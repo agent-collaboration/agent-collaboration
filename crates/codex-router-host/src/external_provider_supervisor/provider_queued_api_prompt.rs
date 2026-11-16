@@ -11,6 +11,46 @@ use super::{
     ProviderOperationCompletion, ProviderOperationEffect, SessionRef, failure,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
+use tokio_util::sync::CancellationToken;
+
+/// The queue's stop as a claimed dispatch's owner reads it at the submission
+/// boundary (D1 R14): the line's shutdown and the provider's retirement, each
+/// with the reason the line gives its unsent entries. The line builds it, so
+/// the reasons stay the line's.
+#[derive(Clone)]
+pub(crate) struct QueueSubmissionStop {
+    shutdown: CancellationToken,
+    shutdown_reason: &'static str,
+    retirement: CancellationToken,
+    retirement_reason: &'static str,
+}
+
+impl QueueSubmissionStop {
+    pub(crate) fn new(
+        shutdown: CancellationToken,
+        shutdown_reason: &'static str,
+        retirement: CancellationToken,
+        retirement_reason: &'static str,
+    ) -> Self {
+        Self {
+            shutdown,
+            shutdown_reason,
+            retirement,
+            retirement_reason,
+        }
+    }
+
+    /// Why the queue stopped, once it has.
+    fn stopped_reason(&self) -> Option<&'static str> {
+        if self.retirement.is_cancelled() {
+            Some(self.retirement_reason)
+        } else if self.shutdown.is_cancelled() {
+            Some(self.shutdown_reason)
+        } else {
+            None
+        }
+    }
+}
 
 /// The admitted, unsettled operation an API queue entry carries. Opaque to
 /// the line: only the supervisor dispatches or settles it, at most once.
@@ -42,11 +82,13 @@ impl AdmittedApiPrompt {
 impl ExternalProviderSupervisor {
     /// Sends a queued API prompt the worker found idle. An unresolved
     /// outcome that appeared while it waited (other than a live turn) means it
-    /// is not sent; a turn that started again sends it back to wait.
+    /// is not sent; a turn that started again sends it back to wait; a queue
+    /// that stopped before the submission left means it is not sent.
     pub(crate) async fn dispatch_queued_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         admitted: &AdmittedApiPrompt,
+        queue_stop: QueueSubmissionStop,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -79,7 +121,7 @@ impl ExternalProviderSupervisor {
         let (reply, answer) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let outcome = owner
-                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted)
+                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted, &queue_stop)
                 .await;
             if reply.send(outcome).is_err() && !admitted.is_settled() {
                 // The worker is gone and the entry went back to waiting, so
@@ -102,14 +144,16 @@ impl ExternalProviderSupervisor {
 
     /// The claimed part of a queued dispatch, run by its own owner: the
     /// dispatch marker, the submission and its settlement. A marker that
-    /// can't be written settles the operation here; a turn that started again
-    /// hands the entry back, unclaimed, to wait.
+    /// can't be written settles the operation here; a queue that stopped
+    /// before the submission boundary settles it not sent; a turn that started
+    /// again hands the entry back, unclaimed, to wait.
     async fn dispatch_claimed_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         binding: collaboration_protocol::ProviderBindingIdentity,
         runtime: Arc<crate::ExternalProviderRuntime>,
         admitted: &AdmittedApiPrompt,
+        queue_stop: &QueueSubmissionStop,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -137,14 +181,19 @@ impl ExternalProviderSupervisor {
                 return Err(Box::new(marker_failure));
             }
         };
+        // The stop and the submission are decided together: nothing awaits
+        // between this read and the spawn, so a stop seen here wins (not
+        // sent), and a stop after it leaves the submission its real outcome.
+        if let Some(reason) = queue_stop.stopped_reason() {
+            self.queued_operation_registry()
+                .mark_not_submitted(&operation_id, reason);
+            let unsent = unsent_failure(&operation_id, &target, reason);
+            self.settle_claimed_unsent(admitted, &operation_id, unsent.clone());
+            return Err(Box::new(unsent));
+        }
+        let started = self.start_admitted_submission(&request, &binding, runtime);
         match self
-            .dispatch_admitted_prompt(
-                request,
-                &binding,
-                runtime,
-                snapshot,
-                Arc::clone(&admitted.live),
-            )
+            .observe_admitted_submission(request, started, snapshot, Arc::clone(&admitted.live))
             .await
         {
             AdmittedPromptDispatch::Done(result) => Ok(match *result {
@@ -205,18 +254,41 @@ impl ExternalProviderSupervisor {
         if !admitted.claim() {
             return;
         }
-        let unsent = failure(
-            ConversationOperationFailureKind::Unavailable,
-            ConversationOperationFailureStage::Dispatch,
-            ProviderOperationEffect::None,
-            &format!("not sent: {reason}"),
-            operation_id.clone(),
-            Some(target.clone()),
+        self.settle_claimed_unsent(
+            admitted,
+            operation_id,
+            unsent_failure(operation_id, target, reason),
         );
+    }
+
+    /// Settles a claimed entry that never reached the agent: terminal, with
+    /// no effect.
+    fn settle_claimed_unsent(
+        &self,
+        admitted: &AdmittedApiPrompt,
+        operation_id: &OperationId,
+        unsent: ConversationOperationFailure,
+    ) {
         self.spawn_operation(
             operation_id.clone(),
             Arc::clone(&admitted.live),
             async move { ProviderOperationCompletion::Failure(unsent) },
         );
     }
+}
+
+/// The failure an entry that left the line before submission settles with.
+fn unsent_failure(
+    operation_id: &OperationId,
+    target: &SessionRef,
+    reason: &str,
+) -> ConversationOperationFailure {
+    failure(
+        ConversationOperationFailureKind::Unavailable,
+        ConversationOperationFailureStage::Dispatch,
+        ProviderOperationEffect::None,
+        &format!("not sent: {reason}"),
+        operation_id.clone(),
+        Some(target.clone()),
+    )
 }

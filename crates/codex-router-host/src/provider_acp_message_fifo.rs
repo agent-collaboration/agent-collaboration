@@ -505,7 +505,16 @@ async fn run_provider_message_fifo(
                 submitted = async {
                     match request.clone() {
                         ProviderQueuedPrompt::Contents { request, admitted: Some(admitted), .. } =>
-                            supervisor.dispatch_queued_api_prompt(request, &admitted).await,
+                            supervisor.dispatch_queued_api_prompt(
+                                request,
+                                &admitted,
+                                crate::external_provider_supervisor::QueueSubmissionStop::new(
+                                    shutdown.clone(),
+                                    "Router shutdown before provider submission",
+                                    retirement.clone(),
+                                    PROVIDER_RETIRED_REASON,
+                                ),
+                            ).await,
                         ProviderQueuedPrompt::Contents { request, admitted: None, .. } =>
                             supervisor.submit_delivery_prompt_contents(request).await,
                     }

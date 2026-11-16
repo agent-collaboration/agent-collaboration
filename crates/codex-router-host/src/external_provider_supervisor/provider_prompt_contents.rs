@@ -159,6 +159,20 @@ impl ExternalProviderSupervisor {
         snapshot: super::ConversationOperationSnapshot,
         live: std::sync::Arc<super::LiveOperation>,
     ) -> AdmittedPromptDispatch {
+        let started = self.start_admitted_submission(&request, binding, runtime);
+        self.observe_admitted_submission(request, started, snapshot, live)
+            .await
+    }
+
+    /// The submission boundary: spawns the provider submission, which may
+    /// reach the agent from here on. It never awaits, so a check made right
+    /// before it is the last word before the submission leaves (D1 R14).
+    pub(super) fn start_admitted_submission(
+        &self,
+        request: &ProviderPromptContentsRequest,
+        binding: &super::ProviderBindingIdentity,
+        runtime: std::sync::Arc<crate::ExternalProviderRuntime>,
+    ) -> StartedSubmission {
         let target = request.target.clone();
         let approval_context = crate::ExternalProviderApprovalContext {
             requester: request.requested_by.clone(),
@@ -170,9 +184,8 @@ impl ExternalProviderSupervisor {
         };
         self.remember_turn_approver(&request.operation_id, &request.approver);
         let (dispatch, dispatched) = tokio::sync::oneshot::channel();
-        let operation_id = request.operation_id.clone();
-        let provider_session_id = String::from(target.session_id.clone());
-        let input_id = request.input_id;
+        let provider_session_id = String::from(target.session_id);
+        let input_id = request.input_id.clone();
         let submission_input = request.input.clone();
         // The submission runs on its own task; only a dispatched prompt hands
         // its result to the operation, so a Busy refusal can be re-decided.
@@ -187,6 +200,27 @@ impl ExternalProviderSupervisor {
                 )
                 .await
         });
+        StartedSubmission {
+            submitted,
+            dispatched,
+        }
+    }
+
+    /// Waits for a started submission's dispatch observation; the turn's
+    /// completion settles the operation in the background.
+    pub(super) async fn observe_admitted_submission(
+        &self,
+        request: ProviderPromptContentsRequest,
+        started: StartedSubmission,
+        snapshot: super::ConversationOperationSnapshot,
+        live: std::sync::Arc<super::LiveOperation>,
+    ) -> AdmittedPromptDispatch {
+        let StartedSubmission {
+            submitted,
+            dispatched,
+        } = started;
+        let target = request.target.clone();
+        let operation_id = request.operation_id.clone();
         let completion_operation_id = operation_id.clone();
         let completion_target = target.clone();
         let complete = move |submitted: tokio::task::JoinHandle<_>| async move {
@@ -260,6 +294,15 @@ impl ExternalProviderSupervisor {
         self.spawn_operation(request.operation_id, live, complete(submitted));
         AdmittedPromptDispatch::Done(Box::new(result))
     }
+}
+
+/// A provider submission already spawned: it may have reached the agent.
+pub(super) struct StartedSubmission {
+    submitted: tokio::task::JoinHandle<
+        Result<crate::ExternalProviderPromptOutcome, crate::ExternalProviderRuntimeError>,
+    >,
+    dispatched:
+        tokio::sync::oneshot::Receiver<acp_client_runtime::ProviderPromptDispatchObservation>,
 }
 
 /// What sending an admitted prompt came to.

@@ -3,7 +3,7 @@
 mod provider_operation_admission;
 mod provider_prompt_send;
 mod provider_queued_api_prompt;
-pub(crate) use provider_queued_api_prompt::AdmittedApiPrompt;
+pub(crate) use provider_queued_api_prompt::{AdmittedApiPrompt, QueueSubmissionStop};
 mod provider_operation_failure;
 mod provider_prompt_contents;
 pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
@@ -97,8 +97,10 @@ struct SupervisorInner {
     requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
-    /// The approver of each prompt this Host dispatched, until it settles: a
-    /// message steered into that turn is approved by it (D1 C1).
+    /// The approver of each prompt this Host dispatched: a message steered
+    /// into that turn is approved by it (D1 C1). Kept as long as the
+    /// operation's settlement is retained, so a steer whose reply raced the
+    /// turn's end still finds the turn it joined.
     turn_approvers: StdMutex<HashMap<OperationId, collaboration_protocol::ProviderIdentity>>,
     /// The session line API prompts wait in when the agent can't steer (D1
     /// R12), given once the delivery route is composed. Weak: the line holds
@@ -115,6 +117,10 @@ struct SupervisorInner {
     /// before its dispatch observation is awaited.
     #[cfg(test)]
     observation_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next steer after its injection reply, before it reads the
+    /// joined turn's approver.
+    #[cfg(test)]
+    steer_reply_test_pause: StdMutex<Option<AdmissionTestPause>>,
 }
 
 #[cfg(test)]
@@ -222,6 +228,26 @@ impl ExternalProviderSupervisor {
         *self
             .inner
             .observation_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(AdmissionTestPause { entered, release });
+        (entered_receiver, release_sender)
+    }
+
+    /// Pauses the next steer after its injection reply and before it reads
+    /// the joined turn's approver.
+    #[cfg(test)]
+    pub(crate) fn pause_next_steer_after_reply(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
+        let (release_sender, release) = tokio::sync::oneshot::channel();
+        *self
+            .inner
+            .steer_reply_test_pause
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) =
             Some(AdmissionTestPause { entered, release });
@@ -366,6 +392,8 @@ impl ExternalProviderSupervisor {
                 dispatch_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 observation_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                steer_reply_test_pause: StdMutex::new(None),
             }),
         })
     }
@@ -558,10 +586,6 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
-        self.turn_approvers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&operation_id);
         let result = match completion {
             ProviderOperationCompletion::Success {
                 settlement,
@@ -676,6 +700,11 @@ impl SupervisorInner {
         while operations.terminal_order.len() > MAX_RETAINED_SETTLEMENTS {
             if let Some(expired) = operations.terminal_order.pop_front() {
                 operations.operations.remove(&expired);
+                // A turn's approver goes with its retained settlement.
+                self.turn_approvers
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&expired);
             }
         }
     }

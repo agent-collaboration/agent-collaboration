@@ -1,9 +1,13 @@
 //! A queued input's outcome (D1 R12, review F2): waiting in the session's
 //! line is not a dispatch that failed to start, so no start deadline applies.
+//! Time moves only on the port's one injected clock (review C1).
 
-use super::queued_input_outcome;
-use crate::provider_queue_operation_registry::ProviderQueueOperationRegistry;
-use collaboration_contracts::{QueuedInputOutcome, SessionEventHub as _};
+use super::HostSessionCommandPort;
+use crate::{
+    ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
+    ProviderAcpDeliveryRoute,
+};
+use collaboration_contracts::{DeliveryFuture, QueuedInputOutcome, SessionCommandPort as _};
 use collaboration_protocol::{
     CodexGeneration, EndpointId, EndpointRef, GenerationNumber, NonEmptyText, OperationId,
     ProviderBindingId, ProviderBindingIdentity, ProviderKind, ProviderRuntimeIdentity,
@@ -13,6 +17,14 @@ use collaboration_runtime::{ProviderOperationStore, ProviderSessionEventHub};
 use session_event_model::{InputId, PromptContent, SessionEvent, StopReason, TurnOutcome};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+struct NoLivePeer;
+
+impl LiveSessionOwnershipCheck for NoLivePeer {
+    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+        Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
+    }
+}
 
 fn target() -> SessionRef {
     SessionRef {
@@ -58,9 +70,10 @@ fn binding(target: &SessionRef) -> ProviderBindingIdentity {
 /// Oracle: D1 spec R12, "a queued ACP prompt answers when its own turn ends,
 /// or with NotSent and the reason", and review F2: an input still waiting
 /// behind a turn that outlasts the 30 s turn-start deadline is still waiting,
-/// not failed, and resolves Started when its own turn starts. Time passes on
-/// Tokio's paused clock, the only clock that deadline reads.
-#[tokio::test(start_paused = true)]
+/// not failed, and resolves Started when its own turn starts. It is asked
+/// through the port's queue_outcome; time passes on the port's injected
+/// clock, the clock its turn-start deadline reads.
+#[tokio::test]
 async fn a_queued_input_waits_past_the_start_deadline_for_its_own_turn() {
     // Arrange: a running turn, and an input waiting in the line behind it.
     let root = tempfile::tempdir().expect("root");
@@ -69,20 +82,40 @@ async fn a_queued_input_waits_past_the_start_deadline_for_its_own_turn() {
             .await
             .expect("store"),
     ));
-    let hub = Arc::new(ProviderSessionEventHub::new(store));
+    let hub = Arc::new(ProviderSessionEventHub::new(Arc::clone(&store)));
     let target = target();
     let session: message_board::SessionRef =
         serde_json::from_value(serde_json::to_value(&target).expect("target JSON"))
             .expect("hub session");
-    let registry = Arc::new(ProviderQueueOperationRegistry::default());
-    let input_id = InputId::generate();
-    registry.record_queued_contents(
-        OperationId::generate(),
-        target.clone(),
-        binding(&target),
-        input_id.clone(),
-        &[PromptContent::text("queued".to_owned()).expect("text")],
+    let supervisor = Arc::new(
+        ExternalProviderSupervisor::new(Vec::new(), Arc::clone(&store)).expect("supervisor"),
     );
+    let delivery = Arc::new(ProviderAcpDeliveryRoute::new(
+        target.endpoint.service_id.clone(),
+        std::collections::HashSet::new(),
+        collaboration_runtime::EndpointDirectory::new(target.endpoint.service_id.clone()),
+        Arc::clone(&supervisor),
+        Arc::clone(&store),
+        Arc::new(NoLivePeer),
+    ));
+    let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let port = Arc::new(HostSessionCommandPort::new(
+        Arc::clone(&supervisor),
+        delivery,
+        Arc::clone(&hub),
+        store,
+        Arc::clone(&clock) as Arc<dyn router_clock::RuntimeClock>,
+    ));
+    let input_id = InputId::generate();
+    supervisor
+        .queued_operation_registry()
+        .record_queued_contents(
+            OperationId::generate(),
+            target.clone(),
+            binding(&target),
+            input_id.clone(),
+            &[PromptContent::text("queued".to_owned()).expect("text")],
+        );
     hub.publish(
         session.clone(),
         SessionEvent::TurnStarted {
@@ -92,18 +125,9 @@ async fn a_queued_input_waits_past_the_start_deadline_for_its_own_turn() {
     )
     .await
     .expect("running turn");
-    let attachment = hub.attach(session.clone()).await.expect("attachment");
     let waiting = {
-        let (hub, registry, session, target, input_id) = (
-            Arc::clone(&hub),
-            Arc::clone(&registry),
-            session.clone(),
-            target.clone(),
-            input_id.clone(),
-        );
-        tokio::spawn(async move {
-            queued_input_outcome(&hub, &registry, session, &target, attachment, input_id).await
-        })
+        let (port, session, input_id) = (Arc::clone(&port), session.clone(), input_id.clone());
+        tokio::spawn(async move { port.queue_outcome(session, input_id).await })
     };
 
     // The wait has started (and armed any timer it has) before time moves.
@@ -112,7 +136,9 @@ async fn a_queued_input_waits_past_the_start_deadline_for_its_own_turn() {
     }
 
     // Act: twice the start deadline passes while the running turn holds.
-    tokio::time::advance(std::time::Duration::from_secs(60)).await;
+    clock
+        .advance(std::time::Duration::from_secs(60))
+        .expect("advance the injected clock");
     for _ in 0..64 {
         tokio::task::yield_now().await;
     }

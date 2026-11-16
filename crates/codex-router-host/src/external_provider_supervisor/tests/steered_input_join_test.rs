@@ -1,8 +1,10 @@
-//! D1 V22 (Lead 2026-11-16): a steered API prompt is taken into the running
-//! turn under the input ID its request carried. The request comes in through
-//! the supervisor's API backend (`ProviderConversationBackend::prompt`, what
-//! the API service calls with the caller's request) with a chosen input ID; the
-//! session's hub must record InputAccepted with exactly that ID.
+//! A steered API prompt joins the running turn correctly (D1 R12). V22 (Lead
+//! 2026-11-16): it is taken under the input ID its request carried. The
+//! request comes in through the supervisor's API backend
+//! (`ProviderConversationBackend::prompt`, what the API service calls with the
+//! caller's request) with a chosen input ID; the session's hub must record
+//! InputAccepted with exactly that ID. Review F3 follow-up: it names the joined
+//! turn's approver even when that turn ended before the steer read it.
 
 use super::*;
 use crate::provider_acp_message_fifo::ProviderAcpMessageFifo;
@@ -10,13 +12,19 @@ use collaboration_contracts::SessionEventHub as _;
 use collaboration_runtime::ProviderSessionRecord;
 use session_event_model::SessionEvent;
 
-/// Oracle: D1 spec R12 and V22, "the operation's input ID equals the input ID
-/// of the session event that took the message (InputAccepted or
-/// TurnStarted)": a prompt sent while a turn runs, carrying input ID X, is
-/// steered, and the hub's InputAccepted for it carries X, never a fresh ID.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn steered_prompt_is_accepted_under_its_requests_input_id() {
-    // Arrange: a running turn on a steering agent, recorded on a real hub.
+/// A steering agent that holds its first turn open, on a supervisor whose
+/// session is recorded on a real hub.
+struct SteeringSession {
+    _root: tempfile::TempDir,
+    receipt: std::path::PathBuf,
+    target: SessionRef,
+    hub: Arc<collaboration_runtime::ProviderSessionEventHub>,
+    hub_target: message_board::SessionRef,
+    supervisor: Arc<ExternalProviderSupervisor>,
+    queue: Arc<ProviderAcpMessageFifo>,
+}
+
+async fn steering_session() -> SteeringSession {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire.json");
     let target = SessionRef {
@@ -91,6 +99,33 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
         Arc::new(NoLivePeer),
     ));
     supervisor.attach_message_fifo(&queue);
+    SteeringSession {
+        _root: root,
+        receipt,
+        target,
+        hub,
+        hub_target,
+        supervisor,
+        queue,
+    }
+}
+
+/// Oracle: D1 spec R12 and V22, "the operation's input ID equals the input ID
+/// of the session event that took the message (InputAccepted or
+/// TurnStarted)": a prompt sent while a turn runs, carrying input ID X, is
+/// steered, and the hub's InputAccepted for it carries X, never a fresh ID.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn steered_prompt_is_accepted_under_its_requests_input_id() {
+    // Arrange: a running turn on a steering agent, recorded on a real hub.
+    let SteeringSession {
+        _root,
+        receipt,
+        target,
+        hub,
+        hub_target,
+        supervisor,
+        queue,
+    } = steering_session().await;
     let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
     let held_context = crate::ExternalProviderApprovalContext {
         requester: target.clone().into(),
@@ -155,6 +190,121 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
     );
     assert!(held.is_ok(), "the held turn ran to its end: {held:?}");
     stopped.expect("supervisor shutdown");
+}
+
+/// Oracle: D1 spec R12 and program design C1, "the result names the running
+/// turn's approver when it differs from the requested one", with the review's
+/// F3 follow-up: a mail-started turn under approver A takes an API steer
+/// naming B, and the injection reply and the turn's end (its settlement) both
+/// land before the steer reads the approver. The steer still names A.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn steer_whose_turn_ended_before_it_read_the_approver_still_names_it() {
+    // Arrange: mail starts the held turn under A.
+    let session = steering_session().await;
+    let approver_a = human("approver-a");
+    let approver_b = human("approver-b");
+    let mailed_operation = OperationId::generate();
+    let mailed = session
+        .supervisor
+        .submit_delivery_prompt_contents(ProviderPromptContentsRequest {
+            operation_id: mailed_operation.clone(),
+            input_id: session_event_model::InputId::generate(),
+            target: session.target.clone(),
+            requested_by: approver_a.clone(),
+            approver: approver_a.clone(),
+            input: acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("first".to_owned())
+                        .expect("mail text"),
+                ]),
+            ),
+            busy: PromptBusyPolicy::RefuseBusy,
+        })
+        .await;
+    while recorded_requests(&session.receipt, "session/prompt") < 1 {
+        tokio::task::yield_now().await;
+    }
+    let (steer_replied, continue_steer) = session.supervisor.pause_next_steer_after_reply();
+
+    // Act: B's prompt is injected; the turn ends and settles; only then does
+    // the steer go on to read the approver.
+    let steered_operation = OperationId::generate();
+    let steer = tokio::spawn({
+        let supervisor = Arc::clone(&session.supervisor);
+        let request = ConversationPromptRequest {
+            operation_id: steered_operation.clone(),
+            input_id: None,
+            target: session.target.clone(),
+            generation: None,
+            requested_by: approver_b.clone(),
+            approver: approver_b.clone(),
+            prompt: collaboration_protocol::MessageContent::HumanUser {
+                text: MessageText::try_from("second".to_owned()).expect("prompt"),
+            },
+        };
+        async move { supervisor.prompt(request).await }
+    });
+    steer_replied
+        .await
+        .expect("the steer's injection reply arrived");
+    std::fs::write(format!("{}.release", session.receipt.display()), b"")
+        .expect("release the turn");
+    let turn_settled = session
+        .supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: mailed_operation,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
+    let _continued = continue_steer.send(());
+    let submitted = steer.await.expect("steer task");
+    let steered = session
+        .supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: steered_operation,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
+    session.queue.shutdown().await;
+    let stopped = session.supervisor.shutdown().await;
+
+    // Assert: the turn had settled before the read, and the steer names A.
+    assert!(
+        matches!(mailed, Ok(ProviderPromptDispatch::Submitted)),
+        "{mailed:?}"
+    );
+    assert!(
+        matches!(
+            &turn_settled,
+            Ok(collaboration_protocol::ConversationOperationWaitResult {
+                output: collaboration_protocol::ConversationOperationWaitOutput::Available {
+                    settlement: ConversationOperationSettlement::PromptCompleted { .. }
+                },
+                ..
+            })
+        ),
+        "the mail turn settled before the steer read its approver: {turn_settled:?}"
+    );
+    assert!(submitted.is_ok(), "the steer was admitted: {submitted:?}");
+    match steered {
+        Ok(collaboration_protocol::ConversationOperationWaitResult {
+            output:
+                collaboration_protocol::ConversationOperationWaitOutput::Available {
+                    settlement: ConversationOperationSettlement::Steered { turn_approver, .. },
+                },
+            ..
+        }) => assert_eq!(
+            turn_approver,
+            Some(approver_a),
+            "the joined turn's approver"
+        ),
+        other => panic!("expected a steered settlement, got {other:?}"),
+    }
+    stopped.expect("supervisor shutdown");
+}
+
+fn human(id: &str) -> collaboration_protocol::ProviderIdentity {
+    serde_json::from_value(serde_json::json!({"kind": "human", "humanId": id})).expect("human")
 }
 
 /// Requests with `method` the fixture read, from its receipt.

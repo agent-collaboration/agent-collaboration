@@ -2,9 +2,9 @@
 //! when the worker is cancelled (D1 R14, review F1). The two windows the
 //! review names are forced with the supervisor's test pauses: right after the
 //! claim, before the dispatch marker; and with the submission spawned, before
-//! its dispatch observation. Shutting the line down there must leave the
-//! operation to settle with its real outcome, and the supervisor's drain must
-//! not time out.
+//! its dispatch observation. A stop before the submission boundary wins: the
+//! operation ends not sent. A stop after it leaves the submission its real
+//! outcome. Either way the supervisor's drain must not time out.
 
 use super::loaded_only_tests::{NoLivePeer, binding, recorded_requests, target};
 use super::*;
@@ -30,6 +30,7 @@ struct Shutdown {
         collaboration_protocol::ConversationOperationFailure,
     >,
     queued_prompts: usize,
+    queue_state: Option<collaboration_protocol::ConversationOperationQueueState>,
     stopped: Result<(), &'static str>,
 }
 
@@ -148,16 +149,22 @@ async fn shut_down_the_line_at(paused_at: PausedAt) -> Shutdown {
     let _released = release.send(());
     let settled = supervisor
         .wait(ConversationOperationWaitRequest {
-            operation_id: queued,
+            operation_id: queued.clone(),
             timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
         })
         .await;
+    let queue_state = supervisor
+        .queued_operation_registry()
+        .snapshot(&queued)
+        .expect("queued operation snapshot")
+        .and_then(|snapshot| snapshot.queue_state);
     let _held = held.await.expect("held turn task");
     let queued_prompts = recorded_requests(&receipt, "session/prompt").saturating_sub(1);
     let stopped = supervisor.shutdown().await;
     Shutdown {
         settled,
         queued_prompts,
+        queue_state,
         stopped,
     }
 }
@@ -174,18 +181,40 @@ fn completed(settled: &Shutdown) -> bool {
     )
 }
 
-/// Oracle: D1 spec R14 and review F1, "every queued operation retains one
-/// completion owner and settles on graceful shutdown": a dispatch the worker
-/// claimed, cancelled before its dispatch marker, still runs to its real
-/// outcome, and the supervisor's drain completes.
+/// Oracle: D1 spec R14 and the review's F1 follow-up, "stop wins before
+/// submission → not sent, effect None, zero prompts at the fixture": a
+/// dispatch the worker claimed, whose line shut down before its submission
+/// left, ends not sent with the line's reason under its one owner, the line
+/// shows it not submitted, and the supervisor's drain completes.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn claimed_dispatch_cancelled_before_its_marker_keeps_its_owner() {
+async fn claimed_dispatch_stopped_before_submission_ends_not_sent() {
     // Arrange, Act
     let shut_down = shut_down_the_line_at(PausedAt::AfterClaim).await;
 
     // Assert
-    assert!(completed(&shut_down), "{:?}", shut_down.settled);
-    assert_eq!(shut_down.queued_prompts, 1, "sent once, after the shutdown");
+    let failure = shut_down.settled.as_ref().err().unwrap_or_else(|| {
+        panic!(
+            "the stopped dispatch ends not sent: {:?}",
+            shut_down.settled
+        )
+    });
+    assert_eq!(
+        String::from(failure.message.clone()),
+        "not sent: Router shutdown before provider submission"
+    );
+    assert_eq!(
+        failure.effect,
+        collaboration_protocol::ProviderOperationEffect::None
+    );
+    assert_eq!(shut_down.queued_prompts, 0, "nothing reached the agent");
+    assert_eq!(
+        shut_down.queue_state,
+        Some(
+            collaboration_protocol::ConversationOperationQueueState::NotSubmitted {
+                reason: "Router shutdown before provider submission".into(),
+            }
+        )
+    );
     shut_down
         .stopped
         .expect("the supervisor drains without a timeout");

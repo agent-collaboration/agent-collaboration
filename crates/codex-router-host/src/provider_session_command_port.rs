@@ -44,6 +44,8 @@ pub struct HostSessionCommandPort {
     delivery: Arc<ProviderAcpDeliveryRoute>,
     hub: Arc<ProviderSessionEventHub>,
     store: Arc<Mutex<ProviderOperationStore>>,
+    /// The Host's one injected clock; the turn-start deadline reads it.
+    clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 impl HostSessionCommandPort {
@@ -53,12 +55,14 @@ impl HostSessionCommandPort {
         delivery: Arc<ProviderAcpDeliveryRoute>,
         hub: Arc<ProviderSessionEventHub>,
         store: Arc<Mutex<ProviderOperationStore>>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         Self {
             supervisor,
             delivery,
             hub,
             store,
+            clock,
         }
     }
 
@@ -185,9 +189,14 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .prompt_contents(target, actor, input_id.clone(), command.submission)
                 .await
                 .map_err(map_prompt_failure)?;
-            let turn_id =
-                wait_for_turn_start(self.hub.as_ref(), command.target, attachment, input_id)
-                    .await?;
+            let turn_id = wait_for_turn_start(
+                self.clock.as_ref(),
+                self.hub.as_ref(),
+                command.target,
+                attachment,
+                input_id,
+            )
+            .await?;
             Ok(SessionTurnHandle { turn_id })
         })
     }
@@ -208,9 +217,14 @@ impl SessionCommandPort for HostSessionCommandPort {
                 )
                 .await
                 .map_err(map_prompt_failure)?;
-            let turn_id =
-                wait_for_turn_start(self.hub.as_ref(), command.target, attachment, input_id)
-                    .await?;
+            let turn_id = wait_for_turn_start(
+                self.clock.as_ref(),
+                self.hub.as_ref(),
+                command.target,
+                attachment,
+                input_id,
+            )
+            .await?;
             Ok(SessionTurnHandle { turn_id })
         })
     }
@@ -238,6 +252,7 @@ impl SessionCommandPort for HostSessionCommandPort {
                 }),
                 ProviderSteeringOutcome::StartedNewTurn => {
                     let turn_id = wait_for_turn_start(
+                        self.clock.as_ref(),
                         self.hub.as_ref(),
                         command.target,
                         attachment,
@@ -554,7 +569,7 @@ async fn wait_for_settlement(
 /// R14): Started when the turn carrying its input ID starts, or NotSent with
 /// the reason the line records, which outranks "no turn started". No deadline
 /// applies: waiting in the line is not a dispatch that failed to start.
-pub(crate) async fn queued_input_outcome(
+async fn queued_input_outcome(
     hub: &ProviderSessionEventHub,
     registry: &crate::provider_queue_operation_registry::ProviderQueueOperationRegistry,
     session: message_board::SessionRef,
@@ -623,7 +638,10 @@ async fn wait_for_queued_turn_start(
     }
 }
 
+/// The turn a dispatched input starts, within the start deadline on the
+/// injected clock.
 async fn wait_for_turn_start(
+    clock: &dyn router_clock::RuntimeClock,
     hub: &ProviderSessionEventHub,
     session: message_board::SessionRef,
     mut attachment: SessionEventAttachment,
@@ -639,7 +657,7 @@ async fn wait_for_turn_start(
             return Ok(turn_id.clone());
         }
     }
-    let started = tokio::time::timeout(TURN_START_DEADLINE, async {
+    let started = router_clock::timeout(clock, TURN_START_DEADLINE, async {
         loop {
             match attachment.receiver.recv().await {
                 Ok(event) => {

@@ -673,6 +673,7 @@ impl CollaborationRuntime {
                     std::sync::Arc::clone(delivery),
                     std::sync::Arc::clone(hub),
                     std::sync::Arc::clone(store),
+                    std::sync::Arc::clone(&worker_clock),
                 ));
             let events: std::sync::Arc<dyn collaboration_contracts::SessionEventHub> =
                 std::sync::Arc::clone(hub) as _;

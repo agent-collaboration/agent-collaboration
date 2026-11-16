@@ -244,8 +244,13 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
         Arc::clone(&store),
         Arc::new(NoLivePeer),
     ));
-    let port =
-        HostSessionCommandPort::new(Arc::clone(&supervisor), delivery, Arc::clone(&hub), store);
+    let port = HostSessionCommandPort::new(
+        Arc::clone(&supervisor),
+        delivery,
+        Arc::clone(&hub),
+        store,
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
+    );
     let board_target: BoardSessionRef =
         serde_json::from_value(serde_json::to_value(&target).expect("target JSON"))
             .expect("board target");

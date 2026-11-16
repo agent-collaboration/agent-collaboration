@@ -48,7 +48,7 @@ impl ExternalProviderSupervisor {
             return Ok(ProviderPromptDispatch::Existing);
         };
         // A delivery-started turn names its approver to a later steer, like an
-        // API-started one; finish removes the record when it settles (D1 C1).
+        // API-started one; the record goes with its retained settlement (D1 C1).
         self.remember_turn_approver(&operation_id, &request.approver);
         let (dispatched, dispatch_observation) = tokio::sync::oneshot::channel();
         let input_id = request.input_id;

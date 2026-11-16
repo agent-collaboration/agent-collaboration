@@ -23,7 +23,8 @@ enum SendRoute {
 }
 
 impl ExternalProviderSupervisor {
-    /// Records the approver of a prompt this Host dispatched, until it settles.
+    /// Records the approver of a prompt this Host dispatched, kept while its
+    /// settlement is retained.
     pub(super) fn remember_turn_approver(
         &self,
         operation_id: &OperationId,
@@ -203,6 +204,19 @@ impl ExternalProviderSupervisor {
                 submission,
             )
             .await;
+        #[cfg(test)]
+        {
+            let pause = self
+                .inner
+                .steer_reply_test_pause
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(pause) = pause {
+                let _entered = pause.entered.send(());
+                let _released = pause.release.await;
+            }
+        }
         let operation_id = request.operation_id.clone();
         let completion = match steered {
             Ok(crate::ProviderSteeringOutcome::Injected {
@@ -210,6 +224,8 @@ impl ExternalProviderSupervisor {
             }) => {
                 // The approver of the turn the input actually joined, as the
                 // injection reports it, when it differs from this request's.
+                // Its record outlives the turn's settlement, so a turn that
+                // ended before this line still names its approver.
                 let turn_approver = running_operation_id.and_then(|running| {
                     self.inner
                         .turn_approvers
