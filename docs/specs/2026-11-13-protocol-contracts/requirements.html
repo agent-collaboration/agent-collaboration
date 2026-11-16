@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — Requirements</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Requirements</h1>
+
+<ex-callout title="In short" tone="tldr">
+  <p>Messages flow through the Router as streams across a graph of nodes. Today almost every node converts messages by hand, and the same conversion is often written in several places, so wrong messages compile and you find the bugs. You want every node fixed and typed from one definition per protocol, without Codex's crates. You want to see who produces and who consumes each message. And you want verification good enough that you are never the first test.</p>
+</ex-callout>
+
+<h2 id="people">Who feels it</h2>
+
+<ex-mermaid id="people-map" label="Who is affected and how"><script type="text/plain">
+flowchart LR
+  owner[You: Codex CLI and agents<br/>through the Router] -- hit --> bugs[Stuck steer, 770K status,<br/>broken /model]
+  maint[Maintainers: Leads,<br/>Implementers, Verifiers] -- live with --> mess[12 schema mechanisms,<br/>same conversion written 3-7 times]
+  leads[Session/MCP Lead,<br/>central Lead] -- build on --> shapes[Shapes about to change]
+</script></ex-mermaid>
+
+<h2 id="journeys">How it goes wrong today</h2>
+
+<ex-trace id="journey-owner" title="You, in the Codex CLI on a Claude session" data-width="reading">
+  <details icon="chat-circle" tag="Observed" open>
+    <summary>Steer stays pending · status shows 770K of a 1M window · /model misbehaves</summary>
+    <p>Each was a message built or read by hand at one node. It compiled. Fixed one at a time in PR #242. The usage value travels as a JSON string inside a typed event and gets parsed again later (<code>provider_item_projection.rs:273-288</code>).</p>
+  </details>
+</ex-trace>
+
+<ex-trace id="journey-maintainer" title="A maintainer changing one stream" data-width="reading">
+  <details icon="code" tag="Observed" open>
+    <summary>The same conversion lives in several nodes</summary>
+    <p>The Router has 4 content parsers, 7 SessionRef conversions, 5 approval option tables, and 3 history-to-turns renderers (c4b6254e1). Nothing lists who produces or consumes each message, so a fix in one node misses its copies.</p>
+  </details>
+</ex-trace>
+
+<h2 id="capabilities">The parts</h2>
+
+<ex-tree id="capability-map" title="Capabilities and needs" icon="stack"><script type="text/markdown">
+- Codex app-server contract: Codex messages checked at build time against Codex's own definition
+  - [U1 Wrong messages fail the build](#U1)
+  - [U2 Types from Codex's own definition](#U2)
+  - [U3 New Codex releases are a visible step](#U3)
+  - [U4 No Codex crates, no Codex of our own](#U4)
+- Every node fixed, one definition each: each node converts typed messages; each kind of message defined once
+  - [U5 Each kind of message defined once, Claude and Cursor included](#U5)
+  - [U6 Crates follow the shapes](#U6)
+  - [U9 Every node in the graph is fixed](#U9)
+  - [U10 Producers and consumers of every message are visible](#U10)
+- Verification system: you are never the first test
+  - [U7 Your CLI journeys checked first](#U7)
+  - [U11 A real verification system, in TypeScript or Rust](#U11)
+- Remote Codex CLIs, later
+  - [U8 Connect from any computer](#U8)
+</script></ex-tree>
+
+<h2 id="cap-contract">Codex app-server contract</h2>
+
+<ex-mermaid id="contract-today-target" label="Where a wrong Codex message is caught"><script type="text/plain">
+flowchart LR
+  subgraph today[Today]
+    t1[Hand-written message] --> t2[Builds] --> t3[You see the bug]
+  end
+  subgraph wanted[Wanted]
+    w0[Codex's own definition] --> w1[Typed message] --> w2{Build}
+    w2 -- wrong --> w3[Fails]
+    w2 -- right --> w4[Runs]
+  end
+</script></ex-mermaid>
+
+<section id="U1"><h3>U1 · Wrong messages fail the build</h3>
+<p>For everything the Router sends to Codex, and the Codex face it shows the CLI.</p>
+<aside class="design-item" id="D1" data-design-item="decision" data-authority="owner-words" data-source="Session/MCP Lead conversation (before the fork), owner messages 2026-11-09/10"><blockquote>why isn thtis stuff compile time safe?</blockquote></aside>
+</section>
+
+<section id="U2"><h3>U2 · Types from Codex's own definition</h3>
+<p>Codex exports its schema and TypeScript from the binary (verified on 0.166.0). No hand-written copy.</p>
+<aside class="design-item" id="D2" data-design-item="decision" data-authority="owner-words" data-source="Session/MCP Lead conversation (before the fork), owner messages 2026-11-09/10"><blockquote>Typed?: Hand-written why isnt htis usign the schmea? im cofnsued wh they hell is there 20 version so fhtis</blockquote></aside>
+</section>
+
+<section id="U3"><h3>U3 · New Codex releases are a visible step</h3>
+<p>One repeatable step that shows what changed. No silent drift. Behavior with other releases: <a href="index.html#Q1">Q1</a>.</p>
+<aside class="design-item" id="D3" data-design-item="decision" data-authority="owner-words" data-source="Session/MCP Lead conversation (before the fork), owner messages 2026-11-09/10"><blockquote>so the codoex protocol chagnes eveyr release</blockquote></aside>
+</section>
+
+<section id="U4"><h3>U4 · No Codex crates, no Codex of our own</h3>
+<p>Codex stays a separate program. Not Zed's approach.</p>
+<aside class="design-item" id="D4" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner messages 2026-11-13"><blockquote>go get ifnormation zed's system nto gonna work its not great.  we nto bkuidngin our own codex</blockquote><blockquote>we want to have ocmpitle tiem safety withotu crets</blockquote></aside>
+<aside class="design-item" id="A4" data-design-item="assumption" data-authority="author" data-reads="D4"><p>"Without crets" read as without Codex's crates. Depends on it: <a href="specification.html#C1">C1</a>.</p></aside>
+</section>
+
+<h2 id="cap-nodes">Every node fixed, one definition each</h2>
+
+<ex-mermaid id="stream-nodes" label="A stream is a path through nodes"><script type="text/plain">
+flowchart LR
+  a[End node:<br/>Codex CLI] -- protocol A --> n1[Node: converts A to B]
+  n1 -- protocol B --> n2[Node: converts B to C]
+  n2 -- protocol C --> b[End node:<br/>Claude]
+  def[(One definition<br/>per protocol)] -.types.-> n1
+  def -.types.-> n2
+</script></ex-mermaid>
+
+<aside class="design-item" id="D10" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner messages 2026-11-13">
+  <blockquote>isnt it line a stream with nodes?</blockquote>
+  <blockquote>each node has nuacnes and its a flow or graph.</blockquote>
+</aside>
+
+<section id="U5"><h3>U5 · Each kind of message defined once</h3>
+<p>Codex, ACP (including Claude's and Cursor's extras), and the Router's own vocabulary.</p>
+<aside class="design-item" id="D6" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner message 2026-11-13"><blockquote>this is more thatn that this is the whoel clean kup of the crtes and the many ways of schema system si think you forgot abou tthis</blockquote></aside>
+<aside class="design-item" id="D9" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner messages 2026-11-13"><blockquote>we want to ahve dismbgioed oen palce for acp schema</blockquote><blockquote>we dont want to repeat thigns all voer the palcn and have mtuleiple schem adifitions</blockquote></aside>
+</section>
+
+<section id="U6"><h3>U6 · Crates follow the shapes</h3>
+<p>Each crate has one job, overlapping crates merge, and orphan files go (seven in the Host today).</p>
+</section>
+
+<section id="U9"><h3>U9 · Every node in the graph is fixed</h3>
+<p>No node is left converting by hand. Each node's own quirks (state, zero-or-many outputs, reverse paths) are fixed in that node, not hidden behind shared types.</p>
+<aside class="design-item" id="D11" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner message 2026-11-13"><blockquote>each node need sto be fixe din our own router</blockquote></aside>
+</section>
+
+<section id="U10"><h3>U10 · Producers and consumers of every message are visible</h3>
+<p>For each message, a maintainer can see which nodes produce it and which consume it, and how many rules depend on each node.</p>
+<aside class="design-item" id="D12" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner message 2026-11-13"><blockquote>specs are kusper important here and how many specs depsds onw th ehowle grrp0ah/flkow node and all procudes and consuers</blockquote></aside>
+</section>
+
+<h2 id="cap-verify">Verification system</h2>
+
+<ex-mermaid id="verify-need" label="Who finds the bug"><script type="text/plain">
+flowchart LR
+  subgraph today[Today]
+    c1[Change] --> o1[You find the bug]
+  end
+  subgraph wanted[Wanted]
+    c2[Change] --> v[Verification catches it] --> o2[You see working software]
+  end
+</script></ex-mermaid>
+
+<section id="U7"><h3>U7 · Your CLI journeys checked first</h3>
+<p>Send, steer, status line, <code>/model</code>, <code>/resume</code> and the unsupported commands are checked on every change and every Codex release.</p>
+<aside class="design-item" id="D5" data-design-item="decision" data-authority="owner-words" data-source="Session/MCP Lead conversation (before the fork), owner messages 2026-11-09"><blockquote>what kind of vericiaion scritps did yo uwrite if basic stuff is not caught?</blockquote></aside>
+</section>
+
+<section id="U11"><h3>U11 · A real verification system, in TypeScript or Rust</h3>
+<p>Verification is something we build, not an afterthought. It covers every edge, every node and every stream.</p>
+<aside class="design-item" id="D13" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner message 2026-11-13"><blockquote>we shoud really need good verficaiotn systems for this.  buidl in ts or rust im cool with both.</blockquote></aside>
+</section>
+
+<h2 id="cap-remote">Remote Codex CLIs (later)</h2>
+
+<section id="U8"><h3>U8 · Connect from any computer</h3>
+<p>Not delivered now. Nothing may assume a local connection.</p>
+<aside class="design-item" id="D7" data-design-item="decision" data-authority="owner-words" data-source="Session/MCP Lead conversation (before the fork), owner message 2026-11-09/10"><blockquote>Okay, so later we need to have the app server contracts and then be able to connect remotely from any computer to this.</blockquote></aside>
+</section>
+
+<h2 id="deliverables-need">Delivered in parts</h2>
+
+<p>The work ships as several deliverables, each with a clean boundary.</p>
+<aside class="design-item" id="D14" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner message 2026-11-13"><blockquote>anwhen we de3isgn this i thsokdu b emultiple delvierable swhat make sclearn budlor y for delvierables</blockquote></aside>
+<aside class="design-item" id="D15" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner messages 2026-11-14"><blockquote>for approval i would liek the same system to work and it go to  codex cli teh same way as codex approvals</blockquote><blockquote>is tha tpossible if its conencted to a sesion?</blockquote><p>An approval on a Claude or Cursor session reaches the Codex CLI attached to that session as the same native approval prompt real Codex uses, and the CLI's answer reaches the agent. It is possible today: the Router already sends it as Codex's own server request (<code>item/commandExecution/requestApproval</code>, <code>item/fileChange/requestApproval</code>, <code>app_server_item_translation.rs:303,329</code>) when that CLI connection is the approver; a connection that isn't the approver sees read-only pending items. D4 makes it one typed path and proves it against real Codex.</p></aside>
+
+<h2 id="boundary">Boundary</h2>
+
+<ex-mermaid id="boundary-map" label="Who owns what"><script type="text/plain">
+flowchart LR
+  subgraph this[This work]
+    p1[Every Router node's conversions and shapes]
+    p2[Codex contract, ACP authority, Router vocabulary]
+    p3[Verification system]
+    p4[Protocol crates]
+  end
+  subgraph central[Central Lead]
+    k1[Central contracts, SQL validators, fleet]
+  end
+  subgraph session[Session/MCP Lead]
+    s1[Which tools and methods exist, session layer behavior, approvals routing]
+  end
+  this -- consumes --> central
+  session -- decides what --> this
+</script></ex-mermaid>
+
+<aside class="design-item" id="A2" data-design-item="decision" data-authority="owner-accepted" data-source="owner review 395339ce-f711-4716-a9ed-81a159b72927 on index.html (revision sha256:a7bbf4f9…), relayed verbatim by the Session/MCP Lead, 2026-11-13"><p>You selected the option worded:</p><blockquote>Yes, as drawn (recommended)</blockquote><p>Your comment on it:</p><blockquote>just to be clearn slq valdiate sand contract are done by central leads right / i dotn want them to be dropped</blockquote><p>The SQL validators and the central and fleet contracts and codecs stay in scope, owned by the central Lead. Lead A confirmed this on 2026-11-13, with two validators deliberately outside central's lane.</p></aside>
+<aside class="design-item" id="A5" data-design-item="decision" data-authority="owner-accepted" data-source="owner review 55e40d4b-ff13-41de-a7f4-86380df0f6fd on index.html (revision sha256:a16de793…), sent directly to the Project 2 Lead, 2026-11-13"><p>The owner selected the proposed owners. The proposal read: Proposed owners for the two validators outside central's lane, so neither is dropped:</p><ul><li><code>interaction-storage</code>'s schema validator (the approvals record on the Mac) moves to the SQLx rule in Project 2, after D4;</li><li><code>codex-router-state</code>'s <code>account_schema</code> stays with the later proxy split, which needs the owner's word.</li></ul><p>The owner added, with that review:</p><blockquote>we want itneracionts to be onlien anyways</blockquote></aside>
+<aside class="design-item" id="A6" data-design-item="decision" data-authority="owner-words" data-source="owner messages to the Project 2 Lead, 2026-11-13"><p>The owner clarified the note on A5:</p><blockquote>i eman not the intraicon sqlite</blockquote><blockquote>but approvals</blockquote><p>Approvals are meant to reach approvers online. That routing is the Session/MCP Lead's: approvals can be forwarded through central. The owner then added:</p><blockquote>figure it out with other leads.   interaciont sqltie has inbox an doutbox so i misspoke</blockquote><p>Lead A answered on 2026-11-13 and is bringing the owner one storage proposal. Approval records move into central, and central becomes their record of truth. Lead A also proposes that the rest of <code>interaction-storage</code> (mail and delivery tables, board intent, fleet-sync metadata) goes away in central's D. That is Lead A's proposal, not your decision: <strong>you have not decided how messages are stored, delivered or batched</strong>. What you confirmed, relayed by Lead A on 2026-11-14 (Leads thread), is central as the approval authority: "yeah b or the cli client right? if there is one directly attached". Central holds the approvals record and decides which answer wins. Project 2 does no <code>interaction-storage</code> validator cleanup, because those tables are scheduled for removal. D4's broker follows central's D approvals design.</p></aside>
+
+<p><strong>Done when:</strong></p>
+<ul>
+<li>a wrong message at any node fails the build;</li>
+<li>a Codex release change shows its diff;</li>
+<li>every node is typed on both sides;</li>
+<li>each message's producers and consumers are listed and match the code;</li>
+<li>your journeys pass against real Codex's own behavior.</li>
+</ul>
+
+</ex-document>
+</body>
+</html>

@@ -425,6 +425,14 @@ export class PtyGridDriver {
 		this.outputRevision += 1;
 		for (const notify of this.outputWaiters) notify();
 	}
+	/**
+	 * Has every pending wait judge the current grid again with no new PTY output: a source outside
+	 * the terminal (the in-process wire tee) changed what its predicate reads. Each wait then sleeps
+	 * on output again under its own bound; nothing polls.
+	 */
+	wakeWaiters(): void {
+		for (const notify of this.outputWaiters) notify();
+	}
 	private waitForOutput(timeoutMillis: number): Promise<void> {
 		if (this.failure !== null) return Promise.reject(this.failure);
 		if (this.ended) return Promise.reject(new Error('PTY driver already ended'));

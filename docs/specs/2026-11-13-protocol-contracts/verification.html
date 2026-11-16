@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — Verification Design</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Verification Design</h1>
+
+<ex-callout title="In short (a plan; nothing has run yet)" tone="tldr">
+  <p>Verification is built first, in D0, and checks four things:</p>
+  <ul>
+    <li><strong>Edges:</strong> every message is checked against its own definition.</li>
+    <li><strong>Nodes:</strong> every conversion is checked at its edges, with its state and reverse paths.</li>
+    <li><strong>Streams:</strong> each of your actions runs end to end on the real Codex CLI, once against real Codex (the reference) and once against our Router with Claude or Cursor behind it. The two runs must match.</li>
+    <li><strong>Baseline:</strong> today's bugs must fail in the harness before anyone fixes them.</li>
+  </ul>
+</ex-callout>
+
+<h2 id="layers">The four layers</h2>
+
+<ex-mermaid id="layers-diagram" label="Verification layers and what each catches"><script type="text/plain">
+flowchart TB
+  t[Types: wrong code does not compile] --> e[Edges: messages match their definition, independent of our generator]
+  e --> n[Nodes: each conversion's outputs and state at its edges]
+  n --> s[Streams: real Codex CLI, Codex vs Router, compared]
+  s --> b[Baseline: today's bugs fail before the fix]
+</script></ex-mermaid>
+
+<p><strong>Typed TypeScript in verification.</strong> Where a check is easier to write in TypeScript (stream comparisons, screen and event readback, sample generation), the drivers import types rather than hand-writing shapes. Router vocabulary types (session events, approvals, commands) come from Rust through Specta. Codex types come from the TypeScript that Codex itself exports at the pinned release. A driver that reads a message the wrong way then fails <code>tsc</code>, just as Rust fails the build. The package's existing runner (<code>node --test</code>) stays (D26).</p>
+<aside class="design-item" id="D26" data-design-item="decision" data-authority="owner-words" data-source="Project 2 Lead conversation, owner message 2026-11-13"><blockquote>if you ever need ts for testin gyou can ukse We used Specta to derive TypeScript types from Rust that can help with anytinhgin liek vierciaiton or tests tha ts o rvitest is better at or easeir to do</blockquote></aside>
+<p>The tooling stays in the repository's existing languages. TypeScript observation drivers in <code>verification/</code> (the <code>verify-codex-router</code> skill) check edges and streams. Rust tests, run through the signed cargo runner, check types and nodes.</p>
+
+<h2 id="observations">The observations</h2>
+
+<section id="O1">
+<h3>O1 · Wrong code does not compile</h3>
+<ex-mermaid id="o1" label="O1"><script type="text/plain">
+flowchart LR
+  s[Snippet: wrong field, wrong reply type,<br/>unhandled message kind] --> api[real public API:<br/>request, handler return, emit, disposition match] --> err[expected compile error naming the shape]
+</script></ex-mermaid>
+<p>Uses the workspace's existing <code>trybuild</code> dependency. <strong>Fails a wrong build:</strong> an API that still accepts raw JSON lets the snippet compile. Decides R1, R3, and the build side of R9. For ACP enums, which the compiler can't make exhaustive, a separate required check compares every variant in the pinned SDK schema with each node's disposition table (D25). <strong>Fails a wrong build:</strong> an SDK bump that adds a variant with no entry.</p>
+</section>
+
+<section id="O2">
+<h3>O2 · Edge conformance</h3>
+<ex-mermaid id="o2" label="O2"><script type="text/plain">
+flowchart LR
+  ex[Pinned Codex export] --> v[valid samples per shape] --> rs[decode + encode with our types] --> eq{accepted, identical JSON?}
+  ex --> i[invalid samples: missing required,<br/>wrong type, unknown enum value] --> rs2[decode] --> ok{rejected, or kept as Unknown where open?}
+</script></ex-mermaid>
+<p>The samples come from the export itself, not from our generator, so a generator that drops a field or closes an open enum fails here. The same tool runs each override's test. Built in D1. Each edge type has its own independent reference:</p>
+<ul>
+<li><strong>Codex edges:</strong> the pinned Codex export.</li>
+<li><strong>ACP edges:</strong> the ACP JSON schema for the version the pinned SDK targets, kept as a test fixture only. Samples from it are decoded and re-encoded with the SDK types.</li>
+<li><strong>Router vocabulary edges that cross languages</strong> (N12's metadata, and the TypeScript drivers): TypeScript serializes a sample with the Specta types, Rust decodes and re-encodes it, and TypeScript decodes it again. The values must be equal, including Claude's reasoning choices and default.</li>
+</ul>
+<p>Decides R1, R2, R4, R5, R6 and R22.</p>
+</section>
+
+<section id="O3">
+<h3>O3 · Refresh and drift</h3>
+<ex-mermaid id="o3" label="O3"><script type="text/plain">
+flowchart LR
+  e1[export 0.157.1] --> g[refresh] --> r[change report]
+  e2[export 0.166.0] --> g
+  r --> c{matches an independent diff of the two exports?}
+  edit[contract with one edited field] --> chk[offline check] --> f[fails]
+</script></ex-mermaid>
+<p>Decides R7. The online check against a pinned, installed Codex depends on A23.</p>
+</section>
+
+<section id="O4">
+<h3>O4 · Node taps</h3>
+<ex-mermaid id="o4" label="O4"><script type="text/plain">
+flowchart LR
+  in[one input per variant at the node's inbound edge] --> node[the node, in-process] --> out[recorded outputs at its outbound edges]
+  node <--> st[(recorded state before / after)]
+  out --> cmp{equals the node's declared 0, 1 or many outputs and state change?}
+  out --> pc[record which messages this node produced and consumed]
+  pc --> tbl{matches the producer/consumer table?}
+</script></ex-mermaid>
+<p>A harness drives one node in-process. It feeds every input variant from the <a href="program-design.html#catalog">conversion catalog</a> into the node's inbound edges and records what comes out, plus the state before and after. It covers every node except N2, the opaque relay:</p>
+<ul>
+<li>N1, N3, N4, N6, N7, N8, N9, N10;</li>
+<li>N5's fan-out: each event reaches every subscriber (N3, N11's events_observe, inventory, and N4's turn wait);</li>
+<li>N11's routing: each tool call reaches its command, carrier or native-control target;</li>
+<li>N12, whose TypeScript output is decoded by the real Rust decoder.</li>
+</ul>
+<p>It also checks:</p>
+<ul>
+<li>approvals in both directions, including that the chosen option reaches the provider;</li>
+<li>malformed Codex replies, which must give <code>OutcomeUnknown</code> or <code>Protocol</code> and retire the connection;</li>
+<li>whether N9 has a real client (D24).</li>
+</ul>
+<p>Decides R12, R13, R17, R20, R21, R23, and the runtime side of R9. Built in D0. Each node's cases are added in the deliverable that fixes that node.</p>
+</section>
+
+<section id="O5">
+<h3>O5 · Streams: Codex compared with the Router</h3>
+<ex-mermaid id="o5" label="O5"><script type="text/plain">
+sequenceDiagram
+  participant D as Driver (verify-codex-router, TS)
+  participant C as Real Codex CLI 0.166.0 in a PTY
+  participant X as Real Codex (reference)
+  participant R as Debug Router + Claude Haiku or Cursor
+  D->>C: same action script (send, steer, /model, /resume, approve ...)
+  C->>X: run 1
+  D->>D: record screen + events + order
+  C->>R: run 2
+  D->>D: record screen + events + order, plus Router session record
+  D->>D: compare run 1 and run 2 (receipts, items, usage, approvals, order)
+</script></ex-mermaid>
+<p>Extends the existing Codex ACP journey driver (<code>capture-run.ts --codex-acp-only</code>), which already reads the wterm grid and the session record. It runs against the debug Router only, with Claude on Haiku.</p>
+<p><strong>Fails a wrong build:</strong> a steer with no receipt, 770K shown for a 1M window, a lost model change, or an approval whose choice never reaches the agent.</p>
+<p>Decides R10, R11, R24, and R2 through <code>/model</code>. Also decides R8 once Q1 is answered. <strong>Lifetime:</strong> lasting; it reruns on every Codex refresh.</p>
+<p><strong>What "match" means:</strong> Claude and Cursor answer differently from Codex: different text, a different number of message chunks and items, and their own reasoning and tool items. So text and exact sequences are never compared. Each run is reduced to a turn skeleton and checked against the rules below.</p>
+<ex-mermaid id="o5-skeleton" label="Turn skeleton both runs must satisfy"><script type="text/plain">
+flowchart LR
+  ts[turn started, once] --> u[user item per input, by client message id]
+  u --> a[agent items: each started, deltas, completed]
+  u -. steer .-> s[steered user item inside the running turn]
+  a --> tc[turn completed, once, last, with status]
+  s --> tc
+</script></ex-mermaid>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Rule</th><th>A wrong build that fails it</th></tr></thead>
+<tbody>
+<tr id="O5-k1"><td>k1 · Each turn starts once and completes once; nothing about that turn arrives after its completion.</td><td>no completion, a second completion, an item after completion</td></tr>
+<tr id="O5-k2"><td>k2 · Within one run, each input the CLI sent has exactly one user item carrying the client message id the CLI sent for it in that run. The input that opens a turn has its user item before every agent item of that turn. A steered input may arrive after earlier agent items; k3 governs where it lands.</td><td>an agent item before the turn-opening user item; a missing, duplicated or wrong id</td></tr>
+<tr id="O5-k3"><td>k3 · A steered input's user item (its receipt) arrives inside the running turn, before that turn completes.</td><td>the steer stays pending, or lands after completion</td></tr>
+<tr id="O5-k4"><td>k4 · Every item starts before its deltas and completes at most once, after them. Only an agent message superseded by a steer may end uncompleted: a user-message item starts later in the same turn, after its last delta, and it gets no delta after that. Every other item completes exactly once. Each answered turn has at least one completed agent message. (Real Codex 0.166.0 leaves a steered-over agent message uncompleted.)</td><td>a delta outside its item, a double completion, an uncompleted item with no later steer, a delta after the steer, an empty answer</td></tr>
+<tr id="O5-k5"><td>k5 · The two runs correspond, not literally equal. The nth input of the action script in run 1 corresponds to the nth in run 2, and each run's ids are checked against that run's own CLI (k2). Equal across corresponding inputs: number of turns, each turn's status, which inputs were steered, approval prompts and the outcome that reached the agent. After <code>/model</code>, each run's model, effort and service tier equal what the script picked <em>for that target</em> (a Codex model for real Codex, a Haiku model for Claude); <code>serviceTier: null</code> clears it and an absent field keeps it, in both runs.</td><td>a lost model change; a tier that does not clear; an approval that never reaches the agent; a turn that fails in one run only</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Allowed to differ:</strong> the count of agent message items and delta chunks, and whether reasoning or tool items appear. Tool items that do appear must follow k4 inside their turn.</p>
+<p id="O5-approvals"><strong>Approvals (owner's words, <a href="requirements.html#D15">D15</a>):</strong> the same action that makes real Codex ask is run on real Codex and on a Router session with Claude Haiku, in the same CLI.</p>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Rule</th><th>A wrong build that fails it</th></tr></thead>
+<tbody>
+<tr id="O5-a1"><td>a1 · The CLI receives the approval as the same Codex server request method as real Codex for that kind of action (command or file change), and shows its native prompt with the same choices.</td><td>a different method, a missing choice, or a prompt only in text</td></tr>
+<tr id="O5-a2"><td>a2 · Each choice the CLI sends (allow once, allow for the session, decline) reaches the agent as its mapped ACP outcome, and a timeout gives its declared outcome. The mapping is the one table in N7; an ACP option with no Codex equivalent is named there, not dropped.</td><td>the agent gets a different outcome, or none</td></tr>
+<tr id="O5-a3"><td>a3 · Only the approving connection gets the server request; a second attached window sees read-only pending items and the result.</td><td>two windows both prompted, or the result never shown</td></tr>
+</tbody>
+</table>
+</div>
+<p id="O5-windows"><strong>Two windows:</strong> window B attaches to the same thread while window A runs the script. Both runs (real Codex first, then the Router) must satisfy these rules:</p>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Rule</th><th>A wrong build that fails it</th></tr></thead>
+<tbody>
+<tr id="O5-w1"><td>w1 · Each window's own frames pass k1–k4.</td><td>a broken stream in either window</td></tr>
+<tr id="O5-w2"><td>w2 · Every turn A starts appears in B with the same turn id: started before, and completed after, the same items, with the same status.</td><td>B misses A's turn, or sees a different status</td></tr>
+<tr id="O5-w3"><td>w3 · Each input A sent appears in B as exactly one user item carrying A's client message id.</td><td>B misses A's receipt, or sees it twice</td></tr>
+<tr id="O5-w4"><td>w4 · B sends no turn/start or turn/steer of its own.</td><td>the driver or Router starts a turn from the watching window</td></tr>
+</tbody>
+</table>
+</div>
+<p><small>Proposed by the D0 Implementer, adopted by the Lead on 2026-11-14. D0 builds these rules with negative controls; D3 runs them live.</small></p>
+<p><strong>Why this is independent of today's code:</strong> the rules are checked against the real Codex run first. If real Codex breaks a rule, the rule is wrong, and the Verifier reports it to the Lead instead of relaxing it.</p>
+<p id="O5-usage"><strong>Usage and context window:</strong> compared with what the provider itself reported in that turn, not with Codex's numbers. The route: N6 stores the provider's ACP <code>usage_update</code> payload unchanged as the turn's Usage item (<code>provider_item_projection.rs:281-284</code>), so the driver reads that item from the debug Router's session record. Its <code>size</code> must equal the context window the CLI receives and shows, and its <code>used</code> must equal the used tokens. A build that shows 770K when the provider reports 1M, or any window other than the reported one, fails. Limit: the payload passes through the ACP SDK's types, so a field the SDK does not know is not compared; <code>size</code> and <code>used</code> are SDK fields.</p>
+<aside class="design-item" id="A31" data-design-item="assumption" data-authority="contract" data-source=".agents/skills/verify-codex-router/SKILL.md (Cursor qualification is draft: no Cursor model input or callback run yet)"><p>Cursor journeys need the verification skill's Cursor qualification first. Until then, the Cursor rows are planned but unqualified. Depends on it: O5 and the D2–D4 Cursor checks.</p></aside>
+<aside class="design-item" id="A30" data-design-item="assumption" data-authority="author"><p>The existing journey driver can be extended to run a second target (real Codex) and compare the two runs without a new harness. The D0 Verifier read its source on 2026-11-14: it pins Codex 0.165, drives only Claude or Cursor sessions, reads only the model from the footer, and its reply check accepts swapped order, a missing client id and a changed window. So D0 extends it with a real-Codex target, the 0.166.0 pin, usage reading and the k1–k5 rules; if that needs more than an extension, the plan's stop condition applies. Depends on it: O5.</p></aside>
+</section>
+
+<section id="O6">
+<h3>O6 · Baseline</h3>
+<ex-mermaid id="o6" label="O6"><script type="text/plain">
+flowchart LR
+  pre[95ab03b56, before PR #242] --> h[stuck steer, 770K, /model: each fails]
+  head[current head c4b6254e1] --> g[the same checks pass]
+  head --> cur[current runtime defects fail: method-not-found, JSON-in-strings]
+  cur --> later[each deliverable turns its own defects green]
+</script></ex-mermaid>
+<p>There are two kinds of evidence. Historical regressions show the checks can detect a bug: they fail on the commit before the fix and pass on the head. Current defects fail on the head until their deliverable lands. Decides R25. Capturing the baseline happens once; the checks it seeds stay as lasting regression tests.</p>
+<p id="O6-type-defects">Only defects visible on the wire belong in the runtime baseline. Untyped steering sends the same bytes as typed steering, so no runtime check can see it. It is a type-level defect, decided by O1 (a compile-fail case) and the O7 review in <a href="d3-input-settings-history.html">D3</a>, not by O4 or O5.</p>
+</section>
+
+<section id="O7">
+<h3>O7 · Structure, per deliverable</h3>
+<ex-mermaid id="o7" label="O7"><script type="text/plain">
+flowchart LR
+  tree[cargo tree: no Codex crate] --> v{Verifier checks}
+  inv[duplicate inventory: one definition each, encodings unchanged] --> v
+  acp[no vendored ACP schema left] --> v
+  mcp[advertised tool schema equals derived schema] --> v
+  crates[crate list, no orphan files] --> v
+  h[N1 handler inputs: no socket path] --> v
+</script></ex-mermaid>
+<p>A one-time review for each deliverable, not a permanent scan of the repo. The exception is the tool-schema equality check, which stays as a focused test. Decides C1, R14, R15, R16, R18, R19 and R26.</p>
+</section>
+
+<h2 id="coverage-map">Every edge, node and stream, and what decides it</h2>
+<ex-mermaid id="coverage-diagram" label="Coverage map"><script type="text/plain">
+flowchart LR
+  edges[Edges: Codex, ACP, vocabulary] --> O2[O2 conformance, one reference per protocol]
+  nodes[Nodes N1, N3-N12] --> O4[O4 taps from the catalog]
+  N2[N2 relay] --> none[opaque by design: bytes only]
+  S1to5[Streams S1-S5] --> O5[O5 real CLI, Codex vs Router]
+  S6[S6 tool schemas] --> s6[advertised schema vs the pinned export definition]
+  S7[S7 provider metadata] --> s7[provider metadata vs decoded vocabulary values]
+  pc[Producers and consumers] --> sig[every catalog variant driven, recorded per message, plus a send-site review]
+</script></ex-mermaid>
+<p>R21 is checked per message, not per protocol family. Each node's conversion catalog is one exhaustive table in code, keyed by input variant, and each row names the output kinds it may emit. O4 feeds every input variant in the catalog, so no catalog row goes unexercised. For each variant it records the messages the node actually produced and consumed, and compares them with that row and with the producer/consumer table. A node path that is not in its catalog cannot compile, for our own types, or fails the D25 check, for ACP. Paths that are not node conversions at all, such as code outside the twelve nodes that sends a message directly, are found by D0's review of every send site on each edge. For S6, the Codex parts of each advertised tool schema are compared with the pinned export, an independent reference, not only with the type that produced them. For S7, the reasoning choices and default the Claude wrapper produced must equal the values the Router decoded.</p>
+
+<h2 id="rows">Proven by, per need</h2>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Need</th><th>Rules</th><th>Proven by</th><th>Reference</th><th>Fails a wrong build when</th><th>Unverified</th></tr></thead>
+<tbody>
+<tr id="V-U1"><td><a href="requirements.html#U1">U1</a></td><td>R1 R2 R3 R4 R5 R9 R17</td><td>Wrong code won't compile (O1); messages match the export (O2); malformed replies keep today's outcomes (O4)</td><td>Pinned 0.166.0 export; <code>common.rs</code> at 6ff1e1ca</td><td>raw JSON is still accepted, or a closed enum drops a turn completion</td><td>shapes we never send</td></tr>
+<tr id="V-U2"><td><a href="requirements.html#U2">U2</a></td><td>R1 R2 R6 R7</td><td>Refresh reproduces the crate, and the export agrees independently (O2, O3)</td><td>The export</td><td>a hand edit or a stale override goes unnoticed</td><td>wire behavior the export omits</td></tr>
+<tr id="V-U3"><td><a href="requirements.html#U3">U3</a></td><td>R5 R6 R7 R8</td><td>Release report between two real exports (O3); mismatch journey once Q1 is decided (O5)</td><td>Two exports; Q1</td><td>the report misses a changed shape</td><td>R8 until Q1 is decided; the online check (A23)</td></tr>
+<tr id="V-U4"><td><a href="requirements.html#U4">U4</a></td><td>C1</td><td><code>cargo tree</code> (O7)</td><td>C1</td><td>any Codex crate appears</td><td>none</td></tr>
+<tr id="V-U5"><td><a href="requirements.html#U5">U5</a></td><td>R12 R14 R15 R16 R17 R19</td><td>Each duplicate ends as one definition (O7); conversions are typed at the node (O4)</td><td><a href="program-design.html#inventory">Inventory</a></td><td>a leftover copy, or a changed encoding</td><td>duplicates outside the inventory</td></tr>
+<tr id="V-U6"><td><a href="requirements.html#U6">U6</a></td><td>R18 R19</td><td>Crate list; orphan files gone (O7)</td><td>Manifests</td><td>an orphan file remains</td><td>crates central still owns</td></tr>
+<tr id="V-U7"><td><a href="requirements.html#U7">U7</a></td><td>R10 R11 R24</td><td>The real CLI does each action against Codex and against the Router with Claude and Cursor, and the results must match (O5)</td><td>The same action on real Codex</td><td>stuck steer, 770K, a lost model change, or an approval that never arrives</td><td>CLI releases other than 0.166.0</td></tr>
+<tr id="V-U8"><td><a href="requirements.html#U8">U8</a></td><td>R26</td><td>Review of N1's handler inputs (O7)</td><td>R1–R10</td><td>a handler reads a socket path</td><td>remote connection itself</td></tr>
+<tr id="V-U9"><td><a href="requirements.html#U9">U9</a></td><td>R9 R12 R13 R19 R20 R23</td><td>Every node's taps pass for every input variant (O4)</td><td>Node sections in <a href="program-design.html#nodes">Program Design</a></td><td>a node emits output it didn't declare, or state changes without an owner</td><td>N2 relay (opaque by design)</td></tr>
+<tr id="V-U10"><td><a href="requirements.html#U10">U10</a></td><td>R21</td><td>Taps record producers and consumers and compare them with the table (O4)</td><td><a href="program-design.html#producers-consumers">Table</a></td><td>a node produces a message the table doesn't list, by signature or at runtime</td><td>send sites outside the twelve nodes beyond D0's review</td></tr>
+<tr id="V-U11"><td><a href="requirements.html#U11">U11</a></td><td>R22 R23 R24 R25</td><td>The four layers exist, and today's bugs fail in them first (O2, O4, O5, O6)</td><td>Real Codex; the export</td><td>a known bug passes the baseline</td><td>A20 (Specta experiment); A30</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="per-deliverable">What each deliverable must show</h2>
+
+<ex-mermaid id="per-deliverable-diagram" label="Observations each deliverable adds or turns green"><script type="text/plain">
+flowchart LR
+  D0[D0] -- builds --> O4h[O4 harness] & O5h[O5 journeys] & O6b[O6 baseline]
+  D1[D1] -- builds --> O1a[O1] & O2a[O2] & O3a[O3]
+  D2[D2] -- greens --> s2[O5 output cases + O4 N3 N5 N6]
+  D3[D3] -- greens --> s3[O5 input, settings, history + O4 N1 N4]
+  D4[D4] -- greens --> s4[O5 approvals both ways + O4 N7]
+  D5[D5] -- greens --> s5[O4 N10 N8 Codex side + malformed replies + MCP schema test]
+  D6[D6] -- greens --> s6[O7 ACP, vocabulary, Specta]
+</script></ex-mermaid>
+
+</ex-document>
+</body>
+</html>

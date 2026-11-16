@@ -146,3 +146,7 @@ impl NativeUserReceipts {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "native_user_receipts_node_tap_test.rs"]
+pub(crate) mod node_tap_tests;

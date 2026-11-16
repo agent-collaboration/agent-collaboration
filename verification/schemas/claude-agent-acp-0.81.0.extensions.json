@@ -1,0 +1,368 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "claude-agent-acp 0.81.0 ACP extensions",
+  "description": "Claude's ACP extras, written from the declarations of @agentclientprotocol/claude-agent-acp 0.81.0: dist/acp-agent.d.ts SteerMeta, SteerRequest and SteerResponse (lines 49-77), parseSteerRequest in dist/acp-agent.js (lines 191-214) and the initialize response's top-level _meta.steering advertisement (dist/acp-agent.js lines 956-963); dist/auth-status.d.ts AUTH_STATUS_UPDATE_METHOD, AuthStatusKind, AuthStatusAccount, AuthStatus and AuthStatusUpdateNotification, the agent-to-client notification dist/acp-agent.js sends at line 1096. Prompt items are ACP ContentBlocks: #/$defs/ContentBlock resolves against the pinned ACP schema, whose $defs the checker merges with these (a name in both is refused). Added for correction 3 (F): dist/goal-extension.d.ts:3-30 GoalCapability, GoalSnapshot, GoalRequest and GoalControlResponse, the _session/goal request dist/acp-agent.js:7876 serves (agent.goal L1625-1637); the initialize _meta.goal and _meta.jetbrains.air advertisement (dist/acp-agent.js:959-969, dist/air-extension.js:12-35 withAirMeta: {jetbrains:{air:{version:1, capabilities}}}); and the session_info_update _meta.goal snapshot (publishGoal, dist/acp-agent.js:1638-1650; goal may be null). x-meta keys: initializeResponse is the initialize result's top-level _meta; sessionInfoUpdate is a session/update notification's update._meta when update.sessionUpdate is session_info_update. Correction 4 (V5): GoalRequest carries the installed parser's constraints, dist/goal-extension.js:20-35 parseGoalRequest (registered at dist/acp-agent.js:7876): a non-empty sessionId, and on set an objective that is not blank after trim() (pattern \\S: ECMAScript \\s and String.prototype.trim treat the same characters as whitespace).",
+  "x-methods": {
+    "_session/steering": {
+      "params": "#/$defs/SteerRequest",
+      "result": "#/$defs/SteerResponse"
+    },
+    "_session/goal": {
+      "params": "#/$defs/GoalRequest",
+      "result": "#/$defs/GoalControlResponse"
+    }
+  },
+  "x-notifications": {
+    "_auth/status_update": {
+      "sender": "agent",
+      "params": "#/$defs/AuthStatusUpdateNotification"
+    }
+  },
+  "x-meta": {
+    "initializeResponse": "#/$defs/InitializeResponseMeta",
+    "sessionInfoUpdate": "#/$defs/SessionInfoUpdateMeta"
+  },
+  "$defs": {
+    "SteerMeta": {
+      "type": "object",
+      "properties": {
+        "steering": {
+          "type": "object",
+          "properties": {
+            "idleBehavior": {
+              "enum": [
+                "promptRequired"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "SteerRequest": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "prompt"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ContentBlock"
+          }
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerMeta"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SteerResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "outcome"
+          ],
+          "properties": {
+            "outcome": {
+              "const": "injected"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "outcome"
+          ],
+          "properties": {
+            "outcome": {
+              "const": "startedNewTurn"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "outcome",
+            "reason"
+          ],
+          "properties": {
+            "outcome": {
+              "const": "promptRequired"
+            },
+            "reason": {
+              "const": "noRunningTurn"
+            }
+          }
+        }
+      ]
+    },
+    "SteeringAdvertisementMeta": {
+      "type": "object",
+      "properties": {
+        "steering": {
+          "type": "object",
+          "required": [
+            "supported"
+          ],
+          "properties": {
+            "supported": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "AuthStatusKind": {
+      "enum": [
+        "account",
+        "api_key",
+        "gateway",
+        "external",
+        "none"
+      ]
+    },
+    "AuthStatusAccount": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "plan": {
+          "type": "string"
+        }
+      }
+    },
+    "AuthStatus": {
+      "type": "object",
+      "required": [
+        "kind",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AuthStatusKind"
+        },
+        "label": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "account": {
+          "$ref": "#/$defs/AuthStatusAccount"
+        },
+        "vendor": {
+          "type": "object"
+        }
+      }
+    },
+    "AuthStatusUpdateNotification": {
+      "type": "object",
+      "required": [
+        "authStatus"
+      ],
+      "properties": {
+        "authStatus": {
+          "$ref": "#/$defs/AuthStatus"
+        }
+      }
+    },
+    "GoalCapability": {
+      "type": "object",
+      "required": [
+        "version",
+        "controlMethod",
+        "actions"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "controlMethod": {
+          "const": "_session/goal"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "set",
+              "clear"
+            ]
+          }
+        }
+      }
+    },
+    "GoalStatus": {
+      "enum": [
+        "active",
+        "paused",
+        "blocked",
+        "limited",
+        "complete"
+      ]
+    },
+    "GoalSnapshot": {
+      "type": "object",
+      "required": [
+        "objective",
+        "status",
+        "controlMethod"
+      ],
+      "properties": {
+        "objective": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/GoalStatus"
+        },
+        "iterations": {
+          "type": "number"
+        },
+        "lastReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        },
+        "tokenBudget": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tokensUsed": {
+          "type": "number"
+        },
+        "timeUsedSeconds": {
+          "type": "number"
+        },
+        "controlMethod": {
+          "const": "_session/goal"
+        }
+      }
+    },
+    "GoalRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "sessionId",
+            "action"
+          ],
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "action": {
+              "const": "clear"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "sessionId",
+            "action",
+            "objective"
+          ],
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "action": {
+              "const": "set"
+            },
+            "objective": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      ]
+    },
+    "GoalControlResponse": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "AirCapabilityMeta": {
+      "type": "object",
+      "properties": {
+        "air": {
+          "type": "object",
+          "required": [
+            "version",
+            "capabilities"
+          ],
+          "properties": {
+            "version": {
+              "const": 1
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "InitializeResponseMeta": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/SteeringAdvertisementMeta"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "goal": {
+              "$ref": "#/$defs/GoalCapability"
+            },
+            "jetbrains": {
+              "$ref": "#/$defs/AirCapabilityMeta"
+            }
+          }
+        }
+      ]
+    },
+    "SessionInfoUpdateMeta": {
+      "type": "object",
+      "properties": {
+        "goal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GoalSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

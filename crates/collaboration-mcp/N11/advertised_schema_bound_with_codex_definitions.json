@@ -1,0 +1,380 @@
+{
+  "caseId": "N11/advertised_schema_bound_with_codex_definitions",
+  "node": "N11",
+  "case": "advertised_schema_bound_with_codex_definitions",
+  "catalogRow": "N11 section: Codex shapes spliced into tool schemas at runtime (schema_binding.rs:3)",
+  "stateBefore": {
+    "native_definitions": "available"
+  },
+  "records": [
+    {
+      "direction": "consumed",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": false,
+      "kind": "tools/list"
+    },
+    {
+      "direction": "produced",
+      "family": "mcpToolSchema",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": false,
+      "kind": "tool_schema:session_inspect codexNativeThread=true unresolvedRefs=false",
+      "payload": {
+        "name": "session_inspect",
+        "description": "Inspects one exact conversation target without changing its identity. Attachment or backend failures retain structured target/effect evidence.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "$defs": {
+            "SessionRef": {
+              "description": "A conversation scoped to the endpoint that interprets its opaque ID.\n\nThe `session_id` value is owned and interpreted by the referenced endpoint;\nit is not a Router-wide, computer-wide, process, or connection identity.",
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "$ref": "#/$defs/EndpointRef"
+                },
+                "sessionId": {
+                  "$ref": "#/$defs/SessionId"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "endpoint",
+                "sessionId"
+              ]
+            },
+            "EndpointRef": {
+              "description": "An adapter endpoint within one Router service, independent of its locator.\n\n`service_id` identifies the Router service; `endpoint_id` selects the\nstable named adapter endpoint within that service.",
+              "type": "object",
+              "properties": {
+                "serviceId": {
+                  "$ref": "#/$defs/UuidIdentity"
+                },
+                "endpointId": {
+                  "$ref": "#/$defs/EndpointId"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "serviceId",
+                "endpointId"
+              ]
+            },
+            "UuidIdentity": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])"
+            },
+            "EndpointId": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])"
+            },
+            "SessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "^[^\\u0000]+$",
+              "x-maxUtf8Bytes": 4096
+            }
+          },
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/SessionRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "target"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "McpToolOutput",
+          "description": "A successful tool result or a typed structured MCP tool error.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeInspectResult"
+            },
+            {
+              "$ref": "#/$defs/McpToolError"
+            }
+          ],
+          "$defs": {
+            "NativeInspectResult": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/SessionRef"
+                },
+                "generation": {
+                  "$ref": "#/$defs/CodexGeneration"
+                },
+                "effectiveAccess": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/RouterAccess"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "settingsObservation": {
+                  "$ref": "#/$defs/SettingsObservation"
+                },
+                "thread": {
+                  "$ref": "#/$defs/codexNativeThread"
+                }
+              },
+              "additionalProperties": {
+                "not": {}
+              },
+              "required": [
+                "target",
+                "generation",
+                "settingsObservation",
+                "thread"
+              ]
+            },
+            "SessionRef": {
+              "description": "A conversation scoped to the endpoint that interprets its opaque ID.\n\nThe `session_id` value is owned and interpreted by the referenced endpoint;\nit is not a Router-wide, computer-wide, process, or connection identity.",
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "$ref": "#/$defs/EndpointRef"
+                },
+                "sessionId": {
+                  "$ref": "#/$defs/SessionId"
+                }
+              },
+              "additionalProperties": {
+                "not": {}
+              },
+              "required": [
+                "endpoint",
+                "sessionId"
+              ]
+            },
+            "EndpointRef": {
+              "description": "An adapter endpoint within one Router service, independent of its locator.\n\n`service_id` identifies the Router service; `endpoint_id` selects the\nstable named adapter endpoint within that service.",
+              "type": "object",
+              "properties": {
+                "serviceId": {
+                  "$ref": "#/$defs/UuidIdentity"
+                },
+                "endpointId": {
+                  "$ref": "#/$defs/EndpointId"
+                }
+              },
+              "additionalProperties": {
+                "not": {}
+              },
+              "required": [
+                "serviceId",
+                "endpointId"
+              ]
+            },
+            "UuidIdentity": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])"
+            },
+            "EndpointId": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])"
+            },
+            "SessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "^[^\\u0000]+$",
+              "x-maxUtf8Bytes": 4096
+            },
+            "CodexGeneration": {
+              "description": "One managed backend incarnation within a particular service process lifetime.",
+              "type": "object",
+              "properties": {
+                "serviceEpoch": {
+                  "$ref": "#/$defs/UuidIdentity"
+                },
+                "generation": {
+                  "$ref": "#/$defs/GenerationNumber"
+                }
+              },
+              "additionalProperties": {
+                "not": {}
+              },
+              "required": [
+                "serviceEpoch",
+                "generation"
+              ]
+            },
+            "GenerationNumber": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "RouterAccess": {
+              "type": "string",
+              "enum": [
+                "write-restricted",
+                "workspace-write"
+              ]
+            },
+            "SettingsObservation": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "$ref": "#/$defs/SettingsObservationSource"
+                    },
+                    "observedAt": {
+                      "type": "string"
+                    },
+                    "routerAccess": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/RouterAccess"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "nativeSandbox": {},
+                    "permissionProfile": {},
+                    "approvalPolicy": {},
+                    "approvalsReviewer": {},
+                    "kind": {
+                      "type": "string",
+                      "const": "observed"
+                    }
+                  },
+                  "additionalProperties": {
+                    "not": {}
+                  },
+                  "required": [
+                    "kind",
+                    "source",
+                    "observedAt"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "$ref": "#/$defs/SettingsUnavailableReason"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "unavailable"
+                    }
+                  },
+                  "additionalProperties": {
+                    "not": {}
+                  },
+                  "required": [
+                    "kind",
+                    "reason"
+                  ]
+                }
+              ]
+            },
+            "SettingsObservationSource": {
+              "type": "string",
+              "enum": [
+                "threadStart",
+                "threadFork",
+                "threadResume"
+              ]
+            },
+            "SettingsUnavailableReason": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "nativeResponseOmittedSettings",
+                    "notObservedBeforeResume",
+                    "threadReadOmitsSettings"
+                  ]
+                },
+                {
+                  "description": "The broker holds no access route for this thread, so the app-server\ndefault governs its access. Threads created before routes were recorded\nstill resume; their access is inherited rather than Router-selected.",
+                  "type": "string",
+                  "const": "noRecordedAccessRoute"
+                }
+              ]
+            },
+            "McpToolError": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "stage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "effect": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "target": {},
+                    "operationId": {},
+                    "mcpResult": {
+                      "type": "string",
+                      "const": "error"
+                    }
+                  },
+                  "required": [
+                    "mcpResult",
+                    "kind",
+                    "message"
+                  ],
+                  "additionalProperties": {}
+                }
+              ]
+            },
+            "codexNativeThread": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "stateAfter": {
+    "native_definitions": "available"
+  },
+  "comparison": {
+    "verdict": "differsFromCatalog",
+    "differences": [
+      "produced [(McpToolSchema, McpCaller, \"tool_schema:session_inspect codexNativeThread=true unresolvedRefs=false\", Some(Object {\"name\": String(\"session_inspect\"), \"description\": String(\"Inspects one exact conversation target without changing its identity. Attachment or backend failures retain structured target/effect evidence.\"), \"inputSchema\": Object {\"$schema\": String(\"https://json-schema.org/draft/2020-12/schema\"), \"$defs\": Object {\"SessionRef\": Object {\"description\": String(\"A conversation scoped to the endpoint that interprets its opaque ID.\\n\\nThe `session_id` value is owned and interpreted by the referenced endpoint;\\nit is not a Router-wide, computer-wide, process, or connection identity.\"), \"type\": String(\"object\"), \"properties\": Object {\"endpoint\": Object {\"$ref\": String(\"#/$defs/EndpointRef\")}, \"sessionId\": Object {\"$ref\": String(\"#/$defs/SessionId\")}}, \"additionalProperties\": Bool(false), \"required\": Array [String(\"endpoint\"), String(\"sessionId\")]}, \"EndpointRef\": Object {\"description\": String(\"An adapter endpoint within one Router service, independent of its locator.\\n\\n`service_id` identifies the Router service; `endpoint_id` selects the\\nstable named adapter endpoint within that service.\"), \"type\": String(\"object\"), \"properties\": Object {\"serviceId\": Object {\"$ref\": String(\"#/$defs/UuidIdentity\")}, \"endpointId\": Object {\"$ref\": String(\"#/$defs/EndpointId\")}}, \"additionalProperties\": Bool(false), \"required\": Array [String(\"serviceId\"), String(\"endpointId\")]}, \"UuidIdentity\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\\\s\\\\S])\")}, \"EndpointId\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[a-z][a-z0-9-]{0,63}$(?![\\\\s\\\\S])\")}, \"SessionId\": Object {\"type\": String(\"string\"), \"minLength\": Number(1), \"maxLength\": Number(4096), \"pattern\": String(\"^[^\\\\u0000]+$\"), \"x-maxUtf8Bytes\": Number(4096)}}, \"type\": String(\"object\"), \"properties\": Object {\"target\": Object {\"$ref\": String(\"#/$defs/SessionRef\")}}, \"additionalProperties\": Bool(false), \"required\": Array [String(\"target\")]}, \"outputSchema\": Object {\"$schema\": String(\"https://json-schema.org/draft/2020-12/schema\"), \"title\": String(\"McpToolOutput\"), \"description\": String(\"A successful tool result or a typed structured MCP tool error.\"), \"anyOf\": Array [Object {\"$ref\": String(\"#/$defs/NativeInspectResult\")}, Object {\"$ref\": String(\"#/$defs/McpToolError\")}], \"$defs\": Object {\"NativeInspectResult\": Object {\"type\": String(\"object\"), \"properties\": Object {\"target\": Object {\"$ref\": String(\"#/$defs/SessionRef\")}, \"generation\": Object {\"$ref\": String(\"#/$defs/CodexGeneration\")}, \"effectiveAccess\": Object {\"anyOf\": Array [Object {\"$ref\": String(\"#/$defs/RouterAccess\")}, Object {\"type\": String(\"null\")}]}, \"settingsObservation\": Object {\"$ref\": String(\"#/$defs/SettingsObservation\")}, \"thread\": Object {\"$ref\": String(\"#/$defs/codexNativeThread\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"target\"), String(\"generation\"), String(\"settingsObservation\"), String(\"thread\")]}, \"SessionRef\": Object {\"description\": String(\"A conversation scoped to the endpoint that interprets its opaque ID.\\n\\nThe `session_id` value is owned and interpreted by the referenced endpoint;\\nit is not a Router-wide, computer-wide, process, or connection identity.\"), \"type\": String(\"object\"), \"properties\": Object {\"endpoint\": Object {\"$ref\": String(\"#/$defs/EndpointRef\")}, \"sessionId\": Object {\"$ref\": String(\"#/$defs/SessionId\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"endpoint\"), String(\"sessionId\")]}, \"EndpointRef\": Object {\"description\": String(\"An adapter endpoint within one Router service, independent of its locator.\\n\\n`service_id` identifies the Router service; `endpoint_id` selects the\\nstable named adapter endpoint within that service.\"), \"type\": String(\"object\"), \"properties\": Object {\"serviceId\": Object {\"$ref\": String(\"#/$defs/UuidIdentity\")}, \"endpointId\": Object {\"$ref\": String(\"#/$defs/EndpointId\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"serviceId\"), String(\"endpointId\")]}, \"UuidIdentity\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\\\s\\\\S])\")}, \"EndpointId\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[a-z][a-z0-9-]{0,63}$(?![\\\\s\\\\S])\")}, \"SessionId\": Object {\"type\": String(\"string\"), \"minLength\": Number(1), \"maxLength\": Number(4096), \"pattern\": String(\"^[^\\\\u0000]+$\"), \"x-maxUtf8Bytes\": Number(4096)}, \"CodexGeneration\": Object {\"description\": String(\"One managed backend incarnation within a particular service process lifetime.\"), \"type\": String(\"object\"), \"properties\": Object {\"serviceEpoch\": Object {\"$ref\": String(\"#/$defs/UuidIdentity\")}, \"generation\": Object {\"$ref\": String(\"#/$defs/GenerationNumber\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"serviceEpoch\"), String(\"generation\")]}, \"GenerationNumber\": Object {\"type\": String(\"integer\"), \"minimum\": Number(1), \"maximum\": Number(9007199254740991)}, \"RouterAccess\": Object {\"type\": String(\"string\"), \"enum\": Array [String(\"write-restricted\"), String(\"workspace-write\")]}, \"SettingsObservation\": Object {\"oneOf\": Array [Object {\"type\": String(\"object\"), \"properties\": Object {\"source\": Object {\"$ref\": String(\"#/$defs/SettingsObservationSource\")}, \"observedAt\": Object {\"type\": String(\"string\")}, \"routerAccess\": Object {\"anyOf\": Array [Object {\"$ref\": String(\"#/$defs/RouterAccess\")}, Object {\"type\": String(\"null\")}]}, \"nativeSandbox\": Object {}, \"permissionProfile\": Object {}, \"approvalPolicy\": Object {}, \"approvalsReviewer\": Object {}, \"kind\": Object {\"type\": String(\"string\"), \"const\": String(\"observed\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"kind\"), String(\"source\"), String(\"observedAt\")]}, Object {\"type\": String(\"object\"), \"properties\": Object {\"reason\": Object {\"$ref\": String(\"#/$defs/SettingsUnavailableReason\")}, \"kind\": Object {\"type\": String(\"string\"), \"const\": String(\"unavailable\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"kind\"), String(\"reason\")]}]}, \"SettingsObservationSource\": Object {\"type\": String(\"string\"), \"enum\": Array [String(\"threadStart\"), String(\"threadFork\"), String(\"threadResume\")]}, \"SettingsUnavailableReason\": Object {\"oneOf\": Array [Object {\"type\": String(\"string\"), \"enum\": Array [String(\"nativeResponseOmittedSettings\"), String(\"notObservedBeforeResume\"), String(\"threadReadOmitsSettings\")]}, Object {\"description\": String(\"The broker holds no access route for this thread, so the app-server\\ndefault governs its access. Threads created before routes were recorded\\nstill resume; their access is inherited rather than Router-selected.\"), \"type\": String(\"string\"), \"const\": String(\"noRecordedAccessRoute\")}]}, \"McpToolError\": Object {\"oneOf\": Array [Object {\"type\": String(\"object\"), \"properties\": Object {\"kind\": Object {\"type\": String(\"string\")}, \"message\": Object {\"type\": String(\"string\")}, \"stage\": Object {\"type\": Array [String(\"string\"), String(\"null\")]}, \"effect\": Object {\"type\": Array [String(\"string\"), String(\"null\")]}, \"target\": Object {}, \"operationId\": Object {}, \"mcpResult\": Object {\"type\": String(\"string\"), \"const\": String(\"error\")}}, \"required\": Array [String(\"mcpResult\"), String(\"kind\"), String(\"message\")], \"additionalProperties\": Object {}}]}, \"codexNativeThread\": Object {\"properties\": Object {\"id\": Object {\"type\": String(\"string\")}}, \"required\": Array [String(\"id\")], \"type\": String(\"object\")}}, \"type\": String(\"object\")}}))], catalog declares [(McpToolSchema, McpCaller, \"tool_schema:session_inspect codexNativeThread=true unresolvedRefs=false\", Some(Object {\"name\": String(\"session_inspect\"), \"description\": String(\"Inspects one exact conversation target without changing its identity. Attachment or backend failures retain structured target/effect evidence.\"), \"inputSchema\": Object {\"$schema\": String(\"https://json-schema.org/draft/2020-12/schema\"), \"$defs\": Object {\"SessionRef\": Object {\"description\": String(\"A conversation scoped to the endpoint that interprets its opaque ID.\\n\\nThe `session_id` value is owned and interpreted by the referenced endpoint;\\nit is not a Router-wide, computer-wide, process, or connection identity.\"), \"type\": String(\"object\"), \"properties\": Object {\"endpoint\": Object {\"$ref\": String(\"#/$defs/EndpointRef\")}, \"sessionId\": Object {\"$ref\": String(\"#/$defs/SessionId\")}}, \"additionalProperties\": Bool(false), \"required\": Array [String(\"endpoint\"), String(\"sessionId\")]}, \"EndpointRef\": Object {\"description\": String(\"An adapter endpoint within one Router service, independent of its locator.\\n\\n`service_id` identifies the Router service; `endpoint_id` selects the\\nstable named adapter endpoint within that service.\"), \"type\": String(\"object\"), \"properties\": Object {\"serviceId\": Object {\"$ref\": String(\"#/$defs/UuidIdentity\")}, \"endpointId\": Object {\"$ref\": String(\"#/$defs/EndpointId\")}}, \"additionalProperties\": Bool(false), \"required\": Array [String(\"serviceId\"), String(\"endpointId\")]}, \"UuidIdentity\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\\\s\\\\S])\")}, \"EndpointId\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[a-z][a-z0-9-]{0,63}$(?![\\\\s\\\\S])\")}, \"SessionId\": Object {\"type\": String(\"string\"), \"minLength\": Number(1), \"maxLength\": Number(4096), \"pattern\": String(\"^[^\\\\u0000]+$\"), \"x-maxUtf8Bytes\": Number(4096)}}, \"type\": String(\"object\"), \"properties\": Object {\"target\": Object {\"$ref\": String(\"#/$defs/SessionRef\")}}, \"additionalProperties\": Bool(false), \"required\": Array [String(\"target\")]}, \"outputSchema\": Object {\"$schema\": String(\"https://json-schema.org/draft/2020-12/schema\"), \"title\": String(\"McpToolOutput\"), \"description\": String(\"A successful tool result or a typed structured MCP tool error.\"), \"anyOf\": Array [Object {\"$ref\": String(\"#/$defs/NativeInspectResult\")}, Object {\"$ref\": String(\"#/$defs/McpToolError\")}], \"$defs\": Object {\"NativeInspectResult\": Object {\"type\": String(\"object\"), \"properties\": Object {\"target\": Object {\"$ref\": String(\"#/$defs/SessionRef\")}, \"generation\": Object {\"$ref\": String(\"#/$defs/CodexGeneration\")}, \"effectiveAccess\": Object {\"anyOf\": Array [Object {\"$ref\": String(\"#/$defs/RouterAccess\")}, Object {\"type\": String(\"null\")}]}, \"settingsObservation\": Object {\"$ref\": String(\"#/$defs/SettingsObservation\")}, \"thread\": Object {}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"target\"), String(\"generation\"), String(\"settingsObservation\"), String(\"thread\")]}, \"SessionRef\": Object {\"description\": String(\"A conversation scoped to the endpoint that interprets its opaque ID.\\n\\nThe `session_id` value is owned and interpreted by the referenced endpoint;\\nit is not a Router-wide, computer-wide, process, or connection identity.\"), \"type\": String(\"object\"), \"properties\": Object {\"endpoint\": Object {\"$ref\": String(\"#/$defs/EndpointRef\")}, \"sessionId\": Object {\"$ref\": String(\"#/$defs/SessionId\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"endpoint\"), String(\"sessionId\")]}, \"EndpointRef\": Object {\"description\": String(\"An adapter endpoint within one Router service, independent of its locator.\\n\\n`service_id` identifies the Router service; `endpoint_id` selects the\\nstable named adapter endpoint within that service.\"), \"type\": String(\"object\"), \"properties\": Object {\"serviceId\": Object {\"$ref\": String(\"#/$defs/UuidIdentity\")}, \"endpointId\": Object {\"$ref\": String(\"#/$defs/EndpointId\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"serviceId\"), String(\"endpointId\")]}, \"UuidIdentity\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\\\s\\\\S])\")}, \"EndpointId\": Object {\"type\": String(\"string\"), \"pattern\": String(\"^[a-z][a-z0-9-]{0,63}$(?![\\\\s\\\\S])\")}, \"SessionId\": Object {\"type\": String(\"string\"), \"minLength\": Number(1), \"maxLength\": Number(4096), \"pattern\": String(\"^[^\\\\u0000]+$\"), \"x-maxUtf8Bytes\": Number(4096)}, \"CodexGeneration\": Object {\"description\": String(\"One managed backend incarnation within a particular service process lifetime.\"), \"type\": String(\"object\"), \"properties\": Object {\"serviceEpoch\": Object {\"$ref\": String(\"#/$defs/UuidIdentity\")}, \"generation\": Object {\"$ref\": String(\"#/$defs/GenerationNumber\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"serviceEpoch\"), String(\"generation\")]}, \"GenerationNumber\": Object {\"type\": String(\"integer\"), \"minimum\": Number(1), \"maximum\": Number(9007199254740991)}, \"RouterAccess\": Object {\"type\": String(\"string\"), \"enum\": Array [String(\"write-restricted\"), String(\"workspace-write\")]}, \"SettingsObservation\": Object {\"oneOf\": Array [Object {\"type\": String(\"object\"), \"properties\": Object {\"source\": Object {\"$ref\": String(\"#/$defs/SettingsObservationSource\")}, \"observedAt\": Object {\"type\": String(\"string\")}, \"routerAccess\": Object {\"anyOf\": Array [Object {\"$ref\": String(\"#/$defs/RouterAccess\")}, Object {\"type\": String(\"null\")}]}, \"nativeSandbox\": Object {}, \"permissionProfile\": Object {}, \"approvalPolicy\": Object {}, \"approvalsReviewer\": Object {}, \"kind\": Object {\"type\": String(\"string\"), \"const\": String(\"observed\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"kind\"), String(\"source\"), String(\"observedAt\")]}, Object {\"type\": String(\"object\"), \"properties\": Object {\"reason\": Object {\"$ref\": String(\"#/$defs/SettingsUnavailableReason\")}, \"kind\": Object {\"type\": String(\"string\"), \"const\": String(\"unavailable\")}}, \"additionalProperties\": Object {\"not\": Object {}}, \"required\": Array [String(\"kind\"), String(\"reason\")]}]}, \"SettingsObservationSource\": Object {\"type\": String(\"string\"), \"enum\": Array [String(\"threadStart\"), String(\"threadFork\"), String(\"threadResume\")]}, \"SettingsUnavailableReason\": Object {\"oneOf\": Array [Object {\"type\": String(\"string\"), \"enum\": Array [String(\"nativeResponseOmittedSettings\"), String(\"notObservedBeforeResume\"), String(\"threadReadOmitsSettings\")]}, Object {\"description\": String(\"The broker holds no access route for this thread, so the app-server\\ndefault governs its access. Threads created before routes were recorded\\nstill resume; their access is inherited rather than Router-selected.\"), \"type\": String(\"string\"), \"const\": String(\"noRecordedAccessRoute\")}]}, \"McpToolError\": Object {\"oneOf\": Array [Object {\"type\": String(\"object\"), \"properties\": Object {\"kind\": Object {\"type\": String(\"string\")}, \"message\": Object {\"type\": String(\"string\")}, \"stage\": Object {\"type\": Array [String(\"string\"), String(\"null\")]}, \"effect\": Object {\"type\": Array [String(\"string\"), String(\"null\")]}, \"target\": Object {}, \"operationId\": Object {}, \"mcpResult\": Object {\"type\": String(\"string\"), \"const\": String(\"error\")}}, \"required\": Array [String(\"mcpResult\"), String(\"kind\"), String(\"message\")], \"additionalProperties\": Object {}}]}, \"codexNativeThread\": Object {\"type\": String(\"object\"), \"required\": Array [String(\"id\")], \"properties\": Object {\"id\": Object {\"type\": String(\"string\")}}}}, \"type\": String(\"object\"), \"properties\": Object {\"thread\": Object {\"$ref\": String(\"#/$defs/codexNativeThread\")}}}}))]"
+    ]
+  },
+  "outcome": {
+    "outcome": "unexpectedFailure"
+  }
+}

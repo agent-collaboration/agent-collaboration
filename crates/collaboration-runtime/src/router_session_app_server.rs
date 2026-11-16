@@ -631,3 +631,11 @@ mod activity_tests;
 #[cfg(test)]
 #[path = "native_provider_service_tier_test.rs"]
 mod service_tier_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_node_tap_test.rs"]
+mod node_tap_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_connection_node_tap_test.rs"]
+mod connection_node_tap_tests;

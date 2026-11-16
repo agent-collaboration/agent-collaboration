@@ -3,6 +3,9 @@
 #[path = "../support/provider_behavior.rs"]
 mod test_behavior;
 
+mod acp_wire_capture;
+
+mod approval_dispatch_node_tap;
 mod approval_offer_cutover;
 mod create_settings_order;
 mod cursor_model_settings;
@@ -23,4 +26,5 @@ mod provider_settings_contract;
 mod provider_transport_idle;
 mod provider_turn_boundaries;
 mod start_mode_outcomes;
+mod typed_extension_node_tap;
 mod unknown_stop_output;

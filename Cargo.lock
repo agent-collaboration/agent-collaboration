@@ -7,6 +7,7 @@ name = "acp-client-runtime"
 version = "0.1.153"
 dependencies = [
  "agent-client-protocol",
+ "codex-router-test-support",
  "futures-util",
  "rustix 1.1.6",
  "serde",
@@ -26,6 +27,7 @@ name = "acp-provider-adapters"
 version = "0.1.153"
 dependencies = [
  "acp-client-runtime",
+ "codex-router-test-support",
  "serde",
  "serde_json",
  "session-event-model",
@@ -1286,9 +1288,11 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 name = "codex-acp-adapter"
 version = "0.1.153"
 dependencies = [
+ "acp-provider-adapters",
  "base64 0.22.1",
  "chrono",
  "codex-native-integration",
+ "codex-router-test-support",
  "collaboration-protocol",
  "futures-util",
  "jsonschema",
@@ -1308,6 +1312,7 @@ dependencies = [
 name = "codex-native-integration"
 version = "0.1.153"
 dependencies = [
+ "codex-router-test-support",
  "futures-util",
  "jsonschema",
  "message-board",
@@ -1705,6 +1710,7 @@ dependencies = [
 name = "codex-router-test-support"
 version = "0.1.153"
 dependencies = [
+ "agent-client-protocol",
  "codex-native-integration",
  "codex-router-cli",
  "codex-router-core",
@@ -1713,8 +1719,11 @@ dependencies = [
  "codex-router-state",
  "collaboration-client",
  "futures-util",
+ "jsonschema",
  "node-test-fixture",
  "owned-process-test-support",
+ "rmcp",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2033,6 +2042,7 @@ dependencies = [
 name = "collaboration-mcp"
 version = "0.1.153"
 dependencies = [
+ "acp-provider-adapters",
  "agent-collaboration",
  "automation-storage",
  "axum",
@@ -2042,6 +2052,7 @@ dependencies = [
  "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-host",
+ "codex-router-test-support",
  "collaboration-application-test-support",
  "collaboration-client",
  "collaboration-contracts",
@@ -2102,6 +2113,7 @@ dependencies = [
 name = "collaboration-runtime"
 version = "0.1.153"
 dependencies = [
+ "acp-provider-adapters",
  "agent-automation",
  "automation-storage",
  "base64 0.22.1",
@@ -2110,6 +2122,7 @@ dependencies = [
  "chrono",
  "codex-acp-adapter",
  "codex-native-integration",
+ "codex-router-test-support",
  "collaboration-contracts",
  "collaboration-mail-protocol",
  "collaboration-protocol",

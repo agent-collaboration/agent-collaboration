@@ -376,3 +376,7 @@ mod conversation_result_tests;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "mcp_server_node_tap_test.rs"]
+mod node_tap_tests;

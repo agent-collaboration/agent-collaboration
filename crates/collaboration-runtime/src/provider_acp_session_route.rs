@@ -780,3 +780,7 @@ async fn serve_provider_sessions(
 #[cfg(test)]
 #[path = "provider_acp_session_route_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "provider_acp_session_route_node_tap_test.rs"]
+mod node_tap_tests;
