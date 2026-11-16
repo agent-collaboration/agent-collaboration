@@ -362,3 +362,6 @@ mod identities;
 mod queued_cancel;
 mod recovery;
 mod workspace_outage;
+
+mod engine_drain_origins;
+mod engine_notice_units;

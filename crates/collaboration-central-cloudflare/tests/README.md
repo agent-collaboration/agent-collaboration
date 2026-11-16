@@ -193,3 +193,40 @@ These cases come from the paused reliability branch and mirror the native ones:
   block another workspace's window or a due wake, and recovers without duplicates.
 - `workspace_requests::organization_signin::alarm_recovery`: the private digest binding
   re-arms a missing alarm on the warm owner, and a failed re-arm keeps the answer.
+- `workspace_requests::mail::engine_event_support`: shared workerd helpers for the V6, V8,
+  V9 and V12 checks (named times from 10:00:00, real alarm callbacks, wake, window, drain
+  and probe fixtures).
+- `workspace_requests::mail::engine_publication_failures`: V6 on workerd; an unpublishable
+  decision rolls the request batch back, the cold handler fails with no later mark, a
+  crash mid fan-out redoes nothing, and a dropped or never-published alarm is re-published
+  by the next request.
+- `workspace_requests::mail::engine_cadence_hour`: V8 and V12.4 on workerd with the held
+  clock; an hour without traffic gives exactly the due callbacks, and a request every
+  minute needs no callback.
+- `workspace_requests::mail::engine_large_batch`: V9 on workerd; 1,000 due probe
+  instances in four capped real callbacks 30 s apart, earliest first and once each, at
+  most eight in flight; prints batch timings as measurement only.
+- `workspace_requests::mail::engine_timing_races`: V12 races on workerd; a held request
+  publishes the newer floor and backlog, simultaneous requests run one due batch, an
+  eviction repeats nothing, notice units get no look-ahead, and a changed stamp refuses
+  every event.
+- `workspace_requests::engine_v2_support`: shared workerd V2 helpers (failure record
+  reads, mark arithmetic, the held clock, wake and automation requests).
+- `workspace_requests::mail::engine_isolation_v2`: V2 on workerd; a corrupt wake or
+  automation beside healthy ones fails alone at count 1 with the next mark, retires on the
+  next pass and is never visited during the following hour. The plain fixture captures no
+  Worker logs, so its observations are asserted in `organization_signin::engine_admin`.
+- `workspace_requests::notices::engine_notice_units`: V2 on workerd; a failing drain arms
+  its next try on a mark; the drain unit's control row gates due batches and request
+  drains across an owner reset; a failing request drain keeps its committed answer.
+- `workspace_requests::notices::engine_drain_origins`: V2 error origin on workerd; each
+  drain-batch outcome forced separately, and the two-workspace mixes.
+- `workspace_requests::organization_signin::engine_admin_support`: an organization with a
+  workspace, today's timers, the four engine admin routes through the Worker sign-in
+  binding with person proofs, and the captured `central engine:` log lines.
+- `workspace_requests::organization_signin::engine_admin`: V13 on workerd; health, the
+  paged retired list, retry and discard with refusals, replays and admission, and the V2
+  item observations.
+- `workspace_requests::organization_signin::engine_unit_revival`: V2 notice units and
+  `engine_source` on workerd; recovery, the restarted 60-day period, retirement, stopped
+  while retired, and EngineRetry revival.

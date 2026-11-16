@@ -88,25 +88,21 @@ async fn creator_window(fixture: &Fixture) -> SqlValue {
 
 #[derive(Clone, Copy)]
 enum Corrupt {
-    AutomationExpiresAt,
-    AutomationAnchorAt,
-    AutomationNextDueAt,
-    WakeCreatedAt,
-    WindowDueAt,
+    AutomationExpiry,
+    AutomationAnchor,
+    AutomationNextDue,
+    WakeCreation,
+    WindowDue,
 }
 
 #[tokio::test]
 async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
     for (index, corrupt, column) in [
-        (
-            0_u32,
-            Corrupt::AutomationExpiresAt,
-            "automations.expires_at",
-        ),
-        (1, Corrupt::AutomationAnchorAt, "automations.anchor_at"),
-        (2, Corrupt::AutomationNextDueAt, "automations.next_due_at"),
-        (3, Corrupt::WakeCreatedAt, "wakes.created_at"),
-        (4, Corrupt::WindowDueAt, "notification_windows.due_at"),
+        (0_u32, Corrupt::AutomationExpiry, "automations.expires_at"),
+        (1, Corrupt::AutomationAnchor, "automations.anchor_at"),
+        (2, Corrupt::AutomationNextDue, "automations.next_due_at"),
+        (3, Corrupt::WakeCreation, "wakes.created_at"),
+        (4, Corrupt::WindowDue, "notification_windows.due_at"),
     ] {
         let fixture = Fixture::new().await;
         let start = chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst))
@@ -155,7 +151,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
         // Arrange: store one invalid value and pick that row's own use, the due
         // batch that first loads it.
         let (use_at, kind, subject) = match corrupt {
-            Corrupt::AutomationExpiresAt => {
+            Corrupt::AutomationExpiry => {
                 execute(
                     &fixture,
                     "UPDATE automations SET expires_at=? WHERE automation_id=?",
@@ -167,7 +163,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 .await;
                 (anchor, "automation_timer", text(&automation_id))
             }
-            Corrupt::AutomationAnchorAt => {
+            Corrupt::AutomationAnchor => {
                 execute(
                     &fixture,
                     "UPDATE automations SET anchor_at=? WHERE automation_id=?",
@@ -179,7 +175,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 .await;
                 (anchor, "automation_timer", text(&automation_id))
             }
-            Corrupt::AutomationNextDueAt => {
+            Corrupt::AutomationNextDue => {
                 // On the grid and within the horizon, but not a 600-second occurrence.
                 let due = anchor + chrono::Duration::seconds(300);
                 execute(
@@ -190,7 +186,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 .await;
                 (due, "automation_timer", text(&automation_id))
             }
-            Corrupt::WakeCreatedAt => {
+            Corrupt::WakeCreation => {
                 execute(
                     &fixture,
                     "UPDATE wakes SET created_at='not-a-timestamp' WHERE wake_id=?",
@@ -199,7 +195,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 .await;
                 (anchor, "wake_timer", text(&wake_id))
             }
-            Corrupt::WindowDueAt => {
+            Corrupt::WindowDue => {
                 let window = creator_window(&fixture).await;
                 // A five-minute mark that is not on the default M15 schedule.
                 assert_ne!(anchor.timestamp().rem_euclid(900), 0);
@@ -240,8 +236,8 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
         );
         let effects = runtime.statement_host().read(Statement { sql: "SELECT (SELECT state FROM wakes WHERE wake_id=?),(SELECT COUNT(*) FROM messages WHERE message_kind='wake'),(SELECT COUNT(*) FROM messages WHERE message_kind='automation'),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')", args: vec![text(&wake_id)] }).await.unwrap();
         let (wake_state, wakes, automations) = match corrupt {
-            Corrupt::WakeCreatedAt => ("active", 0, 1),
-            Corrupt::WindowDueAt => ("done", 1, 1),
+            Corrupt::WakeCreation => ("active", 0, 1),
+            Corrupt::WindowDue => ("done", 1, 1),
             _ => ("done", 1, 0),
         };
         assert_eq!(
