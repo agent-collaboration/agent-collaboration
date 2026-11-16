@@ -362,6 +362,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         // flight is dropped when it lands (D1 R14).
                         let mut pending_releases = std::collections::HashSet::<String>::new();
                         let mut released_sessions = std::collections::HashSet::<String>::new();
+                        // The generation each admitted session's run publishes
+                        // under; its Closed ends that generation (D1 R14).
+                        let mut session_generations = HashMap::<String, crate::SessionGeneration>::new();
                         let Some(base_capabilities) = base_capabilities else { return Ok(()); };
                         loop {
                             tokio::select! {
@@ -377,21 +380,25 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 registration.settings_catalog.clone()
                                             });
                                             let mut setup_error = None;
+                                            let mut created_generation = crate::SessionGeneration::UNTRACKED;
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
+                                                created_generation = registration.generation;
                                                 register_provider_session(registration, &mut sessions)
                                             });
                                             let mut settings_sink_closed = false;
                                             if let Ok(created) = &mut result {
                                                 known_sessions.track(created.provider_session_id.clone()).await;
+                                                session_generations.insert(created.provider_session_id.clone(), created_generation);
                                                 if let Some(report) = report {
                                                     let report = report.with_auth_status(task_auth_status.read().await.clone());
                                                     task_session_capabilities.write().await.insert(created.provider_session_id.clone(), report);
                                                 }
                                                 if let Some(catalog) = catalog {
                                                     created.effective_settings = catalog.effective_settings();
-                                                    if task_event_sink.publish(
+                                                    if task_event_sink.publish_in(
                                                         &created.provider_session_id,
+                                                        created_generation,
                                                         session_event_model::SessionEvent::SettingsChanged {
                                                             settings: catalog.to_session_settings(),
                                                         },
@@ -431,7 +438,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         }
                                         PendingSessionAdmission::Restore { provider_session_id, result, reply } => {
                                             pending_loads.remove(&provider_session_id);
+                                            let generation = session_generations.get(&provider_session_id).copied().unwrap_or(crate::SessionGeneration::UNTRACKED);
                                             if released_sessions.contains(&provider_session_id) {
+                                                session_generations.remove(&provider_session_id);
                                                 known_sessions.forget(&provider_session_id).await;
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
                                                 continue;
@@ -458,18 +467,20 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     &mut session_tasks,
                                                     task_shutdown.clone(),
                                                     Arc::clone(&task_frame_observation),
-                                                    task_runtime_handles.clone(),
+                                                    task_runtime_handles.for_session_generation(generation),
                                                     #[cfg(any(test, feature = "test-observation"))] Arc::clone(&session_test_tool_calls),
                                                 )
-                                            }).map(|_| ());
+                                            }).map(|_| generation);
                                             if result.is_err() {
+                                                session_generations.remove(&provider_session_id);
                                                 known_sessions.forget(&provider_session_id).await;
                                             } else if let Some(report) = report {
                                                 let report = report.with_auth_status(task_auth_status.read().await.clone());
                                                 task_session_capabilities.write().await.insert(provider_session_id.clone(), report);
                                                 if let Some(catalog) = catalog {
-                                                    if task_event_sink.publish(
+                                                    if task_event_sink.publish_in(
                                                         &provider_session_id,
+                                                        generation,
                                                         session_event_model::SessionEvent::SettingsChanged {
                                                             settings: catalog.to_session_settings(),
                                                         },
@@ -491,6 +502,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             if result.is_ok() {
                                                 if released {
                                                     released_sessions.insert(provider_session_id.clone());
+                                                }
+                                                // Closed ends the run's generation here, in the loop
+                                                // that admits restores, so no newer run can open
+                                                // between the close and its Closed (D1 R14).
+                                                if task_event_sink.publish_closed(&provider_session_id, session_generations.remove(&provider_session_id)).is_err() {
+                                                    sink_closed.cancel();
+                                                    task_shutdown.cancel();
                                                 }
                                                 sessions.remove(&provider_session_id);
                                                 known_sessions.forget(&provider_session_id).await;
@@ -571,6 +589,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             } else if sessions.contains_key(&provider_session_id) || !pending_loads.insert(provider_session_id.clone()) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                             } else {
+                                                // Only an admitted restore opens a new run; a
+                                                // refused one leaves the live run alone (D1 R14).
+                                                let generation = task_event_sink.open_generation(&provider_session_id);
+                                                session_generations.insert(provider_session_id.clone(), generation);
                                                 known_sessions.track(provider_session_id.clone()).await;
                                                 let inputs = provider_session_restore::RestoreAdmissionInputs {
                                                     connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
@@ -581,7 +603,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     mode,
                                                     mcp_servers: session_mcp_servers.clone(),
                                                     shutdown: task_shutdown.clone(),
-                                                    event_sink: Arc::clone(&task_event_sink),
+                                                    event_sink: Arc::new(crate::session_event_sink::SessionGenerationSink::new(Arc::clone(&task_event_sink), generation)),
                                                     admission_tx: admission_tx.clone(),
                                                     reply,
                                                 };

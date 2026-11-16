@@ -296,6 +296,23 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/load",
             });
         }
+        self.load_session_with_generation(provider_session_id, cwd)
+            .await
+            .map(|_| ())
+    }
+
+    /// Loads the session; answers the generation the connection admitted it
+    /// under, which the caller's own publications for this run carry.
+    pub async fn load_session_with_generation(
+        &self,
+        provider_session_id: String,
+        cwd: PathBuf,
+    ) -> Result<crate::SessionGeneration, ExternalProviderRuntimeError> {
+        if !self.base_capabilities.supports_load {
+            return Err(ExternalProviderRuntimeError::UnsupportedCapability {
+                capability: "session/load",
+            });
+        }
         self.restore_session(
             provider_session_id,
             cwd,
@@ -314,6 +331,23 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/resume",
             });
         }
+        self.resume_session_with_generation(provider_session_id, cwd)
+            .await
+            .map(|_| ())
+    }
+
+    /// Resumes the session; answers the generation the connection admitted
+    /// it under.
+    pub async fn resume_session_with_generation(
+        &self,
+        provider_session_id: String,
+        cwd: PathBuf,
+    ) -> Result<crate::SessionGeneration, ExternalProviderRuntimeError> {
+        if !self.base_capabilities.supports_resume {
+            return Err(ExternalProviderRuntimeError::UnsupportedCapability {
+                capability: "session/resume",
+            });
+        }
         self.restore_session(
             provider_session_id,
             cwd,
@@ -327,7 +361,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: super::provider_session_restore::RestoreHistoryMode,
-    ) -> Result<(), ExternalProviderRuntimeError> {
+    ) -> Result<crate::SessionGeneration, ExternalProviderRuntimeError> {
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Restore {

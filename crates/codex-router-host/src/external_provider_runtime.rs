@@ -15,11 +15,10 @@ use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 
 use crate::acp_interaction_port::{HostInteractionPort, NoopSessionEventSink};
-use crate::provider_session_event_sink::{
-    GenerationPublication, HubSessionEventSink, SessionGeneration,
-};
+use crate::provider_session_event_sink::HubSessionEventSink;
 #[cfg(test)]
 use crate::{ProviderSessionActivity, ProviderSteeringOutcome};
+use acp_client_runtime::{GenerationPublication, SessionGeneration};
 #[cfg(test)]
 use acp_client_runtime::{
     acp_operation_error_for_test as acp_operation_error,
@@ -334,10 +333,13 @@ impl ExternalProviderRuntime {
             _ => None,
         };
         if let Some(session_id) = active_session {
-            let generation = self
-                .event_sink
-                .as_ref()
-                .map(|event_sink| event_sink.current_generation(session_id));
+            // The connection opened the created session's generation.
+            let generation = self.event_sink.as_ref().map(|event_sink| {
+                acp_client_runtime::SessionEventSink::current_generation(
+                    event_sink.as_ref(),
+                    session_id,
+                )
+            });
             self.publish_active_session(session_id, generation).await?;
         }
         created
@@ -386,13 +388,14 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        let generation = self.open_generation(&provider_session_id);
-        self.client
-            .load_session(provider_session_id.clone(), cwd)
+        // The generation the connection admitted this load under (D1 R14).
+        let generation = self
+            .client
+            .load_session_with_generation(provider_session_id.clone(), cwd)
             .await?;
         #[cfg(test)]
         self.pause_before_activation().await;
-        self.publish_active_session(&provider_session_id, generation)
+        self.publish_active_session(&provider_session_id, Some(generation))
             .await
     }
 
@@ -401,13 +404,13 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        let generation = self.open_generation(&provider_session_id);
-        self.client
-            .resume_session(provider_session_id.clone(), cwd)
+        let generation = self
+            .client
+            .resume_session_with_generation(provider_session_id.clone(), cwd)
             .await?;
         #[cfg(test)]
         self.pause_before_activation().await;
-        if let (Some(event_sink), Some(generation)) = (&self.event_sink, generation) {
+        if let Some(event_sink) = &self.event_sink {
             let invalidated = event_sink
                 .begin_history_unavailable(&provider_session_id, generation)
                 .await
@@ -416,15 +419,8 @@ impl ExternalProviderRuntime {
                 return Err(ExternalProviderRuntimeError::SessionReleased);
             }
         }
-        self.publish_active_session(&provider_session_id, generation)
+        self.publish_active_session(&provider_session_id, Some(generation))
             .await
-    }
-
-    /// A new generation for a session about to be loaded or resumed (D1 R14).
-    fn open_generation(&self, provider_session_id: &str) -> Option<SessionGeneration> {
-        self.event_sink
-            .as_ref()
-            .map(|event_sink| event_sink.open_generation(provider_session_id))
     }
 
     /// Publishes the session active in `generation`. A generation closed
@@ -487,11 +483,8 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        let generation = self.current_generation(&provider_session_id);
-        self.client
-            .close_session(provider_session_id.clone())
-            .await?;
-        self.publish_closed(&provider_session_id, generation)
+        // The connection publishes Closed for the run it closed (D1 R14).
+        self.client.close_session(provider_session_id).await
     }
 
     /// Closes a session on an agent that offers no session/close: the turn is
@@ -500,32 +493,7 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        let generation = self.current_generation(&provider_session_id);
-        self.client
-            .release_session(provider_session_id.clone())
-            .await?;
-        self.publish_closed(&provider_session_id, generation)
-    }
-
-    fn current_generation(&self, provider_session_id: &str) -> Option<SessionGeneration> {
-        self.event_sink
-            .as_ref()
-            .map(|event_sink| event_sink.current_generation(provider_session_id))
-    }
-
-    /// Ends the close's generation with Closed (D1 R14); nothing published
-    /// for that generation afterwards reaches the hub.
-    fn publish_closed(
-        &self,
-        provider_session_id: &str,
-        generation: Option<SessionGeneration>,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        if let (Some(event_sink), Some(generation)) = (&self.event_sink, generation) {
-            event_sink
-                .publish_closed(provider_session_id, generation)
-                .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
-        }
-        Ok(())
+        self.client.release_session(provider_session_id).await
     }
 
     pub async fn steer_session(

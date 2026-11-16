@@ -140,7 +140,10 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: provider_session_restore::RestoreHistoryMode,
-        reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
+        /// The generation the connection admitted the restore under.
+        reply: tokio::sync::oneshot::Sender<
+            Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
+        >,
     },
     List {
         cwd: Option<PathBuf>,
@@ -210,7 +213,9 @@ enum PendingSessionAdmission<P: InteractionPort> {
     Restore {
         provider_session_id: String,
         result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
-        reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
+        reply: tokio::sync::oneshot::Sender<
+            Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
+        >,
     },
     Close {
         provider_session_id: String,
@@ -226,6 +231,8 @@ struct ProviderSessionRegistration<P: InteractionPort> {
     settings_catalog: crate::ProviderSettingsCatalog,
     permission_mode: crate::PermissionModeReport,
     setup_error: Option<ExternalProviderRuntimeError>,
+    /// The generation the created session's actor publishes under.
+    generation: crate::SessionGeneration,
 }
 
 struct RestoredProviderSession {

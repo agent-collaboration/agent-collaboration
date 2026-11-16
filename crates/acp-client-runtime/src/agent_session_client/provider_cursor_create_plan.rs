@@ -179,7 +179,13 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         } else {
             SessionEvent::ItemStarted { item }
         };
-        if self.event_sink.publish(&session_id, event).is_err() {
+        // In the run the plan arrived in (D1 R14).
+        let generation = self.event_sink.current_generation(&session_id);
+        if self
+            .event_sink
+            .publish_in(&session_id, generation, event)
+            .is_err()
+        {
             self.sink_closed.cancel();
             self.shutdown.cancel();
             responder.respond(json!({"outcome":"cancelled"}))?;

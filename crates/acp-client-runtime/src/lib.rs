@@ -93,7 +93,8 @@ pub use provider_session_settings::{
 };
 pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_event_sink::{
-    EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
+    EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
+    SessionEventSink, SessionGeneration,
 };
 
 #[cfg(feature = "test-observation")]

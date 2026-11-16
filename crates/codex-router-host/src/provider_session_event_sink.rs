@@ -9,7 +9,8 @@ use std::{
 };
 
 use acp_client_runtime::{
-    EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
+    EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
+    SessionEventSink, SessionGeneration,
 };
 use collaboration_runtime::ProviderSessionEventHub;
 use message_board::{SessionEndpointRef, SessionId, SessionRef};
@@ -45,22 +46,9 @@ enum HubCommand {
     },
 }
 
-/// One run of a session at this sink, from its start, load or resume to its
-/// Closed (D1 R14). Once Closed is published for a generation, nothing more
-/// for it is: a load or resume continuation, the actor, settings or an
-/// interaction that finishes late is dropped. A load or resume opens a new
-/// generation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct SessionGeneration(u64);
-
-/// Whether a publication tied to a generation went out or found it ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum GenerationPublication {
-    Published,
-    /// The generation was closed, or a newer one had opened.
-    Ended,
-}
-
+/// A session's current run at this sink (D1 R14). The connection opens a
+/// generation when it admits a create, load or resume, and ends it with that
+/// run's Closed; a publication from any other generation is dropped.
 #[derive(Default)]
 struct GenerationState {
     current: u64,
@@ -70,7 +58,8 @@ struct GenerationState {
 /// The generation a publication belongs to.
 #[derive(Clone, Copy)]
 enum GenerationClaim {
-    /// Whatever is current, unless it is closed: the client's own events.
+    /// Whatever is current, unless it is closed: connection-wide
+    /// publishers only (auth status, provider exit).
     Current,
     /// Exactly this one, still open: a runtime continuation.
     Exact(SessionGeneration),
@@ -238,30 +227,6 @@ impl HubSessionEventSink {
         })
     }
 
-    /// Opens a new generation for a session about to be loaded or resumed;
-    /// anything still running for an earlier one can no longer publish.
-    pub(crate) fn open_generation(&self, session_id: &str) -> SessionGeneration {
-        let mut generations = self
-            .generations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let state = generations.entry(session_id.to_owned()).or_default();
-        state.current = state.current.wrapping_add(1);
-        state.closed = false;
-        SessionGeneration(state.current)
-    }
-
-    /// The session's current generation, for a create or close in progress.
-    pub(crate) fn current_generation(&self, session_id: &str) -> SessionGeneration {
-        SessionGeneration(
-            self.generations
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get(session_id)
-                .map_or(0, |state| state.current),
-        )
-    }
-
     /// Enqueues `commands` together when `claim` holds; Ended, with nothing
     /// enqueued, when its generation is closed or no longer current.
     fn enqueue_for(
@@ -278,7 +243,7 @@ impl HubSessionEventSink {
         let holds = match claim {
             GenerationClaim::Current => !state.closed,
             GenerationClaim::Exact(generation) | GenerationClaim::Closing(generation) => {
-                !state.closed && generation.0 == state.current
+                !state.closed && generation.number() == state.current
             }
         };
         if !holds {
@@ -415,27 +380,6 @@ impl HubSessionEventSink {
         result.await.map_err(|_| EventSinkClosed)??;
         Ok(published)
     }
-
-    /// The session closed: its generation ends with this Closed, unless a
-    /// newer generation has opened since the close began.
-    pub(crate) fn publish_closed(
-        &self,
-        session_id: &str,
-        generation: SessionGeneration,
-    ) -> Result<GenerationPublication, EventSinkClosed> {
-        let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
-        self.enqueue_for(
-            session_id,
-            GenerationClaim::Closing(generation),
-            vec![HubCommand::Publish {
-                session,
-                event: SessionEvent::StateChanged {
-                    state: session_event_model::SessionState::Closed,
-                },
-                completion: None,
-            }],
-        )
-    }
 }
 
 /// Passes a published event to the observer unless it belongs to replayed history.
@@ -466,6 +410,44 @@ fn observe_live_event(
     }
 }
 
+impl HubSessionEventSink {
+    fn begin_replay(&self, session_id: &str, claim: GenerationClaim) -> HistoryReplayFuture<'_> {
+        let session = self.session(session_id);
+        let session_id = session_id.to_owned();
+        Box::pin(async move {
+            let session = session?;
+            let (completion, result) = oneshot::channel();
+            // A load opens its generation before the replay begins, so an
+            // ended one here means no load owns this session.
+            let published = self
+                .enqueue_for(
+                    &session_id,
+                    claim,
+                    vec![HubCommand::BeginReplay {
+                        session,
+                        completion,
+                    }],
+                )
+                .map_err(|_| HistoryReplayUnavailable)?;
+            if published == GenerationPublication::Ended {
+                return Err(HistoryReplayUnavailable);
+            }
+            result.await.map_err(|_| HistoryReplayUnavailable)?
+        })
+    }
+
+    fn request_catalog_refresh(&self, session_id: &str) {
+        if let Some(sender) = self
+            .catalog_refresh
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+        {
+            let _ = sender.send(session_id.to_owned());
+        }
+    }
+}
+
 impl SessionEventSink for HubSessionEventSink {
     fn publish_skill_view(
         &self,
@@ -482,28 +464,7 @@ impl SessionEventSink for HubSessionEventSink {
     }
 
     fn begin_history_replay(&self, session_id: &str) -> HistoryReplayFuture<'_> {
-        let session = self.session(session_id);
-        let session_id = session_id.to_owned();
-        Box::pin(async move {
-            let session = session?;
-            let (completion, result) = oneshot::channel();
-            // A load opens its generation before the replay begins, so an
-            // ended one here means no load owns this session.
-            let published = self
-                .enqueue_for(
-                    &session_id,
-                    GenerationClaim::Current,
-                    vec![HubCommand::BeginReplay {
-                        session,
-                        completion,
-                    }],
-                )
-                .map_err(|_| HistoryReplayUnavailable)?;
-            if published == GenerationPublication::Ended {
-                return Err(HistoryReplayUnavailable);
-            }
-            result.await.map_err(|_| HistoryReplayUnavailable)?
-        })
+        self.begin_replay(session_id, GenerationClaim::Current)
     }
 
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
@@ -525,17 +486,104 @@ impl SessionEventSink for HubSessionEventSink {
                 completion: None,
             }],
         )?;
-        if changes_config
-            && published == GenerationPublication::Published
-            && let Some(sender) = self
-                .catalog_refresh
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .as_ref()
-        {
-            let _ = sender.send(session_id.to_owned());
+        if changes_config && published == GenerationPublication::Published {
+            self.request_catalog_refresh(session_id);
         }
         Ok(())
+    }
+
+    fn open_generation(&self, session_id: &str) -> SessionGeneration {
+        let mut generations = self
+            .generations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = generations.entry(session_id.to_owned()).or_default();
+        state.current = state.current.wrapping_add(1);
+        state.closed = false;
+        SessionGeneration::from_number(state.current)
+    }
+
+    fn current_generation(&self, session_id: &str) -> SessionGeneration {
+        SessionGeneration::from_number(
+            self.generations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(session_id)
+                .map_or(0, |state| state.current),
+        )
+    }
+
+    fn publish_in(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+        event: SessionEvent,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        let changes_config = matches!(
+            &event,
+            SessionEvent::ItemStarted { item }
+                | SessionEvent::ItemUpdated { item }
+                if matches!(item.kind, SessionItemKind::ConfigChange)
+        );
+        let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
+        let published = self.enqueue_for(
+            session_id,
+            GenerationClaim::Exact(generation),
+            vec![HubCommand::Publish {
+                session,
+                event,
+                completion: None,
+            }],
+        )?;
+        if changes_config && published == GenerationPublication::Published {
+            self.request_catalog_refresh(session_id);
+        }
+        Ok(published)
+    }
+
+    fn publish_skill_view_in(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+        view: session_event_model::SkillView,
+    ) -> Result<(), EventSinkClosed> {
+        let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
+        self.enqueue_for(
+            session_id,
+            GenerationClaim::Exact(generation),
+            vec![HubCommand::SkillView { session, view }],
+        )
+        .map(|_| ())
+    }
+
+    fn begin_history_replay_in(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+    ) -> HistoryReplayFuture<'_> {
+        self.begin_replay(session_id, GenerationClaim::Exact(generation))
+    }
+
+    /// Ends `generation` (or, for a session never admitted here, the
+    /// current one) with Closed.
+    fn publish_closed(
+        &self,
+        session_id: &str,
+        generation: Option<SessionGeneration>,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        let generation = generation.unwrap_or_else(|| self.current_generation(session_id));
+        let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
+        self.enqueue_for(
+            session_id,
+            GenerationClaim::Closing(generation),
+            vec![HubCommand::Publish {
+                session,
+                event: SessionEvent::StateChanged {
+                    state: session_event_model::SessionState::Closed,
+                },
+                completion: None,
+            }],
+        )
     }
 }
 

@@ -385,3 +385,6 @@ mod admission_lifecycle_tests;
 
 #[path = "tests/mcp_shutdown_test.rs"]
 mod mcp_shutdown_tests;
+
+#[path = "tests/generation_ownership_test.rs"]
+mod generation_ownership_tests;

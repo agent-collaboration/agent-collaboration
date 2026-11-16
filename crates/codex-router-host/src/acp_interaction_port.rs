@@ -4,7 +4,8 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use acp_client_runtime::{
-    ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer,
+    SessionEventSink, SessionGeneration,
 };
 use collaboration_protocol::OperationId;
 use collaboration_runtime::RefusedApprovalOption;
@@ -40,11 +41,31 @@ impl HostInteractionPort {
         *self.event_sink.write().await = Some(event_sink);
     }
 
-    async fn publish(&self, session_id: &str, event: SessionEvent) -> bool {
+    /// The session's run now: an interaction publishes into the run it was
+    /// requested in, even after a long wait for its answer (D1 R14).
+    async fn current_generation(&self, session_id: &str) -> Option<SessionGeneration> {
+        let event_sink = self.event_sink.read().await.clone()?;
+        Some(event_sink.current_generation(session_id))
+    }
+
+    /// Publishes into `generation`'s run (dropped once it ended), or, with
+    /// none, whatever run is current: only connection-wide work does that.
+    async fn publish(
+        &self,
+        session_id: &str,
+        generation: Option<SessionGeneration>,
+        event: SessionEvent,
+    ) -> bool {
         let Some(event_sink) = self.event_sink.read().await.clone() else {
             return true;
         };
-        if event_sink.publish(session_id, event).is_err() {
+        let published = match generation {
+            Some(generation) => event_sink
+                .publish_in(session_id, generation, event)
+                .map(|_| ()),
+            None => event_sink.publish(session_id, event),
+        };
+        if published.is_err() {
             tracing::error!(
                 session_id,
                 "provider interaction event could not be published"
@@ -83,6 +104,7 @@ impl InteractionPort for HostInteractionPort {
             };
             let request_id = request.request_id.clone();
             let session_id = String::from(context.target.session_id.clone());
+            let generation = self.current_generation(&session_id).await;
             let pending_event = SessionEvent::InteractionRequested {
                 interaction: PendingInteraction::Approval {
                     approver: approver.clone(),
@@ -139,7 +161,7 @@ impl InteractionPort for HostInteractionPort {
                     return ApprovalPortOutcome::Unavailable;
                 }
             };
-            if !self.publish(&session_id, pending_event).await {
+            if !self.publish(&session_id, generation, pending_event).await {
                 let _ = broker
                     .cancel_typed_approval(&request_id, "eventPublicationFailed")
                     .await;
@@ -176,6 +198,7 @@ impl InteractionPort for HostInteractionPort {
                 let _ = self
                     .publish(
                         &session_id,
+                        generation,
                         SessionEvent::InteractionResolved { request_id },
                     )
                     .await;
@@ -219,6 +242,7 @@ impl InteractionPort for HostInteractionPort {
             }
             let request_id = request.request_id.clone();
             let session_id = String::from(context.target.session_id.clone());
+            let generation = self.current_generation(&session_id).await;
             let pending_event = SessionEvent::InteractionRequested {
                 interaction: PendingInteraction::Question {
                     approver: approver.clone(),
@@ -240,7 +264,7 @@ impl InteractionPort for HostInteractionPort {
                     return QuestionResponse::Cancelled;
                 }
             };
-            if !self.publish(&session_id, pending_event).await {
+            if !self.publish(&session_id, generation, pending_event).await {
                 let _ = broker
                     .cancel_question(&request_id, "eventPublicationFailed")
                     .await;
@@ -273,6 +297,7 @@ impl InteractionPort for HostInteractionPort {
                 let _ = self
                     .publish(
                         &session_id,
+                        generation,
                         SessionEvent::InteractionResolved { request_id },
                     )
                     .await;
@@ -339,10 +364,12 @@ impl InteractionPort for HostInteractionPort {
             match broker.cancel_typed_approvals(&requester, reason).await {
                 Ok(request_ids) => {
                     let session_id = String::from(context.target.session_id.clone());
+                    let generation = self.current_generation(&session_id).await;
                     for request_id in request_ids {
                         let _ = self
                             .publish(
                                 &session_id,
+                                generation,
                                 SessionEvent::InteractionResolved { request_id },
                             )
                             .await;
@@ -355,10 +382,12 @@ impl InteractionPort for HostInteractionPort {
             match broker.cancel_questions(&requester, reason).await {
                 Ok(request_ids) => {
                     let session_id = String::from(context.target.session_id.clone());
+                    let generation = self.current_generation(&session_id).await;
                     for request_id in request_ids {
                         let _ = self
                             .publish(
                                 &session_id,
+                                generation,
                                 SessionEvent::InteractionResolved { request_id },
                             )
                             .await;
@@ -380,6 +409,8 @@ impl InteractionPort for HostInteractionPort {
                             let _ = self
                                 .publish(
                                     requester.session_id.as_str(),
+                                    // Provider retirement is connection-wide.
+                                    None,
                                     SessionEvent::InteractionResolved { request_id },
                                 )
                                 .await;

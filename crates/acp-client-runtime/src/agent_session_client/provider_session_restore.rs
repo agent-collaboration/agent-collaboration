@@ -34,7 +34,9 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(super) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
-    pub(super) reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
+    pub(super) reply: tokio::sync::oneshot::Sender<
+        Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
+    >,
 }
 
 pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdmissionInputs<P>) {

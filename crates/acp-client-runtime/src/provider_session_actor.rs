@@ -51,6 +51,8 @@ pub enum ProviderSessionActivity {
 
 #[derive(Clone)]
 pub(crate) struct ProviderSessionRuntimeHandles {
+    // event_sink: for one session's actor, a SessionGenerationSink scoped to
+    // the generation it was admitted under (for_session_generation).
     pub(crate) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(crate) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(crate) event_sink: Arc<dyn SessionEventSink>,
@@ -78,6 +80,19 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     /// Sessions whose caller wants fast kept off (D1 R9). It records the wish;
     /// settings_unresolved records whether it's applied.
     pub(crate) keep_fast_off: KeepFastOff,
+}
+
+impl ProviderSessionRuntimeHandles {
+    /// These handles for one session admitted under `generation`: its
+    /// actor, projections and settings work publish only into that run.
+    pub(crate) fn for_session_generation(&self, generation: crate::SessionGeneration) -> Self {
+        let mut handles = self.clone();
+        handles.event_sink = Arc::new(crate::session_event_sink::SessionGenerationSink::new(
+            Arc::clone(&self.event_sink),
+            generation,
+        ));
+        handles
+    }
 }
 
 /// Provider session ids the Router keeps non-fast, for this Router's life.

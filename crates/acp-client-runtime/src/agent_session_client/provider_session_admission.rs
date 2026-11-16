@@ -166,6 +166,10 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         .block_task()
         .run_until(async move |session| {
             let provider_session_id = session.session_id().to_string();
+            // The created session's run starts here, before it publishes
+            // anything (D1 R14).
+            let generation = runtime_handles.event_sink.open_generation(&provider_session_id);
+            let runtime_handles = runtime_handles.for_session_generation(generation);
             let response = session.response();
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
@@ -277,6 +281,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     settings_catalog,
                     permission_mode,
                     setup_error,
+                    generation,
                 }))
                 .map_err(|_| agent_client_protocol::Error::internal_error())?;
             activation_rx
@@ -350,8 +355,10 @@ pub(super) fn fail_pending_session_admission<P: InteractionPort>(
         PendingSessionAdmission::Create { reply, .. } => {
             let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));
         }
-        PendingSessionAdmission::Restore { reply, .. }
-        | PendingSessionAdmission::Close { reply, .. } => {
+        PendingSessionAdmission::Restore { reply, .. } => {
+            let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));
+        }
+        PendingSessionAdmission::Close { reply, .. } => {
             let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));
         }
     }
