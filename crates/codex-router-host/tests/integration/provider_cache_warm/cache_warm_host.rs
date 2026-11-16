@@ -249,11 +249,8 @@ impl CacheWarmHost {
 
     /// Lets the fixture end what it holds behind `<receipt>.<name>`.
     pub(super) fn release(&self, name: &str) {
-        std::fs::write(
-            PathBuf::from(format!("{}.{name}", self.receipt.display())),
-            b"",
-        )
-        .expect("release file");
+        node_test_fixture::release_fixture(&self.receipt, &format!(".{name}"))
+            .expect("release file");
     }
 
     /// With hold-each-prompt: lets prompts 1 to `last` end at once, except `held`.

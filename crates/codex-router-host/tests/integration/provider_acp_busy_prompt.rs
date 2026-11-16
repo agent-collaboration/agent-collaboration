@@ -156,7 +156,8 @@ async fn acp_busy_prompt_through_the_host_command_port() {
     until_recorded(&receipt, "session/prompt", 1).await;
     send(&mut write, &prompt(4, "second")).await;
     let prompts_while_held = recorded(&receipt, "session/prompt");
-    std::fs::write(root.path().join("wire.json.release"), b"").expect("release the held turn");
+    node_test_fixture::release_fixture(&root.path().join("wire.json"), ".release")
+        .expect("release the held turn");
     let first = next_response(&mut lines).await;
     let second = next_response(&mut lines).await;
     until_recorded(&receipt, "session/prompt", 2).await;

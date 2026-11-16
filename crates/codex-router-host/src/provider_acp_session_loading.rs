@@ -23,6 +23,9 @@ pub(crate) enum ProviderSessionLoadOutcome {
     Unavailable {
         reason: String,
     },
+    /// The Router closed the session itself (D1 R14): it is never loaded
+    /// again, and work for it ends not sent.
+    RouterClosed,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -87,6 +90,10 @@ pub(crate) async fn ensure_provider_session_loaded(
     target: &SessionRef,
     load_policy: LoadPolicy,
 ) -> ProviderSessionLoadOutcome {
+    // Before any effect at the agent: a closed session must not come back.
+    if supervisor.is_router_closed(target) {
+        return ProviderSessionLoadOutcome::RouterClosed;
+    }
     let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
         return unavailable("provider runtime is unavailable");
     };

@@ -142,7 +142,7 @@ async fn shut_down_the_line_at(paused_at: PausedAt) -> Shutdown {
 
     // Act: the turn ends, the worker reaches the paused window, the line
     // shuts down there, and only then does the dispatch go on.
-    std::fs::write(format!("{}.release", receipt.display()), b"").expect("release the turn");
+    node_test_fixture::release_fixture(&receipt, ".release").expect("release the turn");
     entered
         .await
         .expect("the queued dispatch reached its paused window");

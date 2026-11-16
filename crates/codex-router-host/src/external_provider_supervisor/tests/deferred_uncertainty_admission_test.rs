@@ -229,7 +229,7 @@ impl ControlFixture {
     /// Ends the held turn, publishes a still-pending seeded entry so the
     /// drain can finish, and stops the line and the supervisor.
     async fn stop(self, seeded: &OperationId, seeded_state: SeededUncertainty) -> StoppedControl {
-        std::fs::write(format!("{}.release", self.receipt().display()), b"")
+        node_test_fixture::release_fixture(&self.receipt(), ".release")
             .expect("release the held turn");
         let held = self.held.await.expect("held turn task");
         if matches!(seeded_state, SeededUncertainty::StoredBeforePublished) {
@@ -353,7 +353,7 @@ async fn assert_queued_entry_not_sent(seeded_state: SeededUncertainty) {
     let seeded = fixture.seed(seeded_state).await;
 
     // Act: the turn ends and the line dispatches its entry.
-    std::fs::write(format!("{}.release", fixture.receipt().display()), b"")
+    node_test_fixture::release_fixture(&fixture.receipt(), ".release")
         .expect("release the held turn");
     let settled = fixture
         .supervisor

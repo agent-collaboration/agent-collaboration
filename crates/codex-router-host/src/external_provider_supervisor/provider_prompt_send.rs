@@ -270,6 +270,19 @@ impl ExternalProviderSupervisor {
                         }
                     },
                     SendRoute::Queue => {
+                        #[cfg(test)]
+                        {
+                            let pause = backend
+                                .inner
+                                .queue_enqueue_test_pause
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .take();
+                            if let Some(pause) = pause {
+                                let _entered = pause.entered.send(());
+                                let _released = pause.release.await;
+                            }
+                        }
                         return backend
                             .queue_admitted_api_prompt(request, &binding, snapshot, live);
                     }
@@ -461,6 +474,19 @@ impl ExternalProviderSupervisor {
         };
         match fifo.enqueue_admitted_api_prompt(request, binding.clone(), admitted.clone()) {
             Ok(_queued) => Ok(admitted_submission(snapshot)),
+            // The Router closed the session while this send was on its way.
+            Err(crate::provider_acp_message_fifo::SESSION_CLOSED) => {
+                self.complete_unsent_api_entry(
+                    &admitted,
+                    &operation_id,
+                    &target,
+                    crate::provider_acp_message_fifo::SESSION_CLOSED,
+                );
+                Err(refused(
+                    ConversationOperationFailureKind::InvalidRequest,
+                    "not sent: session closed",
+                ))
+            }
             Err(_full) => {
                 self.complete_unsent_api_entry(&admitted, &operation_id, &target, "queue full");
                 Err(refused(

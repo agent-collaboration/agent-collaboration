@@ -289,6 +289,21 @@ impl ProviderAcpDeliveryRoute {
                     )
                     .await;
             }
+            // The Router closed the session itself: refused for good, never held.
+            ProviderSessionLoadOutcome::RouterClosed => {
+                return self
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        crate::provider_acp_message_fifo::SESSION_CLOSED,
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::Rejection(
+                            DeliveryRejectionReason::NotResumable,
+                        )),
+                    )
+                    .await;
+            }
             ProviderSessionLoadOutcome::UnsupportedLoad => {
                 return self
                     .finish_known_none(

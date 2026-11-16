@@ -26,7 +26,7 @@ use collaboration_protocol::{
     ProviderOperationEffect, ProviderOperationStage, SessionRef,
 };
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
@@ -263,8 +263,7 @@ async fn until_answered(receipt: &Path, request_id: &str) -> Value {
 
 /// Ends the fixture's held first turn.
 fn release(receipt: &Path) {
-    std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
-        .expect("release the held turn");
+    node_test_fixture::release_fixture(receipt, ".release").expect("release the held turn");
 }
 
 fn same_session(approval: &ApprovalDetailedRecord, target: &SessionRef) -> bool {

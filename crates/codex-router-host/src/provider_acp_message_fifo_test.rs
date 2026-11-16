@@ -820,7 +820,7 @@ async fn close_while_queued_marks_head_and_buffer_not_sent() {
                 .await,
         );
     }
-    std::fs::write(format!("{}.release", receipt.display()), b"").expect("release the turn");
+    node_test_fixture::release_fixture(&receipt, ".release").expect("release the turn");
     let held = held.await.expect("held turn task");
     queue.shutdown().await;
     let prompts = recorded_requests(&receipt, "session/prompt");

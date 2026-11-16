@@ -309,8 +309,8 @@ impl AcpBusyHost {
 
     /// Creates the file `<receipt>.<name>` the fixture waits for.
     pub(super) fn release(&self, name: &str) {
-        let path = PathBuf::from(format!("{}.{name}", self.receipt.display()));
-        std::fs::write(&path, b"").unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        node_test_fixture::release_fixture(&self.receipt, &format!(".{name}"))
+            .unwrap_or_else(|error| panic!("release {name}: {error}"));
     }
 
     /// The session's event history on the Host's hub, through the

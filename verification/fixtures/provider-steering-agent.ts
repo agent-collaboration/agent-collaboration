@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, watch, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { writeFileSync } from "node:fs";
 import { field } from "../exact-json.ts";
 import { requestParameters, requireArgument, wireJson } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
+import { fileAppears, startReleaseBarrier } from "./release-barrier.ts";
 
 // The "send-race" scenario answers every request instead of following a
 // script, records every frame it reads to <receipt> (argv 3), and changes the
@@ -61,29 +61,6 @@ function sendRaceBehaviours(names: readonly string[]): ReadonlySet<SendRaceBehav
   return behaviours;
 }
 
-/**
- * Resolves once the test creates the file at `path`.
- * Woken by a watch on the file's directory; the existence check runs only
- * after the watch is registered, so a file written before the watch began is
- * still seen.
- */
-function waitForFile(path: string): Promise<void> {
-  return new Promise<void>((resolve, reject): void => {
-    const watcher = watch(dirname(path));
-    const releaseIfPresent = (): void => {
-      if (!existsSync(path)) return;
-      watcher.close();
-      resolve();
-    };
-    watcher.on("change", releaseIfPresent);
-    watcher.on("error", (error: Error): void => {
-      watcher.close();
-      reject(error);
-    });
-    releaseIfPresent();
-  });
-}
-
 /** How the first prompt's turn ends once <receipt>.release exists. */
 function releasedStopReason(behaviours: ReadonlySet<SendRaceBehaviour>): string {
   return behaviours.has("first-turn-ends-max-tokens") ? "max_tokens" : "end_turn";
@@ -134,7 +111,7 @@ class EffortSetting {
     value: string,
   ): Promise<void> {
     if (behaviours.has("hold-effort-change")) {
-      await waitForFile(`${receiptPath}.setting-release`);
+      await fileAppears(`${receiptPath}.setting-release`);
       this.value = value;
     } else if (behaviours.has("first-effort-change-unconfirmed")) {
       this.changes += 1;
@@ -157,6 +134,7 @@ async function initializeSendRace(
 }
 
 async function serveSendRace(receiptPath: string, names: readonly string[]): Promise<void> {
+  startReleaseBarrier(receiptPath);
   const behaviours = sendRaceBehaviours(names);
   const frames: Record<string, unknown>[] = [];
   const agent = new AcpExchange((frame): void => {
@@ -205,7 +183,7 @@ async function serveSendRace(receiptPath: string, names: readonly string[]): Pro
           const held = request;
           heldTurns.add(held);
           running = held;
-          void waitForFile(`${receiptPath}.release-${prompts}`).then((): void => {
+          void fileAppears(`${receiptPath}.release-${prompts}`).then((): void => {
             if (!heldTurns.delete(held)) return;
             if (running === held) running = undefined;
             agent.endTurn(held);
@@ -218,7 +196,7 @@ async function serveSendRace(receiptPath: string, names: readonly string[]): Pro
         }
         const first = request;
         running = first;
-        void waitForFile(`${receiptPath}.release`).then((): void => {
+        void fileAppears(`${receiptPath}.release`).then((): void => {
           if (running === first) endRunning(releasedStopReason(behaviours));
         });
         break;

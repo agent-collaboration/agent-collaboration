@@ -81,4 +81,23 @@ impl ExternalProviderSupervisor {
             Some(AdmissionTestPause { entered, release });
         (entered_receiver, release_sender)
     }
+
+    /// Pauses the next API send routed to the session's line, after its
+    /// admission and before it enters the line.
+    pub(crate) fn pause_next_api_send_before_enqueue(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
+        let (release_sender, release) = tokio::sync::oneshot::channel();
+        *self
+            .inner
+            .queue_enqueue_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(AdmissionTestPause { entered, release });
+        (entered_receiver, release_sender)
+    }
 }

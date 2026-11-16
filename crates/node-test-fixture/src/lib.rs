@@ -47,3 +47,17 @@ pub fn write_node_fixture(
     }
     Ok(())
 }
+
+/// Releases a step a Node fixture holds: creates `<receipt><suffix>` (for
+/// example `.release` or `.release-2`), then rings the fixture's doorbell,
+/// `<receipt>.doorbell`, which it watches directly. A folder watch can lose
+/// the release file's creation on macOS; the doorbell's write comes after the
+/// file exists, so the fixture finds it on that event.
+pub fn release_fixture(receipt: &Path, suffix: &str) -> io::Result<()> {
+    fs::write(format!("{}{suffix}", receipt.display()), b"")?;
+    let mut doorbell = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(format!("{}.doorbell", receipt.display()))?;
+    io::Write::write_all(&mut doorbell, b".")
+}

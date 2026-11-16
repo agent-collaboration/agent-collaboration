@@ -159,11 +159,15 @@ pub(super) fn close(
                 let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
                 // Every waiting message ends not sent before the interrupt,
                 // so none starts as the running turn ends.
-                if let Some(fifo) = backend.message_fifo() {
-                    fifo.close_session(&target, "session closed");
-                }
                 if !agent_closes {
                     backend.mark_router_closed(&target);
+                }
+                if let Some(fifo) = backend.message_fifo() {
+                    if agent_closes {
+                        fifo.close_session(&target, "session closed");
+                    } else {
+                        fifo.close_session_terminally(&target);
+                    }
                 }
                 let completion_target = target.clone();
                 // The runtime interrupts a running turn, waits for idle, then

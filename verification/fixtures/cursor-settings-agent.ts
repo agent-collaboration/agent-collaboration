@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, watch, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { writeFileSync } from "node:fs";
 import { AcpStdio, requestParameters, requireArgument, wireJson } from "./acp-stdio.ts";
+import { fileAppears, startReleaseBarrier } from "./release-barrier.ts";
 
 interface ConfigOption {
   readonly id: string;
@@ -324,42 +324,9 @@ function answerReactiveSetting(
   peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
 }
 
-/**
- * Resolves once the test releases the held turn by creating its file.
- * Woken by a watch on the file's directory; the existence check runs only
- * after the watch is registered, so a file written before the watch began is
- * still seen.
- */
-function waitForRelease(releasePath: string): Promise<void> {
-  return new Promise<void>((resolve, reject): void => {
-    const watcher = watch(dirname(releasePath));
-    const releaseIfPresent = (): void => {
-      if (!existsSync(releasePath)) return;
-      watcher.close();
-      resolve();
-    };
-    watcher.on("change", releaseIfPresent);
-    watcher.on("error", (error: Error): void => {
-      watcher.close();
-      reject(error);
-    });
-    releaseIfPresent();
-  });
-}
-
-/**
- * Exits the agent once `stopPath` exists (exit-on-stop-file). The watch is
- * registered before the first check, so a file written at any point is seen;
- * it is unreferenced, so it never keeps the agent running on its own.
- */
+/** Exits the agent once `stopPath` exists (exit-on-stop-file). */
 function exitWhenFileAppears(stopPath: string): void {
-  const watcher = watch(dirname(stopPath));
-  watcher.unref();
-  const exitIfPresent = (): void => {
-    if (existsSync(stopPath)) process.exit(0);
-  };
-  watcher.on("change", exitIfPresent);
-  exitIfPresent();
+  void fileAppears(stopPath).then((): never => process.exit(0));
 }
 
 /** The prompt's first text block, when it has one. */
@@ -486,7 +453,7 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         if (promptsSeen === 1 && peer.behaviours.has("hold-first-prompt-open")) {
           const held = request;
           heldOpen = held;
-          void waitForRelease(peer.releasePath).then((): void => {
+          void fileAppears(peer.releasePath).then((): void => {
             if (heldOpen !== held) return;
             heldOpen = undefined;
             peer.reply(held, {
@@ -498,7 +465,7 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
           break;
         }
         if (promptsSeen === 1 && peer.behaviours.has("hold-first-prompt"))
-          await waitForRelease(peer.releasePath);
+          await fileAppears(peer.releasePath);
         if (peer.behaviours.has("prompt-directives") && promptText(request) === "hold-open") {
           heldOpen = request;
           break;
@@ -581,6 +548,7 @@ function reactivePeer(
   readRequest: () => Promise<Record<string, unknown> | undefined>,
   reply: (request: Record<string, unknown>, result: unknown) => void,
 ): ReactivePeer {
+  startReleaseBarrier(requireArgument(3));
   return {
     behaviours: reactiveBehaviours(process.argv.slice(4)),
     releasePath: `${requireArgument(3)}.release`,

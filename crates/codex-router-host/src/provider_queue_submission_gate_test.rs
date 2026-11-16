@@ -88,3 +88,21 @@ fn a_retired_provider_refuses_the_commit() {
     assert_eq!(committed, Err(RETIRED.to_owned()));
     assert!(!started, "nothing was submitted");
 }
+
+/// Oracle: D1 R14 and the Reviewer's C2: once the Router closes the session
+/// itself, every entry ends with the close reason, including one that entered
+/// the line after the close.
+#[test]
+fn a_terminal_close_refuses_every_entry_whenever_it_entered() {
+    // Arrange
+    let gate = QueueSubmissionGate::default();
+    let retirement = CancellationToken::new();
+
+    // Act
+    gate.close_terminally("session closed");
+    let late = gate.commit(7, &retirement, RETIRED, || ());
+
+    // Assert
+    assert_eq!(late, Err("session closed".to_owned()));
+    assert_eq!(gate.closed_reason_for(7), Some("session closed".to_owned()));
+}

@@ -196,7 +196,7 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
             Err(error) => panic!("the hub stopped before an acceptance: {error:?}"),
         }
     };
-    std::fs::write(format!("{}.release", receipt.display()), b"").expect("release the turn");
+    node_test_fixture::release_fixture(&receipt, ".release").expect("release the turn");
     let held = held.await.expect("held turn task");
     queue.shutdown().await;
     let steers = recorded_requests(&receipt, "_session/steering");
@@ -271,8 +271,7 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
     steer_replied
         .await
         .expect("the steer's injection reply arrived");
-    std::fs::write(format!("{}.release", session.receipt.display()), b"")
-        .expect("release the turn");
+    node_test_fixture::release_fixture(&session.receipt, ".release").expect("release the turn");
     let turn_settled = session
         .supervisor
         .wait(ConversationOperationWaitRequest {
@@ -395,8 +394,7 @@ async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approv
     steer_pinned
         .await
         .expect("the steer is pinned before its injection");
-    std::fs::write(format!("{}.release-1", session.receipt.display()), b"")
-        .expect("release turn A");
+    node_test_fixture::release_fixture(&session.receipt, ".release-1").expect("release turn A");
     let a_settled = session
         .supervisor
         .wait(ConversationOperationWaitRequest {
@@ -417,8 +415,7 @@ async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approv
     steer_replied
         .await
         .expect("the steer's injection reply arrived");
-    std::fs::write(format!("{}.release-2", session.receipt.display()), b"")
-        .expect("release turn C");
+    node_test_fixture::release_fixture(&session.receipt, ".release-2").expect("release turn C");
     let c_settled = session
         .supervisor
         .wait(ConversationOperationWaitRequest {

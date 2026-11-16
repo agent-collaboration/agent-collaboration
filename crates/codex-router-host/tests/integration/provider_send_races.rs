@@ -103,8 +103,7 @@ async fn until(mut condition: impl FnMut() -> bool) {
 
 /// Lets the fixture answer what it holds behind `<receipt>.<name>`.
 fn release(receipt: &Path, name: &str) {
-    std::fs::write(PathBuf::from(format!("{}.{name}", receipt.display())), b"")
-        .expect("release file");
+    node_test_fixture::release_fixture(receipt, &format!(".{name}")).expect("release file");
 }
 
 fn human(id: &str) -> ProviderIdentity {

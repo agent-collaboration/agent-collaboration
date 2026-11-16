@@ -134,6 +134,10 @@ struct SupervisorInner {
     /// injection is sent.
     #[cfg(test)]
     steer_injection_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next API send routed to the line, after its admission and
+    /// before it enters the line.
+    #[cfg(test)]
+    queue_enqueue_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Steers in flight keep every turn's approver record (D1 C1).
     approver_pins: StdMutex<ApproverPins>,
 }
@@ -249,6 +253,15 @@ impl ExternalProviderSupervisor {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(target.clone());
+    }
+
+    /// Whether the Router closed `target` itself (D1 R14).
+    pub(crate) fn is_router_closed(&self, target: &SessionRef) -> bool {
+        self.inner
+            .router_closed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(target)
     }
 
     /// Refuses work for a session the Router closed itself (D1 R14).
@@ -478,6 +491,8 @@ impl ExternalProviderSupervisor {
                 steer_reply_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 steer_injection_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                queue_enqueue_test_pause: StdMutex::new(None),
                 approver_pins: StdMutex::new(ApproverPins::default()),
             }),
         })

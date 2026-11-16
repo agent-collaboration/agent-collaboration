@@ -591,8 +591,7 @@ pub(super) async fn until_recorded(receipt: &Path, method: &str, count: usize) {
 
 /// Ends the fixture's held first turn.
 pub(super) fn release(receipt: &Path) {
-    if let Err(error) = std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
-    {
+    if let Err(error) = node_test_fixture::release_fixture(receipt, ".release") {
         panic!("release the held turn: {error}");
     }
 }

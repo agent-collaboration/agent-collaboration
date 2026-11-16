@@ -25,7 +25,7 @@ use collaboration_protocol::{
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
@@ -323,8 +323,7 @@ async fn prompt_to_a_busy_non_steering_agent_says_cannot_steer_or_queues_when_as
         .await;
     let mailed = host.mail(&target).await;
     let prompts_while_held = recorded(&receipt, "session/prompt");
-    std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
-        .expect("release the held turn");
+    node_test_fixture::release_fixture(&receipt, ".release").expect("release the held turn");
     let completed = host
         .client
         .wait_for_provider_conversation_operation(ConversationOperationWaitRequest {
@@ -615,8 +614,7 @@ async fn finish_case(
     outcome: SendOutcome,
 ) -> SendOutcome {
     if matches!(state, SessionStateAtSend::BusyNonSteering) {
-        std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
-            .expect("release the held turn");
+        node_test_fixture::release_fixture(receipt, ".release").expect("release the held turn");
         if outcome == SendOutcome::Queued {
             until_recorded(receipt, "session/prompt", 2).await;
         }
