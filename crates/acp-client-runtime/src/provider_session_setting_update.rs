@@ -110,6 +110,18 @@ pub(crate) async fn apply_loaded_setting(
             })
         }
         Some(SettingSetupFailure::Agent { reason, .. }) => {
+            if kind == ProviderSettingKind::Fast {
+                // A session meant to be non-fast never quietly runs fast (R8):
+                // a refused explicit off holds prompts, with the agent's catalog.
+                keep_returned_catalog(handles, &provider_session_id, &catalog).await?;
+                hold(
+                    handles,
+                    &provider_session_id,
+                    kind,
+                    UnresolvedSettingCause::DefiniteFailure,
+                )
+                .await;
+            }
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: kind,
                 value,
@@ -179,6 +191,7 @@ async fn keep_fast_off_after_model(
             Ok(catalog.effective_settings())
         }
         Some(SettingSetupFailure::Agent { reason, .. }) => {
+            keep_returned_catalog(handles, provider_session_id, &catalog).await?;
             hold(
                 handles,
                 provider_session_id,
@@ -239,11 +252,10 @@ async fn hold(
         .insert(kind, cause);
 }
 
-/// Publishes and keeps a setting the agent confirmed, and ends its hold.
-async fn commit_confirmed_setting(
+/// Publishes and keeps the catalog the agent last answered with.
+async fn keep_returned_catalog(
     handles: &ProviderSessionRuntimeHandles,
     provider_session_id: &str,
-    kind: ProviderSettingKind,
     catalog: &ProviderSettingsCatalog,
 ) -> Result<(), ExternalProviderRuntimeError> {
     handles
@@ -260,6 +272,17 @@ async fn commit_confirmed_setting(
         .write()
         .await
         .insert(provider_session_id.to_owned(), catalog.clone());
+    Ok(())
+}
+
+/// Publishes and keeps a setting the agent confirmed, and ends its hold.
+async fn commit_confirmed_setting(
+    handles: &ProviderSessionRuntimeHandles,
+    provider_session_id: &str,
+    kind: ProviderSettingKind,
+    catalog: &ProviderSettingsCatalog,
+) -> Result<(), ExternalProviderRuntimeError> {
+    keep_returned_catalog(handles, provider_session_id, catalog).await?;
     let mut unresolved = handles.settings_unresolved.write().await;
     if let Some(kinds) = unresolved.get_mut(provider_session_id) {
         kinds.remove(&kind);

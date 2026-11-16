@@ -242,11 +242,12 @@ fn apply_fast_response(
     behavior: &dyn crate::ProviderBehavior,
 ) -> Result<(), SettingResponseFailure> {
     let updated = catalog_from_config_response(catalog, &response, behavior)?;
-    match updated.fast_observed() {
-        crate::FastObserved::Off => {
-            *catalog = updated;
-            Ok(())
-        }
+    let observed = updated.fast_observed();
+    // The agent answered readably: its catalog is the truth from here on,
+    // whether or not it confirms off (D1 V14), so nothing reports a stale one.
+    *catalog = updated;
+    match observed {
+        crate::FastObserved::Off => Ok(()),
         crate::FastObserved::On => Err(SettingResponseFailure::Rejected(
             "the agent's fast option still reads on".to_owned(),
         )),

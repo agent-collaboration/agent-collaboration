@@ -286,7 +286,8 @@ async fn fast_off_reply_without_fast_option_is_refused_and_held() -> TestResult 
         matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
         "{held:?}"
     );
-    assert_ne!(observed, Some(FastObserved::Off));
+    // The reported catalog is the one the agent returned, never the stale one (V14).
+    assert_eq!(observed, Some(FastObserved::NoOption));
     Ok(())
 }
 
@@ -546,5 +547,63 @@ async fn boolean_fast_option_is_set_with_a_boolean_value() -> TestResult {
         json!({"sessionId":SESSION,"configId":"fast","type":"boolean","value":false})
     );
     assert_eq!(created.effective_settings.fast, Some(FastObserved::Off));
+    Ok(())
+}
+
+/// Oracle: D1 spec R7 and R8 "Refused → held", as clarified for an explicit
+/// set (Lead, push 01a1e1c8) — a session created with fast auto, then an
+/// explicit fast off the agent refuses, holds prompts until a confirmed off.
+#[tokio::test]
+async fn explicit_fast_off_refused_after_fast_auto_holds_prompts() -> TestResult {
+    let fixture = AcpWireFixture::start_reactive(&["refuse-fast-once"]).await;
+    create(&fixture, settings(FastRequest::Leave)).await?;
+    let refused = set(&fixture, ProviderSettingKind::Fast, "off").await;
+    let held = prompt(&fixture).await;
+    set(&fixture, ProviderSettingKind::Fast, "off").await?;
+    let released = prompt(&fixture).await;
+    fixture.client.shutdown().await;
+    match refused {
+        Err(ExternalProviderRuntimeError::SettingFailed { setting, value, .. }) => {
+            assert_eq!(setting, ProviderSettingKind::Fast);
+            assert_eq!(value, "off");
+        }
+        other => return Err(format!("expected a refused fast off, got {other:?}").into()),
+    }
+    assert!(
+        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        "{held:?}"
+    );
+    released?;
+    assert_eq!(prompts_seen(&fixture), 1);
+    Ok(())
+}
+
+/// Oracle: D1 V14 and the Lead's clarification — an explicit fast off whose
+/// valid answer drops the fast option is a refusal: the catalog becomes the
+/// one the agent returned, and prompts are held.
+#[tokio::test]
+async fn explicit_fast_off_reply_without_fast_option_keeps_the_returned_catalog_and_holds()
+-> TestResult {
+    let fixture = AcpWireFixture::start_reactive(&["fast-option-vanishes"]).await;
+    create(&fixture, settings(FastRequest::Leave)).await?;
+    let refused = set(&fixture, ProviderSettingKind::Fast, "off").await;
+    let observed = catalog_fast(&fixture).await;
+    let held = prompt(&fixture).await;
+    fixture.client.shutdown().await;
+    assert!(
+        matches!(
+            refused,
+            Err(ExternalProviderRuntimeError::SettingFailed {
+                setting: ProviderSettingKind::Fast,
+                ..
+            })
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(observed, Some(FastObserved::NoOption));
+    assert!(
+        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        "{held:?}"
+    );
     Ok(())
 }

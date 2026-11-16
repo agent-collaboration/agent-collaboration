@@ -184,19 +184,22 @@ fn resume_fork_and_new_accept_absent_model_or_effort() {
         "--json",
     ];
 
+    // A test-owned, empty service directory: the requests never reach a
+    // running Router, so nothing is prompted or forked anywhere.
+    let service = tempfile::tempdir().expect("service directory");
+    let run = |arguments: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+            .args(arguments)
+            .arg("--service-directory")
+            .arg(service.path())
+            .output()
+            .expect("CLI executes")
+    };
+
     // Act.
-    let resumed = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args(resume)
-        .output()
-        .expect("CLI executes");
-    let forked_output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args(forked)
-        .output()
-        .expect("CLI executes");
-    let created = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args(fresh)
-        .output()
-        .expect("CLI executes");
+    let resumed = run(&resume);
+    let forked_output = run(&forked);
+    let created = run(&fresh);
 
     // Assert: all three requests pass optional model and effort validation.
     let record: serde_json::Value =
