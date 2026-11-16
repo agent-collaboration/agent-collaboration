@@ -194,6 +194,13 @@ impl ConversationClient {
                         "Codex prompt requires a Session requester; use a provider endpoint for Human prompt",
                     ));
                 }
+                if input.delivery != collaboration_protocol::MessageDelivery::Auto {
+                    return Err(unsupported(
+                        &target.endpoint,
+                        "delivery",
+                        "omit delivery for this Codex ACP prompt",
+                    ));
+                }
                 if input.generation.is_some() {
                     return Err(unsupported(
                         &target.endpoint,
@@ -276,6 +283,7 @@ impl ConversationClient {
                     requested_by: requested_by.clone(),
                     approver: input.approver.unwrap_or(requested_by),
                     prompt: input.message.into(),
+                    delivery: input.delivery,
                 };
                 let wait_seconds = provider_wait_seconds(timeout)?;
                 let router =
@@ -302,10 +310,7 @@ impl ConversationClient {
                                 .await
                             {
                                 Ok(snapshot) if router_queued(&snapshot) => {
-                                    ConversationOperationResult::Queued {
-                                        operation_id,
-                                        target,
-                                    }
+                                    ConversationOperationResult::queued(operation_id, target)
                                 }
                                 _ => ConversationOperationResult::Pending {
                                     operation_id,
@@ -352,10 +357,7 @@ impl ConversationClient {
                         };
                         Ok(match looked {
                             Some(waited) if router_queued(&waited.operation) => {
-                                ConversationOperationResult::Queued {
-                                    operation_id,
-                                    target,
-                                }
+                                ConversationOperationResult::queued(operation_id, target)
                             }
                             _ => ConversationOperationResult::Pending {
                                 operation_id,
@@ -536,10 +538,7 @@ pub(crate) fn provider_operation_result(
         waited.operation.queue_state,
         Some(collaboration_protocol::ConversationOperationQueueState::RouterQueued)
     ) {
-        return Ok(ConversationOperationResult::Queued {
-            operation_id,
-            target,
-        });
+        return Ok(ConversationOperationResult::queued(operation_id, target));
     }
     Ok(ConversationOperationResult::Pending {
         operation_id,

@@ -257,7 +257,8 @@ pub(super) fn report_create_operation_failure(
         | ConversationOperationFailureKind::NotFound
         | ConversationOperationFailureKind::StaleGeneration
         | ConversationOperationFailureKind::ProviderSessionNotFound
-        | ConversationOperationFailureKind::ProviderRejected => 4,
+        | ConversationOperationFailureKind::ProviderRejected
+        | ConversationOperationFailureKind::CannotSteer => 4,
         ConversationOperationFailureKind::OutcomeUnknown => 5,
     };
     if json_output {

@@ -203,6 +203,7 @@ impl ControlFixture {
     ) -> Result<ConversationOperationSubmission, ConversationOperationFailure> {
         self.supervisor
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Queue,
                 operation_id: operation_id.clone(),
                 input_id: None,
                 target: self.target.clone(),

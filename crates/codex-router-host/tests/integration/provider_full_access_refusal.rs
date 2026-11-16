@@ -5,7 +5,6 @@
 
 #![expect(
     clippy::expect_used,
-    clippy::panic,
     reason = "A Host or fixture that cannot start or answer must fail its test."
 )]
 
@@ -120,7 +119,7 @@ async fn a_mode_change_to_bypass_permissions_is_refused_and_nothing_changes() {
     };
     assert_eq!(failure.kind, ProviderSettingsFailureKind::InvalidSetting);
     assert!(
-        String::from(failure.message.clone()).contains(REFUSAL),
+        failure.message.contains(REFUSAL),
         "the refusal names session authentication: {failure:?}"
     );
     assert_eq!(

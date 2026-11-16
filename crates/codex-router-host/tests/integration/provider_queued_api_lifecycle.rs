@@ -4,6 +4,7 @@
 //! Each case starts a real Host with the Cursor ACP fixture, whose receipt
 //! records every request the agent received.
 
+mod conversation_cancel_door;
 mod lifecycle_host;
 mod restart_stages;
 
@@ -11,10 +12,9 @@ use collaboration_client::{
     ConversationOperationResult, ConversationSettlementDetail, ProviderPromptOutput,
 };
 use collaboration_protocol::{
-    ConversationOperationFailureKind, ConversationOperationQueueState,
-    ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOutputUnavailableReason, OperationId, ProviderOperationEffect,
-    ProviderOperationStage, ProviderPromptStopReason,
+    ConversationOperationFailureKind, ConversationOperationSettlement,
+    ConversationOperationWaitOutput, ConversationOutputUnavailableReason, OperationId,
+    ProviderOperationEffect, ProviderOperationStage, ProviderPromptStopReason,
 };
 use lifecycle_host::{
     LifecycleHost, SHORT_WAIT, conversation_failure, cursor_reactive, human, prompt_texts,
@@ -89,7 +89,7 @@ async fn queue_full_is_refused() {
     // Act: one more prompt, then the held turn ends.
     let overflow = OperationId::generate();
     let refused = host
-        .prompt(&target, &owner, overflow.clone(), "overflow", SHORT_WAIT)
+        .queue(&target, &owner, overflow.clone(), "overflow", SHORT_WAIT)
         .await;
     let overflow_shown = host.show(&overflow).await;
     let prompts_while_held = recorded(&receipt, "session/prompt");

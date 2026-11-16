@@ -350,6 +350,7 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
     let running_operation = OperationId::generate();
     supervisor
         .prompt(ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: running_operation.clone(),
             target: target.clone(),

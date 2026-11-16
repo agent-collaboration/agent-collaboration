@@ -45,6 +45,7 @@ async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult
     operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_id.clone(),
                 target,

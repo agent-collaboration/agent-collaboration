@@ -17,9 +17,11 @@ pub enum PromptBusyPolicy {
     /// decide steer or queue themselves, and cache warm sends only to an
     /// idle session.
     RefuseBusy,
-    /// Steer it into the running turn, or queue it when the agent can't
-    /// steer: the API prompt (CLI, MCP tools, API).
-    SteerOrQueue,
+    /// The API prompt (CLI, MCP tools, API): the caller's delivery choice
+    /// decides. Auto steers if the agent can and otherwise refuses with
+    /// CannotSteer; queue waits in the session's line; steer steers or is
+    /// refused.
+    Send(collaboration_protocol::MessageDelivery),
 }
 
 /// Host-internal prompt admission. Public API requests keep their prompt
@@ -88,7 +90,7 @@ impl ProviderPromptContentsRequest {
             input: acp_client_runtime::ProviderTurnInput::Prompt(
                 session_event_model::ProviderSubmission::plain(vec![content]),
             ),
-            busy: PromptBusyPolicy::SteerOrQueue,
+            busy: PromptBusyPolicy::Send(request.delivery),
         })
     }
 }
@@ -98,8 +100,8 @@ impl ExternalProviderSupervisor {
         &self,
         request: ProviderPromptContentsRequest,
     ) -> ProviderConversationFuture<'static, ConversationOperationSubmission> {
-        if request.busy == PromptBusyPolicy::SteerOrQueue {
-            return self.send_api_prompt(request);
+        if let PromptBusyPolicy::Send(delivery) = request.busy {
+            return self.send_api_prompt(request, delivery);
         }
         let operation_id = request.operation_id.clone();
         let failure_target = Some(request.target.clone());
@@ -128,7 +130,7 @@ impl ExternalProviderSupervisor {
                     .await
                 {
                     AdmittedPromptDispatch::Done(result) => *result,
-                    // Only SteerOrQueue hands a running turn back; RefuseBusy
+                    // Only Send hands a running turn back; RefuseBusy
                     // settles it as the Busy refusal it is.
                     AdmittedPromptDispatch::TurnRunning { live, .. } => {
                         let refusal = dispatch_refusal_failure(
@@ -149,7 +151,7 @@ impl ExternalProviderSupervisor {
 
     /// Sends an admitted prompt and waits for the dispatch observation; the
     /// turn's completion settles the operation in the background. A Busy
-    /// refusal under SteerOrQueue leaves the operation admitted and unsettled,
+    /// refusal under Send leaves the operation admitted and unsettled,
     /// so the caller can steer or queue it under the same ID (D1 R12).
     pub(super) async fn dispatch_admitted_prompt(
         &self,
@@ -257,7 +259,7 @@ impl ExternalProviderSupervisor {
             }
             Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(
                 acp_client_runtime::ProviderDispatchRefusal::Busy,
-            ))) if request.busy == PromptBusyPolicy::SteerOrQueue => {
+            ))) if matches!(request.busy, PromptBusyPolicy::Send(_)) => {
                 self.forget_turn_approver(&request.operation_id);
                 // Nothing was sent: the row waits again rather than stay Unknown.
                 if let Err(undo) = self
@@ -309,7 +311,7 @@ pub(super) struct StartedSubmission {
 pub(super) enum AdmittedPromptDispatch {
     /// Dispatched, refused or uncertain: the operation is settled as before.
     Done(Box<Result<ConversationOperationSubmission, ConversationOperationFailure>>),
-    /// A turn was running (SteerOrQueue only): nothing was sent, and the
+    /// A turn was running (Send only): nothing was sent, and the
     /// operation is still admitted and unsettled.
     TurnRunning {
         live: std::sync::Arc<super::LiveOperation>,

@@ -89,6 +89,11 @@ pub struct ConversationPromptInput {
     pub effort: Option<String>,
     #[serde(default)]
     pub generation: Option<CodexGeneration>,
+    /// What a busy provider session does with the prompt (D1 R12): auto
+    /// steers if the agent can and otherwise says cannot steer; queue waits
+    /// for the running turn to end; steer steers or is refused.
+    #[serde(default)]
+    pub delivery: collaboration_protocol::MessageDelivery,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
@@ -267,6 +272,8 @@ impl ConversationClient {
             message: input.message,
             effort: input.prompt_effort,
             generation,
+            // A new session is idle, so its first prompt simply starts a turn.
+            delivery: collaboration_protocol::MessageDelivery::Auto,
         };
         let prompt_operation_id = prompt_input.operation_id.clone();
         let prompt = if native {

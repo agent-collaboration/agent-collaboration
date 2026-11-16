@@ -151,6 +151,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     submit_provider_prompt(
         &client,
         ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: prompt_operation.clone(),
             target: target.clone(),

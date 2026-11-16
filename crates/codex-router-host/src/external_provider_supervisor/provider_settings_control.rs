@@ -76,7 +76,7 @@ pub(super) async fn apply(
         && supervisor
             .provider_kind_for(&request.target.endpoint)
             .is_some_and(|provider| {
-                super::provider_full_access_guard::is_full_access_mode(&provider, &request.value)
+                super::provider_full_access_guard::is_full_access_mode(provider, &request.value)
             })
     {
         return Err(ProviderSettingsFailure {

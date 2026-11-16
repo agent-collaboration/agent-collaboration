@@ -109,7 +109,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 .as_ref()
                 .and_then(|settings| settings.mode.as_deref())
                 && super::provider_full_access_guard::is_full_access_mode(
-                    &binding.runtime.provider,
+                    binding.runtime.provider,
                     mode,
                 )
             {
@@ -497,7 +497,36 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let target_operation_id = request.target_operation_id;
                     let provider_session_id = String::from(target.session_id.clone());
                     let completion_target = target.clone();
+                    // A prompt still waiting in its session's line is taken
+                    // out of it and ends not sent; one already running or
+                    // dispatched keeps the interrupt (D1 R12, R14).
+                    let waiting_input = backend
+                        .inner
+                        .queued_operations
+                        .snapshot(&target_operation_id)
+                        .ok()
+                        .flatten()
+                        .filter(|queued| {
+                            queued.queue_state
+                                == Some(collaboration_protocol::ConversationOperationQueueState::RouterQueued)
+                        })
+                        .and_then(|queued| queued.input_id);
+                    let dequeued = waiting_input.is_some_and(|input_id| {
+                        backend
+                            .message_fifo()
+                            .is_some_and(|fifo| fifo.cancel_queued(&target, &input_id).is_ok())
+                    });
                     backend.spawn_operation(operation_id.clone(), live, async move {
+                        if dequeued {
+                            return ProviderOperationCompletion::Success {
+                                settlement: ConversationOperationSettlement::CancelRequested {
+                                    target: completion_target.clone(),
+                                    target_operation_id,
+                                },
+                                target: Some(completion_target),
+                                session_record: None,
+                            };
+                        }
                         match runtime
                             .cancel_prompt_operation(
                                 provider_session_id,

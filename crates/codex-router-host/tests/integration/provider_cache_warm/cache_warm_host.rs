@@ -356,6 +356,7 @@ impl CacheWarmHost {
     ) -> JoinHandle<PromptAnswer> {
         let directory = self.client.directory().to_owned();
         let input = ConversationPromptInput {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             operation_id: Some(operation_id.clone()),
             target: target.clone(),
             working_directory: None,

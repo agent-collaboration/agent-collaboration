@@ -17,6 +17,7 @@ fn prompt_request_forwards_exact_task_text_without_router_envelope() {
     }))
     .expect("sender session");
     let request = ConversationPromptRequest {
+        delivery: collaboration_protocol::MessageDelivery::Auto,
         operation_id: OperationId::generate(),
         input_id: None,
         target,

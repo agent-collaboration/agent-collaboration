@@ -12,7 +12,7 @@ pub(super) const FULL_ACCESS_REFUSAL: &str = "full access is refused until the R
 /// Claude advertises bypassPermissions. Cursor's ACP modes (agent, plan, ask)
 /// include none: its run-everything is a CLI flag, not a mode a Router
 /// session can name. Codex sessions take only the Router's two access modes.
-pub(super) fn is_full_access_mode(provider: &ProviderKind, mode: &str) -> bool {
+pub(super) fn is_full_access_mode(provider: ProviderKind, mode: &str) -> bool {
     match provider {
         ProviderKind::ClaudeCode => mode == "bypassPermissions",
         ProviderKind::Cursor => false,

@@ -1,6 +1,9 @@
-//! The API prompt's one send behaviour (D1 R12, Change 4): under the caller's
-//! one operation ID, an idle session is prompted, a busy one that can steer
-//! is steered, and a busy one that can't is queued. A send never interrupts a
+//! The API prompt's one send behaviour (D1 R12, Changes 4 and 8): under the
+//! caller's one operation ID and delivery choice, an idle session is
+//! prompted. A busy one is steered when the agent can steer. When it can't,
+//! auto refuses with CannotSteer (nothing sent; the caller chooses queue or an
+//! interrupt), queue waits in the session's line, and steer is refused. Steer
+//! and queue mirror message send's provider rules. A send never interrupts a
 //! turn and never answers "busy" for a running turn.
 
 use super::provider_operation_admission::DispatchMark;
@@ -13,6 +16,7 @@ use super::{
     ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind,
     admitted_submission, existing_submission, failure, retain_operation,
 };
+use collaboration_protocol::MessageDelivery;
 
 /// Where one look at the session sends the prompt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,7 +24,54 @@ enum SendRoute {
     Prompt,
     Steer,
     Queue,
+    /// Nothing is sent; the operation settles with this refusal.
+    Refuse(SendRefusal),
 }
+
+/// Why a prompt was not sent, decided by the session and the caller's choice.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SendRefusal {
+    /// Auto, busy, and the agent can't take input mid-turn.
+    CannotSteer,
+    /// Steer, and the agent can't steer at all.
+    SteerUnsupported,
+    /// Steer, and no turn is running.
+    NoRunningTurn,
+}
+
+impl SendRefusal {
+    fn failure(
+        self,
+        operation_id: OperationId,
+        target: super::SessionRef,
+    ) -> ConversationOperationFailure {
+        let (kind, message) = match self {
+            Self::CannotSteer => (
+                ConversationOperationFailureKind::CannotSteer,
+                CANNOT_STEER_MESSAGE,
+            ),
+            Self::SteerUnsupported => (
+                ConversationOperationFailureKind::UnsupportedCapability,
+                "steer unsupported by provider",
+            ),
+            Self::NoRunningTurn => (
+                ConversationOperationFailureKind::InvalidRequest,
+                "no running turn to steer",
+            ),
+        };
+        failure(
+            kind,
+            ConversationOperationFailureStage::Dispatch,
+            ProviderOperationEffect::None,
+            message,
+            operation_id,
+            Some(target),
+        )
+    }
+}
+
+/// What a caller with no choice is told when the agent can't steer (D1 R12).
+const CANNOT_STEER_MESSAGE: &str = "cannot steer: the agent can't take input while its turn runs, so nothing was sent. Send again with delivery queue to wait for the turn to end, or interrupt the turn (conversation cancel) and then send";
 
 impl ExternalProviderSupervisor {
     /// Records the approver of a prompt this Host dispatched, kept while its
@@ -73,20 +124,32 @@ impl ExternalProviderSupervisor {
             .and_then(std::sync::Weak::upgrade)
     }
 
-    /// The session's state decides the route: idle prompts, a running turn
-    /// steers when the agent advertises steering and queues when it doesn't.
+    /// The caller's choice and the session's state decide the route. Queue
+    /// always waits in the line; steer needs an agent that steers and a
+    /// running turn; auto prompts an idle session and steers a busy one, or
+    /// says cannot steer.
     async fn send_route(
         runtime: &Arc<crate::ExternalProviderRuntime>,
         provider_session_id: &str,
+        delivery: MessageDelivery,
     ) -> SendRoute {
+        if delivery == MessageDelivery::Queue {
+            return SendRoute::Queue;
+        }
+        if delivery == MessageDelivery::Steer && !Self::steers(runtime, provider_session_id).await {
+            return SendRoute::Refuse(SendRefusal::SteerUnsupported);
+        }
         match runtime
             .session_activity(provider_session_id.to_owned())
             .await
         {
             Ok(acp_client_runtime::ProviderSessionActivity::Running) => {
-                Self::busy_route(runtime, provider_session_id).await
+                Self::busy_route(runtime, provider_session_id, delivery).await
             }
             // Idle, not loaded, or unreadable: the dispatch itself decides.
+            _ if delivery == MessageDelivery::Steer => {
+                SendRoute::Refuse(SendRefusal::NoRunningTurn)
+            }
             _ => SendRoute::Prompt,
         }
     }
@@ -94,21 +157,40 @@ impl ExternalProviderSupervisor {
     async fn busy_route(
         runtime: &Arc<crate::ExternalProviderRuntime>,
         provider_session_id: &str,
+        delivery: MessageDelivery,
     ) -> SendRoute {
-        if runtime
+        match (delivery, Self::steers(runtime, provider_session_id).await) {
+            (MessageDelivery::Queue, _) => SendRoute::Queue,
+            (_, true) => SendRoute::Steer,
+            (MessageDelivery::Auto, false) => SendRoute::Refuse(SendRefusal::CannotSteer),
+            (MessageDelivery::Steer, false) => SendRoute::Refuse(SendRefusal::SteerUnsupported),
+        }
+    }
+
+    /// Where a send goes once the session changed twice between a look and
+    /// a send: auto reached here only through steering, so it queues (C4,
+    /// step 6); an explicit steer is refused, as there is no turn to join.
+    const fn settled_route(delivery: MessageDelivery) -> SendRoute {
+        match delivery {
+            MessageDelivery::Auto | MessageDelivery::Queue => SendRoute::Queue,
+            MessageDelivery::Steer => SendRoute::Refuse(SendRefusal::NoRunningTurn),
+        }
+    }
+
+    async fn steers(
+        runtime: &Arc<crate::ExternalProviderRuntime>,
+        provider_session_id: &str,
+    ) -> bool {
+        runtime
             .capability_report(provider_session_id)
             .await
             .supports_steering
-        {
-            SendRoute::Steer
-        } else {
-            SendRoute::Queue
-        }
     }
 
     pub(super) fn send_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
+        delivery: MessageDelivery,
     ) -> ProviderConversationFuture<'static, ConversationOperationSubmission> {
         let operation_id = request.operation_id.clone();
         let failure_target = Some(request.target.clone());
@@ -136,11 +218,19 @@ impl ExternalProviderSupervisor {
                 PreparedOperation::Admitted { snapshot, live } => (snapshot, live),
             };
             let provider_session_id = String::from(target.session_id.clone());
-            let mut route = Self::send_route(&runtime, &provider_session_id).await;
+            let mut route = Self::send_route(&runtime, &provider_session_id, delivery).await;
             // One re-decision when the session changed between the look and
-            // the send; a second change queues (C4, step 6).
+            // the send; a second change takes the settled route (C4, step 6).
             for attempt in 0..2 {
                 match route {
+                    SendRoute::Refuse(refusal) => {
+                        let refused = refusal.failure(request.operation_id.clone(), target.clone());
+                        let settled = refused.clone();
+                        backend.spawn_operation(request.operation_id.clone(), live, async move {
+                            ProviderOperationCompletion::Failure(settled)
+                        });
+                        return Err(refused);
+                    }
                     SendRoute::Prompt => {
                         let dispatching = backend
                             .begin_dispatch(&request.operation_id, &target)
@@ -158,9 +248,9 @@ impl ExternalProviderSupervisor {
                             AdmittedPromptDispatch::Done(result) => return *result,
                             AdmittedPromptDispatch::TurnRunning { .. } => {
                                 route = if attempt == 0 {
-                                    Self::busy_route(&runtime, &provider_session_id).await
+                                    Self::busy_route(&runtime, &provider_session_id, delivery).await
                                 } else {
-                                    SendRoute::Queue
+                                    Self::settled_route(delivery)
                                 };
                             }
                         }
@@ -171,10 +261,10 @@ impl ExternalProviderSupervisor {
                     {
                         SteerResult::Settled(submission) => return Ok(*submission),
                         SteerResult::NoRunningTurn => {
-                            route = if attempt == 0 {
+                            route = if attempt == 0 && delivery == MessageDelivery::Auto {
                                 SendRoute::Prompt
                             } else {
-                                SendRoute::Queue
+                                Self::settled_route(delivery)
                             };
                         }
                     },
@@ -184,7 +274,17 @@ impl ExternalProviderSupervisor {
                     }
                 }
             }
-            backend.queue_admitted_api_prompt(request, &binding, snapshot, live)
+            match Self::settled_route(delivery) {
+                SendRoute::Refuse(refusal) => {
+                    let refused = refusal.failure(request.operation_id.clone(), target);
+                    let settled = refused.clone();
+                    backend.spawn_operation(request.operation_id, live, async move {
+                        ProviderOperationCompletion::Failure(settled)
+                    });
+                    Err(refused)
+                }
+                _ => backend.queue_admitted_api_prompt(request, &binding, snapshot, live),
+            }
         })
     }
 

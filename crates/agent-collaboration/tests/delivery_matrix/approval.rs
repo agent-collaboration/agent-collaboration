@@ -82,6 +82,7 @@ pub(super) async fn deliver_approval_notice(
         conversation
             .prompt(
                 ConversationPromptInput {
+                    delivery: collaboration_protocol::MessageDelivery::Auto,
                     operation_id: Some(OperationId::generate()),
                     target: requester_for_prompt,
                     working_directory: None,

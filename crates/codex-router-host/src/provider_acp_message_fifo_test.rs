@@ -556,6 +556,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
     let held_operation = OperationId::generate();
     supervisor
         .prompt(collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             operation_id: held_operation.clone(),
             input_id: None,
             target: target.clone(),
@@ -777,6 +778,7 @@ async fn close_while_queued_marks_head_and_buffer_not_sent() {
         let operation_id = OperationId::generate();
         supervisor
             .prompt(collaboration_protocol::ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Queue,
                 operation_id: operation_id.clone(),
                 input_id: None,
                 target: target.clone(),

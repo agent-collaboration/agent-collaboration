@@ -122,6 +122,7 @@ async fn shut_down_the_line_at(paused_at: PausedAt) -> Shutdown {
     let queued = OperationId::generate();
     supervisor
         .prompt(collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Queue,
             operation_id: queued.clone(),
             input_id: None,
             target: target.clone(),

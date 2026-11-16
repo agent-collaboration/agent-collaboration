@@ -20,7 +20,7 @@ fn only_claudes_bypass_permissions_is_full_access() {
 
     for (provider, mode, expected) in cases {
         // Act
-        let refused = is_full_access_mode(&provider, mode);
+        let refused = is_full_access_mode(provider, mode);
 
         // Assert
         assert_eq!(refused, expected, "{provider:?} {mode}");

@@ -22,6 +22,7 @@ use collaboration_client::{
 };
 use collaboration_contracts::ProviderConversationBackend as _;
 use collaboration_protocol::ConversationAdmissionState as Admission;
+use collaboration_protocol::MessageDelivery;
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationCreateRequest, ConversationOperationFailure,
     ConversationOperationFailureKind, ConversationOperationQueueState,
@@ -142,6 +143,17 @@ fn router_queued(snapshot: Option<&ConversationOperationSnapshot>) -> bool {
     })
 }
 
+/// The delivery this suite's sends ask for: an agent that can't steer is
+/// sent an explicit queue (D1 R12: auto would say cannot steer); any other
+/// agent gets auto.
+fn delivery_for(behaviours: &[&str]) -> MessageDelivery {
+    if behaviours.contains(&"no-steering") {
+        MessageDelivery::Queue
+    } else {
+        MessageDelivery::Auto
+    }
+}
+
 /// A real Host whose one provider is the send-race fixture, driven through
 /// the real client, API and supervisor.
 struct ComposedHost {
@@ -150,6 +162,7 @@ struct ComposedHost {
     runtime: CollaborationRuntime,
     client: CollaborationClient,
     endpoint: EndpointRef,
+    delivery: MessageDelivery,
 }
 
 impl ComposedHost {
@@ -208,6 +221,7 @@ impl ComposedHost {
             runtime,
             client,
             endpoint,
+            delivery: delivery_for(behaviours),
         }
     }
 
@@ -253,6 +267,7 @@ impl ComposedHost {
     ) -> JoinHandle<PromptAnswer> {
         let directory = self.client.directory().to_owned();
         let input = ConversationPromptInput {
+            delivery: self.delivery,
             operation_id: Some(operation_id.clone()),
             target: target.clone(),
             working_directory: None,
@@ -389,6 +404,7 @@ struct DirectSupervisor {
     supervisor: Arc<ExternalProviderSupervisor>,
     route: ProviderAcpDeliveryRoute,
     owner: ProviderIdentity,
+    delivery: MessageDelivery,
 }
 
 impl DirectSupervisor {
@@ -441,6 +457,7 @@ impl DirectSupervisor {
             supervisor,
             route,
             owner,
+            delivery: delivery_for(behaviours),
         }
     }
 
@@ -471,6 +488,7 @@ impl DirectSupervisor {
     ) -> Submitted {
         self.supervisor
             .prompt(ConversationPromptRequest {
+                delivery: self.delivery,
                 operation_id: operation_id.clone(),
                 input_id: None,
                 target: target.clone(),

@@ -16,6 +16,7 @@ use collaboration_client::{
     ClientError, CollaborationAccess, CollaborationClient, ConversationActor, ConversationClient,
     ConversationClientError, ConversationOperationResult, ConversationPromptInput,
 };
+use collaboration_protocol::MessageDelivery;
 use collaboration_protocol::{
     ConversationCloseRequest, ConversationCreateRequest, ConversationLoadRequest,
     ConversationOperationQueueState, ConversationOperationSettlement,
@@ -254,18 +255,26 @@ impl LifecycleHost {
         text: &str,
         wait: Duration,
     ) -> PromptCall {
-        self.spawn_prompt_as(target, approver, approver, operation_id, text, wait)
+        self.spawn_prompt_as(
+            target,
+            (approver, approver),
+            operation_id,
+            text,
+            wait,
+            MessageDelivery::Auto,
+        )
     }
 
-    /// One API prompt by `requester` naming `approver`, in the background.
+    /// One API prompt by `requester` naming `approver`, in the background,
+    /// with the caller's delivery choice.
     pub(super) fn spawn_prompt_as(
         &self,
         target: &SessionRef,
-        requester: &ProviderIdentity,
-        approver: &ProviderIdentity,
+        (requester, approver): (&ProviderIdentity, &ProviderIdentity),
         operation_id: OperationId,
         text: &str,
         wait: Duration,
+        delivery: MessageDelivery,
     ) -> PromptCall {
         let client = self.client.clone();
         let target = target.clone();
@@ -286,6 +295,7 @@ impl LifecycleHost {
             let message = serde_json::from_value(json!({"kind":"humanUser","text":text}))
                 .map_err(|_| ConversationClientError::InvalidInput("prompt content"))?;
             let input = ConversationPromptInput {
+                delivery,
                 operation_id: Some(operation_id),
                 target,
                 working_directory: None,
@@ -311,9 +321,38 @@ impl LifecycleHost {
         text: &str,
         wait: Duration,
     ) -> Result<ConversationOperationResult, ConversationClientError> {
-        self.spawn_prompt_as(target, requester, approver, operation_id, text, wait)
-            .await
-            .unwrap_or_else(|error| panic!("prompt task: {error}"))
+        self.spawn_prompt_as(
+            target,
+            (requester, approver),
+            operation_id,
+            text,
+            wait,
+            MessageDelivery::Auto,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("prompt task: {error}"))
+    }
+
+    /// One API prompt as `approver` that asks to queue (D1 R12), answered
+    /// after `wait`.
+    pub(super) async fn queue(
+        &self,
+        target: &SessionRef,
+        approver: &ProviderIdentity,
+        operation_id: OperationId,
+        text: &str,
+        wait: Duration,
+    ) -> Result<ConversationOperationResult, ConversationClientError> {
+        self.spawn_prompt_as(
+            target,
+            (approver, approver),
+            operation_id,
+            text,
+            wait,
+            MessageDelivery::Queue,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue task: {error}"))
     }
 
     /// One API prompt as `approver`, answered after `wait`.
@@ -361,11 +400,11 @@ impl LifecycleHost {
             let operation_id = OperationId::generate();
             in_flight.push_back(self.spawn_prompt_as(
                 target,
-                requester,
-                approver,
+                (requester, approver),
                 operation_id.clone(),
                 text,
                 SHORT_WAIT,
+                MessageDelivery::Queue,
             ));
             self.until_router_queued(&operation_id).await;
             queued.push(operation_id);

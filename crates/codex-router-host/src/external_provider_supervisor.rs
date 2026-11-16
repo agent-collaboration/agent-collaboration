@@ -184,7 +184,7 @@ impl ExternalProviderSupervisor {
         self.inner
             .bindings
             .get(endpoint)
-            .map(|entry| entry.identity.runtime.provider.clone())
+            .map(|entry| entry.identity.runtime.provider)
     }
 
     pub(crate) fn runtime_for(

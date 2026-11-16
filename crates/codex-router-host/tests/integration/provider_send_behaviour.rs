@@ -170,6 +170,28 @@ impl ComposedHost {
         text: &str,
         wait: Duration,
     ) -> ConversationOperationResult {
+        self.prompt_answer(
+            target,
+            approver,
+            operation_id,
+            text,
+            wait,
+            MessageDelivery::Auto,
+        )
+        .await
+        .expect("prompt answered")
+    }
+
+    /// One API prompt with the caller's delivery choice, as it answered.
+    async fn prompt_answer(
+        &self,
+        target: &SessionRef,
+        approver: &ProviderIdentity,
+        operation_id: OperationId,
+        text: &str,
+        wait: Duration,
+        delivery: MessageDelivery,
+    ) -> Result<ConversationOperationResult, collaboration_client::ConversationClientError> {
         let conversation = ConversationClient::connect(
             &CollaborationAccess::api(self.client.directory()),
             &target.endpoint,
@@ -178,6 +200,7 @@ impl ComposedHost {
         .expect("conversation client");
         let actor = ConversationActor::Typed(approver.to_board_identity().expect("actor"));
         let input = ConversationPromptInput {
+            delivery,
             operation_id: Some(operation_id),
             target: target.clone(),
             working_directory: None,
@@ -191,7 +214,6 @@ impl ComposedHost {
         conversation
             .prompt(input, wait, CancellationToken::new())
             .await
-            .expect("prompt answered")
     }
 }
 
@@ -210,6 +232,22 @@ pub(crate) fn recorded(receipt: &Path, method: &str) -> usize {
 
 /// Waits until the fixture recorded `count`; the test runner bounds the case
 /// (`.config/nextest.toml`), so test code never waits on Tokio's clock.
+/// Prompts the agent read whose request carries `text`.
+fn prompts_carrying(receipt: &Path, text: &str) -> usize {
+    std::fs::read(receipt)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<Value>>(&bytes).ok())
+        .map_or(0, |requests| {
+            requests
+                .iter()
+                .filter(|request| {
+                    request.get("method").and_then(Value::as_str) == Some("session/prompt")
+                        && request.to_string().contains(text)
+                })
+                .count()
+        })
+}
+
 pub(crate) async fn until_recorded(receipt: &Path, method: &str, count: usize) {
     while recorded(receipt, method) < count {
         tokio::task::yield_now().await;
@@ -235,12 +273,15 @@ pub(crate) fn cursor_reactive(
     .expect("Cursor binding")
 }
 
-/// Oracle: D1 spec R12 row "Busy, and the agent can't take input mid-turn"
-/// and V22 — the second message waits in the session's line: the client says
-/// queued, the agent sees no second prompt until the first turn ends, then
-/// exactly one, and waiting again gives its completion.
+/// Oracle: D1 spec R12 (owner, 16 Nov: "Cannot steer, interrupt or queue")
+/// and V32: to a busy agent that can't steer, a CLI prompt with no choice is
+/// not sent: CannotSteer, naming queue and interrupt, and no prompt reaches
+/// the agent. With queue, it waits in the line and says Queued with its
+/// follow-up, then runs as its own turn. Mail to the same busy session is
+/// still queued.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn prompt_to_a_busy_non_steering_agent_queues() {
+async fn prompt_to_a_busy_non_steering_agent_says_cannot_steer_or_queues_when_asked() {
+    // Arrange: a held turn on an agent that can't steer.
     let staging = tempfile::tempdir().expect("receipt folder");
     let receipt = staging.path().join("wire.json");
     let host = ComposedHost::start(
@@ -250,16 +291,36 @@ async fn prompt_to_a_busy_non_steering_agent_queues() {
     .await;
     let owner = ComposedHost::human("send-owner");
     let target = host.create(&owner).await;
-
     let first = OperationId::generate();
     let held = host
         .prompt(&target, &owner, first.clone(), "first", SHORT_WAIT)
         .await;
     until_recorded(&receipt, "session/prompt", 1).await;
+
+    // Act: auto, then queue, then mail, while the turn runs.
+    let refused = host
+        .prompt_answer(
+            &target,
+            &owner,
+            OperationId::generate(),
+            "refused",
+            SHORT_WAIT,
+            MessageDelivery::Auto,
+        )
+        .await;
+    let prompts_after_auto = recorded(&receipt, "session/prompt");
     let second = OperationId::generate();
     let queued = host
-        .prompt(&target, &owner, second.clone(), "second", SHORT_WAIT)
+        .prompt_answer(
+            &target,
+            &owner,
+            second.clone(),
+            "second",
+            SHORT_WAIT,
+            MessageDelivery::Queue,
+        )
         .await;
+    let mailed = host.mail(&target).await;
     let prompts_while_held = recorded(&receipt, "session/prompt");
     std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
         .expect("release the held turn");
@@ -271,17 +332,55 @@ async fn prompt_to_a_busy_non_steering_agent_queues() {
         })
         .await
         .expect("queued prompt settles");
-    let prompts_after = recorded(&receipt, "session/prompt");
+    until_recorded(&receipt, "session/prompt", 3).await;
+    let refused_prompts = prompts_carrying(&receipt, "refused");
     let cancels = recorded(&receipt, "session/cancel");
     host.runtime.shutdown().await.expect("Host shutdown");
 
+    // Assert
     assert!(
         matches!(held, ConversationOperationResult::Pending { .. }),
         "the first turn is held: {held:?}"
     );
+    let failure = match &refused {
+        Err(collaboration_client::ConversationClientError::Client(error)) => error
+            .conversation_failure()
+            .unwrap_or_else(|| panic!("a typed refusal: {refused:?}")),
+        other => panic!("auto to an agent that can't steer is refused: {other:?}"),
+    };
+    assert_eq!(
+        failure.kind,
+        collaboration_protocol::ConversationOperationFailureKind::CannotSteer
+    );
+    assert_eq!(
+        failure.effect,
+        collaboration_protocol::ProviderOperationEffect::None
+    );
+    let message = String::from(failure.message);
     assert!(
-        matches!(queued, ConversationOperationResult::Queued { ref operation_id, .. } if operation_id == &second),
-        "the second message is queued, never busy: {queued:?}"
+        message.contains("delivery queue") && message.contains("conversation cancel"),
+        "it names both choices: {message}"
+    );
+    assert_eq!(prompts_after_auto, 1, "nothing was sent on auto");
+    match &queued {
+        Ok(ConversationOperationResult::Queued {
+            operation_id,
+            follow_up,
+            ..
+        }) => {
+            assert_eq!(operation_id, &second);
+            assert!(
+                follow_up.contains("conversation operation wait")
+                    && follow_up.contains("conversation cancel"),
+                "the follow-up says how to wait, cancel or interrupt: {follow_up}"
+            );
+        }
+        other => panic!("queue waits in the line and says queued: {other:?}"),
+    }
+    assert_eq!(
+        mailed.outcome,
+        DeliveryOutcome::Queued,
+        "mail is still queued: {mailed:?}"
     );
     assert_eq!(
         prompts_while_held, 1,
@@ -294,11 +393,11 @@ async fn prompt_to_a_busy_non_steering_agent_queues() {
                 settlement: ConversationOperationSettlement::PromptCompleted { .. }
             }
         ),
-        "{completed:?}"
+        "the queued prompt runs as its own turn: {completed:?}"
     );
     assert_eq!(
-        prompts_after, 2,
-        "exactly one more prompt after the turn ends"
+        refused_prompts, 0,
+        "the refused prompt never reaches the agent"
     );
     assert_eq!(cancels, 0, "no send interrupts a turn");
 }
@@ -372,6 +471,7 @@ enum SendOutcome {
     Prompted,
     Steered,
     Queued,
+    CannotSteer,
 }
 
 /// The state the session is in when the second message arrives.
@@ -461,15 +561,29 @@ async fn outcome_through(door: Door, state: SessionStateAtSend) -> SendOutcome {
             }
         }
         Door::Cli => {
-            let result = host
-                .prompt(
+            let answer = host
+                .prompt_answer(
                     &target,
                     &owner,
                     OperationId::generate(),
                     "second",
                     Duration::from_secs(10),
+                    MessageDelivery::Auto,
                 )
                 .await;
+            let result = match answer {
+                Ok(result) => result,
+                Err(collaboration_client::ConversationClientError::Client(ref error))
+                    if error.conversation_failure().is_some_and(|failure| {
+                        failure.kind
+                            == collaboration_protocol::ConversationOperationFailureKind::CannotSteer
+                    }) =>
+                {
+                    return finish_case(host, &receipt, door, state, SendOutcome::CannotSteer)
+                        .await;
+                }
+                Err(error) => panic!("{door:?} {state:?}: the CLI failed {error:?}"),
+            };
             match result {
                 ConversationOperationResult::Queued { .. } => SendOutcome::Queued,
                 ConversationOperationResult::Completed { ref settlement, .. } => {
@@ -487,32 +601,56 @@ async fn outcome_through(door: Door, state: SessionStateAtSend) -> SendOutcome {
             }
         }
     };
+    finish_case(host, &receipt, door, state, outcome).await
+}
+
+/// Lets a held turn end (a queued message then runs once after it), and
+/// checks no send interrupted the turn.
+async fn finish_case(
+    host: ComposedHost,
+    receipt: &Path,
+    door: Door,
+    state: SessionStateAtSend,
+    outcome: SendOutcome,
+) -> SendOutcome {
     if matches!(state, SessionStateAtSend::BusyNonSteering) {
         std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
             .expect("release the held turn");
-        // The queued message runs once, after the held turn ends.
-        until_recorded(&receipt, "session/prompt", 2).await;
+        if outcome == SendOutcome::Queued {
+            until_recorded(receipt, "session/prompt", 2).await;
+        }
     }
-    let cancels = recorded(&receipt, "session/cancel");
+    let cancels = recorded(receipt, "session/cancel");
     host.runtime.shutdown().await.expect("Host shutdown");
     assert_eq!(cancels, 0, "{door:?} {state:?}: no send interrupts a turn");
     outcome
 }
 
-/// Oracle: D1 spec R12 "one send behaviour" and V23 — for idle,
-/// busy-steerable and busy-non-steerable sessions, an Auto mail delivery and
-/// a CLI prompt both end prompted, steered or queued the same way; mail keeps
-/// its Router ACP evidence, and neither deadlocks or interrupts the turn.
+/// Oracle: D1 spec R12 "one send behaviour" and V23, with R12's 16 Nov
+/// change: for idle and busy-steerable sessions, an Auto mail delivery and a
+/// CLI prompt end prompted or steered the same way. For a busy agent that
+/// can't steer, mail still queues and the CLI with no choice says cannot
+/// steer. Mail keeps its Router ACP evidence, and neither deadlocks or
+/// interrupts the turn.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn mail_and_cli_reach_the_same_outcome_for_the_same_session_state() {
+async fn mail_and_cli_outcomes_for_each_session_state() {
     let cases = [
-        (SessionStateAtSend::Idle, SendOutcome::Prompted),
-        (SessionStateAtSend::BusySteering, SendOutcome::Steered),
-        (SessionStateAtSend::BusyNonSteering, SendOutcome::Queued),
+        (
+            SessionStateAtSend::Idle,
+            (SendOutcome::Prompted, SendOutcome::Prompted),
+        ),
+        (
+            SessionStateAtSend::BusySteering,
+            (SendOutcome::Steered, SendOutcome::Steered),
+        ),
+        (
+            SessionStateAtSend::BusyNonSteering,
+            (SendOutcome::Queued, SendOutcome::CannotSteer),
+        ),
     ];
     for (state, expected) in cases {
         let mail = outcome_through(Door::Mail, state).await;
         let cli = outcome_through(Door::Cli, state).await;
-        assert_eq!((mail, cli), (expected, expected), "{state:?}");
+        assert_eq!((mail, cli), expected, "{state:?}");
     }
 }

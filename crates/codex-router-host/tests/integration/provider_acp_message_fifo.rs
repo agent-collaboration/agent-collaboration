@@ -79,6 +79,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),
@@ -233,6 +234,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: first_operation_id,
             target: target.clone(),
@@ -593,6 +595,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
     let active_prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),
@@ -802,6 +805,7 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),

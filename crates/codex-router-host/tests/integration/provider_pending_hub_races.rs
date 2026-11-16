@@ -148,6 +148,7 @@ fn prompt(
     let task = spawn_provider_prompt(
         client,
         ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: operation_id.clone(),
             target: target.clone(),

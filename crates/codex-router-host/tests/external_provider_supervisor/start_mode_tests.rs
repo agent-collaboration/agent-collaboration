@@ -216,6 +216,7 @@ async fn confirmed_fallback_then_later_failure_keeps_the_mode_report() -> TestRe
     let prompted = fixture
         .backend
         .prompt(ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: prompt_operation.clone(),
             target: target.clone(),

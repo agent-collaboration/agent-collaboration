@@ -42,6 +42,7 @@ pub(crate) async fn prompt_and_approve_from_peer_provider(
     let prompt = spawn_provider_prompt(
         client,
         ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: operation_id.clone(),
             target: requester.clone(),

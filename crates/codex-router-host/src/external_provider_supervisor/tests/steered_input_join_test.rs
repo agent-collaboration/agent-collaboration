@@ -152,6 +152,7 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
     let chosen = session_event_model::InputId::generate();
     let steered = supervisor
         .prompt(ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             operation_id: OperationId::generate(),
             input_id: Some(chosen.clone()),
             target: target.clone(),
@@ -233,6 +234,7 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
     let steer = tokio::spawn({
         let supervisor = Arc::clone(&session.supervisor);
         let request = ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             operation_id: steered_operation.clone(),
             input_id: None,
             target: session.target.clone(),

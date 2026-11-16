@@ -138,6 +138,11 @@ struct PromptArguments {
     operation_id: Option<String>,
     #[arg(long)]
     prompt_operation_id: Option<String>,
+    /// For a busy Claude or Cursor session: auto steers if the agent can and
+    /// otherwise says cannot steer, naming queue and interrupt; queue waits
+    /// for the running turn to end; steer steers or is refused.
+    #[arg(long, value_enum, default_value = "auto")]
+    delivery: crate::message_input_arguments::DeliveryChoice,
     #[arg(long)]
     access: Option<ConversationAccess>,
     /// Exact SessionRef JSON for this caller. Defaults to the unique active Codex, Claude Code, or Cursor harness.

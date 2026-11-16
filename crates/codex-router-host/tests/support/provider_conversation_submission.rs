@@ -98,6 +98,7 @@ fn prompt_input(
         .and_then(serde_json::from_value)
         .map_err(|_| ConversationClientError::InvalidInput("prompt content is not public"))?;
     Ok(ConversationPromptInput {
+        delivery: collaboration_protocol::MessageDelivery::Auto,
         operation_id: Some(request.operation_id),
         target: request.target,
         working_directory: None,

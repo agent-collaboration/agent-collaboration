@@ -553,6 +553,7 @@ pub(super) fn run_existing_prompt(args: PromptArguments) -> i32 {
             message,
             effort: args.effort,
             generation,
+            delivery: args.delivery.message_delivery(),
         };
         let cancel = CancellationToken::new();
         let signal = cancel.clone();

@@ -631,6 +631,11 @@ pub struct ConversationPromptRequest {
     pub requested_by: ProviderIdentity,
     pub approver: ProviderIdentity,
     pub prompt: MessageContent,
+    /// What a busy session does with the prompt (D1 R12): auto steers if the
+    /// agent can and otherwise refuses with CannotSteer; queue waits in the
+    /// session's line; steer steers or is refused.
+    #[serde(default, skip_serializing_if = "crate::MessageDelivery::is_auto")]
+    pub delivery: crate::MessageDelivery,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -786,6 +791,10 @@ pub enum ConversationOperationFailureKind {
     ProviderRejected,
     ProtocolViolation,
     OutcomeUnknown,
+    /// The session is in a turn and its agent can't take input mid-turn: the
+    /// prompt was not sent, and the caller chooses to queue it or interrupt
+    /// the turn (D1 R12).
+    CannotSteer,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]

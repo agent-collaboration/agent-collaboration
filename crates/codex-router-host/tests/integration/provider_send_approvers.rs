@@ -50,12 +50,35 @@ async fn send(
     text: &str,
     wait: Duration,
 ) -> PromptAnswer {
+    send_with_delivery(
+        host,
+        target,
+        (requester, approver),
+        operation_id,
+        text,
+        wait,
+        collaboration_protocol::MessageDelivery::Auto,
+    )
+    .await
+}
+
+/// As `send`, with the caller's delivery choice (D1 R12).
+async fn send_with_delivery(
+    host: &ComposedHost,
+    target: &SessionRef,
+    (requester, approver): (&ProviderIdentity, &ProviderIdentity),
+    operation_id: &OperationId,
+    text: &str,
+    wait: Duration,
+    delivery: collaboration_protocol::MessageDelivery,
+) -> PromptAnswer {
     let conversation = ConversationClient::connect(
         &CollaborationAccess::api(host.client.directory()),
         &target.endpoint,
     )
     .await?;
     let input = ConversationPromptInput {
+        delivery,
         operation_id: Some(operation_id.clone()),
         target: target.clone(),
         working_directory: None,
@@ -438,14 +461,14 @@ async fn queued_turn_permission_goes_to_its_own_approver() {
     // Act: B's message waits in the line; the turn ends; B's own turn asks a
     // permission, decided by whoever it reached.
     let second = OperationId::generate();
-    let queued = send(
+    let queued = send_with_delivery(
         &host,
         &target,
-        &approver_b,
-        &approver_b,
+        (&approver_b, &approver_b),
         &second,
         "ask-permission",
         SHORT_WAIT,
+        collaboration_protocol::MessageDelivery::Queue,
     )
     .await;
     let prompts_while_held = prompt_texts(&receipt);

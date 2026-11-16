@@ -119,6 +119,7 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
         conversation
             .prompt(
                 ConversationPromptInput {
+                    delivery: collaboration_protocol::MessageDelivery::Auto,
                     operation_id: Some(OperationId::generate()),
                     target: target_for_prompt,
                     working_directory: None,
@@ -261,6 +262,7 @@ async fn deliver_pending_approval(
         conversation
             .prompt(
                 ConversationPromptInput {
+                    delivery: collaboration_protocol::MessageDelivery::Auto,
                     operation_id: Some(OperationId::generate()),
                     target: requester_for_prompt,
                     working_directory: None,

@@ -215,6 +215,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
     let prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),

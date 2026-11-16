@@ -53,6 +53,7 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
     let prompt = operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_operation_id.clone(),
                 target: target.clone(),
@@ -173,6 +174,7 @@ async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected
     operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_operation_id.clone(),
                 target,
@@ -318,6 +320,7 @@ async fn retired_provider_binding_cancels_pending_approval_before_selection() ->
     operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_operation_id.clone(),
                 target,
@@ -757,6 +760,7 @@ async fn prompt_authentication_required_is_no_effect_and_fresh_prompt_retains_fi
 
     let first_id = OperationId::generate();
     let prompt_request = |operation_id: OperationId| ConversationPromptRequest {
+        delivery: collaboration_protocol::MessageDelivery::Auto,
         input_id: None,
         operation_id,
         target: target.clone(),
@@ -844,6 +848,7 @@ async fn provider_prompt_error_text_cannot_become_a_local_no_effect_rejection() 
     operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_id.clone(),
                 target,
