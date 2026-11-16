@@ -12,7 +12,7 @@
 // Claude settings (the Router adds to those grants, never replaces them).
 // Input this hook can't read for certain is answered "ask".
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -20,6 +20,18 @@ type HookAnswer = { readonly ask: false } | { readonly ask: true; readonly reaso
 
 const DEVICE_PATHS = ["/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr", "/dev/tty"];
 const SHELL_OPERATORS = new Set([";", "|", "&", "<", ">", "(", ")", "\n"]);
+/// Operators after which the next word is a new command.
+const COMMAND_SEPARATORS = new Set([";", "|", "&", "(", ")", "\n"]);
+/// Programs that only read and print, run from any folder without asking
+/// when nothing is redirected (D1 R18: a write or a shell command outside
+/// asks; these write nothing).
+const READ_ONLY_PROGRAMS = new Set([
+  "ls", "cat", "head", "tail", "wc", "grep", "rg", "stat", "file", "pwd", "echo",
+  "printf", "which", "true", "false", "test", "du", "cd",
+]);
+
+/// One shell token: a word, or an operator character.
+type ShellToken = { readonly kind: "word"; readonly text: string } | { readonly kind: "operator"; readonly text: string };
 
 function main(): void {
   let answer: HookAnswer;
@@ -49,13 +61,22 @@ function decide(rootsArgument: string | undefined, stdin: string): HookAnswer {
   if (!isRecord(call)) return { ask: true, reason: "the tool call is not a JSON object" };
   const cwd = typeof call.cwd === "string" && isAbsolute(call.cwd) ? call.cwd : undefined;
   if (cwd === undefined) return { ask: true, reason: "the tool call names no absolute working folder" };
-  const roots = [...routerRoots, ...ownedAdditionalDirectories(cwd)].map(canonical);
+  const roots = [...routerRoots, ...ownedAdditionalDirectories(cwd)]
+    .map(canonical)
+    .filter((root): root is string => root !== undefined);
   const input = isRecord(call.tool_input) ? call.tool_input : {};
-  const paths = namedPaths(String(call.tool_name ?? ""), input, cwd);
+  const tool = String(call.tool_name ?? "");
+  const paths = namedPaths(tool, input, cwd);
   if (paths === undefined) return { ask: true, reason: "the command can't be read for certain" };
-  const outside = paths.find(
-    (path) => !DEVICE_PATHS.includes(path) && !roots.some((root) => under(canonical(path), root)),
-  );
+  const resolvedCwd = canonical(cwd);
+  const cwdInside = resolvedCwd !== undefined && roots.some((root) => under(resolvedCwd, root));
+  if (tool === "Bash" && !cwdInside && commandCouldWrite(String(input.command)))
+    return { ask: true, reason: `the command runs in ${cwd}, outside the Router's work roots for this session` };
+  const outside = paths.find((path) => {
+    if (DEVICE_PATHS.includes(path)) return false;
+    const resolved = canonical(path);
+    return resolved === undefined || !roots.some((root) => under(resolved, root));
+  });
   return outside === undefined
     ? { ask: false }
     : { ask: true, reason: `${outside} is outside the Router's work roots for this session` };
@@ -79,11 +100,11 @@ function namedPaths(
         : undefined;
     case "Bash": {
       if (typeof input.command !== "string") return undefined;
-      const words = shellWords(input.command);
-      if (words === undefined) return undefined;
+      const tokens = shellTokens(input.command);
+      if (tokens === undefined) return undefined;
       const paths: string[] = [];
-      for (const word of words) {
-        const candidate = pathCandidate(word);
+      for (const operand of operands(tokens)) {
+        const candidate = pathCandidate(operand);
         if (candidate === "unreadable") return undefined;
         if (candidate !== undefined) paths.push(resolve(cwd, candidate));
       }
@@ -94,22 +115,59 @@ function namedPaths(
   }
 }
 
+/// Every word a command could take as a path: each operand and redirection
+/// target, and the value of an option written --flag=value. A command's own
+/// name, a NAME=value assignment before it, and a bare option are left out.
+function operands(tokens: readonly ShellToken[]): string[] {
+  const found: string[] = [];
+  let expectingCommand = true;
+  for (const token of tokens) {
+    if (token.kind === "operator") {
+      if (COMMAND_SEPARATORS.has(token.text)) expectingCommand = true;
+      continue;
+    }
+    if (expectingCommand) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token.text)) continue;
+      expectingCommand = false;
+      // A command named by a path is still a path it runs.
+      if (token.text.includes("/")) found.push(token.text);
+      continue;
+    }
+    if (token.text.startsWith("-") && !token.text.includes("=")) continue;
+    found.push(token.text);
+  }
+  return found;
+}
+
+/// Whether a command could write: any redirection into a file, or any
+/// program that isn't one of the read-only ones. Read for certain only;
+/// anything unreadable was already answered ask.
+function commandCouldWrite(command: string): boolean {
+  const tokens = shellTokens(command) ?? [];
+  let expectingCommand = true;
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === "operator") {
+      if (token.text === ">") return true;
+      if (COMMAND_SEPARATORS.has(token.text)) expectingCommand = true;
+      continue;
+    }
+    if (!expectingCommand) continue;
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token.text)) continue;
+    expectingCommand = false;
+    if (!READ_ONLY_PROGRAMS.has(token.text)) return true;
+    if (index > 0 && tokens[index - 1]?.text === ">") return true;
+  }
+  return false;
+}
+
 /// A word that names a path, with ~ and environment variables expanded; the
 /// value of a --flag=value word counts. "unreadable" when an expansion can't
-/// be resolved here.
+/// be resolved here. A bare name is a path in the working folder.
 function pathCandidate(word: string): string | undefined | "unreadable" {
   const value = word.startsWith("-") && word.includes("=") ? word.slice(word.indexOf("=") + 1) : word;
-  if (value.includes("://")) return undefined;
+  if (value.includes("://") || value === "") return undefined;
   const expanded = expand(value);
   if (expanded === undefined) return "unreadable";
-  const looksLikePath =
-    expanded.startsWith("/") ||
-    expanded.startsWith("./") ||
-    expanded.startsWith("../") ||
-    expanded === "." ||
-    expanded === ".." ||
-    expanded.includes("/");
-  if (!looksLikePath) return undefined;
   // A glob is judged by the folder it searches.
   const glob = expanded.search(/[*?[]/);
   return glob < 0 ? expanded : dirname(expanded.slice(0, glob) + "x");
@@ -126,10 +184,10 @@ function expand(value: string): string | undefined {
     : expanded;
 }
 
-/// Splits a command into words the way a shell would for quoting, with its
-/// operators as separators; undefined for an unterminated quote.
-function shellWords(command: string): string[] | undefined {
-  const words: string[] = [];
+/// Splits a command into words the way a shell would for quoting, keeping
+/// its operators as tokens; undefined for an unterminated quote.
+function shellTokens(command: string): ShellToken[] | undefined {
+  const words: ShellToken[] = [];
   let word = "";
   let started = false;
   for (let index = 0; index < command.length; index += 1) {
@@ -152,7 +210,8 @@ function shellWords(command: string): string[] | undefined {
       started = true;
       index += 1;
     } else if (/\s/.test(character) || SHELL_OPERATORS.has(character)) {
-      if (started) words.push(word);
+      if (started) words.push({ kind: "word", text: word });
+      if (SHELL_OPERATORS.has(character)) words.push({ kind: "operator", text: character });
       word = "";
       started = false;
     } else {
@@ -160,7 +219,7 @@ function shellWords(command: string): string[] | undefined {
       started = true;
     }
   }
-  if (started) words.push(word);
+  if (started) words.push({ kind: "word", text: word });
   return words;
 }
 
@@ -197,18 +256,31 @@ function ownedAdditionalDirectories(cwd: string): string[] {
 
 /// The path through every symlink in its existing part, with the absent rest
 /// appended, so a file about to be written resolves through its folder.
-function canonical(path: string): string {
+/// Undefined when something present can't be resolved (a dangling or
+/// unreadable symlink): a write would follow it to a place this can't see.
+function canonical(path: string): string | undefined {
   const absent: string[] = [];
   let existing = resolve(path);
   for (;;) {
     try {
       return [realpathSync(existing), ...absent.reverse()].reduce((left, right) => join(left, right));
     } catch {
+      if (isPresent(existing)) return undefined;
       const parent = dirname(existing);
-      if (parent === existing) return resolve(path);
+      if (parent === existing) return undefined;
       absent.push(basename(existing));
       existing = parent;
     }
+  }
+}
+
+/// Whether a directory entry exists, even one that is a dangling symlink.
+function isPresent(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 

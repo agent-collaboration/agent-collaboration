@@ -283,3 +283,102 @@ fn a_sessions_roots_add_its_project_tmp_and_named_roots_once() {
         ]
     );
 }
+
+/// Oracle: D1 R18 and the Verifier's f11cb0c38 finding: a relative path is a
+/// path in the call's working folder. With that folder outside the roots, a
+/// relative redirection and a relative Write ask; with it inside, the same
+/// calls get no answer; and a command that changes into an outside folder
+/// before writing asks.
+#[test]
+fn relative_paths_are_judged_in_the_calls_working_folder() {
+    // Arrange
+    let rig = rig();
+    let roots = [rig.inside.clone()];
+    let relative_write = |cwd: &Path| {
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "cwd": cwd,
+            "tool_input": {"file_path": "relative.txt", "content": "x"},
+        })
+    };
+    let change_then_write = format!("cd {} && printf x > x.txt", rig.outside.display());
+
+    // Act
+    let outside_redirect = answer(
+        &rig,
+        &roots,
+        &bash_call(&rig.outside, "printf x > bare.txt"),
+    );
+    let outside_write = answer(&rig, &roots, &relative_write(&rig.outside));
+    let inside_redirect = answer(&rig, &roots, &bash_call(&rig.inside, "printf x > bare.txt"));
+    let inside_write = answer(&rig, &roots, &relative_write(&rig.inside));
+    let changed_folder = answer(&rig, &roots, &bash_call(&rig.inside, &change_then_write));
+
+    // Assert
+    assert!(
+        outside_redirect.is_ask(),
+        "a relative redirection outside asks"
+    );
+    assert!(outside_write.is_ask(), "a relative Write outside asks");
+    assert_eq!(
+        inside_redirect,
+        Answered::Nothing,
+        "a relative redirection inside"
+    );
+    assert_eq!(inside_write, Answered::Nothing, "a relative Write inside");
+    assert!(
+        changed_folder.is_ask(),
+        "cd to an outside folder, then a write, asks"
+    );
+}
+
+/// Oracle: the Lead's 16 Nov rule for a working folder outside the roots:
+/// a command that could write (a redirection, or a program that isn't
+/// read-only) asks; a read-only one with nothing redirected gets no answer.
+#[test]
+fn outside_the_roots_only_read_only_commands_pass() {
+    // Arrange
+    let rig = rig();
+    let roots = [rig.inside.clone()];
+
+    // Act
+    let listing = answer(&rig, &roots, &bash_call(&rig.outside, "ls"));
+    let building = answer(&rig, &roots, &bash_call(&rig.outside, "cargo build"));
+    let piped = answer(&rig, &roots, &bash_call(&rig.outside, "echo x | tee"));
+
+    // Assert
+    assert_eq!(listing, Answered::Nothing, "ls only reads");
+    assert!(building.is_ask(), "cargo build could write");
+    assert!(piped.is_ask(), "tee could write");
+}
+
+/// Oracle: R18's outside-write rule and the Reviewer's D2: a symlink inside a
+/// root whose target doesn't exist yet (a write through it would create the
+/// file outside) can't be resolved, so the write asks.
+#[test]
+fn a_dangling_symlink_inside_a_root_asks() {
+    // Arrange
+    let rig = rig();
+    let link = rig.inside.join("dangling");
+    std::os::unix::fs::symlink(rig.outside.join("not-yet"), &link).expect("dangling symlink");
+
+    // Act
+    let written = answer(
+        &rig,
+        std::slice::from_ref(&rig.inside),
+        &write_call(&rig.inside, &link),
+    );
+    let redirected = answer(
+        &rig,
+        std::slice::from_ref(&rig.inside),
+        &bash_call(&rig.inside, "printf x > dangling"),
+    );
+
+    // Assert
+    assert!(written.is_ask(), "a Write through a dangling symlink asks");
+    assert!(
+        redirected.is_ask(),
+        "a redirection through a dangling symlink asks"
+    );
+}
