@@ -108,6 +108,13 @@ struct SupervisorInner {
     >,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next queued API dispatch right after it claims its entry.
+    #[cfg(test)]
+    dispatch_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next admitted dispatch after its submission is spawned and
+    /// before its dispatch observation is awaited.
+    #[cfg(test)]
+    observation_test_pause: StdMutex<Option<AdmissionTestPause>>,
 }
 
 #[cfg(test)]
@@ -178,6 +185,47 @@ impl ExternalProviderSupervisor {
         self.inner
             .completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    /// Pauses the next queued API dispatch just after it claims its entry:
+    /// the first receiver fires there, and sending on the returned sender lets
+    /// it go on.
+    #[cfg(test)]
+    pub(crate) fn pause_next_queued_dispatch_after_claim(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
+        let (release_sender, release) = tokio::sync::oneshot::channel();
+        *self
+            .inner
+            .dispatch_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(AdmissionTestPause { entered, release });
+        (entered_receiver, release_sender)
+    }
+
+    /// Pauses the next admitted dispatch with its submission spawned and its
+    /// dispatch observation not yet awaited.
+    #[cfg(test)]
+    pub(crate) fn pause_next_dispatch_before_observation(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
+        let (release_sender, release) = tokio::sync::oneshot::channel();
+        *self
+            .inner
+            .observation_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(AdmissionTestPause { entered, release });
+        (entered_receiver, release_sender)
     }
 
     /// Holds `operation_id` live, as admitting it to a provider does.
@@ -314,6 +362,10 @@ impl ExternalProviderSupervisor {
                 started_at_ms: now_ms(),
                 #[cfg(test)]
                 admission_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                dispatch_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                observation_test_pause: StdMutex::new(None),
             }),
         })
     }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
-import { setTimeout as delay } from "node:timers/promises";
+import { existsSync, watch, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { field } from "../exact-json.ts";
 import { requestParameters, requireArgument, wireJson } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
@@ -61,9 +61,27 @@ function sendRaceBehaviours(names: readonly string[]): ReadonlySet<SendRaceBehav
   return behaviours;
 }
 
-/** Waits until the test creates the file at `path`. */
-async function waitForFile(path: string): Promise<void> {
-  while (!existsSync(path)) await delay(10);
+/**
+ * Resolves once the test creates the file at `path`.
+ * Woken by a watch on the file's directory; the existence check runs only
+ * after the watch is registered, so a file written before the watch began is
+ * still seen.
+ */
+function waitForFile(path: string): Promise<void> {
+  return new Promise<void>((resolve, reject): void => {
+    const watcher = watch(dirname(path));
+    const releaseIfPresent = (): void => {
+      if (!existsSync(path)) return;
+      watcher.close();
+      resolve();
+    };
+    watcher.on("change", releaseIfPresent);
+    watcher.on("error", (error: Error): void => {
+      watcher.close();
+      reject(error);
+    });
+    releaseIfPresent();
+  });
 }
 
 /** How the first prompt's turn ends once <receipt>.release exists. */

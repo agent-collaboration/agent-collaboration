@@ -70,10 +70,73 @@ impl ExternalProviderSupervisor {
         if !admitted.claim() {
             return Ok(ProviderPromptDispatch::Existing);
         }
-        let snapshot = self
-            .begin_dispatch(&operation_id, &target)
-            .await
-            .map_err(Box::new)?;
+        // From the claim on, one spawned unit owns this operation and its
+        // settlement, so cancelling the worker drops only its wait (D1 R14).
+        let owner = self.clone();
+        let admitted = admitted.clone();
+        let failure_target = target.clone();
+        let failure_operation = operation_id.clone();
+        let (reply, answer) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let outcome = owner
+                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted)
+                .await;
+            if reply.send(outcome).is_err() && !admitted.is_settled() {
+                // The worker is gone and the entry went back to waiting, so
+                // nothing was sent: it ends not sent here, its one owner.
+                owner.complete_unsent_api_entry(
+                    &admitted,
+                    &operation_id,
+                    &target,
+                    "the queue stopped before provider submission",
+                );
+            }
+        });
+        answer.await.unwrap_or_else(|_| {
+            Err(Box::new(super::unavailable_failure(
+                failure_operation,
+                Some(failure_target),
+            )))
+        })
+    }
+
+    /// The claimed part of a queued dispatch, run by its own owner: the
+    /// dispatch marker, the submission and its settlement. A marker that
+    /// can't be written settles the operation here; a turn that started again
+    /// hands the entry back, unclaimed, to wait.
+    async fn dispatch_claimed_api_prompt(
+        &self,
+        request: ProviderPromptContentsRequest,
+        binding: collaboration_protocol::ProviderBindingIdentity,
+        runtime: Arc<crate::ExternalProviderRuntime>,
+        admitted: &AdmittedApiPrompt,
+    ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
+        let operation_id = request.operation_id.clone();
+        let target = request.target.clone();
+        #[cfg(test)]
+        {
+            let pause = self
+                .inner
+                .dispatch_test_pause
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(pause) = pause {
+                let _entered = pause.entered.send(());
+                let _released = pause.release.await;
+            }
+        }
+        let snapshot = match self.begin_dispatch(&operation_id, &target).await {
+            Ok(snapshot) => snapshot,
+            Err(marker_failure) => {
+                // No marker, so nothing was sent; the claim makes this its owner.
+                let settled = marker_failure.clone();
+                self.spawn_operation(operation_id, Arc::clone(&admitted.live), async move {
+                    ProviderOperationCompletion::Failure(settled)
+                });
+                return Err(Box::new(marker_failure));
+            }
+        };
         match self
             .dispatch_admitted_prompt(
                 request,

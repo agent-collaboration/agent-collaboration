@@ -670,6 +670,14 @@ fn mark_entry_not_sent(
     let ProviderQueuedPrompt::Contents {
         request, admitted, ..
     } = entry;
+    // A claimed API entry is being dispatched by its own owner, which settles
+    // it with its real outcome; the line must not call it unsent (D1 R14).
+    if admitted
+        .as_ref()
+        .is_some_and(|admitted| admitted.is_settled())
+    {
+        return;
+    }
     supervisor
         .queued_operation_registry()
         .mark_not_submitted(&request.operation_id, reason.clone());
@@ -690,3 +698,7 @@ mod loaded_only_tests;
 #[cfg(test)]
 #[path = "provider_acp_message_fifo_refusal_test.rs"]
 mod refusal_tests;
+
+#[cfg(test)]
+#[path = "provider_acp_message_fifo_dispatch_ownership_test.rs"]
+mod dispatch_ownership_tests;

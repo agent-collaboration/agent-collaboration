@@ -185,14 +185,9 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .prompt_contents(target, actor, input_id.clone(), command.submission)
                 .await
                 .map_err(map_prompt_failure)?;
-            let turn_id = wait_for_turn_start(
-                self.hub.as_ref(),
-                command.target,
-                attachment,
-                input_id,
-                OnHubClosed::Fail,
-            )
-            .await?;
+            let turn_id =
+                wait_for_turn_start(self.hub.as_ref(), command.target, attachment, input_id)
+                    .await?;
             Ok(SessionTurnHandle { turn_id })
         })
     }
@@ -213,14 +208,9 @@ impl SessionCommandPort for HostSessionCommandPort {
                 )
                 .await
                 .map_err(map_prompt_failure)?;
-            let turn_id = wait_for_turn_start(
-                self.hub.as_ref(),
-                command.target,
-                attachment,
-                input_id,
-                OnHubClosed::Fail,
-            )
-            .await?;
+            let turn_id =
+                wait_for_turn_start(self.hub.as_ref(), command.target, attachment, input_id)
+                    .await?;
             Ok(SessionTurnHandle { turn_id })
         })
     }
@@ -252,7 +242,6 @@ impl SessionCommandPort for HostSessionCommandPort {
                         command.target,
                         attachment,
                         command.input_id,
-                        OnHubClosed::Fail,
                     )
                     .await?;
                     Ok(SessionSteerOutcome::StartedNewTurn { turn_id })
@@ -293,24 +282,15 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .map_err(|_| CommandFailure::SessionNotFound)?;
             let protocol_target = protocol_session(&target)?;
             let registry = self.supervisor.queued_operation_registry();
-            // A queued input that never ran says why (D1 R14): its not-sent reason
-            // outranks "no turn started", so a stopped session's closing hub keeps
-            // the turn-start wait open until the line records the reason.
-            tokio::select! {
-                biased;
-                reason = registry.wait_not_sent(&protocol_target, &input_id) => {
-                    Ok(collaboration_contracts::QueuedInputOutcome::NotSent { reason })
-                }
-                started = wait_for_turn_start(
-                    self.hub.as_ref(),
-                    target,
-                    attachment,
-                    input_id.clone(),
-                    OnHubClosed::KeepWaiting,
-                ) => {
-                    Ok(collaboration_contracts::QueuedInputOutcome::Started { turn_id: started? })
-                }
-            }
+            queued_input_outcome(
+                self.hub.as_ref(),
+                registry,
+                target,
+                &protocol_target,
+                attachment,
+                input_id,
+            )
+            .await
         })
     }
 
@@ -570,14 +550,77 @@ async fn wait_for_settlement(
     }
 }
 
-/// What a turn-start wait does when the session's hub closes under it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OnHubClosed {
-    /// The caller sent the input itself: no turn will start, so stop waiting.
-    Fail,
-    /// The input waits in the Router's line, which records why it never ran:
-    /// keep waiting, within the same deadline, for that reason.
-    KeepWaiting,
+/// A queued input's outcome, however long it waits in the line (D1 R12,
+/// R14): Started when the turn carrying its input ID starts, or NotSent with
+/// the reason the line records, which outranks "no turn started". No deadline
+/// applies: waiting in the line is not a dispatch that failed to start.
+pub(crate) async fn queued_input_outcome(
+    hub: &ProviderSessionEventHub,
+    registry: &crate::provider_queue_operation_registry::ProviderQueueOperationRegistry,
+    session: message_board::SessionRef,
+    protocol_target: &SessionRef,
+    attachment: SessionEventAttachment,
+    input_id: InputId,
+) -> Result<collaboration_contracts::QueuedInputOutcome, CommandFailure> {
+    tokio::select! {
+        biased;
+        reason = registry.wait_not_sent(protocol_target, &input_id) => {
+            Ok(collaboration_contracts::QueuedInputOutcome::NotSent { reason })
+        }
+        started = wait_for_queued_turn_start(hub, session, attachment, input_id.clone()) => {
+            Ok(collaboration_contracts::QueuedInputOutcome::Started { turn_id: started? })
+        }
+    }
+}
+
+/// The turn a queued input starts, with no deadline. A lagged receiver
+/// re-reads the session's history; a closed one waits for the line's
+/// not-sent reason instead of failing.
+async fn wait_for_queued_turn_start(
+    hub: &ProviderSessionEventHub,
+    session: message_board::SessionRef,
+    mut attachment: SessionEventAttachment,
+    input_id: InputId,
+) -> Result<String, CommandFailure> {
+    loop {
+        if let Some(turn_id) = attachment
+            .snapshot
+            .iter()
+            .find_map(|event| match &event.event {
+                SessionEvent::TurnStarted {
+                    turn_id,
+                    input_id: observed,
+                } if observed == &input_id => Some(turn_id.clone()),
+                _ => None,
+            })
+        {
+            return Ok(turn_id);
+        }
+        loop {
+            match attachment.receiver.recv().await {
+                Ok(event) => {
+                    if let SessionEvent::TurnStarted {
+                        turn_id,
+                        input_id: observed,
+                    } = &event.event
+                        && observed == &input_id
+                    {
+                        return Ok(turn_id.clone());
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    attachment = hub
+                        .attach(session.clone())
+                        .await
+                        .map_err(|_| CommandFailure::ProviderFailure)?;
+                    break;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    std::future::pending::<()>().await;
+                }
+            }
+        }
+    }
 }
 
 async fn wait_for_turn_start(
@@ -585,7 +628,6 @@ async fn wait_for_turn_start(
     session: message_board::SessionRef,
     mut attachment: SessionEventAttachment,
     input_id: InputId,
-    on_closed: OnHubClosed,
 ) -> Result<String, CommandFailure> {
     for event in &attachment.snapshot {
         if let SessionEvent::TurnStarted {
@@ -612,11 +654,6 @@ async fn wait_for_turn_start(
                     if let SessionEvent::TurnEnded { .. } = event.event {
                         continue;
                     }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed)
-                    if on_closed == OnHubClosed::KeepWaiting =>
-                {
-                    std::future::pending::<()>().await;
                 }
                 Err(_) => return None,
             }
@@ -656,3 +693,7 @@ fn active_turn_id(attachment: &SessionEventAttachment) -> Option<&str> {
             _ => current,
         })
 }
+
+#[cfg(test)]
+#[path = "provider_session_command_port_test.rs"]
+mod tests;

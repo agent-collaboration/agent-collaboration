@@ -202,6 +202,19 @@ impl ExternalProviderSupervisor {
                 )),
             }
         };
+        #[cfg(test)]
+        {
+            let pause = self
+                .inner
+                .observation_test_pause
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(pause) = pause {
+                let _entered = pause.entered.send(());
+                let _released = pause.release.await;
+            }
+        }
         let observation =
             tokio::time::timeout(std::time::Duration::from_secs(10), dispatched).await;
         let result = match observation {

@@ -709,3 +709,76 @@ async fn queued_entry_after_an_unknown_steer_ends_not_sent() {
     assert_eq!(prompts_after, prompts_before, "zero prompt at dispatch");
     assert_eq!(queued_prompts, 0, "the waiting message was never prompted");
 }
+
+/// Oracle: D1 spec R12 and C1, review F3: "the result names the running
+/// turn's approver when it differs from the requested one", for a turn that
+/// mail started too. Mail starts a turn on a session approved by A; an API
+/// prompt naming B is steered into it, and its result names A.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn steer_into_a_mail_started_turn_names_its_approver() {
+    // Arrange: a session approved by A, whose agent holds its first turn and
+    // steers while it runs; mail starts that turn.
+    let staging = tempfile::tempdir().expect("receipt folder");
+    let receipt = staging.path().join("wire.json");
+    let host = ComposedHost::start(
+        cursor_reactive(&receipt, &["hold-first-prompt-open", "advertise-steering"]),
+        "cursor-local",
+    )
+    .await;
+    let approver_a = ComposedHost::human("approver-a");
+    let approver_b = ComposedHost::human("approver-b");
+    let target = host.create(&approver_a).await;
+    let mailed = host
+        .client
+        .send_message(collaboration_client::MessageSendRequest {
+            item_id: None,
+            target: target.clone(),
+            message: collaboration_client::PublicMessageContent::HumanUser {
+                text: collaboration_protocol::MessageText::try_from("first".to_owned())
+                    .expect("mail text"),
+            },
+            delivery: collaboration_protocol::MessageDelivery::Auto,
+            generation_guard: None,
+        })
+        .await
+        .expect("mail receipt");
+    until_recorded(&receipt, "session/prompt", 1).await;
+
+    // Act: an API prompt naming B, while the mail-started turn runs.
+    let second = OperationId::generate();
+    let steered = send(
+        &host,
+        &target,
+        &approver_b,
+        &approver_b,
+        &second,
+        "second",
+        SETTLE_WAIT,
+    )
+    .await;
+    release(&receipt);
+    host.runtime.shutdown().await.expect("Host shutdown");
+
+    // Assert: mail started the turn; the steer names that turn's approver.
+    assert!(
+        matches!(
+            &mailed,
+            collaboration_protocol::MessageSendResult::Local(sent)
+                if matches!(sent.receipt.outcome, collaboration_protocol::DeliveryOutcome::Started)
+        ),
+        "{mailed:?}"
+    );
+    match steered {
+        Ok(ConversationOperationResult::Completed { settlement, .. }) => match settlement.detail {
+            ConversationSettlementDetail::ProviderSteered { turn_approver } => {
+                assert_eq!(
+                    turn_approver,
+                    Some(approver_a),
+                    "the mail-started turn's approver"
+                );
+            }
+            other => panic!("expected steered, got {other:?}"),
+        },
+        other => panic!("expected a steered completion, got {other:?}"),
+    }
+}

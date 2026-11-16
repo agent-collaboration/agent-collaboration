@@ -195,20 +195,6 @@ impl ExternalProviderSupervisor {
         };
         let target = request.target.clone();
         let provider_session_id = String::from(target.session_id.clone());
-        let turn_approver = match runtime
-            .active_prompt_operation(provider_session_id.clone())
-            .await
-        {
-            Ok(Some(running)) => self
-                .inner
-                .turn_approvers
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get(&running)
-                .cloned()
-                .filter(|approver| approver != &request.approver),
-            _ => None,
-        };
         self.begin_dispatch(&request.operation_id, &target).await?;
         let steered = runtime
             .steer_session_contents_with_input(
@@ -219,7 +205,20 @@ impl ExternalProviderSupervisor {
             .await;
         let operation_id = request.operation_id.clone();
         let completion = match steered {
-            Ok(crate::ProviderSteeringOutcome::Injected { .. }) => {
+            Ok(crate::ProviderSteeringOutcome::Injected {
+                running_operation_id,
+            }) => {
+                // The approver of the turn the input actually joined, as the
+                // injection reports it, when it differs from this request's.
+                let turn_approver = running_operation_id.and_then(|running| {
+                    self.inner
+                        .turn_approvers
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .get(&running)
+                        .cloned()
+                        .filter(|approver| approver != &request.approver)
+                });
                 ProviderOperationCompletion::Success {
                     settlement: ConversationOperationSettlement::Steered {
                         target: target.clone(),

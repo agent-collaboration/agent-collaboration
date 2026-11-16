@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
-import { setTimeout as delay } from "node:timers/promises";
+import { existsSync, watch, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { AcpStdio, requestParameters, requireArgument, wireJson } from "./acp-stdio.ts";
 
 interface ConfigOption {
@@ -324,9 +324,42 @@ function answerReactiveSetting(
   peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
 }
 
-/** Waits until the test releases the held turn by creating its file. */
-async function waitForRelease(releasePath: string): Promise<void> {
-  while (!existsSync(releasePath)) await delay(10);
+/**
+ * Resolves once the test releases the held turn by creating its file.
+ * Woken by a watch on the file's directory; the existence check runs only
+ * after the watch is registered, so a file written before the watch began is
+ * still seen.
+ */
+function waitForRelease(releasePath: string): Promise<void> {
+  return new Promise<void>((resolve, reject): void => {
+    const watcher = watch(dirname(releasePath));
+    const releaseIfPresent = (): void => {
+      if (!existsSync(releasePath)) return;
+      watcher.close();
+      resolve();
+    };
+    watcher.on("change", releaseIfPresent);
+    watcher.on("error", (error: Error): void => {
+      watcher.close();
+      reject(error);
+    });
+    releaseIfPresent();
+  });
+}
+
+/**
+ * Exits the agent once `stopPath` exists (exit-on-stop-file). The watch is
+ * registered before the first check, so a file written at any point is seen;
+ * it is unreferenced, so it never keeps the agent running on its own.
+ */
+function exitWhenFileAppears(stopPath: string): void {
+  const watcher = watch(dirname(stopPath));
+  watcher.unref();
+  const exitIfPresent = (): void => {
+    if (existsSync(stopPath)) process.exit(0);
+  };
+  watcher.on("change", exitIfPresent);
+  exitIfPresent();
 }
 
 /** The prompt's first text block, when it has one. */
@@ -408,10 +441,7 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
   let promptsSeen = 0;
   /** The held-open prompt, while its turn runs. */
   let heldOpen: Record<string, unknown> | undefined;
-  if (peer.behaviours.has("exit-on-stop-file"))
-    setInterval((): void => {
-      if (existsSync(peer.stopPath)) process.exit(0);
-    }, 10).unref();
+  if (peer.behaviours.has("exit-on-stop-file")) exitWhenFileAppears(peer.stopPath);
   const sessions = new Map<string, ReactiveSession>();
   const replies = new ReactiveFastReplies(peer.behaviours);
   for (;;) {
