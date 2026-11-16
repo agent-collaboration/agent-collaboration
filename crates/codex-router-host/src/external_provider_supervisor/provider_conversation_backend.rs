@@ -122,6 +122,26 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     None,
                 ));
             }
+            // Claude in auto never starts without its work-roots hook (D1 R18).
+            if request
+                .settings
+                .as_ref()
+                .and_then(|settings| settings.mode.as_deref())
+                == Some("auto")
+                && let crate::provider_work_roots::WorkRootsHook::Unavailable(reason) =
+                    backend.work_roots_for(&binding.endpoint).hook
+            {
+                return Err(failure(
+                    ConversationOperationFailureKind::Unavailable,
+                    ConversationOperationFailureStage::Validation,
+                    ProviderOperationEffect::None,
+                    &format!(
+                        "this agent can't start in auto: the Router's work-roots hook isn't available ({reason}); start it in a named mode, or fix the Host and restart it"
+                    ),
+                    request.operation_id.clone(),
+                    None,
+                ));
+            }
             let prepared = backend
                 .prepare_operation(
                     request.operation_id.clone(),
@@ -174,7 +194,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             }
                         };
                         let cwd = PathBuf::from(String::from(working_directory.clone()));
-                        let work_roots = session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots);
+                        let work_roots = session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots, auto);
                         match runtime
                             .create_session_with_work_roots(
                                 cwd,
@@ -778,12 +798,20 @@ fn session_work_roots(
     cwd: &std::path::Path,
     scratch_folder: Option<&std::path::Path>,
     named: &[PathBuf],
+    router_auto: bool,
 ) -> acp_client_runtime::SessionWorkRoots {
-    if configured.roots.is_empty() && configured.ask_outside.is_none() && named.is_empty() {
-        return acp_client_runtime::SessionWorkRoots::default();
+    let ready_hook = match &configured.hook {
+        crate::provider_work_roots::WorkRootsHook::Ready(hook) => Some(hook),
+        _ => None,
+    };
+    if configured.roots.is_empty() && ready_hook.is_none() && named.is_empty() {
+        return acp_client_runtime::SessionWorkRoots {
+            router_auto,
+            ..acp_client_runtime::SessionWorkRoots::default()
+        };
     }
     let roots = crate::provider_work_roots::session_work_roots(&configured.roots, cwd, named);
-    let ask_outside_command = configured.ask_outside.as_ref().map(|hook| {
+    let ask_outside_command = ready_hook.map(|hook| {
         let inside = std::iter::once(cwd.to_path_buf())
             .chain(scratch_folder.map(std::path::Path::to_path_buf))
             .chain(roots.iter().cloned())
@@ -793,5 +821,6 @@ fn session_work_roots(
     acp_client_runtime::SessionWorkRoots {
         roots,
         ask_outside_command,
+        router_auto,
     }
 }

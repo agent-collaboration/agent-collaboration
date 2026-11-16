@@ -14,6 +14,8 @@ mod provider_session_inspection;
 mod provider_session_lifecycle;
 mod provider_session_scratch;
 mod provider_settings_control;
+#[cfg(test)]
+mod supervisor_test_pauses;
 use provider_operation_failure::{
     admission_failure, invalid_setting_failure, prompt_runtime_failure, runtime_failure,
 };
@@ -128,6 +130,51 @@ struct SupervisorInner {
     /// joined turn's approver.
     #[cfg(test)]
     steer_reply_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next steer with its approver records pinned, before its
+    /// injection is sent.
+    #[cfg(test)]
+    steer_injection_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Steers in flight keep every turn's approver record (D1 C1).
+    approver_pins: StdMutex<ApproverPins>,
+}
+
+/// While a steer is in flight, an evicted operation's approver record is
+/// kept here instead of removed; the last steer to finish removes them.
+#[derive(Default)]
+struct ApproverPins {
+    steers_in_flight: usize,
+    deferred: Vec<OperationId>,
+}
+
+/// Holds every turn's approver record for one steer's flight.
+pub(super) struct TurnApproverPin {
+    inner: Arc<SupervisorInner>,
+}
+
+impl Drop for TurnApproverPin {
+    fn drop(&mut self) {
+        let released = {
+            let mut pins = self
+                .inner
+                .approver_pins
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            pins.steers_in_flight = pins.steers_in_flight.saturating_sub(1);
+            if pins.steers_in_flight == 0 {
+                std::mem::take(&mut pins.deferred)
+            } else {
+                Vec::new()
+            }
+        };
+        let mut approvers = self
+            .inner
+            .turn_approvers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for operation_id in released {
+            approvers.remove(&operation_id);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -275,65 +322,16 @@ impl ExternalProviderSupervisor {
             .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
-    /// Pauses the next queued API dispatch just after it claims its entry:
-    /// the first receiver fires there, and sending on the returned sender lets
-    /// it go on.
-    #[cfg(test)]
-    pub(crate) fn pause_next_queued_dispatch_after_claim(
-        &self,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
-        let (release_sender, release) = tokio::sync::oneshot::channel();
-        *self
-            .inner
-            .dispatch_test_pause
+    /// Keeps every turn's approver record until the returned pin drops.
+    pub(super) fn pin_turn_approvers(&self) -> TurnApproverPin {
+        self.inner
+            .approver_pins
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some(AdmissionTestPause { entered, release });
-        (entered_receiver, release_sender)
-    }
-
-    /// Pauses the next admitted dispatch with its submission spawned and its
-    /// dispatch observation not yet awaited.
-    #[cfg(test)]
-    pub(crate) fn pause_next_dispatch_before_observation(
-        &self,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
-        let (release_sender, release) = tokio::sync::oneshot::channel();
-        *self
-            .inner
-            .observation_test_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some(AdmissionTestPause { entered, release });
-        (entered_receiver, release_sender)
-    }
-
-    /// Pauses the next steer after its injection reply and before it reads
-    /// the joined turn's approver.
-    #[cfg(test)]
-    pub(crate) fn pause_next_steer_after_reply(
-        &self,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
-        let (release_sender, release) = tokio::sync::oneshot::channel();
-        *self
-            .inner
-            .steer_reply_test_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some(AdmissionTestPause { entered, release });
-        (entered_receiver, release_sender)
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .steers_in_flight += 1;
+        TurnApproverPin {
+            inner: Arc::clone(&self.inner),
+        }
     }
 
     /// Holds `operation_id` live, as admitting it to a provider does.
@@ -478,6 +476,9 @@ impl ExternalProviderSupervisor {
                 observation_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 steer_reply_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                steer_injection_test_pause: StdMutex::new(None),
+                approver_pins: StdMutex::new(ApproverPins::default()),
             }),
         })
     }
@@ -765,6 +766,25 @@ impl SupervisorInner {
 
     /// Publishes a live operation's result. Its protection from retention ends here, with
     /// no store write, so the completion signal moves only after the result is set.
+    /// Removes an evicted operation's approver record, or keeps it until no
+    /// steer is in flight.
+    fn release_turn_approver(&self, operation_id: OperationId) {
+        {
+            let mut pins = self
+                .approver_pins
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if pins.steers_in_flight > 0 {
+                pins.deferred.push(operation_id);
+                return;
+            }
+        }
+        self.turn_approvers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&operation_id);
+    }
+
     async fn publish_result(
         &self,
         operation_id: OperationId,
@@ -784,11 +804,9 @@ impl SupervisorInner {
         while operations.terminal_order.len() > MAX_RETAINED_SETTLEMENTS {
             if let Some(expired) = operations.terminal_order.pop_front() {
                 operations.operations.remove(&expired);
-                // A turn's approver goes with its retained settlement.
-                self.turn_approvers
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .remove(&expired);
+                // A turn's approver goes with its retained settlement, unless
+                // a steer in flight still needs it.
+                self.release_turn_approver(expired);
             }
         }
     }

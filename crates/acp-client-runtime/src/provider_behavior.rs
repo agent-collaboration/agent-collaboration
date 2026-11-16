@@ -11,6 +11,9 @@ use std::path::PathBuf;
 pub struct SessionWorkRoots {
     pub roots: Vec<PathBuf>,
     pub ask_outside_command: Option<String>,
+    /// The session starts in Router auto, so its agent must not run without
+    /// the boundary these roots define.
+    pub router_auto: bool,
 }
 
 pub trait ProviderBehavior: Send + Sync {

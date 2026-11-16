@@ -38,12 +38,19 @@ const workRootLayerSchema = z.object({
 type WorkRootLayer = z.infer<typeof workRootLayerSchema>;
 
 /// The Router's work-root layer for this session (D1 R18), from
-/// _meta.codexRouter.workRootSettings; "malformed" when present but unreadable.
-function workRootLayer(metadata: Record<string, unknown>): WorkRootLayer | undefined | "malformed" {
+/// _meta.codexRouter.workRootSettings; "malformed" when present but
+/// unreadable; "missing" when the Router marked an auto start
+/// (_meta.codexRouter.startMode) and sent no layer: such a session must not
+/// start without its boundary.
+function workRootLayer(
+  metadata: Record<string, unknown>,
+): WorkRootLayer | undefined | "malformed" | "missing" {
   const router =
     metadata.codexRouter === undefined ? undefined : publicRecord(metadata.codexRouter);
   if (metadata.codexRouter !== undefined && router === undefined) return "malformed";
-  if (router?.workRootSettings === undefined) return undefined;
+  if (router?.startMode !== undefined && router.startMode !== "auto") return "malformed";
+  if (router?.workRootSettings === undefined)
+    return router?.startMode === "auto" ? "missing" : undefined;
   const parsed = workRootLayerSchema.safeParse(router.workRootSettings);
   return parsed.success ? parsed.data : "malformed";
 }
@@ -121,6 +128,7 @@ export function prepareClaudeRoute({
   };
   const layer = workRootLayer(metadata);
   if (layer === "malformed") return { kind: "unsupported", reason: "MalformedMetadata" };
+  if (layer === "missing") return { kind: "unsupported", reason: "MissingWorkRootBoundary" };
   const callerSettings = options.settings == null ? fallback : publicRecord(options.settings);
   const settings =
     callerSettings === undefined ? undefined : withWorkRootLayer(callerSettings, layer);

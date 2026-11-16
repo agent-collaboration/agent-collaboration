@@ -102,10 +102,7 @@ async fn close_on_an_agent_without_session_close_interrupts_and_closes_it_here()
         }
         other => panic!("a later prompt is refused: {other:?}"),
     };
-    assert_eq!(
-        String::from(refusal.message),
-        "the session is closed"
-    );
+    assert_eq!(String::from(refusal.message), "the session is closed");
     assert_eq!(
         prompts,
         vec!["first".to_owned()],

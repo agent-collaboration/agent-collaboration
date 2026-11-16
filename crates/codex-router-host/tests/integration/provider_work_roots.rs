@@ -213,3 +213,107 @@ async fn a_root_the_creator_names_joins_the_sessions_roots() {
     // Assert
     assert!(directories.contains(&named), "{directories:?}");
 }
+
+fn claude_send_race(receipt: &Path) -> ExternalProviderLaunchBinding {
+    ExternalProviderLaunchBinding::claude(
+        node_test_fixture::node_executable().expect("Node"),
+        vec![
+            node_test_fixture::fixture_program("provider-steering-agent.ts")
+                .to_string_lossy()
+                .into_owned(),
+            "send-race".to_owned(),
+            receipt.display().to_string(),
+        ],
+    )
+    .expect("Claude binding")
+}
+
+/// Oracle: D1 R18 and the Reviewer's D3, "a missing hook must fail closed":
+/// when the Host can't install the hook (its hooks folder is a file), a Claude
+/// start in auto is refused naming why, and nothing starts at the agent.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn claude_in_auto_is_refused_when_its_hook_cannot_be_installed() {
+    // Arrange: the Host root's hooks location is taken by a file.
+    let root = tempfile::tempdir().expect("runtime root");
+    std::fs::set_permissions(
+        root.path(),
+        <std::fs::Permissions as std::os::unix::fs::PermissionsExt>::from_mode(0o700),
+    )
+    .expect("private runtime root");
+    std::fs::write(root.path().join("hooks"), b"not a folder").expect("block the hooks folder");
+    let staging = tempfile::tempdir().expect("receipt folder");
+    let receipt = staging.path().join("wire.json");
+    let host = ComposedHost::start_in(root, claude_send_race(&receipt), "claude-local").await;
+    let owner = ComposedHost::human("work-roots-owner");
+
+    // Act
+    let refused = submit_provider_create(
+        &host.client,
+        ConversationCreateRequest {
+            settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                mode: Some("auto".into()),
+                ..collaboration_protocol::ProviderRequestedSettings::default()
+            }),
+            operation_id: OperationId::generate(),
+            endpoint: host.endpoint.clone(),
+            generation: None,
+            working_directory: ProviderWorkingDirectory::try_from(
+                host.root.path().display().to_string(),
+            )
+            .expect("working directory"),
+            created_by: owner.clone(),
+            approver: owner,
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            work_roots: Vec::new(),
+        },
+    )
+    .await;
+    let session_news = frames(&receipt)
+        .iter()
+        .filter(|frame| frame["method"] == "session/new")
+        .count();
+    host.runtime.shutdown().await.expect("Host shutdown");
+
+    // Assert
+    let refusal = format!("{refused:?}");
+    assert!(refused.is_err(), "the auto start is refused: {refusal}");
+    assert!(
+        refusal.contains("work-roots hook isn't available"),
+        "the refusal names the missing hook: {refusal}"
+    );
+    assert_eq!(session_news, 0, "nothing starts at the agent");
+}
+
+/// Oracle: the Reviewer's D3, "install the boundary independently of whether
+/// the configurable roots list is empty": a Claude session in auto on a
+/// binding with no configured roots still carries the hook over its own
+/// folders.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn claude_in_auto_carries_the_hook_with_an_empty_roots_list() {
+    // Arrange
+    let staging = tempfile::tempdir().expect("receipt folder");
+    let receipt = staging.path().join("wire.json");
+    let host = ComposedHost::start(claude_send_race(&receipt), "claude-local").await;
+    let owner = ComposedHost::human("work-roots-owner");
+
+    // Act
+    let _target = host.create(&owner).await;
+    host.runtime.shutdown().await.expect("Host shutdown");
+
+    // Assert
+    let session_new = frames(&receipt)
+        .into_iter()
+        .find(|frame| frame["method"] == "session/new")
+        .expect("session/new reached the agent");
+    let layer = &session_new["params"]["_meta"]["codexRouter"];
+    assert_eq!(layer["startMode"], "auto");
+    let command = layer["workRootSettings"]["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .expect("the hook command");
+    assert!(
+        command.contains("router-work-roots-hook.ts"),
+        "the installed hook runs: {command}"
+    );
+}

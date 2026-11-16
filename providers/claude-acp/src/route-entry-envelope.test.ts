@@ -452,3 +452,17 @@ await test("shipped malformed Router work-root layer refuses without delegation"
       );
   }
 });
+
+await test("shipped Router auto start without its work-root layer refuses without delegation", async (): Promise<void> => {
+  const row = await runEntry(
+    { sessionId: "fixture", _meta: { codexRouter: { startMode: "auto" } } },
+    lifecycleMethods,
+  );
+  assert.deepEqual(row.calls, []);
+  assert.equal(row.results.length, 3);
+  for (const result of row.results)
+    assert.equal(
+      result.error,
+      "Qualified Claude session creation is unsupported: MissingWorkRootBoundary",
+    );
+});

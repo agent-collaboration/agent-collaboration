@@ -519,6 +519,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             request.meta = task_runtime_handles.behavior.session_new_meta(&crate::SessionWorkRoots {
                                                 roots: folders,
                                                 ask_outside_command: work_roots.ask_outside_command.clone(),
+                                                router_auto: work_roots.router_auto,
                                             });
                                             let in_folder = scratch_folder.as_deref().and_then(|scratch_folder| {
                                                 super::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder, &work_roots.roots)

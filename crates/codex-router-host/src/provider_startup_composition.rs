@@ -123,6 +123,7 @@ pub(crate) async fn compose_provider_startup(
                     service_id: service_id.clone(),
                     endpoint_id: binding.endpoint_id.clone(),
                 };
+                let mut claude_node = None;
                 let behavior: Arc<dyn acp_client_runtime::ProviderBehavior> = match binding.provider
                 {
                     ProviderKind::Cursor => Arc::new(acp_provider_adapters::CursorAcpBehavior),
@@ -139,6 +140,11 @@ pub(crate) async fn compose_provider_startup(
                                 "Claude skill metadata launch is unqualified"
                             ),
                         }
+                        claude_node = prepared
+                            .qualification
+                            .as_ref()
+                            .ok()
+                            .map(|identity| identity.node.clone());
                         launch = prepared.launch;
                         Arc::new(acp_provider_adapters::ClaudeAcpBehavior::new(
                             prepared.skill_source,
@@ -147,9 +153,10 @@ pub(crate) async fn compose_provider_startup(
                 };
                 // The Node a qualified Claude launch runs under also runs its
                 // work-roots hook (D1 R18).
-                let launch_node = (launch.executable.file_name()
-                    == Some(std::ffi::OsStr::new("node")))
-                .then(|| launch.executable.clone());
+                let launch_node = claude_node.or_else(|| {
+                    (launch.executable.file_name() == Some(std::ffi::OsStr::new("node")))
+                        .then(|| launch.executable.clone())
+                });
                 let hub_endpoint = message_board::SessionEndpointRef {
                     service_id: message_board::ServiceId::try_from(String::from(
                         service_id.clone(),
@@ -240,44 +247,26 @@ pub(crate) async fn compose_provider_startup(
                         {
                             cache_warm = Some((description.endpoint.clone(), setting));
                         }
-                        if !binding.work_roots.is_empty() {
-                            let ask_outside = match (binding.provider, launch_node, &hook_directory)
-                            {
-                                (ProviderKind::ClaudeCode, Some(node), Some(directory)) => {
-                                    let hook = match &installed_hook {
-                                        Some(hook) => Some(std::path::PathBuf::clone(hook)),
-                                        None => match crate::provider_work_roots::install_work_roots_hook(directory) {
-                                            Ok(hook) => {
-                                                installed_hook = Some(hook.clone());
-                                                Some(hook)
-                                            }
-                                            Err(error) => {
-                                                tracing::warn!(%error, "the Claude work-roots hook could not be installed; Claude sessions won't ask outside the work roots");
-                                                None
-                                            }
-                                        },
-                                    };
-                                    hook.map(|hook| crate::provider_work_roots::AskOutsideHook {
-                                        node,
-                                        hook,
-                                    })
-                                }
-                                (ProviderKind::ClaudeCode, None, _) => {
-                                    tracing::warn!(
-                                        "the Claude launch runs no known Node, so its sessions get no work-roots hook"
-                                    );
-                                    None
-                                }
-                                _ => None,
-                            };
-                            work_roots.push((
-                                description.endpoint.clone(),
-                                crate::provider_work_roots::ProviderWorkRoots {
-                                    roots: binding.work_roots.clone(),
-                                    ask_outside,
-                                },
-                            ));
-                        }
+                        // Claude's sessions in auto need the work-roots hook,
+                        // whatever the roots list holds: their working, scratch
+                        // and project tmp/ folders still bound them (D1 R18).
+                        let hook = match binding.provider {
+                            ProviderKind::Cursor => {
+                                crate::provider_work_roots::WorkRootsHook::NotNeeded
+                            }
+                            ProviderKind::ClaudeCode => claude_work_roots_hook(
+                                launch_node,
+                                hook_directory.as_deref(),
+                                &mut installed_hook,
+                            ),
+                        };
+                        work_roots.push((
+                            description.endpoint.clone(),
+                            crate::provider_work_roots::ProviderWorkRoots {
+                                roots: binding.work_roots.clone(),
+                                hook,
+                            },
+                        ));
                         retirements.push((runtime.retirement(), description.clone()));
                         endpoints.push(description);
                         bindings.push(ExternalProviderBinding { identity, runtime });
@@ -448,3 +437,36 @@ fn provider_capabilities(
 #[cfg(test)]
 #[path = "provider_startup_composition_test.rs"]
 mod tests;
+
+/// The work-roots hook for Claude's sessions: installed once per Host and run
+/// by the launch's Node, or why it can't be.
+fn claude_work_roots_hook(
+    node: Option<std::path::PathBuf>,
+    hook_directory: Option<&std::path::Path>,
+    installed: &mut Option<std::path::PathBuf>,
+) -> crate::provider_work_roots::WorkRootsHook {
+    use crate::provider_work_roots::{AskOutsideHook, WorkRootsHook};
+    let Some(node) = node else {
+        tracing::warn!("the Claude launch runs no known Node, so Claude can't start in auto");
+        return WorkRootsHook::Unavailable("the Claude launch runs no known Node".to_owned());
+    };
+    let Some(directory) = hook_directory else {
+        return WorkRootsHook::Unavailable("the Host has no folder for the hook".to_owned());
+    };
+    let hook = match installed {
+        Some(hook) => hook.clone(),
+        None => match crate::provider_work_roots::install_work_roots_hook(directory) {
+            Ok(hook) => {
+                *installed = Some(hook.clone());
+                hook
+            }
+            Err(error) => {
+                tracing::warn!(%error, "the Claude work-roots hook could not be installed, so Claude can't start in auto");
+                return WorkRootsHook::Unavailable(format!(
+                    "the hook could not be installed: {error}"
+                ));
+            }
+        },
+    };
+    WorkRootsHook::Ready(AskOutsideHook { node, hook })
+}

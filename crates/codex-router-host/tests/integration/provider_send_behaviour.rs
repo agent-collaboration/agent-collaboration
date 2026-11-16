@@ -49,7 +49,7 @@ impl ComposedHost {
         Self::start_in(root, binding, endpoint_id).await
     }
 
-    async fn start_in(
+    pub(crate) async fn start_in(
         root: tempfile::TempDir,
         mut binding: ExternalProviderLaunchBinding,
         endpoint_id: &str,

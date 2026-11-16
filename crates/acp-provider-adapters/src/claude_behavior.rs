@@ -176,7 +176,17 @@ impl ProviderBehavior for ClaudeAcpBehavior {
         &self,
         work_roots: &acp_client_runtime::SessionWorkRoots,
     ) -> Option<serde_json::Map<String, serde_json::Value>> {
-        let command = work_roots.ask_outside_command.as_ref()?;
+        if !work_roots.router_auto {
+            return None;
+        }
+        // An auto start always says so, so the Router's Claude entry refuses
+        // one that arrives without its work-root layer.
+        let Some(command) = work_roots.ask_outside_command.as_ref() else {
+            return Some(serde_json::Map::from_iter([(
+                "codexRouter".to_owned(),
+                serde_json::json!({"startMode": "auto"}),
+            )]));
+        };
         let directories = work_roots
             .roots
             .iter()
@@ -191,7 +201,7 @@ impl ProviderBehavior for ClaudeAcpBehavior {
         });
         Some(serde_json::Map::from_iter([(
             "codexRouter".to_owned(),
-            serde_json::json!({"workRootSettings": settings}),
+            serde_json::json!({"startMode": "auto", "workRootSettings": settings}),
         )]))
     }
 }

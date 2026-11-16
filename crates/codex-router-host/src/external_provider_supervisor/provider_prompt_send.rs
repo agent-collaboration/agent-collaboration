@@ -308,19 +308,23 @@ impl ExternalProviderSupervisor {
         let target = request.target.clone();
         let provider_session_id = String::from(target.session_id.clone());
         self.begin_dispatch(&request.operation_id, &target).await?;
-        // The running turn and its approver, read while that turn is live and
-        // its record certainly exists; the injection's answer below is matched
-        // against it, so the turn ending or its record being evicted before
-        // the answer is read doesn't lose the approver.
-        let joined_before = runtime
-            .active_prompt_operation(provider_session_id.clone())
-            .await
-            .ok()
-            .flatten()
-            .and_then(|running| {
-                let approver = self.turn_approver_of(&running)?;
-                Some((running, approver))
-            });
+        // Every turn's approver record stays from before the injection until
+        // this steer reads the one it joined, whichever turn that turns out
+        // to be and however many settlements are evicted meanwhile.
+        let _approvers_pinned = self.pin_turn_approvers();
+        #[cfg(test)]
+        {
+            let pause = self
+                .inner
+                .steer_injection_test_pause
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(pause) = pause {
+                let _entered = pause.entered.send(());
+                let _released = pause.release.await;
+            }
+        }
         let steered = runtime
             .steer_session_contents_with_input(
                 provider_session_id.clone(),
@@ -347,15 +351,10 @@ impl ExternalProviderSupervisor {
                 running_operation_id,
             }) => {
                 // The approver of the turn the input actually joined, as the
-                // injection reports it, when it differs from this request's:
-                // the one read before the injection when it is the same turn,
-                // otherwise that turn's record (another turn replaced the one
-                // read before).
+                // injection reports it, when it differs from this request's;
+                // its record is pinned until this read.
                 let turn_approver = running_operation_id
-                    .and_then(|running| match joined_before {
-                        Some((before, approver)) if before == running => Some(approver),
-                        _ => self.turn_approver_of(&running),
-                    })
+                    .and_then(|running| self.turn_approver_of(&running))
                     .filter(|approver| approver != &request.approver);
                 ProviderOperationCompletion::Success {
                     settlement: ConversationOperationSettlement::Steered {

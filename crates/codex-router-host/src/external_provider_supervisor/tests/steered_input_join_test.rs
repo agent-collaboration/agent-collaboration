@@ -25,11 +25,33 @@ struct SteeringSession {
 }
 
 async fn steering_session() -> SteeringSession {
+    steering_session_on(
+        "cursor-settings-agent.ts",
+        "reactive-session-1",
+        |receipt| {
+            vec![
+                "reactive".to_owned(),
+                receipt.display().to_string(),
+                "hold-first-prompt-open".to_owned(),
+                "advertise-steering".to_owned(),
+            ]
+        },
+    )
+    .await
+}
+
+/// A steering session on `program`, whose first session is `session_id`,
+/// launched with the arguments `arguments` gives for its receipt.
+async fn steering_session_on(
+    program: &str,
+    session_id: &str,
+    arguments: impl FnOnce(&std::path::Path) -> Vec<String>,
+) -> SteeringSession {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire.json");
     let target = SessionRef {
         endpoint: endpoint(),
-        session_id: SessionId::try_from("reactive-session-1".to_owned()).expect("session"),
+        session_id: SessionId::try_from(session_id.to_owned()).expect("session"),
     };
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
@@ -44,13 +66,8 @@ async fn steering_session() -> SteeringSession {
             .expect("hub target");
     let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
         crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
-            "cursor-settings-agent.ts",
-            vec![
-                "reactive".to_owned(),
-                receipt.display().to_string(),
-                "hold-first-prompt-open".to_owned(),
-                "advertise-steering".to_owned(),
-            ],
+            program,
+            arguments(&receipt),
         ),
         acp_client_runtime::ProviderModelPicker::Standard,
         "fixture",
@@ -309,6 +326,141 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
         }) => assert_eq!(
             turn_approver,
             Some(approver_a),
+            "the joined turn's approver"
+        ),
+        other => panic!("expected a steered settlement, got {other:?}"),
+    }
+    stopped.expect("supervisor shutdown");
+}
+
+/// Oracle: D1 spec R12 and program design C1, with the Reviewer's F3 at
+/// f11cb0c38: the steer began while turn A ran, but before its injection A
+/// ended and turn C (approver C) started, so the injection joined C. C then
+/// ends and more settlements than are retained evict its record before the
+/// steer reads it. The steer still names C, the turn it actually joined.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approver() {
+    // Arrange: every prompt's turn is held until its own release file.
+    let session = steering_session_on("provider-steering-agent.ts", "fixture-session", |receipt| {
+        vec![
+            "send-race".to_owned(),
+            receipt.display().to_string(),
+            "hold-each-prompt".to_owned(),
+        ]
+    })
+    .await;
+    let approver_a = human("approver-a");
+    let approver_b = human("approver-b");
+    let approver_c = human("approver-c");
+    let prompt = |operation_id: &OperationId,
+                  approver: &collaboration_protocol::ProviderIdentity,
+                  text: &str| {
+        ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
+            operation_id: operation_id.clone(),
+            input_id: None,
+            target: session.target.clone(),
+            generation: None,
+            requested_by: approver.clone(),
+            approver: approver.clone(),
+            prompt: collaboration_protocol::MessageContent::HumanUser {
+                text: MessageText::try_from(text.to_owned()).expect("prompt"),
+            },
+        }
+    };
+    let turn_a = OperationId::generate();
+    session
+        .supervisor
+        .prompt(prompt(&turn_a, &approver_a, "first"))
+        .await
+        .expect("turn A starts");
+    while recorded_requests(&session.receipt, "session/prompt") < 1 {
+        tokio::task::yield_now().await;
+    }
+    let (steer_pinned, inject) = session.supervisor.pause_next_steer_before_injection();
+    let (steer_replied, read_approver) = session.supervisor.pause_next_steer_after_reply();
+
+    // Act: B's steer is held before its injection; A ends and C starts; the
+    // steer joins C; C ends and its record is evicted before the read.
+    let steered_operation = OperationId::generate();
+    let steer = tokio::spawn({
+        let supervisor = Arc::clone(&session.supervisor);
+        let request = prompt(&steered_operation, &approver_b, "second");
+        async move { supervisor.prompt(request).await }
+    });
+    steer_pinned
+        .await
+        .expect("the steer is pinned before its injection");
+    std::fs::write(format!("{}.release-1", session.receipt.display()), b"")
+        .expect("release turn A");
+    let a_settled = session
+        .supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: turn_a.clone(),
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
+    let turn_c = OperationId::generate();
+    session
+        .supervisor
+        .prompt(prompt(&turn_c, &approver_c, "third"))
+        .await
+        .expect("turn C starts");
+    while recorded_requests(&session.receipt, "session/prompt") < 2 {
+        tokio::task::yield_now().await;
+    }
+    let _injected = inject.send(());
+    steer_replied
+        .await
+        .expect("the steer's injection reply arrived");
+    std::fs::write(format!("{}.release-2", session.receipt.display()), b"")
+        .expect("release turn C");
+    let c_settled = session
+        .supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: turn_c.clone(),
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
+    for _ in 0..=MAX_RETAINED_SETTLEMENTS {
+        let other = OperationId::generate();
+        session.supervisor.hold_live_operation(other.clone());
+        assert!(session.supervisor.publish_held_result(&other).await);
+    }
+    let c_evicted = session.supervisor.held_result_for_test(&turn_c).is_none();
+    let _read = read_approver.send(());
+    let submitted = steer.await.expect("steer task");
+    let steered = session
+        .supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: steered_operation,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
+    session.queue.shutdown().await;
+    let stopped = session.supervisor.shutdown().await;
+
+    // Assert
+    assert!(
+        a_settled.is_ok(),
+        "turn A ended before the injection: {a_settled:?}"
+    );
+    assert!(
+        c_settled.is_ok(),
+        "turn C ended before the read: {c_settled:?}"
+    );
+    assert!(c_evicted, "turn C's settlement was evicted");
+    assert!(submitted.is_ok(), "the steer was admitted: {submitted:?}");
+    match steered {
+        Ok(collaboration_protocol::ConversationOperationWaitResult {
+            output:
+                collaboration_protocol::ConversationOperationWaitOutput::Available {
+                    settlement: ConversationOperationSettlement::Steered { turn_approver, .. },
+                },
+            ..
+        }) => assert_eq!(
+            turn_approver,
+            Some(approver_c),
             "the joined turn's approver"
         ),
         other => panic!("expected a steered settlement, got {other:?}"),

@@ -206,11 +206,17 @@ fn work_roots_become_claude_session_settings_with_the_hook() {
             std::path::PathBuf::from("/tmp/agents"),
         ],
         ask_outside_command: Some("'/node' '/hook.ts' '[\"/scratch/s\"]'".to_owned()),
+        router_auto: true,
+    };
+    let auto_without_hook = acp_client_runtime::SessionWorkRoots {
+        router_auto: true,
+        ..acp_client_runtime::SessionWorkRoots::default()
     };
 
     // Act
     let meta = behavior.session_new_meta(&work_roots);
     let none = behavior.session_new_meta(&acp_client_runtime::SessionWorkRoots::default());
+    let marked = behavior.session_new_meta(&auto_without_hook);
 
     // Assert
     let settings = &meta.expect("Claude session settings")["codexRouter"]["workRootSettings"];
@@ -225,5 +231,10 @@ fn work_roots_become_claude_session_settings_with_the_hook() {
         hook["hooks"][0]["command"],
         "'/node' '/hook.ts' '[\"/scratch/s\"]'"
     );
-    assert!(none.is_none(), "no hook command, no settings");
+    assert!(none.is_none(), "a named-mode start carries nothing");
+    assert_eq!(
+        marked.map(serde_json::Value::Object),
+        Some(json!({"codexRouter": {"startMode": "auto"}})),
+        "an auto start without its hook still says auto, so the entry refuses it"
+    );
 }

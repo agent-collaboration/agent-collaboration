@@ -19,8 +19,21 @@ const WORK_ROOTS_HOOK_FILE: &str = "router-work-roots-hook.ts";
 pub(crate) struct ProviderWorkRoots {
     /// The configured roots, already expanded to absolute paths.
     pub(crate) roots: Vec<PathBuf>,
-    /// For Claude: the hook that makes it ask outside the roots.
-    pub(crate) ask_outside: Option<AskOutsideHook>,
+    /// The hook that makes Claude ask outside the roots.
+    pub(crate) hook: WorkRootsHook,
+}
+
+/// Whether a provider's sessions in auto have their work-roots hook.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) enum WorkRootsHook {
+    /// The provider needs none (Cursor: the Router's allowance decides).
+    #[default]
+    NotNeeded,
+    /// Installed, with the Node that runs it.
+    Ready(AskOutsideHook),
+    /// Claude needs it and the Host couldn't set it up: an auto start is
+    /// refused rather than run without it (D1 R18).
+    Unavailable(String),
 }
 
 /// The installed hook and the Node that runs it.
