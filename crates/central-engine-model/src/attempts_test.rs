@@ -143,6 +143,16 @@ fn invalid_generated_id_and_missing_next_mark_are_rejected() {
         after_failure(
             None,
             failure(),
+            time(crate::MAX_ALARM_UNIX_MILLIS + 1),
+            RetirementThreshold::After(NonZeroU32::MIN),
+            attempt_id()
+        ),
+        Err(FailureUpdateError::Alarm(AlarmDecisionError::OutOfRange))
+    );
+    assert_eq!(
+        after_failure(
+            None,
+            failure(),
             time(0),
             RetirementThreshold::DEFAULT,
             uuid::Uuid::nil()

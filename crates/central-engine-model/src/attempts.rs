@@ -81,6 +81,9 @@ pub fn after_failure(
     threshold: RetirementThreshold,
     new_attempt_id: uuid::Uuid,
 ) -> Result<FailureRecord, FailureUpdateError> {
+    if !crate::supported_time(now) {
+        return Err(FailureUpdateError::Alarm(AlarmDecisionError::OutOfRange));
+    }
     if prior.is_some_and(|record| matches!(record.state, AttemptState::Retired { .. })) {
         return Err(FailureUpdateError::AlreadyRetired);
     }
