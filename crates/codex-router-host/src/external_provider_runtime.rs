@@ -15,7 +15,9 @@ use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 
 use crate::acp_interaction_port::{HostInteractionPort, NoopSessionEventSink};
-use crate::provider_session_event_sink::HubSessionEventSink;
+use crate::provider_session_event_sink::{
+    GenerationPublication, HubSessionEventSink, SessionGeneration,
+};
 #[cfg(test)]
 use crate::{ProviderSessionActivity, ProviderSteeringOutcome};
 #[cfg(test)]
@@ -95,6 +97,15 @@ pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
     interaction_port: Arc<HostInteractionPort>,
     event_sink: Option<Arc<HubSessionEventSink>>,
+    /// Test-only: holds the next load or resume after the client's success,
+    /// before its activation is published.
+    #[cfg(test)]
+    activation_pause: std::sync::Mutex<
+        Option<(
+            tokio::sync::oneshot::Sender<()>,
+            tokio::sync::oneshot::Receiver<()>,
+        )>,
+    >,
 }
 
 impl std::fmt::Debug for ExternalProviderRuntime {
@@ -123,6 +134,8 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: None,
+            #[cfg(test)]
+            activation_pause: std::sync::Mutex::new(None),
         })
     }
 
@@ -148,6 +161,8 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: None,
+            #[cfg(test)]
+            activation_pause: std::sync::Mutex::new(None),
         })
     }
 
@@ -187,6 +202,8 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: Some(event_sink),
+            #[cfg(test)]
+            activation_pause: std::sync::Mutex::new(None),
         })
     }
 
@@ -209,6 +226,8 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: None,
+            #[cfg(test)]
+            activation_pause: std::sync::Mutex::new(None),
         })
     }
 
@@ -315,7 +334,11 @@ impl ExternalProviderRuntime {
             _ => None,
         };
         if let Some(session_id) = active_session {
-            self.publish_active_session(session_id).await?;
+            let generation = self
+                .event_sink
+                .as_ref()
+                .map(|event_sink| event_sink.current_generation(session_id));
+            self.publish_active_session(session_id, generation).await?;
         }
         created
     }
@@ -363,10 +386,14 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
     ) -> Result<(), ExternalProviderRuntimeError> {
+        let generation = self.open_generation(&provider_session_id);
         self.client
             .load_session(provider_session_id.clone(), cwd)
             .await?;
-        self.publish_active_session(&provider_session_id).await
+        #[cfg(test)]
+        self.pause_before_activation().await;
+        self.publish_active_session(&provider_session_id, generation)
+            .await
     }
 
     pub async fn resume_session(
@@ -374,50 +401,97 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
     ) -> Result<(), ExternalProviderRuntimeError> {
+        let generation = self.open_generation(&provider_session_id);
         self.client
             .resume_session(provider_session_id.clone(), cwd)
             .await?;
-        if let Some(event_sink) = &self.event_sink {
-            event_sink
-                .begin_history_unavailable(&provider_session_id)
+        #[cfg(test)]
+        self.pause_before_activation().await;
+        if let (Some(event_sink), Some(generation)) = (&self.event_sink, generation) {
+            let invalidated = event_sink
+                .begin_history_unavailable(&provider_session_id, generation)
                 .await
                 .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
+            if invalidated == GenerationPublication::Ended {
+                return Err(ExternalProviderRuntimeError::SessionReleased);
+            }
         }
-        self.publish_active_session(&provider_session_id).await
+        self.publish_active_session(&provider_session_id, generation)
+            .await
     }
 
+    /// A new generation for a session about to be loaded or resumed (D1 R14).
+    fn open_generation(&self, provider_session_id: &str) -> Option<SessionGeneration> {
+        self.event_sink
+            .as_ref()
+            .map(|event_sink| event_sink.open_generation(provider_session_id))
+    }
+
+    /// Publishes the session active in `generation`. A generation closed
+    /// meanwhile publishes nothing, and the session counts as closed.
     async fn publish_active_session(
         &self,
         provider_session_id: &str,
+        generation: Option<SessionGeneration>,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        if let Some(event_sink) = &self.event_sink {
+        if let (Some(event_sink), Some(generation)) = (&self.event_sink, generation) {
             let capabilities = self
                 .client
                 .capability_report(provider_session_id)
                 .await
                 .to_session_model();
-            acp_client_runtime::SessionEventSink::publish(
-                event_sink.as_ref(),
-                provider_session_id,
-                session_event_model::SessionEvent::CapabilitiesChanged { capabilities },
-            )
-            .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
-            event_sink
-                .publish_idle(provider_session_id)
+            let published = event_sink
+                .publish_activation(provider_session_id, generation, capabilities)
                 .await
                 .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
+            if published == GenerationPublication::Ended {
+                return Err(ExternalProviderRuntimeError::SessionReleased);
+            }
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    async fn pause_before_activation(&self) {
+        let pause = self
+            .activation_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some((reached, release)) = pause {
+            let _ = reached.send(());
+            let _ = release.await;
+        }
+    }
+
+    /// Test-only: the next load or resume stops after the client's success,
+    /// before its activation; returns (reached, release).
+    #[cfg(test)]
+    pub(crate) fn pause_next_activation(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (reached_sender, reached) = tokio::sync::oneshot::channel();
+        let (release, release_receiver) = tokio::sync::oneshot::channel();
+        *self
+            .activation_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some((reached_sender, release_receiver));
+        (reached, release)
     }
 
     pub async fn close_session(
         &self,
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
+        let generation = self.current_generation(&provider_session_id);
         self.client
             .close_session(provider_session_id.clone())
             .await?;
-        self.publish_closed(&provider_session_id)
+        self.publish_closed(&provider_session_id, generation)
     }
 
     /// Closes a session on an agent that offers no session/close: the turn is
@@ -426,25 +500,30 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
+        let generation = self.current_generation(&provider_session_id);
         self.client
             .release_session(provider_session_id.clone())
             .await?;
-        self.publish_closed(&provider_session_id)
+        self.publish_closed(&provider_session_id, generation)
     }
 
+    fn current_generation(&self, provider_session_id: &str) -> Option<SessionGeneration> {
+        self.event_sink
+            .as_ref()
+            .map(|event_sink| event_sink.current_generation(provider_session_id))
+    }
+
+    /// Ends the close's generation with Closed (D1 R14); nothing published
+    /// for that generation afterwards reaches the hub.
     fn publish_closed(
         &self,
         provider_session_id: &str,
+        generation: Option<SessionGeneration>,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        if let Some(event_sink) = &self.event_sink {
-            acp_client_runtime::SessionEventSink::publish(
-                event_sink.as_ref(),
-                provider_session_id,
-                session_event_model::SessionEvent::StateChanged {
-                    state: session_event_model::SessionState::Closed,
-                },
-            )
-            .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
+        if let (Some(event_sink), Some(generation)) = (&self.event_sink, generation) {
+            event_sink
+                .publish_closed(provider_session_id, generation)
+                .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
         }
         Ok(())
     }

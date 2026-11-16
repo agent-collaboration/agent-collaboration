@@ -416,3 +416,202 @@ async fn a_load_reaching_the_connection_after_a_release_is_refused() {
     );
     assert_eq!(loads, 0, "the agent never saw a session/load");
 }
+
+/// Oracle: D1 spec R14 and the Lead's terminal-per-generation rule: on an
+/// agent that can load but can't close, an implicit load's client succeeds
+/// (the actor is registered) and its continuation is held before it
+/// publishes the session active; the Router closes the session and finishes;
+/// then the continuation goes on. Nothing for that generation is published
+/// after its Closed: the hub stays Closed with no CapabilitiesChanged or
+/// Idle, and the load answers RouterClosed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_load_continuation_held_past_a_router_close_publishes_nothing() {
+    // Arrange: a recorded, unloaded session on a load-capable agent without
+    // session/close, on a real hub; the next load stops before activation.
+    let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("wire.json");
+    let mut target = target();
+    target.session_id = SessionId::try_from("reactive-session-1".to_owned()).expect("session ID");
+    let binding = binding(&target);
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+            .await
+            .expect("store"),
+    ));
+    store
+        .lock()
+        .await
+        .record_session(&ProviderSessionRecord {
+            target: target.clone(),
+            working_directory: ProviderWorkingDirectory::try_from(
+                root.path().display().to_string(),
+            )
+            .expect("working directory"),
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
+            updated_at_ms: 1,
+        })
+        .await
+        .expect("session record");
+    let hub = Arc::new(collaboration_runtime::ProviderSessionEventHub::new(
+        Arc::clone(&store),
+    ));
+    let hub_target: message_board::SessionRef =
+        serde_json::from_value(serde_json::to_value(&target).expect("target JSON"))
+            .expect("hub target");
+    let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
+        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+            "cursor-settings-agent.ts",
+            vec!["reactive".to_owned(), receipt.display().to_string()],
+        ),
+        acp_client_runtime::ProviderModelPicker::Standard,
+        "fixture",
+        "http://127.0.0.1:1/mcp",
+        Arc::clone(&hub),
+        hub_target.endpoint.clone(),
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
+    let (activation_reached, activation_release) = runtime.pause_next_activation();
+    let supervisor = Arc::new(
+        ExternalProviderSupervisor::new(
+            vec![ExternalProviderBinding {
+                identity: binding.clone(),
+                runtime,
+            }],
+            Arc::clone(&store),
+        )
+        .expect("supervisor"),
+    );
+    let queue = Arc::new(ProviderAcpMessageFifo::new(
+        Arc::clone(&supervisor),
+        Arc::clone(&store),
+        Arc::new(NoLivePeer),
+    ));
+    supervisor.attach_message_fifo(&queue);
+    let load = tokio::spawn({
+        let supervisor = Arc::clone(&supervisor);
+        let store = Arc::clone(&store);
+        let target = target.clone();
+        async move {
+            crate::provider_acp_session_loading::ensure_provider_session_loaded(
+                &supervisor,
+                &store,
+                &NoLivePeer,
+                &target,
+                collaboration_contracts::LoadPolicy::MayLoad,
+            )
+            .await
+        }
+    });
+    activation_reached
+        .await
+        .expect("the load's client succeeded and its continuation is held");
+
+    // Act: the Router closes the session and finishes, and the hub applies
+    // its Closed; the hub is followed from there; then the held continuation
+    // goes on.
+    let mut before_close =
+        collaboration_contracts::SessionEventHub::attach(hub.as_ref(), hub_target.clone())
+            .await
+            .expect("hub attachment");
+    let close = OperationId::generate();
+    supervisor
+        .close(ConversationCloseRequest {
+            operation_id: close.clone(),
+            target: target.clone(),
+            generation: None,
+            requested_by: target.clone().into(),
+            approver: target.clone().into(),
+        })
+        .await
+        .expect("close is admitted");
+    let closed = supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: close,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
+    loop {
+        match before_close.receiver.recv().await {
+            Ok(event)
+                if matches!(
+                    event.event,
+                    session_event_model::SessionEvent::StateChanged {
+                        state: session_event_model::SessionState::Closed,
+                    }
+                ) =>
+            {
+                break;
+            }
+            Ok(_) => {}
+            Err(error) => panic!("the hub stopped before the close: {error:?}"),
+        }
+    }
+    let mut after_close =
+        collaboration_contracts::SessionEventHub::attach(hub.as_ref(), hub_target.clone())
+            .await
+            .expect("hub attachment");
+    let state_at_close =
+        collaboration_contracts::SessionEventHub::state(hub.as_ref(), hub_target.clone()).await;
+    let _go = activation_release.send(());
+    let loaded = load.await.expect("load task");
+    // The activation, had it gone out, was accepted by the hub before the
+    // load returned, so it would be on this follower already.
+    let mut published_after_close = after_close.snapshot.clone();
+    while let Ok(event) = after_close.receiver.try_recv() {
+        published_after_close.push(event);
+    }
+    let state_after =
+        collaboration_contracts::SessionEventHub::state(hub.as_ref(), hub_target).await;
+    queue.shutdown().await;
+    let stopped = supervisor.shutdown().await;
+
+    // Assert
+    assert!(
+        matches!(
+            closed,
+            Ok(collaboration_protocol::ConversationOperationWaitResult {
+                output: ConversationOperationWaitOutput::Available {
+                    settlement: ConversationOperationSettlement::Closed {
+                        router_closed: true,
+                        ..
+                    }
+                },
+                ..
+            })
+        ),
+        "the Router closed the session: {closed:?}"
+    );
+    assert!(
+        matches!(
+            state_at_close,
+            Ok(session_event_model::SessionState::Closed)
+        ),
+        "the hub saw the close: {state_at_close:?}"
+    );
+    assert!(
+        matches!(
+            loaded,
+            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::RouterClosed
+        ),
+        "the load whose continuation outlived the close answers closed: {loaded:?}"
+    );
+    assert!(
+        !published_after_close.iter().any(|event| matches!(
+            event.event,
+            session_event_model::SessionEvent::CapabilitiesChanged { .. }
+                | session_event_model::SessionEvent::StateChanged { .. }
+        )),
+        "nothing for the closed generation was published after Closed: {published_after_close:?}"
+    );
+    assert!(
+        matches!(state_after, Ok(session_event_model::SessionState::Closed)),
+        "the hub still says Closed: {state_after:?}"
+    );
+    stopped.expect("the supervisor drains without a timeout");
+}
