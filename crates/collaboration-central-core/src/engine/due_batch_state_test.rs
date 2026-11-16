@@ -34,6 +34,10 @@ fn simultaneous_events_claim_exactly_one_due_batch() {
     let spacing = chrono::Duration::seconds(30);
     assert!(state.try_claim(0, spacing).unwrap());
     let barrier = Arc::new(Barrier::new(3));
+    #[expect(
+        clippy::needless_collect,
+        reason = "every thread must be spawned before the barrier opens"
+    )]
     let threads = (0..2)
         .map(|_| {
             let state = state.clone();

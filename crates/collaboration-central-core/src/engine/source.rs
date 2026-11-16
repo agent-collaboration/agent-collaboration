@@ -12,6 +12,13 @@ pub(crate) enum SourcePolicy {
 
 pub(crate) enum ReceiptStatements {
     None,
+    #[cfg_attr(
+        not(feature = "test-support"),
+        expect(
+            dead_code,
+            reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
+        )
+    )]
     Request(Vec<GuardedStatement>),
     Admin(Vec<GuardedStatement>),
 }
@@ -49,6 +56,13 @@ impl<M: Machine> EventSource<M> for DueSource {
     }
 }
 
+#[cfg_attr(
+    not(feature = "test-support"),
+    expect(
+        dead_code,
+        reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
+    )
+)]
 pub(crate) struct RequestSource(pub ReceiptClaim);
 impl<M: Machine> EventSource<M> for RequestSource
 where

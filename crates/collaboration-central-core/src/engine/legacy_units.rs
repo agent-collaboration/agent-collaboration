@@ -34,7 +34,7 @@ impl From<StoreFailure> for LegacyUnitOutcome {
                 | central_storage::CorruptReason::UnknownKind { column }
                 | central_storage::CorruptReason::BadValue { column }) = reason;
                 Self::Corrupt {
-                    column: column.to_owned(),
+                    column,
                     workspaces: vec![],
                 }
             }

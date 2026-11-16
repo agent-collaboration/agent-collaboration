@@ -74,8 +74,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             Err(outcome) => {
                 let outcome = outcome.in_workspace(workspace);
-                if let Some(class) = outcome.failure_class() {
-                    if let FailureOutcome::StoreDown(failure) = self
+                if let Some(class) = outcome.failure_class()
+                    && let FailureOutcome::StoreDown(failure) = self
                         .record_failure_naming(
                             &subject,
                             CONTROL_WRITE,
@@ -85,9 +85,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                             outcome.affected_workspaces(),
                         )
                         .await
-                    {
-                        self.observe_engine_store_down(&subject, failure);
-                    }
+                {
+                    self.observe_engine_store_down(&subject, failure);
                 }
                 Ok(())
             }

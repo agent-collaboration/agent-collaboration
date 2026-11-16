@@ -8,6 +8,10 @@ use workspace_model::central_mail as mail;
 
 pub(crate) struct AutomationTimer;
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a transient reducer value; boxing the active row would only obscure the pure match"
+)]
 pub(crate) enum State {
     Active(AutomationRow),
     Done { evaluated: Option<EngineTime> },
@@ -34,7 +38,16 @@ impl StateTag for State {
 }
 #[derive(Clone)]
 pub(crate) enum Event {
-    Due { occurrence: EngineTime },
+    Due {
+        occurrence: EngineTime,
+    },
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "DisableAutomation keeps its own request path until schedules move onto handle (deliverable 3)"
+        )
+    )]
     Disable,
     Discard,
 }
@@ -48,6 +61,10 @@ impl EventTag for Event {
     }
 }
 #[derive(Debug, Eq, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "effects are built and applied once per transition"
+)]
 pub(crate) enum Effect {
     QueueMessage(mail::MessageRecord),
     ScheduleAt(EngineTime),

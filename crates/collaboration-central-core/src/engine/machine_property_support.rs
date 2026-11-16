@@ -15,6 +15,10 @@ impl IdSource for ReplayIds {
 
 /// Replay exactly the same supplied time and identifier stream before accepting
 /// a step. Only a returned success is installed by the sequence's caller.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "property support asserts determinism and declared edges before returning the step"
+)]
 pub(crate) fn checked_step<M>(
     state: &M::State,
     event: M::Event,

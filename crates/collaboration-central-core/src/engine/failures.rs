@@ -83,7 +83,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             .await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one guarded failure write needs the subject, its guard and the record inputs together"
+    )]
     async fn write_failure_naming(
         &self,
         subject: &EngineSubject,

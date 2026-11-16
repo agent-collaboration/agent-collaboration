@@ -34,7 +34,16 @@ impl StateTag for State {
 }
 #[derive(Clone)]
 pub(crate) enum Event {
-    Due { occurrence: EngineTime },
+    Due {
+        occurrence: EngineTime,
+    },
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "CancelWake keeps its own request path until wakes move onto handle (deliverable 2)"
+        )
+    )]
     Cancel,
     Discard,
 }

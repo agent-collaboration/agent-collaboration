@@ -42,7 +42,10 @@ fn stored_state(state: &State) -> &'static str {
 }
 
 fn decode(rows: &ReadOutcome) -> Result<State, StoreFailure> {
-    let row = &rows.rows[0];
+    let row = rows
+        .rows
+        .first()
+        .ok_or_else(|| corrupt("engine_probe_items.item_id"))?;
     let uuid = |name: &'static str| -> Result<uuid::Uuid, StoreFailure> {
         string(rows, row, name)?
             .parse::<uuid::Uuid>()

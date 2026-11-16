@@ -14,10 +14,28 @@ pub(crate) enum HandleOutcome<State, Error> {
     Done(State),
     Refused(TransitionError<Error>),
     NotFound,
-    Failed(ItemFailureClass),
+    Failed(
+        #[cfg_attr(
+            not(feature = "test-support"),
+            expect(
+                dead_code,
+                reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
+            )
+        )]
+        ItemFailureClass,
+    ),
     /// A request whose subject or batch is broken gets a typed answer; only due
     /// units charge an attempt record (P2, R3).
-    RequestFailed(ItemFailureClass),
+    RequestFailed(
+        #[cfg_attr(
+            not(feature = "test-support"),
+            expect(
+                dead_code,
+                reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
+            )
+        )]
+        ItemFailureClass,
+    ),
     Superseded,
     Uncertain,
     StoreDown(StoreFailure),
