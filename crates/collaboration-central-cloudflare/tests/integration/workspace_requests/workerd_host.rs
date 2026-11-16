@@ -428,6 +428,10 @@ impl RemoteRuntime {
     ) -> collaboration_central_core::LegacyUnitInvocations {
         self.control("legacy-unit-invocations", &()).await.unwrap()
     }
+    /// Every unit the object's due batches started, in start order (R2/R3).
+    pub async fn due_unit_starts(&self) -> Vec<collaboration_central_core::DueUnitStart> {
+        self.control("due-unit-starts", &()).await.unwrap()
+    }
     pub async fn engine_commit_fault_pending(&self) -> bool {
         self.control("engine-commit-fault-pending", &())
             .await

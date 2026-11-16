@@ -1,6 +1,9 @@
 //! V2 checks 1-4 on the native host: for wakes and automations, each corrupt
 //! subject next to a healthy due one fails alone (count 1, next try the next
 //! mark), retires on the next pass and is never visited again.
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::engine_v2_support::*;
 use super::super::support::*;
 use router_clock::RuntimeClock;
@@ -21,6 +24,7 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
     let observations = EngineObservations::default();
     let _capture = observations.install();
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let first_mark = next_mark(fixture.clock.utc_now());
     let second_mark = first_mark + minutes(5);
@@ -199,5 +203,11 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
         "no further failure observed"
     );
     assert_eq!(all_messages(&runtime).await, messages_after_first);
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_visited_again",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }

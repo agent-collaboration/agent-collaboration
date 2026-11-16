@@ -12,6 +12,18 @@ pub struct DueBatchSnapshot {
     pub leftovers_pending: bool,
 }
 
+/// Test-support receipt of one unit a due batch started, in start order
+/// (acceptance R2/R3 visit order). Never built without `test-support`.
+#[cfg(feature = "test-support")]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DueUnitStart {
+    /// The start time of the due batch that started this unit.
+    pub batch_start_unix_millis: i64,
+    pub machine_kind: String,
+    pub subject_key: String,
+}
+
 /// The start and backlog bit share one CAS, so a publisher reads one coherent
 /// snapshot. The portable timestamp range leaves room for the backlog bit.
 pub struct DueBatchState {
@@ -19,6 +31,8 @@ pub struct DueBatchState {
     publication_order: Mutex<()>,
     #[cfg(feature = "test-support")]
     claim_waiting: tokio::sync::watch::Sender<usize>,
+    #[cfg(feature = "test-support")]
+    unit_starts: Mutex<Vec<DueUnitStart>>,
 }
 
 impl Default for DueBatchState {
@@ -28,6 +42,8 @@ impl Default for DueBatchState {
             publication_order: Mutex::new(()),
             #[cfg(feature = "test-support")]
             claim_waiting: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            unit_starts: Mutex::new(Vec::new()),
         }
     }
 }
@@ -153,6 +169,24 @@ impl DueBatchState {
     pub async fn until_claim_waiting(&self) {
         let mut waiting = self.claim_waiting.subscribe();
         let _ = waiting.wait_for(|count| *count > 0).await;
+    }
+
+    /// Called by the due batch as each unit starts, before its first await.
+    #[cfg(feature = "test-support")]
+    pub(super) fn record_unit_start(&self, start: DueUnitStart) {
+        self.unit_starts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(start);
+    }
+
+    /// Every unit started by this object's due batches, in start order.
+    #[cfg(feature = "test-support")]
+    pub fn unit_starts(&self) -> Vec<DueUnitStart> {
+        self.unit_starts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 

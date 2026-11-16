@@ -1,3 +1,6 @@
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::{Statement, support::*};
 use std::sync::atomic::Ordering;
 use workspace_model::central_mail::{
@@ -22,6 +25,7 @@ async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result
 #[tokio::test]
 async fn interval_catches_up_once_and_after_finishes() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
         chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst)).unwrap();
@@ -254,12 +258,19 @@ async fn interval_catches_up_once_and_after_finishes() {
             .unwrap(),
         None
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "interval_catches_up_once_and_after_finishes",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
         chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst)).unwrap();
@@ -315,12 +326,19 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
             ]
         ]
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "at_and_cron_rules_retain_their_calendar_boundaries",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let timing =
         serde_json::from_str(r#"{"kind":"cron","expression":"0 0 30 2 *","timezone":"UTC"}"#)
@@ -354,5 +372,11 @@ async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
             .unwrap(),
         None
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "impossible_cron_refuses_no_occurrence_and_only_caches_the_answer",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }

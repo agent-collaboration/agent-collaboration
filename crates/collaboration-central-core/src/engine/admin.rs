@@ -8,9 +8,8 @@ use super::{
 };
 use super::{
     machines::{
-        automation_timer,
-        timer_store::{AutomationStore, WakeStore},
-        wake_timer,
+        finish_store::{AutomationFinishStore, WakeFinishStore},
+        lifecycle_finish::{AutomationKind, FinishEvent, LifecycleFinish, WakeKind},
     },
     port::{Engine, EngineHost},
 };
@@ -331,19 +330,19 @@ impl<R: EngineHost> Engine<'_, R> {
         let key = InstanceKey(key);
         let outcome = match kind {
             EngineKindName::WakeTimer => {
-                self.discard_subject::<wake_timer::WakeTimer, _>(
-                    &WakeStore(self.0),
+                self.discard_subject::<LifecycleFinish<WakeKind>, _>(
+                    &WakeFinishStore(self.0),
                     key,
-                    wake_timer::Event::Discard,
+                    FinishEvent::Discard,
                     &source,
                 )
                 .await
             }
             EngineKindName::AutomationTimer => {
-                self.discard_subject::<automation_timer::AutomationTimer, _>(
-                    &AutomationStore(self.0),
+                self.discard_subject::<LifecycleFinish<AutomationKind>, _>(
+                    &AutomationFinishStore(self.0),
                     key,
-                    automation_timer::Event::Discard,
+                    FinishEvent::Discard,
                     &source,
                 )
                 .await
@@ -357,8 +356,9 @@ impl<R: EngineHost> Engine<'_, R> {
         Ok(outcome)
     }
 
-    /// A subject whose row will not decode cannot run its Discard transition:
-    /// the answer is SubjectUnreadable and nothing changes (Retry still works).
+    /// Discard reads only the finishing view: a corrupt payload does not stop it;
+    /// only a lifecycle state that will not decode answers SubjectUnreadable,
+    /// with nothing changed (Retry still works).
     async fn discard_subject<M, Adapter>(
         &self,
         adapter: &Adapter,

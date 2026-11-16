@@ -4,6 +4,9 @@
 //! not asserted here: the plain workerd fixture (WorkerdHost::open) prints
 //! Worker logs to stderr and captures none; the sign-in fixture captures them
 //! and engine_admin.rs asserts the same observation lines there.
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::engine_v2_support::*;
 use super::super::support::*;
 
@@ -21,6 +24,7 @@ async fn subject_row(runtime: &Runtime, corrupt: &Corrupt) -> Vec<Vec<central_st
 #[tokio::test]
 async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_visited_again() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let first_mark = next_mark(now(&fixture));
     let second_mark = first_mark + minutes(5);
@@ -174,5 +178,11 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
         );
     }
     assert_eq!(all_messages(&runtime).await, messages_after_first);
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_visited_again",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }

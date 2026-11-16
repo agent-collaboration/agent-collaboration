@@ -1,5 +1,8 @@
 //! V4 on the native host: the failure record's life through success, today's
 //! finishing requests, failed batches and a damaged stored record.
+use super::super::engine_evidence::{
+    assert_every_written_attempt_id_is_uuid_v7, dump_attempts, install_attempt_id_witness,
+};
 use super::super::{Statement, support::*};
 use super::engine_probe_support::*;
 use central_storage::SqlValue;
@@ -22,17 +25,26 @@ async fn record(runtime: &Runtime, kind: &str, key: &str) -> Vec<Vec<SqlValue>> 
         args: vec![text(kind), text(key)],
     }).await.unwrap().rows
 }
+/// The R4 receipt: the whole table after one step of `test`.
+async fn dump(runtime: &Runtime, test: &str, step: &str) {
+    dump_attempts(runtime.statement_host(), &format!("r4-{test}.jsonl"), step).await;
+}
 
 #[tokio::test]
 async fn a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_changes_nothing() {
+    const TEST: &str =
+        "a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_changes_nothing";
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
+    install_attempt_id_witness(runtime.statement_host()).await;
     let due = fixture.clock.utc_now() + minutes(5);
     let (item, group) = (probe_id(9500), probe_id(9501));
     seed_probe(&runtime, item, group, Some(due), "retry once").await;
     raw(&runtime, REJECT_PROBE, vec![]).await;
+    dump(&runtime, TEST, "seeded, before any pass").await;
     fixture.clock.set_utc(due);
     runtime.after_event().await.unwrap();
+    dump(&runtime, TEST, "after the rejected pass").await;
     assert_eq!(
         attempt(&runtime, item).await,
         vec![vec![
@@ -52,6 +64,7 @@ async fn a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_ch
         });
     fixture.clock.set_utc(due + minutes(5));
     runtime.after_event().await.unwrap();
+    dump(&runtime, TEST, "after the failed success batch").await;
     assert_eq!(
         probe_facts(&runtime, item, group).await,
         vec![text("waiting"), integer(0), integer(1)]
@@ -70,15 +83,20 @@ async fn a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_ch
         .clock
         .set_utc(due + minutes(5) + chrono::Duration::seconds(30));
     runtime.after_event().await.unwrap();
+    dump(&runtime, TEST, "after the successful retry").await;
     assert_eq!(
         probe_facts(&runtime, item, group).await,
         vec![text("fired"), integer(1), integer(0)]
+    );
+    assert!(
+        assert_every_written_attempt_id_is_uuid_v7(runtime.statement_host(), TEST, &[]).await > 0
     );
     fixture.host.close().await;
 }
 
 async fn failing_wake(fixture: &Fixture, number: u32) -> (Runtime, workspace_ids::WakeId) {
     let runtime = runtime(fixture).await;
+    install_attempt_id_witness(runtime.statement_host()).await;
     let due = fixture.clock.utc_now() + minutes(5);
     let Result::Done(Answer::WakeSet { wake_id, .. }) = fixture
         .host
@@ -116,6 +134,7 @@ async fn failing_wake(fixture: &Fixture, number: u32) -> (Runtime, workspace_ids
 
 async fn failing_automation(fixture: &Fixture, number: u32) -> (Runtime, String) {
     let runtime = runtime(fixture).await;
+    install_attempt_id_witness(runtime.statement_host()).await;
     let Result::Done(Answer::AutomationSet { automation_id, .. }) = fixture
         .host
         .request_central(
@@ -154,9 +173,12 @@ async fn failing_automation(fixture: &Fixture, number: u32) -> (Runtime, String)
 #[tokio::test]
 async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_request_changes_nothing()
 {
+    const TEST: &str =
+        "todays_cancel_and_disable_requests_delete_the_record_and_a_failed_request_changes_nothing";
     // A failed CancelWake batch changes neither the wake nor its record.
     let fixture = Fixture::new().await;
     let (runtime, wake_id) = failing_wake(&fixture, 9510).await;
+    dump(&runtime, TEST, "wake failing once").await;
     raw(
         &runtime,
         "CREATE TRIGGER cancel_reject BEFORE UPDATE OF state ON wakes WHEN NEW.state='disabled' BEGIN SELECT RAISE(ABORT,'cancel rejected'); END",
@@ -170,6 +192,7 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
         },
     };
     let failed = fixture.host.request_central(&fixture.caller, cancel).await;
+    dump(&runtime, TEST, "after the rejected CancelWake").await;
     assert!(
         !matches!(failed, Ok(Result::Done(_))),
         "the rejected cancel must not succeed: {failed:?}"
@@ -207,15 +230,20 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
             .unwrap(),
         Result::Done(_)
     ));
+    dump(&runtime, TEST, "after the successful CancelWake").await;
     assert!(
         record(&runtime, "wake_timer", wake_id.as_str())
             .await
             .is_empty()
     );
+    assert!(
+        assert_every_written_attempt_id_is_uuid_v7(runtime.statement_host(), TEST, &[]).await > 0
+    );
     fixture.host.close().await;
 
     let fixture = Fixture::new().await;
     let (runtime, automation_id) = failing_automation(&fixture, 9520).await;
+    dump(&runtime, TEST, "automation failing once").await;
     raw(
         &runtime,
         "CREATE TRIGGER disable_reject BEFORE UPDATE OF state ON automations WHEN NEW.state='disabled' BEGIN SELECT RAISE(ABORT,'disable rejected'); END",
@@ -234,6 +262,7 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
             },
         )
         .await;
+    dump(&runtime, TEST, "after the rejected DisableAutomation").await;
     assert!(
         !matches!(failed, Ok(Result::Done(_))),
         "the rejected disable must not succeed: {failed:?}"
@@ -259,10 +288,14 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
             .unwrap(),
         Result::Done(_)
     ));
+    dump(&runtime, TEST, "after the successful DisableAutomation").await;
     assert!(
         record(&runtime, "automation_timer", &automation_id)
             .await
             .is_empty()
+    );
+    assert!(
+        assert_every_written_attempt_id_is_uuid_v7(runtime.statement_host(), TEST, &[]).await > 0
     );
     fixture.host.close().await;
 }
@@ -270,8 +303,10 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
 #[tokio::test]
 async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_and_is_never_visited()
  {
+    const TEST: &str = "a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_and_is_never_visited";
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
+    install_attempt_id_witness(runtime.statement_host()).await;
     let due = fixture.clock.utc_now() + minutes(5);
     let group = probe_id(9530);
     let (damaged, healthy) = (probe_id(9531), probe_id(9532));
@@ -292,9 +327,11 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
         vec![text(damaged)],
     )
     .await;
+    dump(&runtime, TEST, "damaged record planted").await;
     fixture.clock.set_utc(due);
 
     runtime.after_event().await.unwrap();
+    dump(&runtime, TEST, "after pass 1").await;
 
     assert_eq!(
         probe_facts(&runtime, healthy, group).await[0],
@@ -313,6 +350,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
     );
     fixture.clock.set_utc(due + minutes(5));
     runtime.after_event().await.unwrap();
+    dump(&runtime, TEST, "after pass 2 at the next mark").await;
     assert_eq!(
         record(&runtime, "engine_probe", &damaged.to_string()).await[0][..2],
         [text("retired"), integer(2)]
@@ -322,6 +360,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
         fixture.clock.set_utc(due + minutes(5 * step));
         runtime.after_event().await.unwrap();
     }
+    dump(&runtime, TEST, "after twelve later marks").await;
     assert_eq!(
         probe_facts(&runtime, damaged, broken_group).await,
         before,
@@ -330,6 +369,15 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
     assert_eq!(
         record(&runtime, "engine_probe", &damaged.to_string()).await[0][..2],
         [text("retired"), integer(2)]
+    );
+    assert!(
+        assert_every_written_attempt_id_is_uuid_v7(
+            runtime.statement_host(),
+            TEST,
+            &["01890f2e-7b4c-7cc0-98c4-000000009533"],
+        )
+        .await
+            > 0
     );
     fixture.host.close().await;
 }

@@ -118,6 +118,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn due_batch_snapshot(&self) -> crate::DueBatchSnapshot {
         self.due_batches.snapshot()
     }
+    /// Every unit the due batches started, in start order (R2/R3 visit order).
+    #[cfg(feature = "test-support")]
+    pub fn due_unit_starts(&self) -> Vec<crate::DueUnitStart> {
+        self.due_batches.unit_starts()
+    }
     #[cfg(feature = "test-support")]
     pub fn legacy_unit_invocations(&self) -> LegacyUnitInvocations {
         *self

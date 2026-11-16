@@ -44,4 +44,6 @@ pub(crate) mod source;
 pub(crate) mod store_adapter;
 
 pub use alarm_decision::engine_alarm_decider;
+#[cfg(feature = "test-support")]
+pub use due_batch_state::DueUnitStart;
 pub use due_batch_state::{DueBatchSnapshot, DueBatchState};

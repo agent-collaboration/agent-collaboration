@@ -1,4 +1,6 @@
 pub(crate) mod automation_timer;
+pub(crate) mod finish_store;
+pub(crate) mod lifecycle_finish;
 #[cfg_attr(
     not(any(test, feature = "test-support")),
     expect(

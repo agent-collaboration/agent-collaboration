@@ -1,3 +1,6 @@
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::{Statement, support::*};
 use central_storage::SqlValue;
 use collaboration_central_core::engine_probe::InstanceKey;
@@ -9,6 +12,7 @@ use std::sync::atomic::Ordering;
 #[tokio::test]
 async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let item = uuid(8600);
     let group = uuid(8601);
@@ -80,12 +84,19 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
         None,
         "traffic-driven work never arms the alarm"
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "probe_requests_claim_one_receipt_and_replay_the_original_typed_answer",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_millisecond_boundary() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
         chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst)).unwrap();
@@ -173,6 +184,12 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
             SqlValue::Integer(1.try_into().unwrap())
         ]]
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_millisecond_boundary",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
@@ -186,6 +203,7 @@ fn uuid(number: u32) -> uuid::Uuid {
 async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effect() {
     use collaboration_central_core::{EngineCommitFault, EngineCommitFaultKind};
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     for (number, kind, applied) in [
         (8620, EngineCommitFaultKind::AppliedAnswerLost, true),
@@ -258,12 +276,19 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
             vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
         );
     }
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effect",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_without_a_record() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let group = uuid(8630);
     for number in [8631, 8632, 8633] {
@@ -331,5 +356,11 @@ async fn a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_
             SqlValue::Integer(0.try_into().unwrap())
         ]]
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_without_a_record",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }

@@ -20,8 +20,7 @@ fn wake_sequences_are_deterministic_declared_and_finish_once(case: hegel::TestCa
             1 => Event::Due {
                 occurrence: time(case.draw(gs::integers::<i64>().min_value(0).max_value(10_080))),
             },
-            2 => Event::Cancel,
-            _ => Event::Discard,
+            _ => Event::Cancel,
         };
         match crate::engine::machine_property_support::checked_step::<WakeTimer>(
             &state,
@@ -53,7 +52,6 @@ fn every_wake_state_event_pair_matches_the_declared_edges() {
                     occurrence: time(5),
                 },
                 Event::Cancel,
-                Event::Discard,
             ]
             .into_iter()
             .map(move |event| (state.clone(), event))

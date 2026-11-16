@@ -155,6 +155,30 @@ async fn the_static_alarm_query_combines_machine_and_legacy_control_deadlines() 
     }
 }
 
+/// V5.4: with test-support the query registers six kinds, the second test table
+/// included, and still has no compound term.
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn the_test_support_alarm_query_registers_six_kinds_and_the_sixth_contributes() {
+    for table in [
+        "FROM wakes ",
+        "FROM automations ",
+        "FROM notification_windows ",
+        "FROM workspace_drains ",
+        "FROM engine_probe_items ",
+        "FROM engine_alarm_only_items ",
+    ] {
+        assert!(ALARM_INPUTS.contains(table), "{table}");
+    }
+    let mut connection = database().await;
+    sqlx::query("INSERT INTO engine_alarm_only_items VALUES (?,'1970-01-01T00:15:00.000Z','waiting','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')")
+        .bind(key(2))
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    assert_eq!(alarm(&mut connection).await, (Some(900_000), None));
+}
+
 #[tokio::test]
 async fn due_selection_orders_before_its_per_kind_cap() {
     let mut connection = database().await;

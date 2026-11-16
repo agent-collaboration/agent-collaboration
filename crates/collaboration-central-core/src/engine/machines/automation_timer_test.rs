@@ -24,12 +24,11 @@ fn automation_sequences_never_repeat_an_occurrence_and_catch_up_once(case: hegel
             1 => Event::Due {
                 occurrence: time(case.draw(gs::integers::<i64>().min_value(0).max_value(10_080))),
             },
-            2 => Event::Disable,
-            _ => Event::Discard,
+            _ => Event::Disable,
         };
         let selected = match &event {
             Event::Due { occurrence } => Some(*occurrence),
-            Event::Disable | Event::Discard => None,
+            Event::Disable => None,
         };
         match crate::engine::machine_property_support::checked_step::<AutomationTimer>(
             &state,
@@ -97,7 +96,6 @@ fn every_automation_state_event_pair_matches_the_declared_edges() {
                 occurrence: time(5),
             },
             Event::Disable,
-            Event::Discard,
         ]
         .into_iter()
         .map(move |event| (state.clone(), event))

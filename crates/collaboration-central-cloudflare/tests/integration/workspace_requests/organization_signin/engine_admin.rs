@@ -412,45 +412,133 @@ async fn discard_runs_the_finishing_transition_and_refuses_unsupported_and_stale
     engine.close().await;
 }
 
-#[tokio::test]
-async fn discarding_a_retired_unreadable_automation_reports_subject_unreadable_and_keeps_its_record()
- {
-    // Probe of the design's "Discard on a retired automation" when the subject
-    // itself is unreadable (the common retirement cause).
-    let engine = EngineOrg::new().await;
+/// One retired subject with a corrupt stored value, for the F1 / V13 item 3 cases.
+enum Corruption {
+    AutomationTimingRule,
+    AutomationTarget,
+    WakeDueAt,
+    WakeTarget,
+    AutomationLifecycle,
+}
+
+async fn retired_with(engine: &EngineOrg, corruption: &Corruption) -> (&'static str, String) {
     let first = next_mark(engine.now());
-    let automation = engine.automation(first, "corrupt").await;
-    engine
-        .raw(
+    let (kind, subject, sql): (&'static str, String, &'static str) = match corruption {
+        Corruption::AutomationTimingRule => (
+            "automation_timer",
+            engine.automation(first, "corrupt timing").await,
             "UPDATE automations SET timing_rule='not-json' WHERE automation_id=?",
-            vec![text(&automation)],
-        )
-        .await;
+        ),
+        Corruption::AutomationTarget => (
+            "automation_timer",
+            engine.automation(first, "corrupt target").await,
+            "UPDATE automations SET target='not-json' WHERE automation_id=?",
+        ),
+        Corruption::WakeDueAt => (
+            "wake_timer",
+            engine.wake(first, "corrupt due").await,
+            "UPDATE wakes SET due_at='not-a-time' WHERE wake_id=?",
+        ),
+        Corruption::WakeTarget => (
+            "wake_timer",
+            engine.wake(first, "corrupt target").await,
+            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+        ),
+        Corruption::AutomationLifecycle => (
+            "automation_timer",
+            engine.automation(first, "corrupt state").await,
+            "UPDATE automations SET state='mangled' WHERE automation_id=?",
+        ),
+    };
+    engine.raw(sql, vec![text(&subject)]).await;
     engine.set(first);
     engine.after_event().await;
     engine.set(first + minutes(5));
     engine.after_event().await;
+    assert_eq!(
+        engine.record(kind, &subject).await[0][..2],
+        [text("retired"), integer(2)]
+    );
+    (kind, subject)
+}
+
+async fn subject_state(
+    engine: &EngineOrg,
+    kind: &str,
+    subject: &str,
+) -> Vec<Vec<central_storage::SqlValue>> {
+    match kind {
+        "wake_timer" => {
+            engine
+                .rows(
+                    "SELECT state FROM wakes WHERE wake_id=?",
+                    vec![text(subject)],
+                )
+                .await
+        }
+        _ => automation_state(engine, subject).await,
+    }
+}
+
+#[tokio::test]
+async fn discard_finishes_a_retired_subject_whose_payload_will_not_decode() {
+    // F1 / V13 item 3: Discard reads only the lifecycle facts, so a corrupt
+    // timing_rule, due_at or target does not stop it; no payload repair first.
+    for corruption in [
+        Corruption::AutomationTimingRule,
+        Corruption::WakeDueAt,
+        Corruption::AutomationTarget,
+        Corruption::WakeTarget,
+    ] {
+        let engine = EngineOrg::new().await;
+        let (kind, subject) = retired_with(&engine, &corruption).await;
+        let attempt = engine.attempt_id(kind, &subject).await;
+
+        let answer = engine.discard(&attempt).await;
+
+        assert_eq!(answer, serde_json::json!({"result": "engineDiscarded"}));
+        assert_eq!(
+            subject_state(&engine, kind, &subject).await,
+            vec![vec![text("disabled")]]
+        );
+        assert!(
+            engine.record(kind, &subject).await.is_empty(),
+            "the record is gone in the same batch"
+        );
+        engine.close().await;
+    }
+}
+
+#[tokio::test]
+async fn discarding_a_retired_subject_whose_lifecycle_state_will_not_decode_reports_subject_unreadable()
+ {
+    let engine = EngineOrg::new().await;
+    let (kind, subject) = retired_with(&engine, &Corruption::AutomationLifecycle).await;
     let before = engine
         .rows(
             "SELECT * FROM central_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
-            vec![text(&automation)],
+            vec![text(&subject)],
         )
         .await;
-    let attempt = engine.attempt_id("automation_timer", &automation).await;
+    let attempt = engine.attempt_id(kind, &subject).await;
 
     let answer = engine.discard(&attempt).await;
 
-    let after = engine
-        .rows(
-            "SELECT * FROM central_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
-            vec![text(&automation)],
-        )
-        .await;
+    assert_eq!(answer, refused("subjectUnreadable"));
     assert_eq!(
-        answer,
-        refused("subjectUnreadable"),
-        "an unreadable subject cannot run Discard"
+        engine
+            .rows(
+                "SELECT * FROM central_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
+                vec![text(&subject)],
+            )
+            .await,
+        before,
+        "nothing changed"
     );
-    assert_eq!(after, before, "nothing changed");
+    assert_eq!(
+        subject_state(&engine, kind, &subject).await,
+        vec![vec![text("mangled")]],
+        "never coerced"
+    );
     engine.close().await;
 }

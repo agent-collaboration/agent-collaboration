@@ -1,6 +1,9 @@
 //! V2 notice units and engine_source on the workerd host, through the real admin
 //! route: a whole unit fails, recovers by itself, restarts its 60-day period,
 //! retires at 60 days, stays stopped, and comes back only by EngineRetry.
+use super::super::engine_evidence::{
+    assert_every_written_attempt_id_is_uuid_v7, install_attempt_id_witness,
+};
 use super::engine_admin_support::*;
 use central_storage::SqlValue;
 use collaboration_central_core::EngineReadFault;
@@ -80,6 +83,7 @@ fn failing(count: i64, next: Time) -> Vec<Vec<SqlValue>> {
 #[tokio::test]
 async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry() {
     let engine = EngineOrg::new().await;
+    install_attempt_id_witness(engine.runtime().await.statement_host()).await;
     let thread = engine.thread().await;
     let recipient = engine.observer(&thread).await;
     engine.post(&thread).await;
@@ -198,6 +202,12 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
         unit_record(&engine, WINDOWS).await.is_empty(),
         "no record remains"
     );
+    assert_every_written_attempt_id_is_uuid_v7(
+        engine.runtime().await.statement_host(),
+        "the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry",
+        &[],
+    )
+    .await;
     engine.close().await;
 }
 
@@ -268,6 +278,7 @@ fn corrupt_drain(count: i64, next: Time) -> Vec<Vec<SqlValue>> {
 #[tokio::test]
 async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry() {
     let engine = EngineOrg::new().await;
+    install_attempt_id_witness(engine.runtime().await.statement_host()).await;
     let thread = engine.thread().await;
     engine.observer(&thread).await;
     undrained_post(&engine, &thread).await;
@@ -392,12 +403,19 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
         unit_record(&engine, DRAINS).await.is_empty(),
         "no record remains"
     );
+    assert_every_written_attempt_id_is_uuid_v7(
+        engine.runtime().await.statement_host(),
+        "the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry",
+        &[],
+    )
+    .await;
     engine.close().await;
 }
 
 #[tokio::test]
 async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run() {
     let engine = EngineOrg::new().await;
+    install_attempt_id_witness(engine.runtime().await.statement_host()).await;
     let first = next_mark(engine.now());
     let wake = engine.wake(first, "wake behind a broken source").await;
     let automation = engine.automation(first, "other kind").await;
@@ -500,5 +518,11 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
             .await
             .is_empty()
     );
+    assert_every_written_attempt_id_is_uuid_v7(
+        engine.runtime().await.statement_host(),
+        "a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run",
+        &[],
+    )
+    .await;
     engine.close().await;
 }

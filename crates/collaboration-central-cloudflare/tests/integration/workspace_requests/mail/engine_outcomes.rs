@@ -1,4 +1,7 @@
 //! V3: superseded, constraint, uncertain and store-down outcomes on the workerd host.
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::support::*;
 use super::engine_probe_support::*;
 use collaboration_central_core::{
@@ -13,6 +16,7 @@ fn minutes(count: i64) -> chrono::Duration {
 #[tokio::test]
 async fn a_held_due_loses_its_compare_and_set_to_a_stop_request_and_ends_superseded() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let due = now(&fixture) + minutes(5);
     let (item, group) = (probe_id(9000), probe_id(9001));
@@ -48,6 +52,12 @@ async fn a_held_due_loses_its_compare_and_set_to_a_stop_request_and_ends_superse
         vec![text("stopped"), integer(0), integer(0)],
         "the stale Due reloads, finds the item stopped and records nothing"
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "a_held_due_loses_its_compare_and_set_to_a_stop_request_and_ends_superseded",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
@@ -60,6 +70,7 @@ async fn race_one_request_id(
     Vec<Vec<central_storage::SqlValue>>,
 ) {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let group = probe_id(9011);
     let (first_item, second_item) = (probe_id(9012), probe_id(9013));
@@ -108,6 +119,12 @@ async fn race_one_request_id(
         sql: "SELECT (SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?),(SELECT COUNT(*) FROM engine_probe_items WHERE group_id=? AND state='fired')",
         args: vec![text(group), text(id::<workspace_model::RequestId>(9010)), text(group)],
     }).await.unwrap().rows;
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "racing_requests_with_one_id_commit_once_in_either_release_order",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
     (first, second, rows)
 }
@@ -142,6 +159,7 @@ async fn racing_requests_with_one_id_commit_once_in_either_release_order() {
 #[tokio::test]
 async fn a_second_request_after_the_winner_committed_replays_or_is_refused() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let group = probe_id(9021);
     let (item, other) = (probe_id(9022), probe_id(9023));
@@ -186,6 +204,12 @@ async fn a_second_request_after_the_winner_committed_replays_or_is_refused() {
         vec![text("waiting"), integer(1), integer(0)]
     );
     assert_eq!(receipts(&runtime, 9020).await, 1);
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "a_second_request_after_the_winner_committed_replays_or_is_refused",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
@@ -193,6 +217,7 @@ async fn rejected_due_with_optional_stop(
     stop_before_failure_write: bool,
 ) -> Vec<central_storage::SqlValue> {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let due = now(&fixture) + minutes(5);
     let (item, group) = (probe_id(9030), probe_id(9031));
@@ -231,6 +256,12 @@ async fn rejected_due_with_optional_stop(
     let facts = probe_facts(&runtime, item, group).await;
     let mut rows = facts;
     rows.extend(attempt(&runtime, item).await.into_iter().flatten());
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "a_finishing_request_beats_a_stale_failure_write_and_its_control_records",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
     rows
 }
@@ -259,6 +290,7 @@ async fn a_finishing_request_beats_a_stale_failure_write_and_its_control_records
 #[tokio::test]
 async fn a_due_unique_violation_records_only_its_item_and_the_others_commit() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let due = now(&fixture) + minutes(5);
     let group = probe_id(9040);
@@ -300,6 +332,12 @@ async fn a_due_unique_violation_records_only_its_item_and_the_others_commit() {
             text("constraint_violated")
         ]]
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "a_due_unique_violation_records_only_its_item_and_the_others_commit",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
@@ -310,6 +348,7 @@ async fn a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled() {
         (9055, EngineCommitFaultKind::NotAppliedAnswerLost, false),
     ] {
         let fixture = Fixture::new().await;
+        witness_fixture_attempt_ids(&fixture).await;
         let runtime = runtime(&fixture).await;
         let due = now(&fixture) + minutes(5);
         let (item, group) = (probe_id(number), probe_id(number + 1));
@@ -337,6 +376,12 @@ async fn a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled() {
             vec![text("fired"), integer(1), integer(0)],
             "{kind:?}: the next pass finishes it, the effect exists once"
         );
+        assert_fixture_attempt_ids_are_uuid_v7(
+            &fixture,
+            "a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled",
+            &[],
+        )
+        .await;
         fixture.host.close().await;
     }
 }
@@ -345,6 +390,7 @@ async fn a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled() {
 async fn operational_database_codes_are_never_charged_to_the_item() {
     for (number, code) in [(9060, 13), (9063, 778), (9066, 5), (9069, 99_999)] {
         let fixture = Fixture::new().await;
+        witness_fixture_attempt_ids(&fixture).await;
         let runtime = runtime(&fixture).await;
         let due = now(&fixture) + minutes(5);
         let (item, group) = (probe_id(number), probe_id(number + 1));
@@ -377,6 +423,12 @@ async fn operational_database_codes_are_never_charged_to_the_item() {
             vec![text("fired"), integer(1), integer(0)],
             "code {code}: worked normally when the alarm fires"
         );
+        assert_fixture_attempt_ids_are_uuid_v7(
+            &fixture,
+            "operational_database_codes_are_never_charged_to_the_item",
+            &[],
+        )
+        .await;
         fixture.host.close().await;
     }
 }
@@ -386,6 +438,7 @@ async fn no_unit_starts_after_central_store_down_and_started_units_settle() {
     // Seven earlier units are held mid-handle so they are in flight on both hosts
     // (workerd storage calls do not yield), then the eighth hits the outage.
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let due = now(&fixture) + minutes(5);
     let group = probe_id(9100);
@@ -462,12 +515,19 @@ async fn no_unit_starts_after_central_store_down_and_started_units_settle() {
         vec![text("waiting"), integer(7), integer(0)],
         "the faulted item carries no record"
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "no_unit_starts_after_central_store_down_and_started_units_settle",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn one_held_unit_never_delays_the_other_nineteen_or_a_probe_request() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let due = now(&fixture) + minutes(5);
     let group = probe_id(9200);
@@ -512,5 +572,11 @@ async fn one_held_unit_never_delays_the_other_nineteen_or_a_probe_request() {
         probe_facts(&runtime, items[0], group).await[0],
         text("fired")
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "one_held_unit_never_delays_the_other_nineteen_or_a_probe_request",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }

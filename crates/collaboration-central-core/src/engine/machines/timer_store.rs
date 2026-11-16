@@ -21,10 +21,10 @@ use workspace_model::central_mail as mail;
 pub(crate) struct WakeStore<'a, R: EngineHost>(pub &'a R);
 pub(crate) struct AutomationStore<'a, R: EngineHost>(pub &'a R);
 
-const WAKE_FAILURE: &str = guarded_attempt_sql!(
+pub(crate) const WAKE_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM wakes WHERE wake_id IS ?20 AND target IS ?21 AND due_at IS ?22 AND text IS ?23 AND state IS ?24 AND created_at IS ?25 AND updated_at IS ?26 AND state NOT IN ('done','disabled'))"
 );
-const AUTOMATION_FAILURE: &str = guarded_attempt_sql!(
+pub(crate) const AUTOMATION_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM automations WHERE automation_id IS ?20 AND target IS ?21 AND timing_rule IS ?22 AND anchor_at IS ?23 AND expires_at IS ?24 AND evaluated_through_at IS ?25 AND text IS ?26 AND next_due_at IS ?27 AND state IS ?28 AND created_at IS ?29 AND updated_at IS ?30 AND state NOT IN ('done','disabled'))"
 );
 

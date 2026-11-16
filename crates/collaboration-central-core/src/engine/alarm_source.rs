@@ -83,6 +83,22 @@ enum Unit {
     Windows,
     Drains,
 }
+#[cfg(feature = "test-support")]
+impl Unit {
+    /// The visit-order receipt names a unit by its subject (R2/R3).
+    fn start_receipt(&self, now: EngineTime) -> super::due_batch_state::DueUnitStart {
+        let (kind, key) = match self {
+            Self::Machine(kind, row) => (kind.kind().0, row.key.0.clone()),
+            Self::Windows => ("legacy_notice_windows", "all".to_owned()),
+            Self::Drains => ("legacy_workspace_drains", "all".to_owned()),
+        };
+        super::due_batch_state::DueUnitStart {
+            batch_start_unix_millis: now.timestamp_millis(),
+            machine_kind: kind.to_owned(),
+            subject_key: key,
+        }
+    }
+}
 
 fn source(kind: MachineKind) -> EngineSubject {
     EngineSubject {
@@ -286,6 +302,9 @@ impl<R: EngineHost> Engine<'_, R> {
                         if stop.load(Ordering::Acquire) {
                             return AlarmResult::default();
                         }
+                        #[cfg(feature = "test-support")]
+                        self.due_batches()
+                            .record_unit_start(unit.start_receipt(now));
                         let (work, down) = self.run_engine_unit(unit, now).await;
                         if down {
                             stop.store(true, Ordering::Release);

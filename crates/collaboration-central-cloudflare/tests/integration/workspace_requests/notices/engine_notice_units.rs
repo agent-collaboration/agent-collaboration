@@ -1,6 +1,9 @@
 //! V2 on the workerd host: a corrupt drain never pulls the alarm off the grid,
 //! and the drain unit's control row gates the due batch and every
 //! request-triggered drain, across an owner reset.
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::engine_v2_support::{
     alarm_ms, minutes, next_mark, now, raw, record, rows, runtime, set_now, set_wake, stamp,
     wake_messages,
@@ -47,6 +50,7 @@ async fn drain_due(f: &Fixture) -> SqlValue {
 #[tokio::test]
 async fn a_failing_drain_arms_its_next_try_on_a_mark_never_its_past_drain_due() {
     let f = Fixture::new().await;
+    witness_fixture_attempt_ids(&f).await;
     f.area(8400).await;
     let first = next_mark(now(&f));
     let past_due = now(&f) - chrono::Duration::seconds(7);
@@ -88,12 +92,19 @@ async fn a_failing_drain_arms_its_next_try_on_a_mark_never_its_past_drain_due() 
         );
     }
     assert_eq!(wake_messages(&runtime, &wake).await, 1, "wakes unaffected");
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &f,
+        "a_failing_drain_arms_its_next_try_on_a_mark_never_its_past_drain_due",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }
 
 #[tokio::test]
 async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_next_try() {
     let mut f = Fixture::new().await;
+    witness_fixture_attempt_ids(&f).await;
     f.area(8410).await;
     let failure = next_mark(now(&f));
     let cursor = corrupt_drain(&f, failure - chrono::Duration::seconds(1)).await;
@@ -165,12 +176,19 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
     );
     assert_eq!(drain_due(&f).await, SqlValue::Null, "and drains");
     assert!(record(&runtime, DRAINS, "all").await.is_empty());
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &f,
+        "a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_next_try",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }
 
 #[tokio::test]
 async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committed_answer() {
     let f = Fixture::new().await;
+    witness_fixture_attempt_ids(&f).await;
     f.area(8420).await;
     let runtime = runtime(&f).await;
     let mark = next_mark(now(&f) + minutes(1));
@@ -246,5 +264,11 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
         whole,
         "one workspace's success leaves the unit's record unchanged"
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &f,
+        "a_failing_request_drain_records_against_the_unit_and_keeps_its_committed_answer",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }

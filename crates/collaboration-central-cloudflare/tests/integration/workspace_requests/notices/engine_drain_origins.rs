@@ -2,6 +2,9 @@
 //! separately, then mixed across two workspaces. The plain workerd fixture
 //! captures no Worker logs, so the observation naming the workspace is
 //! asserted on the native host only.
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::engine_v2_support::{
     alarm_ms, next_mark, now, raw, record, rows, runtime, set_now, set_wake, stamp, wake_messages,
 };
@@ -85,6 +88,7 @@ struct Case {
 }
 async fn case() -> Case {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     fixture.area(8600).await;
     let at = next_mark(now(&fixture));
     drain_due_at(
@@ -138,6 +142,12 @@ async fn a_workspace_store_outage_is_recorded_and_the_batch_continues() {
             text("other_store_unavailable")
         ]
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        f,
+        "a_workspace_store_outage_is_recorded_and_the_batch_continues",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }
 
@@ -171,6 +181,12 @@ async fn central_down_on_the_drain_batch_records_nothing_and_rearms() {
         SqlValue::Null,
         "drained once central is back"
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        f,
+        "central_down_on_the_drain_batch_records_nothing_and_rearms",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }
 
@@ -214,6 +230,12 @@ async fn rejected_and_uncertain_and_guard_failed_drain_batches_each_take_their_o
             before,
             "{kind:?}: nothing committed"
         );
+        assert_fixture_attempt_ids_are_uuid_v7(
+            f,
+            "rejected_and_uncertain_and_guard_failed_drain_batches_each_take_their_own_outcome",
+            &[],
+        )
+        .await;
         f.host.close().await;
     }
 }
@@ -241,6 +263,12 @@ async fn a_unique_constraint_on_the_drain_batch_is_recorded_as_constraint_violat
     );
     assert_eq!(drain_row(f, &f.workspace).await, before);
     assert_eq!(wake_messages(&runtime, &case.wake).await, 1);
+    assert_fixture_attempt_ids_are_uuid_v7(
+        f,
+        "a_unique_constraint_on_the_drain_batch_is_recorded_as_constraint_violated",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }
 
@@ -269,6 +297,12 @@ async fn remote_down_never_masks_central_down_across_two_workspaces() {
         record(&runtime, DRAINS, "all").await.is_empty(),
         "CentralDown wins: no record"
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        f,
+        "remote_down_never_masks_central_down_across_two_workspaces",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }
 
@@ -292,5 +326,11 @@ async fn a_committed_workspace_stays_committed_when_another_violates_a_constrain
     assert_eq!(drain_row(f, &other).await, other_before, "W2 rolled back");
     let found = record(&runtime, DRAINS, "all").await;
     assert_eq!(found[0][3], text("constraint_violated"));
+    assert_fixture_attempt_ids_are_uuid_v7(
+        f,
+        "a_committed_workspace_stays_committed_when_another_violates_a_constraint",
+        &[],
+    )
+    .await;
     f.host.close().await;
 }

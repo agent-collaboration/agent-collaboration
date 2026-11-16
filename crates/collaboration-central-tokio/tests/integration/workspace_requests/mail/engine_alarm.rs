@@ -21,7 +21,7 @@ fn ms(time: Time) -> Option<i64> {
 
 /// The native driver computed its deadline for the published alarm at the
 /// current reading, so a later UTC move cannot make it fire on its own.
-async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
+pub(super) async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
     if let Some(alarm) = alarm_ms(runtime) {
         fixture
             .clock
@@ -33,7 +33,7 @@ async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
             .await;
     }
 }
-async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
+pub(super) async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
     driver_settled(fixture, runtime).await;
     fixture.clock.set_utc(time);
     runtime.after_event().await.unwrap();

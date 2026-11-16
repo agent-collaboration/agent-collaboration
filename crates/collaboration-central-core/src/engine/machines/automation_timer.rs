@@ -52,14 +52,12 @@ pub(crate) enum Event {
         )
     )]
     Disable,
-    Discard,
 }
 impl EventTag for Event {
     fn event_tag(&self) -> &'static str {
         match self {
             Self::Due { .. } => "due",
             Self::Disable => "disable",
-            Self::Discard => "discard",
         }
     }
 }
@@ -126,7 +124,7 @@ impl Machine for AutomationTimer {
                 };
                 Ok((next, vec![Effect::QueueMessage(message), schedule]))
             }
-            (State::Active(row), Event::Disable | Event::Discard) => Ok((
+            (State::Active(row), Event::Disable) => Ok((
                 State::Disabled {
                     evaluated: row.evaluated,
                 },
@@ -135,7 +133,7 @@ impl Machine for AutomationTimer {
             (State::Done { .. } | State::Disabled { .. }, Event::Due { .. }) => {
                 Err(TransitionError::Stale)
             }
-            (State::Done { .. } | State::Disabled { .. }, Event::Disable | Event::Discard) => {
+            (State::Done { .. } | State::Disabled { .. }, Event::Disable) => {
                 Err(TransitionError::Domain(TimerRefusal::AlreadyFinished))
             }
         }
@@ -157,12 +155,6 @@ impl Machine for AutomationTimer {
             Transition {
                 from: "active",
                 event: "disable",
-                to: "disabled",
-                terminal: true,
-            },
-            Transition {
-                from: "active",
-                event: "discard",
                 to: "disabled",
                 terminal: true,
             },

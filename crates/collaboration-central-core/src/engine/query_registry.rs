@@ -67,6 +67,22 @@ macro_rules! probe_rows {
         )
     };
 }
+/// The second test table (V5.4): a timed kind with no machine and no due list,
+/// registered only so the alarm-inputs query runs with six kinds.
+#[cfg(feature = "test-support")]
+macro_rules! alarm_only_rows {
+    () => {
+        machine_rows!(
+            "engine_alarm_only_items",
+            "item_id",
+            "s.due_at",
+            "engine_alarm_only",
+            "'waiting'",
+            "'fired','stopped'",
+            "s.due_at IS NOT NULL"
+        )
+    };
+}
 #[cfg(feature = "test-support")]
 macro_rules! all_grid_inputs {
     () => {
@@ -74,6 +90,8 @@ macro_rules! all_grid_inputs {
             grid_inputs!(),
             ",COALESCE(",
             controlled_machine!("engine_probe", probe_rows!()),
+            ",9223372036855),COALESCE(",
+            controlled_machine!("engine_alarm_only", alarm_only_rows!()),
             ",9223372036855)"
         )
     };

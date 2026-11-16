@@ -409,18 +409,25 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         .statement_host()
         .alarm()
         .expect("W1 drain keeps an alarm");
+    // Let the real native driver settle on the published deadline, then advance
+    // the one clock: the driver itself runs the due batch that drains W1.
+    f.clock.not_due_check_now(f.clock.wall_deadline(next)).await;
+    let before_driver = runtime.alarm_completion_count();
     f.clock.advance_to(next).unwrap();
-    let batch = tokio::spawn({
-        let runtime = runtime.clone();
-        async move { runtime.after_event().await }
-    });
-    drained.until_held().await;
+    let driver_drained = tokio::select! {
+        () = drained.until_held() => true,
+        () = runtime.until_alarm_completed(before_driver + 1) => false,
+    };
+    assert!(
+        driver_drained,
+        "the native driver completed without reaching the due drain"
+    );
     let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
     assert_eq!(after.rows.len(), 1);
     assert!(matches!(&after.rows[0][0], SqlValue::Integer(position) if position.get() > 0));
     assert_eq!(after.rows[0][1], SqlValue::Null);
     drained.release();
-    let _ = batch.await;
+    runtime.until_alarm_completed(before_driver + 1).await;
     f.host.close().await;
 }
 

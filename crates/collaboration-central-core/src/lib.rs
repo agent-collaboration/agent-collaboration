@@ -9,6 +9,8 @@ pub mod engine_owed_probe;
 pub mod engine_probe;
 mod engine_wiring;
 #[cfg(feature = "test-support")]
+pub use engine::DueUnitStart;
+#[cfg(feature = "test-support")]
 pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineReadFault};
 pub use engine::{AlarmNotPublished, EventCompletion};
 pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};

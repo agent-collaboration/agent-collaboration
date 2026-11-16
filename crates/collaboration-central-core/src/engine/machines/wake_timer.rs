@@ -45,14 +45,12 @@ pub(crate) enum Event {
         )
     )]
     Cancel,
-    Discard,
 }
 impl EventTag for Event {
     fn event_tag(&self) -> &'static str {
         match self {
             Self::Due { .. } => "due",
             Self::Cancel => "cancel",
-            Self::Discard => "discard",
         }
     }
 }
@@ -87,9 +85,9 @@ impl Machine for WakeTimer {
                 )?;
                 Ok((State::Done, vec![Effect::QueueMessage(message)]))
             }
-            (State::Active(_), Event::Cancel | Event::Discard) => Ok((State::Disabled, vec![])),
+            (State::Active(_), Event::Cancel) => Ok((State::Disabled, vec![])),
             (State::Done | State::Disabled, Event::Due { .. }) => Err(TransitionError::Stale),
-            (State::Done | State::Disabled, Event::Cancel | Event::Discard) => {
+            (State::Done | State::Disabled, Event::Cancel) => {
                 Err(TransitionError::Domain(TimerRefusal::AlreadyFinished))
             }
         }
@@ -105,12 +103,6 @@ impl Machine for WakeTimer {
             Transition {
                 from: "active",
                 event: "cancel",
-                to: "disabled",
-                terminal: true,
-            },
-            Transition {
-                from: "active",
-                event: "discard",
                 to: "disabled",
                 terminal: true,
             },
