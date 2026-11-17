@@ -67,6 +67,10 @@ pub enum SubmitRefusal {
     OutboxUnavailable,
     #[error("this Router is not enrolled")]
     NotEnrolled,
+    /// The same RequestId was already used with different content or by
+    /// another caller; nothing new was stored or sent.
+    #[error("this request id was already used for a different request")]
+    RequestIdConflict,
     #[error("invalid request: {0}")]
     InvalidRequest(ProtocolError),
 }

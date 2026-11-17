@@ -34,8 +34,12 @@ pub use codex_conversation_operation_recorder::{
     CodexConversationOperationRecorder, CodexPermissionModes,
     UnavailableConversationOperationRecorder,
 };
+mod outbox_store;
 mod provider_session_event_hub;
 mod provider_session_record;
+pub use outbox_store::{
+    MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
+};
 pub use provider_operation_store::{
     PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,
     ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,

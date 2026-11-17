@@ -234,7 +234,7 @@ fn resubmitted_outbox_write(
     request_id: RequestId,
 ) -> Submission {
     if existing.caller != *caller || existing.payload != *payload {
-        return Submission::Refused(SubmitRefusal::InvalidRequest(request_id_policy()));
+        return Submission::Refused(SubmitRefusal::RequestIdConflict);
     }
     match existing.status {
         RequestStatus::InOutbox { flush_at } => Submission::InOutbox(OutboxReceipt {

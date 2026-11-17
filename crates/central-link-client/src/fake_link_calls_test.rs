@@ -214,7 +214,7 @@ async fn resubmitting_the_same_write_returns_its_receipt_and_new_content_is_refu
     assert!(
         matches!(
             changed,
-            Submission::Refused(SubmitRefusal::InvalidRequest(_))
+            Submission::Refused(SubmitRefusal::RequestIdConflict)
         ),
         "{changed:?}"
     );
