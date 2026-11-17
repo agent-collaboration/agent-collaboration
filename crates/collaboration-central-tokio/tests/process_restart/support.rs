@@ -237,3 +237,118 @@ pub(super) async fn read_claim_reservation(
         _ => Err("Claim reservation observer returned another result".into()),
     }
 }
+
+/// A startup control pinning the Fleet clock `seconds` after the imported
+/// fixture's records, so no Fleet work ever runs on the wall clock.
+pub fn pinned_after_import(seconds: i64) -> ConformanceResult<RuntimeControlRequest> {
+    Ok(RuntimeControlRequest {
+        address: ObjectAddress::Fleet,
+        command: RuntimeControl::SetTime {
+            now: collaboration_central_core::RegistryTime(
+                super::imported_board_fixture::time_after_import(seconds)?,
+            ),
+        },
+    })
+}
+
+/// A startup control pinning the Fleet clock one millisecond past the stopped
+/// operation's recovery deadline (its next attempt or killed-drive lease),
+/// read from the owning store, so the restart recovers it on the pinned clock.
+pub async fn pinned_at_recovery(
+    path: &Path,
+    identity: &Value,
+) -> ConformanceResult<RuntimeControlRequest> {
+    let mut connection = sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .read_only(true)
+        .connect()
+        .await?;
+    let id = identity
+        .as_str()
+        .ok_or("operation identity is not a string")?;
+    let row = query::<sqlx_turso::Turso>(
+        "SELECT next_attempt_at,drive_until FROM _fleet_sync_operations WHERE operation_id=?",
+    )
+    .bind(id)
+    .fetch_one(&mut connection)
+    .await?;
+    let ready = row
+        .try_get::<Option<i64>, _>("next_attempt_at")?
+        .into_iter()
+        .chain(row.try_get::<Option<i64>, _>("drive_until")?)
+        .max()
+        .and_then(|deadline| deadline.checked_add(1))
+        .ok_or("stopped operation has no recoverable deadline")?;
+    connection.close().await?;
+    Ok(RuntimeControlRequest {
+        address: ObjectAddress::Fleet,
+        command: RuntimeControl::SetTime {
+            now: collaboration_central_core::RegistryTime(
+                chrono::DateTime::from_timestamp_millis(ready)
+                    .ok_or("recovery deadline outside clock range")?,
+            ),
+        },
+    })
+}
+
+/// The Fleet clock this test pinned, observed from the owner.
+pub async fn pinned_fleet_time(
+    base: &str,
+) -> ConformanceResult<collaboration_central_core::RegistryTime> {
+    match control(base, ObjectAddress::Fleet, RuntimeControl::Observe)
+        .await?
+        .clock
+    {
+        collaboration_central_conformance::ClockObservation::Pinned { now } => Ok(now),
+        collaboration_central_conformance::ClockObservation::Wall => {
+            Err("the Fleet clock is not pinned".into())
+        }
+    }
+}
+
+/// Advances the pinned Fleet clock to the time the store says a running Fleet
+/// notice waits for: its next attempt when that is not yet due, otherwise the
+/// expiry of the drive lease still holding it (the killed drive's 30-second
+/// lease that RECOVERY_BOUND covers on the wall clock). The test moves its one
+/// clock to the stored deadline instead of waiting on wall time.
+pub async fn advance_fleet_to_due_notices(base: &str, path: &Path) -> ConformanceResult<()> {
+    let mut connection = sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .read_only(true)
+        .connect()
+        .await?;
+    let rows = query::<sqlx_turso::Turso>(
+        "SELECT next_attempt_at,drive_until FROM _fleet_sync_operations WHERE kind='central.fleet-notice' AND state='running'",
+    )
+    .fetch_all(&mut connection)
+    .await?;
+    connection.close().await?;
+    let now = pinned_fleet_time(base).await?.0.timestamp_millis();
+    let mut target = now;
+    for row in rows {
+        let next = row.try_get::<Option<i64>, _>("next_attempt_at")?;
+        let lease = row.try_get::<Option<i64>, _>("drive_until")?;
+        let waits_for = match (next, lease) {
+            (Some(next), _) if next >= now => Some(next),
+            (_, Some(lease)) if lease >= now => Some(lease),
+            _ => None,
+        };
+        if let Some(deadline) = waits_for.and_then(|deadline| deadline.checked_add(1)) {
+            target = target.max(deadline);
+        }
+    }
+    if target > now {
+        control(
+            base,
+            ObjectAddress::Fleet,
+            RuntimeControl::SetTime {
+                now: collaboration_central_core::RegistryTime(
+                    chrono::DateTime::from_timestamp_millis(target)
+                        .ok_or("stored deadline outside clock range")?,
+                ),
+            },
+        )
+        .await?;
+    }
+    Ok(())
+}
