@@ -61,10 +61,20 @@ pub struct FailureRecord {
     pub updated_at: EngineTime,
 }
 
+/// What one observed failure does to a subject's attempt record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FailureTransition {
+    /// Write this record in the failure's batch.
+    Record(FailureRecord),
+    /// The subject is retired, or failing with its next try still ahead: the
+    /// run that saw this failure should not have worked it yet, so the failure
+    /// counts for nothing and nothing is written (R4: each further failure
+    /// retries on the next mark).
+    Unchanged,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum FailureUpdateError {
-    #[error("a retired subject cannot fail again until an admin retries it")]
-    AlreadyRetired,
     #[error("the failure count is exhausted")]
     CountExhausted,
     #[error("the supplied attempt identifier is not UUIDv7")]
@@ -80,12 +90,16 @@ pub fn after_failure(
     now: EngineTime,
     threshold: RetirementThreshold,
     new_attempt_id: uuid::Uuid,
-) -> Result<FailureRecord, FailureUpdateError> {
+) -> Result<FailureTransition, FailureUpdateError> {
     if !crate::supported_time(now) {
         return Err(FailureUpdateError::Alarm(AlarmDecisionError::OutOfRange));
     }
-    if prior.is_some_and(|record| matches!(record.state, AttemptState::Retired { .. })) {
-        return Err(FailureUpdateError::AlreadyRetired);
+    match prior.map(|record| &record.state) {
+        Some(AttemptState::Retired { .. }) => return Ok(FailureTransition::Unchanged),
+        Some(AttemptState::Failing { next_try_at }) if *next_try_at > now => {
+            return Ok(FailureTransition::Unchanged);
+        }
+        Some(AttemptState::Failing { .. }) | None => {}
     }
     let count = prior
         .map_or(Some(1), |record| record.failure_count.get().checked_add(1))
@@ -109,7 +123,7 @@ pub fn after_failure(
             next_try_at: next_five_minute_mark(now)?,
         }
     };
-    Ok(FailureRecord {
+    Ok(FailureTransition::Record(FailureRecord {
         attempt_id,
         failure_count: count,
         state,
@@ -118,7 +132,7 @@ pub fn after_failure(
         last_failed_at: now,
         created_at: prior.map_or(now, |record| record.created_at),
         updated_at: now,
-    })
+    }))
 }
 
 #[cfg(test)]
