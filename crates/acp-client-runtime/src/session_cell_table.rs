@@ -40,6 +40,8 @@ pub(crate) enum EntryEffectRoute {
 pub(crate) struct SessionCellTable {
     cells: Mutex<HashMap<String, Arc<Mutex<SessionCell>>>>,
     sink: OnceLock<Arc<dyn QueueEntrySink>>,
+    /// Wakes callers waiting for a session's cell to leave a state.
+    changed: tokio::sync::Notify,
 }
 
 impl SessionCellTable {
@@ -62,6 +64,7 @@ impl SessionCellTable {
         route: EntryEffectRoute,
     ) -> Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>> {
         let effects = self.apply(session_id, last_published, event)?;
+        self.changed.notify_waiters();
         Ok(match route {
             EntryEffectRoute::Caller => effects,
             EntryEffectRoute::Sink => self.deliver_entry_effects(session_id, effects),
@@ -75,6 +78,20 @@ impl SessionCellTable {
         match cell {
             Some(cell) => read(&lock(&cell)),
             None => read(&SessionCell::fresh()),
+        }
+    }
+
+    /// Waits while `holds` is true of the session's cell, rechecking after
+    /// every successful move on the table.
+    pub(crate) async fn wait_while(&self, session_id: &str, holds: impl Fn(&SessionCell) -> bool) {
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if !self.read(session_id, &holds) {
+                return;
+            }
+            changed.await;
         }
     }
 

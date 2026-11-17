@@ -466,6 +466,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             }
             self.wait_session_idle(provider_session_id.clone()).await?;
         }
+        // A close that found a turn running frees the session only once that
+        // turn's end is recorded on the cell (design note §12.1, EndingTurn).
+        tokio::select! {
+            () = self.shutdown.cancelled() => return Err(self.retired_operation_error()),
+            () = super::session_cell_bookkeeping::wait_for_close_turn(&self.session_cells, &provider_session_id) => {}
+        }
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Close {

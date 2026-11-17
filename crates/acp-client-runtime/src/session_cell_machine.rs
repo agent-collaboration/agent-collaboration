@@ -174,6 +174,10 @@ pub(crate) enum SessionCellEvent {
     CancelEntry {
         operation: QueuedOperation,
     },
+    /// A prompt sent directly, not from the line, opens the session's turn.
+    PromptStarted {
+        turn: TurnId,
+    },
     SteerRequested {
         agent_steers: bool,
     },
@@ -260,6 +264,7 @@ impl EventTag for SessionCellEvent {
             Self::UnmarkCommitted { .. } => "unmark_committed",
             Self::UnmarkFailed { .. } => "unmark_failed",
             Self::CancelEntry { .. } => "cancel_entry",
+            Self::PromptStarted { .. } => "prompt_started",
             Self::SteerRequested { .. } => "steer_requested",
             Self::CancelTurn => "cancel_turn",
             Self::TurnEnded { .. } => "turn_ended",
@@ -623,6 +628,33 @@ impl StateMachine for SessionCellMachine {
                     .map(|(sequence, _)| *sequence)
                     .ok_or(TransitionError::Domain(SessionCellRefusal::UnknownEntry))?;
                 entry_move(cell, sequence, QueuedEntryEvent::Cancel, None)
+            }
+            V::PromptStarted { turn } => {
+                if cell.live_generation().is_none() {
+                    // NotLoaded, Loading or Closing: the lifecycle's refusal.
+                    return Err(
+                        match lifecycle_move(cell, SessionLifecycleEvent::PromptRequested) {
+                            Err(refusal) => refusal,
+                            Ok(_) => TransitionError::Stale,
+                        },
+                    );
+                }
+                if cell.in_flight() {
+                    return Err(TransitionError::Domain(SessionCellRefusal::Turn(
+                        SessionTurnRefusal::TurnRunning,
+                    )));
+                }
+                let (opened, effects) = SessionTurnMachine::transition(
+                    &cell.turn,
+                    SessionTurnEvent::PromptStarted { turn },
+                )
+                .map_err(|refusal| lift(refusal, SessionCellRefusal::Turn))?;
+                let mut next = cell.clone();
+                next.turn = opened;
+                Ok((
+                    next,
+                    effects.into_iter().map(SessionCellEffect::Turn).collect(),
+                ))
             }
             V::SteerRequested { agent_steers } => {
                 let (turn, effects) = SessionTurnMachine::transition(

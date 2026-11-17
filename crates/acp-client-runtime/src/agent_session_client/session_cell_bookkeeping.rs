@@ -6,6 +6,7 @@
 
 use super::ExternalProviderRuntimeError;
 use crate::SessionGeneration;
+use crate::queued_entry_machine::SentOutcome;
 use crate::session_cell_machine::{SessionCellEffect, SessionCellEvent, SessionCellRefusal};
 use crate::session_cell_table::SessionCellTable;
 use crate::session_lifecycle_answers::refusal_answer;
@@ -13,6 +14,7 @@ use crate::session_lifecycle_machine::{
     CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle, SessionLifecycleEffect,
     SessionLifecycleRefusal,
 };
+use crate::session_turn_machine::TurnId;
 use state_machine_core::TransitionError;
 
 /// Admits a created identity: NotLoaded to Live under the run's next
@@ -183,6 +185,129 @@ pub(super) fn settle_close(
         | SessionCellEffect::Entry { .. }
         | SessionCellEffect::Turn(_) => None,
     })
+}
+
+/// Why a direct prompt couldn't open the session's turn: what its dispatch
+/// observer hears and what the caller gets, as before the cell decided it.
+pub(super) struct DirectTurnRefusal {
+    pub(super) observation: super::ProviderPromptDispatchObservation,
+    pub(super) error: ExternalProviderRuntimeError,
+}
+
+/// Opens the session's turn for a direct prompt: only while Live, with no
+/// turn running and no queued message in flight.
+pub(super) fn start_direct_turn(
+    cells: &SessionCellTable,
+    session_id: &str,
+    turn: TurnId,
+) -> Result<(), Box<DirectTurnRefusal>> {
+    let refusal = match cells.transition(
+        session_id,
+        SessionGeneration::UNTRACKED,
+        SessionCellEvent::PromptStarted { turn },
+        crate::session_cell_table::EntryEffectRoute::Sink,
+    ) {
+        Ok(_effects) => return Ok(()),
+        Err(refusal) => refusal,
+    };
+    let busy = DirectTurnRefusal {
+        observation: super::ProviderPromptDispatchObservation::Refused(
+            crate::ProviderDispatchRefusal::Busy,
+        ),
+        error: ExternalProviderRuntimeError::LocalBusy,
+    };
+    Err(Box::new(match refusal {
+        TransitionError::Domain(SessionCellRefusal::Lifecycle(
+            SessionLifecycleRefusal::NotLoaded,
+        )) => DirectTurnRefusal {
+            observation: super::ProviderPromptDispatchObservation::NotSubmitted,
+            error: ExternalProviderRuntimeError::LocalNotFound,
+        },
+        TransitionError::Domain(
+            SessionCellRefusal::Lifecycle(
+                SessionLifecycleRefusal::SessionClosing
+                | SessionLifecycleRefusal::DuplicateIdentity
+                | SessionLifecycleRefusal::SessionLoading
+                | SessionLifecycleRefusal::AlreadyLoaded
+                | SessionLifecycleRefusal::NothingToClose
+                | SessionLifecycleRefusal::CloseInProgress,
+            )
+            | SessionCellRefusal::Turn(_)
+            | SessionCellRefusal::Line(_)
+            | SessionCellRefusal::Entry(_)
+            | SessionCellRefusal::NotHead
+            | SessionCellRefusal::UnknownEntry
+            | SessionCellRefusal::NotLive,
+        )
+        | TransitionError::NotAllowed { .. }
+        | TransitionError::Stale => busy,
+    }))
+}
+
+/// Ends a session's turn when dropped. The outcome is unknown unless the
+/// prompt was shown applied or never sent (design note §16 refines this
+/// once the operation record decides it).
+pub(super) struct CellTurnGuard {
+    cells: std::sync::Arc<SessionCellTable>,
+    session_id: String,
+    turn: TurnId,
+    outcome: SentOutcome,
+}
+
+impl CellTurnGuard {
+    pub(super) fn new(
+        cells: &std::sync::Arc<SessionCellTable>,
+        session_id: &str,
+        turn: TurnId,
+    ) -> Self {
+        Self {
+            cells: std::sync::Arc::clone(cells),
+            session_id: session_id.to_owned(),
+            turn,
+            outcome: SentOutcome::Unknown,
+        }
+    }
+
+    /// The prompt returned its turn's result.
+    pub(super) fn applied(&mut self) {
+        self.outcome = SentOutcome::Applied;
+    }
+
+    /// The prompt was refused before it was sent.
+    pub(super) fn not_sent(&mut self) {
+        self.outcome = SentOutcome::Refused;
+    }
+}
+
+impl Drop for CellTurnGuard {
+    fn drop(&mut self) {
+        // Stale only when the turn already ended (a close freed it).
+        let _ended = self.cells.transition(
+            &self.session_id,
+            SessionGeneration::UNTRACKED,
+            SessionCellEvent::TurnEnded {
+                turn: self.turn,
+                outcome: self.outcome,
+            },
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        );
+    }
+}
+
+/// Waits while the session's close is ending its running turn: the close
+/// frees the session only after that turn's end is recorded.
+pub(super) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &str) {
+    cells
+        .wait_while(session_id, |cell| {
+            matches!(
+                cell.lifecycle,
+                SessionLifecycle::Closing {
+                    phase: crate::session_lifecycle_machine::ClosePhase::EndingTurn,
+                    ..
+                }
+            )
+        })
+        .await;
 }
 
 /// The session is closing on this connection.

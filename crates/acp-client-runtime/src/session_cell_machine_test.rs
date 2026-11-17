@@ -282,7 +282,7 @@ fn drawn_event(case: &hegel::TestCase, minted: &mut u128) -> SessionCellEvent {
     let sequence = u64::from(case.draw(gs::integers::<u8>().max_value(4)));
     let generation =
         SessionGeneration::from_number(u64::from(case.draw(gs::integers::<u8>().max_value(4))));
-    match case.draw(gs::integers::<u8>().max_value(24)) {
+    match case.draw(gs::integers::<u8>().max_value(25)) {
         0 => V::CreateAdmitted,
         1 => V::LoadRequested {
             via: RestoreVia::Load,
@@ -331,6 +331,12 @@ fn drawn_event(case: &hegel::TestCase, minted: &mut u128) -> SessionCellEvent {
         23 => V::SteerRequested {
             agent_steers: case.draw(gs::booleans()),
         },
+        24 => {
+            *minted += 1;
+            V::PromptStarted {
+                turn: turn(*minted),
+            }
+        }
         _ => V::CancelTurn,
     }
 }
@@ -578,5 +584,62 @@ fn a_failed_load_ends_its_waiting_messages_not_sent() {
     assert_eq!(
         NotSentReason::LoadFailed.human_phrase(),
         "the session couldn't be loaded"
+    );
+}
+
+/// Oracle: design note §3.5 and §11.2: every prompt runs as the session's
+/// one turn. A direct prompt opens it only while the session is Live and no
+/// queued message is in flight; while it runs, the line's head waits; its
+/// end frees the line.
+#[test]
+fn a_direct_prompt_holds_the_turn_until_it_ends() {
+    // Arrange
+    let cell = live_with_one_queued();
+    let mut effects = Vec::new();
+
+    // Act
+    let direct = step(
+        &cell,
+        SessionCellEvent::PromptStarted { turn: turn(7) },
+        &mut effects,
+    );
+    let blocked = SessionCellMachine::transition(&direct, SessionCellEvent::Commit { sequence: 0 });
+    let second =
+        SessionCellMachine::transition(&direct, SessionCellEvent::PromptStarted { turn: turn(8) });
+    let ended = step(
+        &direct,
+        SessionCellEvent::TurnEnded {
+            turn: turn(7),
+            outcome: SentOutcome::Applied,
+        },
+        &mut effects,
+    );
+    let commit = SessionCellMachine::transition(&ended, SessionCellEvent::Commit { sequence: 0 });
+    let not_loaded = SessionCellMachine::transition(
+        &SessionCell::fresh(),
+        SessionCellEvent::PromptStarted { turn: turn(9) },
+    );
+
+    // Assert
+    assert!(matches!(direct.turn, SessionTurn::Running { .. }));
+    assert_eq!(
+        blocked,
+        Err(TransitionError::Domain(SessionCellRefusal::NotHead))
+    );
+    assert_eq!(
+        second,
+        Err(TransitionError::Domain(SessionCellRefusal::Turn(
+            SessionTurnRefusal::TurnRunning
+        )))
+    );
+    assert!(
+        commit.is_ok(),
+        "the head commits once the turn ends: {commit:?}"
+    );
+    assert_eq!(
+        not_loaded,
+        Err(TransitionError::Domain(SessionCellRefusal::Lifecycle(
+            SessionLifecycleRefusal::NotLoaded
+        )))
     );
 }

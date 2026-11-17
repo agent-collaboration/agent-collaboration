@@ -251,9 +251,7 @@ impl SessionQueueDoor<'_> {
         provider_session_id: &str,
         refusal: TransitionError<SessionCellRefusal>,
     ) -> QueueRefusal {
-        let state = self
-            .cells
-            .read(provider_session_id, |cell| cell.lifecycle);
+        let state = self.cells.read(provider_session_id, |cell| cell.lifecycle);
         match refusal {
             TransitionError::Domain(SessionCellRefusal::Lifecycle(
                 refusal @ SessionLifecycleRefusal::NotLoaded,

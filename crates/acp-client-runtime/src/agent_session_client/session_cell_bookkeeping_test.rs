@@ -152,3 +152,40 @@ fn a_session_new_to_this_connection_runs_after_the_sinks_last_generation() {
     );
     assert!(!is_closing(&cells, SESSION));
 }
+
+/// Oracle: design note §12.1 (Closing{EndingTurn} advances only on the
+/// running turn's end) and the owner's close decision (a done close ends
+/// NotLoaded and publishes Closed). A close that finds a prompt running
+/// waits for that prompt's turn to end, then frees and publishes Closed.
+#[tokio::test]
+async fn a_close_during_a_prompt_frees_only_after_the_turn_ends() {
+    // Arrange
+    let cells = std::sync::Arc::new(SessionCellTable::default());
+    let generation = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED).expect("created");
+    let turn = TurnId(uuid::Uuid::from_u128(5));
+    assert!(
+        start_direct_turn(&cells, SESSION, turn).is_ok(),
+        "the prompt's turn opens"
+    );
+    let mut guard = CellTurnGuard::new(&cells, SESSION, turn);
+    admit_close(&cells, SESSION, close_attempt(1)).expect("the close is admitted");
+
+    // Act
+    let early = settle_close(&cells, SESSION, close_attempt(1), true);
+    let waiting = wait_for_close_turn(&cells, SESSION);
+    tokio::pin!(waiting);
+    let pending = futures_util::poll!(waiting.as_mut()).is_pending();
+    guard.applied();
+    drop(guard);
+    waiting.await;
+    let closed = settle_close(&cells, SESSION, close_attempt(1), true);
+
+    // Assert
+    assert_eq!(early, None, "nothing frees while the turn runs");
+    assert!(pending, "the close waits for the turn's end");
+    assert_eq!(
+        closed,
+        Some(generation),
+        "then it frees and publishes Closed"
+    );
+}
