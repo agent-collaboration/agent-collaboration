@@ -166,7 +166,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     });
     let _: bool = runtime.control("until-held", &pause).await.unwrap();
     f.workspace_batch(
-        "UPDATE changes SET change_id=? WHERE thread_id=? AND change_kind='posted'",
+        "UPDATE changes SET change_id=? WHERE change_id=(SELECT change_id FROM changes WHERE thread_id=? AND change_kind='posted' ORDER BY position DESC LIMIT 1)",
         vec![text(&later), text(&thread)],
     )
     .await;
