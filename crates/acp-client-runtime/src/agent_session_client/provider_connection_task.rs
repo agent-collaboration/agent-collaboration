@@ -914,7 +914,3 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         })
     }
 }
-
-#[cfg(test)]
-#[path = "provider_connection_task_test.rs"]
-mod tests;
