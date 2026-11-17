@@ -104,6 +104,7 @@ mod session_setting_machine;
     )
 )]
 mod session_turn_machine;
+mod state_machine_cell;
 
 #[cfg(test)]
 extern crate self as acp_client_runtime;
@@ -144,6 +145,7 @@ pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
     SessionEventSink, SessionGeneration,
 };
+pub use state_machine_cell::{CellEffects, CellRuntime, MachineCell};
 
 #[cfg(feature = "test-observation")]
 pub const MAX_ACP_FRAME_BYTES: usize = agent_session_client::MAX_ACP_FRAME_BYTES;
