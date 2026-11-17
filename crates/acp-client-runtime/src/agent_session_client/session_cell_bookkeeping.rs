@@ -1,93 +1,112 @@
 //! The connection's typed session states (D1 state machines, design note
-//! §11–§16): one SessionCell per provider session, replacing the connection
-//! task's separate sets of pending loads, pending closes, releases and
-//! generations. Every lifecycle decision is a transition on that one cell;
-//! the connection task runs the ACP calls and actor registration the
-//! transitions call for.
+//! §11–§16): the lifecycle moves on each provider session's `SessionCell`,
+//! replacing the connection's separate sets of pending loads, pending closes,
+//! releases, generations and close marks. Each function is one transition;
+//! the caller runs the ACP calls and actor registration it calls for.
 
 use super::ExternalProviderRuntimeError;
 use crate::SessionGeneration;
-use crate::session_cell_machine::{
-    SessionCell, SessionCellEffect, SessionCellEvent, SessionCellMachine, SessionCellRefusal,
-};
+use crate::session_cell_machine::{SessionCellEffect, SessionCellEvent, SessionCellRefusal};
+use crate::session_cell_table::SessionCellTable;
 use crate::session_lifecycle_answers::refusal_answer;
 use crate::session_lifecycle_machine::{
     CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle, SessionLifecycleEffect,
     SessionLifecycleRefusal,
 };
-use state_machine_core::{StateMachine, TransitionError};
-use std::collections::HashMap;
-
-pub(super) type SessionCells = HashMap<String, SessionCell>;
+use state_machine_core::TransitionError;
 
 /// Admits a created identity: NotLoaded to Live under the run's next
-/// generation. A session already loading, live or closing is a duplicate.
-/// `last_published` is the sink's generation for a session this connection
-/// hasn't run, so a run here is newer than one on an earlier connection.
+/// generation, which it returns. A session already loading, live or closing
+/// is a duplicate. `last_published` is the sink's generation for a session
+/// this connection hasn't run, so a run here is newer than one on an earlier
+/// connection.
 pub(super) fn admit_create(
-    cells: &mut SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     last_published: SessionGeneration,
 ) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
-    seed(cells, session_id, last_published);
-    apply(cells, session_id, SessionCellEvent::CreateAdmitted)
+    let effects = cells
+        .transition(session_id, last_published, SessionCellEvent::CreateAdmitted)
         .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))?;
-    live_or_loading_generation(cells, session_id)
+    effects
+        .iter()
+        .find_map(|effect| match effect {
+            SessionCellEffect::Lifecycle(SessionLifecycleEffect::RegisterActor { generation }) => {
+                Some(*generation)
+            }
+            SessionCellEffect::Lifecycle(_)
+            | SessionCellEffect::Entry { .. }
+            | SessionCellEffect::Turn(_) => None,
+        })
+        .ok_or(ExternalProviderRuntimeError::LocalBusy)
 }
 
 /// Returns an admitted run whose actor never registered to NotLoaded,
 /// keeping its generation as the last one so the next run is newer.
 pub(super) fn abandon_run(
-    cells: &mut SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     generation: SessionGeneration,
 ) {
     // Stale only when the cell already moved on; nothing is left to undo.
-    let _ignored = apply(
-        cells,
+    let _ignored = cells.transition(
         session_id,
+        SessionGeneration::UNTRACKED,
         SessionCellEvent::ActorExited { generation },
     );
 }
 
 /// Admits a load or resume: NotLoaded to Loading under the run's next
-/// generation. Loading, live or closing sessions refuse it.
-/// `last_published` seeds a session this connection hasn't run, as for a
-/// create.
+/// generation, which it returns. Loading, live or closing sessions refuse
+/// it. `last_published` seeds a session this connection hasn't run, as for
+/// a create.
 pub(super) fn admit_load(
-    cells: &mut SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     last_published: SessionGeneration,
     via: RestoreVia,
     attempt: LoadAttempt,
 ) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
-    seed(cells, session_id, last_published);
-    apply(
-        cells,
-        session_id,
-        SessionCellEvent::LoadRequested { via, attempt },
-    )
-    .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))?;
-    live_or_loading_generation(cells, session_id)
+    let effects = cells
+        .transition(
+            session_id,
+            last_published,
+            SessionCellEvent::LoadRequested { via, attempt },
+        )
+        .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))?;
+    effects
+        .iter()
+        .find_map(|effect| match effect {
+            SessionCellEffect::Lifecycle(SessionLifecycleEffect::StartRestore {
+                generation,
+                ..
+            }) => Some(*generation),
+            SessionCellEffect::Lifecycle(_)
+            | SessionCellEffect::Entry { .. }
+            | SessionCellEffect::Turn(_) => None,
+        })
+        .ok_or(ExternalProviderRuntimeError::LocalBusy)
 }
 
 /// The restore admitted as `attempt` is still the session's load: no close
 /// or other load has replaced it since.
 pub(super) fn is_current_load(
-    cells: &SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     attempt: LoadAttempt,
 ) -> bool {
-    matches!(
-        cells.get(session_id).map(|cell| cell.lifecycle),
-        Some(SessionLifecycle::Loading { attempt: current, .. }) if current == attempt
-    )
+    cells.read(session_id, |cell| {
+        matches!(
+            cell.lifecycle,
+            SessionLifecycle::Loading { attempt: current, .. } if current == attempt
+        )
+    })
 }
 
 /// Settles the load admitted as `attempt`: Live when its actor registered,
 /// NotLoaded otherwise. A stale attempt changes nothing.
 pub(super) fn settle_load(
-    cells: &mut SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     attempt: LoadAttempt,
     registered: bool,
@@ -98,30 +117,31 @@ pub(super) fn settle_load(
         SessionCellEvent::LoadFailed { attempt }
     };
     // Stale only when a close already replaced this load; the caller checked.
-    let _ignored = apply(cells, session_id, event);
+    let _ignored = cells.transition(session_id, SessionGeneration::UNTRACKED, event);
 }
 
 /// Admits a close: Live or Loading to Closing. Closing refuses it as busy;
 /// NotLoaded answers "nothing to close" with its next steps (M8).
 pub(super) fn admit_close(
-    cells: &mut SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     attempt: CloseAttempt,
 ) -> Result<(), ExternalProviderRuntimeError> {
-    apply(
-        cells,
-        session_id,
-        SessionCellEvent::CloseRequested { attempt },
-    )
-    .map(|_effects| ())
-    .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))
+    cells
+        .transition(
+            session_id,
+            SessionGeneration::UNTRACKED,
+            SessionCellEvent::CloseRequested { attempt },
+        )
+        .map(|_effects| ())
+        .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))
 }
 
 /// Settles the close admitted as `attempt`. A done close ends NotLoaded and
 /// returns the generation its Closed publishes under; a failed close goes
 /// back to Live from Live and to NotLoaded from Loading.
 pub(super) fn settle_close(
-    cells: &mut SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     attempt: CloseAttempt,
     freed: bool,
@@ -131,45 +151,9 @@ pub(super) fn settle_close(
     } else {
         SessionCellEvent::CloseFailed { attempt }
     };
-    apply(cells, session_id, event)
-        .ok()
-        .and_then(|effects| published_closed_generation(&effects))
-}
-
-/// The session is closing on this connection.
-pub(super) fn is_closing(cells: &SessionCells, session_id: &str) -> bool {
-    matches!(
-        cells.get(session_id).map(|cell| cell.lifecycle),
-        Some(SessionLifecycle::Closing { .. })
-    )
-}
-
-/// Starts a cell for a session this connection hasn't run, after the
-/// generation its last run published under.
-fn seed(cells: &mut SessionCells, session_id: &str, last_published: SessionGeneration) {
-    cells
-        .entry(session_id.to_owned())
-        .or_insert_with(|| SessionCell::not_loaded_after(last_published));
-}
-
-/// Applies `event` to the session's cell (a fresh one for a session this
-/// connection hasn't run). The cell changes only when the move succeeds.
-fn apply(
-    cells: &mut SessionCells,
-    session_id: &str,
-    event: SessionCellEvent,
-) -> Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>> {
-    let current = cells
-        .get(session_id)
-        .cloned()
-        .unwrap_or_else(SessionCell::fresh);
-    let (next, effects) = SessionCellMachine::transition(&current, event)?;
-    cells.insert(session_id.to_owned(), next);
-    Ok(effects)
-}
-
-/// The generation a done close's Closed publishes under.
-fn published_closed_generation(effects: &[SessionCellEffect]) -> Option<SessionGeneration> {
+    let effects = cells
+        .transition(session_id, SessionGeneration::UNTRACKED, event)
+        .ok()?;
     effects.iter().find_map(|effect| match effect {
         SessionCellEffect::Lifecycle(SessionLifecycleEffect::PublishClosed { generation }) => {
             Some(*generation)
@@ -180,29 +164,22 @@ fn published_closed_generation(effects: &[SessionCellEffect]) -> Option<SessionG
     })
 }
 
-fn live_or_loading_generation(
-    cells: &SessionCells,
-    session_id: &str,
-) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
-    cells
-        .get(session_id)
-        .and_then(SessionCell::run_generation)
-        .ok_or(ExternalProviderRuntimeError::LocalBusy)
+/// The session is closing on this connection.
+pub(super) fn is_closing(cells: &SessionCellTable, session_id: &str) -> bool {
+    cells.read(session_id, |cell| {
+        matches!(cell.lifecycle, SessionLifecycle::Closing { .. })
+    })
 }
 
 /// The runtime error for a refused lifecycle move. A busy session keeps
 /// today's LocalBusy; "nothing to close" answers with the state and the
 /// valid next steps (M8).
 fn lifecycle_refusal_error(
-    cells: &SessionCells,
+    cells: &SessionCellTable,
     session_id: &str,
     refusal: TransitionError<SessionCellRefusal>,
 ) -> ExternalProviderRuntimeError {
-    let state = cells
-        .get(session_id)
-        .cloned()
-        .unwrap_or_else(SessionCell::fresh)
-        .lifecycle;
+    let state = cells.read(session_id, |cell| cell.lifecycle);
     match refusal {
         TransitionError::Domain(SessionCellRefusal::Lifecycle(
             refusal @ SessionLifecycleRefusal::NothingToClose,

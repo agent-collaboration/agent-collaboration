@@ -15,15 +15,15 @@ fn close_attempt(id: u128) -> CloseAttempt {
 #[test]
 fn a_closed_session_loads_again_under_a_newer_generation() {
     // Arrange
-    let mut cells = SessionCells::new();
-    let first = admit_create(&mut cells, SESSION, SessionGeneration::UNTRACKED)
+    let cells = SessionCellTable::default();
+    let first = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED)
         .expect("the create is admitted");
-    admit_close(&mut cells, SESSION, close_attempt(1)).expect("the close is admitted");
-    let closed = settle_close(&mut cells, SESSION, close_attempt(1), true);
+    admit_close(&cells, SESSION, close_attempt(1)).expect("the close is admitted");
+    let closed = settle_close(&cells, SESSION, close_attempt(1), true);
 
     // Act
     let reloaded = admit_load(
-        &mut cells,
+        &cells,
         SESSION,
         SessionGeneration::UNTRACKED,
         RestoreVia::Load,
@@ -43,10 +43,10 @@ fn a_closed_session_loads_again_under_a_newer_generation() {
 #[test]
 fn closing_a_session_that_is_not_loaded_answers_nothing_to_close() {
     // Arrange
-    let mut cells = SessionCells::new();
+    let cells = SessionCellTable::default();
 
     // Act
-    let refused = admit_close(&mut cells, SESSION, close_attempt(1));
+    let refused = admit_close(&cells, SESSION, close_attempt(1));
 
     // Assert
     assert!(
@@ -64,22 +64,22 @@ fn closing_a_session_that_is_not_loaded_answers_nothing_to_close() {
 #[test]
 fn a_load_landing_after_a_close_is_stale_and_a_fresh_load_is_admitted() {
     // Arrange
-    let mut cells = SessionCells::new();
+    let cells = SessionCellTable::default();
     admit_load(
-        &mut cells,
+        &cells,
         SESSION,
         SessionGeneration::UNTRACKED,
         RestoreVia::Load,
         load_attempt(1),
     )
     .expect("the load is admitted");
-    admit_close(&mut cells, SESSION, close_attempt(2)).expect("the close is admitted");
-    let closed = settle_close(&mut cells, SESSION, close_attempt(2), true);
+    admit_close(&cells, SESSION, close_attempt(2)).expect("the close is admitted");
+    let closed = settle_close(&cells, SESSION, close_attempt(2), true);
 
     // Act
     let late_is_current = is_current_load(&cells, SESSION, load_attempt(1));
     let fresh = admit_load(
-        &mut cells,
+        &cells,
         SESSION,
         SessionGeneration::UNTRACKED,
         RestoreVia::Resume,
@@ -98,31 +98,31 @@ fn a_load_landing_after_a_close_is_stale_and_a_fresh_load_is_admitted() {
 #[test]
 fn a_failed_close_returns_to_where_it_started() {
     // Arrange
-    let mut cells = SessionCells::new();
-    admit_create(&mut cells, "live", SessionGeneration::UNTRACKED).expect("created");
+    let cells = SessionCellTable::default();
+    admit_create(&cells, "live", SessionGeneration::UNTRACKED).expect("created");
     admit_load(
-        &mut cells,
+        &cells,
         "loading",
         SessionGeneration::UNTRACKED,
         RestoreVia::Load,
         load_attempt(1),
     )
     .expect("loading");
-    admit_close(&mut cells, "live", close_attempt(2)).expect("closing live");
-    admit_close(&mut cells, "loading", close_attempt(3)).expect("closing loading");
+    admit_close(&cells, "live", close_attempt(2)).expect("closing live");
+    admit_close(&cells, "loading", close_attempt(3)).expect("closing loading");
 
     // Act
-    let live_closed = settle_close(&mut cells, "live", close_attempt(2), false);
-    let loading_closed = settle_close(&mut cells, "loading", close_attempt(3), false);
+    let live_closed = settle_close(&cells, "live", close_attempt(2), false);
+    let loading_closed = settle_close(&cells, "loading", close_attempt(3), false);
 
     // Assert
     assert_eq!((live_closed, loading_closed), (None, None));
     assert!(matches!(
-        cells["live"].lifecycle,
+        cells.read("live", |cell| cell.lifecycle),
         SessionLifecycle::Live { .. }
     ));
     assert!(matches!(
-        cells["loading"].lifecycle,
+        cells.read("loading", |cell| cell.lifecycle),
         SessionLifecycle::NotLoaded { .. }
     ));
 }
@@ -133,12 +133,12 @@ fn a_failed_close_returns_to_where_it_started() {
 #[test]
 fn a_session_new_to_this_connection_runs_after_the_sinks_last_generation() {
     // Arrange
-    let mut cells = SessionCells::new();
+    let cells = SessionCellTable::default();
     let earlier = SessionGeneration::from_number(7);
 
     // Act
-    let created = admit_create(&mut cells, SESSION, earlier).expect("created");
-    let duplicate = admit_create(&mut cells, SESSION, earlier);
+    let created = admit_create(&cells, SESSION, earlier).expect("created");
+    let duplicate = admit_create(&cells, SESSION, earlier);
 
     // Assert
     assert_eq!(created.number(), 8);

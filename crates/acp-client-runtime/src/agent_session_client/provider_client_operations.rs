@@ -14,15 +14,32 @@ use super::{
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
 use agent_client_protocol::schema::v1::ContentBlock;
 
-/// Until the Close command enters the connection queue, dropping its caller
-/// must release the admission mark. The connection task clears it afterward.
+/// A close the session's cell admitted. Until its Close command enters the
+/// connection queue, dropping the caller settles it as failed, so the cell
+/// returns to where it started; the connection settles it afterward.
 struct PendingCloseAdmissionGuard {
-    marks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    cells: Arc<crate::session_cell_table::SessionCellTable>,
     provider_session_id: String,
+    attempt: crate::session_lifecycle_machine::CloseAttempt,
     submitted: bool,
 }
 
 impl PendingCloseAdmissionGuard {
+    /// Admits the close on the session's cell: Live or Loading to Closing.
+    fn admit(
+        cells: &Arc<crate::session_cell_table::SessionCellTable>,
+        provider_session_id: &str,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
+        let attempt = crate::session_lifecycle_machine::CloseAttempt(uuid::Uuid::now_v7());
+        super::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
+        Ok(Self {
+            cells: Arc::clone(cells),
+            provider_session_id: provider_session_id.to_owned(),
+            attempt,
+            submitted: false,
+        })
+    }
+
     fn transfer_to_connection(&mut self) {
         self.submitted = true;
     }
@@ -31,10 +48,12 @@ impl PendingCloseAdmissionGuard {
 impl Drop for PendingCloseAdmissionGuard {
     fn drop(&mut self) {
         if !self.submitted {
-            self.marks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .remove(&self.provider_session_id);
+            super::session_cell_bookkeeping::settle_close(
+                &self.cells,
+                &self.provider_session_id,
+                self.attempt,
+                false,
+            );
         }
     }
 }
@@ -426,19 +445,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/close",
             });
         }
-        if !self
-            .pending_close_marks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(provider_session_id.clone())
-        {
-            return Err(ExternalProviderRuntimeError::LocalBusy);
-        }
-        let mut admission_guard = PendingCloseAdmissionGuard {
-            marks: Arc::clone(&self.pending_close_marks),
-            provider_session_id: provider_session_id.clone(),
-            submitted: false,
-        };
+        let mut admission_guard =
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
         self.close_session_after_mark(provider_session_id, false, &mut admission_guard)
             .await
     }
@@ -462,6 +470,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         self.commands
             .send(ProviderCommand::Close {
                 provider_session_id,
+                attempt: admission_guard.attempt,
                 release_only,
                 reply,
             })
@@ -478,19 +487,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        if !self
-            .pending_close_marks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(provider_session_id.clone())
-        {
-            return Err(ExternalProviderRuntimeError::LocalBusy);
-        }
-        let mut admission_guard = PendingCloseAdmissionGuard {
-            marks: Arc::clone(&self.pending_close_marks),
-            provider_session_id: provider_session_id.clone(),
-            submitted: false,
-        };
+        let mut admission_guard =
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
         self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
             .await
     }

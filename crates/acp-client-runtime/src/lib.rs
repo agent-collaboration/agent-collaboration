@@ -79,6 +79,7 @@ mod queued_entry_machine;
     )
 )]
 mod session_cell_machine;
+mod session_cell_table;
 mod session_event_sink;
 mod session_lifecycle_answers;
 #[cfg_attr(

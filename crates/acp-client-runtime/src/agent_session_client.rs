@@ -152,6 +152,9 @@ enum ProviderCommand<P: InteractionPort> {
     },
     Close {
         provider_session_id: String,
+        /// The close attempt the session's cell admitted when the client
+        /// asked to close; the connection settles it.
+        attempt: crate::session_lifecycle_machine::CloseAttempt,
         /// The agent offers no session/close: the session is only released
         /// here, and no request reaches the agent (D1 R14).
         release_only: bool,
@@ -271,7 +274,8 @@ pub struct AgentSessionClient<P: InteractionPort> {
             >,
         >,
     >,
-    pending_close_marks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// Each provider session's typed lifecycle, shared with the connection.
+    session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     shutdown: CancellationToken,
     sink_closed: CancellationToken,
     retirement: CancellationToken,

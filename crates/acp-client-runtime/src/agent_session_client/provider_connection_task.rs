@@ -76,10 +76,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             >,
         >::new()));
         let task_settings_unresolved = Arc::clone(&settings_unresolved);
-        let pending_close_marks = Arc::new(std::sync::Mutex::new(std::collections::HashSet::<
-            String,
-        >::new()));
-        let task_pending_close_marks = Arc::clone(&pending_close_marks);
+        // One typed lifecycle per provider session (design note §11.2): the
+        // client's close and the connection's admissions are transitions on
+        // the same cell.
+        let session_cells = Arc::new(crate::session_cell_table::SessionCellTable::default());
+        let task_session_cells = Arc::clone(&session_cells);
         let tool_registry = Arc::new(ProviderConnectionActivity::default());
         let task_tool_registry = Arc::clone(&tool_registry);
         let retirement_registry = Arc::clone(&tool_registry);
@@ -354,11 +355,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         let mut session_tasks = tokio::task::JoinSet::new();
                         let mut admission_tasks = tokio::task::JoinSet::new();
                         let (admission_tx, mut admission_rx) = tokio::sync::mpsc::channel(32);
-                        // One typed lifecycle per provider session (design note
-                        // §12.1): loading, live, closing, or not loaded with the
-                        // generation its last run published under. Every
-                        // admission below is a transition on that cell.
-                        let mut session_cells = super::session_cell_bookkeeping::SessionCells::new();
+                        let session_cells = task_session_cells;
                         let Some(base_capabilities) = base_capabilities else { return Ok(()); };
                         loop {
                             tokio::select! {
@@ -382,14 +379,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
                                                 let provider_session_id = registration.provider_session_id.clone();
-                                                let generation = super::session_cell_bookkeeping::admit_create(&mut session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id))?;
+                                                let generation = super::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id))?;
                                                 match register_provider_session(registration, &mut sessions) {
                                                     Ok(created) => {
                                                         created_generation = Some(generation);
                                                         Ok(created)
                                                     }
                                                     Err(error) => {
-                                                        super::session_cell_bookkeeping::abandon_run(&mut session_cells, &provider_session_id, generation);
+                                                        super::session_cell_bookkeeping::abandon_run(&session_cells, &provider_session_id, generation);
                                                         Err(error)
                                                     }
                                                 }
@@ -485,7 +482,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }).map(|_| generation);
                                             // The cell moves Loading to Live on a registered restore,
                                             // and back to NotLoaded on a failed one.
-                                            super::session_cell_bookkeeping::settle_load(&mut session_cells, &provider_session_id, attempt, result.is_ok());
+                                            super::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
                                             if result.is_err() {
                                                 known_sessions.forget(&provider_session_id).await;
                                             } else if let Some(report) = report {
@@ -510,10 +507,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let _result = reply.send(result);
                                         }
                                         PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
-                                            task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&provider_session_id);
                                             // A done close ends NotLoaded and can be loaded again (ACP
                                             // close); a failed one returns the cell to where it started.
-                                            let closed_generation = super::session_cell_bookkeeping::settle_close(&mut session_cells, &provider_session_id, attempt, result.is_ok());
+                                            let closed_generation = super::session_cell_bookkeeping::settle_close(&session_cells, &provider_session_id, attempt, result.is_ok());
                                             if result.is_ok() {
                                                 // Closed ends the run's generation here, in the loop
                                                 // that admits restores, so no newer run can open
@@ -603,7 +599,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 provider_session_restore::RestoreHistoryMode::Replay => crate::session_lifecycle_machine::RestoreVia::Load,
                                                 provider_session_restore::RestoreHistoryMode::WithoutReplay => crate::session_lifecycle_machine::RestoreVia::Resume,
                                             };
-                                            let generation = match super::session_cell_bookkeeping::admit_load(&mut session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id), via, attempt) {
+                                            let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id), via, attempt) {
                                                 Ok(generation) => generation,
                                                 Err(error) => {
                                                     let _result = reply.send(Err(error));
@@ -642,12 +638,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = reply.send(result);
                                             });
                                         }
-                                        ProviderCommand::Close { provider_session_id, release_only, reply } => {
-                                            let attempt = crate::session_lifecycle_machine::CloseAttempt(uuid::Uuid::now_v7());
-                                            if let Err(error) = super::session_cell_bookkeeping::admit_close(&mut session_cells, &provider_session_id, attempt) {
-                                                let _result = reply.send(Err(error));
-                                                continue;
-                                            }
+                                        ProviderCommand::Close { provider_session_id, attempt, release_only, reply } => {
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
                                             let pending_admission_tx = admission_tx.clone();
@@ -670,7 +661,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             });
                                         }
                                         ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
-                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
+                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
                                                     let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy));
                                                 }
@@ -706,7 +697,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let _result = session.send(ProviderSessionCommand::Cancel { expected_operation_id, reply }).await;
                                         }
                                         ProviderCommand::Steer { provider_session_id, input_id, prompt, reply } => {
-                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
+                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }
@@ -854,7 +845,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             auth_status,
             session_settings,
             settings_unresolved,
-            pending_close_marks,
+            session_cells,
             shutdown,
             sink_closed: client_sink_closed,
             retirement,
