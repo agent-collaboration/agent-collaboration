@@ -20,4 +20,5 @@ mod route_boundaries;
 
 mod engine_admin;
 mod engine_admin_support;
+mod engine_stateful;
 mod engine_unit_revival;
