@@ -6,7 +6,7 @@ proof uses Miniflare 5.20261012.0-beta and workerd 1.20261012.1.
 
 Use the Node and pnpm versions pinned in `verification/package.json`. Install
 tooling dependencies with `pnpm --dir verification install --frozen-lockfile` before
-running the bundle checks and local conformance commands below.
+running the bundle checks below.
 
 Build and check a deployment candidate without test features:
 
@@ -23,76 +23,23 @@ The checked bundle is `build/index.js` plus `build/index_bg.wasm`. These
 commands do not deploy it. The existing deployment flow uploads that prebuilt
 artifact: `wrangler.config.ts` retains `noBundle`, and the public cf-format
 `cloudflare.config.ts` disables workers.dev and preview URLs. Account, routing
-and real Access values belong to the private ops configuration. The public
-template contains placeholders and binds `CENTRAL` to each organization's central,
-`PROJECT_COPIES` to the kept project copy, `FLEET` to the legacy object, and
-`WORKSPACE_STORE` to one store per workspace named by its workspace id. A workspace store holds tables and runs the statement batches central
-sends it; it has no rules of its own. Deploying the new `WORKSPACE_STORE` class
-needs a deployment-side Durable Object migration entry; that belongs to the
-deployment deliverable (E), and nothing in this repository deploys it yet.
-
-Fill `CENTRAL_DELIVERY_CONFIG` with JSON containing the deployment's immutable
-UUIDv7 relay identity, for example `{"relayPeer":"<deployment-relay-uuidv7>"}`.
-This identity is independent of `CENTRAL_REGISTRY_CONFIG`'s authoritative Copy
-receiver. Missing, malformed or non-UUIDv7 values refuse initialization; there
-is no default relay identity. Keep the real deployment values in private ops.
+and real sign-in values belong to the private ops configuration. The public
+template contains placeholders and binds `CENTRAL` to each organization's central
+and `WORKSPACE_STORE` to one store per workspace named by its workspace id. A
+workspace store holds tables and runs the statement batches central sends it; it
+has no rules of its own. Deploying the new `WORKSPACE_STORE` class needs a
+deployment-side Durable Object migration entry; that belongs to the deployment
+deliverable (E), and nothing in this repository deploys it yet. The template no
+longer exports the old `ProjectCopyObject` and `FleetObject` classes: deploying
+it drops those objects and their stored data, a separate one-way deploy step.
 The public binding-presence check runs from the root with
 `node --test crates/collaboration-central-cloudflare/tests/public-template.test.mjs`.
 
 The Worker adapts the shared asynchronous core to Durable Object storage and
-transport. The legacy synchronous central shell and its conformance-only
-execution path have been removed. Admin requests require a signed owner
-assertion; the shell does not store an admin secret.
-
-For local conformance, build the dev artifact with the current test controls:
-
-```sh
-worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
-node verification/tooling/check-central-worker-bundle.ts faults
-cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- runtime-controls node /path/to/miniflare/dist/src/index.js /absolute/fresh/persistence 8957
-```
-
-The same process wrapper owns readiness, shutdown and physical restart for the
-retained examples. Supply a fresh persistence directory for each scenario.
-`composed_scope_workerd` accepts its mode first: `composed-copy-suite`,
-`composed-transactions`, `composed-numeric`, `runtime-controls` or
-`composed-fleet-conflict`, followed by Node, Miniflare, persistence and port.
-`step_scope_workerd` and `bootstrap_scope_workerd` accept those four arguments
-without a mode. Their fixtures use owner-verified
-`/admin/v1/conformance/fleet-receipt` and `/admin/v1/conformance/bootstrap`.
-
-Normal session cases use a mode after the four runtime arguments, for example:
-
-```sh
-cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node /path/to/miniflare/dist/src/index.js /absolute/fresh/session-persistence 8957 access-sessions
-```
-
-The conformance-only `POST /admin/v1/conformance/fleet-mail-custody` route is
-the same on Tokio and Worker. It requires the same owner Access as the schema
-observer and accepts `{"item":"<UUIDv7>"}`. A present response is:
-
-```json
-{"outboxCount":1,"row":{"kind":"present","value":{"statusKind":"sent","statusVersion":1,"payloadPresent":true}}}
-```
-
-An absent item returns `{"outboxCount":1,"row":{"kind":"absent"}}`; the count
-still includes every retained outbox row. The response contains no payload,
-acceptance/refusal contents, machine identities or item listing. All fields
-come from one transaction on the existing Fleet owner. The observation does not
-initialize a store, migrate it, expire mail, publish status or write an address.
-Run `session_scope_workerd` with `fleet-mail-observer` for its shared
-Native/Worker owner-only admission/refusal case. Production builds omit this
-route and its response types.
-
-The harness redirects only the synthetic issuer's certs URL to its owned local
-JWKS fixture. Worker WebCrypto verification remains real. No local run proves
-Google sign-in, deployed Access policies, TLS or cross-machine behavior.
-
-Retired launchers and their historical oracles were recorded in the 0.1.102
-process logs, which are kept outside the public tree.
-Complete normal Worker session/holder equivalence and G18 panic rollback with
-subsequent store usability remain PR3 obligations. The removed legacy fixtures
-do not count as proof of those behaviors on the shared core.
+transport. The public Worker has no fetch entry: it only hosts the
+`CentralObject` and `WorkspaceStoreObject` classes. The old public Access
+edge and its conformance path have been removed. The `test-support` bundle
+alone mounts a fetch entry, for its storage and workspace case routes.
 
 ## Private organization sign-in link
 

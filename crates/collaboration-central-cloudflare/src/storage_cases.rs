@@ -17,7 +17,7 @@ const STORAGE_PREFIX: &str = "/test-support/storage/";
 const CALL_STORE_PREFIX: &str = "/test-support/call-store/";
 const DRIVER_PREFIX: &str = "/test-support/driver/";
 
-/// Answers a test-support route, or returns the request for the central router.
+/// Answers a test-support route, or returns the request unanswered.
 pub(crate) async fn route(
     request: Request,
     env: &Env,
@@ -29,16 +29,6 @@ pub(crate) async fn route(
         };
     let mut request = request;
     let path = request.path();
-    #[cfg(feature = "conformance")]
-    if path == "/test-support/object-clock-ids" {
-        return Ok(Ok(crate::composed_control::forward(
-            env,
-            &collaboration_central_core::ObjectAddress::Fleet,
-            "/test/object-clock-ids",
-            Some(request.text().await?),
-        )
-        .await?));
-    }
     if let Some(scenario) = path.strip_prefix(DRIVER_PREFIX) {
         return Ok(Ok(crate::driver_scenarios::route(scenario, env).await?));
     }

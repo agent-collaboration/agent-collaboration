@@ -103,8 +103,8 @@ fn invalid_configuration() -> worker::Error {
 #[cfg(feature = "link")]
 mod private_entry {
     use super::is_signin_path;
+    use crate::object_location::ObjectAddress;
     use crate::{cloudflare_transport, http_body};
-    use collaboration_central_core::ObjectAddress;
     use fleet_identity_protocol::OrganizationId;
     use serde::Deserialize;
     use worker::{Context, Env, Request, Response, Result, event};

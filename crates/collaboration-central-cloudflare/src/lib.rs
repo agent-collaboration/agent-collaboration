@@ -7,36 +7,16 @@
         reason = "the private link build shares object exports but mounts only its private fetch entry"
     )
 )]
-mod access_crypto;
-mod access_verification;
-mod binding_attachment;
-#[cfg(feature = "conformance")]
-mod composed_control;
-#[cfg(feature = "conformance")]
-mod conformance_admission;
-#[cfg(feature = "conformance")]
-mod conformance_bootstrap;
-#[cfg(feature = "conformance")]
-mod conformance_core_store;
-#[cfg(feature = "conformance")]
-pub use conformance_bootstrap::BootstrapObject;
 mod cloudflare_transport;
-#[cfg(feature = "conformance")]
-mod conformance_scope_faults;
 #[cfg(feature = "test-support")]
 mod driver_scenarios;
 mod http_body;
 mod object_location;
 mod object_migrations;
-mod object_shell;
 mod organization_signin_link;
-mod platform;
-mod reply_deadline;
-mod shared_object_store;
 mod sign_in_crypto;
 mod sign_in_trust;
-mod storage_measurement;
-pub use object_shell::{FleetObject, ProjectCopyObject};
+mod signin_observation;
 mod statement_store;
 #[cfg(feature = "test-support")]
 mod storage_cases;
@@ -46,64 +26,23 @@ mod workspace_central_object;
 mod workspace_store_object;
 #[cfg(feature = "test-support")]
 pub use driver_scenarios::DriverScenarioObject;
-pub use shared_object_store::CloudflareStorageHost;
 #[cfg(feature = "test-support")]
 pub use storage_cases::StorageCaseObject;
-#[cfg(not(feature = "link"))]
-use worker::{Context, Env, Request, Response, Result, event};
 pub use workspace_central_object::CentralObject;
 pub use workspace_store_object::WorkspaceStoreObject;
-#[cfg(not(feature = "link"))]
-#[event(fetch)]
-pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
-    #[cfg(feature = "test-support")]
-    let request = match storage_cases::route(request, &env).await? {
-        Ok(response) => return Ok(response),
-        Err(request) => request,
-    };
-    let labels = access_verification::InvocationLabels::for_request(&request)?;
-    let request: worker::HttpRequest = request.try_into()?;
-    let (parts, body) = request.into_parts();
-    let body = match http_body::complete(body).await? {
-        http_body::BodyCompletion::Complete(body) => body,
-        http_body::BodyCompletion::OverLimit => return http_body::over_limit(),
-    };
-    // Retain headers, Cf, abort signal and upgrade parts while replacing only
-    // the consumed network body with its bounded, completed bytes.
-    let request = http::Request::from_parts(parts, body);
-    #[cfg(feature = "conformance")]
-    if request.uri().path() == conformance_bootstrap::CONTROL_PATH {
-        return conformance_bootstrap::forward(&env, request.try_into()?).await;
+
+/// The test-support bundle's fetch entry: it answers only the storage and workspace
+/// case routes. The public Worker has no fetch entry; the private link Worker
+/// (`--features link`) mounts its own.
+#[cfg(all(feature = "test-support", not(feature = "link")))]
+#[worker::event(fetch)]
+pub async fn main(
+    request: worker::Request,
+    env: worker::Env,
+    _context: worker::Context,
+) -> worker::Result<worker::Response> {
+    match storage_cases::route(request, &env).await? {
+        Ok(response) => Ok(response),
+        Err(_) => worker::Response::error("no such route", 404),
     }
-    #[cfg(feature = "conformance")]
-    if request.uri().path() == composed_control::CONTROL_PATH {
-        return composed_control::fetch(request.try_into()?, env).await;
-    }
-    #[cfg(feature = "conformance")]
-    if request.uri().path() == collaboration_central_core::FLEET_SCHEMA_PATH {
-        return conformance_admission::fleet_schema(request.try_into()?, env).await;
-    }
-    #[cfg(feature = "conformance")]
-    if request.uri().path() == collaboration_central_core::FLEET_MAIL_CUSTODY_PATH {
-        return conformance_admission::fleet_mail_custody(request.try_into()?, env).await;
-    }
-    #[cfg(feature = "conformance")]
-    if request.uri().path() == collaboration_central_core::FORWARD_STATE_PATH {
-        return conformance_admission::forward_state(request.try_into()?, env).await;
-    }
-    #[cfg(feature = "conformance")]
-    if request.uri().path() == "/__conformance/admission" {
-        return conformance_admission::fetch(request.try_into()?, env).await;
-    }
-    use tower_service::Service;
-    let application = access_verification::application(
-        &env,
-        labels,
-        access_verification::VerificationLayer::Edge,
-    )
-    .map_err(|error| worker::Error::RustError(error.to_string()))?;
-    let response = collaboration_central_core::central_router(application)
-        .call(request)
-        .await?;
-    response.try_into()
 }
