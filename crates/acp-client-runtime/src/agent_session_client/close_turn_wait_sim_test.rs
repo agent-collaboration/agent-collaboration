@@ -199,7 +199,11 @@ fn a_close_cannot_overtake_a_prompt_whose_turn_is_open() {
         let methods_while_held = agent.methods();
         drop(held_prompt);
         let prompted = prompting.await.expect("prompt task");
-        let closed = closing.await.expect("close task");
+        // A close that already finished was taken by the select above.
+        let closed_cleanly = match &close_waited {
+            Ok(_) => closing.await.expect("close task").is_ok(),
+            Err(early) => matches!(early, Ok(Ok(()))),
+        };
         let methods = agent.methods();
 
         // Assert
@@ -222,7 +226,7 @@ fn a_close_cannot_overtake_a_prompt_whose_turn_is_open() {
             ),
             "{prompted:?}"
         );
-        assert!(closed.is_ok(), "{closed:?}");
+        assert!(closed_cleanly, "the close completes");
         assert!(
             !methods.iter().any(|method| method == "session/prompt"),
             "{methods:?}"
