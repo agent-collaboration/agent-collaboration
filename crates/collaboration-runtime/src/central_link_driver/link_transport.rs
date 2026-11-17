@@ -16,7 +16,7 @@ pub enum LinkTransportError {
 }
 
 /// One open link socket carrying text frames.
-pub trait LinkSocket: Send {
+pub trait LinkSocket: Send + Sync {
     fn send_text(&mut self, text: String) -> TransportFuture<'_, Result<(), LinkTransportError>>;
     /// The next text frame; None once the socket closed or failed.
     fn next_text(&mut self) -> TransportFuture<'_, Option<String>>;
@@ -49,9 +49,8 @@ impl WebSocketLinkTransport {
     }
 }
 
-type Stream = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type Stream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 struct WebSocketLink(Stream);
 
