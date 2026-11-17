@@ -1,26 +1,34 @@
 //! Keeps Claude's prompt cache warm while a session sits idle (D1 R16).
 //!
 //! One owner per Claude endpoint, fed every live event the ordered Host
-//! publication owner publishes. It keeps, per session and in memory only, what
-//! it has seen: whether a turn is running, whether the current turn is real
-//! work, when the last real turn ended, and which input IDs it sent itself.
-//! A timer armed from the injected Host clock sends one warm prompt to an idle
-//! session; any refusal means "not now" and waits for the next turn end.
+//! publication owner publishes. Each session has its own warm cell on the
+//! cache-warm machine (D1 state machines, design note §3.7, §11.7): cold,
+//! busy with a real or a warm turn, armed, or warming. A timer armed from the
+//! injected Host clock sends one warm prompt to an idle session; any refusal
+//! means "not now" and waits for the next turn end. The endpoint keeps only
+//! the cells' index and its timer tasks.
 
 mod supervisor_submitter;
 
 pub(crate) use supervisor_submitter::SupervisorWarmPromptSubmitter;
 
+use crate::cache_warm_machine::{
+    CacheWarm, CacheWarmEffect, CacheWarmEvent, CacheWarmMachine, WarmCadence,
+};
 use crate::provider_session_event_sink::LiveSessionEventObserver;
 use crate::provider_settings_section::CacheWarmSetting;
 use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
 use router_clock::{ClockInstant, RuntimeClock};
 use session_event_model::{InputId, SessionEvent, SessionState};
+use state_machine_core::StateMachine;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex as StdMutex},
+    sync::{
+        Arc, Mutex as StdMutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 use tokio::task::JoinHandle;
@@ -48,41 +56,26 @@ pub(crate) struct ProviderCacheWarm {
 
 struct WarmInner {
     endpoint: EndpointRef,
-    every: Duration,
-    keep_warm_for: Duration,
+    cadence: WarmCadence,
     clock: Arc<dyn RuntimeClock>,
     submitter: Arc<dyn WarmPromptSubmitter>,
     shutdown: CancellationToken,
-    state: StdMutex<WarmState>,
+    stopped: AtomicBool,
+    /// Each session's warm cell; the index lock covers lookup and insert.
+    sessions: StdMutex<HashMap<String, Arc<StdMutex<SessionWarmCell>>>>,
+    tasks: StdMutex<Vec<JoinHandle<()>>>,
 }
 
-#[derive(Default)]
-struct WarmState {
-    sessions: HashMap<String, SessionWarmState>,
-    tasks: Vec<JoinHandle<()>>,
-    stopped: bool,
-}
-
-#[derive(Default)]
-struct SessionWarmState {
-    /// Input IDs this module sent, so its own turns are not real work.
-    warm_inputs: HashSet<InputId>,
-    turn_running: bool,
-    current_turn_is_real: bool,
-    last_real_turn_end: Option<ClockInstant>,
+/// One session's warm state and its armed timer.
+struct SessionWarmCell {
+    state: CacheWarm,
     timer: Option<CancellationToken>,
 }
 
-impl SessionWarmState {
+impl SessionWarmCell {
     fn disarm(&mut self) {
         if let Some(timer) = self.timer.take() {
             timer.cancel();
-        }
-    }
-
-    fn mark_real_unless_warm(&mut self, input_id: &InputId) {
-        if !self.warm_inputs.contains(input_id) {
-            self.current_turn_is_real = true;
         }
     }
 }
@@ -104,12 +97,16 @@ impl ProviderCacheWarm {
         Some(Arc::new(Self {
             inner: Arc::new(WarmInner {
                 endpoint,
-                every: Duration::from_secs(u64::from(setting.every_minutes) * 60),
-                keep_warm_for: Duration::from_secs(u64::from(setting.for_hours) * 3600),
+                cadence: WarmCadence {
+                    every: Duration::from_secs(u64::from(setting.every_minutes) * 60),
+                    keep_warm_for: Duration::from_secs(u64::from(setting.for_hours) * 3600),
+                },
                 clock,
                 submitter,
                 shutdown: CancellationToken::new(),
-                state: StdMutex::new(WarmState::default()),
+                stopped: AtomicBool::new(false),
+                sessions: StdMutex::new(HashMap::new()),
+                tasks: StdMutex::new(Vec::new()),
             }),
         }))
     }
@@ -117,12 +114,11 @@ impl ProviderCacheWarm {
     /// Cancels every timer and waits for its task, so nothing can submit afterwards.
     pub(crate) async fn shutdown(&self) {
         self.inner.shutdown.cancel();
-        let tasks = {
-            let mut state = self.inner.lock_state();
-            state.stopped = true;
-            state.sessions.clear();
-            std::mem::take(&mut state.tasks)
-        };
+        self.inner.stopped.store(true, Ordering::SeqCst);
+        for cell in std::mem::take(&mut *lock(&self.inner.sessions)).into_values() {
+            lock(&cell).disarm();
+        }
+        let tasks = std::mem::take(&mut *lock(&self.inner.tasks));
         for task in tasks {
             let _ = task.await;
         }
@@ -159,76 +155,92 @@ pub(crate) fn compose_provider_cache_warm(
 impl LiveSessionEventObserver for ProviderCacheWarm {
     fn observe_live_event(&self, session_id: &str, event: &SessionEvent) {
         let inner = &self.inner;
-        let mut state = inner.lock_state();
-        if state.stopped {
+        if inner.stopped.load(Ordering::SeqCst) {
             return;
         }
-        match event {
-            SessionEvent::InputAccepted { input_id, .. } => {
-                state
-                    .sessions
-                    .entry(session_id.to_owned())
-                    .or_default()
-                    .mark_real_unless_warm(input_id);
-            }
-            SessionEvent::TurnStarted { input_id, .. } => {
-                let session = state.sessions.entry(session_id.to_owned()).or_default();
-                session.disarm();
-                session.turn_running = true;
-                session.mark_real_unless_warm(input_id);
-            }
-            SessionEvent::TurnEnded { .. } => {
-                let now = inner.clock.monotonic_now();
-                let session = state.sessions.entry(session_id.to_owned()).or_default();
-                session.turn_running = false;
-                if session.current_turn_is_real {
-                    session.last_real_turn_end = Some(now);
-                    session.warm_inputs.clear();
-                }
-                session.current_turn_is_real = false;
-                inner.arm_timer(&mut state, session_id, now);
-            }
+        let event = match event {
+            SessionEvent::InputAccepted { input_id, .. } => CacheWarmEvent::InputJoined {
+                input: input_id.clone(),
+            },
+            SessionEvent::TurnStarted { input_id, .. } => CacheWarmEvent::TurnStarted {
+                input: Some(input_id.clone()),
+            },
+            SessionEvent::TurnEnded { .. } => CacheWarmEvent::TurnEnded {
+                at: inner.clock.monotonic_now(),
+                cadence: inner.cadence,
+            },
             SessionEvent::StateChanged {
                 state: SessionState::Closed | SessionState::Unloaded,
             } => {
-                if let Some(mut session) = state.sessions.remove(session_id) {
-                    session.disarm();
+                if let Some(cell) = lock(&inner.sessions).remove(session_id) {
+                    let mut cell = lock(&cell);
+                    let _gone = inner.apply(&mut cell, session_id, CacheWarmEvent::SessionGone);
                 }
+                return;
             }
-            _ => {}
-        }
+            _ => return,
+        };
+        let cell = inner.cell(session_id);
+        let mut cell = lock(&cell);
+        let _effects = inner.apply(&mut cell, session_id, event);
     }
 }
 
 impl WarmInner {
-    fn lock_state(&self) -> std::sync::MutexGuard<'_, WarmState> {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    /// The session's warm cell, a cold one the first time.
+    fn cell(&self, session_id: &str) -> Arc<StdMutex<SessionWarmCell>> {
+        Arc::clone(
+            lock(&self.sessions)
+                .entry(session_id.to_owned())
+                .or_insert_with(|| {
+                    Arc::new(StdMutex::new(SessionWarmCell {
+                        state: CacheWarm::Cold {
+                            last_real_end: None,
+                        },
+                        timer: None,
+                    }))
+                }),
+        )
     }
 
-    /// Arms the one timer for a session whose turn just ended, if the last real
-    /// turn is still inside the keep-warm window.
-    fn arm_timer(self: &Arc<Self>, state: &mut WarmState, session_id: &str, now: ClockInstant) {
-        let Some(session) = state.sessions.get_mut(session_id) else {
-            return;
+    /// Applies one event to the session's cell under its lock and runs its
+    /// timer effects; returns the warm prompt to submit, if the move asks
+    /// for one. A stale event changes nothing.
+    fn apply(
+        self: &Arc<Self>,
+        cell: &mut SessionWarmCell,
+        session_id: &str,
+        event: CacheWarmEvent,
+    ) -> Option<InputId> {
+        let Ok((next, effects)) = CacheWarmMachine::transition(&cell.state, event) else {
+            return None;
         };
-        session.disarm();
-        let Some(last_real) = session.last_real_turn_end else {
-            return;
-        };
-        if now.saturating_duration_since(last_real) >= self.keep_warm_for {
-            return;
+        cell.state = next;
+        let mut submit = None;
+        for effect in effects {
+            match effect {
+                CacheWarmEffect::ArmTimer { at } => self.arm_timer(cell, session_id, at),
+                CacheWarmEffect::Disarm => cell.disarm(),
+                CacheWarmEffect::SubmitWarm { input } => submit = Some(input),
+            }
         }
+        submit
+    }
+
+    /// Arms the session's one timer for `deadline`, replacing any earlier one.
+    fn arm_timer(
+        self: &Arc<Self>,
+        cell: &mut SessionWarmCell,
+        session_id: &str,
+        deadline: ClockInstant,
+    ) {
+        cell.disarm();
         let timer = CancellationToken::new();
-        session.timer = Some(timer.clone());
-        let task = tokio::spawn(Arc::clone(self).run_timer(
-            session_id.to_owned(),
-            timer,
-            now + self.every,
-        ));
-        state.tasks.retain(|task| !task.is_finished());
-        state.tasks.push(task);
+        cell.timer = Some(timer.clone());
+        let task = tokio::spawn(Arc::clone(self).run_timer(session_id.to_owned(), timer, deadline));
+        let mut tasks = lock(&self.tasks);
+        tasks.retain(|task| !task.is_finished());
+        tasks.push(task);
     }
 
     async fn run_timer(
@@ -243,8 +255,26 @@ impl WarmInner {
             () = timer.cancelled() => return,
             () = self.clock.sleep_until(deadline) => {}
         }
-        let Some(input_id) = self.begin_warm_turn(&session_id, &timer) else {
-            return;
+        // Decided at the moment of firing, under the session's cell lock:
+        // still the armed timer, no turn running, inside the window.
+        let input_id = {
+            let Some(cell) = lock(&self.sessions).get(&session_id).map(Arc::clone) else {
+                return;
+            };
+            let mut cell = lock(&cell);
+            if self.stopped.load(Ordering::SeqCst) || timer.is_cancelled() {
+                return;
+            }
+            cell.timer = None;
+            let event = CacheWarmEvent::TimerFired {
+                input: InputId::generate(),
+                at: self.clock.monotonic_now(),
+                cadence: self.cadence,
+            };
+            match self.apply(&mut cell, &session_id, event) {
+                Some(input_id) => input_id,
+                None => return,
+            }
         };
         let Ok(session_id_value) = SessionId::try_from(session_id.clone()) else {
             return;
@@ -256,41 +286,22 @@ impl WarmInner {
         let submitted = tokio::select! {
             biased;
             () = self.shutdown.cancelled() => return,
-            submitted = self.submitter.submit_warm_prompt(target, input_id.clone()) => submitted,
+            submitted = self.submitter.submit_warm_prompt(target, input_id) => submitted,
         };
         if submitted.is_err() {
             // Not now: nothing was sent, so the next real turn end re-arms.
-            let mut state = self.lock_state();
-            if let Some(session) = state.sessions.get_mut(&session_id) {
-                session.warm_inputs.remove(&input_id);
+            if let Some(cell) = lock(&self.sessions).get(&session_id).map(Arc::clone) {
+                let mut cell = lock(&cell);
+                let _refused = self.apply(&mut cell, &session_id, CacheWarmEvent::WarmRefused);
             }
         }
     }
+}
 
-    /// Decides at the moment of firing, under the same lock as every event:
-    /// the timer is still the armed one, no turn is running, and the last real
-    /// turn ended inside the window. Records the warm input ID before it is sent.
-    fn begin_warm_turn(&self, session_id: &str, timer: &CancellationToken) -> Option<InputId> {
-        let mut state = self.lock_state();
-        if state.stopped || timer.is_cancelled() {
-            return None;
-        }
-        let session = state.sessions.get_mut(session_id)?;
-        session.timer = None;
-        let last_real = session.last_real_turn_end?;
-        if session.turn_running
-            || self
-                .clock
-                .monotonic_now()
-                .saturating_duration_since(last_real)
-                >= self.keep_warm_for
-        {
-            return None;
-        }
-        let input_id = InputId::generate();
-        session.warm_inputs.insert(input_id.clone());
-        Some(input_id)
-    }
+fn lock<T>(mutex: &StdMutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]

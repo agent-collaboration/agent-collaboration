@@ -25,10 +25,12 @@ fn every_state_event_pair_reaches_exactly_the_declared_edges() {
         CacheWarm::Busy {
             real: true,
             last_real_end: None,
+            warm: None,
         },
         CacheWarm::Busy {
             real: false,
             last_real_end: Some(at(0)),
+            warm: Some(input(1)),
         },
         CacheWarm::Armed {
             last_real_end: at(0),
@@ -51,7 +53,17 @@ fn every_state_event_pair_reaches_exactly_the_declared_edges() {
             at: at(9000),
             cadence: CADENCE,
         },
-        CacheWarmEvent::TimerFired { input: input(2) },
+        CacheWarmEvent::TimerFired {
+            input: input(2),
+            at: at(240),
+            cadence: CADENCE,
+        },
+        CacheWarmEvent::TimerFired {
+            input: input(3),
+            at: at(9000),
+            cadence: CADENCE,
+        },
+        CacheWarmEvent::InputJoined { input: input(4) },
         CacheWarmEvent::WarmRefused,
         CacheWarmEvent::SessionGone,
     ];
@@ -92,7 +104,14 @@ fn a_real_turn_arms_a_warm_prompt_and_its_own_turns_never_extend_the_window() {
             cadence: CADENCE,
         },
     );
-    let (warming, submit) = step(armed, CacheWarmEvent::TimerFired { input: input(7) });
+    let (warming, submit) = step(
+        armed,
+        CacheWarmEvent::TimerFired {
+            input: input(7),
+            at: at(340),
+            cadence: CADENCE,
+        },
+    );
     let (warm_turn, _) = step(
         warming,
         CacheWarmEvent::TurnStarted {
@@ -108,7 +127,11 @@ fn a_real_turn_arms_a_warm_prompt_and_its_own_turns_never_extend_the_window() {
     );
     let (refused_from, _) = step(
         rearmed.clone(),
-        CacheWarmEvent::TimerFired { input: input(8) },
+        CacheWarmEvent::TimerFired {
+            input: input(8),
+            at: at(640),
+            cadence: CADENCE,
+        },
     );
     let (after_refusal, _) = step(refused_from, CacheWarmEvent::WarmRefused);
 
@@ -146,7 +169,7 @@ fn any_event_order_keeps_the_warm_window(case: hegel::TestCase) {
     let mut minted: u128 = 0;
     for _ in 0..case.draw(gs::integers::<u8>().min_value(1).max_value(60)) {
         clock += u64::from(case.draw(gs::integers::<u16>().max_value(2000)));
-        let event = match case.draw(gs::integers::<u8>().max_value(4)) {
+        let event = match case.draw(gs::integers::<u8>().max_value(5)) {
             0 => {
                 let own = match &state {
                     CacheWarm::Warming { input, .. } if case.draw(gs::booleans()) => {
@@ -167,9 +190,17 @@ fn any_event_order_keeps_the_warm_window(case: hegel::TestCase) {
                 minted += 1;
                 CacheWarmEvent::TimerFired {
                     input: input(minted),
+                    at: at(clock),
+                    cadence: CADENCE,
                 }
             }
             3 => CacheWarmEvent::WarmRefused,
+            4 => {
+                minted += 1;
+                CacheWarmEvent::InputJoined {
+                    input: input(minted),
+                }
+            }
             _ => CacheWarmEvent::SessionGone,
         };
         let before = state.clone();
@@ -179,7 +210,13 @@ fn any_event_order_keeps_the_warm_window(case: hegel::TestCase) {
         for effect in &effects {
             match effect {
                 CacheWarmEffect::SubmitWarm { .. } => {
-                    assert!(matches!(before, CacheWarm::Armed { .. }));
+                    let CacheWarm::Armed { last_real_end, .. } = &before else {
+                        panic!("submitted from {before:?}");
+                    };
+                    assert!(
+                        at(clock).saturating_duration_since(*last_real_end) < CADENCE.keep_warm_for,
+                        "submitted after the window"
+                    );
                 }
                 CacheWarmEffect::ArmTimer { .. } => {
                     let CacheWarm::Armed { last_real_end, .. } = &next else {
@@ -196,6 +233,7 @@ fn any_event_order_keeps_the_warm_window(case: hegel::TestCase) {
             CacheWarm::Busy {
                 real: false,
                 last_real_end: was,
+                ..
             },
             CacheWarmEvent::TurnEnded { .. },
         ) = (&before, &event)
@@ -204,4 +242,71 @@ fn any_event_order_keeps_the_warm_window(case: hegel::TestCase) {
         }
         state = next;
     }
+}
+
+/// Oracle: design note §3.7 ("Armed | TimerFired (window over) → Cold") and
+/// today's begin_warm_turn: a timer that fires after the last real turn's
+/// window warms nothing and leaves the session cold.
+#[test]
+fn a_timer_firing_after_the_window_warms_nothing() {
+    // Arrange
+    let armed = CacheWarm::Armed {
+        last_real_end: at(0),
+        fires_at: at(3590),
+    };
+
+    // Act
+    let (after, effects) = step(
+        armed,
+        CacheWarmEvent::TimerFired {
+            input: input(1),
+            at: at(3700),
+            cadence: CADENCE,
+        },
+    );
+
+    // Assert
+    assert!(effects.is_empty(), "no warm prompt: {effects:?}");
+    assert_eq!(
+        after,
+        CacheWarm::Cold {
+            last_real_end: Some(at(0))
+        }
+    );
+}
+
+/// Oracle: today's mark_real_unless_warm (R16): an input that joins a warm
+/// turn (a steer) makes it real work, so its end moves the window.
+#[test]
+fn an_input_joining_a_warm_turn_makes_it_real() {
+    // Arrange
+    let warming = CacheWarm::Warming {
+        input: input(7),
+        last_real_end: at(100),
+    };
+    let (warm_turn, _) = step(
+        warming,
+        CacheWarmEvent::TurnStarted {
+            input: Some(input(7)),
+        },
+    );
+
+    // Act
+    let (joined, _) = step(warm_turn, CacheWarmEvent::InputJoined { input: input(8) });
+    let (after, _) = step(
+        joined,
+        CacheWarmEvent::TurnEnded {
+            at: at(400),
+            cadence: CADENCE,
+        },
+    );
+
+    // Assert
+    assert_eq!(
+        after,
+        CacheWarm::Armed {
+            last_real_end: at(400),
+            fires_at: at(640)
+        }
+    );
 }

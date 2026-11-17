@@ -27,6 +27,8 @@ pub(crate) enum CacheWarm {
     Busy {
         real: bool,
         last_real_end: Option<ClockInstant>,
+        /// The warm prompt this turn runs, while it is the module's own.
+        warm: Option<InputId>,
     },
     Armed {
         last_real_end: ClockInstant,
@@ -48,6 +50,12 @@ pub(crate) enum CacheWarmEvent {
         cadence: WarmCadence,
     },
     TimerFired {
+        input: InputId,
+        at: ClockInstant,
+        cadence: WarmCadence,
+    },
+    /// An input joined the running turn (a steer, or the prompt itself).
+    InputJoined {
         input: InputId,
     },
     WarmRefused,
@@ -96,6 +104,7 @@ impl EventTag for CacheWarmEvent {
             Self::TurnStarted { .. } => "turn_started",
             Self::TurnEnded { .. } => "turn_ended",
             Self::TimerFired { .. } => "timer_fired",
+            Self::InputJoined { .. } => "input_joined",
             Self::WarmRefused => "warm_refused",
             Self::SessionGone => "session_gone",
         }
@@ -118,6 +127,8 @@ const TRANSITIONS: &[Transition] = &[
     edge("busy", "turn_ended", "armed"),
     edge("busy", "turn_ended", "cold"),
     edge("armed", "timer_fired", "warming"),
+    edge("armed", "timer_fired", "cold"),
+    edge("busy", "input_joined", "busy"),
     edge("warming", "warm_refused", "cold"),
     edge("cold", "session_gone", "cold"),
     edge("busy", "session_gone", "cold"),
@@ -148,15 +159,23 @@ impl StateMachine for CacheWarmMachine {
         use CacheWarmEvent as V;
         match (state, event) {
             (S::Cold { .. } | S::Armed { .. } | S::Warming { .. }, V::TurnStarted { input }) => {
-                let own = matches!((state, &input), (S::Warming { input: warm, .. }, Some(started)) if warm == started);
+                let warm = match (state, &input) {
+                    (S::Warming { input: warm, .. }, Some(started)) if warm == started => {
+                        Some(warm.clone())
+                    }
+                    (S::Cold { .. } | S::Armed { .. } | S::Warming { .. } | S::Busy { .. }, _) => {
+                        None
+                    }
+                };
                 let effects = match state {
                     S::Armed { .. } => vec![E::Disarm],
                     S::Cold { .. } | S::Warming { .. } | S::Busy { .. } => Vec::new(),
                 };
                 Ok((
                     S::Busy {
-                        real: !own,
+                        real: warm.is_none(),
                         last_real_end: last_real(state),
+                        warm,
                     },
                     effects,
                 ))
@@ -166,6 +185,7 @@ impl StateMachine for CacheWarmMachine {
                 S::Busy {
                     real,
                     last_real_end,
+                    ..
                 },
                 V::TurnEnded { at, cadence },
             ) => {
@@ -194,13 +214,44 @@ impl StateMachine for CacheWarmMachine {
             (S::Cold { .. } | S::Armed { .. } | S::Warming { .. }, V::TurnEnded { .. }) => {
                 Err(TransitionError::Stale)
             }
-            (S::Armed { last_real_end, .. }, V::TimerFired { input }) => Ok((
-                S::Warming {
-                    input: input.clone(),
-                    last_real_end: *last_real_end,
+            (S::Armed { last_real_end, .. }, V::TimerFired { input, at, cadence })
+                if at.saturating_duration_since(*last_real_end) < cadence.keep_warm_for =>
+            {
+                Ok((
+                    S::Warming {
+                        input: input.clone(),
+                        last_real_end: *last_real_end,
+                    },
+                    vec![E::SubmitWarm { input }],
+                ))
+            }
+            // The window passed while the timer waited: nothing to warm.
+            (S::Armed { last_real_end, .. }, V::TimerFired { .. }) => Ok((
+                S::Cold {
+                    last_real_end: Some(*last_real_end),
                 },
-                vec![E::SubmitWarm { input }],
+                Vec::new(),
             )),
+            // An input other than the warm prompt joined: the turn is real.
+            (
+                S::Busy {
+                    real: false,
+                    last_real_end,
+                    warm: Some(warm),
+                },
+                V::InputJoined { input },
+            ) if &input != warm => Ok((
+                S::Busy {
+                    real: true,
+                    last_real_end: *last_real_end,
+                    warm: None,
+                },
+                Vec::new(),
+            )),
+            (
+                S::Cold { .. } | S::Busy { .. } | S::Armed { .. } | S::Warming { .. },
+                V::InputJoined { .. },
+            ) => Err(TransitionError::Stale),
             (S::Cold { .. } | S::Busy { .. } | S::Warming { .. }, V::TimerFired { .. }) => {
                 Err(TransitionError::Stale)
             }
