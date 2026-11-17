@@ -7,7 +7,7 @@ cargo nextest run --locked --profile ci -p codex-router-cli --features keychain-
 ```
 
 `integration/main.rs` covers account and recovery commands, debug isolation and
-logging, compiled Host lifecycle, enrollment and proxy overload. The retired
+logging, compiled Host lifecycle, enrollment status and proxy overload. The retired
 root-updater guard and its dedicated journeys were removed. `e2e/main.rs` covers
 one-off root conversion with real encrypted OpenAI and Claude credentials,
 production proxy credential resolution and a signed compiled account-list smoke
@@ -15,10 +15,10 @@ check. It also retains the ignored default-port cutover case selected by its
 separate CI job. Ordinary package runs keep that case ignored. Library and binary
 unit tests remain colocated.
 
-Case expansions and fixture data retain their existing directories. The three
-child selectors derive from `module_path!()`: the captured enrollment Host must
-report one passed test, and managed native children retain real readiness, PID,
-replacement and teardown checks that reject zero matches.
+Case expansions and fixture data retain their existing directories. The
+compiled Host child selector derives from `module_path!()`. The enrollment
+producer journey and its Host and native child selectors were removed with
+`fleet enroll` and the old central edge.
 
 Compiled Host installation fixtures sign and verify copied Router binaries before
 launch. Their directory owner kills only processes rooted in that fixture (and
