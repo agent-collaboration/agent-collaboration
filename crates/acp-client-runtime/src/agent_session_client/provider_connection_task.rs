@@ -354,17 +354,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         let mut session_tasks = tokio::task::JoinSet::new();
                         let mut admission_tasks = tokio::task::JoinSet::new();
                         let (admission_tx, mut admission_rx) = tokio::sync::mpsc::channel(32);
-                        let mut pending_loads = std::collections::HashSet::<String>::new();
-                        let mut pending_closes = std::collections::HashSet::<String>::new();
-                        // Release-only closes in flight, and the sessions they
-                        // released: a released session never comes back on
-                        // this connection, and a restore that was already in
-                        // flight is dropped when it lands (D1 R14).
-                        let mut pending_releases = std::collections::HashSet::<String>::new();
-                        let mut released_sessions = std::collections::HashSet::<String>::new();
-                        // The generation each admitted session's run publishes
-                        // under; its Closed ends that generation (D1 R14).
-                        let mut session_generations = HashMap::<String, crate::SessionGeneration>::new();
+                        // One typed lifecycle per provider session (design note
+                        // §12.1): loading, live, closing, or not loaded with the
+                        // generation its last run published under. Every
+                        // admission below is a transition on that cell.
+                        let mut session_cells = super::session_cell_bookkeeping::SessionCells::new();
                         let Some(base_capabilities) = base_capabilities else { return Ok(()); };
                         loop {
                             tokio::select! {
@@ -380,21 +374,32 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 registration.settings_catalog.clone()
                                             });
                                             let mut setup_error = None;
+                                            // Only an admitted identity opens a run: the session's cell
+                                            // admits the create (NotLoaded to Live) before the actor is
+                                            // registered, and a duplicate it refuses leaves the live
+                                            // run alone (D1 R14).
+                                            let mut created_generation = None;
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
-                                                register_provider_session(registration, &mut sessions)
+                                                let provider_session_id = registration.provider_session_id.clone();
+                                                let generation = super::session_cell_bookkeeping::admit_create(&mut session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id))?;
+                                                match register_provider_session(registration, &mut sessions) {
+                                                    Ok(created) => {
+                                                        created_generation = Some(generation);
+                                                        Ok(created)
+                                                    }
+                                                    Err(error) => {
+                                                        super::session_cell_bookkeeping::abandon_run(&mut session_cells, &provider_session_id, generation);
+                                                        Err(error)
+                                                    }
+                                                }
                                             });
-                                            // Only an admitted identity opens a run; a duplicate the
-                                            // registration rejected leaves the live run alone (D1 R14).
-                                            let created_generation = result.as_ref().ok().map(|created| {
-                                                task_event_sink.open_generation(&created.provider_session_id)
-                                            });
+                                            if let (Ok(created), Some(generation)) = (&result, created_generation) {
+                                                task_event_sink.adopt_generation(&created.provider_session_id, generation);
+                                            }
                                             let mut settings_sink_closed = false;
                                             if let Ok(created) = &mut result {
                                                 known_sessions.track(created.provider_session_id.clone()).await;
-                                                if let Some(generation) = created_generation {
-                                                    session_generations.insert(created.provider_session_id.clone(), generation);
-                                                }
                                                 if let Some(report) = report {
                                                     let report = report.with_auth_status(task_auth_status.read().await.clone());
                                                     task_session_capabilities.write().await.insert(created.provider_session_id.clone(), report);
@@ -443,16 +448,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
                                         }
-                                        PendingSessionAdmission::Restore { provider_session_id, generation, result, reply } => {
-                                            pending_loads.remove(&provider_session_id);
-                                            // A close since this restore was admitted ended its run
-                                            // (a release also bans the session): the late completion
-                                            // registers nothing, and a fresh restore stays possible.
-                                            let still_admitted = session_generations.get(&provider_session_id) == Some(&generation);
-                                            if released_sessions.contains(&provider_session_id) || !still_admitted {
-                                                if still_admitted {
-                                                    session_generations.remove(&provider_session_id);
-                                                }
+                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, reply } => {
+                                            // A close since this restore was admitted made its attempt
+                                            // stale: the late completion registers nothing, and a fresh
+                                            // restore stays possible.
+                                            if !super::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
                                                 known_sessions.forget(&provider_session_id).await;
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
                                                 continue;
@@ -483,8 +483,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     #[cfg(any(test, feature = "test-observation"))] Arc::clone(&session_test_tool_calls),
                                                 )
                                             }).map(|_| generation);
+                                            // The cell moves Loading to Live on a registered restore,
+                                            // and back to NotLoaded on a failed one.
+                                            super::session_cell_bookkeeping::settle_load(&mut session_cells, &provider_session_id, attempt, result.is_ok());
                                             if result.is_err() {
-                                                session_generations.remove(&provider_session_id);
                                                 known_sessions.forget(&provider_session_id).await;
                                             } else if let Some(report) = report {
                                                 let report = report.with_auth_status(task_auth_status.read().await.clone());
@@ -507,18 +509,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let _result = reply.send(result);
                                         }
-                                        PendingSessionAdmission::Close { provider_session_id, result, reply } => {
-                                            pending_closes.remove(&provider_session_id);
-                                            let released = pending_releases.remove(&provider_session_id);
+                                        PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
                                             task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&provider_session_id);
+                                            // A done close ends NotLoaded and can be loaded again (ACP
+                                            // close); a failed one returns the cell to where it started.
+                                            let closed_generation = super::session_cell_bookkeeping::settle_close(&mut session_cells, &provider_session_id, attempt, result.is_ok());
                                             if result.is_ok() {
-                                                if released {
-                                                    released_sessions.insert(provider_session_id.clone());
-                                                }
                                                 // Closed ends the run's generation here, in the loop
                                                 // that admits restores, so no newer run can open
                                                 // between the close and its Closed (D1 R14).
-                                                if task_event_sink.publish_closed(&provider_session_id, session_generations.remove(&provider_session_id)).is_err() {
+                                                if task_event_sink.publish_closed(&provider_session_id, closed_generation).is_err() {
                                                     sink_closed.cancel();
                                                     task_shutdown.cancel();
                                                 }
@@ -596,34 +596,40 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             });
                                         }
                                         ProviderCommand::Restore { provider_session_id, cwd, mode, reply } => {
-                                            if released_sessions.contains(&provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
-                                            } else if sessions.contains_key(&provider_session_id) || !pending_loads.insert(provider_session_id.clone()) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
-                                            } else {
-                                                // Only an admitted restore opens a new run; a
-                                                // refused one leaves the live run alone (D1 R14).
-                                                let generation = task_event_sink.open_generation(&provider_session_id);
-                                                session_generations.insert(provider_session_id.clone(), generation);
-                                                known_sessions.track(provider_session_id.clone()).await;
-                                                let inputs = provider_session_restore::RestoreAdmissionInputs {
-                                                    connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
-                                                    behavior: Arc::clone(&task_runtime_handles.behavior),
-                                                    connection: connection.clone(),
-                                                    provider_session_id,
-                                                    cwd,
-                                                    mode,
-                                                    mcp_servers: session_mcp_servers.clone(),
-                                                    shutdown: task_shutdown.clone(),
-                                                    event_sink: Arc::new(crate::session_event_sink::SessionGenerationSink::new(Arc::clone(&task_event_sink), generation)),
-                                                    admission_tx: admission_tx.clone(),
-                                                    generation,
-                                                    reply,
-                                                };
-                                                admission_tasks.spawn(async move {
-                                                    provider_session_restore::run_restore_admission(inputs).await;
-                                                });
-                                            }
+                                            // Only an admitted restore opens a new run; a refused
+                                            // one leaves the live run alone (D1 R14).
+                                            let attempt = crate::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
+                                            let via = match mode {
+                                                provider_session_restore::RestoreHistoryMode::Replay => crate::session_lifecycle_machine::RestoreVia::Load,
+                                                provider_session_restore::RestoreHistoryMode::WithoutReplay => crate::session_lifecycle_machine::RestoreVia::Resume,
+                                            };
+                                            let generation = match super::session_cell_bookkeeping::admit_load(&mut session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id), via, attempt) {
+                                                Ok(generation) => generation,
+                                                Err(error) => {
+                                                    let _result = reply.send(Err(error));
+                                                    continue;
+                                                }
+                                            };
+                                            task_event_sink.adopt_generation(&provider_session_id, generation);
+                                            known_sessions.track(provider_session_id.clone()).await;
+                                            let inputs = provider_session_restore::RestoreAdmissionInputs {
+                                                connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
+                                                behavior: Arc::clone(&task_runtime_handles.behavior),
+                                                connection: connection.clone(),
+                                                provider_session_id,
+                                                cwd,
+                                                mode,
+                                                mcp_servers: session_mcp_servers.clone(),
+                                                shutdown: task_shutdown.clone(),
+                                                event_sink: Arc::new(crate::session_event_sink::SessionGenerationSink::new(Arc::clone(&task_event_sink), generation)),
+                                                admission_tx: admission_tx.clone(),
+                                                generation,
+                                                attempt,
+                                                reply,
+                                            };
+                                            admission_tasks.spawn(async move {
+                                                provider_session_restore::run_restore_admission(inputs).await;
+                                            });
                                         }
                                         ProviderCommand::List { cwd, reply } => {
                                             let pending_connection = connection.clone();
@@ -637,12 +643,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             });
                                         }
                                         ProviderCommand::Close { provider_session_id, release_only, reply } => {
-                                            if !pending_closes.insert(provider_session_id.clone()) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
+                                            let attempt = crate::session_lifecycle_machine::CloseAttempt(uuid::Uuid::now_v7());
+                                            if let Err(error) = super::session_cell_bookkeeping::admit_close(&mut session_cells, &provider_session_id, attempt) {
+                                                let _result = reply.send(Err(error));
                                                 continue;
-                                            }
-                                            if release_only {
-                                                pending_releases.insert(provider_session_id.clone());
                                             }
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
@@ -661,12 +665,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 publish_pending_session_admission(
                                                     &pending_admission_tx,
                                                     &pending_shutdown,
-                                                    PendingSessionAdmission::Close { provider_session_id, result, reply },
+                                                    PendingSessionAdmission::Close { provider_session_id, attempt, result, reply },
                                                 ).await;
                                             });
                                         }
                                         ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
-                                            if pending_closes.contains(&provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
+                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
                                                     let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy));
                                                 }
@@ -702,7 +706,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let _result = session.send(ProviderSessionCommand::Cancel { expected_operation_id, reply }).await;
                                         }
                                         ProviderCommand::Steer { provider_session_id, input_id, prompt, reply } => {
-                                            if pending_closes.contains(&provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
+                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }
@@ -738,7 +742,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let _result = session.send(ProviderSessionCommand::WaitIdle { reply }).await;
                                         }
                                         ProviderCommand::SetSetting { provider_session_id, request, reply } => {
-                                            if pending_closes.contains(&provider_session_id) {
+                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }

@@ -374,15 +374,14 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
     stopped.expect("the supervisor drains without a timeout");
 }
 
-/// Oracle: D1 spec R14 and the Reviewer's C2 residual: a load whose
-/// router-closed check passed before the close but which reaches the
-/// connection after the release is refused there. Released on an agent that
-/// can load but can't close, the session can't be loaded again on that
-/// connection, and the agent never sees the session/load.
+/// Oracle: the owner's close decision (ACP close: it ends NotLoaded and can
+/// be loaded again; the Router-side close is no longer terminal). Released on
+/// an agent that can load but can't close, the session loads again on the
+/// same connection, and the agent sees both session/loads.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_load_reaching_the_connection_after_a_release_is_refused() {
-    // Arrange: a released session on a load-capable agent without
-    // session/close.
+async fn a_released_session_loads_again_on_the_same_connection() {
+    // Arrange: a loaded, then released, session on a load-capable agent
+    // without session/close.
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire.json");
     let runtime = ExternalProviderRuntime::initialize(
@@ -395,12 +394,16 @@ async fn a_load_reaching_the_connection_after_a_release_is_refused() {
     .await
     .expect("fixture provider");
     runtime
+        .load_session("reactive-session-1".to_owned(), root.path().to_owned())
+        .await
+        .expect("the first load");
+    runtime
         .release_session("reactive-session-1".to_owned())
         .await
         .expect("the Router releases the session");
 
     // Act
-    let loaded = runtime
+    let reloaded = runtime
         .load_session("reactive-session-1".to_owned(), root.path().to_owned())
         .await;
     let loads = recorded_requests(&receipt, "session/load");
@@ -408,13 +411,47 @@ async fn a_load_reaching_the_connection_after_a_release_is_refused() {
 
     // Assert
     assert!(
-        matches!(
-            loaded,
-            Err(acp_client_runtime::ExternalProviderRuntimeError::SessionReleased)
-        ),
-        "a released session isn't loaded again: {loaded:?}"
+        reloaded.is_ok(),
+        "a released session loads again: {reloaded:?}"
     );
-    assert_eq!(loads, 0, "the agent never saw a session/load");
+    assert_eq!(loads, 2, "the agent saw both session/loads");
+}
+
+/// Oracle: the owner's close decision and M8: close on a session that isn't
+/// loaded is refused "nothing to close", with the state and its valid next
+/// steps; the agent sees no request for it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn releasing_a_session_that_is_not_loaded_answers_nothing_to_close() {
+    // Arrange: a load-capable agent without session/close, nothing loaded.
+    let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("wire.json");
+    let runtime = ExternalProviderRuntime::initialize(
+        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+            "cursor-settings-agent.ts",
+            vec!["reactive".to_owned(), receipt.display().to_string()],
+        ),
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
+
+    // Act
+    let released = runtime
+        .release_session("reactive-session-1".to_owned())
+        .await;
+    let loads = recorded_requests(&receipt, "session/load");
+    runtime.shutdown().await;
+
+    // Assert
+    assert!(
+        matches!(
+            &released,
+            Err(acp_client_runtime::ExternalProviderRuntimeError::SessionStateRefused { answer })
+                if answer == "session is not loaded; nothing to close; load it or resume it"
+        ),
+        "the release answers nothing to close: {released:?}"
+    );
+    assert_eq!(loads, 0, "the agent saw no session/load");
 }
 
 /// Oracle: D1 spec R14 and the Lead's terminal-per-generation rule: on an

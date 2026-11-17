@@ -52,12 +52,16 @@ pub(crate) struct SessionCell {
 impl SessionCell {
     /// A session this connection hasn't run yet.
     pub(crate) fn fresh() -> Self {
+        Self::not_loaded_after(SessionGeneration::UNTRACKED)
+    }
+
+    /// A session this connection hasn't run yet whose last run, on an
+    /// earlier connection, published under `last`: its next run is newer.
+    pub(crate) fn not_loaded_after(last: SessionGeneration) -> Self {
         Self {
-            lifecycle: SessionLifecycle::NotLoaded {
-                last: SessionGeneration::UNTRACKED,
-            },
+            lifecycle: SessionLifecycle::NotLoaded { last },
             line: QueueLine::Ended {
-                epoch: SessionGeneration::UNTRACKED,
+                epoch: last,
                 reason: NotSentReason::SessionClosed,
                 next_sequence: 0,
             },
@@ -67,7 +71,7 @@ impl SessionCell {
         }
     }
 
-    fn run_generation(&self) -> Option<SessionGeneration> {
+    pub(crate) fn run_generation(&self) -> Option<SessionGeneration> {
         match self.lifecycle {
             SessionLifecycle::Loading { generation, .. }
             | SessionLifecycle::Live { generation } => Some(generation),

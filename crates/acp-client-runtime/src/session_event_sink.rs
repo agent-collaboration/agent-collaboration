@@ -63,6 +63,10 @@ pub trait SessionEventSink: Send + Sync + 'static {
         SessionGeneration::UNTRACKED
     }
 
+    /// The session cell opened `generation` for an admitted create or
+    /// restore; a tracking sink makes it current (D1 state machines).
+    fn adopt_generation(&self, _session_id: &str, _generation: SessionGeneration) {}
+
     /// The session's generation now, for a callback starting work on it.
     fn current_generation(&self, _session_id: &str) -> SessionGeneration {
         SessionGeneration::UNTRACKED

@@ -198,6 +198,10 @@ pub enum ExternalProviderRuntimeError {
     /// connection, even by a load that was already in flight (D1 R14).
     #[error("provider session was closed by the Router")]
     SessionReleased,
+    /// The session's state refused the request; `answer` names the state and
+    /// the valid next steps (D1 M8).
+    #[error("{answer}")]
+    SessionStateRefused { answer: String },
     #[error("provider cancellation target is no longer active")]
     LocalCancelTargetMismatch,
     #[error("provider authentication is required (ACP code {code})")]

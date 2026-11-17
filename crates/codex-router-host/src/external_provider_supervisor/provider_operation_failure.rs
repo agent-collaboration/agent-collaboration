@@ -221,6 +221,16 @@ pub(super) fn runtime_failure(
             operation_id,
             target,
         ),
+        // The session's state refused the request: its own answer names the
+        // state and the valid next steps (D1 M8).
+        ExternalProviderRuntimeError::SessionStateRefused { answer } => failure(
+            ConversationOperationFailureKind::InvalidRequest,
+            ConversationOperationFailureStage::Validation,
+            ProviderOperationEffect::None,
+            &answer,
+            operation_id,
+            target,
+        ),
         // The Router closed the session while a load or resume was in
         // flight; the same refusal as one checked before it (D1 R14).
         ExternalProviderRuntimeError::SessionReleased => failure(

@@ -24,6 +24,7 @@ mod provider_request_fallback;
 mod provider_session_admission;
 mod provider_session_restore;
 pub(crate) mod provider_setting_application;
+mod session_cell_bookkeeping;
 
 use crate::ProviderCapabilityReport;
 use crate::provider_connection_activity::{ProviderConnectionActivity, ToolCallOwnershipHandler};
@@ -213,6 +214,9 @@ enum PendingSessionAdmission<P: InteractionPort> {
         /// The generation this restore was admitted under: its completion
         /// counts only while that is still the session's recorded run.
         generation: crate::SessionGeneration,
+        /// The load attempt the session's cell admitted; a close or another
+        /// load since then makes it stale.
+        attempt: crate::session_lifecycle_machine::LoadAttempt,
         result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
         reply: tokio::sync::oneshot::Sender<
             Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
@@ -220,6 +224,8 @@ enum PendingSessionAdmission<P: InteractionPort> {
     },
     Close {
         provider_session_id: String,
+        /// The close attempt the session's cell admitted.
+        attempt: crate::session_lifecycle_machine::CloseAttempt,
         result: Result<(), ExternalProviderRuntimeError>,
         reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
     },

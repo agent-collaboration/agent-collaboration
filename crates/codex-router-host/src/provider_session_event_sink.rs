@@ -503,6 +503,16 @@ impl SessionEventSink for HubSessionEventSink {
         SessionGeneration::from_number(state.current)
     }
 
+    fn adopt_generation(&self, session_id: &str, generation: SessionGeneration) {
+        let mut generations = self
+            .generations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = generations.entry(session_id.to_owned()).or_default();
+        state.current = generation.number();
+        state.closed = false;
+    }
+
     fn current_generation(&self, session_id: &str) -> SessionGeneration {
         SessionGeneration::from_number(
             self.generations

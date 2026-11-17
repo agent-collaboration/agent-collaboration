@@ -80,13 +80,6 @@ mod queued_entry_machine;
 )]
 mod session_cell_machine;
 mod session_event_sink;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the session cell wires the lifecycle machine in the next D1 step"
-    )
-)]
 mod session_lifecycle_answers;
 #[cfg_attr(
     not(test),
