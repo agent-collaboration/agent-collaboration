@@ -20,18 +20,14 @@ use state_machine_core::TransitionError;
 
 /// Admits a created identity: NotLoaded to Live under the run's next
 /// generation, which it returns. A session already loading, live or closing
-/// is a duplicate. `last_published` is the sink's generation for a session
-/// this connection hasn't run, so a run here is newer than one on an earlier
-/// connection.
+/// is a duplicate.
 pub(super) fn admit_create(
     cells: &SessionCellTable,
     session_id: &str,
-    last_published: SessionGeneration,
 ) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
     let effects = cells
         .transition(
             session_id,
-            last_published,
             SessionCellEvent::CreateAdmitted,
             crate::session_cell_table::EntryEffectRoute::Sink,
         )
@@ -61,7 +57,6 @@ pub(super) fn abandon_run(
     // Stale only when the cell already moved on; nothing is left to undo.
     let _ignored = cells.transition(
         session_id,
-        SessionGeneration::UNTRACKED,
         SessionCellEvent::ActorExited { generation },
         crate::session_cell_table::EntryEffectRoute::Sink,
     );
@@ -69,19 +64,16 @@ pub(super) fn abandon_run(
 
 /// Admits a load or resume: NotLoaded to Loading under the run's next
 /// generation, which it returns. Loading, live or closing sessions refuse
-/// it. `last_published` seeds a session this connection hasn't run, as for
-/// a create.
+/// it.
 pub(super) fn admit_load(
     cells: &SessionCellTable,
     session_id: &str,
-    last_published: SessionGeneration,
     via: RestoreVia,
     attempt: LoadAttempt,
 ) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
     let effects = cells
         .transition(
             session_id,
-            last_published,
             SessionCellEvent::LoadRequested { via, attempt },
             crate::session_cell_table::EntryEffectRoute::Sink,
         )
@@ -133,7 +125,6 @@ pub(super) fn settle_load(
     // Stale only when a close already replaced this load; the caller checked.
     let _ignored = cells.transition(
         session_id,
-        SessionGeneration::UNTRACKED,
         event,
         crate::session_cell_table::EntryEffectRoute::Sink,
     );
@@ -149,7 +140,6 @@ pub(super) fn admit_close(
     cells
         .transition(
             session_id,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::CloseRequested { attempt },
             crate::session_cell_table::EntryEffectRoute::Sink,
         )
@@ -174,7 +164,6 @@ pub(super) fn settle_close(
     let effects = cells
         .transition(
             session_id,
-            SessionGeneration::UNTRACKED,
             event,
             crate::session_cell_table::EntryEffectRoute::Sink,
         )
@@ -209,7 +198,6 @@ pub(super) fn start_direct_turn(
 ) -> Result<(), Box<DirectTurnRefusal>> {
     let refusal = match cells.transition(
         session_id,
-        SessionGeneration::UNTRACKED,
         SessionCellEvent::PromptStarted { turn },
         crate::session_cell_table::EntryEffectRoute::Sink,
     ) {
@@ -300,7 +288,6 @@ impl Drop for CellTurnGuard {
         // Stale only when the turn already ended (a close freed it).
         let _ended = self.cells.transition(
             &self.session_id,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::TurnEnded {
                 turn: self.turn,
                 outcome: self.outcome,
@@ -352,7 +339,6 @@ pub(crate) fn report_actor_exit(
 ) {
     let Ok(effects) = cells.transition(
         session_id,
-        SessionGeneration::UNTRACKED,
         SessionCellEvent::ActorExited { generation },
         crate::session_cell_table::EntryEffectRoute::Sink,
     ) else {
@@ -421,7 +407,6 @@ pub(crate) fn apply_setting(
 ) {
     let _applied = cells.transition(
         session_id,
-        SessionGeneration::UNTRACKED,
         SessionCellEvent::Setting { kind, event },
         crate::session_cell_table::EntryEffectRoute::Sink,
     );
@@ -471,7 +456,6 @@ pub(crate) fn accept_settings(
     let effects = cells
         .transition(
             session_id,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::AcceptSettings,
             crate::session_cell_table::EntryEffectRoute::Sink,
         )

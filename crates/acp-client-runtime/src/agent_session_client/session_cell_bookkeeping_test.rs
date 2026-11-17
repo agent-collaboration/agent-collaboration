@@ -16,19 +16,12 @@ fn close_attempt(id: u128) -> CloseAttempt {
 fn a_closed_session_loads_again_under_a_newer_generation() {
     // Arrange
     let cells = SessionCellTable::default();
-    let first = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED)
-        .expect("the create is admitted");
+    let first = admit_create(&cells, SESSION).expect("the create is admitted");
     admit_close(&cells, SESSION, close_attempt(1)).expect("the close is admitted");
     let closed = settle_close(&cells, SESSION, close_attempt(1), true);
 
     // Act
-    let reloaded = admit_load(
-        &cells,
-        SESSION,
-        SessionGeneration::UNTRACKED,
-        RestoreVia::Load,
-        load_attempt(2),
-    );
+    let reloaded = admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(2));
 
     // Assert
     assert_eq!(closed, Some(first));
@@ -65,26 +58,13 @@ fn closing_a_session_that_is_not_loaded_answers_nothing_to_close() {
 fn a_load_landing_after_a_close_is_stale_and_a_fresh_load_is_admitted() {
     // Arrange
     let cells = SessionCellTable::default();
-    admit_load(
-        &cells,
-        SESSION,
-        SessionGeneration::UNTRACKED,
-        RestoreVia::Load,
-        load_attempt(1),
-    )
-    .expect("the load is admitted");
+    admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(1)).expect("the load is admitted");
     admit_close(&cells, SESSION, close_attempt(2)).expect("the close is admitted");
     let closed = settle_close(&cells, SESSION, close_attempt(2), true);
 
     // Act
     let late_is_current = is_current_load(&cells, SESSION, load_attempt(1));
-    let fresh = admit_load(
-        &cells,
-        SESSION,
-        SessionGeneration::UNTRACKED,
-        RestoreVia::Resume,
-        load_attempt(3),
-    );
+    let fresh = admit_load(&cells, SESSION, RestoreVia::Resume, load_attempt(3));
 
     // Assert
     assert!(closed.is_some(), "the close published Closed");
@@ -99,15 +79,8 @@ fn a_load_landing_after_a_close_is_stale_and_a_fresh_load_is_admitted() {
 fn a_failed_close_returns_to_where_it_started() {
     // Arrange
     let cells = SessionCellTable::default();
-    admit_create(&cells, "live", SessionGeneration::UNTRACKED).expect("created");
-    admit_load(
-        &cells,
-        "loading",
-        SessionGeneration::UNTRACKED,
-        RestoreVia::Load,
-        load_attempt(1),
-    )
-    .expect("loading");
+    admit_create(&cells, "live").expect("created");
+    admit_load(&cells, "loading", RestoreVia::Load, load_attempt(1)).expect("loading");
     admit_close(&cells, "live", close_attempt(2)).expect("closing live");
     admit_close(&cells, "loading", close_attempt(3)).expect("closing loading");
 
@@ -127,32 +100,6 @@ fn a_failed_close_returns_to_where_it_started() {
     ));
 }
 
-/// Oracle: D1 R14 (one run per generation). A session this connection hasn't
-/// run starts after the generation the sink last published it under, so an
-/// earlier connection's run can't share its number.
-#[test]
-fn a_session_new_to_this_connection_runs_after_the_sinks_last_generation() {
-    // Arrange
-    let cells = SessionCellTable::default();
-    let earlier = SessionGeneration::from_number(7);
-
-    // Act
-    let created = admit_create(&cells, SESSION, earlier).expect("created");
-    let duplicate = admit_create(&cells, SESSION, earlier);
-
-    // Assert
-    assert_eq!(created.number(), 8);
-    assert!(
-        matches!(
-            &duplicate,
-            Err(ExternalProviderRuntimeError::Operation(message))
-                if message == "provider returned a duplicate conversation identity"
-        ),
-        "{duplicate:?}"
-    );
-    assert!(!is_closing(&cells, SESSION));
-}
-
 /// Oracle: design note §12.1 (Closing{EndingTurn} advances only on the
 /// running turn's end) and the owner's close decision (a done close ends
 /// NotLoaded and publishes Closed). A close that finds a prompt running
@@ -161,7 +108,7 @@ fn a_session_new_to_this_connection_runs_after_the_sinks_last_generation() {
 async fn a_close_during_a_prompt_frees_only_after_the_turn_ends() {
     // Arrange
     let cells = std::sync::Arc::new(SessionCellTable::default());
-    let generation = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED).expect("created");
+    let generation = admit_create(&cells, SESSION).expect("created");
     let turn = TurnId(uuid::Uuid::from_u128(5));
     assert!(
         start_direct_turn(&cells, SESSION, turn, false).is_ok(),
@@ -256,11 +203,10 @@ fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
     let cells = SessionCellTable::default();
     let ended = std::sync::Arc::new(EndedMessages::default());
     cells.set_sink(std::sync::Arc::clone(&ended) as std::sync::Arc<dyn crate::QueueEntrySink>);
-    let generation = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED).expect("created");
+    let generation = admit_create(&cells, SESSION).expect("created");
     cells
         .transition(
             SESSION,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::Enqueue {
                 operation: crate::session_cell_machine::QueuedOperation("waiting".to_owned()),
             },
@@ -273,13 +219,7 @@ fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
     report_actor_exit(&cells, &hub, SESSION, generation);
     let stale_exit = HubRecorder::default();
     report_actor_exit(&cells, &stale_exit, SESSION, generation);
-    let reloaded = admit_load(
-        &cells,
-        SESSION,
-        SessionGeneration::UNTRACKED,
-        RestoreVia::Load,
-        load_attempt(9),
-    );
+    let reloaded = admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(9));
 
     // Assert
     let published = hub

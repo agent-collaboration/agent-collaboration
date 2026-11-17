@@ -406,7 +406,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
                                                 let provider_session_id = registration.provider_session_id.clone();
-                                                let generation = super::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id, crate::SessionGeneration::UNTRACKED)?;
+                                                let generation = super::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id)?;
                                                 match register_provider_session(registration, &mut sessions) {
                                                     Ok(created) => {
                                                         created_generation = Some(generation);
@@ -623,7 +623,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 provider_session_restore::RestoreHistoryMode::Replay => crate::session_lifecycle_machine::RestoreVia::Load,
                                                 provider_session_restore::RestoreHistoryMode::WithoutReplay => crate::session_lifecycle_machine::RestoreVia::Resume,
                                             };
-                                            let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, crate::SessionGeneration::UNTRACKED, via, attempt) {
+                                            let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, via, attempt) {
                                                 Ok(generation) => generation,
                                                 Err(error) => {
                                                     let _result = reply.send(Err(error));

@@ -10,12 +10,7 @@ const SESSION: &str = "session-one";
 type Recorded = RefCell<Vec<(&'static str, RunClaim)>>;
 
 fn move_cell(cells: &SessionCellTable, event: SessionCellEvent) {
-    let _moved = cells.transition(
-        SESSION,
-        SessionGeneration::UNTRACKED,
-        event,
-        EntryEffectRoute::Caller,
-    );
+    let _moved = cells.transition(SESSION, event, EntryEffectRoute::Caller);
 }
 
 fn publish(

@@ -223,12 +223,9 @@ impl SessionQueueDoor<'_> {
     /// through the queue sink, and sent ones finish their turns.
     pub fn queue_stop(&self) {
         for session_id in self.cells.session_ids() {
-            let _ended = self.cells.transition(
-                &session_id,
-                SessionGeneration::UNTRACKED,
-                SessionCellEvent::Stop,
-                EntryEffectRoute::Sink,
-            );
+            let _ended =
+                self.cells
+                    .transition(&session_id, SessionCellEvent::Stop, EntryEffectRoute::Sink);
         }
     }
 
@@ -238,12 +235,7 @@ impl SessionQueueDoor<'_> {
         event: SessionCellEvent,
     ) -> Result<Vec<SessionCellEffect>, QueueRefusal> {
         self.cells
-            .transition(
-                provider_session_id,
-                SessionGeneration::UNTRACKED,
-                event,
-                EntryEffectRoute::Caller,
-            )
+            .transition(provider_session_id, event, EntryEffectRoute::Caller)
             .map_err(|refusal| self.queue_refusal(provider_session_id, refusal))
     }
 

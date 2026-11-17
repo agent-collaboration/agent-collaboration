@@ -35,7 +35,6 @@ fn live_table() -> (SessionCellTable, Arc<RecordingSink>) {
     cells
         .transition(
             SESSION,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::CreateAdmitted,
             EntryEffectRoute::Sink,
         )
@@ -47,7 +46,6 @@ fn close(cells: &SessionCellTable) {
     cells
         .transition(
             SESSION,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::CloseRequested {
                 attempt: CloseAttempt(uuid::Uuid::from_u128(9)),
             },
@@ -206,7 +204,6 @@ fn a_send_after_a_failed_close_is_accepted() {
     cells
         .transition(
             SESSION,
-            SessionGeneration::UNTRACKED,
             SessionCellEvent::CloseFailed { attempt },
             EntryEffectRoute::Sink,
         )

@@ -10,7 +10,6 @@
 //! failed load, an actor exit, a stop) and the Host must settle the messages
 //! it ended.
 
-use crate::SessionGeneration;
 use crate::queued_entry_machine::QueuedEntryEffect;
 use crate::session_cell_machine::{
     SessionCell, SessionCellEffect, SessionCellEvent, SessionCellMachine, SessionCellRefusal,
@@ -51,19 +50,16 @@ impl SessionCellTable {
     }
 
     /// Applies `event` to the session's cell. A session this connection
-    /// hasn't run starts NotLoaded after `last_published`, the generation
-    /// its last run on an earlier connection published under; only a create
-    /// or a load can move such a cell. Nothing changes unless the move
+    /// hasn't run starts NotLoaded; only a create or a load can move it. Nothing changes unless the move
     /// succeeds, so a refused event never adds a cell. With the Sink route,
     /// message effects go to the sink and the rest come back.
     pub(crate) fn transition(
         &self,
         session_id: &str,
-        last_published: SessionGeneration,
         event: SessionCellEvent,
         route: EntryEffectRoute,
     ) -> Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>> {
-        let effects = self.apply(session_id, last_published, event)?;
+        let effects = self.apply(session_id, event)?;
         self.changed.notify_waiters();
         Ok(match route {
             EntryEffectRoute::Caller => effects,
@@ -103,7 +99,6 @@ impl SessionCellTable {
     fn apply(
         &self,
         session_id: &str,
-        last_published: SessionGeneration,
         event: SessionCellEvent,
     ) -> Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>> {
         loop {
@@ -114,7 +109,7 @@ impl SessionCellTable {
                 *cell = next;
                 return Ok(effects);
             }
-            let seeded = SessionCell::not_loaded_after(last_published);
+            let seeded = SessionCell::fresh();
             let (next, effects) = SessionCellMachine::transition(&seeded, event.clone())?;
             let mut cells = lock(&self.cells);
             if cells.contains_key(session_id) {
