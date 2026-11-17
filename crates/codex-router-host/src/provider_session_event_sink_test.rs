@@ -474,11 +474,15 @@ async fn closing_session_releases_backlog_and_publication_tracking() {
     );
 }
 
+/// Rounds of yielding that let every task made ready run to its next wait;
+/// a count of rounds on the test's one runtime, never time.
+const QUIESCENCE_ROUNDS: usize = 1_000;
+
 /// Oracle: design note §11.7 (M5) and Lead D-b, "A held at its hub
 /// publication: B completes fully" (wrong build: one consumer for every
-/// session): session A's history is held while a publication for A waits;
-/// session B's history replay still begins, and once A is released A's
-/// publication lands.
+/// session): session A's history is held while a publication for A waits.
+/// Driven until no task is ready, session B's history replay has begun;
+/// once A is released, A's publication lands.
 #[tokio::test]
 async fn a_session_held_at_its_hub_publication_never_holds_up_another() {
     // Arrange
@@ -507,16 +511,27 @@ async fn a_session_held_at_its_hub_publication_never_holds_up_another() {
     .expect("A's publication is queued");
 
     // Act
-    let other = sink.begin_history_replay("session-b").await;
+    let mut other = Box::pin(sink.begin_history_replay("session-b"));
+    let mut completed_while_held = futures_util::FutureExt::now_or_never(other.as_mut());
+    for _ in 0..QUIESCENCE_ROUNDS {
+        if completed_while_held.is_some() {
+            break;
+        }
+        tokio::task::yield_now().await;
+        completed_while_held = futures_util::FutureExt::now_or_never(other.as_mut());
+    }
+    let answered_while_held = completed_while_held.is_some();
     drop(held);
+    let other = match completed_while_held {
+        Some(completed) => completed,
+        None => other.await,
+    };
     sink.shutdown().await.expect("drain");
     let held_state = hub.state(held_session).await;
 
     // Assert
-    assert!(
-        other.is_ok(),
-        "B's replay began while A was held: {other:?}"
-    );
+    assert!(answered_while_held, "B did not complete while A was held");
+    assert!(other.is_ok(), "{other:?}");
     assert!(
         matches!(&held_state, Ok(session_event_model::SessionState::Idle)),
         "A's publication landed once released: {held_state:?}"
