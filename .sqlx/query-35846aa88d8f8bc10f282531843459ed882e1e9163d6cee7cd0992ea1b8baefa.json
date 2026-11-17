@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "UPDATE outbox_items SET item_state = ?, updated_at = ?\n                   WHERE request_id = ? AND item_state = ?\n                   RETURNING request_id AS \"request_id!\", caller_json, payload_json,\n                             item_state, flush_at_ms, outcome_json",
+  "query": "SELECT request_id AS \"request_id!\", caller_json, payload_json, item_state,\n                      flush_at_ms, outcome_json\n               FROM outbox_items WHERE caller_json = ? AND item_state <> ?\n               ORDER BY created_at, request_id",
   "describe": {
     "columns": [
       {
@@ -71,7 +71,7 @@
       }
     ],
     "parameters": {
-      "Right": 4
+      "Right": 2
     },
     "nullable": [
       false,
@@ -82,5 +82,5 @@
       true
     ]
   },
-  "hash": "02cd4a2b88894ccc7bd71338a461660f943329d34b518d43365e745106493dcc"
+  "hash": "35846aa88d8f8bc10f282531843459ed882e1e9163d6cee7cd0992ea1b8baefa"
 }

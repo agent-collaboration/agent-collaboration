@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT request_id AS \"request_id!\", flush_at_ms FROM outbox_items\n               WHERE item_state = ? ORDER BY flush_at_ms, request_id",
+  "query": "SELECT request_id AS \"request_id!\", flush_at_ms FROM outbox_items\n               WHERE item_state IN (?, ?) ORDER BY flush_at_ms, request_id",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,12 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
       false
     ]
   },
-  "hash": "67faeac88763b99dd425e2638968e7cea6cac42214436a24f8e840b27fa26be9"
+  "hash": "1e2eaf454a16542ab864a996ed0b76bcd1bd2f9ba594b6100eeb277507b31c7a"
 }

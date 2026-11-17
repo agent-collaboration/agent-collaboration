@@ -6,10 +6,11 @@
 //! or answered is sent again, and members a batch leaves unanswered return to
 //! the outbox to be resent under the same RequestId, which central replays.
 use crate::flush_marks::{earliest_open_mark, mark_in_window, next_mark_after};
+use crate::link_calls::LinkAdmissionRefusal;
 use central_link_protocol::ReplyPayload;
 use runtime_primitives::SyncTime;
 use std::collections::{BTreeMap, BTreeSet};
-use workspace_model::{RefusalReason, RequestId};
+use workspace_model::RequestId;
 
 /// The link batch frame's cap (Lead, 2026-11-15).
 pub const MAX_BATCH_WRITES: usize = 64;
@@ -63,8 +64,10 @@ pub enum FlushEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemberOutcome {
-    Accepted(ReplyPayload),
-    Refused(RefusalReason),
+    /// Central's whole answer, domain refusals included.
+    Answered(ReplyPayload),
+    /// Central never admitted the frame.
+    Refused(LinkAdmissionRefusal),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

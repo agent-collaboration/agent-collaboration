@@ -188,12 +188,16 @@ impl WorkerdHost {
         self.clock.now().unix_millis().div_euclid(1000)
     }
     pub async fn open_signin(clock: Arc<dyn Clock>, plan: &Path) -> Result<Self, StoreFailure> {
-        Self::open_configured(clock, Some(plan.to_owned()), false).await
+        Self::open_configured(clock, Some(plan.to_owned()), false, true).await
     }
+    /// `capture_logs` gives the bridge a private stderr the fixture reads; without
+    /// it the bridge inherits this process's stderr, so that pipe's EOF means
+    /// the bridge exited (the lifecycle tests' completion barrier).
     async fn open_configured(
         clock: Arc<dyn Clock>,
         plan: Option<std::path::PathBuf>,
         c2_witness: bool,
+        capture_logs: bool,
     ) -> Result<Self, StoreFailure> {
         let signin = plan.is_some();
         let initial_time_ms = clock.now().unix_millis();
@@ -219,7 +223,7 @@ impl WorkerdHost {
                 .current_dir(root)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
-                .stderr(if signin {
+                .stderr(if capture_logs {
                     Stdio::piped()
                 } else {
                     Stdio::inherit()
@@ -283,7 +287,7 @@ impl WorkerdHost {
             let drain = std::thread::spawn(move || {
                 let mut line = String::new();
                 while output.read_line(&mut line).unwrap_or(0) > 0 {
-                    if signin {
+                    if capture_logs {
                         process_logs
                             .lock()
                             .unwrap_or_else(PoisonError::into_inner)

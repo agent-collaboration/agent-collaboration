@@ -183,7 +183,7 @@ impl FlushModel {
         let members = self.in_flight();
         tc.assume(!members.is_empty());
         let request = tc.draw(gs::sampled_from(members));
-        let outcome = MemberOutcome::Refused(RefusalReason::MachineRevoked);
+        let outcome = MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked);
         self.apply(FlushEvent::MemberAnswered { request, outcome });
     }
 
@@ -202,7 +202,7 @@ impl FlushModel {
             self.state.clone(),
             FlushEvent::MemberAnswered {
                 request: stray,
-                outcome: MemberOutcome::Refused(RefusalReason::MachineRevoked),
+                outcome: MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked),
             },
         );
 
@@ -269,7 +269,8 @@ fn a_connected_link_drains_the_outbox_64_per_mark(tc: TestCase) {
         for effect in effects {
             if let FlushEffect::SendBatch { requests, .. } = effect {
                 for request in requests {
-                    let outcome = MemberOutcome::Refused(RefusalReason::MachineRevoked);
+                    let outcome =
+                        MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked);
                     model.apply(FlushEvent::MemberAnswered { request, outcome });
                 }
             }

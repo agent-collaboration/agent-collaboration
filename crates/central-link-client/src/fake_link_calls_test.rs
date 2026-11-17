@@ -80,7 +80,7 @@ fn request_id(text: &str) -> RequestId {
 }
 
 #[tokio::test]
-async fn a_thread_post_is_in_the_outbox_until_its_mark_then_accepted() {
+async fn a_thread_post_is_in_the_outbox_until_its_mark_then_answered() {
     let (clock, calls) = fixture(MARK - 20_000);
     let id = uuid_v7(1);
     let caller = session_caller(1);
@@ -108,7 +108,7 @@ async fn a_thread_post_is_in_the_outbox_until_its_mark_then_accepted() {
     assert_eq!(calls.flush_on_mark(), 1);
     assert_eq!(
         calls.request_status(caller, request_id(&id)).await,
-        RequestStatus::Accepted(conflict_reply())
+        RequestStatus::Answered(conflict_reply())
     );
 }
 
@@ -188,7 +188,7 @@ async fn outbox_writes_wait_out_an_unavailable_central_and_send_after() {
         calls
             .request_status(session_caller(1), request_id(&id))
             .await,
-        RequestStatus::Accepted(conflict_reply())
+        RequestStatus::Answered(conflict_reply())
     );
 }
 

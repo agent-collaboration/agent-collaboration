@@ -138,7 +138,7 @@ pub(super) fn is_control_reply(line: &str) -> bool {
 
 impl WorkerdHost {
     pub async fn open_c2(clock: Arc<dyn Clock>, plan: &Path) -> Result<Self, StoreFailure> {
-        Self::open_configured(clock, Some(plan.to_owned()), true).await
+        Self::open_configured(clock, Some(plan.to_owned()), true, true).await
     }
     async fn c2_control(&self, request: impl Serialize) -> Result<BridgeReply, StoreFailure> {
         let bytes = serde_json::to_vec(&request).map_err(|_| StoreFailure::Unavailable)?;
@@ -205,7 +205,9 @@ pub(super) async fn open_fixture(clock: Arc<dyn Clock>) -> Result<WorkerdHost, S
             "ACCESS_TEAM_DOMAIN":access.issuer.strip_prefix("https://").unwrap(),
             "ACCESS_SESSION_AUD":access.session_audience,"ACCESS_ADMIN_AUD":access.admin_audience,"ACCESS_OWNER_IDENTITY":access.owner_identity
         },"jwksFixtureUrl":keys.url})).map_err(|_| StoreFailure::Unavailable)?).map_err(|_| StoreFailure::Unavailable)?;
-    let mut host = WorkerdHost::open_configured(clock, Some(plan), false).await?;
+    // The default fixture reads no Worker logs: the bridge inherits stderr, so
+    // the lifecycle tests' stderr-EOF barrier still means the bridge exited.
+    let mut host = WorkerdHost::open_configured(clock, Some(plan), false, false).await?;
     host._fixture_keys = Some(keys);
     host._fixture_plan = Some(root);
     Ok(host)

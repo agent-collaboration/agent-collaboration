@@ -12,7 +12,7 @@ use axum::{
 };
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, ProtocolError, ReplyPayload, RequestPayload,
-    decode_text, encode_text,
+    TokenRenewalRefusal, TokenRenewalResult, decode_text, encode_text,
 };
 use collaboration_central_core::{ValidatedMachineConnection, WorkspaceCaller, WorkspaceRuntime};
 use fleet_identity_protocol::OrganizationId;
@@ -133,7 +133,7 @@ async fn serve_link(
     mut socket: WebSocket,
     state: Arc<LinkState>,
     runtime: Arc<Runtime>,
-    connection: ValidatedMachineConnection,
+    mut connection: ValidatedMachineConnection,
     central_time: workspace_model::Timestamp,
 ) {
     let welcome = LinkFrame::Data(DataFrame::Welcome {
@@ -218,6 +218,19 @@ async fn serve_link(
                     }
                 }
             }
+            LinkFrame::Data(DataFrame::RenewMachineToken {
+                correlation_id,
+                token,
+            }) => {
+                let result = renew(&runtime, &mut connection, token.expose()).await;
+                let answer = LinkFrame::Data(DataFrame::MachineTokenRenewal {
+                    correlation_id,
+                    result,
+                });
+                if !send_frame(&mut socket, &state.stop, &answer).await {
+                    return;
+                }
+            }
             // Acknowledgements and delivery belong to the delivery owner (C4).
             // Direction validation also rejects server-only frames here.
             _ => {
@@ -231,6 +244,37 @@ async fn serve_link(
                 return;
             }
         }
+    }
+}
+
+/// R40/V32 renewal on the open connection: a renewed connection replaces the
+/// current one; on refusal the current connection and its expiry stand.
+async fn renew(
+    runtime: &Runtime,
+    connection: &mut ValidatedMachineConnection,
+    token: &str,
+) -> TokenRenewalResult {
+    use collaboration_central_core::MachineTokenRenewalRefusal as Refusal;
+    let refused = |reason| TokenRenewalResult::Refused { reason };
+    match runtime.renew_machine_connection(connection, token).await {
+        Ok(Ok(renewed)) => {
+            let Some(effective_expires_at) =
+                chrono::DateTime::from_timestamp(renewed.effective_expires_at().0, 0)
+            else {
+                return refused(TokenRenewalRefusal::CentralUnavailable);
+            };
+            *connection = renewed;
+            TokenRenewalResult::Renewed {
+                effective_expires_at,
+            }
+        }
+        Ok(Err(refusal)) => refused(match refusal {
+            Refusal::TokenRejected => TokenRenewalRefusal::TokenRejected,
+            Refusal::EnrollmentNotActive => TokenRenewalRefusal::EnrollmentNotActive,
+            Refusal::DifferentMachine => TokenRenewalRefusal::DifferentMachine,
+            Refusal::DifferentEnrollment => TokenRenewalRefusal::DifferentEnrollment,
+        }),
+        Err(_) => refused(TokenRenewalRefusal::CentralUnavailable),
     }
 }
 
