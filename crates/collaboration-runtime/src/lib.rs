@@ -39,12 +39,11 @@ mod provider_session_record;
 pub use provider_operation_store::{
     PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,
     ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,
-    ProviderOperationStoreError, provider_operation_retention_cutoff_ms,
+    ProviderOperationStoreError, ProviderSessionRecord, provider_operation_retention_cutoff_ms,
 };
 mod delivery_acceptance_effect;
 pub mod delivery_route_projection;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
-pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
 mod app_server_item_metadata;
 mod app_server_item_translation;

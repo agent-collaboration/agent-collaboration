@@ -3,9 +3,10 @@
 //! This store intentionally has no request, prompt, reply, diagnostic, or transcript input.
 
 use collaboration_protocol::{
-    ConversationBindingIdentity, OperationId, ProviderBindingIdentity, ProviderOperationEffect,
-    ProviderOperationKind, ProviderOperationStage, ProviderPromptStopReason,
-    ProviderReconciliationState, SessionRef,
+    ConversationBindingIdentity, OperationId, ProviderBindingIdentity, ProviderIdentity,
+    ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
+    ProviderPromptStopReason, ProviderReconciliationState, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, SessionRef,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::{
@@ -716,6 +717,35 @@ async fn validate_schema(
         Ok(())
     } else {
         Err(ProviderOperationStoreError::InvalidRecord)
+    }
+}
+
+/// Durable provider session metadata needed for load-on-demand and approvals.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderSessionRecord {
+    pub target: SessionRef,
+    pub working_directory: ProviderWorkingDirectory,
+    pub requested_policy: ProviderRequestedPolicy,
+    pub created_by: ProviderIdentity,
+    pub approver: ProviderIdentity,
+    pub updated_at_ms: i64,
+}
+
+impl ProviderSessionRecord {
+    pub(crate) fn validate(&self) -> Result<(), ProviderOperationStoreError> {
+        let endpoint_id = String::from(self.target.endpoint.endpoint_id.clone());
+        if !matches!(endpoint_id.as_str(), "claude-local" | "cursor-local")
+            || self.created_by.session().is_some_and(|session| {
+                session.endpoint.service_id != self.target.endpoint.service_id
+            })
+            || self.approver.session().is_some_and(|session| {
+                session.endpoint.service_id != self.target.endpoint.service_id
+            })
+            || self.updated_at_ms < 0
+        {
+            return Err(ProviderOperationStoreError::InvalidRecord);
+        }
+        Ok(())
     }
 }
 
