@@ -28,6 +28,7 @@ mod provider_session_queue;
 mod provider_session_restore;
 pub(crate) mod provider_setting_application;
 mod session_cell_bookkeeping;
+pub(crate) use session_cell_bookkeeping::report_actor_exit;
 
 use crate::ProviderCapabilityReport;
 use crate::provider_connection_activity::{ProviderConnectionActivity, ToolCallOwnershipHandler};

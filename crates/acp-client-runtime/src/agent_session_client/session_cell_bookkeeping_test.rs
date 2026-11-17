@@ -189,3 +189,131 @@ async fn a_close_during_a_prompt_frees_only_after_the_turn_ends() {
         "then it frees and publishes Closed"
     );
 }
+
+/// Records what the hub is told, with the run it was told in.
+#[derive(Default)]
+struct HubRecorder(std::sync::Mutex<Vec<(SessionGeneration, session_event_model::SessionEvent)>>);
+
+impl crate::SessionEventSink for HubRecorder {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), crate::EventSinkClosed> {
+        Ok(())
+    }
+
+    fn begin_history_replay(&self, _session_id: &str) -> crate::HistoryReplayFuture<'_> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn publish(
+        &self,
+        _session_id: &str,
+        event: session_event_model::SessionEvent,
+    ) -> Result<(), crate::EventSinkClosed> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((SessionGeneration::UNTRACKED, event));
+        Ok(())
+    }
+
+    fn publish_in(
+        &self,
+        _session_id: &str,
+        generation: SessionGeneration,
+        event: session_event_model::SessionEvent,
+    ) -> Result<crate::GenerationPublication, crate::EventSinkClosed> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((generation, event));
+        Ok(crate::GenerationPublication::Published)
+    }
+}
+
+/// Records the queued messages the queue sink is told ended.
+#[derive(Default)]
+struct EndedMessages(std::sync::Mutex<Vec<(String, &'static str)>>);
+
+impl crate::QueueEntrySink for EndedMessages {
+    fn entry_not_sent(&self, _session_id: &str, operation_id: &str, reason: &'static str) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((operation_id.to_owned(), reason));
+    }
+}
+
+/// Oracle: design note §11.2 and inventory S2: an actor whose loop ends on
+/// its own ends its run: the session goes from Live to NotLoaded, the hub
+/// reads Unloaded in that run, its waiting messages end not sent "the agent
+/// stopped", and the session can be loaded again under a newer run.
+#[test]
+fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
+    // Arrange
+    let cells = SessionCellTable::default();
+    let ended = std::sync::Arc::new(EndedMessages::default());
+    cells.set_sink(std::sync::Arc::clone(&ended) as std::sync::Arc<dyn crate::QueueEntrySink>);
+    let generation = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED).expect("created");
+    cells
+        .transition(
+            SESSION,
+            SessionGeneration::UNTRACKED,
+            SessionCellEvent::Enqueue {
+                operation: crate::session_cell_machine::QueuedOperation("waiting".to_owned()),
+            },
+            crate::session_cell_table::EntryEffectRoute::Caller,
+        )
+        .expect("a message waits");
+    let hub = HubRecorder::default();
+
+    // Act
+    report_actor_exit(&cells, &hub, SESSION, generation);
+    let stale_exit = HubRecorder::default();
+    report_actor_exit(&cells, &stale_exit, SESSION, generation);
+    let reloaded = admit_load(
+        &cells,
+        SESSION,
+        SessionGeneration::UNTRACKED,
+        RestoreVia::Load,
+        load_attempt(9),
+    );
+
+    // Assert
+    let published = hub
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    assert_eq!(
+        published,
+        vec![(
+            generation,
+            session_event_model::SessionEvent::StateChanged {
+                state: session_event_model::SessionState::Unloaded,
+            }
+        )]
+    );
+    assert_eq!(
+        ended
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone(),
+        vec![("waiting".to_owned(), "the agent stopped")]
+    );
+    assert!(
+        stale_exit
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty(),
+        "a second report for the same run publishes nothing"
+    );
+    assert_eq!(
+        reloaded.map(|next| next.number()).ok(),
+        Some(generation.number() + 1)
+    );
+}

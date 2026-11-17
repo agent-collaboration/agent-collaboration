@@ -310,6 +310,40 @@ pub(super) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &s
         .await;
 }
 
+/// An actor's loop ended on its own: Live{g} goes to NotLoaded, the line
+/// ends (its waiting messages settle "the agent stopped" through the queue
+/// sink), and the hub reads Unloaded for that run. Any other state means a
+/// close or a newer run already moved past this actor: nothing changes.
+pub(crate) fn report_actor_exit(
+    cells: &SessionCellTable,
+    event_sink: &dyn crate::SessionEventSink,
+    session_id: &str,
+    generation: SessionGeneration,
+) {
+    let Ok(effects) = cells.transition(
+        session_id,
+        SessionGeneration::UNTRACKED,
+        SessionCellEvent::ActorExited { generation },
+        crate::session_cell_table::EntryEffectRoute::Sink,
+    ) else {
+        return;
+    };
+    for effect in effects {
+        if let SessionCellEffect::Lifecycle(SessionLifecycleEffect::PublishUnloaded {
+            generation,
+        }) = effect
+        {
+            let _published = event_sink.publish_in(
+                session_id,
+                generation,
+                session_event_model::SessionEvent::StateChanged {
+                    state: session_event_model::SessionState::Unloaded,
+                },
+            );
+        }
+    }
+}
+
 /// The session is closing on this connection.
 pub(super) fn is_closing(cells: &SessionCellTable, session_id: &str) -> bool {
     cells.read(session_id, |cell| {

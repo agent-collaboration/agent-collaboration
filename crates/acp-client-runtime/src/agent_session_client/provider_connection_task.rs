@@ -105,6 +105,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             settings_unresolved: Arc::clone(&task_settings_unresolved),
             in_folder_grants: Arc::clone(&in_folder_grants),
             keep_fast_off: Arc::clone(&keep_fast_off),
+            session_cells: Arc::clone(&session_cells),
+            run_generation: crate::SessionGeneration::UNTRACKED,
         };
         let task_event_sink = Arc::clone(&event_sink);
         let retirement_event_sink = Arc::clone(&event_sink);
@@ -363,6 +365,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 () = task_shutdown.cancelled() => break,
                                 completion = admission_rx.recv() => {
                                     let Some(completion) = completion else { continue; };
+                                    // An actor that exited on its own left its sender
+                                    // behind; its session is no longer loaded here.
+                                    sessions.retain(|_, sender| !sender.is_closed());
                                     match completion {
                                         PendingSessionAdmission::Create { result, activation, reply } => {
                                             let report = result.as_ref().as_ref().ok().map(|registration| {
@@ -549,6 +554,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 }
                                 command = command_rx.recv() => {
                                     let Some(command) = command else { break; };
+                                    sessions.retain(|_, sender| !sender.is_closed());
                                     match command {
                                         ProviderCommand::Create { cwd, scratch_folder, work_roots, settings, reply } => {
                                             let mut request = NewSessionRequest::new(&cwd)

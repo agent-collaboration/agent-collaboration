@@ -80,6 +80,10 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     /// Sessions whose caller wants fast kept off (D1 R9). It records the wish;
     /// settings_unresolved records whether it's applied.
     pub(crate) keep_fast_off: KeepFastOff,
+    /// The connection's session cells (D1 state machines).
+    pub(crate) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
+    /// The run these handles serve; untracked until for_session_generation.
+    pub(crate) run_generation: crate::SessionGeneration,
 }
 
 impl ProviderSessionRuntimeHandles {
@@ -91,6 +95,7 @@ impl ProviderSessionRuntimeHandles {
             Arc::clone(&self.event_sink),
             generation,
         ));
+        handles.run_generation = generation;
         handles
     }
 }
@@ -137,7 +142,51 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
     },
 }
 
+/// One session's actor. When its loop ends on its own (the agent's update
+/// stream ended or failed), not by the connection's shutdown, the session's
+/// run ends: its cell goes from Live to NotLoaded, the messages waiting in
+/// its line end not sent, "the agent stopped", and the hub reads Unloaded
+/// (D1 state machines, design note §11.2, inventory S2).
 pub(crate) async fn run_provider_session<P: InteractionPort>(
+    session: ActiveSession<'_, Agent>,
+    commands: tokio::sync::mpsc::Receiver<ProviderSessionCommand<P>>,
+    shutdown: CancellationToken,
+    frame_observation: Arc<ProviderFrameObservation>,
+    runtime_handles: ProviderSessionRuntimeHandles,
+    initial_projection: Option<ProviderItemProjection>,
+    #[cfg(any(test, feature = "test-observation"))] test_tool_calls: Arc<
+        std::sync::Mutex<Vec<ExternalProviderToolCall>>,
+    >,
+) {
+    let session_id = session.session_id().to_string();
+    let cells = Arc::clone(&runtime_handles.session_cells);
+    let generation = runtime_handles.run_generation;
+    let event_sink = Arc::clone(&runtime_handles.event_sink);
+    let connection_shutdown = shutdown.clone();
+    run_session_loop(
+        session,
+        commands,
+        shutdown,
+        frame_observation,
+        runtime_handles,
+        initial_projection,
+        #[cfg(any(test, feature = "test-observation"))]
+        test_tool_calls,
+    )
+    .await;
+    if connection_shutdown.is_cancelled() {
+        // The connection's retirement publishes for every session it knew.
+        return;
+    }
+    crate::agent_session_client::report_actor_exit(
+        &cells,
+        event_sink.as_ref(),
+        &session_id,
+        generation,
+    );
+}
+
+async fn run_session_loop<P: InteractionPort>(
     mut session: ActiveSession<'_, Agent>,
     mut commands: tokio::sync::mpsc::Receiver<ProviderSessionCommand<P>>,
     shutdown: CancellationToken,
