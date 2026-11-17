@@ -71,6 +71,14 @@ mod queue_line_machine;
     )
 )]
 mod queued_entry_machine;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the connection task wires the session cell in the next D1 step"
+    )
+)]
+mod session_cell_machine;
 mod session_event_sink;
 #[cfg_attr(
     not(test),

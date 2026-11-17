@@ -212,6 +212,7 @@ fn not_sent_reasons_read_as_their_answers() {
         NotSentReason::ProviderConnectionClosed,
         NotSentReason::DispatchNotRecorded,
         NotSentReason::DispatchRecordUncertain,
+        NotSentReason::AgentStopped,
     ];
 
     // Act
@@ -227,6 +228,7 @@ fn not_sent_reasons_read_as_their_answers() {
             "provider connection closed",
             "the dispatch couldn't be recorded",
             "dispatch record uncertain; not sent",
+            "the agent stopped",
         ]
     );
 }

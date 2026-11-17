@@ -20,6 +20,8 @@ pub(crate) enum NotSentReason {
     ProviderConnectionClosed,
     DispatchNotRecorded,
     DispatchRecordUncertain,
+    /// The session's actor exited while the message waited.
+    AgentStopped,
 }
 
 impl NotSentReason {
@@ -31,6 +33,7 @@ impl NotSentReason {
             Self::ProviderConnectionClosed => "provider connection closed",
             Self::DispatchNotRecorded => "the dispatch couldn't be recorded",
             Self::DispatchRecordUncertain => "dispatch record uncertain; not sent",
+            Self::AgentStopped => "the agent stopped",
         }
     }
 }
