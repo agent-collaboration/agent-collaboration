@@ -1,7 +1,7 @@
 //! Sign-in service decisions and machine-token extension claims.
 use super::{AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollPermission, PersonId};
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
-use fleet_sync_protocol::PeerId;
+use super::PeerId;
 use message_board::{MachineLabel, RecordId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
