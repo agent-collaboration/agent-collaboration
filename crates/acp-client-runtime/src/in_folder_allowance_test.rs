@@ -540,3 +540,39 @@ fn work_roots_widen_the_inside_for_file_actions_and_command_operands() {
         assert_eq!(answered.is_some(), allowed, "{case}");
     }
 }
+
+/// Oracle: Lead V3 and design note §11.3, a held mode change: run A's
+/// confirmed change to auto, arriving after A ended and run B started with
+/// its grant off, never turns B's allowance on.
+#[test]
+fn an_ended_runs_mode_change_never_turns_on_the_newer_runs_grant() {
+    // Arrange
+    let folders = folders();
+    let cells = std::sync::Arc::new(crate::session_cell_table::SessionCellTable::default());
+    let grants: super::InFolderGrants = std::sync::Arc::new(
+        crate::run_owned_state::RunOwnedMap::new(std::sync::Arc::clone(&cells)),
+    );
+    let first =
+        crate::session_cell_bookkeeping::admit_create(&cells, "session-a").expect("created");
+    let second =
+        crate::session_cell_bookkeeping::end_run_and_load_next_for_test(&cells, "session-a", first);
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).expect("grant");
+    let _newer = grants.write(
+        "session-a",
+        second,
+        super::SessionInFolderGrant {
+            grant,
+            router_auto: false,
+        },
+    );
+
+    // Act
+    super::set_router_auto(&grants, "session-a", first, true);
+
+    // Assert
+    assert_eq!(super::active_grant(&grants, "session-a"), None);
+    assert_eq!(
+        grants.read("session-a").map(|session| session.router_auto),
+        Some(false)
+    );
+}

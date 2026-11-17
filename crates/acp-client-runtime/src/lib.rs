@@ -63,6 +63,7 @@ mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
+mod run_owned_state;
 mod session_cell_bookkeeping;
 mod session_cell_table;
 mod session_event_sink;
@@ -71,7 +72,6 @@ mod session_start_folders;
 #[cfg(feature = "test-support")]
 pub mod sim_points;
 pub use session_runs::SessionRuns;
-mod state_machine_cell;
 
 #[cfg(test)]
 extern crate self as acp_client_runtime;
@@ -112,7 +112,6 @@ pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
     SessionEventSink,
 };
-pub use state_machine_cell::{CellEffects, CellRuntime, MachineCell};
 
 #[cfg(feature = "test-observation")]
 pub const MAX_ACP_FRAME_BYTES: usize = agent_session_client::MAX_ACP_FRAME_BYTES;

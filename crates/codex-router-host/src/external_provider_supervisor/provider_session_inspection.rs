@@ -32,7 +32,7 @@ pub(super) async fn inspect(
         .capability_report(&session_id)
         .await
         .to_session_model();
-    let catalog = runtime.settings_catalog(&session_id).await;
+    let catalog = runtime.settings_catalog(&session_id);
     // A lost mode answer leaves the catalog's old mode; show never claims it.
     let mode_unconfirmed = runtime.setting_outcome_unknown(
         &session_id,
@@ -196,7 +196,7 @@ impl ExternalProviderSupervisor {
             .runtime_for(&target.endpoint)
             .ok_or(SessionModelCatalogError::Unavailable)?;
         let session_id = String::from(target.session_id.clone());
-        let catalog = match runtime.settings_catalog(&session_id).await {
+        let catalog = match runtime.settings_catalog(&session_id) {
             Some(catalog) => catalog,
             None => self
                 .inner

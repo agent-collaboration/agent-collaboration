@@ -218,7 +218,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             .await
                         {
                             Ok(created) => {
-                                let catalog = runtime.settings_catalog(&created.provider_session_id).await;
+                                let catalog = runtime.settings_catalog(&created.provider_session_id);
                                 match SessionId::try_from(created.provider_session_id) {
                                     Ok(session_id) => {
                                         let target = SessionRef {
@@ -271,7 +271,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 not_applied,
                                 permission_mode,
                             }) => {
-                                let catalog = runtime.settings_catalog(&provider_session_id).await;
+                                let catalog = runtime.settings_catalog(&provider_session_id);
                                 match SessionId::try_from(provider_session_id) {
                                 Ok(session_id) => {
                                     let target = SessionRef { endpoint, session_id };
@@ -429,7 +429,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             Ok(()) => {
                                 let mut observed = effective_settings(requested_policy.clone());
                                 if let Some(catalog) =
-                                    runtime.settings_catalog(&provider_session_id).await
+                                    runtime.settings_catalog(&provider_session_id)
                                 {
                                     let effective = catalog.effective_settings();
                                     observed.mode = effective.mode;

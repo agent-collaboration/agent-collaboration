@@ -12,7 +12,7 @@ use super::{
     Arc, ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationFailureStage, ConversationOperationSettlement,
     ConversationOperationSnapshot, ConversationOperationSubmission, ExternalProviderSupervisor,
-    LiveOperation, OperationId, PreparedOperation, ProviderConversationFuture, ProviderIdentity,
+    LiveOperation, OperationId, PreparedOperation, ProviderConversationFuture,
     ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind,
     admitted_submission, existing_submission, failure, retain_operation,
 };
@@ -74,38 +74,6 @@ impl SendRefusal {
 const CANNOT_STEER_MESSAGE: &str = "cannot steer: the agent can't take input while its turn runs, so nothing was sent. Send again with delivery queue to wait for the turn to end, or interrupt the turn (conversation cancel) and then send";
 
 impl ExternalProviderSupervisor {
-    /// Records the approver of a prompt this Host dispatched, kept while its
-    /// settlement is retained.
-    pub(super) fn remember_turn_approver(
-        &self,
-        operation_id: &OperationId,
-        approver: &ProviderIdentity,
-    ) {
-        self.inner
-            .turn_approvers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(operation_id.clone(), approver.clone());
-    }
-
-    /// The approver recorded for a turn this Host dispatched.
-    fn turn_approver_of(&self, operation_id: &OperationId) -> Option<ProviderIdentity> {
-        self.inner
-            .turn_approvers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(operation_id)
-            .cloned()
-    }
-
-    pub(super) fn forget_turn_approver(&self, operation_id: &OperationId) {
-        self.inner
-            .turn_approvers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(operation_id);
-    }
-
     /// Gives the supervisor the session line API prompts wait in. Called once,
     /// when the delivery route is composed.
     pub(crate) fn attach_message_fifo(
@@ -325,10 +293,6 @@ impl ExternalProviderSupervisor {
         let target = request.target.clone();
         let provider_session_id = String::from(target.session_id.clone());
         self.begin_dispatch(&request.operation_id, &target).await?;
-        // Every turn's approver record stays from before the injection until
-        // this steer reads the one it joined, whichever turn that turns out
-        // to be and however many settlements are evicted meanwhile.
-        let _approvers_pinned = self.pin_turn_approvers();
         #[cfg(test)]
         {
             let pause = self
@@ -364,14 +328,12 @@ impl ExternalProviderSupervisor {
         }
         let operation_id = request.operation_id.clone();
         let completion = match steered {
-            Ok(crate::ProviderSteeringOutcome::Injected {
-                running_operation_id,
-            }) => {
-                // The approver of the turn the input actually joined, as the
-                // injection reports it, when it differs from this request's;
-                // its record is pinned until this read.
-                let turn_approver = running_operation_id
-                    .and_then(|running| self.turn_approver_of(&running))
+            Ok(crate::ProviderSteeringOutcome::Injected { joined_turn, .. }) => {
+                // The approver of the turn the input actually joined, from the
+                // context the actor captured when it sent the steer (design
+                // note §12.4), when it differs from this request's.
+                let turn_approver = joined_turn
+                    .map(|turn| turn.approver)
                     .filter(|approver| approver != &request.approver);
                 ProviderOperationCompletion::Success {
                     settlement: ConversationOperationSettlement::Steered {

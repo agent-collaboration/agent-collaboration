@@ -32,10 +32,7 @@ pub(crate) async fn apply_loaded_setting(
     } = request;
     let mut catalog = handles
         .session_settings
-        .read()
-        .await
-        .get(&provider_session_id)
-        .cloned()
+        .read_in(&provider_session_id, handles.run_generation)
         .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
     if intent == session_event_model::SettingApplicationIntent::TurnContext
         && crate::session_cell_bookkeeping::settings_held(
@@ -60,11 +57,9 @@ pub(crate) async fn apply_loaded_setting(
     if kind == ProviderSettingKind::Fast && value == FAST_AUTO {
         // A policy change only: nothing reaches the agent, and every hold
         // stays exactly as it was (D1 R7).
-        handles
+        let _cleared = handles
             .keep_fast_off
-            .write()
-            .await
-            .remove(&provider_session_id);
+            .clear(&provider_session_id, handles.run_generation);
         return Ok(current);
     }
     let current_value = match kind {
@@ -86,11 +81,10 @@ pub(crate) async fn apply_loaded_setting(
         ProviderSettingKind::Effort => requested.effort = Some(value.clone()),
         ProviderSettingKind::Fast if value == FAST_OFF => {
             requested.fast = FastRequest::Off;
-            handles
-                .keep_fast_off
-                .write()
-                .await
-                .insert(provider_session_id.clone());
+            let _kept =
+                handles
+                    .keep_fast_off
+                    .write(&provider_session_id, handles.run_generation, ());
         }
         ProviderSettingKind::Fast => {
             return Err(ExternalProviderRuntimeError::InvalidSetting {
@@ -137,7 +131,7 @@ pub(crate) async fn apply_loaded_setting(
             if kind == ProviderSettingKind::Fast {
                 // A session meant to be non-fast never quietly runs fast (R8):
                 // a refused explicit off holds prompts, with the agent's catalog.
-                keep_returned_catalog(handles, &provider_session_id, &catalog).await?;
+                keep_returned_catalog(handles, &provider_session_id, &catalog)?;
                 record(
                     handles,
                     &provider_session_id,
@@ -179,18 +173,17 @@ pub(crate) async fn apply_loaded_setting(
                 crate::in_folder_allowance::set_router_auto(
                     &handles.in_folder_grants,
                     &provider_session_id,
+                    handles.run_generation,
                     outcome.router_auto_active,
                 );
             }
-            commit_confirmed_setting(handles, &provider_session_id, kind, application, &catalog)
-                .await?;
+            commit_confirmed_setting(handles, &provider_session_id, kind, application, &catalog)?;
             if kind == ProviderSettingKind::Model
                 && catalog.offers_fast()
                 && handles
                     .keep_fast_off
-                    .read()
-                    .await
-                    .contains(&provider_session_id)
+                    .read_in(&provider_session_id, handles.run_generation)
+                    .is_some()
             {
                 return keep_fast_off_after_model(session, handles, &provider_session_id, catalog)
                     .await;
@@ -228,12 +221,11 @@ async fn keep_fast_off_after_model(
         apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
     match outcome.failure {
         None => {
-            commit_confirmed_setting(handles, provider_session_id, fast, application, &catalog)
-                .await?;
+            commit_confirmed_setting(handles, provider_session_id, fast, application, &catalog)?;
             Ok(catalog.effective_settings())
         }
         Some(SettingSetupFailure::Agent { reason, .. }) => {
-            keep_returned_catalog(handles, provider_session_id, &catalog).await?;
+            keep_returned_catalog(handles, provider_session_id, &catalog)?;
             record(
                 handles,
                 provider_session_id,
@@ -291,7 +283,7 @@ fn record(
 }
 
 /// Publishes and keeps the catalog the agent last answered with.
-async fn keep_returned_catalog(
+fn keep_returned_catalog(
     handles: &ProviderSessionRuntimeHandles,
     provider_session_id: &str,
     catalog: &ProviderSettingsCatalog,
@@ -305,23 +297,25 @@ async fn keep_returned_catalog(
             },
         )
         .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
-    handles
-        .session_settings
-        .write()
-        .await
-        .insert(provider_session_id.to_owned(), catalog.clone());
+    // Kept only for the run that asked: an ended run's continuation changes
+    // nothing (design note §11.3; Lead V3).
+    let _kept = handles.session_settings.write(
+        provider_session_id,
+        handles.run_generation,
+        catalog.clone(),
+    );
     Ok(())
 }
 
 /// Publishes and keeps a setting the agent confirmed, and ends its change.
-async fn commit_confirmed_setting(
+fn commit_confirmed_setting(
     handles: &ProviderSessionRuntimeHandles,
     provider_session_id: &str,
     kind: ProviderSettingKind,
     application: SettingApplication,
     catalog: &ProviderSettingsCatalog,
 ) -> Result<(), ExternalProviderRuntimeError> {
-    keep_returned_catalog(handles, provider_session_id, catalog).await?;
+    keep_returned_catalog(handles, provider_session_id, catalog)?;
     let confirmed = match kind {
         ProviderSettingKind::Mode => catalog.effective_settings().mode,
         ProviderSettingKind::Model => catalog.effective_settings().model,
@@ -339,9 +333,8 @@ async fn commit_confirmed_setting(
     );
     if let Some(capabilities) = handles
         .session_capabilities
-        .read()
-        .await
-        .get(provider_session_id)
+        .read_in(provider_session_id, handles.run_generation)
+        .as_ref()
         .map(crate::ProviderCapabilityReport::to_session_model)
     {
         handles
@@ -354,3 +347,7 @@ async fn commit_confirmed_setting(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "provider_session_setting_update_test.rs"]
+mod tests;

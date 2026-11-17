@@ -133,9 +133,8 @@ pub(super) async fn apply(
             }
             other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
         })?;
-    if let Some(catalog) = runtime
-        .settings_catalog(&String::from(request.target.session_id.clone()))
-        .await
+    if let Some(catalog) =
+        runtime.settings_catalog(&String::from(request.target.session_id.clone()))
     {
         supervisor
             .inner
@@ -165,7 +164,6 @@ pub(super) async fn accept(
         })?;
     let observed = runtime
         .accept_session_settings(String::from(request.target.session_id.clone()))
-        .await
         .map_err(|error| plain_error(&request.target, error))?;
     Ok(result(request.target, record, observed))
 }

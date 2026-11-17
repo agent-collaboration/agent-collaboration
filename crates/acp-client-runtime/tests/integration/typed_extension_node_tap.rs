@@ -56,7 +56,7 @@ fn masked_replies(capture: &[CapturedFrame], method: &str) -> Vec<serde_json::Va
 }
 
 fn steering_result_kind(
-    result: &Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>,
+    result: &Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>,
 ) -> &'static str {
     match result {
         Ok(ProviderSteeringOutcome::Injected { .. }) => "steering result:Injected",
@@ -90,7 +90,7 @@ struct SteerRun {
     /// The capture's fixture setup: the session, and a held turn when there is one.
     setup_methods: &'static [&'static str],
     events: Vec<SessionEvent>,
-    result: Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>,
+    result: Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>,
     activity_before: ProviderSessionActivity,
     activity_after: ProviderSessionActivity,
 }
@@ -188,7 +188,7 @@ const STEERING_ROW: &str = "N6 catalog: Typed extension messages: Steering";
 
 /// The steering call's whole result as its full `Debug` text (the outcome type has no serde).
 fn result_value(
-    result: &Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>,
+    result: &Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>,
 ) -> serde_json::Value {
     serde_json::json!({ "debug": format!("{result:?}") })
 }
@@ -306,7 +306,7 @@ fn user_message_completed() -> ExpectedEvent {
     )
 }
 
-type SteeringResult = Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>;
+type SteeringResult = Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>;
 
 /// The steer's own catalog row: the steering request, then the session events and the call's
 /// result the steering reply caused. The session setup (and a held turn's prompt and cancel) are
@@ -355,6 +355,9 @@ async fn node_tap_steering_injected_while_running() {
         "steering result:Injected",
         &Ok(ProviderSteeringOutcome::Injected {
             running_operation_id: Some(1),
+            // The running turn's approval context, captured with the steer
+            // (design note §12.4).
+            joined_turn: Some(()),
         }),
         "Running",
     );
@@ -502,7 +505,6 @@ async fn run_discovery(scenario: &str) -> DiscoveryRun {
     let catalog = wire
         .client
         .settings_catalog(SESSION_ID)
-        .await
         .expect("settings catalog");
     let reply_seen = wire.behavior.reply_seen.lock().expect("reply lock").clone();
     wire.client.shutdown().await;

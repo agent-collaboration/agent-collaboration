@@ -378,11 +378,7 @@ async fn thinking_first_and_explicit_effort_win_without_companion_rewrites() {
             serde_json::json!({
             "sessionId":"fixture-session", "configId":config_id, "value":"high"})
         );
-        let catalog = fixture
-            .client
-            .settings_catalog(&session)
-            .await
-            .expect("catalog");
+        let catalog = fixture.client.settings_catalog(&session).expect("catalog");
         for (config_id, value) in [
             ("model", "fixture-a"),
             ("thinking", "true"),
@@ -550,7 +546,6 @@ async fn load_and_live_update_refresh_effort_identity_and_invalid_values_do_not_
             if fixture
                 .client
                 .settings_catalog("fixture-session")
-                .await
                 .expect("loaded catalog")
                 .config_options
                 .iter()

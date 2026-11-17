@@ -16,6 +16,9 @@ pub enum ClientSimPoint {
     /// A prompt's turn is open on the session's cell; its command hasn't
     /// reached the connection yet.
     PromptTurnOpen,
+    /// A session's actor ended on its own (its command channel closed); the
+    /// hand-off of its exit to the session's cell and the hub hasn't finished.
+    ActorExitHandoff,
 }
 
 /// What a test runs at each named point; the client awaits it.

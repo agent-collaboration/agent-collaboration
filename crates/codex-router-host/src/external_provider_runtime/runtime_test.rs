@@ -148,11 +148,15 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
         .steer_session("fixture-session".to_owned(), "follow-up".to_owned())
         .await
         .expect("steer active turn");
-    assert_eq!(
-        injected,
-        ProviderSteeringOutcome::Injected {
-            running_operation_id: Some(running_operation_id),
-        }
+    assert!(
+        matches!(
+            &injected,
+            ProviderSteeringOutcome::Injected {
+                running_operation_id: Some(running),
+                ..
+            } if *running == running_operation_id
+        ),
+        "{injected:?}"
     );
     prompt
         .await
@@ -170,7 +174,10 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
         .steer_session("fixture-session".to_owned(), "later".to_owned())
         .await
         .expect("steer idle session");
-    assert_eq!(idle, ProviderSteeringOutcome::PromptRequired);
+    assert!(
+        matches!(idle, ProviderSteeringOutcome::PromptRequired),
+        "{idle:?}"
+    );
     runtime.shutdown().await;
 }
 

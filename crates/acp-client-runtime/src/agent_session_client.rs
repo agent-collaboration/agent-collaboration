@@ -140,6 +140,10 @@ enum ProviderCommand<P: InteractionPort> {
             Result<RestoredSessionAdmission, ExternalProviderRuntimeError>,
         >,
     },
+    /// Test support: drops the session's command sender without closing the
+    /// session, so its actor ends on its own, as when its channel closes.
+    #[cfg(any(test, feature = "test-support"))]
+    EndActor { provider_session_id: String },
     List {
         cwd: Option<PathBuf>,
         reply: tokio::sync::oneshot::Sender<
@@ -175,9 +179,7 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         input_id: InputId,
         prompt: ProviderPromptContent,
-        reply: tokio::sync::oneshot::Sender<
-            Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError>,
-        >,
+        reply: crate::provider_session_actor::SteeringReply<P>,
     },
     InspectSession {
         provider_session_id: String,
@@ -236,11 +238,15 @@ enum PendingSessionAdmission<P: InteractionPort> {
 
 struct ProviderSessionRegistration<P: InteractionPort> {
     provider_session_id: String,
-    commands: tokio::sync::mpsc::Sender<ProviderSessionCommand<P>>,
+    commands: tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>,
     response: NewSessionResponse,
     settings_catalog: crate::ProviderSettingsCatalog,
     permission_mode: crate::PermissionModeReport,
     setup_error: Option<ExternalProviderRuntimeError>,
+    /// The run's in-folder grant and its wish to keep fast off, written by
+    /// the connection under the generation it admits the run with.
+    in_folder: Option<crate::in_folder_allowance::SessionInFolderGrant>,
+    keep_fast_off: bool,
 }
 
 /// A create's outcome and, when the connection admitted the session (even
@@ -269,9 +275,9 @@ struct RestoredProviderSession {
 pub struct AgentSessionClient<P: InteractionPort> {
     admission: ExternalProviderAdmission,
     base_capabilities: ProviderCapabilityReport,
-    session_capabilities: Arc<tokio::sync::RwLock<HashMap<String, ProviderCapabilityReport>>>,
+    session_capabilities: Arc<crate::run_owned_state::RunOwnedMap<ProviderCapabilityReport>>,
     auth_status: Arc<tokio::sync::RwLock<session_event_model::ProviderAuthStatus>>,
-    session_settings: Arc<tokio::sync::RwLock<HashMap<String, crate::ProviderSettingsCatalog>>>,
+    session_settings: Arc<crate::run_owned_state::RunOwnedMap<crate::ProviderSettingsCatalog>>,
     /// Each provider session's typed lifecycle, shared with the connection.
     session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     shutdown: CancellationToken,
@@ -303,13 +309,12 @@ pub struct AgentSessionClient<P: InteractionPort> {
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {
-    /// `Some(router_auto)` for a session with an in-folder grant, `None` without one.
+    /// `Some(router_auto)` for a session whose current run has an in-folder
+    /// grant, `None` without one.
     #[cfg(test)]
     pub(crate) fn in_folder_router_auto_for_test(&self, provider_session_id: &str) -> Option<bool> {
         self.in_folder_grants
-            .read()
-            .ok()?
-            .get(provider_session_id)
+            .read(provider_session_id)
             .map(|grant| grant.router_auto)
     }
 }

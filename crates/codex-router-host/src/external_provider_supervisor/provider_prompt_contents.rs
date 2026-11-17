@@ -182,7 +182,6 @@ impl ExternalProviderSupervisor {
             binding_generation: binding.generation.clone(),
             binding_retirement: runtime.retirement(),
         };
-        self.remember_turn_approver(&request.operation_id, &request.approver);
         let (dispatch, dispatched) = tokio::sync::oneshot::channel();
         let provider_session_id = String::from(target.session_id);
         let input_id = request.input_id.clone();
@@ -266,7 +265,6 @@ impl ExternalProviderSupervisor {
             Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(
                 refusal @ acp_client_runtime::ProviderDispatchRefusal::Busy { .. },
             ))) if matches!(request.busy, PromptBusyPolicy::Send(_)) => {
-                self.forget_turn_approver(&request.operation_id);
                 // Nothing was sent: the row waits again rather than stay Unknown.
                 if let Err(undo) = self
                     .undo_dispatch_mark(&request.operation_id, &target)

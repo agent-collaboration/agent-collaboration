@@ -38,11 +38,13 @@ pub use provider_acp_delivery_route::{
     ProviderAcpDeliveryRoute, ProviderCancelActiveTurnError, ProviderPromptContentsError,
     ProviderQueueAdmissionError, ProviderSteerContentsError,
 };
+mod external_provider_approval_context;
 mod provider_acp_scheduled_runs;
 mod provider_acp_session_loading;
+pub use external_provider_approval_context::ExternalProviderApprovalContext;
 pub use external_provider_runtime::{
-    ExternalProviderAdmission, ExternalProviderApprovalContext, ExternalProviderLaunch,
-    ExternalProviderPromptOutcome, ExternalProviderRuntime, ExternalProviderRuntimeError,
+    ExternalProviderAdmission, ExternalProviderLaunch, ExternalProviderPromptOutcome,
+    ExternalProviderRuntime, ExternalProviderRuntimeError,
 };
 mod external_provider_supervisor;
 pub use external_provider_supervisor::{
@@ -101,8 +103,10 @@ mod provider_startup_composition;
 pub use provider_startup_composition::ExternalProviderStartup;
 mod provider_operation_settlement;
 pub use acp_client_runtime::ProviderSessionActivity;
-pub type ProviderSteeringOutcome =
-    acp_client_runtime::ProviderSteeringOutcome<collaboration_protocol::OperationId>;
+pub type ProviderSteeringOutcome = acp_client_runtime::ProviderSteeringOutcome<
+    collaboration_protocol::OperationId,
+    external_provider_approval_context::ExternalProviderApprovalContext,
+>;
 mod router_compatibility;
 mod router_executable_observation;
 mod session_message_route_composition;

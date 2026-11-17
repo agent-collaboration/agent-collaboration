@@ -202,7 +202,6 @@ async fn refused_auto_is_created_without_settings_held_and_has_no_allowance() {
     let current_mode = fixture
         .client
         .settings_catalog(&session)
-        .await
         .expect("catalog")
         .effective_settings()
         .mode;
@@ -434,4 +433,74 @@ async fn a_restore_without_a_recorded_setup_grants_nothing() {
     );
     assert_eq!(grant, None);
     assert_eq!(resumed.permission_mode.requested, None);
+}
+
+/// Oracle: Lead V2 and owner Decision 3, "allowance follows the restored
+/// mode": a session created in auto has an active grant; its run ends
+/// without the connection ending; it is resumed in a named mode with a
+/// scratch folder that no longer resolves, so the restore has no grant to
+/// write. The earlier run's auto grant is gone: no grant is active, and an
+/// in-folder edit goes to the approver instead of being allowed.
+#[tokio::test]
+async fn a_restore_without_a_grant_leaves_no_earlier_runs_allowance() {
+    // Arrange: an active auto grant, then the run ends on its own.
+    let fixture = Fixture::start(&["advertise-restore"]).await;
+    let created = fixture.create("auto").await.expect("created in auto");
+    let session = created.provider_session_id;
+    let before = fixture.client.in_folder_router_auto_for_test(&session);
+    fixture
+        .client
+        .end_session_actor(session.clone())
+        .await
+        .expect("the connection takes the command");
+    while fixture
+        .client
+        .session_activity(session.clone())
+        .await
+        .expect("activity")
+        != crate::ProviderSessionActivity::NotLoaded
+    {
+        tokio::task::yield_now().await;
+    }
+
+    // Act: resumed in a named mode; its scratch folder no longer resolves.
+    let resumed = fixture
+        .client
+        .resume_session_with_setup(
+            session.clone(),
+            fixture.project.clone(),
+            crate::SessionRestoreSetup {
+                requested_mode: Some("default".to_owned()),
+                scratch_folder: Some(fixture.project.join("removed-scratch")),
+                work_roots: crate::SessionWorkRoots::default(),
+            },
+        )
+        .await
+        .expect("resume");
+    let after = fixture.client.in_folder_router_auto_for_test(&session);
+    let edit = fixture.prompt_in_folder_edit(&session).await;
+    fixture.client.shutdown().await;
+
+    // Assert
+    assert_eq!(before, Some(true), "the auto start had an active grant");
+    assert_eq!(
+        resumed.permission_mode.requested.as_deref(),
+        Some("default")
+    );
+    assert_eq!(after, None, "no grant is left for the resumed run");
+    let answers = fixture.receipt()["permissionAnswers"].clone();
+    let last = answers
+        .as_array()
+        .and_then(|answers| answers.last())
+        .cloned()
+        .unwrap_or(Value::Null);
+    assert_ne!(
+        last["answer"]["outcome"],
+        json!({"outcome": "selected", "optionId": "allow"}),
+        "the in-folder edit was allowed without asking: {last} ({edit:?})"
+    );
+    assert!(
+        !last.is_null(),
+        "the agent asked for the edit's permission: {answers}"
+    );
 }

@@ -393,6 +393,7 @@ impl ProviderAcpDeliveryRoute {
             {
                 Ok(ProviderSteeringOutcome::Injected {
                     running_operation_id: Some(running),
+                    ..
                 }) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {
@@ -405,6 +406,7 @@ impl ProviderAcpDeliveryRoute {
                 }
                 Ok(ProviderSteeringOutcome::Injected {
                     running_operation_id: None,
+                    ..
                 }) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {

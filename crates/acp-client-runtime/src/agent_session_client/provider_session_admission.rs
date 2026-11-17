@@ -57,7 +57,7 @@ fn untried_settings(
 
 pub(super) fn register_provider_session<P: InteractionPort>(
     registration: ProviderSessionRegistration<P>,
-    sessions: &mut HashMap<String, tokio::sync::mpsc::Sender<ProviderSessionCommand<P>>>,
+    sessions: &mut HashMap<String, tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>>,
 ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
     if sessions.contains_key(&registration.provider_session_id) {
         return Err(ExternalProviderRuntimeError::Operation(
@@ -83,7 +83,7 @@ pub(super) struct StaticSessionActivation {
 
 pub(super) fn register_static_provider_session<P: InteractionPort>(
     admission: StaticSessionActivation,
-    sessions: &mut HashMap<String, tokio::sync::mpsc::Sender<ProviderSessionCommand<P>>>,
+    sessions: &mut HashMap<String, tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>>,
     session_tasks: &mut tokio::task::JoinSet<()>,
     shutdown: CancellationToken,
     frame_observation: Arc<ProviderFrameObservation>,
@@ -103,7 +103,9 @@ pub(super) fn register_static_provider_session<P: InteractionPort>(
             "provider returned a duplicate conversation identity".to_owned(),
         ));
     }
-    let (commands, command_rx) = tokio::sync::mpsc::channel(16);
+    // Unbounded: the connection loop never awaits one session's mailbox
+    // (design note §11.7).
+    let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
     sessions.insert(provider_session_id.clone(), commands);
     session_tasks.spawn(async move {
         if activation.await.is_ok() {
@@ -174,17 +176,12 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
             // The caller's wish to keep fast off holds whatever this start's outcome (D1 R9).
-            if fast_off_requested(requested_settings.fast, &settings_catalog) {
-                runtime_handles.keep_fast_off.write().await.insert(provider_session_id.clone());
-            }
+            let keep_fast_off = fast_off_requested(requested_settings.fast, &settings_catalog);
             let InitialSettingsOutcome { applied, failure, permission_mode, router_auto_active } =
                 apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref()).await;
-            if let Some(grant) = in_folder
-                && let Ok(mut grants) = runtime_handles.in_folder_grants.write()
-            {
-                // The allowance follows the mode the agent confirmed (D1 R4).
-                grants.insert(provider_session_id.clone(), crate::in_folder_allowance::SessionInFolderGrant { grant, router_auto: router_auto_active });
-            }
+            // The allowance follows the mode the agent confirmed (D1 R4); the
+            // connection writes it under the run it admits (design note §11.3).
+            let in_folder = in_folder.map(|grant| crate::in_folder_allowance::SessionInFolderGrant { grant, router_auto: router_auto_active });
             let setup_error = match failure {
                 None => None,
                 Some(SettingSetupFailure::Invalid {
@@ -231,11 +228,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                         }
                     };
                     if disposition == crate::InvalidSettingSessionDisposition::Closed {
-                        // No Close admission follows a closed start, so its grant goes here.
-                        if let Ok(mut grants) = runtime_handles.in_folder_grants.write() {
-                            grants.remove(&provider_session_id);
-                        }
-                        runtime_handles.keep_fast_off.write().await.remove(&provider_session_id);
+                        // A closed start was never admitted, so it wrote no run state.
                         registration_tx
                             .send(Err(error))
                             .map_err(|_| agent_client_protocol::Error::internal_error())?;
@@ -272,7 +265,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     })
                 }
             };
-            let (commands, command_rx) = tokio::sync::mpsc::channel(16);
+            let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
             registration_tx
                 .send(Ok(ProviderSessionRegistration {
                     provider_session_id,
@@ -281,6 +274,8 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     settings_catalog,
                     permission_mode,
                     setup_error,
+                    in_folder,
+                    keep_fast_off,
                 }))
                 .map_err(|_| agent_client_protocol::Error::internal_error())?;
             // The connection opens the run's generation only when it admits

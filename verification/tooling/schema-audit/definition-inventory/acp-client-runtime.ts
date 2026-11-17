@@ -352,8 +352,8 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${A}provider_cursor_plan_items.rs`,
-    line: 112,
+    file: `${R}provider_cursor_plan_items.rs`,
+    line: 114,
     owner: "cursor-extra",
     kind: "rust-type",
     defines:
@@ -375,7 +375,7 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${A}provider_acp_error_mapping.rs`,
+    file: `${R}provider_acp_error_mapping.rs`,
     line: 29,
     owner: "claude-extra",
     kind: "content-parser",
@@ -421,20 +421,20 @@ export const rows: InventoryRow[] = [
     fixedBy: "D1",
   },
   {
-    file: `${A}provider_setting_application.rs`,
-    line: 253,
+    file: `${R}provider_setting_application.rs`,
+    line: 433,
     owner: "acp",
     kind: "content-parser",
     defines:
-      "apply_config_response: reads set_config_option response options and _meta (:276) with serde_json::Value access",
+      "apply_config_response: reads set_config_option response options and _meta (:479) with serde_json::Value access",
     usedBy: [{ part: "N6" }],
     duplicateGroup: "acp-schema-copies",
     disposition: "duplicate",
     fixedBy: "D1",
   },
   {
-    file: `${R}agent_session_client/approval_turn_cancellation.rs`,
-    line: 98,
+    file: `${R}approval_turn_cancellation.rs`,
+    line: 99,
     owner: "router-vocabulary",
     kind: "approval-table",
     defines:
@@ -445,18 +445,18 @@ export const rows: InventoryRow[] = [
     fixedBy: "D2",
   },
   {
-    file: `${R}agent_session_client/in_folder_allowance.rs`,
-    line: 121,
+    file: `${R}in_folder_allowance.rs`,
+    line: 173,
     owner: "acp",
     kind: "content-parser",
     defines:
-      "covers: reads ToolCallUpdate kind (read, edit, delete, move need locations inside the folders; execute reads rawInput.command and allows a fixed file-utility list) and allow_once picks the single allow_once option (103-119) for the in-folder auto reply",
+      "covers: reads ToolCallUpdate kind (read, edit, delete, move need locations inside the folders; execute reads rawInput.command and allows a fixed file-utility list) and allow_once picks the single allow_once option (152-169) for the in-folder auto reply",
     usedBy: [{ part: "N6" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
   },
   {
-    file: `${R}agent_session_client/provider_acp_error_mapping.rs`,
+    file: `${R}provider_acp_error_mapping.rs`,
     line: 78,
     owner: "acp",
     kind: "rust-type",

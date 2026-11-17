@@ -3,7 +3,7 @@
 use provider_session_machines::SessionGeneration;
 use provider_session_machines::session_run_claims::RunClaim;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex as StdMutex,
         atomic::{AtomicUsize, Ordering},
@@ -18,7 +18,7 @@ use collaboration_runtime::ProviderSessionEventHub;
 use message_board::{SessionEndpointRef, SessionId, SessionRef};
 use session_event_model::{SessionEvent, SessionItemKind};
 use tokio::{
-    sync::{Mutex, mpsc, oneshot},
+    sync::{mpsc, oneshot},
     task::JoinHandle,
 };
 
@@ -48,8 +48,10 @@ enum HubCommand {
     },
 }
 
-/// One provider connection has one queue and one consumer. The synchronous ACP
-/// reader only enqueues; replay waits behind every earlier publication.
+/// Each session has its own queue and consumer (design note §11.7, M5): a
+/// session held at its hub publication never holds up another's. The
+/// synchronous ACP reader only enqueues; a session's replay waits behind its
+/// own earlier publications.
 /// Every publication claims a run, and the connection's session cells decide
 /// it: the claim is checked and the publication enqueued under the session
 /// cell's lock, so nothing of a run lands after its terminal fact (D1 step
@@ -59,10 +61,12 @@ pub(crate) struct HubSessionEventSink {
     /// The connection's session cells, once the connection has attached
     /// them; until then the sink is a plain pipe.
     runs: StdMutex<Option<Arc<dyn SessionRuns>>>,
-    sender: StdMutex<Option<mpsc::UnboundedSender<HubCommand>>>,
-    consumer: Mutex<Option<JoinHandle<()>>>,
-    backlog: Arc<AtomicUsize>,
-    backlog_warned: Arc<StdMutex<HashSet<String>>>,
+    hub: Arc<ProviderSessionEventHub>,
+    /// Spawns each session's consumer; enqueues can come from a thread
+    /// outside the runtime (the synchronous ACP reader).
+    spawner: tokio::runtime::Handle,
+    /// `None` once the sink has shut down.
+    queues: StdMutex<Option<SessionQueues>>,
     not_publishing: Arc<StdMutex<HashSet<String>>>,
     catalog_refresh: StdMutex<Option<mpsc::UnboundedSender<String>>>,
     /// Told of every live event after the hub published it; installed after startup.
@@ -71,127 +75,15 @@ pub(crate) struct HubSessionEventSink {
 
 impl HubSessionEventSink {
     pub(crate) fn new(hub: Arc<ProviderSessionEventHub>, endpoint: SessionEndpointRef) -> Self {
-        let (sender, mut receiver) = mpsc::unbounded_channel();
-        let backlog = Arc::new(AtomicUsize::new(0));
-        let backlog_warned = Arc::new(StdMutex::new(HashSet::new()));
-        let not_publishing = Arc::new(StdMutex::new(HashSet::new()));
-        let consumer_backlog = Arc::clone(&backlog);
-        let consumer_warned = Arc::clone(&backlog_warned);
-        let consumer_failures = Arc::clone(&not_publishing);
-        let live_observer: Arc<StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>> =
-            Arc::new(StdMutex::new(None));
-        let consumer_observer = Arc::clone(&live_observer);
-        let consumer = tokio::spawn(async move {
-            // Sessions whose history is being replayed: those events are not live.
-            let mut replaying: HashSet<String> = HashSet::new();
-            while let Some(command) = receiver.recv().await {
-                consumer_backlog.fetch_sub(1, Ordering::Relaxed);
-                match command {
-                    HubCommand::SkillView { session, view } => {
-                        if hub.publish_skill_view(session.clone(), view).await.is_err() {
-                            consumer_failures
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .insert(session.session_id.as_str().to_owned());
-                        }
-                    }
-                    HubCommand::Publish {
-                        session,
-                        event,
-                        completion,
-                    } => {
-                        let session_closed = matches!(
-                            &event,
-                            SessionEvent::StateChanged {
-                                state: session_event_model::SessionState::Closed,
-                            }
-                        );
-                        // Only the small turn and state events matter to an observer.
-                        let observed = matches!(
-                            &event,
-                            SessionEvent::TurnStarted { .. }
-                                | SessionEvent::InputAccepted { .. }
-                                | SessionEvent::TurnEnded { .. }
-                                | SessionEvent::StateChanged { .. }
-                        )
-                        .then(|| event.clone());
-                        let result = hub.publish(session.clone(), event).await.map(|_| ()).map_err(|error| {
-                            tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session event publication failed");
-                            consumer_failures
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .insert(session.session_id.as_str().to_owned());
-                            EventSinkClosed
-                        });
-                        if result.is_ok()
-                            && let Some(observed) = &observed
-                        {
-                            observe_live_event(
-                                &consumer_observer,
-                                &mut replaying,
-                                session.session_id.as_str(),
-                                observed,
-                            );
-                        }
-                        if session_closed && result.is_ok() {
-                            let session_id = session.session_id.as_str();
-                            consumer_warned
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .remove(session_id);
-                            consumer_failures
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .remove(session_id);
-                        }
-                        if let Some(completion) = completion {
-                            let _ = completion.send(result);
-                        }
-                    }
-                    HubCommand::BeginReplay {
-                        session,
-                        completion,
-                    } => {
-                        let result = hub
-                            .begin_history_replay(session.clone())
-                            .await
-                            .map(|_| ())
-                            .map_err(|error| {
-                                tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session replay reset failed");
-                                HistoryReplayUnavailable
-                            });
-                        if result.is_ok() {
-                            replaying.insert(session.session_id.as_str().to_owned());
-                        }
-                        let _ = completion.send(result);
-                    }
-                    HubCommand::BeginUnavailable {
-                        session,
-                        completion,
-                    } => {
-                        let result = hub
-                            .begin_history_unavailable(session.clone())
-                            .await
-                            .map(|_| ())
-                            .map_err(|error| {
-                                tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session history invalidation failed");
-                                HistoryReplayUnavailable
-                            });
-                        let _ = completion.send(result);
-                    }
-                }
-            }
-        });
         Self {
             endpoint,
+            hub,
+            spawner: tokio::runtime::Handle::current(),
             runs: StdMutex::new(None),
-            sender: StdMutex::new(Some(sender)),
-            consumer: Mutex::new(Some(consumer)),
-            backlog,
-            backlog_warned,
-            not_publishing,
+            queues: StdMutex::new(Some(SessionQueues::default())),
+            not_publishing: Arc::new(StdMutex::new(HashSet::new())),
             catalog_refresh: StdMutex::new(None),
-            live_observer,
+            live_observer: Arc::new(StdMutex::new(None)),
         }
     }
 
@@ -253,30 +145,65 @@ impl HubSessionEventSink {
         {
             return Err(EventSinkClosed);
         }
-        self.backlog.fetch_add(1, Ordering::Relaxed);
-        let sent = self
-            .sender
+        let ends_queue = matches!(
+            &command,
+            HubCommand::Publish {
+                event: SessionEvent::StateChanged {
+                    state: session_event_model::SessionState::Closed,
+                },
+                ..
+            }
+        );
+        let mut queues = self
+            .queues
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .as_ref()
-            .is_some_and(|sender| sender.send(command).is_ok());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let sent = queues.as_mut().is_some_and(|queues| {
+            let queue = queues.open_for(session_id, |previous, finished| {
+                let (sender, receiver) = mpsc::unbounded_channel();
+                let backlog = Arc::new(AtomicUsize::new(0));
+                let consumer = self.spawner.spawn(run_session_consumer(
+                    Arc::clone(&self.hub),
+                    receiver,
+                    Arc::clone(&backlog),
+                    Arc::clone(&self.not_publishing),
+                    Arc::clone(&self.live_observer),
+                    previous,
+                    finished,
+                ));
+                (
+                    SessionQueue {
+                        sender,
+                        backlog,
+                        backlog_warned: false,
+                    },
+                    consumer,
+                )
+            });
+            queue.backlog.fetch_add(1, Ordering::Relaxed);
+            if queue.sender.send(command).is_err() {
+                queue.backlog.fetch_sub(1, Ordering::Relaxed);
+                return false;
+            }
+            if queue.backlog.load(Ordering::Relaxed) > 10_000 && !queue.backlog_warned {
+                queue.backlog_warned = true;
+                tracing::warn!(session_id, "provider Session event backlog exceeds 10000");
+            }
+            if ends_queue {
+                // The run's Closed is its queue's last command; a later run
+                // gets a new queue, whose consumer waits for this one.
+                queues.open.remove(session_id);
+            }
+            true
+        });
+        drop(queues);
         if !sent {
-            self.backlog.fetch_sub(1, Ordering::Relaxed);
             self.not_publishing
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .insert(session_id.to_owned());
             tracing::error!(session_id, "provider Session event consumer is unavailable");
             return Err(EventSinkClosed);
-        }
-        if self.backlog.load(Ordering::Relaxed) > 10_000
-            && self
-                .backlog_warned
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .insert(session_id.to_owned())
-        {
-            tracing::warn!(session_id, "provider Session event backlog exceeds 10000");
         }
         Ok(())
     }
@@ -286,11 +213,15 @@ impl HubSessionEventSink {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        self.sender
+        let queues = self
+            .queues
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        if let Some(consumer) = self.consumer.lock().await.take() {
+        // Every session's sender goes with its queue; each consumer drains
+        // what it holds and ends.
+        let consumers = queues.map(SessionQueues::close).unwrap_or_default();
+        for consumer in consumers {
             consumer.await.map_err(|_| HistoryReplayUnavailable)?;
         }
         Ok(())
@@ -361,6 +292,167 @@ impl HubSessionEventSink {
         }
         result.await.map_err(|_| EventSinkClosed)??;
         Ok(published)
+    }
+}
+
+/// One session's open queue.
+struct SessionQueue {
+    sender: mpsc::UnboundedSender<HubCommand>,
+    backlog: Arc<AtomicUsize>,
+    backlog_warned: bool,
+}
+
+/// Every session's queue, and every consumer the sink has started.
+#[derive(Default)]
+struct SessionQueues {
+    open: HashMap<String, SessionQueue>,
+    /// For each session, a signal its latest consumer drops when it ends.
+    latest_finished: HashMap<String, oneshot::Receiver<()>>,
+    consumers: Vec<JoinHandle<()>>,
+}
+
+impl SessionQueues {
+    /// The session's open queue, starting one (and its consumer) if needed.
+    fn open_for(
+        &mut self,
+        session_id: &str,
+        start: impl FnOnce(
+            Option<oneshot::Receiver<()>>,
+            oneshot::Sender<()>,
+        ) -> (SessionQueue, JoinHandle<()>),
+    ) -> &mut SessionQueue {
+        match self.open.entry(session_id.to_owned()) {
+            std::collections::hash_map::Entry::Occupied(open) => open.into_mut(),
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                let previous = self.latest_finished.remove(session_id);
+                let (finished, finished_signal) = oneshot::channel();
+                let (queue, consumer) = start(previous, finished);
+                self.latest_finished
+                    .insert(session_id.to_owned(), finished_signal);
+                self.consumers.retain(|consumer| !consumer.is_finished());
+                self.consumers.push(consumer);
+                vacant.insert(queue)
+            }
+        }
+    }
+
+    /// Drops every sender and answers the consumers to wait for.
+    fn close(self) -> Vec<JoinHandle<()>> {
+        drop(self.open);
+        self.consumers
+    }
+}
+
+/// One session's consumer: it waits for that session's previous consumer
+/// to finish, so a run's Closed is applied before anything of a later run,
+/// then applies the session's commands in order. Sessions never wait on each
+/// other (design note §11.7, M5).
+async fn run_session_consumer(
+    hub: Arc<ProviderSessionEventHub>,
+    mut receiver: mpsc::UnboundedReceiver<HubCommand>,
+    backlog: Arc<AtomicUsize>,
+    failures: Arc<StdMutex<HashSet<String>>>,
+    observer: Arc<StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>>,
+    previous: Option<oneshot::Receiver<()>>,
+    _finished: oneshot::Sender<()>,
+) {
+    if let Some(previous) = previous {
+        let _finished_before = previous.await;
+    }
+    // Sessions whose history is being replayed: those events are not live.
+    let mut replaying: HashSet<String> = HashSet::new();
+    while let Some(command) = receiver.recv().await {
+        backlog.fetch_sub(1, Ordering::Relaxed);
+        match command {
+            HubCommand::SkillView { session, view } => {
+                if hub.publish_skill_view(session.clone(), view).await.is_err() {
+                    failures
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .insert(session.session_id.as_str().to_owned());
+                }
+            }
+            HubCommand::Publish {
+                session,
+                event,
+                completion,
+            } => {
+                let session_closed = matches!(
+                    &event,
+                    SessionEvent::StateChanged {
+                        state: session_event_model::SessionState::Closed,
+                    }
+                );
+                // Only the small turn and state events matter to an observer.
+                let observed = matches!(
+                    &event,
+                    SessionEvent::TurnStarted { .. }
+                        | SessionEvent::InputAccepted { .. }
+                        | SessionEvent::TurnEnded { .. }
+                        | SessionEvent::StateChanged { .. }
+                )
+                .then(|| event.clone());
+                let result = hub.publish(session.clone(), event).await.map(|_| ()).map_err(|error| {
+                    tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session event publication failed");
+                    failures
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .insert(session.session_id.as_str().to_owned());
+                    EventSinkClosed
+                });
+                if result.is_ok()
+                    && let Some(observed) = &observed
+                {
+                    observe_live_event(
+                        &observer,
+                        &mut replaying,
+                        session.session_id.as_str(),
+                        observed,
+                    );
+                }
+                if session_closed && result.is_ok() {
+                    let session_id = session.session_id.as_str();
+                    failures
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .remove(session_id);
+                }
+                if let Some(completion) = completion {
+                    let _ = completion.send(result);
+                }
+            }
+            HubCommand::BeginReplay {
+                session,
+                completion,
+            } => {
+                let result = hub
+                    .begin_history_replay(session.clone())
+                    .await
+                    .map(|_| ())
+                    .map_err(|error| {
+                        tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session replay reset failed");
+                        HistoryReplayUnavailable
+                    });
+                if result.is_ok() {
+                    replaying.insert(session.session_id.as_str().to_owned());
+                }
+                let _ = completion.send(result);
+            }
+            HubCommand::BeginUnavailable {
+                session,
+                completion,
+            } => {
+                let result = hub
+                    .begin_history_unavailable(session.clone())
+                    .await
+                    .map(|_| ())
+                    .map_err(|error| {
+                        tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session history invalidation failed");
+                        HistoryReplayUnavailable
+                    });
+                let _ = completion.send(result);
+            }
+        }
     }
 }
 

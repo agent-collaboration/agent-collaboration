@@ -406,7 +406,6 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
     ));
     client
         .accept_session_settings(provider_session_id.clone())
-        .await
         .expect("caller accepts effective settings");
     let prompt = client
         .submit_with_approval_dispatch_for_input(
@@ -488,7 +487,6 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
     assert!(client.settings_unresolved(&provider_session_id));
     client
         .accept_session_settings(provider_session_id.clone())
-        .await
         .expect("accept remaining untried setting");
     assert!(!client.settings_unresolved(&provider_session_id));
     let prompt = client

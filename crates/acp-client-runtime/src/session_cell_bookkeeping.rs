@@ -324,19 +324,21 @@ pub(crate) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &s
 /// An actor's loop ended on its own: Live{g} goes to NotLoaded, the line
 /// ends (its waiting messages settle "the agent stopped" through the queue
 /// sink), and the hub reads Unloaded for that run. Any other state means a
-/// close or a newer run already moved past this actor: nothing changes.
+/// close or a newer run already moved past this actor: nothing changes, and
+/// it answers false. The connection loop calls it (Lead V1), so the move and
+/// its Unloaded happen before the loop admits anything else.
 pub(crate) fn report_actor_exit(
     cells: &SessionCellTable,
     event_sink: &dyn crate::SessionEventSink,
     session_id: &str,
     generation: SessionGeneration,
-) {
+) -> bool {
     let Ok(effects) = cells.transition(
         session_id,
         SessionCellEvent::ActorExited { generation },
         crate::session_cell_table::EntryEffectRoute::Sink,
     ) else {
-        return;
+        return false;
     };
     for effect in effects {
         if let SessionCellEffect::Lifecycle(SessionLifecycleEffect::PublishUnloaded {
@@ -346,6 +348,7 @@ pub(crate) fn report_actor_exit(
             let _published = event_sink.publish_unloaded(session_id, generation);
         }
     }
+    true
 }
 
 /// A setting kind holds the session's prompts: its last change was refused
@@ -526,6 +529,26 @@ fn lifecycle_refusal_error(
             answer: state_answer(&state),
         },
     }
+}
+
+/// Test support: ends `generation`'s run as an actor exit does and admits a
+/// newer run of the session, answering its generation.
+#[cfg(test)]
+pub(crate) fn end_run_and_load_next_for_test(
+    cells: &SessionCellTable,
+    session_id: &str,
+    generation: SessionGeneration,
+) -> SessionGeneration {
+    let ended = cells.transition(
+        session_id,
+        SessionCellEvent::ActorExited { generation },
+        crate::session_cell_table::EntryEffectRoute::Sink,
+    );
+    assert!(ended.is_ok(), "the run ends: {ended:?}");
+    let attempt = LoadAttempt(uuid::Uuid::now_v7());
+    let next = admit_load(cells, session_id, RestoreVia::Load, attempt);
+    settle_load(cells, session_id, attempt, true);
+    next.unwrap_or_else(|error| panic!("a newer run loads: {error:?}"))
 }
 
 #[cfg(test)]

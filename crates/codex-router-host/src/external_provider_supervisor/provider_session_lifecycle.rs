@@ -93,9 +93,7 @@ pub(super) fn resume(
                                 .lock()
                                 .await
                                 .insert(completion_target.clone());
-                            if let Some(catalog) =
-                                runtime.settings_catalog(&provider_session_id).await
-                            {
+                            if let Some(catalog) = runtime.settings_catalog(&provider_session_id) {
                                 let effective = catalog.effective_settings();
                                 observed.mode = effective.mode;
                                 observed.model = effective.model;

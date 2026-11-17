@@ -388,7 +388,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
         );
         assert!(client.settings_unresolved(&session_id));
         assert!(matches!(
-            client.accept_session_settings(session_id.clone()).await,
+            client.accept_session_settings(session_id.clone()),
             Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsOutcomeUncertain)
         ));
         for value in ["auto", "ask"] {

@@ -77,23 +77,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     pub async fn capability_report(&self, provider_session_id: &str) -> ProviderCapabilityReport {
         let report = self
             .session_capabilities
-            .read()
-            .await
-            .get(provider_session_id)
-            .cloned()
+            .read(provider_session_id)
             .unwrap_or_else(|| self.base_capabilities.clone());
         report.with_auth_status(self.auth_status.read().await.clone())
     }
 
-    pub async fn settings_catalog(
+    pub fn settings_catalog(
         &self,
         provider_session_id: &str,
     ) -> Option<crate::ProviderSettingsCatalog> {
-        self.session_settings
-            .read()
-            .await
-            .get(provider_session_id)
-            .cloned()
+        self.session_settings.read(provider_session_id)
     }
 
     /// A setting holds the session's prompts: refused where refusals hold, or
@@ -116,16 +109,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         )
     }
 
-    pub async fn accept_session_settings(
+    pub fn accept_session_settings(
         &self,
         provider_session_id: String,
     ) -> Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError> {
         let catalog = self
             .session_settings
-            .read()
-            .await
-            .get(&provider_session_id)
-            .cloned()
+            .read(&provider_session_id)
             .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
         // One session-cell event across kinds: refused while any outcome is
         // unknown; an in-flight change is left alone, as today.
@@ -135,10 +125,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         )?;
         if accepted.contains(&provider_session_machines::ProviderSettingKind::Fast) {
             // The caller accepted a refused fast as it stands (D1 R8, R9).
-            self.keep_fast_off
-                .write()
-                .await
-                .remove(&provider_session_id);
+            let run = crate::SessionRuns::current_generation(
+                self.session_cells.as_ref(),
+                &provider_session_id,
+            );
+            let _cleared = self.keep_fast_off.clear(&provider_session_id, run);
         }
         Ok(catalog.effective_settings())
     }
@@ -430,6 +421,21 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         result.await.map_err(|_| self.retired_operation_error())?
     }
 
+    /// Test support: ends the session's actor the way an actor ends on its
+    /// own (its command channel closes), without closing the session.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn end_session_actor(
+        &self,
+        provider_session_id: String,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        self.commands
+            .send(ProviderCommand::EndActor {
+                provider_session_id,
+            })
+            .await
+            .map_err(|_| self.retired_operation_error())
+    }
+
     pub async fn list_sessions(
         &self,
         cwd: Option<PathBuf>,
@@ -517,7 +523,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         input_id: InputId,
         submission: session_event_model::ProviderSubmission,
-    ) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+    ) -> Result<ProviderSteeringOutcome<P::OperationId, P::Context>, ExternalProviderRuntimeError>
+    {
         if !submission.selected.is_empty() {
             return Err(ExternalProviderRuntimeError::Behavior(
                 crate::ProviderError::Unsupported,
@@ -536,7 +543,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         input_id: InputId,
         blocks: Vec<ContentBlock>,
-    ) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+    ) -> Result<ProviderSteeringOutcome<P::OperationId, P::Context>, ExternalProviderRuntimeError>
+    {
         if !self.admission.supports_steering {
             return Err(ExternalProviderRuntimeError::UnsupportedSteering);
         }

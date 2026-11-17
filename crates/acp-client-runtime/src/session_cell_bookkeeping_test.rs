@@ -219,9 +219,9 @@ fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
     let hub = HubRecorder::default();
 
     // Act
-    report_actor_exit(&cells, &hub, SESSION, generation);
+    let moved = report_actor_exit(&cells, &hub, SESSION, generation);
     let stale_exit = HubRecorder::default();
-    report_actor_exit(&cells, &stale_exit, SESSION, generation);
+    let stale_moved = report_actor_exit(&cells, &stale_exit, SESSION, generation);
     let reloaded = admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(9));
 
     // Assert
@@ -255,6 +255,8 @@ fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
             .is_empty(),
         "a second report for the same run publishes nothing"
     );
+    assert!(moved, "the first report ends the run");
+    assert!(!stale_moved, "a second report changes nothing");
     assert_eq!(
         reloaded.map(|next| next.number()).ok(),
         Some(generation.number() + 1)

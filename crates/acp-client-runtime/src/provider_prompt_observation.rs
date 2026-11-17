@@ -156,7 +156,6 @@ pub(crate) async fn observe_idle_session_update(
                 return Ok(());
             };
             update_live_settings(&parsed.update, runtime_handles, session_id)
-                .await
                 .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
             item_projection
                 .observe(&parsed.update, update)
@@ -173,7 +172,7 @@ fn projection_error(error: ItemProjectionError) -> ExternalProviderRuntimeError 
     }
 }
 
-async fn update_live_settings(
+fn update_live_settings(
     update: &SessionUpdate,
     handles: &ProviderSessionRuntimeHandles,
     session_id: &str,
@@ -183,11 +182,19 @@ async fn update_live_settings(
         SessionUpdate::ConfigOptionUpdate(_) => Some(false),
         _ => None,
     };
+    // Only the run these handles serve writes its own catalog and report: an
+    // ended run's late update changes nothing (design note §11.3; Lead V3).
     let catalog = if capability_change.is_some() {
-        let mut catalogs = handles.session_settings.write().await;
-        let catalog = catalogs.entry(session_id.to_owned()).or_default();
-        apply_settings_update(catalog, update, handles.behavior.as_ref());
-        Some(catalog.clone())
+        let mut updated = None;
+        let _written =
+            handles
+                .session_settings
+                .write_with(session_id, handles.run_generation, |entry| {
+                    let catalog = entry.get_or_insert_with(crate::ProviderSettingsCatalog::default);
+                    apply_settings_update(catalog, update, handles.behavior.as_ref());
+                    updated = Some(catalog.clone());
+                });
+        updated
     } else {
         None
     };
@@ -200,18 +207,21 @@ async fn update_live_settings(
         )?;
     }
     if let Some(modes_update) = capability_change {
-        let capabilities = {
-            let mut reports = handles.session_capabilities.write().await;
-            reports.get_mut(session_id).map(|report| {
-                let flag = if modes_update {
-                    &mut report.supports_modes
-                } else {
-                    &mut report.supports_config_options
-                };
-                *flag = true;
-                report.to_session_model()
-            })
-        };
+        let mut capabilities = None;
+        let _written =
+            handles
+                .session_capabilities
+                .write_with(session_id, handles.run_generation, |entry| {
+                    if let Some(report) = entry {
+                        let flag = if modes_update {
+                            &mut report.supports_modes
+                        } else {
+                            &mut report.supports_config_options
+                        };
+                        *flag = true;
+                        capabilities = Some(report.to_session_model());
+                    }
+                });
         if let Some(capabilities) = capabilities {
             handles.event_sink.publish(
                 session_id,
@@ -290,7 +300,6 @@ async fn record_prompt_update(
                         session_context.runtime_handles,
                         session_context.session_id,
                     )
-                    .await
                     .is_err()
                     {
                         sink_closed = true;
@@ -407,3 +416,7 @@ async fn record_prompt_update(
     }
     Ok(None)
 }
+
+#[cfg(test)]
+#[path = "provider_prompt_observation_test.rs"]
+mod tests;

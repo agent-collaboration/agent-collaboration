@@ -47,9 +47,6 @@ impl ExternalProviderSupervisor {
         let PreparedOperation::Admitted { live, .. } = prepared else {
             return Ok(ProviderPromptDispatch::Existing);
         };
-        // A delivery-started turn names its approver to a later steer, like an
-        // API-started one; the record goes with its retained settlement (D1 C1).
-        self.remember_turn_approver(&operation_id, &request.approver);
         let (dispatched, dispatch_observation) = tokio::sync::oneshot::channel();
         let input_id = request.input_id;
         let provider_session_id = String::from(target.session_id.clone());
@@ -159,7 +156,6 @@ impl ExternalProviderSupervisor {
             binding_generation: binding.generation.clone(),
             binding_retirement: runtime.retirement(),
         };
-        self.remember_turn_approver(&operation_id, &request.approver);
         let (dispatched, dispatch_observation) = tokio::sync::oneshot::channel();
         let input_id = request.input_id;
         let provider_session_id = String::from(target.session_id.clone());

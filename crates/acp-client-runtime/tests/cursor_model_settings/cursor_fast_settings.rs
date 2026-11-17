@@ -80,11 +80,10 @@ async fn prompt(fixture: &AcpWireFixture) -> Result<(), ExternalProviderRuntimeE
         .map(|_| ())
 }
 
-async fn catalog_fast(fixture: &AcpWireFixture) -> Option<FastObserved> {
+fn catalog_fast(fixture: &AcpWireFixture) -> Option<FastObserved> {
     fixture
         .client
         .settings_catalog(SESSION)
-        .await
         .map(|catalog| catalog.fast_observed())
 }
 
@@ -215,10 +214,7 @@ async fn refused_fast_off_holds_until_set_again() -> TestResult {
 async fn accepting_a_refused_fast_stops_keeping_it_off() -> TestResult {
     let fixture = AcpWireFixture::start_reactive(&["refuse-fast-once"]).await;
     failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
-    fixture
-        .client
-        .accept_session_settings(SESSION.to_owned())
-        .await?;
+    fixture.client.accept_session_settings(SESSION.to_owned())?;
     let released = prompt(&fixture).await;
     let before_model = setting_requests(&fixture).len();
     set(&fixture, ProviderSettingKind::Model, "fixture-a").await?;
@@ -236,10 +232,7 @@ async fn lost_fast_off_answer_is_unknown_and_cannot_be_accepted() -> TestResult 
     let fixture = AcpWireFixture::start_reactive(&["malformed-fast-reply"]).await;
     let failed = failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
     let held = prompt(&fixture).await;
-    let accepted = fixture
-        .client
-        .accept_session_settings(SESSION.to_owned())
-        .await;
+    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
@@ -271,7 +264,7 @@ async fn fast_off_reply_still_on_is_refused_and_held() -> TestResult {
     let fixture = AcpWireFixture::start_reactive(&["fast-stays-on"]).await;
     let failed = failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
     let held = prompt(&fixture).await;
-    let observed = catalog_fast(&fixture).await;
+    let observed = catalog_fast(&fixture);
     fixture.client.shutdown().await;
     assert_eq!(failed.kind, ProviderSettingKind::Fast);
     assert_ne!(failed.reason, ProviderSettingFailureReason::OutcomeUnknown);
@@ -294,7 +287,7 @@ async fn fast_off_reply_without_fast_option_is_refused_and_held() -> TestResult 
     let fixture = AcpWireFixture::start_reactive(&["fast-option-vanishes"]).await;
     let failed = failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
     let held = prompt(&fixture).await;
-    let observed = catalog_fast(&fixture).await;
+    let observed = catalog_fast(&fixture);
     fixture.client.shutdown().await;
     assert_eq!(failed.kind, ProviderSettingKind::Fast);
     assert_ne!(failed.reason, ProviderSettingFailureReason::OutcomeUnknown);
@@ -321,7 +314,7 @@ async fn assert_two_model_changes_keep_fast_off(fixture: &AcpWireFixture) -> Tes
         );
         assert_eq!(effective.fast, Some(FastObserved::Off));
         assert_eq!(effective.model.as_deref(), Some(model));
-        assert_eq!(catalog_fast(fixture).await, Some(FastObserved::Off));
+        assert_eq!(catalog_fast(fixture), Some(FastObserved::Off));
     }
     Ok(())
 }
@@ -378,7 +371,6 @@ async fn model_ok_then_fast_refused_keeps_model_and_keeps_fast_off() -> TestResu
     let model = fixture
         .client
         .settings_catalog(SESSION)
-        .await
         .and_then(|catalog| catalog.effective_settings().model);
     let held = prompt(&fixture).await;
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
@@ -421,13 +413,9 @@ async fn model_ok_then_fast_reply_lost_is_unknown_and_needs_a_confirmed_off() ->
     let model = fixture
         .client
         .settings_catalog(SESSION)
-        .await
         .and_then(|catalog| catalog.effective_settings().model);
     let held = prompt(&fixture).await;
-    let accepted = fixture
-        .client
-        .accept_session_settings(SESSION.to_owned())
-        .await;
+    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
@@ -488,10 +476,7 @@ async fn fast_auto_keeps_a_refused_fast_hold() -> TestResult {
     let before = setting_requests(&fixture).len();
     let model = set(&fixture, ProviderSettingKind::Model, "fixture-a").await;
     let after = setting_requests(&fixture);
-    let accepted = fixture
-        .client
-        .accept_session_settings(SESSION.to_owned())
-        .await;
+    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
     kept?;
@@ -512,10 +497,7 @@ async fn fast_auto_keeps_an_unknown_fast_hold() -> TestResult {
     let before = setting_requests(&fixture).len();
     let model = set(&fixture, ProviderSettingKind::Model, "fixture-a").await;
     let after = setting_requests(&fixture);
-    let accepted = fixture
-        .client
-        .accept_session_settings(SESSION.to_owned())
-        .await;
+    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
@@ -618,7 +600,7 @@ async fn explicit_fast_off_reply_without_fast_option_keeps_the_returned_catalog_
     let fixture = AcpWireFixture::start_reactive(&["fast-option-vanishes"]).await;
     create(&fixture, settings(FastRequest::Leave)).await?;
     let refused = set(&fixture, ProviderSettingKind::Fast, "off").await;
-    let observed = catalog_fast(&fixture).await;
+    let observed = catalog_fast(&fixture);
     let held = prompt(&fixture).await;
     fixture.client.shutdown().await;
     assert!(

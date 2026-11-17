@@ -1,6 +1,7 @@
 //! An in-process ACP agent for scenario tests (design note §11.8): it
 //! answers JSON-RPC lines on its end of a duplex pair and records every
-//! method it reads, in order. It offers session/close, answers each prompt
+//! method it reads, in order. It offers session/close and session/load (an
+//! empty load, no replay), answers each prompt
 //! at once with end_turn, and refuses anything else as method not found.
 
 use serde_json::{Value, json};
@@ -65,7 +66,7 @@ impl ScriptedLineAgent {
             let reply = match method {
                 "initialize" => json!({"jsonrpc": "2.0", "id": id, "result": {
                     "protocolVersion": 1,
-                    "agentCapabilities": {"sessionCapabilities": {"close": {}}},
+                    "agentCapabilities": {"loadSession": true, "sessionCapabilities": {"close": {}}},
                     "agentInfo": {"name": "scripted-line-agent", "version": "1"},
                 }}),
                 "session/new" => json!({"jsonrpc": "2.0", "id": id, "result": {
@@ -74,7 +75,9 @@ impl ScriptedLineAgent {
                 "session/prompt" => json!({"jsonrpc": "2.0", "id": id, "result": {
                     "stopReason": "end_turn",
                 }}),
-                "session/close" => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
+                "session/close" | "session/load" => {
+                    json!({"jsonrpc": "2.0", "id": id, "result": {}})
+                }
                 _ => json!({"jsonrpc": "2.0", "id": id, "error": {
                     "code": -32601, "message": "method not found",
                 }}),

@@ -27,14 +27,29 @@ use tokio_util::sync::CancellationToken;
 const STEERING_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProviderSteeringOutcome<OperationId> {
+pub enum ProviderSteeringOutcome<OperationId, Context> {
     Injected {
         running_operation_id: Option<OperationId>,
+        /// The approval context of the turn the input joined, captured when
+        /// the steer was sent (design note §12.4): the caller reads the
+        /// joined turn's approver from it, not from a shared record.
+        joined_turn: Option<Context>,
     },
     PromptRequired,
     StartedNewTurn,
     Failed,
 }
+
+/// Where a steer's outcome is answered.
+pub(crate) type SteeringReply<P> = tokio::sync::oneshot::Sender<
+    Result<
+        ProviderSteeringOutcome<
+            <P as InteractionPort>::OperationId,
+            <P as InteractionPort>::Context,
+        >,
+        ExternalProviderRuntimeError,
+    >,
+>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderSessionActivity {
@@ -61,9 +76,7 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
     Steer {
         input_id: InputId,
         prompt: ProviderPromptContent,
-        reply: tokio::sync::oneshot::Sender<
-            Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError>,
-        >,
+        reply: SteeringReply<P>,
     },
     Inspect {
         reply: tokio::sync::oneshot::Sender<ProviderSessionActivity>,
@@ -89,7 +102,7 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
 /// (D1 state machines, design note §11.2, inventory S2).
 pub(crate) async fn run_provider_session<P: InteractionPort>(
     session: ActiveSession<'_, Agent>,
-    commands: tokio::sync::mpsc::Receiver<ProviderSessionCommand<P>>,
+    commands: tokio::sync::mpsc::UnboundedReceiver<ProviderSessionCommand<P>>,
     shutdown: CancellationToken,
     frame_observation: Arc<ProviderFrameObservation>,
     runtime_handles: ProviderSessionRuntimeHandles,
@@ -99,9 +112,8 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
     >,
 ) {
     let session_id = session.session_id().to_string();
-    let cells = Arc::clone(&runtime_handles.session_cells);
     let generation = runtime_handles.run_generation;
-    let event_sink = Arc::clone(&runtime_handles.event_sink);
+    let actor_exits = runtime_handles.actor_exits.clone();
     let connection_shutdown = shutdown.clone();
     run_session_loop(
         session,
@@ -118,17 +130,20 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
         // The connection's retirement publishes for every session it knew.
         return;
     }
-    crate::session_cell_bookkeeping::report_actor_exit(
-        &cells,
-        event_sink.as_ref(),
-        &session_id,
+    #[cfg(feature = "test-support")]
+    crate::sim_points::reach(crate::sim_points::ClientSimPoint::ActorExitHandoff).await;
+    // The run's end goes to the connection loop, which moves the cell and
+    // publishes Unloaded in one iteration (Lead V1). Never awaited: a failed
+    // send means the loop has ended, and retirement publishes for the session.
+    let _handed = actor_exits.send(crate::provider_session_runtime_handles::ActorExit {
+        provider_session_id: session_id,
         generation,
-    );
+    });
 }
 
 async fn run_session_loop<P: InteractionPort>(
     mut session: ActiveSession<'_, Agent>,
-    mut commands: tokio::sync::mpsc::Receiver<ProviderSessionCommand<P>>,
+    mut commands: tokio::sync::mpsc::UnboundedReceiver<ProviderSessionCommand<P>>,
     shutdown: CancellationToken,
     frame_observation: Arc<ProviderFrameObservation>,
     runtime_handles: ProviderSessionRuntimeHandles,
@@ -210,7 +225,7 @@ async fn run_session_loop<P: InteractionPort>(
                                 continue;
                             }
                         };
-                        let capabilities = runtime_handles.session_capabilities.read().await.get(session.session_id().0.as_ref()).cloned();
+                        let capabilities = runtime_handles.session_capabilities.read_in(session.session_id().0.as_ref(), runtime_handles.run_generation);
                         let Some(capabilities) = capabilities else {
                             if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted); }
                             let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
@@ -417,7 +432,8 @@ async fn run_session_loop<P: InteractionPort>(
                                                 continue;
                                             }
                                             let submitted_text = Some(prompt.submitted_text());
-                                            let result = steer_provider_turn::<P>(&provider_connection, &provider_session_id, prompt, operation_id.clone()).await;
+                                            let joined_turn = turn_cancellation.as_ref().map(|turn| turn.approval.clone());
+                                            let result = steer_provider_turn::<P>(&provider_connection, &provider_session_id, prompt, operation_id.clone(), joined_turn).await;
                                             if matches!(result, Ok(ProviderSteeringOutcome::Injected { .. }))
                                                 && runtime_handles.event_sink.publish(
                                                     provider_session_id.0.as_ref(),
@@ -460,7 +476,7 @@ async fn run_session_loop<P: InteractionPort>(
                             continue;
                         }
                         let submitted_text = Some(prompt.submitted_text());
-                        let result = steer_provider_turn::<P>(session.connection(), session.session_id(), prompt, None).await;
+                        let result = steer_provider_turn::<P>(session.connection(), session.session_id(), prompt, None, None).await;
                         if matches!(result, Ok(ProviderSteeringOutcome::StartedNewTurn)) {
                             let turn_id = uuid::Uuid::now_v7().to_string();
                             runtime_handles.tool_registry.turn_started(session.session_id().0.as_ref(), &turn_id);
@@ -551,7 +567,8 @@ async fn steer_provider_turn<P: InteractionPort>(
     session_id: &agent_client_protocol::schema::v1::SessionId,
     prompt: ProviderPromptContent,
     running_operation_id: Option<P::OperationId>,
-) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+    joined_turn: Option<P::Context>,
+) -> Result<ProviderSteeringOutcome<P::OperationId, P::Context>, ExternalProviderRuntimeError> {
     let message = UntypedMessage::new(
         "_session/steering",
         json!({
@@ -577,6 +594,7 @@ async fn steer_provider_turn<P: InteractionPort>(
     match response.get("outcome").and_then(serde_json::Value::as_str) {
         Some("injected") => Ok(ProviderSteeringOutcome::Injected {
             running_operation_id,
+            joined_turn,
         }),
         Some("startedNewTurn") => Ok(ProviderSteeringOutcome::StartedNewTurn),
         Some("promptRequired") => Ok(ProviderSteeringOutcome::PromptRequired),

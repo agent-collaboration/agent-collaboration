@@ -165,7 +165,6 @@ async fn live_update_continues_replayed_item_projection() {
         .expect("history loads");
     let catalog = client
         .settings_catalog("fixture-session")
-        .await
         .expect("loaded catalog");
     assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
     tokio::time::timeout(
@@ -235,7 +234,6 @@ async fn history_replay_reset_precedes_session_load() {
         .await;
     let catalog = client
         .settings_catalog("fixture-session")
-        .await
         .expect("loaded session catalog");
     client.shutdown().await;
 

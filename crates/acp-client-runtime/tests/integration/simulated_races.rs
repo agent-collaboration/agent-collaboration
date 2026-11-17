@@ -8,6 +8,7 @@
     reason = "A connection or session the scenario cannot set up must fail it at once."
 )]
 
+mod actor_exit_handoff;
 mod scripted_line_agent;
 
 use acp_client_runtime::sim_points::ClientSimPoint;

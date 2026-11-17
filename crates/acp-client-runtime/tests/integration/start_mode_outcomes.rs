@@ -166,7 +166,7 @@ async fn lost_auto_answer_is_unconfirmed_held_and_has_no_allowance() {
         panic!("expected a start created without settings, got {created:?}");
     };
     let first_prompt = prompt_in_folder_edit(&client, &session, &scratch).await;
-    let accepted = client.accept_session_settings(session.clone()).await;
+    let accepted = client.accept_session_settings(session.clone());
     let second_prompt = prompt_in_folder_edit(&client, &session, &scratch).await;
     let read_before_set: Value =
         serde_json::from_slice(&std::fs::read(&receipt).expect("receipt")).expect("JSON");

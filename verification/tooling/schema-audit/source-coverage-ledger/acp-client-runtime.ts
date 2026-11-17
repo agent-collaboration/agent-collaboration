@@ -33,7 +33,7 @@ export const section: LedgerSection = {
       note: "process admission and connection lifetime; frame caps :105-106",
     },
     {
-      file: `${R}agent_session_client/approval_turn_cancellation.rs`,
+      file: `${R}approval_turn_cancellation.rs`,
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "turn cancellation bookkeeping; passes the cancel reason as the string literal turnCancelled to InteractionPort::cancel_all (:98); the wire cancel is sent from provider_session_actor.rs",
     },
@@ -43,12 +43,12 @@ export const section: LedgerSection = {
       note: "answers session/request_permission with a typed RequestPermissionResponse (:104); request id is JSON text (:77)",
     },
     {
-      file: `${R}agent_session_client/in_folder_allowance.rs`,
+      file: `${R}in_folder_allowance.rs`,
       disposition: { kind: "converts", owners: ["acp"] },
       note: "picks an allow-once optionId from a RequestPermissionRequest (:103); the reply is written in provider_connection_task.rs:201",
     },
     {
-      file: `${R}agent_session_client/provider_acp_error_mapping.rs`,
+      file: `${R}provider_acp_error_mapping.rs`,
       disposition: { kind: "reads", owners: ["acp", "claude-extra"] },
       note: "reads error.data.errorKind strings by hand (:29-47) for diagnostic logging only (:148-179); the returned runtime error is chosen from the decoded ACP ErrorCode (:78-145)",
     },
@@ -63,7 +63,7 @@ export const section: LedgerSection = {
       note: "handles the _auth/status_update notification (:51); decode lives in session-event-model; the sweep listed it under Cursor, the file doc says Claude",
     },
     {
-      file: `${R}agent_session_client/provider_client_contract.rs`,
+      file: `${R}provider_client_contract.rs`,
       disposition: { kind: "none" },
       note: "Router-internal admission and error types, not serialized",
     },
@@ -88,7 +88,7 @@ export const section: LedgerSection = {
       note: "CursorCreatePlan (:26) and cursor/create_plan reply bodies json! (:108-121, 152-185); also sends the reply",
     },
     {
-      file: `${R}agent_session_client/provider_cursor_plan_items.rs`,
+      file: `${R}provider_cursor_plan_items.rs`,
       disposition: { kind: "defines", owners: ["cursor-extra"] },
       note: "CursorTodoUpdate (:112), CursorTodo (:121), CursorTodoStatus (:128) for cursor/update_todos; replies {} (:204)",
     },
@@ -103,7 +103,7 @@ export const section: LedgerSection = {
       note: "elicitation/create form to Question (:39) and answer json! (:165-225); also sends the reply (:274-305)",
     },
     {
-      file: `${R}agent_session_client/provider_frame_observation.rs`,
+      file: `${R}provider_frame_observation.rs`,
       disposition: { kind: "none" },
       note: "frame-limit counters",
     },
@@ -143,7 +143,7 @@ export const section: LedgerSection = {
       note: "session/load (:67-71) and session/resume (:90-94); pre-parses replayed session/update by hand (update.sessionUpdate, unknown kind content.text :138-156) before from_value into SessionNotification (:158)",
     },
     {
-      file: `${R}agent_session_client/provider_setting_application.rs`,
+      file: `${R}provider_setting_application.rs`,
       disposition: { kind: "sends", owners: ["acp"] },
       note: "session/set_config_option (:197) and session/set_mode (:217) via to_untyped_message, sent at :297; reads response _meta (:276)",
     },
@@ -329,8 +329,8 @@ export const section: LedgerSection = {
       coverage: noTap("no tap records session/resume"),
     },
     {
-      file: `${R}agent_session_client/provider_setting_application.rs`,
-      line: 297,
+      file: `${R}provider_setting_application.rs`,
+      line: 377,
       edge: "acp-agent",
       sends: "session/set_config_option and session/set_mode",
       owner: N6,
@@ -434,8 +434,8 @@ export const section: LedgerSection = {
       coverage: noTap("no tap records cursor/create_plan replies"),
     },
     {
-      file: `${R}agent_session_client/provider_cursor_plan_items.rs`,
-      line: 204,
+      file: `${R}provider_cursor_plan_items.rs`,
+      line: 210,
       edge: "acp-agent",
       sends: "empty reply to cursor/update_todos",
       owner: N6,

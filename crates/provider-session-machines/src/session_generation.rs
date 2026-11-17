@@ -4,7 +4,9 @@
 /// admitted to its Closed (D1 R14). Every per-session publication carries the
 /// generation it was produced under; once its run has ended, nothing more is
 /// published for it.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+/// Generations of one session only grow: each admitted run takes the last
+/// one plus one, so a later run orders after an earlier one.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SessionGeneration(u64);
 
 impl SessionGeneration {

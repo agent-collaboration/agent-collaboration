@@ -99,11 +99,6 @@ struct SupervisorInner {
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
-    /// The approver of each prompt this Host dispatched: a message steered
-    /// into that turn is approved by it (D1 C1). Kept as long as the
-    /// operation's settlement is retained, so a steer whose reply raced the
-    /// turn's end still finds the turn it joined.
-    turn_approvers: StdMutex<HashMap<OperationId, collaboration_protocol::ProviderIdentity>>,
     /// The session line API prompts wait in when the agent can't steer (D1
     /// R12), given once the delivery route is composed. Weak: the line holds
     /// this supervisor.
@@ -135,47 +130,6 @@ struct SupervisorInner {
     /// outcome is known, nothing is stored yet, and its turn is still held.
     #[cfg(any(test, feature = "test-support"))]
     terminal_write_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
-    /// Steers in flight keep every turn's approver record (D1 C1).
-    approver_pins: StdMutex<ApproverPins>,
-}
-
-/// While a steer is in flight, an evicted operation's approver record is
-/// kept here instead of removed; the last steer to finish removes them.
-#[derive(Default)]
-struct ApproverPins {
-    steers_in_flight: usize,
-    deferred: Vec<OperationId>,
-}
-
-/// Holds every turn's approver record for one steer's flight.
-pub(super) struct TurnApproverPin {
-    inner: Arc<SupervisorInner>,
-}
-
-impl Drop for TurnApproverPin {
-    fn drop(&mut self) {
-        let released = {
-            let mut pins = self
-                .inner
-                .approver_pins
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            pins.steers_in_flight = pins.steers_in_flight.saturating_sub(1);
-            if pins.steers_in_flight == 0 {
-                std::mem::take(&mut pins.deferred)
-            } else {
-                Vec::new()
-            }
-        };
-        let mut approvers = self
-            .inner
-            .turn_approvers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for operation_id in released {
-            approvers.remove(&operation_id);
-        }
-    }
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -243,18 +197,6 @@ impl ExternalProviderSupervisor {
         self.inner
             .completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));
-    }
-
-    /// Keeps every turn's approver record until the returned pin drops.
-    pub(super) fn pin_turn_approvers(&self) -> TurnApproverPin {
-        self.inner
-            .approver_pins
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .steers_in_flight += 1;
-        TurnApproverPin {
-            inner: Arc::clone(&self.inner),
-        }
     }
 
     /// Records `operation_id` as an unknown outcome on its binding's
@@ -402,7 +344,7 @@ impl ExternalProviderSupervisor {
             let task_endpoint = endpoint.clone();
             catalog_tasks.push(tokio::spawn(async move {
                 while let Some(session_id) = refresh_receiver.recv().await {
-                    let Some(catalog) = task_runtime.settings_catalog(&session_id).await else {
+                    let Some(catalog) = task_runtime.settings_catalog(&session_id) else {
                         continue;
                     };
                     let Ok(session_id) = SessionId::try_from(session_id) else {
@@ -429,7 +371,6 @@ impl ExternalProviderSupervisor {
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
                 uncertainty: UncertaintyCells::default(),
-                turn_approvers: StdMutex::new(HashMap::new()),
                 message_fifo: std::sync::OnceLock::new(),
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
@@ -453,7 +394,6 @@ impl ExternalProviderSupervisor {
                 queue_enqueue_test_pause: StdMutex::new(None),
                 #[cfg(any(test, feature = "test-support"))]
                 terminal_write_test_pause: StdMutex::new(None),
-                approver_pins: StdMutex::new(ApproverPins::default()),
             }),
         })
     }
@@ -663,25 +603,6 @@ impl SupervisorInner {
 
     /// Publishes a live operation's result. Its protection from retention ends here, with
     /// no store write, so the completion signal moves only after the result is set.
-    /// Removes an evicted operation's approver record, or keeps it until no
-    /// steer is in flight.
-    fn release_turn_approver(&self, operation_id: OperationId) {
-        {
-            let mut pins = self
-                .approver_pins
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if pins.steers_in_flight > 0 {
-                pins.deferred.push(operation_id);
-                return;
-            }
-        }
-        self.turn_approvers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&operation_id);
-    }
-
     async fn publish_result(
         &self,
         operation_id: OperationId,
@@ -713,9 +634,6 @@ impl SupervisorInner {
         }
         for expired in expired_operations {
             operations.operations.remove(&expired);
-            // A turn's approver goes with its retained settlement, unless a
-            // steer in flight still needs it.
-            self.release_turn_approver(expired);
         }
     }
 }

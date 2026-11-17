@@ -7,9 +7,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::AgentSessionClient;
 pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
-use collaboration_protocol::{
-    CodexGeneration, OperationId, ProviderIdentity, ProviderPromptStopReason, SessionRef,
-};
+#[cfg(test)]
+use collaboration_protocol::{CodexGeneration, SessionRef};
+use collaboration_protocol::{OperationId, ProviderPromptStopReason};
 use collaboration_runtime::ProviderSessionEventHub;
 use collaboration_runtime::ServiceInteractionBroker;
 use message_board::SessionEndpointRef;
@@ -36,15 +36,7 @@ pub use acp_client_runtime::{
     ExternalProviderPermissionOutcome, ExternalProviderToolCall, ExternalProviderToolOutcome,
 };
 
-#[derive(Clone, Debug)]
-pub struct ExternalProviderApprovalContext {
-    pub requester: ProviderIdentity,
-    pub approver: ProviderIdentity,
-    pub target: SessionRef,
-    pub operation_id: OperationId,
-    pub binding_generation: CodexGeneration,
-    pub binding_retirement: CancellationToken,
-}
+use crate::external_provider_approval_context::ExternalProviderApprovalContext;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExternalProviderPromptOutcome {
@@ -370,20 +362,18 @@ impl ExternalProviderRuntime {
         self.client.set_setting(provider_session_id, request).await
     }
 
-    pub async fn accept_session_settings(
+    pub fn accept_session_settings(
         &self,
         provider_session_id: String,
     ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        self.client
-            .accept_session_settings(provider_session_id)
-            .await
+        self.client.accept_session_settings(provider_session_id)
     }
 
-    pub async fn settings_catalog(
+    pub fn settings_catalog(
         &self,
         provider_session_id: &str,
     ) -> Option<acp_client_runtime::ProviderSettingsCatalog> {
-        self.client.settings_catalog(provider_session_id).await
+        self.client.settings_catalog(provider_session_id)
     }
 
     /// The binding's work roots and each session's requested mode.
