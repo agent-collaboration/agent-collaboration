@@ -74,20 +74,26 @@ workspace_identifiers!(
     AutomationId
 );
 
-/// A Router installation's identity on the wire: any canonical lowercase RFC
-/// UUID, whatever its version, so live installations keep their v4 service
-/// ids. Central resolves it to its own UUIDv7 machine id.
+/// A Router installation's identity: its peer UUIDv7, canonical lowercase. It
+/// is the machine identity on the wire and in callers; central's private
+/// machines.machine_id never leaves central, and the boundary resolves through
+/// the unique machines.installation_id. A v4 Router is re-keyed to a v7
+/// installation at enrollment (B3); its service id and session references are
+/// untouched.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct InstallationId(String);
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("InstallationId must be a canonical lowercase RFC UUID")]
+#[error("InstallationId must be a canonical lowercase RFC UUIDv7")]
 pub struct InstallationIdError;
 impl TryFrom<String> for InstallationId {
     type Error = InstallationIdError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         let parsed = Uuid::parse_str(&value).map_err(|_| InstallationIdError)?;
-        if parsed.get_variant() != Variant::RFC4122 || parsed.hyphenated().to_string() != value {
+        if parsed.get_variant() != Variant::RFC4122
+            || parsed.get_version_num() != 7
+            || parsed.hyphenated().to_string() != value
+        {
             return Err(InstallationIdError);
         }
         Ok(Self(value))

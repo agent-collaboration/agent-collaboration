@@ -460,7 +460,6 @@ mod migrations_and_loss;
 mod turns_and_ledger;
 
 mod contract_additions;
-mod installation_lookup;
 mod relation_positions;
 
 mod admission_negatives;

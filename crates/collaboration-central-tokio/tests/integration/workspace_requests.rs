@@ -475,7 +475,6 @@ mod turns_and_ledger;
 mod workspace_boundaries;
 
 mod contract_additions;
-mod installation_lookup;
 mod relation_positions;
 
 mod admission_negatives;

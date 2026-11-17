@@ -326,3 +326,23 @@ fn transport_failure_receipts_distinguish_unsent_from_ambiguous_write() {
     ));
     assert!(client.closed(&attempt).unwrap().is_empty());
 }
+
+#[test]
+fn a_reconnect_whose_welcome_names_another_installation_is_invalid() {
+    let (mut client, clock) = fixture();
+    let attempt = connect(&mut client);
+    client.closed(&attempt).unwrap();
+    clock.advance(Duration::from_secs(600)).unwrap();
+    let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
+        panic!("reconnect action required")
+    };
+    let other = LinkFrame::Data(DataFrame::Welcome {
+        machine_id: "01890f2e-7b4c-7cc0-98c4-0000000000bb".parse().unwrap(),
+        central_time: clock.utc_now(),
+    });
+
+    let refused = client.receive(&attempt, other);
+
+    assert_eq!(refused, Err(ClientError::InvalidWelcome));
+    assert_eq!(client.status(), LinkStatus::Connecting);
+}

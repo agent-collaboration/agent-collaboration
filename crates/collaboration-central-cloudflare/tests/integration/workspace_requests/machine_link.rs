@@ -269,6 +269,14 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
         signed::NOW_SECONDS,
         signed::NOW_SECONDS + 600,
     )?;
+    // A well-formed installation with no machine row is refused.
+    let unknown_installation = signed::machine_token(
+        ORGANIZATION,
+        "019f0000-0000-7000-8000-00000000cf0f",
+        fixture.enrollment.as_str(),
+        signed::NOW_SECONDS,
+        signed::NOW_SECONDS + 600,
+    )?;
     for request in [
         fixture.client.get(fixture.link_url(ORGANIZATION)),
         fixture.client.get(format!(
@@ -284,6 +292,10 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
             .client
             .get(fixture.link_url(ORGANIZATION))
             .bearer_auth(non_v7),
+        fixture
+            .client
+            .get(fixture.link_url(ORGANIZATION))
+            .bearer_auth(unknown_installation),
         fixture
             .client
             .get(fixture.link_url(OTHER_ORGANIZATION))

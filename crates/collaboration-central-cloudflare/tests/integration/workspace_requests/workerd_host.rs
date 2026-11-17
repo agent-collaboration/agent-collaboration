@@ -442,14 +442,6 @@ pub(super) struct RemoteRuntime {
     lost_answers: Mutex<Vec<RequestId>>,
 }
 impl RemoteRuntime {
-    /// The real runtime's installation lookup, through the test control route.
-    pub async fn machine_for_installation(
-        &self,
-        installation: &workspace_model::InstallationId,
-    ) -> Result<Option<workspace_model::MachineId>, StoreFailure> {
-        self.control("machine-for-installation", installation)
-            .await?
-    }
     pub async fn inject_engine_commit_fault(
         &self,
         fault: collaboration_central_core::EngineCommitFault,

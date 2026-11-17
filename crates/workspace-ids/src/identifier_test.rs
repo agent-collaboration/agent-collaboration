@@ -18,17 +18,15 @@ fn canonical_v7_is_required_on_construction_and_decode() {
 }
 
 #[test]
-fn an_installation_id_is_any_canonical_rfc_uuid_version() {
-    for good in [
-        "550e8400-e29b-41d4-a716-446655440701",
-        "01890f2e-7b4c-7cc0-98c4-000000000001",
-    ] {
+fn an_installation_id_is_a_canonical_uuid_v7() {
+    for good in ["01890f2e-7b4c-7cc0-98c4-000000000001"] {
         assert!(good.parse::<InstallationId>().is_ok(), "{good}");
         assert!(serde_json::from_str::<InstallationId>(&format!("\"{good}\"")).is_ok());
     }
     for invalid in [
         "",
-        "550E8400-E29B-41D4-A716-446655440701",
+        "550e8400-e29b-41d4-a716-446655440701",
+        "01890F2E-7B4C-7CC0-98C4-000000000001",
         "550e8400e29b41d4a716446655440701",
         "550e8400-e29b-41d4-0716-446655440701",
     ] {
