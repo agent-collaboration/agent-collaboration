@@ -56,6 +56,10 @@ const LAYER_POLICY: [(&str, &[&str]); 25] = [
             "collaboration-contracts",
             "sqlite-storage-maintenance",
             "router-clock",
+            // The Mac outbox store in provider-operations.sqlite stores link vocabulary.
+            "central-link-client",
+            "central-link-protocol",
+            "workspace-model",
         ],
     ),
     (
