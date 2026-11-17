@@ -29,6 +29,7 @@ fn send(to: m::SessionAddress, body: &str) -> Operation {
         to,
         body: body.to_owned().try_into().unwrap(),
         delivery: workspace_model::central_mail::MessageDelivery::Auto,
+        reply_to: None,
     }
 }
 
@@ -90,6 +91,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         workspace_model::central_mail::MessageBody::Direct {
             body: "one".to_owned().try_into().unwrap(),
             delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         }
     );
 
@@ -224,7 +226,7 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
 }
 
 #[tokio::test]
-async fn a_chosen_delivery_is_stored_in_the_message_body_for_the_recipient_router() {
+async fn a_chosen_delivery_and_reply_to_are_stored_in_the_message_body_for_the_recipient_router() {
     let fixture = Fixture::new().await;
     let target = session(&fixture.caller);
     let answer = request(
@@ -235,6 +237,7 @@ async fn a_chosen_delivery_is_stored_in_the_message_body_for_the_recipient_route
             to: target,
             body: "steer this".to_owned().try_into().unwrap(),
             delivery: workspace_model::central_mail::MessageDelivery::Steer,
+            reply_to: Some(id(1049)),
         },
     )
     .await;
@@ -245,11 +248,17 @@ async fn a_chosen_delivery_is_stored_in_the_message_body_for_the_recipient_route
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT json_extract(body,'$.delivery') FROM messages WHERE message_id=?",
+            sql: "SELECT json_extract(body,'$.delivery'),json_extract(body,'$.replyTo') FROM messages WHERE message_id=?",
             args: vec![text(message_id)],
         })
         .await
         .unwrap();
-    assert_eq!(rows.rows, vec![vec![text("steer")]]);
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            text("steer"),
+            text(id::<workspace_model::MessageId>(1049))
+        ]]
+    );
     fixture.host.close().await;
 }

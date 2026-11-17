@@ -142,6 +142,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
                     .to_owned()
                     .try_into()?,
                 delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                reply_to: None,
             },
         };
         let answer = reopened.request_central(&healthy, request.clone()).await?;

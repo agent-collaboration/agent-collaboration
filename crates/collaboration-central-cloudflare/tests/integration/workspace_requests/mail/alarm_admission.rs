@@ -102,6 +102,7 @@ async fn send(f: &Fixture, serial: u32) -> TestResult<MailResult> {
             to: session(&f.caller),
             body: "unrelated fresh mail".to_owned().try_into()?,
             delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         },
     )
     .await

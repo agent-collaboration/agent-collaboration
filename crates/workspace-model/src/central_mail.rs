@@ -31,6 +31,9 @@ pub enum CentralMailOperation {
         body: PostText,
         #[serde(default)]
         delivery: MessageDelivery,
+        /// The message this one answers, carried to the recipient as-is.
+        #[serde(default)]
+        reply_to: Option<MessageId>,
     },
     SetWake {
         target: SessionAddress,
@@ -161,6 +164,10 @@ pub enum MessageBody {
         /// existed decode as `Auto`.
         #[serde(default)]
         delivery: MessageDelivery,
+        /// The message this one answers; bodies stored before this field
+        /// existed decode as `None`.
+        #[serde(default)]
+        reply_to: Option<MessageId>,
     },
     Notice {
         items: Vec<NoticeItem>,

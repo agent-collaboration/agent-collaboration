@@ -213,6 +213,7 @@ async fn request_event_runs_due_work_inside_the_fifty_second_horizon() {
                     to: session(&fixture.caller),
                     body: "own event work".to_owned().try_into().unwrap(),
                     delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
                 },
             },
         )

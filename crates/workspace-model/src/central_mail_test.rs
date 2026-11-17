@@ -110,13 +110,14 @@ fn a_direct_body_stored_before_delivery_existed_decodes_as_auto() {
         MessageBody::Direct {
             body: "hello".to_owned().try_into().unwrap(),
             delivery: MessageDelivery::Auto,
+            reply_to: None,
         }
     );
 }
 
 #[test]
 fn a_direct_body_keeps_its_chosen_delivery() {
-    let stored = json!({ "kind": "direct", "body": "hello", "delivery": "steer" });
+    let stored = json!({ "kind": "direct", "body": "hello", "delivery": "steer", "replyTo": null });
     let body: MessageBody = serde_json::from_value(stored.clone()).unwrap();
     assert!(matches!(
         body,
@@ -125,5 +126,20 @@ fn a_direct_body_keeps_its_chosen_delivery() {
             ..
         }
     ));
+    assert_eq!(serde_json::to_value(body).unwrap(), stored);
+}
+
+#[test]
+fn a_direct_body_keeps_the_message_it_answers() {
+    let stored = json!({
+        "kind": "direct",
+        "body": "answer",
+        "delivery": "auto",
+        "replyTo": "01890f3e-7b8c-7cc0-8000-000000000009"
+    });
+    let body: MessageBody = serde_json::from_value(stored.clone()).unwrap();
+    assert!(
+        matches!(&body, MessageBody::Direct { reply_to: Some(id), .. } if id.as_str() == "01890f3e-7b8c-7cc0-8000-000000000009")
+    );
     assert_eq!(serde_json::to_value(body).unwrap(), stored);
 }

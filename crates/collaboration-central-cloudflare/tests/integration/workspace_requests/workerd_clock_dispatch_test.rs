@@ -57,6 +57,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                     to: support::session(&fixture.caller),
                     body: "clock dispatch".to_owned().try_into().unwrap(),
                     delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
                 },
             },
         )

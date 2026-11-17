@@ -343,6 +343,7 @@ async fn corrupt_queued_direct_message_does_not_block_timers() {
                     to: session(&f.caller),
                     body: "unrelated direct".to_owned().try_into().unwrap(),
                     delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
                 },
             },
         )

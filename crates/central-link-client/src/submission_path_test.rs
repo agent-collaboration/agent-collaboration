@@ -146,7 +146,7 @@ fn mail_fields(kind: &str, id: &str, text: &str) -> Value {
     let session = json!({"machineId": id, "endpoint": "codex-local", "sessionId": text});
     match kind {
         "setNoticeCadence" => json!({"cadence": "m25"}),
-        "sendMessage" => json!({"to": session, "body": text, "delivery": "steer"}),
+        "sendMessage" => json!({"to": session, "body": text, "delivery": "steer", "replyTo": id}),
         "setWake" => json!({"target": session, "dueAt": "2026-11-17T10:05:00Z", "text": text}),
         "cancelWake" => json!({"wakeId": id}),
         "setAutomation" => {
