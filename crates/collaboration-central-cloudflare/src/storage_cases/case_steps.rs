@@ -108,7 +108,7 @@ impl CaseRead {
     }
 }
 
-/// A store call a case sends through `CentralPlatform::call_store`.
+/// A store call a case sends to a workspace store.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) enum CaseStoreCall {
