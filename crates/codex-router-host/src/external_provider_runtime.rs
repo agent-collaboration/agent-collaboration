@@ -96,7 +96,7 @@ pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
     interaction_port: Arc<HostInteractionPort>,
     event_sink: Option<Arc<HubSessionEventSink>>,
-    /// Test-only: holds the next load or resume after the client's success,
+    /// Test-only: holds the next create, load or resume after the client's success,
     /// before its activation is published.
     #[cfg(test)]
     activation_pause: std::sync::Mutex<
@@ -315,9 +315,11 @@ impl ExternalProviderRuntime {
         settings: acp_client_runtime::RequestedProviderSettings,
         work_roots: acp_client_runtime::SessionWorkRoots,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        let created = self
+        // The generation the connection admitted the session under, kept
+        // with the outcome rather than looked up later (D1 R14).
+        let (created, generation) = self
             .client
-            .create_session_with_work_roots(cwd, scratch_folder, settings, work_roots)
+            .create_session_admitted(cwd, scratch_folder, settings, work_roots)
             .await;
         let active_session = match &created {
             Ok(created) => Some(created.provider_session_id.as_str()),
@@ -333,13 +335,8 @@ impl ExternalProviderRuntime {
             _ => None,
         };
         if let Some(session_id) = active_session {
-            // The connection opened the created session's generation.
-            let generation = self.event_sink.as_ref().map(|event_sink| {
-                acp_client_runtime::SessionEventSink::current_generation(
-                    event_sink.as_ref(),
-                    session_id,
-                )
-            });
+            #[cfg(test)]
+            self.pause_before_activation().await;
             self.publish_active_session(session_id, generation).await?;
         }
         created
@@ -460,7 +457,7 @@ impl ExternalProviderRuntime {
         }
     }
 
-    /// Test-only: the next load or resume stops after the client's success,
+    /// Test-only: the next create, load or resume stops after the client's success,
     /// before its activation; returns (reached, release).
     #[cfg(test)]
     pub(crate) fn pause_next_activation(

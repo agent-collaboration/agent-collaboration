@@ -132,9 +132,7 @@ enum ProviderCommand<P: InteractionPort> {
         /// The Router's work roots for a session it starts in auto (D1 R18).
         work_roots: crate::SessionWorkRoots,
         settings: crate::RequestedProviderSettings,
-        reply: tokio::sync::oneshot::Sender<
-            Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
-        >,
+        reply: tokio::sync::oneshot::Sender<CreateAdmissionReply>,
     },
     Restore {
         provider_session_id: String,
@@ -205,13 +203,16 @@ enum ProviderCommand<P: InteractionPort> {
 enum PendingSessionAdmission<P: InteractionPort> {
     Create {
         result: Box<Result<ProviderSessionRegistration<P>, ExternalProviderRuntimeError>>,
-        activation: tokio::sync::oneshot::Sender<()>,
-        reply: tokio::sync::oneshot::Sender<
-            Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
-        >,
+        /// The generation the connection admitted the session under; the
+        /// actor starts only once it has it.
+        activation: tokio::sync::oneshot::Sender<crate::SessionGeneration>,
+        reply: tokio::sync::oneshot::Sender<CreateAdmissionReply>,
     },
     Restore {
         provider_session_id: String,
+        /// The generation this restore was admitted under: its completion
+        /// counts only while that is still the session's recorded run.
+        generation: crate::SessionGeneration,
         result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
         reply: tokio::sync::oneshot::Sender<
             Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
@@ -231,8 +232,13 @@ struct ProviderSessionRegistration<P: InteractionPort> {
     settings_catalog: crate::ProviderSettingsCatalog,
     permission_mode: crate::PermissionModeReport,
     setup_error: Option<ExternalProviderRuntimeError>,
-    /// The generation the created session's actor publishes under.
-    generation: crate::SessionGeneration,
+}
+
+/// A create's outcome and, when the connection admitted the session (even
+/// one created without its settings), the generation it was admitted under.
+pub(crate) struct CreateAdmissionReply {
+    pub(crate) result: Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
+    pub(crate) generation: Option<crate::SessionGeneration>,
 }
 
 struct RestoredProviderSession {

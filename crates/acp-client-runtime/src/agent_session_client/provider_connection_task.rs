@@ -380,16 +380,21 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 registration.settings_catalog.clone()
                                             });
                                             let mut setup_error = None;
-                                            let mut created_generation = crate::SessionGeneration::UNTRACKED;
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
-                                                created_generation = registration.generation;
                                                 register_provider_session(registration, &mut sessions)
+                                            });
+                                            // Only an admitted identity opens a run; a duplicate the
+                                            // registration rejected leaves the live run alone (D1 R14).
+                                            let created_generation = result.as_ref().ok().map(|created| {
+                                                task_event_sink.open_generation(&created.provider_session_id)
                                             });
                                             let mut settings_sink_closed = false;
                                             if let Ok(created) = &mut result {
                                                 known_sessions.track(created.provider_session_id.clone()).await;
-                                                session_generations.insert(created.provider_session_id.clone(), created_generation);
+                                                if let Some(generation) = created_generation {
+                                                    session_generations.insert(created.provider_session_id.clone(), generation);
+                                                }
                                                 if let Some(report) = report {
                                                     let report = report.with_auth_status(task_auth_status.read().await.clone());
                                                     task_session_capabilities.write().await.insert(created.provider_session_id.clone(), report);
@@ -398,7 +403,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     created.effective_settings = catalog.effective_settings();
                                                     if task_event_sink.publish_in(
                                                         &created.provider_session_id,
-                                                        created_generation,
+                                                        created_generation.unwrap_or(crate::SessionGeneration::UNTRACKED),
                                                         session_event_model::SessionEvent::SettingsChanged {
                                                             settings: catalog.to_session_settings(),
                                                         },
@@ -433,14 +438,21 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     None => Ok(created),
                                                 })
                                             };
-                                            let _result = activation.send(());
-                                            let _result = reply.send(result);
+                                            if let Some(generation) = created_generation {
+                                                let _result = activation.send(generation);
+                                            }
+                                            let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
                                         }
-                                        PendingSessionAdmission::Restore { provider_session_id, result, reply } => {
+                                        PendingSessionAdmission::Restore { provider_session_id, generation, result, reply } => {
                                             pending_loads.remove(&provider_session_id);
-                                            let generation = session_generations.get(&provider_session_id).copied().unwrap_or(crate::SessionGeneration::UNTRACKED);
-                                            if released_sessions.contains(&provider_session_id) {
-                                                session_generations.remove(&provider_session_id);
+                                            // A close since this restore was admitted ended its run
+                                            // (a release also bans the session): the late completion
+                                            // registers nothing, and a fresh restore stays possible.
+                                            let still_admitted = session_generations.get(&provider_session_id) == Some(&generation);
+                                            if released_sessions.contains(&provider_session_id) || !still_admitted {
+                                                if still_admitted {
+                                                    session_generations.remove(&provider_session_id);
+                                                }
                                                 known_sessions.forget(&provider_session_id).await;
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
                                                 continue;
@@ -605,6 +617,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     shutdown: task_shutdown.clone(),
                                                     event_sink: Arc::new(crate::session_event_sink::SessionGenerationSink::new(Arc::clone(&task_event_sink), generation)),
                                                     admission_tx: admission_tx.clone(),
+                                                    generation,
                                                     reply,
                                                 };
                                                 admission_tasks.spawn(async move {

@@ -131,9 +131,7 @@ pub(super) struct CreateAdmissionInputs<P: InteractionPort> {
     pub(super) supports_close: bool,
     pub(super) shutdown: CancellationToken,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
-    pub(super) reply: tokio::sync::oneshot::Sender<
-        Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
-    >,
+    pub(super) reply: tokio::sync::oneshot::Sender<super::CreateAdmissionReply>,
     pub(super) frame_observation: Arc<ProviderFrameObservation>,
     pub(super) runtime_handles: ProviderSessionRuntimeHandles,
     #[cfg(any(test, feature = "test-observation"))]
@@ -166,10 +164,6 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         .block_task()
         .run_until(async move |session| {
             let provider_session_id = session.session_id().to_string();
-            // The created session's run starts here, before it publishes
-            // anything (D1 R14).
-            let generation = runtime_handles.event_sink.open_generation(&provider_session_id);
-            let runtime_handles = runtime_handles.for_session_generation(generation);
             let response = session.response();
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
@@ -281,10 +275,11 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     settings_catalog,
                     permission_mode,
                     setup_error,
-                    generation,
                 }))
                 .map_err(|_| agent_client_protocol::Error::internal_error())?;
-            activation_rx
+            // The connection opens the run's generation only when it admits
+            // this identity, so a rejected duplicate opens nothing (D1 R14).
+            let generation = activation_rx
                 .await
                 .map_err(|_| agent_client_protocol::Error::internal_error())?;
             run_provider_session(
@@ -292,7 +287,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                 command_rx,
                 session_shutdown,
                 session_frame_observation,
-                runtime_handles,
+                runtime_handles.for_session_generation(generation),
                 None,
                 #[cfg(any(test, feature = "test-observation"))]
                 test_tool_calls,
@@ -353,7 +348,10 @@ pub(super) fn fail_pending_session_admission<P: InteractionPort>(
 ) {
     match completion {
         PendingSessionAdmission::Create { reply, .. } => {
-            let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));
+            let _result = reply.send(super::CreateAdmissionReply {
+                result: Err(ExternalProviderRuntimeError::TransportFailure),
+                generation: None,
+            });
         }
         PendingSessionAdmission::Restore { reply, .. } => {
             let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));

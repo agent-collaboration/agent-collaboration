@@ -272,8 +272,27 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         settings: crate::RequestedProviderSettings,
         work_roots: crate::SessionWorkRoots,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_session_admitted(cwd, scratch_folder, settings, work_roots)
+            .await
+            .0
+    }
+
+    /// Creates a session; answers its outcome and, when the connection
+    /// admitted it (even without its settings), the generation it was
+    /// admitted under, which the caller's own publications for it carry.
+    pub async fn create_session_admitted(
+        &self,
+        cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
+        settings: crate::RequestedProviderSettings,
+        work_roots: crate::SessionWorkRoots,
+    ) -> (
+        Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
+        Option<crate::SessionGeneration>,
+    ) {
         let (reply, result) = tokio::sync::oneshot::channel();
-        self.commands
+        if self
+            .commands
             .send(ProviderCommand::Create {
                 cwd,
                 scratch_folder,
@@ -282,8 +301,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 reply,
             })
             .await
-            .map_err(|_| self.retired_operation_error())?;
-        result.await.map_err(|_| self.retired_operation_error())?
+            .is_err()
+        {
+            return (Err(self.retired_operation_error()), None);
+        }
+        match result.await {
+            Ok(super::CreateAdmissionReply { result, generation }) => (result, generation),
+            Err(_) => (Err(self.retired_operation_error()), None),
+        }
     }
 
     pub async fn load_session(

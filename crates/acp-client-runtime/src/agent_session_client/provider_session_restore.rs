@@ -34,6 +34,7 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(super) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
+    pub(super) generation: crate::SessionGeneration,
     pub(super) reply: tokio::sync::oneshot::Sender<
         Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
     >,
@@ -51,6 +52,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         behavior,
         connection_model_reasoning,
         admission_tx,
+        generation,
         reply,
     } = inputs;
     let replay_started = if mode == RestoreHistoryMode::Replay {
@@ -107,6 +109,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         &admission_tx,
         &shutdown,
         PendingSessionAdmission::Restore {
+            generation,
             provider_session_id,
             result: Box::new(result),
             reply,
