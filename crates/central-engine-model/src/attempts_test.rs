@@ -6,6 +6,17 @@ fn time(milliseconds: i64) -> EngineTime {
 fn attempt_id() -> uuid::Uuid {
     "01890f2e-7b4c-7cc0-98c4-000000000001".parse().unwrap()
 }
+trait Recorded {
+    fn recorded(self) -> FailureRecord;
+}
+impl Recorded for Result<FailureTransition, FailureUpdateError> {
+    fn recorded(self) -> FailureRecord {
+        match self.unwrap() {
+            FailureTransition::Record(record) => record,
+            FailureTransition::Unchanged => panic!("the failure was expected to be recorded"),
+        }
+    }
+}
 fn failure() -> ItemFailureClass {
     ItemFailureClass::CorruptRow {
         column: "probe.due_at".into(),
@@ -22,7 +33,7 @@ fn first_failure_retries_at_the_next_mark_and_second_retires() {
         RetirementThreshold::DEFAULT,
         attempt_id(),
     )
-    .unwrap();
+    .recorded();
     assert_eq!(first.failure_count.get(), 1);
     assert_eq!(
         first.state,
@@ -38,7 +49,7 @@ fn first_failure_retries_at_the_next_mark_and_second_retires() {
         RetirementThreshold::DEFAULT,
         uuid::Uuid::nil(),
     )
-    .unwrap();
+    .recorded();
     assert_eq!(second.failure_count.get(), 2);
     assert_eq!(
         second.state,
@@ -58,7 +69,7 @@ fn first_failure_retries_at_the_next_mark_and_second_retires() {
             RetirementThreshold::DEFAULT,
             attempt_id()
         ),
-        Err(FailureUpdateError::AlreadyRetired)
+        Ok(FailureTransition::Unchanged)
     );
 }
 
@@ -74,7 +85,7 @@ fn thresholds_one_and_three_retire_at_exactly_their_count() {
                 RetirementThreshold::After(NonZeroU32::new(limit).unwrap()),
                 attempt_id(),
             )
-            .unwrap();
+            .recorded();
             assert_eq!(
                 matches!(record.state, AttemptState::Retired { .. }),
                 count == limit
@@ -96,7 +107,7 @@ fn whole_notice_units_retry_until_sixty_days_of_continuous_failure() {
             RetirementThreshold::NOTICE_UNITS,
             attempt_id(),
         )
-        .unwrap();
+        .recorded();
         assert_eq!(record.failure_count.get(), count);
         assert_eq!(
             record.state,
@@ -115,7 +126,7 @@ fn whole_notice_units_retry_until_sixty_days_of_continuous_failure() {
         RetirementThreshold::NOTICE_UNITS,
         attempt_id(),
     )
-    .unwrap();
+    .recorded();
     assert!(matches!(record.state, AttemptState::Failing { .. }));
     let retired = after_failure(
         Some(&record),
@@ -124,7 +135,7 @@ fn whole_notice_units_retry_until_sixty_days_of_continuous_failure() {
         RetirementThreshold::NOTICE_UNITS,
         attempt_id(),
     )
-    .unwrap();
+    .recorded();
     assert!(matches!(retired.state, AttemptState::Retired { .. }));
     let reset = after_failure(
         None,
@@ -133,7 +144,7 @@ fn whole_notice_units_retry_until_sixty_days_of_continuous_failure() {
         RetirementThreshold::NOTICE_UNITS,
         attempt_id(),
     )
-    .unwrap();
+    .recorded();
     assert!(matches!(reset.state, AttemptState::Failing { .. }));
 }
 
@@ -171,4 +182,80 @@ fn invalid_generated_id_and_missing_next_mark_are_rejected() {
             AlarmDecisionError::NoLaterGridMark
         ))
     );
+}
+
+/// R4 for every prior state: a failure before the next try never counts and
+/// writes nothing; with no record, or at or after the next try, it counts once
+/// and any new next try is the next mark after the failure; a retired subject
+/// never changes. The same inputs always give the same transition.
+#[hegel::test]
+fn no_failure_counts_before_the_next_try(case: hegel::TestCase) {
+    use hegel::generators as gs;
+    let draw_time = || {
+        time(
+            case.draw(
+                gs::integers::<i64>()
+                    .min_value(0)
+                    .max_value(4_000_000_000_000),
+            ),
+        )
+    };
+    let now = draw_time();
+    let anchor = draw_time();
+    let count =
+        NonZeroU32::new(case.draw(gs::integers::<u32>().min_value(1).max_value(5))).unwrap();
+    let threshold = RetirementThreshold::After(
+        NonZeroU32::new(case.draw(gs::integers::<u32>().min_value(1).max_value(6))).unwrap(),
+    );
+    let state = match case.draw(gs::integers::<u8>().min_value(0).max_value(2)) {
+        0 => None,
+        1 => Some(AttemptState::Failing {
+            next_try_at: anchor,
+        }),
+        _ => Some(AttemptState::Retired { retired_at: anchor }),
+    };
+    let prior = state.map(|state| FailureRecord {
+        attempt_id: attempt_id(),
+        failure_count: count,
+        state,
+        last_failure: failure(),
+        first_failed_at: time(0),
+        last_failed_at: time(0),
+        created_at: time(0),
+        updated_at: time(0),
+    });
+
+    let transition =
+        after_failure(prior.as_ref(), failure(), now, threshold, attempt_id()).unwrap();
+
+    assert_eq!(
+        transition,
+        after_failure(prior.as_ref(), failure(), now, threshold, attempt_id()).unwrap()
+    );
+    match (&prior, &transition) {
+        (None, FailureTransition::Unchanged) => panic!("a first failure always counts"),
+        (None, FailureTransition::Record(record)) => assert_eq!(record.failure_count.get(), 1),
+        (Some(prior), FailureTransition::Unchanged) => assert!(
+            match prior.state {
+                AttemptState::Retired { .. } => true,
+                AttemptState::Failing { next_try_at } => next_try_at > now,
+            },
+            "only a retired subject or a future next try ignores a failure"
+        ),
+        (Some(prior), FailureTransition::Record(record)) => {
+            assert!(
+                matches!(prior.state, AttemptState::Failing { next_try_at } if next_try_at <= now),
+                "a failure before the next try counted"
+            );
+            assert_eq!(record.failure_count.get(), prior.failure_count.get() + 1);
+        }
+    }
+    if let FailureTransition::Record(FailureRecord {
+        state: AttemptState::Failing { next_try_at },
+        ..
+    }) = transition
+    {
+        assert_eq!(next_try_at, next_five_minute_mark(now).unwrap());
+        assert!(next_try_at > now);
+    }
 }
