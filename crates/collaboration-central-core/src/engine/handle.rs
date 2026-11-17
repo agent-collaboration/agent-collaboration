@@ -91,6 +91,12 @@ impl<R: EngineHost> Engine<'_, R> {
             {
                 return outcome;
             }
+            #[cfg(feature = "test-support")]
+            if source.policy() == SourcePolicy::Due {
+                self.pauses()
+                    .reached_engine(crate::PausePoint::AfterEngineAttemptGate, &key.0)
+                    .await;
+            }
             let prior = match adapter.load(&key).await {
                 Ok(Some(prior)) => prior,
                 Ok(None) => {

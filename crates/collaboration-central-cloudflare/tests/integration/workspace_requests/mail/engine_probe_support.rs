@@ -138,6 +138,7 @@ impl RemotePauses {
     ) -> RemoteHold {
         use collaboration_central_core::PausePoint as P;
         let point = match point {
+            P::AfterEngineAttemptGate => "afterEngineAttemptGate",
             P::AfterEngineLoad => "afterEngineLoad",
             P::AfterEngineCommit => "afterEngineCommit",
             P::BeforeEngineFailureWrite => "beforeEngineFailureWrite",

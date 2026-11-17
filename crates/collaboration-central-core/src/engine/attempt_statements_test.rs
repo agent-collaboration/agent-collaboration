@@ -21,7 +21,7 @@ fn subject(kind: &'static str, key: &str) -> EngineSubject {
     }
 }
 fn failure(prior: Option<&FailureRecord>, now: i64) -> FailureRecord {
-    after_failure(
+    match after_failure(
         prior,
         ItemFailureClass::StatementRejected,
         EngineTime::from_timestamp_millis(now).unwrap(),
@@ -29,6 +29,10 @@ fn failure(prior: Option<&FailureRecord>, now: i64) -> FailureRecord {
         "01890f2e-7b4c-7cc0-98c4-000000000001".parse().unwrap(),
     )
     .unwrap()
+    {
+        central_engine_model::FailureTransition::Record(record) => record,
+        central_engine_model::FailureTransition::Unchanged => panic!("the failure must count"),
+    }
 }
 async fn database() -> SqliteConnection {
     let mut connection = SqliteConnection::connect("sqlite::memory:").await.unwrap();
