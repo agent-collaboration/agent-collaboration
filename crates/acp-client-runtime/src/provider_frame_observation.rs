@@ -1,6 +1,7 @@
 //! Bounded ACP frame-limit observation shared by connection and Session actors.
 
-use super::{AtomicBool, Duration, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 #[cfg(any(test, feature = "test-observation"))]
 static FRAME_LIMIT_EXCEEDED_COUNT: std::sync::atomic::AtomicU64 =
@@ -18,7 +19,7 @@ pub(crate) struct ProviderFrameObservation {
 }
 
 impl ProviderFrameObservation {
-    pub(super) fn record_limit_exceeded(&self) {
+    pub(crate) fn record_limit_exceeded(&self) {
         #[cfg(any(test, feature = "test-observation"))]
         FRAME_LIMIT_EXCEEDED_COUNT.fetch_add(1, Ordering::Relaxed);
         self.limit_exceeded.store(true, Ordering::Relaxed);

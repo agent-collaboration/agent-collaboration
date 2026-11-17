@@ -1,6 +1,6 @@
 //! Decode an ACP prompt result without the SDK's closed stop-reason enum.
 
-use crate::agent_session_client::ExternalProviderRuntimeError;
+use crate::provider_client_contract::ExternalProviderRuntimeError;
 use agent_client_protocol::schema::v1::StopReason;
 use session_event_model::StopReason as ProviderPromptStopReason;
 

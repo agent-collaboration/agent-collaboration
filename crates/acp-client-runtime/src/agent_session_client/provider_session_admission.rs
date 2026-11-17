@@ -2,10 +2,6 @@
 #[cfg(any(test, feature = "test-observation"))]
 use super::ExternalProviderToolCall;
 
-use super::provider_setting_application::{
-    FAST_OFF, InitialSettingsOutcome, SettingSetupFailure, apply_initial_settings,
-    fast_off_requested,
-};
 use super::{
     ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderCreatedSession,
     ExternalProviderRuntimeError, HashMap, InteractionPort, NewSessionRequest,
@@ -14,6 +10,10 @@ use super::{
     run_provider_session,
 };
 use crate::provider_item_projection::ProviderItemProjection;
+use crate::provider_setting_application::{
+    FAST_OFF, InitialSettingsOutcome, SettingSetupFailure, apply_initial_settings,
+    fast_off_requested,
+};
 use agent_client_protocol::schema::v1::CloseSessionRequest;
 
 /// The requested settings after the failed one, in apply order. Fast counts
@@ -132,7 +132,7 @@ pub(super) struct CreateAdmissionInputs<P: InteractionPort> {
     pub(super) request: NewSessionRequest,
     /// The session's in-folder roots, kept for its whole life; active while it
     /// runs in Router auto.
-    pub(super) in_folder: Option<super::in_folder_allowance::InFolderGrant>,
+    pub(super) in_folder: Option<crate::in_folder_allowance::InFolderGrant>,
     pub(super) requested_settings: crate::RequestedProviderSettings,
     pub(super) supports_close: bool,
     pub(super) shutdown: CancellationToken,
@@ -183,7 +183,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                 && let Ok(mut grants) = runtime_handles.in_folder_grants.write()
             {
                 // The allowance follows the mode the agent confirmed (D1 R4).
-                grants.insert(provider_session_id.clone(), super::in_folder_allowance::SessionInFolderGrant { grant, router_auto: router_auto_active });
+                grants.insert(provider_session_id.clone(), crate::in_folder_allowance::SessionInFolderGrant { grant, router_auto: router_auto_active });
             }
             let setup_error = match failure {
                 None => None,

@@ -5,9 +5,9 @@
 
 use super::provider_transport::ProviderTransport;
 use super::scripted_line_agent::ScriptedLineAgent;
-use super::session_cell_bookkeeping::ClientSimPoint;
 use super::turn_admission_tests::NoopInteractionPort;
 use super::*;
+use crate::session_cell_bookkeeping::ClientSimPoint;
 use crate::session_event_sink::{EventSinkClosed, HistoryReplayFuture};
 use turmoil::barriers::{Barrier, Reaction};
 

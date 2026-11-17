@@ -7,8 +7,9 @@ use agent_client_protocol::schema::v1::{
 use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
 use provider_session_machines::ProviderSettingKind;
 
-use super::{ActiveSession, Agent, acp_operation_error};
+use crate::provider_acp_error_mapping::acp_operation_error;
 use crate::{AppliedProviderSetting, ProviderSettingsCatalog, RequestedProviderSettings};
+use agent_client_protocol::{ActiveSession, Agent};
 use std::time::Duration;
 
 const SETTING_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);

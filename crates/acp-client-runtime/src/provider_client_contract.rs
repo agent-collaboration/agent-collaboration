@@ -1,9 +1,23 @@
 //! Provider admission, prompt result, and safe ACP error contracts.
+use crate::AcpProtocolVersion;
+use agent_client_protocol::AcpAgentConfig;
 #[cfg(any(test, feature = "test-observation"))]
-use super::ToolKind;
-
-use super::{AcpAgentConfig, AcpProtocolVersion, PathBuf, ProviderPromptStopReason};
+use agent_client_protocol::schema::v1::ToolKind;
+use session_event_model::StopReason as ProviderPromptStopReason;
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
+
+/// The largest prompt output a turn keeps; the rest is cut off.
+pub(crate) const MAX_PROMPT_OUTPUT_BYTES: usize = 1024 * 1024;
+
+/// What a prompt's dispatch observer hears: it was submitted, it wasn't,
+/// or a session refusal stopped it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProviderPromptDispatchObservation {
+    Submitted,
+    NotSubmitted,
+    Refused(crate::ProviderDispatchRefusal),
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProviderErrorCorrelationId(uuid::Uuid);
@@ -30,7 +44,7 @@ pub struct ExternalProviderLaunch {
 }
 
 impl ExternalProviderLaunch {
-    pub(super) fn sdk_config(&self) -> AcpAgentConfig {
+    pub(crate) fn sdk_config(&self) -> AcpAgentConfig {
         AcpAgentConfig::new(&self.executable)
             .args(self.arguments.clone())
             .envs(self.environment.clone())

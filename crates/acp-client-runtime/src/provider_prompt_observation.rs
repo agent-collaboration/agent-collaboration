@@ -1,15 +1,17 @@
 //! Bounded ACP prompt output and settlement observation.
-use crate::agent_session_client::{
+use crate::provider_acp_error_mapping::acp_operation_error;
+use crate::provider_client_contract::{
     ExternalProviderPromptOutcome, ExternalProviderRuntimeError, MAX_PROMPT_OUTPUT_BYTES,
-    ProviderFrameObservation, acp_operation_error, provider_frame_decode_error,
+    provider_frame_decode_error,
 };
 #[cfg(any(test, feature = "test-observation"))]
-use crate::agent_session_client::{
+use crate::provider_client_contract::{
     ExternalProviderToolCall, ExternalProviderToolOutcome, classify_mcp_tool_outcome,
 };
+use crate::provider_frame_observation::ProviderFrameObservation;
 use crate::provider_item_projection::{ItemProjectionError, ProviderItemProjection};
 use crate::provider_prompt_result_codec::{decode_prompt_result, decode_typed_stop_reason};
-use crate::provider_session_actor::ProviderSessionRuntimeHandles;
+use crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles;
 use crate::provider_settings_catalog_codec::apply_settings_update;
 use crate::provider_update_kind::{
     has_unknown_informational_value, is_known_update_kind, is_session_update_notification,

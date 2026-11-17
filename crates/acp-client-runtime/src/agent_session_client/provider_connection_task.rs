@@ -112,8 +112,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let todo_state = Arc::new(CursorPlanItems::default());
         let task_todo_state = Arc::clone(&todo_state);
         let retirement_todos = Arc::clone(&todo_state);
-        let in_folder_grants = super::in_folder_allowance::InFolderGrants::default();
-        let keep_fast_off = crate::provider_session_actor::KeepFastOff::default();
+        let in_folder_grants = crate::in_folder_allowance::InFolderGrants::default();
+        let keep_fast_off = crate::provider_session_runtime_handles::KeepFastOff::default();
         let task_keep_fast_off = Arc::clone(&keep_fast_off);
         #[cfg(test)]
         let client_in_folder_grants = Arc::clone(&in_folder_grants);
@@ -221,7 +221,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
                         #[cfg(any(test, feature = "test-observation"))]
                         callback_permission_request_count.fetch_add(1, Ordering::Relaxed);
-                        let in_folder_allowance = super::in_folder_allowance::active_grant(
+                        let in_folder_allowance = crate::in_folder_allowance::active_grant(
                             &callback_in_folder_grants,
                             request.session_id.0.as_ref(),
                         )
@@ -406,14 +406,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
                                                 let provider_session_id = registration.provider_session_id.clone();
-                                                let generation = super::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id)?;
+                                                let generation = crate::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id)?;
                                                 match register_provider_session(registration, &mut sessions) {
                                                     Ok(created) => {
                                                         created_generation = Some(generation);
                                                         Ok(created)
                                                     }
                                                     Err(error) => {
-                                                        super::session_cell_bookkeeping::abandon_run(&session_cells, &provider_session_id, generation);
+                                                        crate::session_cell_bookkeeping::abandon_run(&session_cells, &provider_session_id, generation);
                                                         Err(error)
                                                     }
                                                 }
@@ -473,7 +473,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             // A close since this restore was admitted made its attempt
                                             // stale: the late completion registers nothing, and a fresh
                                             // restore stays possible.
-                                            if !super::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
+                                            if !crate::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
                                                 known_sessions.forget(&provider_session_id).await;
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
                                                 continue;
@@ -506,7 +506,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }).map(|_| generation);
                                             // The cell moves Loading to Live on a registered restore,
                                             // and back to NotLoaded on a failed one.
-                                            super::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
+                                            crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
                                             if result.is_err() {
                                                 known_sessions.forget(&provider_session_id).await;
                                             } else if let Some(report) = report {
@@ -533,7 +533,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
                                             // A done close ends NotLoaded and can be loaded again (ACP
                                             // close); a failed one returns the cell to where it started.
-                                            let closed_generation = super::session_cell_bookkeeping::settle_close(&session_cells, &provider_session_id, attempt, result.is_ok());
+                                            let closed_generation = crate::session_cell_bookkeeping::settle_close(&session_cells, &provider_session_id, attempt, result.is_ok());
                                             if result.is_ok() {
                                                 // Closed ends the run's generation here, in the loop
                                                 // that admits restores, so no newer run can open
@@ -577,7 +577,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let mut request = NewSessionRequest::new(&cwd)
                                                 .mcp_servers(session_mcp_servers.clone());
                                             // The scratch folder, then the work roots that exist (D1 R18).
-                                            let folders = super::in_folder_allowance::session_folders(scratch_folder.as_deref(), &work_roots.roots);
+                                            let folders = crate::in_folder_allowance::session_folders(scratch_folder.as_deref(), &work_roots.roots);
                                             if base_capabilities.supports_additional_directories && !folders.is_empty() {
                                                 request = request.additional_directories(folders.clone());
                                             }
@@ -587,7 +587,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 router_auto: work_roots.router_auto,
                                             });
                                             let in_folder = scratch_folder.as_deref().and_then(|scratch_folder| {
-                                                super::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder, &work_roots.roots)
+                                                crate::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder, &work_roots.roots)
                                             });
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
@@ -623,7 +623,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 provider_session_restore::RestoreHistoryMode::Replay => provider_session_machines::session_lifecycle_machine::RestoreVia::Load,
                                                 provider_session_restore::RestoreHistoryMode::WithoutReplay => provider_session_machines::session_lifecycle_machine::RestoreVia::Resume,
                                             };
-                                            let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, via, attempt) {
+                                            let generation = match crate::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, via, attempt) {
                                                 Ok(generation) => generation,
                                                 Err(error) => {
                                                     let _result = reply.send(Err(error));
@@ -687,7 +687,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             });
                                         }
                                         ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
-                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
+                                            if crate::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
                                                 let answer = super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering);
                                                 if let Some(dispatch) = dispatch {
                                                     let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy { answer: answer.clone() }));
@@ -725,7 +725,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let _result = session.send(ProviderSessionCommand::Cancel { expected_operation_id, reply }).await;
                                         }
                                         ProviderCommand::Steer { provider_session_id, input_id, prompt, reply } => {
-                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
+                                            if crate::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering) }));
                                                 continue;
                                             }
@@ -761,7 +761,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let _result = session.send(ProviderSessionCommand::WaitIdle { reply }).await;
                                         }
                                         ProviderCommand::SetSetting { provider_session_id, request, reply } => {
-                                            if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
+                                            if crate::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering) }));
                                                 continue;
                                             }

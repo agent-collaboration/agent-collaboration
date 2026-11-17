@@ -14,10 +14,8 @@ use session_event_model::{
 };
 use tokio_util::sync::CancellationToken;
 
-use super::{
-    ActiveApprovalContext,
-    provider_cursor_plan_items::{CursorPlanDefinition, CursorPlanItems, CursorTodo},
-};
+use super::ActiveApprovalContext;
+use crate::provider_cursor_plan_items::{CursorPlanDefinition, CursorPlanItems, CursorTodo};
 use crate::{
     ApprovalPortOutcome, InteractionPort, SessionEventSink,
     provider_connection_activity::ProviderConnectionActivity,

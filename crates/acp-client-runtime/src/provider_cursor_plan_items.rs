@@ -23,12 +23,12 @@ struct CursorPlanRecord {
     todos: Vec<CursorTodo>,
 }
 
-pub(super) struct CursorPlanDefinition {
-    pub(super) tool_call_id: String,
-    pub(super) name: Option<String>,
-    pub(super) overview: Option<String>,
-    pub(super) markdown: String,
-    pub(super) todos: Vec<CursorTodo>,
+pub(crate) struct CursorPlanDefinition {
+    pub(crate) tool_call_id: String,
+    pub(crate) name: Option<String>,
+    pub(crate) overview: Option<String>,
+    pub(crate) markdown: String,
+    pub(crate) todos: Vec<CursorTodo>,
 }
 
 impl CursorPlanItems {
@@ -39,7 +39,7 @@ impl CursorPlanItems {
             .retain(|(owner, _), _| owner != session_id);
     }
 
-    pub(super) fn set_plan(
+    pub(crate) fn set_plan(
         &self,
         session_id: &str,
         plan: CursorPlanDefinition,
@@ -119,15 +119,15 @@ struct CursorTodoUpdate {
 }
 
 #[derive(Clone, Deserialize)]
-pub(super) struct CursorTodo {
-    pub(super) id: String,
-    pub(super) content: String,
-    pub(super) status: CursorTodoStatus,
+pub(crate) struct CursorTodo {
+    pub(crate) id: String,
+    pub(crate) content: String,
+    pub(crate) status: CursorTodoStatus,
 }
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum CursorTodoStatus {
+pub(crate) enum CursorTodoStatus {
     Pending,
     InProgress,
     Completed,
@@ -145,7 +145,7 @@ impl CursorTodoStatus {
     }
 }
 
-pub(super) struct ProviderCursorTodoHandler {
+pub(crate) struct ProviderCursorTodoHandler {
     tool_registry: Arc<ProviderConnectionActivity>,
     todo_state: Arc<CursorPlanItems>,
     event_sink: Arc<dyn SessionEventSink>,
@@ -154,7 +154,7 @@ pub(super) struct ProviderCursorTodoHandler {
 }
 
 impl ProviderCursorTodoHandler {
-    pub(super) fn new(
+    pub(crate) fn new(
         tool_registry: Arc<ProviderConnectionActivity>,
         todo_state: Arc<CursorPlanItems>,
         event_sink: Arc<dyn SessionEventSink>,

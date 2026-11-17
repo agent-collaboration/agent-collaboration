@@ -3,11 +3,9 @@
 use agent_client_protocol::{ActiveSession, Agent};
 use provider_session_machines::ProviderSettingKind;
 
-use crate::agent_session_client::ExternalProviderRuntimeError;
-use crate::agent_session_client::provider_setting_application::{
-    FAST_OFF, SettingSetupFailure, apply_initial_settings,
-};
-use crate::provider_session_actor::ProviderSessionRuntimeHandles;
+use crate::provider_client_contract::ExternalProviderRuntimeError;
+use crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles;
+use crate::provider_setting_application::{FAST_OFF, SettingSetupFailure, apply_initial_settings};
 use crate::{
     EffectiveProviderSettings, FastRequest, InvalidSettingSessionDisposition,
     ProviderSettingsCatalog, RequestedProviderSettings,
@@ -40,10 +38,13 @@ pub(crate) async fn apply_loaded_setting(
         .cloned()
         .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
     if intent == session_event_model::SettingApplicationIntent::TurnContext
-        && crate::agent_session_client::settings_held(&handles.session_cells, &provider_session_id)
+        && crate::session_cell_bookkeeping::settings_held(
+            &handles.session_cells,
+            &provider_session_id,
+        )
     {
         return Err(ExternalProviderRuntimeError::SettingsUnresolved {
-            answer: crate::agent_session_client::settings_hold_answer_for(
+            answer: crate::session_cell_bookkeeping::settings_hold_answer_for(
                 &handles.session_cells,
                 &provider_session_id,
             ),
@@ -175,7 +176,7 @@ pub(crate) async fn apply_loaded_setting(
             if kind == ProviderSettingKind::Mode {
                 // The mode the agent confirmed decides whether auto's in-folder
                 // grant applies; uncertain or failed changes never reach here.
-                crate::agent_session_client::set_router_auto(
+                crate::in_folder_allowance::set_router_auto(
                     &handles.in_folder_grants,
                     &provider_session_id,
                     outcome.router_auto_active,
@@ -281,7 +282,7 @@ fn record(
     kind: ProviderSettingKind,
     event: SessionSettingEvent,
 ) {
-    crate::agent_session_client::apply_setting(
+    crate::session_cell_bookkeeping::apply_setting(
         &handles.session_cells,
         provider_session_id,
         kind,

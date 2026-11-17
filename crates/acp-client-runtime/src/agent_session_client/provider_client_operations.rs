@@ -33,7 +33,7 @@ impl PendingCloseAdmissionGuard {
         let attempt = provider_session_machines::session_lifecycle_machine::CloseAttempt(
             uuid::Uuid::now_v7(),
         );
-        super::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
+        crate::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
         Ok(Self {
             cells: Arc::clone(cells),
             provider_session_id: provider_session_id.to_owned(),
@@ -50,7 +50,7 @@ impl PendingCloseAdmissionGuard {
 impl Drop for PendingCloseAdmissionGuard {
     fn drop(&mut self) {
         if !self.submitted {
-            super::session_cell_bookkeeping::settle_close(
+            crate::session_cell_bookkeeping::settle_close(
                 &self.cells,
                 &self.provider_session_id,
                 self.attempt,
@@ -109,7 +109,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: &str,
         kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
-        super::session_cell_bookkeeping::setting_outcome_unknown(
+        crate::session_cell_bookkeeping::setting_outcome_unknown(
             &self.session_cells,
             provider_session_id,
             kind,
@@ -129,7 +129,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
         // One session-cell event across kinds: refused while any outcome is
         // unknown; an in-flight change is left alone, as today.
-        let accepted = super::session_cell_bookkeeping::accept_settings(
+        let accepted = crate::session_cell_bookkeeping::accept_settings(
             &self.session_cells,
             &provider_session_id,
         )?;
@@ -465,7 +465,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         // turn's end is recorded on the cell (design note §12.1, EndingTurn).
         tokio::select! {
             () = self.shutdown.cancelled() => return Err(self.retired_operation_error()),
-            () = super::session_cell_bookkeeping::wait_for_close_turn(&self.session_cells, &provider_session_id) => {}
+            () = crate::session_cell_bookkeeping::wait_for_close_turn(&self.session_cells, &provider_session_id) => {}
         }
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands

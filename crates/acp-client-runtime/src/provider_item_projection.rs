@@ -8,7 +8,8 @@ use agent_client_protocol::schema::v1::{
 };
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind, ToolCallStatus};
 
-use crate::{EventSinkClosed, SessionEventSink, agent_session_client::MAX_PROMPT_OUTPUT_BYTES};
+use crate::provider_client_contract::MAX_PROMPT_OUTPUT_BYTES;
+use crate::{EventSinkClosed, SessionEventSink};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ItemProjectionError {

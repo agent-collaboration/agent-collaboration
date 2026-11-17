@@ -1,16 +1,16 @@
 //! Approval context lifetime for a dispatched provider prompt.
 
-use super::approval_turn_cancellation::PermissionResponseBarrier;
 use super::{
     ActiveApprovalContext, AgentSessionClient, ApprovalContextGuard, ExternalProviderPromptOutcome,
     ExternalProviderRuntimeError, ProviderPromptDispatchObservation,
 };
+use crate::approval_turn_cancellation::PermissionResponseBarrier;
 use session_event_model::InputId;
 use std::sync::Arc;
 
 /// Ends a prompt's turn on its session's cell when dropped. The Host drops
 /// it once the prompt's operation has settled (design note §13.1).
-pub struct ProviderTurnEnd(super::session_cell_bookkeeping::CellTurnGuard);
+pub struct ProviderTurnEnd(crate::session_cell_bookkeeping::CellTurnGuard);
 
 impl<P: crate::InteractionPort> AgentSessionClient<P> {
     /// Preserve the typed approval context for a multi-block delivery turn.
@@ -83,7 +83,7 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
             None => {
                 let turn =
                     provider_session_machines::session_turn_machine::TurnId(uuid::Uuid::now_v7());
-                if let Err(refusal) = super::session_cell_bookkeeping::start_direct_turn(
+                if let Err(refusal) = crate::session_cell_bookkeeping::start_direct_turn(
                     &self.session_cells,
                     &provider_session_id,
                     turn,
@@ -97,13 +97,13 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                 turn
             }
         };
-        let mut turn_end = ProviderTurnEnd(super::session_cell_bookkeeping::CellTurnGuard::new(
+        let mut turn_end = ProviderTurnEnd(crate::session_cell_bookkeeping::CellTurnGuard::new(
             &self.session_cells,
             &provider_session_id,
             turn,
         ));
         #[cfg(test)]
-        turmoil::barriers::trigger(super::session_cell_bookkeeping::ClientSimPoint::PromptTurnOpen)
+        turmoil::barriers::trigger(crate::session_cell_bookkeeping::ClientSimPoint::PromptTurnOpen)
             .await;
         let result = self
             .submit_in_turn(

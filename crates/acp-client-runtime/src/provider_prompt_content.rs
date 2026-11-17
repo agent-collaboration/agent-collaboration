@@ -1,7 +1,7 @@
 //! Validate ACP prompt blocks against a Session's advertised content types.
 
 use crate::ProviderCapabilityReport;
-use crate::agent_session_client::ExternalProviderRuntimeError;
+use crate::provider_client_contract::ExternalProviderRuntimeError;
 use agent_client_protocol::schema::v1::{
     AudioContent, BlobResourceContents, ContentBlock, EmbeddedResource, EmbeddedResourceResource,
     ImageContent, ResourceLink, TextContent, TextResourceContents,

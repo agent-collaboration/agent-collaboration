@@ -35,12 +35,18 @@
 mod acp_protocol_version;
 mod agent_session_client;
 mod approval_presentation;
+mod approval_turn_cancellation;
 mod external_permission_options;
+mod in_folder_allowance;
 mod interaction_port;
 mod permission_mode_plan;
+mod provider_acp_error_mapping;
 mod provider_behavior;
 mod provider_capability_report;
+mod provider_client_contract;
 mod provider_connection_activity;
+mod provider_cursor_plan_items;
+mod provider_frame_observation;
 mod provider_item_projection;
 mod provider_model_picker;
 mod provider_model_reasoning;
@@ -49,12 +55,15 @@ mod provider_prompt_content;
 mod provider_prompt_observation;
 mod provider_prompt_result_codec;
 mod provider_session_actor;
+mod provider_session_runtime_handles;
 mod provider_session_setting_update;
 mod provider_session_settings;
+mod provider_setting_application;
 mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
+mod session_cell_bookkeeping;
 mod session_cell_table;
 mod session_event_sink;
 mod session_runs;
@@ -82,13 +91,12 @@ pub use permission_mode_plan::{
 };
 pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;
+pub use provider_client_contract::ProviderPromptDispatchObservation;
 pub use provider_model_picker::ProviderModelPicker;
 pub use provider_model_reasoning::*;
 pub use provider_persistence_target::ProviderPersistenceTarget;
 pub use provider_prompt_content::ProviderPromptContent;
-pub use provider_session_actor::{
-    ProviderPromptDispatchObservation, ProviderSessionActivity, ProviderSteeringOutcome,
-};
+pub use provider_session_actor::{ProviderSessionActivity, ProviderSteeringOutcome};
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
     FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,

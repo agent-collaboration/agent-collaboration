@@ -1,6 +1,6 @@
 //! Safe ACP error-code classification at the provider client boundary.
 
-use super::{ExternalProviderRuntimeError, ProviderErrorCorrelationId};
+use crate::provider_client_contract::{ExternalProviderRuntimeError, ProviderErrorCorrelationId};
 use agent_client_protocol::schema::v1::ErrorCode;
 
 // Only the adapter's finite reported convention is retained. It is not vendor attribution.

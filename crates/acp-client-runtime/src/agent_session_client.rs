@@ -1,90 +1,75 @@
 //! ACP provider process admission and connection lifetime.
 
-mod approval_turn_cancellation;
 mod external_approval_dispatch;
-mod in_folder_allowance;
-pub(crate) use in_folder_allowance::{InFolderGrants, set_router_auto};
-mod provider_acp_error_mapping;
 mod provider_approval_dispatch;
 pub use provider_approval_dispatch::ProviderTurnEnd;
 mod provider_auth_status_update;
-mod provider_client_contract;
 mod provider_client_initialization;
 mod provider_client_operations;
 mod provider_connection_retirement;
 mod provider_connection_task;
 mod provider_cursor_create_plan;
-mod provider_cursor_plan_items;
 mod provider_cursor_question;
 mod provider_form_elicitation;
-mod provider_frame_observation;
 mod provider_initialize_request;
 mod provider_lifecycle_requests;
 mod provider_model_discovery;
+mod provider_prompt_cancellation;
 mod provider_prompt_dispatch;
 mod provider_request_fallback;
 mod provider_session_admission;
 mod provider_session_queue;
 mod provider_session_restore;
-pub(crate) mod provider_setting_application;
 mod provider_transport;
-mod session_cell_bookkeeping;
-pub(crate) use session_cell_bookkeeping::{
-    apply_setting, busy_answer, hold_setting_at_create, report_actor_exit, settings_held,
-    settings_hold_answer_for,
+pub(crate) use crate::session_cell_bookkeeping::{
+    apply_setting, busy_answer, hold_setting_at_create, settings_held, settings_hold_answer_for,
 };
 
 use crate::ProviderCapabilityReport;
-use crate::provider_connection_activity::{ProviderConnectionActivity, ToolCallOwnershipHandler};
-use crate::provider_prompt_content::ProviderPromptContent;
-use crate::provider_session_actor::{
-    ProviderPromptDispatchObservation, ProviderSessionActivity, ProviderSessionCommand,
-    ProviderSessionRuntimeHandles, ProviderSteeringOutcome, run_provider_session,
-};
-use crate::{AcpProtocolVersion, InteractionPort, SessionEventSink};
-use agent_client_protocol::schema::ProtocolVersion;
-#[cfg(any(test, feature = "test-observation"))]
-use agent_client_protocol::schema::v1::ToolKind;
-use agent_client_protocol::schema::v1::{
-    LoadSessionRequest, McpServer, McpServerHttp, NewSessionRequest, NewSessionResponse,
-    RequestPermissionRequest,
-};
-use agent_client_protocol::{
-    AcpAgent, AcpAgentConfig, ActiveSession, Agent, Client, ConnectionTo, Lines,
-};
-pub(crate) use approval_turn_cancellation::ProviderTurnCancellation;
-use approval_turn_cancellation::{ActiveApprovalContext, active_turn_cancellation};
-use external_approval_dispatch::{
-    PermissionDispatchState, record_permission_refusal, spawn_external_approval_dispatch,
-};
-use provider_acp_error_mapping::acp_load_session_error;
-pub(crate) use provider_acp_error_mapping::acp_operation_error;
-use provider_auth_status_update::ProviderAuthStatusHandler;
-#[cfg(any(test, feature = "test-observation"))]
-pub(crate) use provider_client_contract::classify_mcp_tool_outcome;
-pub(crate) use provider_client_contract::provider_frame_decode_error;
+use crate::approval_turn_cancellation::{ActiveApprovalContext, active_turn_cancellation};
+use crate::provider_acp_error_mapping::acp_load_session_error;
+pub(crate) use crate::provider_acp_error_mapping::acp_operation_error;
+use crate::provider_client_contract::ProviderPromptDispatchObservation;
+pub(crate) use crate::provider_client_contract::provider_frame_decode_error;
 #[cfg(feature = "test-observation")]
-pub(crate) use provider_client_contract::sanitized_acp_error;
+pub(crate) use crate::provider_client_contract::sanitized_acp_error;
 #[cfg(feature = "test-observation")]
-pub(crate) use provider_client_contract::sanitized_initialization_error;
-pub use provider_client_contract::{
+pub(crate) use crate::provider_client_contract::sanitized_initialization_error;
+pub use crate::provider_client_contract::{
     ExternalProviderAdmission, ExternalProviderApprovalRefusalReason,
     ExternalProviderCreatedSession, ExternalProviderLaunch, ExternalProviderPromptOutcome,
     ExternalProviderRuntimeError, ProviderErrorCorrelationId, ProviderSessionSummary,
 };
 #[cfg(any(test, feature = "test-observation"))]
-pub use provider_client_contract::{
+pub use crate::provider_client_contract::{
     ExternalProviderApprovalRefusalWarning, ExternalProviderPermissionObservation,
     ExternalProviderPermissionOutcome, ExternalProviderToolCall, ExternalProviderToolOutcome,
 };
+use crate::provider_connection_activity::{ProviderConnectionActivity, ToolCallOwnershipHandler};
+pub(crate) use crate::provider_cursor_plan_items::CursorPlanItems;
+use crate::provider_cursor_plan_items::ProviderCursorTodoHandler;
+pub(crate) use crate::provider_frame_observation::ProviderFrameObservation;
+#[cfg(any(test, feature = "test-observation"))]
+pub(crate) use crate::provider_frame_observation::frame_limit_exceeded_count_for_test;
+use crate::provider_prompt_content::ProviderPromptContent;
+use crate::provider_session_actor::{
+    ProviderSessionActivity, ProviderSessionCommand, ProviderSteeringOutcome, run_provider_session,
+};
+use crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles;
+use crate::{AcpProtocolVersion, InteractionPort, SessionEventSink};
+use agent_client_protocol::schema::ProtocolVersion;
+use agent_client_protocol::schema::v1::{
+    LoadSessionRequest, McpServer, McpServerHttp, NewSessionRequest, NewSessionResponse,
+    RequestPermissionRequest,
+};
+use agent_client_protocol::{AcpAgent, ActiveSession, Agent, Client, ConnectionTo, Lines};
+use external_approval_dispatch::{
+    PermissionDispatchState, record_permission_refusal, spawn_external_approval_dispatch,
+};
+use provider_auth_status_update::ProviderAuthStatusHandler;
 use provider_cursor_create_plan::ProviderCursorCreatePlanHandler;
-pub(crate) use provider_cursor_plan_items::CursorPlanItems;
-use provider_cursor_plan_items::ProviderCursorTodoHandler;
 use provider_cursor_question::ProviderCursorQuestionHandler;
 use provider_form_elicitation::ProviderFormElicitationHandler;
-pub(crate) use provider_frame_observation::ProviderFrameObservation;
-#[cfg(any(test, feature = "test-observation"))]
-pub(crate) use provider_frame_observation::frame_limit_exceeded_count_for_test;
 use provider_initialize_request::initialize_provider_connection;
 use provider_request_fallback::{
     ProviderKnownSessions, ProviderRequestFallback, ProviderRequestSessionGuard,
@@ -98,15 +83,11 @@ pub use provider_session_queue::{
     QueueCancel, QueueMarkStep, QueueRefusal, QueueTicket, QueueTurn, SessionLoadStarted,
 };
 use session_event_model::InputId;
-use session_event_model::StopReason as ProviderPromptStopReason;
 use std::collections::HashMap;
 use std::path::PathBuf;
 #[cfg(any(test, feature = "test-observation"))]
 use std::sync::atomic::AtomicU64;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -115,7 +96,6 @@ const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(15);
 /// ACP JSON-RPC frames are capped at 64 MiB to allow large tool results while
 /// keeping each provider connection's transport memory bounded.
 pub(crate) const MAX_ACP_FRAME_BYTES: usize = 64 * 1024 * 1024;
-pub(crate) const MAX_PROMPT_OUTPUT_BYTES: usize = 1024 * 1024;
 
 struct ApprovalContextGuard<P: InteractionPort> {
     contexts: Arc<std::sync::Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
@@ -303,9 +283,9 @@ pub struct AgentSessionClient<P: InteractionPort> {
     test_tool_calls: Arc<std::sync::Mutex<Vec<ExternalProviderToolCall>>>,
     /// Crate tests read whether a session's in-folder grant is in Router auto.
     #[cfg(test)]
-    in_folder_grants: InFolderGrants,
+    in_folder_grants: crate::in_folder_allowance::InFolderGrants,
     /// Accepting a refused fast as it stands ends keeping it off (D1 R8).
-    keep_fast_off: crate::provider_session_actor::KeepFastOff,
+    keep_fast_off: crate::provider_session_runtime_handles::KeepFastOff,
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {

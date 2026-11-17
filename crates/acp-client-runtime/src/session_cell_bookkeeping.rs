@@ -4,7 +4,9 @@
 //! releases, generations and close marks. Each function is one transition;
 //! the caller runs the ACP calls and actor registration it calls for.
 
-use super::ExternalProviderRuntimeError;
+use crate::provider_client_contract::{
+    ExternalProviderRuntimeError, ProviderPromptDispatchObservation,
+};
 use crate::session_cell_table::SessionCellTable;
 use provider_session_machines::SessionGeneration;
 use provider_session_machines::queued_entry_machine::SentOutcome;
@@ -25,7 +27,7 @@ use state_machine_core::TransitionError;
 /// Admits a created identity: NotLoaded to Live under the run's next
 /// generation, which it returns. A session already loading, live or closing
 /// is a duplicate.
-pub(super) fn admit_create(
+pub(crate) fn admit_create(
     cells: &SessionCellTable,
     session_id: &str,
 ) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
@@ -53,7 +55,7 @@ pub(super) fn admit_create(
 
 /// Returns an admitted run whose actor never registered to NotLoaded,
 /// keeping its generation as the last one so the next run is newer.
-pub(super) fn abandon_run(
+pub(crate) fn abandon_run(
     cells: &SessionCellTable,
     session_id: &str,
     generation: SessionGeneration,
@@ -69,7 +71,7 @@ pub(super) fn abandon_run(
 /// Admits a load or resume: NotLoaded to Loading under the run's next
 /// generation, which it returns. Loading, live or closing sessions refuse
 /// it.
-pub(super) fn admit_load(
+pub(crate) fn admit_load(
     cells: &SessionCellTable,
     session_id: &str,
     via: RestoreVia,
@@ -100,7 +102,7 @@ pub(super) fn admit_load(
 
 /// The restore admitted as `attempt` is still the session's load: no close
 /// or other load has replaced it since.
-pub(super) fn is_current_load(
+pub(crate) fn is_current_load(
     cells: &SessionCellTable,
     session_id: &str,
     attempt: LoadAttempt,
@@ -115,7 +117,7 @@ pub(super) fn is_current_load(
 
 /// Settles the load admitted as `attempt`: Live when its actor registered,
 /// NotLoaded otherwise. A stale attempt changes nothing.
-pub(super) fn settle_load(
+pub(crate) fn settle_load(
     cells: &SessionCellTable,
     session_id: &str,
     attempt: LoadAttempt,
@@ -136,7 +138,7 @@ pub(super) fn settle_load(
 
 /// Admits a close: Live or Loading to Closing. Closing refuses it as busy;
 /// NotLoaded answers "nothing to close" with its next steps (M8).
-pub(super) fn admit_close(
+pub(crate) fn admit_close(
     cells: &SessionCellTable,
     session_id: &str,
     attempt: CloseAttempt,
@@ -154,7 +156,7 @@ pub(super) fn admit_close(
 /// Settles the close admitted as `attempt`. A done close ends NotLoaded and
 /// returns the generation its Closed publishes under; a failed close goes
 /// back to Live from Live and to NotLoaded from Loading.
-pub(super) fn settle_close(
+pub(crate) fn settle_close(
     cells: &SessionCellTable,
     session_id: &str,
     attempt: CloseAttempt,
@@ -186,15 +188,15 @@ pub(super) fn settle_close(
 
 /// Why a direct prompt couldn't open the session's turn: what its dispatch
 /// observer hears and what the caller gets, as before the cell decided it.
-pub(super) struct DirectTurnRefusal {
-    pub(super) observation: super::ProviderPromptDispatchObservation,
-    pub(super) error: ExternalProviderRuntimeError,
+pub(crate) struct DirectTurnRefusal {
+    pub(crate) observation: ProviderPromptDispatchObservation,
+    pub(crate) error: ExternalProviderRuntimeError,
 }
 
 /// Opens the session's turn for a direct prompt: only while Live, with no
 /// turn running and no queued message in flight. A refusal answers with the
 /// session's state and the steps the agent allows (M8).
-pub(super) fn start_direct_turn(
+pub(crate) fn start_direct_turn(
     cells: &SessionCellTable,
     session_id: &str,
     turn: TurnId,
@@ -211,7 +213,7 @@ pub(super) fn start_direct_turn(
     let busy = || {
         let answer = busy_answer(cells, session_id, agent_steers);
         DirectTurnRefusal {
-            observation: super::ProviderPromptDispatchObservation::Refused(
+            observation: ProviderPromptDispatchObservation::Refused(
                 crate::ProviderDispatchRefusal::Busy {
                     answer: answer.clone(),
                 },
@@ -223,7 +225,7 @@ pub(super) fn start_direct_turn(
         TransitionError::Domain(SessionCellRefusal::Lifecycle(
             refusal @ SessionLifecycleRefusal::NotLoaded,
         )) => DirectTurnRefusal {
-            observation: super::ProviderPromptDispatchObservation::Refused(
+            observation: ProviderPromptDispatchObservation::Refused(
                 crate::ProviderDispatchRefusal::NotLoaded {
                     answer: refusal_answer(&cells.read(session_id, |cell| cell.lifecycle), refusal),
                 },
@@ -255,7 +257,7 @@ pub(super) fn start_direct_turn(
 /// Ends a session's turn when dropped. The outcome is unknown unless the
 /// prompt was shown applied or never sent (design note §16 refines this
 /// once the operation record decides it).
-pub(super) struct CellTurnGuard {
+pub(crate) struct CellTurnGuard {
     cells: std::sync::Arc<SessionCellTable>,
     session_id: String,
     turn: TurnId,
@@ -263,7 +265,7 @@ pub(super) struct CellTurnGuard {
 }
 
 impl CellTurnGuard {
-    pub(super) fn new(
+    pub(crate) fn new(
         cells: &std::sync::Arc<SessionCellTable>,
         session_id: &str,
         turn: TurnId,
@@ -277,12 +279,12 @@ impl CellTurnGuard {
     }
 
     /// The prompt returned its turn's result.
-    pub(super) fn applied(&mut self) {
+    pub(crate) fn applied(&mut self) {
         self.outcome = SentOutcome::Applied;
     }
 
     /// The prompt was refused before it was sent.
-    pub(super) fn not_sent(&mut self) {
+    pub(crate) fn not_sent(&mut self) {
         self.outcome = SentOutcome::Refused;
     }
 }
@@ -315,7 +317,7 @@ pub(crate) enum ClientSimPoint {
 
 /// Waits while the session's close is ending its running turn: the close
 /// frees the session only after that turn's end is recorded.
-pub(super) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &str) {
+pub(crate) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &str) {
     #[cfg(test)]
     turmoil::barriers::trigger(ClientSimPoint::CloseTurnWait).await;
     cells
@@ -479,7 +481,7 @@ pub(crate) fn accept_settings(
 }
 
 /// The session is closing on this connection.
-pub(super) fn is_closing(cells: &SessionCellTable, session_id: &str) -> bool {
+pub(crate) fn is_closing(cells: &SessionCellTable, session_id: &str) -> bool {
     cells.read(session_id, |cell| {
         matches!(cell.lifecycle, SessionLifecycle::Closing { .. })
     })

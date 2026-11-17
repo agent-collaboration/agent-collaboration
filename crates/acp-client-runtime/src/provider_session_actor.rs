@@ -1,18 +1,19 @@
 //! One provider session's prompt, cancellation, and steering actor.
 use crate::InteractionPort;
 use crate::SessionEventSink;
-use crate::agent_session_client::CursorPlanItems;
+use crate::approval_turn_cancellation::ProviderTurnCancellation;
+use crate::provider_acp_error_mapping::acp_operation_error;
 #[cfg(any(test, feature = "test-observation"))]
-use crate::agent_session_client::ExternalProviderToolCall;
-use crate::agent_session_client::ProviderTurnCancellation;
-use crate::agent_session_client::{
-    ExternalProviderPromptOutcome, ExternalProviderRuntimeError, ProviderFrameObservation,
-    acp_operation_error,
+use crate::provider_client_contract::ExternalProviderToolCall;
+use crate::provider_client_contract::ProviderPromptDispatchObservation;
+use crate::provider_client_contract::{
+    ExternalProviderPromptOutcome, ExternalProviderRuntimeError,
 };
-use crate::provider_connection_activity::ProviderConnectionActivity;
+use crate::provider_frame_observation::ProviderFrameObservation;
 use crate::provider_item_projection::ProviderItemProjection;
 use crate::provider_prompt_content::ProviderPromptContent;
 use crate::provider_prompt_observation::{observe_idle_session_update, read_bounded_prompt};
+use crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles;
 use agent_client_protocol::schema::v1::{CancelNotification, PromptRequest};
 use agent_client_protocol::{ActiveSession, Agent, ConnectionTo, JsonRpcMessage, UntypedMessage};
 use serde_json::json;
@@ -35,67 +36,12 @@ pub enum ProviderSteeringOutcome<OperationId> {
     Failed,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProviderPromptDispatchObservation {
-    Submitted,
-    NotSubmitted,
-    Refused(crate::ProviderDispatchRefusal),
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderSessionActivity {
     NotLoaded,
     Idle,
     Running,
 }
-
-#[derive(Clone)]
-pub(crate) struct ProviderSessionRuntimeHandles {
-    // event_sink: for one session's actor, a SessionGenerationSink scoped to
-    // the generation it was admitted under (for_session_generation).
-    pub(crate) connection_model_reasoning: crate::ModelReasoningMetadata,
-    pub(crate) behavior: Arc<dyn crate::ProviderBehavior>,
-    pub(crate) event_sink: Arc<dyn SessionEventSink>,
-    pub(crate) sink_closed: CancellationToken,
-    pub(crate) tool_registry: Arc<ProviderConnectionActivity>,
-    pub(crate) todo_state: Arc<CursorPlanItems>,
-    pub(crate) session_settings:
-        Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::ProviderSettingsCatalog>>>,
-    pub(crate) session_capabilities: Arc<
-        tokio::sync::RwLock<std::collections::HashMap<String, crate::ProviderCapabilityReport>>,
-    >,
-    /// In-folder grants, so a confirmed mode change can turn auto's grant on or off.
-    pub(crate) in_folder_grants: crate::agent_session_client::InFolderGrants,
-    /// Sessions whose caller wants fast kept off (D1 R9). It records the wish;
-    /// the session cell's fast setting records whether it's applied.
-    pub(crate) keep_fast_off: KeepFastOff,
-    /// The connection's session cells (D1 state machines).
-    pub(crate) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
-    /// The run these handles serve; untracked until for_session_generation.
-    pub(crate) run_generation: provider_session_machines::SessionGeneration,
-    /// The agent advertises steering, so a busy refusal offers it (D1 M8).
-    pub(crate) agent_steers: bool,
-}
-
-impl ProviderSessionRuntimeHandles {
-    /// These handles for one session admitted under `generation`: its
-    /// actor, projections and settings work publish only into that run.
-    pub(crate) fn for_session_generation(
-        &self,
-        generation: provider_session_machines::SessionGeneration,
-    ) -> Self {
-        let mut handles = self.clone();
-        handles.event_sink = Arc::new(crate::session_event_sink::SessionGenerationSink::new(
-            Arc::clone(&self.event_sink),
-            generation,
-        ));
-        handles.run_generation = generation;
-        handles
-    }
-}
-
-/// Provider session ids the Router keeps non-fast, for this Router's life.
-pub(crate) type KeepFastOff = Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>;
 
 pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
     Prompt {
@@ -172,7 +118,7 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
         // The connection's retirement publishes for every session it knew.
         return;
     }
-    crate::agent_session_client::report_actor_exit(
+    crate::session_cell_bookkeeping::report_actor_exit(
         &cells,
         event_sink.as_ref(),
         &session_id,
@@ -232,8 +178,8 @@ async fn run_session_loop<P: InteractionPort>(
                 let Some(command) = command else { break; };
                 match command {
                     ProviderSessionCommand::Prompt { input_id, operation_id, prompt, turn_cancellation, dispatch, reply } => {
-                        if crate::agent_session_client::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
-                            let answer = crate::agent_session_client::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref());
+                        if crate::session_cell_bookkeeping::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
+                            let answer = crate::session_cell_bookkeeping::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref());
                             if let Some(dispatch) = dispatch {
                                 let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved { answer: answer.clone() }));
                             }
@@ -461,13 +407,13 @@ async fn run_session_loop<P: InteractionPort>(
                                             let _result = reply.send(result);
                                         }
                                         Some(ProviderSessionCommand::Prompt { reply, dispatch, .. }) => {
-                                            let answer = crate::agent_session_client::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers);
+                                            let answer = crate::session_cell_bookkeeping::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers);
                                             if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy { answer: answer.clone() })); }
                                             let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer }));
                                         }
                                         Some(ProviderSessionCommand::Steer { input_id, prompt, reply }) => {
-                                            if crate::agent_session_client::settings_held(&runtime_handles.session_cells, provider_session_id.0.as_ref()) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::agent_session_client::settings_hold_answer_for(&runtime_handles.session_cells, provider_session_id.0.as_ref()) }));
+                                            if crate::session_cell_bookkeeping::settings_held(&runtime_handles.session_cells, provider_session_id.0.as_ref()) {
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::session_cell_bookkeeping::settings_hold_answer_for(&runtime_handles.session_cells, provider_session_id.0.as_ref()) }));
                                                 continue;
                                             }
                                             let submitted_text = Some(prompt.submitted_text());
@@ -497,7 +443,7 @@ async fn run_session_loop<P: InteractionPort>(
                                         }
                                         Some(ProviderSessionCommand::WaitIdle { reply }) => idle_waiters.push(reply),
                                         Some(ProviderSessionCommand::SetSetting { reply, .. }) => {
-                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: crate::agent_session_client::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers) }));
+                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: crate::session_cell_bookkeeping::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers) }));
                                         }
                                         None => return,
                                     }
@@ -509,8 +455,8 @@ async fn run_session_loop<P: InteractionPort>(
                         let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
                     }
                     ProviderSessionCommand::Steer { input_id, prompt, reply } => {
-                        if crate::agent_session_client::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
-                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::agent_session_client::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref()) }));
+                        if crate::session_cell_bookkeeping::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
+                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::session_cell_bookkeeping::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref()) }));
                             continue;
                         }
                         let submitted_text = Some(prompt.submitted_text());
