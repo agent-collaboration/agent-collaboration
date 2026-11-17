@@ -317,6 +317,9 @@ impl Drop for CellTurnGuard {
 pub(crate) enum ClientSimPoint {
     /// A close reached its wait for the session's turn end.
     CloseTurnWait,
+    /// A prompt's turn is open on the session's cell; its command hasn't
+    /// reached the connection yet.
+    PromptTurnOpen,
 }
 
 /// Waits while the session's close is ending its running turn: the close

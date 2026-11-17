@@ -115,3 +115,120 @@ fn a_close_frees_the_session_only_after_its_held_turn_end() {
     });
     simulation.run().expect("the scenario completes");
 }
+
+/// The scenario's client and agent, with one live session.
+async fn connected() -> (
+    Arc<AgentSessionClient<NoopInteractionPort>>,
+    ScriptedLineAgent,
+    String,
+) {
+    let (client_end, agent_end) = tokio::io::duplex(64 * 1024);
+    let (agent, agent_task) = ScriptedLineAgent::start(agent_end);
+    let client = Arc::new(
+        AgentSessionClient::initialize_in_process(
+            ProviderTransport::in_process(client_end, agent_task),
+            Arc::new(NoopInteractionPort),
+            Arc::new(DiscardingSink),
+            Arc::new(crate::test_behavior::TestProviderBehavior),
+        )
+        .await
+        .expect("the connection initializes"),
+    );
+    let session = client
+        .create_session(std::path::PathBuf::from("/scenario"))
+        .await
+        .expect("session/new");
+    (client, agent, session)
+}
+
+/// Oracle: §12.1's EndingTurn and the session table (Closing × prompt
+/// requested: refused "session is closing", so the message is not sent)
+/// close the race logged in out-of-scope.md, a prompt racing a finished
+/// close. A close requested after a prompt's turn is open on the cell, but
+/// before its command reaches the connection, waits for that turn and can't
+/// finish while the prompt is held there. Once the prompt goes on it is
+/// refused with the closing answer, never left with no actor; the agent
+/// never reads it, and the close then completes.
+#[test]
+fn a_close_cannot_overtake_a_prompt_whose_turn_is_open() {
+    let mut simulation = turmoil::Builder::new().build();
+    simulation.client("router", async move {
+        // Arrange
+        let mut prompt_open = Barrier::build(Reaction::Suspend, |point: &ClientSimPoint| {
+            *point == ClientSimPoint::PromptTurnOpen
+        });
+        let mut close_waits = Barrier::build(Reaction::Noop, |point: &ClientSimPoint| {
+            *point == ClientSimPoint::CloseTurnWait
+        });
+        let (client, agent, session) = connected().await;
+        let text: session_event_model::PromptContent =
+            serde_json::from_value(serde_json::json!({"type": "text", "text": "work"}))
+                .expect("text block");
+
+        // Act: the prompt is held with its turn open; a close is requested.
+        let prompting = tokio::spawn({
+            let client = Arc::clone(&client);
+            let session = session.clone();
+            async move {
+                let (prompted, turn_end) = client
+                    .submit_holding_turn_end(
+                        session,
+                        session_event_model::InputId::generate(),
+                        crate::ProviderTurnInput::Prompt(
+                            session_event_model::ProviderSubmission::plain(vec![text]),
+                        ),
+                        (),
+                        None,
+                        None,
+                    )
+                    .await;
+                drop(turn_end);
+                prompted
+            }
+        });
+        let held_prompt = prompt_open.wait().await.expect("the prompt's turn opens");
+        let mut closing = tokio::spawn({
+            let client = Arc::clone(&client);
+            let session = session.clone();
+            async move { client.close_session(session).await }
+        });
+        let close_waited = tokio::select! {
+            triggered = close_waits.wait() => Ok(triggered.is_some()),
+            closed = &mut closing => Err(closed),
+        };
+        let methods_while_held = agent.methods();
+        drop(held_prompt);
+        let prompted = prompting.await.expect("prompt task");
+        let closed = closing.await.expect("close task");
+        let methods = agent.methods();
+
+        // Assert
+        assert_eq!(
+            close_waited.as_ref().ok(),
+            Some(&true),
+            "the close finished while the prompt's turn was open: {close_waited:?}"
+        );
+        assert!(
+            !methods_while_held
+                .iter()
+                .any(|method| method == "session/close" || method == "session/prompt"),
+            "{methods_while_held:?}"
+        );
+        assert!(
+            matches!(
+                &prompted,
+                Err(crate::ExternalProviderRuntimeError::LocalBusy { answer })
+                    if answer == "session is closing; wait for it"
+            ),
+            "{prompted:?}"
+        );
+        assert!(closed.is_ok(), "{closed:?}");
+        assert!(
+            !methods.iter().any(|method| method == "session/prompt"),
+            "{methods:?}"
+        );
+        assert_eq!(methods.last().map(String::as_str), Some("session/close"));
+        Ok(())
+    });
+    simulation.run().expect("the scenario completes");
+}
