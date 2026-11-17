@@ -89,7 +89,11 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
     )
     .await?;
     let jwks = JwksFixtureServer::start().await?;
-    let first = ServerProcess::start(root.path(), &jwks.url).await?;
+    // The owner's clock is pinned from startup: an unpinned start would run
+    // Fleet maintenance on the wall clock and prune the import's feed.
+    let first =
+        ServerProcess::start_with_controls(root.path(), &jwks.url, &[pinned_after_import(1)?])
+            .await?;
     let prepared = prepare::prepare_cleanup(&first.base, database, loss).await;
     let crashed = first.crash().await;
     crashed?;

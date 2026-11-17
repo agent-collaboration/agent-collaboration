@@ -1,16 +1,23 @@
 //! Test support helpers for codex-router.
+//!
+//! The modules that run or stand in for Router parts need the Router crates and are behind the
+//! default `router-fixtures` feature; `node_taps` and the plain fixtures need none of them.
 
 pub mod global_claude_fixture;
+#[cfg(feature = "router-fixtures")]
 pub mod installed_codex;
 pub mod mock_upstream;
 pub mod native_app_server;
 pub mod node_taps;
 #[cfg(test)]
 mod owned_cli_process;
+#[cfg(feature = "router-fixtures")]
 pub mod owned_peer_fixture;
+#[cfg(feature = "router-fixtures")]
 pub mod route_native;
+#[cfg(feature = "router-fixtures")]
 pub mod router_health;
-#[cfg(test)]
+#[cfg(all(test, feature = "router-fixtures"))]
 mod scenario_finalization;
 pub mod signal_recording;
 pub mod transcript;

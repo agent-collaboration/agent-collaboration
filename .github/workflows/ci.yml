@@ -761,8 +761,12 @@ jobs:
       - name: Run the storage boundary cases in workerd
         shell: bash
         run: |
-          worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
-          worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
+          # Every workerd test boots its own process and compiles the test wasm;
+          # at opt-level 0 that compile is most of each test's time. Only these
+          # two test-support bundles build at opt-level 1; the rest of the dev
+          # profile (debug assertions, overflow checks, line tables) is unchanged.
+          CARGO_PROFILE_DEV_OPT_LEVEL=1 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
+          CARGO_PROFILE_DEV_OPT_LEVEL=1 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
           pnpm --dir verification run test:workerd
           cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration --color never 2>&1 | tee "$RUNNER_TEMP/central-worker-nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$RUNNER_TEMP/central-worker-nextest.log"; then

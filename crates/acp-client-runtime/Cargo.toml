@@ -28,7 +28,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
-codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4", default-features = false }
 tempfile = "3.27.0"
 tracing-subscriber.workspace = true
 
