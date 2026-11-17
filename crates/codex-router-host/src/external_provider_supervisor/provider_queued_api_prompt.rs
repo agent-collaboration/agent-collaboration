@@ -10,7 +10,7 @@ use super::{
     ConversationOperationFailureStage, ExternalProviderSupervisor, LiveOperation, OperationId,
     ProviderOperationCompletion, ProviderOperationEffect, SessionRef, failure,
 };
-use crate::provider_queue_submission_gate::QueuedSubmissionCommit;
+use crate::provider_queued_send::{QueuedSend, QueuedSendStep};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The admitted, unsettled operation an API queue entry carries. Opaque to
@@ -34,6 +34,16 @@ impl AdmittedApiPrompt {
         self.settled.load(Ordering::SeqCst)
     }
 
+    /// Claims the operation for its dispatch; false if it was settled.
+    pub(super) fn claim_for_dispatch(&self) -> bool {
+        self.claim()
+    }
+
+    /// The operation's live record, for its settlement.
+    pub(super) fn live(&self) -> Arc<LiveOperation> {
+        Arc::clone(&self.live)
+    }
+
     /// Claims the right to settle this operation; false if it was claimed.
     fn claim(&self) -> bool {
         !self.settled.swap(true, Ordering::SeqCst)
@@ -41,16 +51,49 @@ impl AdmittedApiPrompt {
 }
 
 impl ExternalProviderSupervisor {
-    /// Sends a queued API prompt the worker found idle. An unresolved
-    /// outcome that appeared while it waited (other than a live turn) means it
-    /// is not sent; a turn that started again sends it back to wait; a line
-    /// that stopped or closed before the submission committed means it is
-    /// not sent.
+    /// Admits a queued delivery when it reaches the head of its line, as an
+    /// API prompt is admitted before it is queued: the operation is Admitted
+    /// with no effect, and dispatch later moves it forward. `None` when the
+    /// operation was admitted before; a Busy failure means an unresolved
+    /// operation still blocks it, and the line tries again.
+    pub(crate) async fn admit_queued_delivery(
+        &self,
+        request: &ProviderPromptContentsRequest,
+    ) -> Result<Option<AdmittedApiPrompt>, Box<ConversationOperationFailure>> {
+        let (binding, _runtime) = self
+            .runtime_binding(
+                &request.target.endpoint,
+                &request.operation_id,
+                Some(request.target.clone()),
+            )
+            .map_err(Box::new)?;
+        match self
+            .admit_operation(
+                request.operation_id.clone(),
+                collaboration_protocol::ProviderOperationKind::ConversationPrompt,
+                binding,
+                Some(&request.target),
+                DispatchMark::Deferred,
+            )
+            .await
+            .map_err(Box::new)?
+        {
+            super::PreparedOperation::Admitted { live, .. } => {
+                Ok(Some(AdmittedApiPrompt::new(live)))
+            }
+            super::PreparedOperation::Existing(_) => Ok(None),
+        }
+    }
+
+    /// Sends a queued API prompt its line committed. An unresolved outcome
+    /// that appeared while it waited (other than a live turn) means it is not
+    /// sent; a close, cancel or stop that won before the handover means it is
+    /// not sent, with its dispatch mark undone.
     pub(crate) async fn dispatch_queued_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         admitted: &AdmittedApiPrompt,
-        queue_commit: QueuedSubmissionCommit,
+        queued_send: QueuedSend,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -62,6 +105,7 @@ impl ExternalProviderSupervisor {
             .await
             .map_err(Box::new)?
         {
+            queued_send.mark_not_written(false);
             return Err(Box::new(failure(
                 ConversationOperationFailureKind::Unavailable,
                 ConversationOperationFailureStage::Dispatch,
@@ -83,7 +127,7 @@ impl ExternalProviderSupervisor {
         let (reply, answer) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let outcome = owner
-                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted, &queue_commit)
+                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted, &queued_send)
                 .await;
             if reply.send(outcome).is_err() && !admitted.is_settled() {
                 // The worker is gone and the entry went back to waiting, so
@@ -105,17 +149,17 @@ impl ExternalProviderSupervisor {
     }
 
     /// The claimed part of a queued dispatch, run by its own owner: the
-    /// dispatch marker, the submission and its settlement. A marker that
-    /// can't be written settles the operation here; a line that stopped or
-    /// closed before the submission committed settles it not sent; a turn
-    /// that started again hands the entry back, unclaimed, to wait.
+    /// dispatch marker, the handover, the submission and its settlement
+    /// (design note §12.2, §13.1–§13.2). A marker that can't be written
+    /// settles the operation here; a close, cancel or stop that won before
+    /// the handover undoes the marker and settles it not sent.
     async fn dispatch_claimed_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         binding: collaboration_protocol::ProviderBindingIdentity,
         runtime: Arc<crate::ExternalProviderRuntime>,
         admitted: &AdmittedApiPrompt,
-        queue_commit: &QueuedSubmissionCommit,
+        queued_send: &QueuedSend,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -136,6 +180,7 @@ impl ExternalProviderSupervisor {
             Ok(snapshot) => snapshot,
             Err(marker_failure) => {
                 // No marker, so nothing was sent; the claim makes this its owner.
+                queued_send.mark_not_written(false);
                 let settled = marker_failure.clone();
                 self.spawn_operation(operation_id, Arc::clone(&admitted.live), async move {
                     ProviderOperationCompletion::Failure(settled)
@@ -143,17 +188,22 @@ impl ExternalProviderSupervisor {
                 return Err(Box::new(marker_failure));
             }
         };
-        // The line's gate decides between its stop or close and this
-        // submission: a stop that took it first ends the entry not sent; a
-        // submission started under it keeps its real outcome.
-        let started = match queue_commit
-            .commit(|| self.start_admitted_submission(&request, &binding, runtime))
-        {
-            Ok(started) => started,
-            Err(reason) => {
+        // The session's cell decides between a close, cancel or stop and this
+        // send: one that won first withdraws it, and the marker is undone; a
+        // handover starts the submission under its turn.
+        let started = match queued_send.mark_written() {
+            QueuedSendStep::Send(turn) => {
+                self.start_admitted_submission(&request, &binding, runtime, Some(turn))
+            }
+            QueuedSendStep::Withdraw => {
+                let unmarked = self
+                    .undo_dispatch_mark(&operation_id, &target)
+                    .await
+                    .is_ok();
+                let reason = queued_send.unmark_done(unmarked);
                 self.queued_operation_registry()
-                    .mark_not_submitted(&operation_id, reason.clone());
-                let unsent = unsent_failure(&operation_id, &target, &reason);
+                    .mark_not_submitted(&operation_id, reason);
+                let unsent = unsent_failure(&operation_id, &target, reason);
                 self.settle_claimed_unsent(admitted, &operation_id, unsent.clone());
                 return Err(Box::new(unsent));
             }
@@ -256,5 +306,21 @@ fn unsent_failure(
         &format!("not sent: {reason}"),
         operation_id.clone(),
         Some(target.clone()),
+    )
+}
+
+/// A queued message that reached its dispatch without an admitted
+/// operation: nothing was sent.
+pub(crate) fn unadmitted_queued_failure(
+    operation_id: OperationId,
+    target: SessionRef,
+) -> ConversationOperationFailure {
+    failure(
+        ConversationOperationFailureKind::Unavailable,
+        ConversationOperationFailureStage::Dispatch,
+        ProviderOperationEffect::None,
+        "not sent: the message wasn't admitted",
+        operation_id,
+        Some(target),
     )
 }

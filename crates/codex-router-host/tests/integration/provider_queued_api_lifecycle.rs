@@ -590,7 +590,7 @@ async fn provider_stop_settles_queued_waiters_not_sent() {
         assert_eq!(
             reason,
             &Some((
-                "not sent: providerRetired".to_owned(),
+                "not sent: provider connection closed".to_owned(),
                 ProviderOperationEffect::None
             )),
             "every waiter is not sent, with the reason: {settled:?}"

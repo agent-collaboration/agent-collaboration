@@ -412,6 +412,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 provider_session_id,
                 cwd,
                 mode,
+                admitted: None,
                 reply,
             })
             .await

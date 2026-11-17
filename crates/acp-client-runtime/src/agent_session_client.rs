@@ -6,6 +6,7 @@ mod in_folder_allowance;
 pub(crate) use in_folder_allowance::{InFolderGrants, set_router_auto};
 mod provider_acp_error_mapping;
 mod provider_approval_dispatch;
+pub use provider_approval_dispatch::ProviderTurnEnd;
 mod provider_auth_status_update;
 mod provider_client_contract;
 mod provider_client_initialization;
@@ -88,7 +89,7 @@ use provider_session_admission::{
     run_create_admission,
 };
 pub use provider_session_queue::{
-    QueueCancel, QueueMarkStep, QueueRefusal, QueueTicket, QueueTurn,
+    QueueCancel, QueueMarkStep, QueueRefusal, QueueTicket, QueueTurn, SessionLoadStarted,
 };
 use session_event_model::InputId;
 use session_event_model::StopReason as ProviderPromptStopReason;
@@ -143,6 +144,9 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: provider_session_restore::RestoreHistoryMode,
+        /// Told the run's generation as soon as the session's cell admits the
+        /// load, before the agent answers it.
+        admitted: Option<tokio::sync::oneshot::Sender<crate::SessionGeneration>>,
         /// The generation the connection admitted the restore under.
         reply: tokio::sync::oneshot::Sender<
             Result<crate::SessionGeneration, ExternalProviderRuntimeError>,

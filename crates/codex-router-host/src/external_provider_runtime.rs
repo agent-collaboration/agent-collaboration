@@ -738,6 +738,9 @@ fn test_approval_context(
     }
 }
 
+#[path = "external_provider_runtime/provider_runtime_queue.rs"]
+mod provider_runtime_queue;
+
 #[cfg(test)]
 #[path = "external_provider_runtime/fixture_tests.rs"]
 mod fixture_tests;

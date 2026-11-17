@@ -9,6 +9,7 @@
 use super::loaded_only_tests::{NoLivePeer, binding, recorded_requests, target};
 use super::*;
 use crate::{ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor};
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, MessageText, OperationId, PositiveSeconds,
@@ -201,7 +202,7 @@ async fn claimed_dispatch_stopped_before_submission_ends_not_sent() {
     });
     assert_eq!(
         String::from(failure.message.clone()),
-        "not sent: Router shutdown before provider submission"
+        "not sent: Router shutting down"
     );
     assert_eq!(
         failure.effect,
@@ -212,7 +213,7 @@ async fn claimed_dispatch_stopped_before_submission_ends_not_sent() {
         shut_down.queue_state,
         Some(
             collaboration_protocol::ConversationOperationQueueState::NotSubmitted {
-                reason: "Router shutdown before provider submission".into(),
+                reason: "Router shutting down".into(),
             }
         )
     );

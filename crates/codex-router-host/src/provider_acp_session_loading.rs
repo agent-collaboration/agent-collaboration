@@ -131,15 +131,22 @@ pub(crate) async fn ensure_provider_session_loaded(
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,
+        Err(error) => load_error_outcome(error),
+    }
+}
+
+/// What a failed load means for the work that asked for it.
+fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoadOutcome {
+    match error {
         // A close won while this load was in flight: the connection
         // dropped the restored session.
-        Err(ExternalProviderRuntimeError::SessionReleased) => {
+        ExternalProviderRuntimeError::SessionReleased => {
             ProviderSessionLoadOutcome::ClosedWhileLoading
         }
-        Err(ExternalProviderRuntimeError::ProviderSessionNotFound {
+        ExternalProviderRuntimeError::ProviderSessionNotFound {
             code,
             correlation_id,
-        }) => {
+        } => {
             let correlation_id = match DeliveryCorrelationId::try_from(correlation_id.to_string()) {
                 Ok(correlation_id) => correlation_id,
                 Err(_) => return unavailable("provider error reference was invalid"),
@@ -151,14 +158,14 @@ pub(crate) async fn ensure_provider_session_loaded(
                 },
             }
         }
-        Err(ExternalProviderRuntimeError::AuthenticationRequired {
+        ExternalProviderRuntimeError::AuthenticationRequired {
             code,
             correlation_id,
-        })
-        | Err(ExternalProviderRuntimeError::ProviderRejected {
+        }
+        | ExternalProviderRuntimeError::ProviderRejected {
             code,
             correlation_id,
-        }) => {
+        } => {
             let correlation_id = match DeliveryCorrelationId::try_from(correlation_id.to_string()) {
                 Ok(correlation_id) => correlation_id,
                 Err(_) => return unavailable("provider error reference was invalid"),
@@ -170,29 +177,47 @@ pub(crate) async fn ensure_provider_session_loaded(
                 },
             }
         }
-        Err(ExternalProviderRuntimeError::ResourceNotFound {
+        ExternalProviderRuntimeError::ResourceNotFound {
             code,
             correlation_id,
-        }) => provider_error_unavailable("provider resource was not found", code, correlation_id),
-        Err(ExternalProviderRuntimeError::UnsupportedMethod {
+        } => provider_error_unavailable("provider resource was not found", code, correlation_id),
+        ExternalProviderRuntimeError::UnsupportedMethod {
             code,
             correlation_id,
-        }) => {
-            provider_error_unavailable("provider ACP method is unsupported", code, correlation_id)
-        }
-        Err(ExternalProviderRuntimeError::InvalidParams {
+        } => provider_error_unavailable("provider ACP method is unsupported", code, correlation_id),
+        ExternalProviderRuntimeError::InvalidParams {
             code,
             correlation_id,
-        }) => {
+        } => {
             provider_error_unavailable("provider ACP parameters are invalid", code, correlation_id)
         }
-        Err(ExternalProviderRuntimeError::RequestCancelled {
+        ExternalProviderRuntimeError::RequestCancelled {
             code,
             correlation_id,
-        }) => {
-            provider_error_unavailable("provider ACP request was cancelled", code, correlation_id)
+        } => provider_error_unavailable("provider ACP request was cancelled", code, correlation_id),
+        error => unavailable(error.to_string()),
+    }
+}
+
+/// The reason a queued message ends not sent when its load failed.
+pub(crate) fn load_error_reason(error: ExternalProviderRuntimeError) -> String {
+    match load_error_outcome(error) {
+        ProviderSessionLoadOutcome::Ready | ProviderSessionLoadOutcome::AlreadyLoaded => {
+            "the session couldn't be loaded".to_owned()
         }
-        Err(error) => unavailable(error.to_string()),
+        ProviderSessionLoadOutcome::NotLoaded => {
+            collaboration_contracts::NOT_LOADED_REASON.to_owned()
+        }
+        ProviderSessionLoadOutcome::UnsupportedLoad => "unsupported: load".to_owned(),
+        ProviderSessionLoadOutcome::MissingRecord => {
+            "provider session record is missing".to_owned()
+        }
+        ProviderSessionLoadOutcome::LiveElsewhere => "session is live elsewhere".to_owned(),
+        ProviderSessionLoadOutcome::Unavailable { reason } => reason,
+        ProviderSessionLoadOutcome::Rejected { reason } => reason.safe_detail(),
+        ProviderSessionLoadOutcome::ClosedWhileLoading => {
+            crate::provider_acp_message_fifo::SESSION_CLOSED.to_owned()
+        }
     }
 }
 

@@ -44,15 +44,36 @@ impl ProviderAcpDeliveryRoute {
                     input_id,
                     ProviderQueuedPrompt::Contents {
                         request: prompt_request,
-                        load_policy: request.load_policy,
                         admitted: None,
                     },
                 )
             }
         };
-        let permit = match self.queue.reserve(&request.target) {
+        let permit = match self
+            .queue
+            .reserve(&request.target, operation_id, request.load_policy)
+            .await
+        {
             Ok(permit) => permit,
-            Err(reason) => return Ok(Self::rejected(DeliveryRejectionReason::Busy, reason)),
+            Err(crate::provider_acp_message_fifo::QueueDoorRefusal::Busy(reason)) => {
+                return Ok(Self::rejected(DeliveryRejectionReason::Busy, reason));
+            }
+            // The session unloaded after the route checked it.
+            Err(crate::provider_acp_message_fifo::QueueDoorRefusal::NotLoaded(_)) => {
+                return Ok(Self::not_submitted(
+                    collaboration_contracts::NOT_LOADED_REASON,
+                    true,
+                    UnsentCause::Holdable {
+                        otherwise: collaboration_contracts::NativeRefusalCode::ThreadNotLoaded,
+                    },
+                ));
+            }
+            Err(crate::provider_acp_message_fifo::QueueDoorRefusal::Refused(answer)) => {
+                return Ok(Self::rejected(
+                    DeliveryRejectionReason::LocalRejection,
+                    &answer,
+                ));
+            }
         };
         let effect = Self::effect(request, binding, SubmissionEffect::RouterQueued)?;
         sink.record(effect).await?;

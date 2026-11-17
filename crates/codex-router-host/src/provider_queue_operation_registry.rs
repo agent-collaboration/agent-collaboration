@@ -163,6 +163,20 @@ impl ProviderQueueOperationRegistry {
         Ok(operation_id.clone())
     }
 
+    /// The operation of a waiting entry, without changing it.
+    pub(crate) fn queued_operation_id(
+        &self,
+        target: &SessionRef,
+        input_id: &session_event_model::InputId,
+    ) -> Option<OperationId> {
+        self.operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .find(|(_, operation)| &operation.target == target && &operation.input_id == input_id)
+            .map(|(operation_id, _)| operation_id.clone())
+    }
+
     pub(crate) fn try_start(&self, operation_id: &OperationId) -> bool {
         let mut operations = self
             .operations

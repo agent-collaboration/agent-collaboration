@@ -283,7 +283,8 @@ impl ExternalProviderSupervisor {
                             }
                         }
                         return backend
-                            .queue_admitted_api_prompt(request, &binding, snapshot, live);
+                            .queue_admitted_api_prompt(request, &binding, snapshot, live)
+                            .await;
                     }
                 }
             }
@@ -296,7 +297,11 @@ impl ExternalProviderSupervisor {
                     });
                     Err(refused)
                 }
-                _ => backend.queue_admitted_api_prompt(request, &binding, snapshot, live),
+                _ => {
+                    backend
+                        .queue_admitted_api_prompt(request, &binding, snapshot, live)
+                        .await
+                }
             }
         })
     }
@@ -439,7 +444,7 @@ impl ExternalProviderSupervisor {
         clippy::result_large_err,
         reason = "The typed failure retains the full published operation payload."
     )]
-    fn queue_admitted_api_prompt(
+    async fn queue_admitted_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         binding: &super::ProviderBindingIdentity,
@@ -471,22 +476,23 @@ impl ExternalProviderSupervisor {
                 "provider session is busy",
             ));
         };
-        match fifo.enqueue_admitted_api_prompt(request, binding.clone(), admitted.clone()) {
+        match fifo
+            .enqueue_admitted_api_prompt(request, binding.clone(), admitted.clone())
+            .await
+        {
             Ok(_queued) => Ok(admitted_submission(snapshot)),
-            // The Router closed the session while this send was on its way.
-            Err(crate::provider_acp_message_fifo::SESSION_CLOSED) => {
-                self.complete_unsent_api_entry(
-                    &admitted,
-                    &operation_id,
-                    &target,
-                    crate::provider_acp_message_fifo::SESSION_CLOSED,
-                );
+            // The session's state refused it at the line's door (M8).
+            Err(
+                crate::provider_acp_message_fifo::QueueDoorRefusal::NotLoaded(answer)
+                | crate::provider_acp_message_fifo::QueueDoorRefusal::Refused(answer),
+            ) => {
+                self.complete_unsent_api_entry(&admitted, &operation_id, &target, &answer);
                 Err(refused(
                     ConversationOperationFailureKind::InvalidRequest,
-                    "not sent: session closed",
+                    &format!("not sent: {answer}"),
                 ))
             }
-            Err(_full) => {
+            Err(crate::provider_acp_message_fifo::QueueDoorRefusal::Busy(_full)) => {
                 self.complete_unsent_api_entry(&admitted, &operation_id, &target, "queue full");
                 Err(refused(
                     ConversationOperationFailureKind::Overloaded,

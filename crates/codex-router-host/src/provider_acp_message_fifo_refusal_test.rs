@@ -88,7 +88,10 @@ async fn entry_refused_at_dispatch_is_recorded_not_sent_with_the_reason() {
     // Act: enqueue it as the route's queue_contents does, past its content check.
     let operation_id = OperationId::generate();
     let input_id = session_event_model::InputId::generate();
-    let permit = queue.reserve(&target).expect("room in the line");
+    let permit = queue
+        .reserve(&target, &operation_id, LoadPolicy::MayLoad)
+        .await
+        .expect("room in the line");
     supervisor
         .queued_operation_registry()
         .record_queued_contents(
@@ -108,7 +111,6 @@ async fn entry_refused_at_dispatch_is_recorded_not_sent_with_the_reason() {
             input: acp_client_runtime::ProviderTurnInput::Prompt(submission),
             busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
         },
-        load_policy: LoadPolicy::MayLoad,
         admitted: None,
     });
     // The line either records why it never ran, or drops the entry as if it had.

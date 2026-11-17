@@ -81,7 +81,7 @@ async fn queued_busy_prompt_answers_when_the_turn_its_input_started_ends() {
 /// Oracle: D1 R12 and R14, V22b — "Not sent: an error naming the reason.
 /// Zero cancels." The busy prompt waits as the line's head while the turn
 /// runs; the agent then exits, the provider retires, and the prompt answers
-/// with an error naming providerRetired. It never started: the agent never
+/// with an error naming "provider connection closed". It never started: the agent never
 /// received it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn queued_busy_prompt_not_sent_when_the_provider_retires() {
@@ -108,7 +108,7 @@ async fn queued_busy_prompt_not_sent_when_the_provider_retires() {
     assert_eq!(waiting.len(), 1, "one queue_add: {waiting:?}");
     let message = second["error"]["message"].as_str().unwrap_or_default();
     assert!(
-        message.contains("not sent: providerRetired"),
+        message.contains("not sent: provider connection closed"),
         "an error naming why it was not sent: {second}"
     );
     assert_eq!(

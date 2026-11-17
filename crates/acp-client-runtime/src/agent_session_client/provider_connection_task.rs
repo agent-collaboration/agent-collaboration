@@ -81,6 +81,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         // the same cell.
         let session_cells = Arc::new(crate::session_cell_table::SessionCellTable::default());
         let task_session_cells = Arc::clone(&session_cells);
+        let retirement_session_cells = Arc::clone(&session_cells);
         let tool_registry = Arc::new(ProviderConnectionActivity::default());
         let task_tool_registry = Arc::clone(&tool_registry);
         let retirement_registry = Arc::clone(&tool_registry);
@@ -591,7 +592,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 .await;
                                             });
                                         }
-                                        ProviderCommand::Restore { provider_session_id, cwd, mode, reply } => {
+                                        ProviderCommand::Restore { provider_session_id, cwd, mode, admitted, reply } => {
                                             // Only an admitted restore opens a new run; a refused
                                             // one leaves the live run alone (D1 R14).
                                             let attempt = crate::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
@@ -607,6 +608,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 }
                                             };
                                             task_event_sink.adopt_generation(&provider_session_id, generation);
+                                            if let Some(admitted) = admitted {
+                                                let _result = admitted.send(generation);
+                                            }
                                             known_sessions.track(provider_session_id.clone()).await;
                                             let inputs = provider_session_restore::RestoreAdmissionInputs {
                                                 connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
@@ -782,6 +786,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 },
             };
             connection_retirement.cancel();
+            // Messages still waiting in this connection's lines end not sent,
+            // "provider connection closed", through the Host's queue sink.
+            for session_id in retirement_session_cells.session_ids() {
+                let _ended = retirement_session_cells.transition(
+                    &session_id,
+                    crate::SessionGeneration::UNTRACKED,
+                    crate::session_cell_machine::SessionCellEvent::ConnectionClosed,
+                    crate::session_cell_table::EntryEffectRoute::Sink,
+                );
+            }
             final_interaction_port.cancel_retired().await;
             for (session_id, turn_id) in retirement_registry.drain_running_turns() {
                 let _result = retirement_event_sink.publish(

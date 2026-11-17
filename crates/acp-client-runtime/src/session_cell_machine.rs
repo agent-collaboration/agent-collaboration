@@ -187,6 +187,8 @@ pub(crate) enum SessionCellEvent {
         outcome: SentOutcome,
     },
     Stop,
+    /// The provider connection ended: its lines end.
+    ConnectionClosed,
     KeepFastOff(bool),
 }
 
@@ -269,6 +271,7 @@ impl EventTag for SessionCellEvent {
             Self::CancelTurn => "cancel_turn",
             Self::TurnEnded { .. } => "turn_ended",
             Self::Stop => "stop",
+            Self::ConnectionClosed => "connection_closed",
             Self::KeepFastOff(_) => "keep_fast_off",
         }
     }
@@ -685,6 +688,16 @@ impl StateMachine for SessionCellMachine {
                 let mut next = cell.clone();
                 let mut effects = Vec::new();
                 end_line(&mut next, NotSentReason::RouterShuttingDown, &mut effects);
+                Ok((next, effects))
+            }
+            V::ConnectionClosed => {
+                let mut next = cell.clone();
+                let mut effects = Vec::new();
+                end_line(
+                    &mut next,
+                    NotSentReason::ProviderConnectionClosed,
+                    &mut effects,
+                );
                 Ok((next, effects))
             }
             V::KeepFastOff(keep) => {

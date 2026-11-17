@@ -156,13 +156,11 @@ pub(super) fn close(
             PreparedOperation::Admitted { live, .. } => {
                 let operation_id = request.operation_id.clone();
                 let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
-                // Every waiting message ends not sent before the interrupt,
-                // so none starts as the running turn ends. A Router-side
-                // close (the agent offers no session/close) ends NotLoaded
-                // like any close, and the session can be loaded again.
-                if let Some(fifo) = backend.message_fifo() {
-                    fifo.close_session(&target, "session closed");
-                }
+                // The close's admission on the session's cell ends every
+                // waiting message not sent before the interrupt, so none
+                // starts as the running turn ends. A Router-side close (the
+                // agent offers no session/close) ends NotLoaded like any
+                // close, and the session can be loaded again.
                 let completion_target = target.clone();
                 // The runtime interrupts a running turn, waits for idle, then
                 // closes, or only releases the session when the agent can't.

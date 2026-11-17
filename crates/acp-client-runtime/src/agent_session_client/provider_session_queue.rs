@@ -291,7 +291,65 @@ impl SessionQueueDoor<'_> {
     }
 }
 
+/// A load the session's cell admitted (Loading): messages may join its line
+/// now; `finished` answers when the agent has loaded it.
+pub struct SessionLoadStarted {
+    pub generation: SessionGeneration,
+    completion: tokio::sync::oneshot::Receiver<
+        Result<SessionGeneration, super::ExternalProviderRuntimeError>,
+    >,
+}
+
+impl SessionLoadStarted {
+    /// The load's result: the run is Live, or it failed and the messages
+    /// that waited for it ended not sent.
+    pub async fn finished(self) -> Result<SessionGeneration, super::ExternalProviderRuntimeError> {
+        self.completion
+            .await
+            .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?
+    }
+}
+
 impl<P: InteractionPort> AgentSessionClient<P> {
+    /// Starts loading the session (session/load with replay) and returns as
+    /// soon as its cell admits the load, so a door can put messages in the
+    /// loading run's line in order.
+    pub async fn begin_load_session(
+        &self,
+        provider_session_id: String,
+        cwd: std::path::PathBuf,
+    ) -> Result<SessionLoadStarted, super::ExternalProviderRuntimeError> {
+        if !self.base_capabilities.supports_load {
+            return Err(super::ExternalProviderRuntimeError::UnsupportedCapability {
+                capability: "session/load",
+            });
+        }
+        let (admitted, generation) = tokio::sync::oneshot::channel();
+        let (reply, completion) = tokio::sync::oneshot::channel();
+        self.commands
+            .send(super::ProviderCommand::Restore {
+                provider_session_id,
+                cwd,
+                mode: super::provider_session_restore::RestoreHistoryMode::Replay,
+                admitted: Some(admitted),
+                reply,
+            })
+            .await
+            .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?;
+        match generation.await {
+            Ok(generation) => Ok(SessionLoadStarted {
+                generation,
+                completion,
+            }),
+            // Refused before admission: the reply carries why.
+            Err(_) => Err(completion
+                .await
+                .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?
+                .err()
+                .unwrap_or(super::ExternalProviderRuntimeError::TransportFailure)),
+        }
+    }
+
     /// Sets the Host's sink for messages that moves it didn't drive end.
     pub fn set_queue_entry_sink(&self, sink: Arc<dyn QueueEntrySink>) {
         self.session_cells.set_sink(sink);

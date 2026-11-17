@@ -285,11 +285,20 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .binding(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
+        let operation_id = OperationId::generate();
         let permit = self
             .queue
-            .reserve(&target)
-            .map_err(|_| ProviderQueueAdmissionError::Busy)?;
-        let operation_id = OperationId::generate();
+            .reserve(&target, &operation_id, LoadPolicy::MayLoad)
+            .await
+            .map_err(|refusal| match refusal {
+                crate::provider_acp_message_fifo::QueueDoorRefusal::Busy(_) => {
+                    ProviderQueueAdmissionError::Busy
+                }
+                crate::provider_acp_message_fifo::QueueDoorRefusal::NotLoaded(_)
+                | crate::provider_acp_message_fifo::QueueDoorRefusal::Refused(_) => {
+                    ProviderQueueAdmissionError::Unavailable
+                }
+            })?;
         let input_id = session_event_model::InputId::generate();
         let queued = self
             .supervisor
@@ -311,7 +320,6 @@ impl ProviderAcpDeliveryRoute {
                 input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
                 busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             },
-            load_policy: LoadPolicy::MayLoad,
             admitted: None,
         });
         Ok(queued)

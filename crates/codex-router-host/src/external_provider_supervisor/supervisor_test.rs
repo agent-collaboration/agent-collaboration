@@ -317,8 +317,15 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     let mut queued_input_ids = Vec::new();
     let mut expected_lines = Vec::new();
     for text in ["first", "second"] {
-        let permit = queue.reserve(&target).expect("queue capacity");
         let operation_id = OperationId::generate();
+        let permit = queue
+            .reserve(
+                &target,
+                &operation_id,
+                collaboration_contracts::LoadPolicy::MayLoad,
+            )
+            .await
+            .expect("queue capacity");
         let input_id = session_event_model::InputId::generate();
         queued_input_ids.push(input_id.clone());
         let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
@@ -353,7 +360,6 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         permit.send(
             crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
                 request: contents,
-                load_policy: collaboration_contracts::LoadPolicy::MayLoad,
                 admitted: None,
             },
         );
@@ -471,13 +477,20 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
             acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
         },
     );
-    queue.reserve(&target).expect("queue capacity").send(
-        crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-            request: queued_contents,
-            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
-            admitted: None,
-        },
-    );
+    queue
+        .reserve(
+            &target,
+            &queued_id,
+            collaboration_contracts::LoadPolicy::MayLoad,
+        )
+        .await
+        .expect("queue capacity")
+        .send(
+            crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
+                request: queued_contents,
+                admitted: None,
+            },
+        );
 
     queue.shutdown().await;
 
@@ -496,7 +509,8 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
 #[tokio::test]
 async fn provider_retirement_settles_queued_input_without_resubmission() {
     // Specification R5: queued Inputs of a lost Session become notSubmitted
-    // with providerRetired and are never sent to a successor connection.
+    // "provider connection closed" and are never sent to a successor
+    // connection.
     let root = tempfile::tempdir().expect("temporary root");
     let runtime = ExternalProviderRuntime::initialize(
         pending_prompt_fixture(),
@@ -546,7 +560,14 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     );
     let queued_id = OperationId::generate();
     let queued_input_id = session_event_model::InputId::generate();
-    let permit = queue.reserve(&target).expect("queue capacity");
+    let permit = queue
+        .reserve(
+            &target,
+            &queued_id,
+            collaboration_contracts::LoadPolicy::MayLoad,
+        )
+        .await
+        .expect("queue capacity");
     let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
         .expect("UUIDv7 push id");
     let queued_line = MessageText::try_from(format!(
@@ -578,7 +599,6 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     permit.send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
-            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
             admitted: None,
         },
     );
@@ -587,9 +607,14 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         .expect("provider runtime")
         .shutdown()
         .await;
-    tokio::time::timeout(Duration::from_secs(5), queue.wait_for_workers())
-        .await
-        .expect("queued operation worker settles after provider retirement");
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        backend
+            .queued_operation_registry()
+            .wait_for_not_submitted(&queued_id),
+    )
+    .await
+    .expect("the queued input settles after provider retirement");
     let snapshot = backend
         .queued_operation_registry()
         .snapshot(&queued_id)
@@ -599,7 +624,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     assert!(matches!(
         snapshot.queue_state,
         Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
-            if reason == "providerRetired"
+            if reason == "provider connection closed"
     ));
     queue.shutdown().await;
     backend.shutdown().await.expect("supervisor shutdown");

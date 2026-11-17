@@ -3,7 +3,7 @@
 mod provider_operation_admission;
 mod provider_prompt_send;
 mod provider_queued_api_prompt;
-pub(crate) use provider_queued_api_prompt::AdmittedApiPrompt;
+pub(crate) use provider_queued_api_prompt::{AdmittedApiPrompt, unadmitted_queued_failure};
 mod provider_operation_failure;
 mod provider_prompt_contents;
 pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
@@ -533,6 +533,31 @@ impl ExternalProviderSupervisor {
         tokio::spawn(async move {
             let completion = operation.await;
             inner.finish(operation_id, live, completion).await;
+        });
+    }
+
+    /// Like `spawn_operation` for a prompt: its session's turn ends only
+    /// once the operation's settlement is recorded, so the session's line
+    /// commits nothing that would see it unresolved (design note §13.1).
+    fn spawn_prompt_operation<F>(
+        &self,
+        operation_id: OperationId,
+        live: Arc<LiveOperation>,
+        operation: F,
+    ) where
+        F: std::future::Future<
+                Output = (
+                    ProviderOperationCompletion,
+                    Option<acp_client_runtime::ProviderTurnEnd>,
+                ),
+            > + Send
+            + 'static,
+    {
+        let inner = Arc::clone(&self.inner);
+        tokio::spawn(async move {
+            let (completion, turn_end) = operation.await;
+            inner.finish(operation_id, live, completion).await;
+            drop(turn_end);
         });
     }
 

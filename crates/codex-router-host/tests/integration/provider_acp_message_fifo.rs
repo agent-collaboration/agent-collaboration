@@ -533,13 +533,13 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
     })
     .await
     .expect("both permanent item failures are recorded");
-    assert_eq!(
-        std::fs::read_to_string(load_marker)
-            .expect("load marker")
-            .lines()
-            .count(),
-        2
-    );
+    // One door load serves every message that joins the line while it
+    // runs; a message that arrives after it failed starts its own.
+    let loads = std::fs::read_to_string(load_marker)
+        .expect("load marker")
+        .lines()
+        .count();
+    assert!((1..=2).contains(&loads), "loads: {loads}");
 
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
@@ -862,11 +862,15 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
         )
         .await
         .expect("retired queue item remains inspectable");
-        assert!(matches!(
-            snapshot.queue_state,
-            Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
-                if reason == "providerRetired"
-        ));
+        assert!(
+            matches!(
+                &snapshot.queue_state,
+                Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
+                    if reason == "provider connection closed"
+            ),
+            "{:?}",
+            snapshot.queue_state
+        );
     }
     let _ = first;
     route.shutdown_queue().await;

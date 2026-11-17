@@ -161,7 +161,7 @@ impl ExternalProviderSupervisor {
         snapshot: super::ConversationOperationSnapshot,
         live: std::sync::Arc<super::LiveOperation>,
     ) -> AdmittedPromptDispatch {
-        let started = self.start_admitted_submission(&request, binding, runtime);
+        let started = self.start_admitted_submission(&request, binding, runtime, None);
         self.observe_admitted_submission(request, started, snapshot, live)
             .await
     }
@@ -174,6 +174,7 @@ impl ExternalProviderSupervisor {
         request: &ProviderPromptContentsRequest,
         binding: &super::ProviderBindingIdentity,
         runtime: std::sync::Arc<crate::ExternalProviderRuntime>,
+        queue_turn: Option<acp_client_runtime::QueueTurn>,
     ) -> StartedSubmission {
         let target = request.target.clone();
         let approval_context = crate::ExternalProviderApprovalContext {
@@ -191,14 +192,16 @@ impl ExternalProviderSupervisor {
         let submission_input = request.input.clone();
         // The submission runs on its own task; only a dispatched prompt hands
         // its result to the operation, so a Busy refusal can be re-decided.
+        // A queued message runs under the turn its handover opened.
         let submitted = tokio::spawn(async move {
             runtime
-                .submit_with_approval_dispatch_for_input(
+                .submit_holding_turn_end(
                     provider_session_id,
                     input_id,
                     submission_input,
                     approval_context,
                     Some(dispatch),
+                    queue_turn,
                 )
                 .await
         });
@@ -227,15 +230,21 @@ impl ExternalProviderSupervisor {
         let completion_target = target.clone();
         let complete = move |submitted: tokio::task::JoinHandle<_>| async move {
             match submitted.await {
-                Ok(result) => prompt_completion(result, completion_operation_id, completion_target),
-                Err(_) => ProviderOperationCompletion::Failure(failure(
-                    ConversationOperationFailureKind::OutcomeUnknown,
-                    ConversationOperationFailureStage::Dispatch,
-                    ProviderOperationEffect::Unknown,
-                    "provider dispatch outcome is unknown",
-                    operation_id,
+                Ok((result, turn_end)) => (
+                    prompt_completion(result, completion_operation_id, completion_target),
+                    turn_end,
+                ),
+                Err(_) => (
+                    ProviderOperationCompletion::Failure(failure(
+                        ConversationOperationFailureKind::OutcomeUnknown,
+                        ConversationOperationFailureStage::Dispatch,
+                        ProviderOperationEffect::Unknown,
+                        "provider dispatch outcome is unknown",
+                        operation_id,
+                        None,
+                    )),
                     None,
-                )),
+                ),
             }
         };
         #[cfg(test)]
@@ -266,7 +275,7 @@ impl ExternalProviderSupervisor {
                     .undo_dispatch_mark(&request.operation_id, &target)
                     .await
                 {
-                    self.spawn_operation(request.operation_id, live, complete(submitted));
+                    self.spawn_prompt_operation(request.operation_id, live, complete(submitted));
                     return AdmittedPromptDispatch::Done(Box::new(Err(undo)));
                 }
                 return AdmittedPromptDispatch::TurnRunning { live };
@@ -293,16 +302,17 @@ impl ExternalProviderSupervisor {
                 Some(target),
             )),
         };
-        self.spawn_operation(request.operation_id, live, complete(submitted));
+        self.spawn_prompt_operation(request.operation_id, live, complete(submitted));
         AdmittedPromptDispatch::Done(Box::new(result))
     }
 }
 
 /// A provider submission already spawned: it may have reached the agent.
 pub(super) struct StartedSubmission {
-    submitted: tokio::task::JoinHandle<
+    submitted: tokio::task::JoinHandle<(
         Result<crate::ExternalProviderPromptOutcome, crate::ExternalProviderRuntimeError>,
-    >,
+        Option<acp_client_runtime::ProviderTurnEnd>,
+    )>,
     dispatched:
         tokio::sync::oneshot::Receiver<acp_client_runtime::ProviderPromptDispatchObservation>,
 }

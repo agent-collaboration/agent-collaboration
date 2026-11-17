@@ -643,3 +643,27 @@ fn a_direct_prompt_holds_the_turn_until_it_ends() {
         )))
     );
 }
+
+/// Oracle: the accepted door rule (waiting messages end not sent "provider
+/// connection closed" when their connection retires); a sent message keeps
+/// its turn.
+#[test]
+fn a_closed_connection_ends_its_waiting_messages() {
+    // Arrange
+    let cell = live_with_one_queued();
+    let mut effects = Vec::new();
+
+    // Act
+    let closed = step(&cell, SessionCellEvent::ConnectionClosed, &mut effects);
+
+    // Assert
+    assert!(closed.entries.is_empty(), "no message is left waiting");
+    assert_eq!(
+        effects,
+        vec![SessionCellEffect::Entry {
+            sequence: 0,
+            operation: operation("a"),
+            effect: QueuedEntryEffect::SettleNotSent(NotSentReason::ProviderConnectionClosed),
+        }]
+    );
+}

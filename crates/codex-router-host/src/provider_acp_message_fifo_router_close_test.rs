@@ -1,11 +1,13 @@
-//! A session the Router closed itself stays closed (D1 R14, the Reviewer's
-//! C2): a send already admitted when the close lands never enters the line or
-//! reaches the agent, and nothing reloads the session, not even a load that
-//! was already in flight when the close landed.
+//! A Router-side close (an agent without session/close) ends the session
+//! NotLoaded like any close (the owner's close decision, design note §6):
+//! messages waiting in its line end not sent, an old run's late load or
+//! continuation publishes nothing into a later run, and the session can be
+//! loaded again.
 
 use super::loaded_only_tests::{NoLivePeer, binding, recorded_requests, target};
 use super::*;
 use crate::{ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor};
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     ConversationCloseRequest, ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, MessageText, OperationId, PositiveSeconds,
