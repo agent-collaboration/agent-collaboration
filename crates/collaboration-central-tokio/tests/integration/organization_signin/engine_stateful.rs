@@ -704,6 +704,12 @@ impl EngineModel {
 impl Drop for EngineModel {
     fn drop(&mut self) {
         if let Some(engine) = self.engine.take() {
+            if std::thread::panicking() {
+                // A failed case may have a stalled driver that close would wait
+                // on forever; dropping the runtime cancels its tasks instead.
+                std::mem::forget(engine);
+                return;
+            }
             self.runtime.block_on(engine.close());
         }
     }
