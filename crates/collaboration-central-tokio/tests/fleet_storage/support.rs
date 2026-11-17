@@ -15,11 +15,17 @@ use sqlx_core::{query::query, row::Row};
 use std::{path::Path, sync::Arc};
 
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+/// The fixed instant (2026-10-18T00:00:00Z) the fixture imports and writes at.
+/// A test that later pins the owner's clock pins it from here, never from the
+/// wall clock: Fleet retains its feed for 30 days of central time, so a
+/// wall-clock pin prunes these records once they are 30 days old.
+pub const IMPORT_UNIX_MILLIS: i64 = 1_792_281_600_000;
+
 #[derive(Clone, Copy)]
 pub struct Io(SyncTime);
 impl Default for Io {
     fn default() -> Self {
-        Self(SyncTime::from_unix_millis(1_792_281_600_000))
+        Self(SyncTime::from_unix_millis(IMPORT_UNIX_MILLIS))
     }
 }
 impl Clock for Io {

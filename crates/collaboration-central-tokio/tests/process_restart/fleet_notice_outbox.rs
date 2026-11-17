@@ -50,7 +50,11 @@ async fn run_notice_loss_across_process_restart(loss: NoticeLoss) -> Conformance
     )
     .await?;
     let jwks = JwksFixtureServer::start().await?;
-    let first = ServerProcess::start(root.path(), &jwks.url).await?;
+    // The owner's clock is pinned from startup: an unpinned start would run
+    // Fleet maintenance on the wall clock and prune the import's feed.
+    let first =
+        ServerProcess::start_with_controls(root.path(), &jwks.url, &[pinned_after_import(1)?])
+            .await?;
     let prepared = prepare_notice_loss(&first.base, root.path(), database, loss).await;
     if prepared.is_err() {
         let _ = observe_failed_preparation(&first.base, root.path()).await;
@@ -86,7 +90,9 @@ async fn run_notice_loss_across_process_restart(loss: NoticeLoss) -> Conformance
     assert_eq!(digest, prepared.input_digest);
     eprintln!("FLEET_NOTICE_RESTART_STAGE original Fleet debt persisted at process death");
 
-    let second = ServerProcess::start(root.path(), &jwks.url).await?;
+    let recovery =
+        pinned_at_recovery(&root.path().join("fleet.db"), &prepared.operation_id).await?;
+    let second = ServerProcess::start_with_controls(root.path(), &jwks.url, &[recovery]).await?;
     let proof = verify_recovered_notices(&second.base, root.path(), &prepared).await;
     let stopped = second.stop().await;
     let keys_stopped = jwks.shutdown().await;
@@ -103,7 +109,7 @@ async fn prepare_notice_loss(
     database: DatabaseId,
     loss: NoticeLoss,
 ) -> ConformanceResult<PreparedNoticeRestart> {
-    let at = RegistryTime(chrono::Utc::now() - chrono::TimeDelta::seconds(1));
+    let at = RegistryTime(imported_board_fixture::time_after_import(1)?);
     control(
         base,
         ObjectAddress::Fleet,
@@ -289,6 +295,9 @@ async fn verify_recovered_notices(
                 {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
                 }
+                // The retry the restart scheduled is due on the pinned clock only
+                // when the test moves that clock to it.
+                advance_fleet_to_due_notices(base, &fleet_path).await?;
                 tokio::task::yield_now().await;
             }
         }).await.map_err(|_| "recovered notice was delivered but its original Fleet debt never completed")??;
@@ -307,9 +316,8 @@ async fn verify_recovered_notices(
         assert_eq!(read_complete_fleet_feed(&mut socket).await?, (prepared.feed.clone(), 6));
         // Preserve the old later-time no-repeat checkpoint through the current
         // native clock/wake capability, after the journal debt is terminal.
-        control(base, ObjectAddress::Fleet, RuntimeControl::SetTime {
-            now: RegistryTime(chrono::Utc::now() + chrono::TimeDelta::seconds(60)),
-        }).await?;
+        let later = RegistryTime(pinned_fleet_time(base).await?.0 + chrono::TimeDelta::seconds(60));
+        control(base, ObjectAddress::Fleet, RuntimeControl::SetTime { now: later }).await?;
         assert_eq!(read_machine_notices(&mut socket, None).await?, expected_history);
         assert_eq!(read_small_fleet_snapshot(&mut socket).await?, (prepared.records.clone(), 6));
         assert_eq!(read_complete_fleet_feed(&mut socket).await?, (prepared.feed.clone(), 6));

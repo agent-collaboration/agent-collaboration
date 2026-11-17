@@ -5,6 +5,15 @@ use collaboration_central_core::ConformanceBoardState;
 use fleet_admission::{FleetImportRecord, FleetImportResult, ImportedBoardState};
 use fleet_sync_protocol::DatabaseId;
 
+/// The owner time a test pins after arranging an import: `seconds` after the
+/// fixture wrote its records. Derived from the fixture's one clock, never the
+/// wall clock, so 30-day feed retention cannot prune the import.
+pub(super) fn time_after_import(seconds: i64) -> ConformanceResult<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::from_timestamp_millis(native_fleet::IMPORT_UNIX_MILLIS)
+        .and_then(|imported| imported.checked_add_signed(chrono::TimeDelta::seconds(seconds)))
+        .ok_or_else(|| "pinned time after the import is outside the clock range".into())
+}
+
 pub(super) async fn arrange_imported_unheld_board(
     root: &std::path::Path,
     board_state: ConformanceBoardState,
