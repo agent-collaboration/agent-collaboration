@@ -48,14 +48,9 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
    - Every package sets `autotests = false`.
    - It has at most one non-empty integration target and one non-empty e2e target, plus a README naming each target's contract.
    - Modules are named for their responsibility. The file-size limits apply.
-5. **A new test crate needs a reason on record:**
-   - a named contract and owner;
-   - its dependency closure, compared with the alternative;
-   - how it finds compiled artifacts (`CARGO_BIN_EXE_*` works only within a package);
-   - a mapping that keeps every moved case;
-   - a before/after measurement;
-   - an Advisor check before it's built.
-6. **Proof never changes in a move:** ignores, scheduling groups, priorities, deadlines, per-case process isolation and zero-match checks stay as they are.
+5. **Crates, test crates included, are planned out for decomposition and good boundaries.**
+6. **Property-based testing is the norm.** Use fuzz testing with Hegel and with Turmoil as well.
+7. **Proof never changes in a move:** ignores, scheduling groups, priorities, deadlines, per-case process isolation and zero-match checks stay as they are.
 
 ## Time
 
