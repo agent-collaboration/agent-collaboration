@@ -11,6 +11,7 @@ mod provider_auth_status_update;
 mod provider_client_contract;
 mod provider_client_initialization;
 mod provider_client_operations;
+mod provider_connection_retirement;
 mod provider_connection_task;
 mod provider_cursor_create_plan;
 mod provider_cursor_plan_items;

@@ -786,37 +786,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 },
             };
             connection_retirement.cancel();
-            // Messages still waiting in this connection's lines end not sent,
-            // "provider connection closed", through the Host's queue sink.
-            for session_id in retirement_session_cells.session_ids() {
-                let _ended = retirement_session_cells.transition(
-                    &session_id,
-                    crate::SessionGeneration::UNTRACKED,
-                    crate::session_cell_machine::SessionCellEvent::ConnectionClosed,
-                    crate::session_cell_table::EntryEffectRoute::Sink,
-                );
+            super::provider_connection_retirement::ConnectionRetirement {
+                session_cells: retirement_session_cells,
+                interaction_port: final_interaction_port,
+                activity: retirement_registry,
+                todos: retirement_todos,
+                known_sessions: retirement_known_sessions,
+                event_sink: retirement_event_sink,
             }
-            final_interaction_port.cancel_retired().await;
-            for (session_id, turn_id) in retirement_registry.drain_running_turns() {
-                let _result = retirement_event_sink.publish(
-                    &session_id,
-                    session_event_model::SessionEvent::TurnEnded {
-                        turn_id,
-                        outcome: session_event_model::TurnOutcome::Lost {
-                            reason: session_event_model::TurnLostReason::ProviderRetired,
-                        },
-                    },
-                );
-                retirement_todos.forget_session(&session_id);
-            }
-            for session_id in retirement_known_sessions.snapshot().await {
-                let _result = retirement_event_sink.publish(
-                    &session_id,
-                    session_event_model::SessionEvent::StateChanged {
-                        state: session_event_model::SessionState::Unloaded,
-                    },
-                );
-            }
+            .retire()
+            .await;
             #[cfg(unix)]
             if !child_exited
                 && let Some(process_id) = rustix::process::Pid::from_raw(child.id().cast_signed())
