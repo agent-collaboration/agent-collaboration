@@ -1,4 +1,5 @@
 use super::*;
+use central_link_client::PendingWriteState;
 use central_link_protocol::ReplyPayload;
 use hegel::{TestCase, generators as gs};
 use serde_json::json;
@@ -294,14 +295,56 @@ async fn an_invalid_stored_row_is_refused_not_coerced() {
     ));
 }
 
+/// A write's state in the model, as the store should report it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ModelState {
+    Unsent,
+    Sent,
+    SentAnswerLost,
+    Accepted,
+    Refused,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ModelWrite {
+    flush_at: SyncTime,
+    state: ModelState,
+    answered_at: Option<i64>,
+}
+
+impl ModelWrite {
+    fn status(&self) -> RequestStatus {
+        match self.state {
+            ModelState::Unsent | ModelState::SentAnswerLost => RequestStatus::InOutbox {
+                flush_at: self.flush_at,
+            },
+            ModelState::Sent => RequestStatus::Sent,
+            ModelState::Accepted => RequestStatus::Accepted(accepted_reply()),
+            ModelState::Refused => RequestStatus::Refused(RefusalReason::RequestIdReused),
+        }
+    }
+}
+
+const RETENTION_MS: i64 = 60 * 24 * 60 * 60 * 1000;
+
 /// The real SQLite store against a model of each write's state.
 struct OutboxStoreModel {
     runtime: tokio::runtime::Runtime,
     _root: tempfile::TempDir,
     store: ProviderOperationStore,
-    model: BTreeMap<RequestId, (SyncTime, RequestStatus)>,
+    model: BTreeMap<RequestId, ModelWrite>,
     next_seed: u16,
     now: i64,
+}
+
+impl OutboxStoreModel {
+    fn ids_in(&self, states: &[ModelState]) -> Vec<RequestId> {
+        self.model
+            .iter()
+            .filter(|(_, write)| states.contains(&write.state))
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
 }
 
 #[hegel::state_machine]
@@ -316,20 +359,19 @@ impl OutboxStoreModel {
             .runtime
             .block_on(MacOutbox::new(&mut self.store).insert(&write, at(self.now)));
         assert_eq!(result.unwrap(), OutboxInsert::Stored);
-        let status = RequestStatus::InOutbox {
-            flush_at: write.flush_at,
-        };
-        self.model.insert(write.request, (write.flush_at, status));
+        self.model.insert(
+            write.request,
+            ModelWrite {
+                flush_at: write.flush_at,
+                state: ModelState::Unsent,
+                answered_at: None,
+            },
+        );
     }
 
     #[rule(weight = 2)]
     fn send_waiting_writes(&mut self, tc: TestCase) {
-        let waiting: Vec<RequestId> = self
-            .model
-            .iter()
-            .filter(|(_, (_, status))| matches!(status, RequestStatus::InOutbox { .. }))
-            .map(|(id, _)| id.clone())
-            .collect();
+        let waiting = self.ids_in(&[ModelState::Unsent, ModelState::SentAnswerLost]);
         tc.assume(!waiting.is_empty());
         let count = tc.draw(
             gs::integers::<usize>()
@@ -349,73 +391,85 @@ impl OutboxStoreModel {
             batch
         );
         for id in batch {
-            if let Some(entry) = self.model.get_mut(id) {
-                entry.1 = RequestStatus::Sent;
+            if let Some(write) = self.model.get_mut(id) {
+                write.state = ModelState::Sent;
             }
         }
     }
 
     #[rule(weight = 2)]
     fn answer_or_return_a_sent_write(&mut self, tc: TestCase) {
-        let sent: Vec<RequestId> = self
-            .model
-            .iter()
-            .filter(|(_, (_, status))| *status == RequestStatus::Sent)
-            .map(|(id, _)| id.clone())
-            .collect();
+        let sent = self.ids_in(&[ModelState::Sent]);
         tc.assume(!sent.is_empty());
         let id = tc.draw(gs::sampled_from(sent));
         self.now += 1_000;
-        let Some(entry) = self.model.get_mut(&id) else {
-            return;
-        };
-        match tc.draw(gs::integers::<u8>().max_value(2)) {
+        let now = self.now;
+        let choice = tc.draw(gs::integers::<u8>().max_value(2));
+        let mut outbox = MacOutbox::new(&mut self.store);
+        let next = match choice {
             0 => {
                 self.runtime
-                    .block_on(
-                        MacOutbox::new(&mut self.store)
-                            .return_unanswered(std::slice::from_ref(&id), at(self.now)),
-                    )
+                    .block_on(outbox.return_unanswered(std::slice::from_ref(&id), at(now)))
                     .unwrap();
-                entry.1 = RequestStatus::InOutbox { flush_at: entry.0 };
+                ModelState::SentAnswerLost
             }
             1 => {
                 let refusal = MemberOutcome::Refused(RefusalReason::RequestIdReused);
                 self.runtime
-                    .block_on(MacOutbox::new(&mut self.store).record_outcome(
-                        &id,
-                        &refusal,
-                        at(self.now),
-                    ))
+                    .block_on(outbox.record_outcome(&id, &refusal, at(now)))
                     .unwrap();
-                entry.1 = RequestStatus::Refused(RefusalReason::RequestIdReused);
+                ModelState::Refused
             }
             _ => {
                 self.runtime
-                    .block_on(MacOutbox::new(&mut self.store).record_outcome(
-                        &id,
-                        &accepted(),
-                        at(self.now),
-                    ))
+                    .block_on(outbox.record_outcome(&id, &accepted(), at(now)))
                     .unwrap();
-                entry.1 = RequestStatus::Accepted(accepted_reply());
+                ModelState::Accepted
+            }
+        };
+        if let Some(write) = self.model.get_mut(&id) {
+            write.state = next;
+            if matches!(next, ModelState::Accepted | ModelState::Refused) {
+                write.answered_at = Some(now);
             }
         }
     }
 
+    #[rule]
+    fn time_passes_and_answered_writes_age_out(&mut self, tc: TestCase) {
+        self.now += tc.draw(
+            gs::integers::<i64>()
+                .min_value(0)
+                .max_value(2 * RETENTION_MS),
+        );
+        let deleted = self
+            .runtime
+            .block_on(
+                MacOutbox::new(&mut self.store).delete_answered_before_retention(at(self.now)),
+            )
+            .unwrap();
+        let cutoff = self.now - RETENTION_MS;
+        let before = self.model.len();
+        self.model
+            .retain(|_, write| write.answered_at.is_none_or(|answered| answered > cutoff));
+        assert_eq!(usize::try_from(deleted).unwrap(), before - self.model.len());
+    }
+
     #[invariant]
     fn the_store_agrees_with_the_model(&mut self, _: TestCase) {
-        for (id, (_, status)) in &self.model {
+        for (id, write) in &self.model {
             let stored = self
                 .runtime
                 .block_on(MacOutbox::new(&mut self.store).request_status(&caller(1), id));
-            assert_eq!(&stored.unwrap(), status);
+            assert_eq!(stored.unwrap(), write.status());
         }
         let mut expected_waiting: Vec<(SyncTime, RequestId)> = self
             .model
             .iter()
-            .filter(|(_, (_, status))| matches!(status, RequestStatus::InOutbox { .. }))
-            .map(|(id, (flush_at, _))| (*flush_at, id.clone()))
+            .filter(|(_, write)| {
+                matches!(write.state, ModelState::Unsent | ModelState::SentAnswerLost)
+            })
+            .map(|(id, write)| (write.flush_at, id.clone()))
             .collect();
         expected_waiting.sort();
         assert_eq!(
@@ -423,6 +477,57 @@ impl OutboxStoreModel {
                 .block_on(MacOutbox::new(&mut self.store).waiting())
                 .unwrap(),
             expected_waiting
+        );
+        let expected_pending: Vec<(RequestId, PendingWriteState)> = self
+            .model
+            .iter()
+            .filter_map(|(id, write)| {
+                let state = match write.state {
+                    ModelState::Unsent => PendingWriteState::Unsent,
+                    ModelState::Sent | ModelState::SentAnswerLost => {
+                        PendingWriteState::SentAnswerLost
+                    }
+                    ModelState::Accepted => PendingWriteState::Answered(accepted_reply()),
+                    ModelState::Refused => return None,
+                };
+                Some((id.clone(), state))
+            })
+            .collect();
+        let pending = self
+            .runtime
+            .block_on(MacOutbox::new(&mut self.store).pending_for(&caller(1)))
+            .unwrap();
+        assert_eq!(
+            pending
+                .into_iter()
+                .map(|write| (write.request_id, write.state))
+                .collect::<Vec<_>>(),
+            expected_pending
+        );
+        let mut expected_outgoing: Vec<(i64, RequestId)> = self
+            .model
+            .iter()
+            .filter_map(|(id, write)| write.answered_at.map(|at| (at, id.clone())))
+            .collect();
+        expected_outgoing.sort_by(|left, right| right.cmp(left));
+        let outgoing = self
+            .runtime
+            .block_on(MacOutbox::new(&mut self.store).outgoing_for(&caller(1), u16::MAX))
+            .unwrap();
+        assert_eq!(
+            outgoing
+                .into_iter()
+                .map(|write| (write.answered_at.unix_millis(), write.request_id))
+                .collect::<Vec<_>>(),
+            expected_outgoing
+        );
+        let foreign = self
+            .runtime
+            .block_on(MacOutbox::new(&mut self.store).pending_for(&caller(2)))
+            .unwrap();
+        assert!(
+            foreign.is_empty(),
+            "another caller sees none of these writes"
         );
     }
 }

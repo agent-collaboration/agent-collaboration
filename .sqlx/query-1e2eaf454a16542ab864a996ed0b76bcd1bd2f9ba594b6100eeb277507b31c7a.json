@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT request_id AS \"request_id!\", flush_at_ms FROM outbox_items\n               WHERE item_state IN (?, ?) ORDER BY flush_at_ms, request_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "request_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "name": "flush_at_ms",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "flush_at_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1e2eaf454a16542ab864a996ed0b76bcd1bd2f9ba594b6100eeb277507b31c7a"
+}

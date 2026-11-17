@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE outbox_items SET item_state = ?, updated_at = ?\n                   WHERE request_id = ? AND item_state IN (?, ?)\n                   RETURNING request_id AS \"request_id!\", caller_json, payload_json,\n                             item_state, flush_at_ms, outcome_json",
+  "describe": {
+    "columns": [
+      {
+        "name": "request_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "name": "caller_json",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "caller_json"
+          }
+        }
+      },
+      {
+        "name": "payload_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "payload_json"
+          }
+        }
+      },
+      {
+        "name": "item_state",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "item_state"
+          }
+        }
+      },
+      {
+        "name": "flush_at_ms",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "flush_at_ms"
+          }
+        }
+      },
+      {
+        "name": "outcome_json",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "outcome_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a05579498049e506d5c2c9fbc7288af9cc095207deb1af901692de95141b5e7b"
+}

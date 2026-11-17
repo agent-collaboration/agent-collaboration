@@ -3,7 +3,10 @@
 //! through Rust types and an invalid row is refused, never coerced.
 use crate::ProviderOperationStore;
 use crate::provider_operation_store::OneStatementWrite;
-use central_link_client::{MemberOutcome, RequestStatus};
+use central_link_client::{
+    MemberOutcome, OutboxWriteContent, OutgoingOutcome, OutgoingWrite, PendingWrite,
+    PendingWriteState, RequestStatus,
+};
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use sqlite_storage_maintenance::TransactionStart;
@@ -32,6 +35,9 @@ pub enum OutboxStoreError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutboxItemState {
     InOutbox,
+    /// Went out in a batch whose answer was lost; back in the outbox to be
+    /// resent with the same id, and may already be in central.
+    SentAnswerLost,
     Sent,
     Accepted,
     Refused,
@@ -41,6 +47,7 @@ impl OutboxItemState {
     const fn as_str(self) -> &'static str {
         match self {
             Self::InOutbox => "inOutbox",
+            Self::SentAnswerLost => "sentAnswerLost",
             Self::Sent => "sent",
             Self::Accepted => "accepted",
             Self::Refused => "refused",
@@ -50,6 +57,7 @@ impl OutboxItemState {
     fn parse(value: &str) -> Option<Self> {
         match value {
             "inOutbox" => Some(Self::InOutbox),
+            "sentAnswerLost" => Some(Self::SentAnswerLost),
             "sent" => Some(Self::Sent),
             "accepted" => Some(Self::Accepted),
             "refused" => Some(Self::Refused),
@@ -92,6 +100,19 @@ struct OutboxRow {
     flush_at_ms: i64,
     outcome_json: Option<String>,
 }
+
+struct OutgoingRow {
+    request_id: String,
+    caller_json: String,
+    payload_json: String,
+    item_state: String,
+    flush_at_ms: i64,
+    outcome_json: Option<String>,
+    updated_at: i64,
+}
+
+/// Answered writes are kept this long after their answer, then deleted.
+const ANSWERED_RETENTION_MILLIS: i64 = 60 * 24 * 60 * 60 * 1000;
 
 /// The outbox table, borrowed from the provider-operations store whose
 /// connection and signalled transactions it uses.
@@ -187,13 +208,134 @@ impl<'store> MacOutbox<'store> {
         })
     }
 
-    /// Writes not yet sent, with their receipt marks, to load the flush reducer.
+    /// The caller's own writes not yet resolved, oldest first: unsent, sent
+    /// with a lost answer (or still in flight), and answered ones the read
+    /// layer drops once it sees their created ids. A refused write never
+    /// reached central and is not pending.
+    pub async fn pending_for(
+        &mut self,
+        caller: &Caller,
+    ) -> Result<Vec<PendingWrite>, OutboxStoreError> {
+        let caller_json = serde_json::to_string(caller)?;
+        let refused = OutboxItemState::Refused.as_str();
+        let rows = sqlx::query_as!(
+            OutboxRow,
+            r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
+                      flush_at_ms, outcome_json
+               FROM outbox_items WHERE caller_json = ? AND item_state <> ?
+               ORDER BY created_at, request_id"#,
+            caller_json,
+            refused
+        )
+        .fetch_all(&mut self.store.connection)
+        .await?;
+        let mut pending = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let stored = decode_owned_row(row, caller)?;
+            let state = match (stored.state, stored.status) {
+                (OutboxItemState::InOutbox, _) => PendingWriteState::Unsent,
+                (OutboxItemState::SentAnswerLost | OutboxItemState::Sent, _) => {
+                    PendingWriteState::SentAnswerLost
+                }
+                (OutboxItemState::Accepted, RequestStatus::Accepted(reply)) => {
+                    PendingWriteState::Answered(reply)
+                }
+                (OutboxItemState::Accepted | OutboxItemState::Refused, _) => {
+                    return Err(corrupt_row(&row.request_id, "item_state"));
+                }
+            };
+            pending.push(PendingWrite {
+                request_id: parse_request_id(&row.request_id)?,
+                content: outbox_content(&row.request_id, &stored.payload)?,
+                flush_at: SyncTime::from_unix_millis(row.flush_at_ms),
+                state,
+            });
+        }
+        Ok(pending)
+    }
+
+    /// The caller's recently answered writes, newest answer first.
+    pub async fn outgoing_for(
+        &mut self,
+        caller: &Caller,
+        limit: u16,
+    ) -> Result<Vec<OutgoingWrite>, OutboxStoreError> {
+        let caller_json = serde_json::to_string(caller)?;
+        let accepted = OutboxItemState::Accepted.as_str();
+        let refused = OutboxItemState::Refused.as_str();
+        let limit = i64::from(limit);
+        let rows = sqlx::query_as!(
+            OutgoingRow,
+            r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
+                      flush_at_ms, outcome_json, updated_at
+               FROM outbox_items WHERE caller_json = ? AND item_state IN (?, ?)
+               ORDER BY updated_at DESC, request_id DESC LIMIT ?"#,
+            caller_json,
+            accepted,
+            refused,
+            limit
+        )
+        .fetch_all(&mut self.store.connection)
+        .await?;
+        let mut outgoing = Vec::with_capacity(rows.len());
+        for row in rows {
+            let request_id = row.request_id.clone();
+            let answered_at = SyncTime::from_unix_millis(row.updated_at);
+            let row = OutboxRow {
+                request_id: row.request_id,
+                caller_json: row.caller_json,
+                payload_json: row.payload_json,
+                item_state: row.item_state,
+                flush_at_ms: row.flush_at_ms,
+                outcome_json: row.outcome_json,
+            };
+            let stored = decode_owned_row(&row, caller)?;
+            let outcome = match stored.status {
+                RequestStatus::Accepted(reply) => OutgoingOutcome::Accepted(reply),
+                RequestStatus::Refused(reason) => OutgoingOutcome::Refused(reason),
+                RequestStatus::NotFound | RequestStatus::InOutbox { .. } | RequestStatus::Sent => {
+                    return Err(corrupt_row(&request_id, "item_state"));
+                }
+            };
+            outgoing.push(OutgoingWrite {
+                request_id: parse_request_id(&request_id)?,
+                content: outbox_content(&request_id, &stored.payload)?,
+                outcome,
+                answered_at,
+            });
+        }
+        Ok(outgoing)
+    }
+
+    /// Deletes answered writes 60 days after their answer, on the injected clock.
+    pub async fn delete_answered_before_retention(
+        &mut self,
+        now: SyncTime,
+    ) -> Result<u64, OutboxStoreError> {
+        let cutoff = now.unix_millis().saturating_sub(ANSWERED_RETENTION_MILLIS);
+        let accepted = OutboxItemState::Accepted.as_str();
+        let refused = OutboxItemState::Refused.as_str();
+        Ok(sqlx::query!(
+            "DELETE FROM outbox_items WHERE item_state IN (?, ?) AND updated_at <= ?",
+            accepted,
+            refused,
+            cutoff
+        )
+        .execute_as_transaction(self.store)
+        .await?
+        .rows_affected())
+    }
+
+    /// Writes waiting to be sent (never sent, or sent with a lost answer), with
+    /// their receipt marks, to load the flush reducer.
     pub async fn waiting(&mut self) -> Result<Vec<(SyncTime, RequestId)>, OutboxStoreError> {
-        let state = OutboxItemState::InOutbox.as_str();
+        let unsent = OutboxItemState::InOutbox.as_str();
+        let answer_lost = OutboxItemState::SentAnswerLost.as_str();
         let rows = sqlx::query!(
             r#"SELECT request_id AS "request_id!", flush_at_ms FROM outbox_items
-               WHERE item_state = ? ORDER BY flush_at_ms, request_id"#,
-            state
+               WHERE item_state IN (?, ?) ORDER BY flush_at_ms, request_id"#,
+            unsent,
+            answer_lost
         )
         .fetch_all(&mut self.store.connection)
         .await?;
@@ -227,7 +369,8 @@ impl<'store> MacOutbox<'store> {
         requests: &[RequestId],
         now: SyncTime,
     ) -> Result<Vec<StoredOutboxWrite>, OutboxStoreError> {
-        let from = OutboxItemState::InOutbox.as_str();
+        let unsent = OutboxItemState::InOutbox.as_str();
+        let answer_lost = OutboxItemState::SentAnswerLost.as_str();
         let to = OutboxItemState::Sent.as_str();
         let now_ms = now.unix_millis();
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
@@ -237,13 +380,14 @@ impl<'store> MacOutbox<'store> {
             let row = sqlx::query_as!(
                 OutboxRow,
                 r#"UPDATE outbox_items SET item_state = ?, updated_at = ?
-                   WHERE request_id = ? AND item_state = ?
+                   WHERE request_id = ? AND item_state IN (?, ?)
                    RETURNING request_id AS "request_id!", caller_json, payload_json,
                              item_state, flush_at_ms, outcome_json"#,
                 to,
                 now_ms,
                 request_id,
-                from
+                unsent,
+                answer_lost
             )
             .fetch_optional(&mut *transaction)
             .await?
@@ -296,14 +440,15 @@ impl<'store> MacOutbox<'store> {
         expect_one(changed, request, "sent")
     }
 
-    /// Sent writes left unanswered go back to the outbox with their receipt mark.
+    /// Sent writes left unanswered go back to the outbox with their receipt
+    /// mark, marked as possibly already in central.
     pub async fn return_unanswered(
         &mut self,
         requests: &[RequestId],
         now: SyncTime,
     ) -> Result<(), OutboxStoreError> {
         let from = OutboxItemState::Sent.as_str();
-        let to = OutboxItemState::InOutbox.as_str();
+        let to = OutboxItemState::SentAnswerLost.as_str();
         let now_ms = now.unix_millis();
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
         for request in requests {
@@ -327,6 +472,7 @@ impl<'store> MacOutbox<'store> {
 }
 
 struct DecodedRow {
+    state: OutboxItemState,
     caller: Caller,
     payload: RequestPayload,
     status: RequestStatus,
@@ -346,9 +492,11 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
     }
     let state = OutboxItemState::parse(&row.item_state).ok_or_else(|| corrupt("item_state"))?;
     let status = match (state, row.outcome_json.as_deref()) {
-        (OutboxItemState::InOutbox, None) => RequestStatus::InOutbox {
-            flush_at: SyncTime::from_unix_millis(row.flush_at_ms),
-        },
+        (OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost, None) => {
+            RequestStatus::InOutbox {
+                flush_at: SyncTime::from_unix_millis(row.flush_at_ms),
+            }
+        }
         (OutboxItemState::Sent, None) => RequestStatus::Sent,
         (OutboxItemState::Accepted, Some(outcome)) => RequestStatus::Accepted(
             serde_json::from_str::<ReplyPayload>(outcome).map_err(|_| corrupt("outcome_json"))?,
@@ -356,16 +504,43 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
         (OutboxItemState::Refused, Some(outcome)) => RequestStatus::Refused(
             serde_json::from_str::<RefusalReason>(outcome).map_err(|_| corrupt("outcome_json"))?,
         ),
-        (OutboxItemState::InOutbox | OutboxItemState::Sent, Some(_))
+        (
+            OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost | OutboxItemState::Sent,
+            Some(_),
+        )
         | (OutboxItemState::Accepted | OutboxItemState::Refused, None) => {
             return Err(corrupt("outcome_json"));
         }
     };
     Ok(DecodedRow {
+        state,
         caller,
         payload,
         status,
     })
+}
+
+/// Decodes a row read by caller and checks it really is that caller's.
+fn decode_owned_row(row: &OutboxRow, caller: &Caller) -> Result<DecodedRow, OutboxStoreError> {
+    let stored = decode_row(row)?;
+    if stored.caller != *caller {
+        return Err(corrupt_row(&row.request_id, "caller_json"));
+    }
+    Ok(stored)
+}
+
+fn outbox_content(
+    request_id: &str,
+    payload: &RequestPayload,
+) -> Result<OutboxWriteContent, OutboxStoreError> {
+    OutboxWriteContent::of(payload).ok_or_else(|| corrupt_row(request_id, "payload_json"))
+}
+
+fn corrupt_row(request_id: &str, field: &'static str) -> OutboxStoreError {
+    OutboxStoreError::CorruptItem {
+        request_id: request_id.to_owned(),
+        field,
+    }
 }
 
 fn parse_request_id(value: &str) -> Result<RequestId, OutboxStoreError> {
