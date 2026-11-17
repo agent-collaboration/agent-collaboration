@@ -39,6 +39,10 @@ impl CollaborationRuntime {
     pub async fn shutdown(mut self) -> io::Result<()> {
         self.manifest.take();
         self.shutdown.cancel();
+        // The link driver stops on the shared cancel; wait for it to close its socket.
+        self.central_link.take();
+        self.central_link_tasks.close();
+        self.central_link_tasks.wait().await;
         let mut failure = None;
         if let Some(mut exposure) = self.tailscale_exposure.take()
             && let Err(error) = exposure.shutdown().await
