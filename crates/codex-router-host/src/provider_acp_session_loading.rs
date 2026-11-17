@@ -23,9 +23,10 @@ pub(crate) enum ProviderSessionLoadOutcome {
     Unavailable {
         reason: String,
     },
-    /// The Router closed the session itself (D1 R14): it is never loaded
-    /// again, and work for it ends not sent.
-    RouterClosed,
+    /// A close of the session won while this load was in flight: the
+    /// connection dropped the restored session, and the work that asked for
+    /// the load ends not sent. A later load starts a new run.
+    ClosedWhileLoading,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,10 +91,6 @@ pub(crate) async fn ensure_provider_session_loaded(
     target: &SessionRef,
     load_policy: LoadPolicy,
 ) -> ProviderSessionLoadOutcome {
-    // Before any effect at the agent: a closed session must not come back.
-    if supervisor.is_router_closed(target) {
-        return ProviderSessionLoadOutcome::RouterClosed;
-    }
     let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
         return unavailable("provider runtime is unavailable");
     };
@@ -134,10 +131,10 @@ pub(crate) async fn ensure_provider_session_loaded(
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,
-        // The Router closed the session while this load was in flight: the
-        // connection dropped the restored session, so it stays closed.
+        // A close won while this load was in flight: the connection
+        // dropped the restored session.
         Err(ExternalProviderRuntimeError::SessionReleased) => {
-            ProviderSessionLoadOutcome::RouterClosed
+            ProviderSessionLoadOutcome::ClosedWhileLoading
         }
         Err(ExternalProviderRuntimeError::ProviderSessionNotFound {
             code,

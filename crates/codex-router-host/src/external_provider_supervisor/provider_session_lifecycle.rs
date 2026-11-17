@@ -26,7 +26,6 @@ pub(super) fn resume(
             &request.operation_id,
             Some(target.clone()),
         )?;
-        backend.refuse_if_router_closed(&target, &request.operation_id)?;
         let provider_session_id = String::from(target.session_id.clone());
         if !runtime
             .capability_report(&provider_session_id)
@@ -158,16 +157,11 @@ pub(super) fn close(
                 let operation_id = request.operation_id.clone();
                 let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
                 // Every waiting message ends not sent before the interrupt,
-                // so none starts as the running turn ends.
-                if !agent_closes {
-                    backend.mark_router_closed(&target);
-                }
+                // so none starts as the running turn ends. A Router-side
+                // close (the agent offers no session/close) ends NotLoaded
+                // like any close, and the session can be loaded again.
                 if let Some(fifo) = backend.message_fifo() {
-                    if agent_closes {
-                        fifo.close_session(&target, "session closed");
-                    } else {
-                        fifo.close_session_terminally(&target);
-                    }
+                    fifo.close_session(&target, "session closed");
                 }
                 let completion_target = target.clone();
                 // The runtime interrupts a running turn, waits for idle, then

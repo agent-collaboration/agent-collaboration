@@ -14,14 +14,16 @@ use collaboration_protocol::{
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionRecord};
 use std::sync::Arc;
 
-/// Oracle: D1 spec R14 and the Reviewer's C2: on an agent that can load but
-/// can't close, an API send admitted with delivery queue is held before it
-/// enters the line; the Router closes the session and finishes; then the send
-/// goes on. It ends not sent, "session closed", with no effect; a load after
-/// the close is refused; and the agent sees no prompt and no session/load
-/// after the held one.
+/// Oracle: the owner's close decision (a Router-side close ends NotLoaded
+/// like any close, and the session can be loaded again) and the accepted
+/// door rule (a MayLoad send loads the session first, as mail does). On an
+/// agent that can load but can't close, an API send admitted with delivery
+/// queue is held before it enters the line; the Router closes the session
+/// and finishes; then the send goes on. It meets a NotLoaded session, loads
+/// it again and is sent: the agent sees one session/load and the late
+/// prompt after the held one.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_send_admitted_before_a_router_close_never_reaches_the_agent() {
+async fn a_send_reaching_the_line_after_a_router_close_loads_the_session_again() {
     // Arrange: a held turn on a load-capable agent without session/close.
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire.json");
@@ -182,25 +184,17 @@ async fn a_send_admitted_before_a_router_close_never_reaches_the_agent() {
         ),
         "the Router closed the session: {closed:?}"
     );
-    assert!(sent.is_err(), "the late send is refused: {sent:?}");
-    let failure = settled.expect_err("the late send ends not sent");
-    assert_eq!(
-        String::from(failure.message.clone()),
-        "not sent: session closed"
-    );
-    assert_eq!(
-        failure.effect,
-        collaboration_protocol::ProviderOperationEffect::None
-    );
+    assert!(sent.is_ok(), "the late send is admitted: {sent:?}");
+    assert!(settled.is_ok(), "the late send settles: {settled:?}");
     assert!(
         matches!(
             load,
-            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::RouterClosed
+            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::Ready
         ),
-        "a load after the close is refused: {load:?}"
+        "the session is loaded again: {load:?}"
     );
-    assert_eq!(prompts, 1, "only the held prompt reached the agent");
-    assert_eq!(loads, 0, "nothing reloaded the session");
+    assert_eq!(prompts, 2, "the held prompt, then the late one");
+    assert_eq!(loads, 1, "the late send loaded the closed session once");
     stopped.expect("the supervisor drains without a timeout");
 }
 
@@ -353,7 +347,7 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
     assert!(
         matches!(
             loaded,
-            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::RouterClosed
+            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::ClosedWhileLoading
         ),
         "the load that landed after the close is refused: {loaded:?}"
     );
@@ -634,7 +628,7 @@ async fn a_load_continuation_held_past_a_router_close_publishes_nothing() {
     assert!(
         matches!(
             loaded,
-            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::RouterClosed
+            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::ClosedWhileLoading
         ),
         "the load whose continuation outlived the close answers closed: {loaded:?}"
     );

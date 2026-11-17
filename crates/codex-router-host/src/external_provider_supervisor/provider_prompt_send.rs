@@ -202,7 +202,6 @@ impl ExternalProviderSupervisor {
                 &request.operation_id,
                 Some(target.clone()),
             )?;
-            backend.refuse_if_router_closed(&target, &request.operation_id)?;
             let prepared = backend
                 .admit_operation(
                     request.operation_id.clone(),

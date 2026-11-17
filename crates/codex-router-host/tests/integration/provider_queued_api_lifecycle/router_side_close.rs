@@ -16,8 +16,9 @@ use collaboration_protocol::{
 /// with a held turn and two queued prompts on an agent with no session/close,
 /// close is admitted. Both queued prompts end not sent, "session closed";
 /// the turn is interrupted (Cancelled); the result says the Router closed the
-/// session itself; the agent is never asked to close; and a later prompt is
-/// refused as closed, with nothing more reaching the agent.
+/// session itself; the agent is never asked to close. The session then
+/// reads NotLoaded like any closed session (owner's close decision): a later
+/// direct prompt isn't sent, and nothing more reaches the agent.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn close_on_an_agent_without_session_close_interrupts_and_closes_it_here() {
     // Arrange: a held turn, a head and one buffered entry, on an agent that
@@ -102,7 +103,11 @@ async fn close_on_an_agent_without_session_close_interrupts_and_closes_it_here()
         }
         other => panic!("a later prompt is refused: {other:?}"),
     };
-    assert_eq!(String::from(refusal.message), "the session is closed");
+    assert_eq!(
+        String::from(refusal.message),
+        "provider input was not submitted",
+        "the later prompt meets a session that isn't loaded"
+    );
     assert_eq!(
         prompts,
         vec!["first".to_owned()],

@@ -20,9 +20,6 @@ struct GateState {
     closed_before: u64,
     /// Why the session closed, when it did.
     close_reason: Option<String>,
-    /// The Router closed the session itself (an agent with no session/close):
-    /// every entry, whenever it entered the line, ends not sent (D1 R14).
-    terminal: Option<String>,
 }
 
 impl QueueSubmissionGate {
@@ -42,22 +39,10 @@ impl QueueSubmissionGate {
         state.closed_before = sent;
     }
 
-    /// Closes the session for good: no entry commits a submission after this,
-    /// whenever it entered the line.
-    pub(crate) fn close_terminally(&self, reason: &str) {
-        let mut state = self.lock();
-        if state.terminal.is_none() {
-            state.terminal = Some(reason.to_owned());
-        }
-    }
-
     /// The close reason, when entry `sequence` was in the line as its session
-    /// closed, or for any entry once the session closed for good.
+    /// closed.
     pub(crate) fn closed_reason_for(&self, sequence: u64) -> Option<String> {
         let state = self.lock();
-        if let Some(reason) = &state.terminal {
-            return Some(reason.clone());
-        }
         (sequence < state.closed_before)
             .then(|| state.close_reason.clone())
             .flatten()
@@ -76,9 +61,6 @@ impl QueueSubmissionGate {
     ) -> Result<T, String> {
         let state = self.lock();
         if let Some(reason) = &state.stopped {
-            return Err(reason.clone());
-        }
-        if let Some(reason) = &state.terminal {
             return Err(reason.clone());
         }
         if sequence < state.closed_before

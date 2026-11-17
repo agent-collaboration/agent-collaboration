@@ -136,10 +136,6 @@ pub(crate) struct ProviderAcpMessageFifo {
     >,
     workers: StdMutex<Vec<JoinHandle<()>>>,
     shutdown: CancellationToken,
-    /// Sessions the Router closed itself, refused at the line's door whether
-    /// or not a line existed when they closed (D1 R14). Taken with
-    /// `senders` held, so a reservation and a close never interleave.
-    terminally_closed: StdMutex<std::collections::HashSet<SessionRef>>,
 }
 
 impl ProviderAcpMessageFifo {
@@ -158,7 +154,6 @@ impl ProviderAcpMessageFifo {
             admitted_waiting: StdMutex::new(HashMap::new()),
             workers: StdMutex::new(Vec::new()),
             shutdown: CancellationToken::new(),
-            terminally_closed: StdMutex::new(std::collections::HashSet::new()),
         }
     }
 
@@ -170,14 +165,6 @@ impl ProviderAcpMessageFifo {
             .senders
             .lock()
             .map_err(|_| "provider queue unavailable")?;
-        if self
-            .terminally_closed
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .contains(target)
-        {
-            return Err(SESSION_CLOSED);
-        }
         let (sender, line) =
             if let Some(line) = senders.get(target).filter(|line| !line.sender.is_closed()) {
                 let waiting = QUEUE_CAPACITY.saturating_sub(line.sender.capacity())
@@ -301,24 +288,6 @@ impl ProviderAcpMessageFifo {
             line.gate
                 .close_before(line.sent.load(std::sync::atomic::Ordering::SeqCst), reason);
             line.closed.notify_waiters();
-        }
-    }
-
-    /// The Router closed the session itself (D1 R14): every entry in its line
-    /// ends not sent, and no later entry is admitted or committed, even one
-    /// whose send began before the close.
-    pub(crate) fn close_session_terminally(&self, target: &SessionRef) {
-        let senders = self
-            .senders
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.terminally_closed
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(target.clone());
-        if let Some(line) = senders.get(target) {
-            line.state.gate.close_terminally(SESSION_CLOSED);
-            line.state.closed.notify_waiters();
         }
     }
 
@@ -469,7 +438,7 @@ async fn run_provider_message_fifo(
                         mark_entry_not_sent(&supervisor, &request, "unsupported: load");
                         break;
                     }
-                    ProviderSessionLoadOutcome::RouterClosed => {
+                    ProviderSessionLoadOutcome::ClosedWhileLoading => {
                         mark_entry_not_sent(&supervisor, &request, SESSION_CLOSED);
                         break;
                     }

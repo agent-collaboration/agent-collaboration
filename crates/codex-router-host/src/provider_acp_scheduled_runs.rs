@@ -254,7 +254,7 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
                             uncertain: false,
                         })
                     }
-                    ProviderSessionLoadOutcome::RouterClosed => {
+                    ProviderSessionLoadOutcome::ClosedWhileLoading => {
                         SchedulePreparationOutcome::Failed(SchedulePreparationFailure {
                             kind: ScheduleFailureKind::ResourceNotFound,
                             explanation: "Provider session is closed".into(),

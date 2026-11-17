@@ -289,8 +289,9 @@ impl ProviderAcpDeliveryRoute {
                     )
                     .await;
             }
-            // The Router closed the session itself: refused for good, never held.
-            ProviderSessionLoadOutcome::RouterClosed => {
+            // A close won while the load was in flight: this delivery ends
+            // not sent, never held.
+            ProviderSessionLoadOutcome::ClosedWhileLoading => {
                 return self
                     .finish_known_none(
                         &request,
