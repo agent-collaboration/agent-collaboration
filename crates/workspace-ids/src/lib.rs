@@ -74,6 +74,48 @@ workspace_identifiers!(
     AutomationId
 );
 
+/// A Router installation's identity on the wire: any canonical lowercase RFC
+/// UUID, whatever its version, so live installations keep their v4 service
+/// ids. Central resolves it to its own UUIDv7 machine id.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct InstallationId(String);
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("InstallationId must be a canonical lowercase RFC UUID")]
+pub struct InstallationIdError;
+impl TryFrom<String> for InstallationId {
+    type Error = InstallationIdError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let parsed = Uuid::parse_str(&value).map_err(|_| InstallationIdError)?;
+        if parsed.get_variant() != Variant::RFC4122 || parsed.hyphenated().to_string() != value {
+            return Err(InstallationIdError);
+        }
+        Ok(Self(value))
+    }
+}
+impl std::str::FromStr for InstallationId {
+    type Err = InstallationIdError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+impl From<InstallationId> for String {
+    fn from(value: InstallationId) -> Self {
+        value.0
+    }
+}
+impl std::fmt::Display for InstallationId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+impl InstallationId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 #[path = "identifier_test.rs"]
 mod tests;

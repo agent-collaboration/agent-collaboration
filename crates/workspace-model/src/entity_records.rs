@@ -73,7 +73,7 @@ macro_rules! records {
     )+};
 }
 records! {
-    Workspace { workspace_id: WorkspaceId, name: ResourceName, state: WorkspaceState },
+    Workspace { workspace_id: WorkspaceId, name: ResourceName, description: Description, state: WorkspaceState },
     Area { area_id: AreaId, workspace_id: WorkspaceId, name: ResourceName, state: AreaState },
     Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, status: WorkStatus, lead: ActorIdentityId },
     Initiative { initiative_id: InitiativeId, name: ResourceName, description: Description, status: WorkStatus },

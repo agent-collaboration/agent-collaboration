@@ -81,16 +81,31 @@ pub enum WorkspaceOperation {
     CreateWorkspace {
         name: ResourceName,
     },
+    /// Targets the request's workspace. The canonical name stays unique per organization.
+    UpdateWorkspace {
+        name: ResourceName,
+        description: Description,
+    },
+    /// Targets the request's workspace.
+    ArchiveWorkspace,
     CreateArea {
         name: ResourceName,
     },
     ArchiveArea {
         area_id: AreaId,
     },
+    UpdateArea {
+        area_id: AreaId,
+        name: ResourceName,
+    },
     CreateProject {
         area_id: AreaId,
         title: ResourceName,
         lead: Option<ActorRef>,
+    },
+    UpdateProject {
+        project_id: ProjectId,
+        title: ResourceName,
     },
     CreateInitiative {
         name: ResourceName,
@@ -107,6 +122,10 @@ pub enum WorkspaceOperation {
     },
     CreateIssue {
         deliverable_id: DeliverableId,
+        title: IssueTitle,
+    },
+    UpdateIssue {
+        issue_id: IssueId,
         title: IssueTitle,
     },
     GrantProjectRole {
@@ -127,9 +146,12 @@ pub enum WorkspaceOperation {
         deliverable_id: DeliverableId,
         role: DeliverableRole,
     },
+    /// The thread, its creator's membership and its first post are one change set.
     CreateThread {
         area_id: AreaId,
         title: ResourceName,
+        body: PostText,
+        addressees: Vec<Addressee>,
     },
     JoinThread {
         thread_id: ThreadId,
@@ -152,8 +174,10 @@ pub enum WorkspaceOperation {
         body: PostText,
         addressees: Vec<Addressee>,
     },
+    /// An optional closing post commits atomically with the resolution.
     ResolveThread {
         thread_id: ThreadId,
+        closing_post: Option<PostText>,
     },
     AddDependency {
         blocking: DeliverableId,
@@ -226,6 +250,8 @@ pub enum WorkspaceOperation {
         limit: crate::PageLimit,
     },
     Inbox {
+        scope: crate::InboxScope,
+        read_mode: crate::InboxReadMode,
         after: Option<ChangePosition>,
         limit: crate::PageLimit,
     },
@@ -286,9 +312,15 @@ pub enum WorkspaceAnswer {
         next_after_position: Option<ChangePosition>,
     },
     Inbox {
-        entries: Vec<crate::InboxEntry>,
+        scope: crate::InboxScope,
+        read_mode: crate::InboxReadMode,
+        order: crate::ListOrder,
+        items: Vec<crate::InboxItem>,
+        /// The workspace's latest change position when the page was read.
+        high_water: ChangePosition,
+        /// Projects in scope whose items could not be read for this page.
+        unavailable_projects: Vec<ProjectId>,
         next_after_position: Option<ChangePosition>,
-        read_through: ChangePosition,
     },
     Marked {
         scope: ReadScope,
