@@ -163,8 +163,10 @@ fn read_request(client: &mut LinkClient) -> CorrelationId {
         request_id: None,
         workspace_id: Some("01890f2e-7b4c-7cc0-98c4-000000000003".parse().unwrap()),
         operation: WorkspaceOperation::List {
-            query: workspace_model::ListQuery::Areas,
-            after: 0_u64.try_into().unwrap(),
+            query: workspace_model::ListQuery::Areas {
+                include_archived: false,
+            },
+            cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
             limit: 10_u16.try_into().unwrap(),
         },
     });

@@ -19,8 +19,10 @@ fn correlation_and_write_identity_are_distinct_and_reads_have_no_write_id() {
     assert_eq!(serde_json::to_value(parsed).unwrap(), write);
     // Use the model's actual read shape, without duplicating an operation definition.
     let operation = workspace_model::WorkspaceOperation::List {
-        query: workspace_model::ListQuery::Areas,
-        after: 0_u64.try_into().unwrap(),
+        query: workspace_model::ListQuery::Areas {
+            include_archived: false,
+        },
+        cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
         limit: workspace_model::PageLimit::try_from(10).unwrap(),
     };
     let mut read = read;
