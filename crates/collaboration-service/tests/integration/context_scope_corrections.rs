@@ -214,6 +214,7 @@ async fn provider_context_uses_existing_durable_session_worktrees() -> Result<()
                 created_by: target.clone().into(),
                 approver: target.clone().into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await?;
         accepted(&fixture.api.call("role_grant",fixture.request(&project,json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":lane},"role":if revision==0 {"implementer"} else {"verifier"},"holder":{"kind":"session","session":target},"model":null,"lineage":null,"expectedRevision":revision,"ownerGrant":null}))).await?);

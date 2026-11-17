@@ -226,6 +226,7 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
             created_by: owner.clone(),
             approver: owner,
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await?;
     let hub = Arc::new(crate::ProviderSessionEventHub::new(Arc::new(Mutex::new(

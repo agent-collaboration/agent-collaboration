@@ -9,7 +9,7 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderOperationStoreError;
-use collaboration_runtime::ProviderSessionRecord;
+use collaboration_runtime::{ProviderSessionRecord, ProviderSessionResumeInputs};
 
 pub(crate) enum ProviderOperationCompletion {
     Success {
@@ -133,6 +133,7 @@ pub(crate) fn provider_session_record(
     requested_policy: ProviderRequestedPolicy,
     created_by: ProviderIdentity,
     approver: ProviderIdentity,
+    resume: ProviderSessionResumeInputs,
 ) -> ProviderSessionRecord {
     ProviderSessionRecord {
         target,
@@ -141,6 +142,24 @@ pub(crate) fn provider_session_record(
         created_by,
         approver,
         updated_at_ms: chrono::Utc::now().timestamp_millis(),
+        resume,
+    }
+}
+
+/// What a create records for a later resume to rebuild (D1 R18; owner
+/// Decision 3): the mode it asked for, the work roots its creator named, and
+/// the scratch folder the Router made for it.
+pub(crate) fn created_session_resume_inputs(
+    requested_mode: Option<String>,
+    named_work_roots: Vec<ProviderWorkingDirectory>,
+    scratch_folder: Option<&std::path::Path>,
+) -> ProviderSessionResumeInputs {
+    ProviderSessionResumeInputs {
+        requested_mode,
+        work_roots: Some(named_work_roots),
+        scratch_folder: scratch_folder
+            .and_then(std::path::Path::to_str)
+            .and_then(|folder| ProviderWorkingDirectory::try_from(folder.to_owned()).ok()),
     }
 }
 

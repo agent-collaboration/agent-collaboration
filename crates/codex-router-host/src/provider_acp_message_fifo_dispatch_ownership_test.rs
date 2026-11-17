@@ -80,6 +80,7 @@ async fn shut_down_the_line_at(paused_at: PausedAt) -> Shutdown {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

@@ -96,6 +96,7 @@ async fn recorded_session_loads_without_creating_a_replacement() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record");
@@ -159,6 +160,7 @@ async fn live_peer_prevents_provider_load() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record");
@@ -216,6 +218,7 @@ async fn rejected_load_preserves_provider_code_without_creating_replacement() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record");

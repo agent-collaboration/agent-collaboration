@@ -95,6 +95,7 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
             created_by: actor.clone().into(),
             approver: actor.into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record unloaded provider session");

@@ -55,6 +55,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -209,6 +210,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -446,6 +448,7 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -582,6 +585,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -785,6 +789,7 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

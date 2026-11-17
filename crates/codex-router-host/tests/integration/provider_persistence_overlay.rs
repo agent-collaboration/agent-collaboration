@@ -68,6 +68,7 @@ async fn a_settlement_that_fails_to_save_answers_its_outcome_and_durable_stage()
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

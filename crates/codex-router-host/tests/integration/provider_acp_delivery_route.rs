@@ -74,6 +74,7 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -151,6 +152,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -412,6 +414,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -542,6 +545,7 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -671,6 +675,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
                 created_by: (target.clone()).into(),
                 approver: (target.clone()).into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("session record");

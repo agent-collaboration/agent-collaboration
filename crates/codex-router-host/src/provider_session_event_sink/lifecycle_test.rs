@@ -267,6 +267,7 @@ async fn record_session(store: &Arc<Mutex<ProviderOperationStore>>, session: &Se
             created_by: owner.clone().into(),
             approver: owner.into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

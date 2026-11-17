@@ -164,6 +164,7 @@ impl RouteHarness {
                 created_by: owner.clone(),
                 approver: owner,
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("inventory");

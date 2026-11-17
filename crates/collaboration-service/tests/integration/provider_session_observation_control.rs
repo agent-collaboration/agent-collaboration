@@ -54,6 +54,7 @@ async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error
             created_by: owner.clone().into(),
             approver: owner.into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await?;
     let hub = Arc::new(ProviderSessionEventHub::with_capacity(store, 2));

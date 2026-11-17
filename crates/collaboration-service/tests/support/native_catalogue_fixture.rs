@@ -72,6 +72,7 @@ impl CatalogueFixture {
                 created_by: approver,
                 approver: serde_json::from_value(json!({"humanId":"saved-managed-approver"}))?,
                 updated_at_ms: 1790162100000_i64,
+                resume: Default::default(),
             })
             .await?;
         let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));

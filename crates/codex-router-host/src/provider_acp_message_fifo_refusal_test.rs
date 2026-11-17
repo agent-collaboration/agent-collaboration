@@ -58,6 +58,7 @@ async fn entry_refused_at_dispatch_is_recorded_not_sent_with_the_reason() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

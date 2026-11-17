@@ -98,6 +98,7 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

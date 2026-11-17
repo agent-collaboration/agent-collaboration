@@ -72,6 +72,7 @@ async fn a_send_reaching_the_line_after_a_router_close_loads_the_session_again()
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -239,6 +240,7 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -411,6 +413,7 @@ async fn a_load_continuation_held_past_a_router_close_publishes_nothing() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

@@ -223,6 +223,7 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record session");

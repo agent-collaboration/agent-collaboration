@@ -95,12 +95,15 @@ pub(super) fn resume(
                                     history: ProviderHistoryAvailability::HistoryUnavailable,
                                 },
                                 target: Some(completion_target.clone()),
+                                // A resume writes none of the resume inputs, so
+                                // the ones its create recorded stay (Decision 3).
                                 session_record: Some(Box::new(provider_session_record(
                                     completion_target,
                                     working_directory,
                                     requested_policy,
                                     created_by,
                                     approver,
+                                    collaboration_runtime::ProviderSessionResumeInputs::default(),
                                 ))),
                             }
                         }

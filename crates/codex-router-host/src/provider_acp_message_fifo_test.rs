@@ -142,6 +142,7 @@ async fn a_loaded_only_message_after_a_close_is_refused_at_the_door_without_a_lo
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -282,6 +283,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -451,6 +453,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record session");
@@ -694,6 +697,7 @@ async fn close_while_queued_marks_head_and_buffer_not_sent() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

@@ -58,6 +58,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -185,6 +186,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

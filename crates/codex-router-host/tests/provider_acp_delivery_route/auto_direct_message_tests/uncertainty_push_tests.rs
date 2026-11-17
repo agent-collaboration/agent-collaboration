@@ -33,6 +33,7 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("saved provider session");

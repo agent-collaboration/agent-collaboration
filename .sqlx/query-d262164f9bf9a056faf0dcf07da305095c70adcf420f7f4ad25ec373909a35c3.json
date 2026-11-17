@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT target_session_id,working_directory,requested_policy_json,\n                    created_by_json,approver_json,updated_at_ms\n             FROM provider_session_records\n             WHERE target_service_id=? AND target_endpoint_id=?\n             ORDER BY updated_at_ms DESC,target_session_id ASC",
+  "query": "SELECT target_session_id,working_directory,requested_policy_json,\n                    created_by_json,approver_json,updated_at_ms,\n                    requested_mode,work_roots_json,scratch_folder\n             FROM provider_session_records\n             WHERE target_service_id=? AND target_endpoint_id=?\n             ORDER BY updated_at_ms DESC,target_session_id ASC",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,39 @@
             "name": "updated_at_ms"
           }
         }
+      },
+      {
+        "name": "requested_mode",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "requested_mode"
+          }
+        }
+      },
+      {
+        "name": "work_roots_json",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "work_roots_json"
+          }
+        }
+      },
+      {
+        "name": "scratch_folder",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "scratch_folder"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +112,11 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "353134dbf5080a650ac9ff0630e8ac4665891ef414746385bc614f01ebfebb78"
+  "hash": "d262164f9bf9a056faf0dcf07da305095c70adcf420f7f4ad25ec373909a35c3"
 }

@@ -177,6 +177,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     } else {
                         Vec::new()
                     };
+                    let named_work_roots = request.work_roots;
                     let scratch_root = backend.inner.scratch_root.clone();
                     let completion_inner = Arc::clone(&backend.inner);
                     backend.spawn_operation(operation_id.clone(), live, async move {
@@ -195,6 +196,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         };
                         let cwd = PathBuf::from(String::from(working_directory.clone()));
                         let work_roots = session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots, auto);
+                        let resume = crate::provider_operation_settlement::created_session_resume_inputs(requested_settings.mode.clone(), named_work_roots, scratch_folder.as_deref());
                         match runtime
                             .create_session_with_work_roots(
                                 cwd,
@@ -247,6 +249,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                                     requested_policy,
                                                     created_by,
                                                     approver,
+                                                    resume,
                                                 ),
                                             )),
                                         }
@@ -291,6 +294,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                             requested_policy,
                                             created_by,
                                             approver,
+                                            resume,
                                         ))),
                                     }
                                 }
@@ -332,6 +336,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                                 requested_policy,
                                                 created_by,
                                                 approver,
+                                                resume,
                                             )),
                                         }
                                     }
@@ -429,12 +434,16 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         effective_settings: observed,
                                     },
                                     target: Some(completion_target.clone()),
+                                    // A load writes none of the resume inputs, so the
+                                    // ones its create recorded stay (Decision 3).
                                     session_record: Some(Box::new(provider_session_record(
                                         completion_target,
                                         working_directory,
                                         requested_policy,
                                         created_by,
                                         approver,
+                                        collaboration_runtime::ProviderSessionResumeInputs::default(
+                                        ),
                                     ))),
                                 }
                             }

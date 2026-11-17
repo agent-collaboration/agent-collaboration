@@ -75,6 +75,7 @@ async fn store_with_session_record(
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("provider session record");
@@ -187,6 +188,7 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("provider session record");

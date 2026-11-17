@@ -249,6 +249,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

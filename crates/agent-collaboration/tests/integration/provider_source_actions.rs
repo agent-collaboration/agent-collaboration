@@ -105,6 +105,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                 created_by: approver.clone(),
                 approver: approver.clone(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await?;
         let binding = endpoint
@@ -215,6 +216,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                         created_by: approver.clone(),
                         approver: approver.clone(),
                         updated_at_ms: 1,
+                        resume: Default::default(),
                     })
                     .await?;
                 target
@@ -513,6 +515,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                 created_by: approver.clone(),
                 approver: approver.clone(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await?;
         let explicit_operation = OperationId::generate();
