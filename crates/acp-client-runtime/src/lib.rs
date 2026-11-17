@@ -55,6 +55,22 @@ mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the session cell wires the queue machines in the next D1 step"
+    )
+)]
+mod queue_line_machine;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the session cell wires the queue machines in the next D1 step"
+    )
+)]
+mod queued_entry_machine;
 mod session_event_sink;
 #[cfg_attr(
     not(test),
@@ -72,6 +88,22 @@ mod session_lifecycle_answers;
     )
 )]
 mod session_lifecycle_machine;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the session cell wires the setting machine in the next D1 step"
+    )
+)]
+mod session_setting_machine;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the session cell wires the turn machine in the next D1 step"
+    )
+)]
+mod session_turn_machine;
 
 #[cfg(test)]
 extern crate self as acp_client_runtime;
