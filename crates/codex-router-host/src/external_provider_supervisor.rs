@@ -1,6 +1,10 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
 mod provider_operation_admission;
+mod provider_operation_index;
+#[cfg(test)]
+pub(crate) use provider_operation_index::HeldResult;
+use provider_operation_index::{LiveOperation, LiveOperations, UncertaintyCells};
 mod provider_prompt_send;
 mod provider_queued_api_prompt;
 pub(crate) use provider_queued_api_prompt::{AdmittedApiPrompt, unadmitted_queued_failure};
@@ -51,15 +55,12 @@ use collaboration_runtime::ProviderOperationRecord;
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_service::conversation_operation_snapshot as snapshot_from_record;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::{
-        Arc, Mutex as StdMutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex as StdMutex, atomic::Ordering},
     time::Duration,
 };
-use tokio::sync::{Mutex, Notify, mpsc};
+use tokio::sync::{Mutex, mpsc};
 
 const MAX_RETAINED_SETTLEMENTS: usize = 256;
 
@@ -84,6 +85,9 @@ struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
+    /// Each binding's unknown outcomes: the one place admission asks
+    /// whether an earlier send's outcome is unknown (design note §14.1).
+    uncertainty: UncertaintyCells,
     /// Moves each time a live operation publishes its result, so schedulers and
     /// provider retention wake on an ACP completion that writes no row.
     completions: tokio::sync::watch::Sender<u64>,
@@ -188,42 +192,6 @@ struct RuntimeBinding {
     runtime: Arc<ExternalProviderRuntime>,
 }
 
-#[derive(Default)]
-struct LiveOperations {
-    operations: HashMap<OperationId, Arc<LiveOperation>>,
-    terminal_order: VecDeque<OperationId>,
-}
-
-struct LiveOperation {
-    result: Mutex<Option<Result<ConversationOperationSettlement, ConversationOperationFailure>>>,
-    /// Set once the result is published. Retention reads it without the result lock, which
-    /// a reader of the result may be holding.
-    published: AtomicBool,
-    changed: Notify,
-}
-
-/// A held operation's result, for a test that locks it as a reader would.
-#[cfg(test)]
-pub(crate) struct HeldResult(Arc<LiveOperation>);
-
-#[cfg(test)]
-impl HeldResult {
-    /// Takes the result lock now, without waiting, or `None` when it is taken.
-    pub(crate) fn try_hold(&self) -> Option<impl Sized + '_> {
-        self.0.result.try_lock().ok()
-    }
-}
-
-impl LiveOperation {
-    fn pending() -> Self {
-        Self {
-            result: Mutex::new(None),
-            published: AtomicBool::new(false),
-            changed: Notify::new(),
-        }
-    }
-}
-
 impl ExternalProviderSupervisor {
     pub(crate) fn queued_operation_registry(&self) -> &ProviderQueueOperationRegistry {
         &self.inner.queued_operations
@@ -293,6 +261,26 @@ impl ExternalProviderSupervisor {
             .steers_in_flight += 1;
         TurnApproverPin {
             inner: Arc::clone(&self.inner),
+        }
+    }
+
+    /// Records `operation_id` as an unknown outcome on its binding's
+    /// uncertainty cell, as its live owner or the start-up seed would.
+    #[cfg(test)]
+    pub(crate) async fn record_unknown_for_test(
+        &self,
+        operation_id: &OperationId,
+        binding: &ProviderBindingIdentity,
+        target: Option<SessionRef>,
+    ) {
+        if let Ok(cell) = self.inner.binding_uncertainty(binding).await {
+            let _recorded = provider_operation_index::apply_uncertainty(
+                &cell,
+                crate::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
+                    operation: operation_id.clone(),
+                    target,
+                },
+            );
         }
     }
 
@@ -417,6 +405,7 @@ impl ExternalProviderSupervisor {
                 bindings: runtimes,
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
+                uncertainty: UncertaintyCells::default(),
                 turn_approvers: StdMutex::new(HashMap::new()),
                 message_fifo: std::sync::OnceLock::new(),
                 completions: tokio::sync::watch::channel(0).0,
@@ -697,6 +686,14 @@ impl SupervisorInner {
             ProviderOperationCompletion::Failure(operation_failure) => {
                 let reconciliation = if operation_failure.effect == ProviderOperationEffect::Unknown
                 {
+                    // Recorded on the binding's uncertainty cell before this
+                    // operation stops counting as live (design note §14.1).
+                    self.record_became_unknown(
+                        &operation_id,
+                        &live,
+                        operation_failure.target.clone(),
+                    )
+                    .await;
                     ProviderReconciliationState::Unresolved
                 } else {
                     ProviderReconciliationState::Confirmed

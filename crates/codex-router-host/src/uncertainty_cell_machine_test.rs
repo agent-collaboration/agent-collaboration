@@ -37,7 +37,7 @@ fn every_state_event_pair_reaches_exactly_the_declared_edges() {
             operation: operation(1),
         },
         UncertaintyEvent::AdmissionCheck {
-            target: session("z"),
+            target: Some(session("z")),
         },
     ];
     let cases = [clear, holding_one, holding_two]
@@ -56,11 +56,11 @@ fn every_state_event_pair_reaches_exactly_the_declared_edges() {
     assert_eq!(checked, Ok(()));
 }
 
-fn admits(state: &UnknownOutcomes, target: &SessionRef) -> bool {
+fn admits(state: &UnknownOutcomes, target: Option<&SessionRef>) -> bool {
     UncertaintyCellMachine::transition(
         state,
         UncertaintyEvent::AdmissionCheck {
-            target: target.clone(),
+            target: target.cloned(),
         },
     )
     .is_ok()
@@ -82,7 +82,7 @@ fn an_admission_is_refused_at_every_point_of_the_a_c_order() {
     let c_unknown = seeded([(&operation(0x0c), Some(&b))]);
 
     // Act
-    let before_a = admits(&c_unknown, &b);
+    let before_a = admits(&c_unknown, Some(&b));
     let both = apply(
         c_unknown,
         UncertaintyEvent::BecameUnknown {
@@ -90,14 +90,14 @@ fn an_admission_is_refused_at_every_point_of_the_a_c_order() {
             target: Some(b.clone()),
         },
     );
-    let while_both = admits(&both, &b);
+    let while_both = admits(&both, Some(&b));
     let only_a = apply(
         both,
         UncertaintyEvent::Reconciled {
             operation: operation(0x0c),
         },
     );
-    let after_c = admits(&only_a, &b);
+    let after_c = admits(&only_a, Some(&b));
 
     // Assert
     assert_eq!((before_a, while_both, after_c), (false, false, false));
@@ -113,7 +113,7 @@ fn a_targetless_unknown_blocks_every_session_until_reconciled() {
     let refused = UncertaintyCellMachine::transition(
         &targetless,
         UncertaintyEvent::AdmissionCheck {
-            target: session("other"),
+            target: Some(session("other")),
         },
     );
     let cleared = apply(
@@ -134,7 +134,7 @@ fn a_targetless_unknown_blocks_every_session_until_reconciled() {
             operation(7).as_str()
         )
     );
-    assert!(admits(&cleared, &session("other")));
+    assert!(admits(&cleared, Some(&session("other"))));
 }
 
 /// Oracle: §14.1's linearizability over any order of writes and checks: each
@@ -169,12 +169,35 @@ fn every_admission_matches_the_reference_set(case: hegel::TestCase) {
                 model.retain(|(held, _)| held != &op);
             }
             _ => {
-                let asking = target.unwrap_or_else(|| session("b"));
-                let expected_blocked = model
-                    .iter()
-                    .any(|(_, held)| held.is_none() || held.as_ref() == Some(&asking));
-                assert_eq!(admits(&state, &asking), !expected_blocked);
+                // A create asks with no target: only binding-wide unknowns
+                // block it.
+                let asking = target;
+                let expected_blocked = model.iter().any(|(_, held)| {
+                    held.is_none() || (asking.is_some() && held.as_ref() == asking.as_ref())
+                });
+                assert_eq!(admits(&state, asking.as_ref()), !expected_blocked);
             }
         }
     }
+}
+
+/// Oracle: today's scan for an admission with no target yet (a create):
+/// only binding-wide unknowns block it; a session's unknown blocks that
+/// session alone.
+#[test]
+fn a_create_is_blocked_only_by_binding_wide_unknowns() {
+    // Arrange
+    let session_unknown = seeded([(&operation(1), Some(&session("b")))]);
+    let binding_unknown = seeded([(&operation(2), None)]);
+
+    // Act
+    let create_past_session_unknown = admits(&session_unknown, None);
+    let create_past_binding_unknown = admits(&binding_unknown, None);
+
+    // Assert
+    assert!(
+        create_past_session_unknown,
+        "a session's unknown doesn't block a create"
+    );
+    assert!(!create_past_binding_unknown, "a binding-wide unknown does");
 }

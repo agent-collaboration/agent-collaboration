@@ -715,10 +715,9 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         request: ConversationOperationReconcileRequest,
     ) -> ProviderConversationFuture<'_, ConversationOperationSnapshot> {
         Box::pin(async move {
-            // Serialize against prepare_operation, which holds this same store
-            // lock until its live owner is inserted. Store -> live is the
-            // single lock order for admission and reconciliation.
-            let mut store = self.inner.store.lock().await;
+            // Admission reserves an operation in the live index before its
+            // durable insert, so a row with no live owner here has none
+            // (design note §15.3); no store lock is held across this read.
             let is_live = self
                 .inner
                 .live_operations
@@ -731,6 +730,11 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     Err(_) => true,
                 })
                 .unwrap_or(false);
+            if is_live {
+                // A reservation answers once its durable insert does.
+                self.wait_for_reservation(&request.operation_id).await;
+            }
+            let mut store = self.inner.store.lock().await;
             if is_live {
                 let record = store
                     .inspect(&request.operation_id)

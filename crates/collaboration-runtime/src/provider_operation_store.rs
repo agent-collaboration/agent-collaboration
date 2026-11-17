@@ -292,6 +292,63 @@ impl ProviderOperationStore {
         .transpose()
     }
 
+    /// Every operation on `binding` whose durable effect is Unknown, with its
+    /// target (none for a binding-wide row), for seeding the binding's
+    /// uncertainty at start (D1 state machines, design note §14.1). The same
+    /// statement as `blocking_uncertain_operation_ids`, unfiltered by target.
+    pub async fn unknown_operations(
+        &mut self,
+        binding: &ProviderBindingIdentity,
+    ) -> Result<Vec<(OperationId, Option<SessionRef>)>, ProviderOperationStoreError> {
+        let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
+        let candidates = sqlx::query!(
+            "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id
+             FROM provider_operations WHERE effect=? ORDER BY operation_id",
+            unknown,
+        )
+        .fetch_all(&mut self.connection)
+        .await?;
+        let mut unknown_operations = Vec::new();
+        for candidate in candidates {
+            let same_scope = match decode_binding(&candidate.binding_json)? {
+                ConversationBindingIdentity::ExternalProvider { binding: stored } => {
+                    stored.endpoint == binding.endpoint
+                        && stored.runtime.provider == binding.runtime.provider
+                        && stored.generation == binding.generation
+                }
+                ConversationBindingIdentity::CodexAcp { .. } => false,
+            };
+            if !same_scope {
+                continue;
+            }
+            let target = match (
+                candidate.target_service_id,
+                candidate.target_endpoint_id,
+                candidate.target_session_id,
+            ) {
+                (None, None, None) => None,
+                (Some(service_id), Some(endpoint_id), Some(session_id)) => Some(SessionRef {
+                    endpoint: collaboration_protocol::EndpointRef {
+                        service_id: service_id
+                            .try_into()
+                            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                        endpoint_id: collaboration_protocol::EndpointId::try_from(endpoint_id)
+                            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                    },
+                    session_id: collaboration_protocol::SessionId::try_from(session_id)
+                        .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                }),
+                _ => return Err(ProviderOperationStoreError::InvalidRecord),
+            };
+            unknown_operations.push((
+                OperationId::try_from(candidate.operation_id)
+                    .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                target,
+            ));
+        }
+        Ok(unknown_operations)
+    }
+
     pub async fn blocking_uncertain_operation_ids(
         &mut self,
         binding: &ProviderBindingIdentity,

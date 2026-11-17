@@ -242,19 +242,12 @@ impl ExternalProviderSupervisor {
         target: &SessionRef,
         own: &OperationId,
     ) -> Result<bool, ConversationOperationFailure> {
-        let mut store = self.inner.store.lock().await;
-        let blocking = store
-            .blocking_uncertain_operation_ids(binding, Some(target))
-            .await
-            .map_err(|_| super::unavailable_failure(own.clone(), Some(target.clone())))?
-            .into_iter()
-            .filter(|operation_id| operation_id != own)
-            .collect();
+        // The binding's uncertainty cell decides, with no store lock held.
         let blocking = self
-            .still_blocking(&mut store, blocking, DispatchMark::Deferred)
+            .admission_blockers(binding, Some(target), DispatchMark::Deferred)
             .await
             .map_err(|()| super::unavailable_failure(own.clone(), Some(target.clone())))?;
-        Ok(!blocking.is_empty())
+        Ok(blocking.iter().any(|operation_id| operation_id != own))
     }
 
     /// The one completion owner for an API entry that leaves the line before

@@ -188,6 +188,12 @@ impl ControlFixture {
                 self.supervisor.hold_live_operation(operation_id.clone());
             }
         }
+        // The binding's uncertainty cell holds it, as the start-up seed (a
+        // row with no live owner) or its live owner (an unknown failure)
+        // records it there.
+        self.supervisor
+            .record_unknown_for_test(&operation_id, &binding(), Some(self.target.clone()))
+            .await;
         operation_id
     }
 

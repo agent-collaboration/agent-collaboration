@@ -28,12 +28,14 @@ fn target_key(target: &SessionRef) -> String {
 }
 
 impl UnknownOutcomes {
-    fn blocking(&self, target: &SessionRef) -> Vec<String> {
+    /// What blocks an admission on `target`; a create has no target yet, and
+    /// only binding-wide unknowns block it, as today's scan does.
+    fn blocking(&self, target: Option<&SessionRef>) -> Vec<String> {
         self.binding_wide
             .iter()
             .chain(
-                self.by_target
-                    .get(&target_key(target))
+                target
+                    .and_then(|target| self.by_target.get(&target_key(target)))
                     .into_iter()
                     .flatten(),
             )
@@ -89,7 +91,7 @@ pub(crate) enum UncertaintyEvent {
     /// Reconciliation committed durably.
     Reconciled { operation: OperationId },
     /// An admission on `target` asks whether it may proceed.
-    AdmissionCheck { target: SessionRef },
+    AdmissionCheck { target: Option<SessionRef> },
 }
 
 /// The admission check's answer when it passes; refusals carry the blockers.
@@ -179,7 +181,7 @@ impl StateMachine for UncertaintyCellMachine {
             }
             UncertaintyEvent::Reconciled { .. } => Err(TransitionError::Stale),
             UncertaintyEvent::AdmissionCheck { target } => {
-                let blocking = state.blocking(&target);
+                let blocking = state.blocking(target.as_ref());
                 if blocking.is_empty() {
                     Ok((state.clone(), vec![UncertaintyEffect::Admit]))
                 } else {
