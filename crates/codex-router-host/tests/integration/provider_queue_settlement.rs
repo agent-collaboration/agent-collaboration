@@ -2,21 +2,33 @@
 //! written (design note §13.1), and the line's retries wait on the one
 //! injected clock (step 5a). The line itself waits for each of its own
 //! messages' settlements, so the race is a direct prompt with a message
-//! queued behind it. The scenario holds the prompt at its terminal write, a
-//! named point, instead of timing anything.
+//! queued behind it. The scenario holds the prompt at its terminal write,
+//! the Host's test-support named point, instead of timing anything.
 
-use super::loaded_only_tests::{NoLivePeer, binding, recorded_requests, target};
-use super::*;
-use crate::{ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor};
+#![expect(
+    clippy::expect_used,
+    reason = "A fixture prompt that cannot be built must fail the scenario at once."
+)]
+
+use super::provider_acp_message_fifo_support::{
+    NoLivePeer, available_directory, provider_binding, recorded_requests, target,
+};
+use super::provider_fixture_launch;
+use codex_router_host::{
+    ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
+    ProviderAcpDeliveryRoute, QUEUE_RETRY_DELAY,
+};
 use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationPromptRequest, MessageContent, MessageDelivery,
-    MessageText, PositiveSeconds, ProviderOperationStage, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, RouterAccess, SessionId,
+    MessageText, OperationId, PositiveSeconds, ProviderOperationStage, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionRecord};
 use router_clock::{ClockInstant, ManualClock};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 fn prompt_request(
     delivery: MessageDelivery,
@@ -42,8 +54,9 @@ fn prompt_request(
 /// recorded, so the line commits nothing that would see it unresolved) and
 /// AGENTS.md's one injected clock. While a direct prompt is held before
 /// its terminal write, the message queued behind it is not sent: its worker
-/// sleeps on the injected clock. After the first settles, the second still waits until
-/// that clock advances; then both complete and no admission is refused.
+/// sleeps on the injected clock. After the first settles, the second still
+/// waits until that clock advances; then both complete and no admission is
+/// refused.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_queued_message_commits_only_after_the_previous_settlement_is_written() {
     // Arrange
@@ -51,9 +64,9 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
     let receipt = root.path().join("wire.json");
     let mut target = target();
     target.session_id = SessionId::try_from("reactive-session-1".to_owned()).expect("session ID");
-    let binding = binding(&target);
+    let binding = provider_binding(&target);
     let runtime = ExternalProviderRuntime::initialize(
-        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        provider_fixture_launch::launch(
             "cursor-settings-agent.ts",
             vec!["reactive".to_owned(), receipt.display().to_string()],
         ),
@@ -91,7 +104,7 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
     let supervisor = Arc::new(
         ExternalProviderSupervisor::new(
             vec![ExternalProviderBinding {
-                identity: binding,
+                identity: binding.clone(),
                 runtime,
             }],
             Arc::clone(&store),
@@ -99,13 +112,17 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
         .expect("supervisor"),
     );
     let clock = Arc::new(ManualClock::new(chrono::DateTime::UNIX_EPOCH));
-    let queue = Arc::new(ProviderAcpMessageFifo::new(
+    // The route builds the session lines on the injected clock and attaches
+    // them to the supervisor.
+    let route = ProviderAcpDeliveryRoute::new(
+        target.endpoint.service_id.clone(),
+        std::iter::once(target.endpoint.clone()).collect(),
+        available_directory(&target, &binding),
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
         Arc::clone(&clock) as Arc<dyn router_clock::RuntimeClock>,
-    ));
-    supervisor.attach_message_fifo(&queue);
+    );
     let first = OperationId::generate();
     let second = OperationId::generate();
     let (first_held, release_first) = supervisor.pause_terminal_write_of(&first);
@@ -140,7 +157,7 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
         ))
         .await
         .expect("second queued");
-    let retry_deadline = ClockInstant::ZERO.after(MIN_RETRY_DELAY);
+    let retry_deadline = ClockInstant::ZERO.after(QUEUE_RETRY_DELAY);
     // Either the queued message sleeps on the injected clock, or (a wrong
     // build) its wait ends first: sent and settled, or never on that clock.
     let second_waited = tokio::select! {
@@ -152,11 +169,11 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
     let first_settled = wait(&first).await.expect("first settles");
     let prompts_after_first = recorded_requests(&receipt, "session/prompt");
     clock
-        .advance(MIN_RETRY_DELAY)
+        .advance(QUEUE_RETRY_DELAY)
         .expect("advance the injected clock");
     let second_settled = wait(&second).await.expect("second settles");
     let prompts = recorded_requests(&receipt, "session/prompt");
-    queue.shutdown().await;
+    route.shutdown_queue().await;
     let stopped = supervisor.shutdown().await;
 
     // Assert

@@ -323,10 +323,3 @@ mod turn_admission_tests;
 #[cfg(test)]
 #[path = "agent_session_client/submitted_prompt_test.rs"]
 mod submitted_prompt_tests;
-
-#[cfg(test)]
-mod scripted_line_agent;
-
-#[cfg(test)]
-#[path = "agent_session_client/close_turn_wait_sim_test.rs"]
-mod close_turn_wait_sim_tests;

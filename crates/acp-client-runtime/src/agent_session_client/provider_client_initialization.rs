@@ -91,18 +91,20 @@ impl<P: InteractionPort> AgentSessionClient<P> {
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {
-    /// A connection to an in-process agent, for this crate's scenario tests
-    /// (design note §11.8): the same connection as `initialize`, over the
-    /// transport's duplex pair instead of a process's stdio.
-    #[cfg(test)]
-    pub(super) async fn initialize_in_process(
-        transport: super::provider_transport::ProviderTransport,
+    /// A connection to an in-process agent, for scenario tests (design note
+    /// §11.8): the same connection as `initialize`, over the client's end of
+    /// a duplex pair, with `agent` serving the other end, instead of a
+    /// process's stdio. Test support only.
+    #[cfg(feature = "test-support")]
+    pub async fn initialize_in_process(
+        connection: tokio::io::DuplexStream,
+        agent: tokio::task::JoinHandle<()>,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
         behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         Self::initialize_over_transport(
-            transport,
+            super::provider_transport::ProviderTransport::in_process(connection, agent),
             crate::ProviderPersistenceTarget::Unspecified,
             crate::ProviderModelPicker::Standard,
             INITIALIZE_TIMEOUT,

@@ -20,7 +20,7 @@ pub(super) struct ProviderTransport {
 pub(super) enum ProviderLifetime {
     Process(async_process::Child),
     /// A scenario test's in-process agent task.
-    #[cfg(test)]
+    #[cfg(feature = "test-support")]
     InProcess(tokio::task::JoinHandle<()>),
 }
 
@@ -42,7 +42,7 @@ impl ProviderTransport {
     }
 
     /// An in-process agent's end of a duplex pair, and the task serving it.
-    #[cfg(test)]
+    #[cfg(feature = "test-support")]
     pub(super) fn in_process(
         connection: tokio::io::DuplexStream,
         agent: tokio::task::JoinHandle<()>,
@@ -64,7 +64,7 @@ impl ProviderLifetime {
             Self::Process(child) => {
                 let _status = child.status().await;
             }
-            #[cfg(test)]
+            #[cfg(feature = "test-support")]
             Self::InProcess(agent) => {
                 let _joined = agent.await;
             }
@@ -86,7 +86,7 @@ impl ProviderLifetime {
                 let _result = child.kill();
                 let _result = child.status().await;
             }
-            #[cfg(test)]
+            #[cfg(feature = "test-support")]
             Self::InProcess(agent) => {
                 agent.abort();
                 let _joined = agent.await;

@@ -22,6 +22,8 @@ mod explicit_router_restart;
 mod external_provider_runtime;
 mod provider_acp_delivery_route;
 mod provider_acp_message_fifo;
+#[cfg(feature = "test-support")]
+pub use provider_acp_message_fifo::QUEUE_RETRY_DELAY;
 mod provider_acp_route_claim;
 mod provider_queue_operation_registry;
 mod provider_session_command_port;

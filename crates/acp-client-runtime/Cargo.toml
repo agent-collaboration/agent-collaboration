@@ -11,6 +11,9 @@ workspace = true
 
 [features]
 test-observation = []
+# Scenario tests only (design note §11.8): the in-process transport and the
+# named-point hook. Enabled only from this crate's own dev-dependencies.
+test-support = []
 
 [dependencies]
 agent-client-protocol.workspace = true
@@ -30,6 +33,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+acp-client-runtime = { path = ".", features = ["test-support"] }
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 # Client-level race scenarios (design note §11.8); dev-only, never a normal dependency.
 turmoil = { version = "=0.7.2", features = ["unstable-barriers"] }

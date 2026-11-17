@@ -34,6 +34,11 @@ const QUEUE_CAPACITY: usize = 128;
 const MAX_SESSION_QUEUES: usize = 1024;
 const SETTLEMENT_WAIT_SECONDS: u32 = 10;
 const MIN_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(50);
+/// The first retry wait of a line whose commit is refused for now: a scenario
+/// test reads it to know the injected-clock deadline a waiting message
+/// sleeps to (design note §11.8). Test support only.
+#[cfg(feature = "test-support")]
+pub const QUEUE_RETRY_DELAY: std::time::Duration = MIN_RETRY_DELAY;
 const MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 /// Why a message ends not sent when its session closed (D1 R14).
 pub(crate) const SESSION_CLOSED: &str = "session closed";
@@ -506,7 +511,3 @@ mod dispatch_ownership_tests;
 #[cfg(test)]
 #[path = "provider_acp_message_fifo_router_close_test.rs"]
 mod router_close_tests;
-
-#[cfg(test)]
-#[path = "provider_acp_message_fifo_settlement_test.rs"]
-mod settlement_tests;

@@ -58,3 +58,13 @@ Relaunched test names derive from `module_path!()`. Normally completed children
 with captured output must report one passed test. Intentional exits, kills,
 exec replacements and managed children with discarded output retain actual
 readiness, effect, exit-code or reaping checks that reject zero matches.
+
+The provider scenarios that hold the Host at a named point (design note
+§11.8) use the crate's `test-support` feature, which exposes only
+`ExternalProviderSupervisor::pause_terminal_write_of` and `QUEUE_RETRY_DELAY`:
+`provider_queue_settlement` (a queued message commits only after the running
+prompt's settlement is written, on a ManualClock), `provider_persistence_overlay`
+(a settlement that fails to save answers its outcome and durable stage, through
+collaboration-runtime's StoreFault) and `provider_router_close` (Router-side
+release cases through the public runtime). Cases that prove a private invariant
+stay unit tests next to their code.

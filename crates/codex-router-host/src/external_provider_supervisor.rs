@@ -23,6 +23,8 @@ mod provider_session_inspection;
 mod provider_session_lifecycle;
 mod provider_session_scratch;
 mod provider_settings_control;
+#[cfg(any(test, feature = "test-support"))]
+mod supervisor_named_points;
 #[cfg(test)]
 mod supervisor_test_pauses;
 use provider_operation_failure::{
@@ -144,7 +146,7 @@ struct SupervisorInner {
     queue_enqueue_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Pauses one operation's settlement before its terminal write: its
     /// outcome is known, nothing is stored yet, and its turn is still held.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     terminal_write_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
     /// Steers in flight keep every turn's approver record (D1 C1).
     approver_pins: StdMutex<ApproverPins>,
@@ -189,7 +191,7 @@ impl Drop for TurnApproverPin {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 struct AdmissionTestPause {
     entered: tokio::sync::oneshot::Sender<()>,
     release: tokio::sync::oneshot::Receiver<()>,
@@ -468,7 +470,7 @@ impl ExternalProviderSupervisor {
                 steer_injection_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 queue_enqueue_test_pause: StdMutex::new(None),
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 terminal_write_test_pause: StdMutex::new(None),
                 approver_pins: StdMutex::new(ApproverPins::default()),
             }),

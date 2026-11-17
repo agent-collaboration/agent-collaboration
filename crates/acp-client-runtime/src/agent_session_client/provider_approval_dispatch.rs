@@ -102,9 +102,8 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
             &provider_session_id,
             turn,
         ));
-        #[cfg(test)]
-        turmoil::barriers::trigger(crate::session_cell_bookkeeping::ClientSimPoint::PromptTurnOpen)
-            .await;
+        #[cfg(feature = "test-support")]
+        crate::sim_points::reach(crate::sim_points::ClientSimPoint::PromptTurnOpen).await;
         let result = self
             .submit_in_turn(
                 provider_session_id,

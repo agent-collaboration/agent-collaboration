@@ -22,7 +22,7 @@ impl SupervisorInner {
         completion: ProviderOperationCompletion,
     ) {
         // A test holds this operation here, before its terminal write.
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         let terminal_write_test_pause = {
             let mut pause = self
                 .terminal_write_test_pause
@@ -36,7 +36,7 @@ impl SupervisorInner {
                 }
             }
         };
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if let Some(pause) = terminal_write_test_pause {
             let _result = pause.entered.send(());
             let _result = pause.release.await;

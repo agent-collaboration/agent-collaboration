@@ -67,6 +67,8 @@ mod session_cell_bookkeeping;
 mod session_cell_table;
 mod session_event_sink;
 mod session_runs;
+#[cfg(feature = "test-support")]
+pub mod sim_points;
 pub use session_runs::SessionRuns;
 mod state_machine_cell;
 

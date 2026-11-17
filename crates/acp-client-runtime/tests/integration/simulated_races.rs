@@ -1,15 +1,76 @@
-//! A Turmoil scenario (design note §11.8, composed async orders): the real
+//! Turmoil scenarios (design note §11.8, composed async orders): the real
 //! client over a duplex pair to an in-process agent, on Turmoil's
-//! deterministic runtime. A barrier observes the close reaching its turn
-//! wait; nothing is timed.
+//! deterministic runtime. The client's named points (test-support) are
+//! forwarded to Turmoil's barriers; nothing is timed.
 
-use super::provider_transport::ProviderTransport;
-use super::scripted_line_agent::ScriptedLineAgent;
-use super::turn_admission_tests::NoopInteractionPort;
-use super::*;
-use crate::session_cell_bookkeeping::ClientSimPoint;
-use crate::session_event_sink::{EventSinkClosed, HistoryReplayFuture};
+#![expect(
+    clippy::expect_used,
+    reason = "A connection or session the scenario cannot set up must fail it at once."
+)]
+
+mod scripted_line_agent;
+
+use acp_client_runtime::sim_points::ClientSimPoint;
+use acp_client_runtime::{
+    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderRuntimeError,
+    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderTurnInput,
+    RefusedApprovalOffer, SessionEventSink,
+};
+use scripted_line_agent::ScriptedLineAgent;
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use turmoil::barriers::{Barrier, Reaction};
+
+/// Forwards every named point to Turmoil's barriers, on the simulation's
+/// own thread.
+fn forward_named_points_to_turmoil() {
+    acp_client_runtime::sim_points::install(|point| Box::pin(turmoil::barriers::trigger(point)));
+}
+
+/// An interaction port that never sees a request in these scenarios.
+struct NoInteraction;
+
+impl InteractionPort for NoInteraction {
+    type Context = ();
+    type OperationId = u64;
+    fn operation_id(_context: &Self::Context) -> Self::OperationId {
+        1
+    }
+    fn binding_retirement(_context: &Self::Context) -> CancellationToken {
+        CancellationToken::new()
+    }
+    fn request_approval(
+        &self,
+        _context: (),
+        _request: session_event_model::ApprovalRequest,
+        _turn_cancellation: CancellationToken,
+        _agent_cancellation: CancellationToken,
+    ) -> InteractionFuture<'_, ApprovalPortOutcome> {
+        Box::pin(async { ApprovalPortOutcome::Cancelled })
+    }
+    fn request_question(
+        &self,
+        _context: (),
+        _request: session_event_model::QuestionRequest,
+        _turn_cancellation: CancellationToken,
+        _agent_cancellation: CancellationToken,
+    ) -> InteractionFuture<'_, session_event_model::QuestionResponse> {
+        Box::pin(async { session_event_model::QuestionResponse::Cancelled })
+    }
+    fn record_refusal(
+        &self,
+        _context: (),
+        _refusal: RefusedApprovalOffer,
+    ) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+    fn cancel_all(&self, _context: (), _reason: &'static str) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+}
 
 /// Accepts every event and keeps none.
 struct DiscardingSink;
@@ -42,6 +103,7 @@ impl SessionEventSink for DiscardingSink {
 /// released. The agent reads no session/close while it is held.
 #[test]
 fn a_close_frees_the_session_only_after_its_held_turn_end() {
+    forward_named_points_to_turmoil();
     let mut simulation = turmoil::Builder::new().build();
     simulation.client("router", async move {
         // Arrange: a session whose answered prompt still holds its turn end.
@@ -52,10 +114,11 @@ fn a_close_frees_the_session_only_after_its_held_turn_end() {
         let (agent, agent_task) = ScriptedLineAgent::start(agent_end);
         let client = Arc::new(
             AgentSessionClient::initialize_in_process(
-                ProviderTransport::in_process(client_end, agent_task),
-                Arc::new(NoopInteractionPort),
+                client_end,
+                agent_task,
+                Arc::new(NoInteraction),
                 Arc::new(DiscardingSink),
-                Arc::new(crate::test_behavior::TestProviderBehavior),
+                Arc::new(super::test_behavior::TestProviderBehavior),
             )
             .await
             .expect("the connection initializes"),
@@ -71,9 +134,9 @@ fn a_close_frees_the_session_only_after_its_held_turn_end() {
             .submit_holding_turn_end(
                 session.clone(),
                 session_event_model::InputId::generate(),
-                crate::ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(
-                    vec![text],
-                )),
+                ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(vec![
+                    text,
+                ])),
                 (),
                 None,
                 None,
@@ -118,7 +181,7 @@ fn a_close_frees_the_session_only_after_its_held_turn_end() {
 
 /// The scenario's client and agent, with one live session.
 async fn connected() -> (
-    Arc<AgentSessionClient<NoopInteractionPort>>,
+    Arc<AgentSessionClient<NoInteraction>>,
     ScriptedLineAgent,
     String,
 ) {
@@ -126,10 +189,11 @@ async fn connected() -> (
     let (agent, agent_task) = ScriptedLineAgent::start(agent_end);
     let client = Arc::new(
         AgentSessionClient::initialize_in_process(
-            ProviderTransport::in_process(client_end, agent_task),
-            Arc::new(NoopInteractionPort),
+            client_end,
+            agent_task,
+            Arc::new(NoInteraction),
             Arc::new(DiscardingSink),
-            Arc::new(crate::test_behavior::TestProviderBehavior),
+            Arc::new(super::test_behavior::TestProviderBehavior),
         )
         .await
         .expect("the connection initializes"),
@@ -151,6 +215,7 @@ async fn connected() -> (
 /// never reads it, and the close then completes.
 #[test]
 fn a_close_cannot_overtake_a_prompt_whose_turn_is_open() {
+    forward_named_points_to_turmoil();
     let mut simulation = turmoil::Builder::new().build();
     simulation.client("router", async move {
         // Arrange
@@ -174,9 +239,9 @@ fn a_close_cannot_overtake_a_prompt_whose_turn_is_open() {
                     .submit_holding_turn_end(
                         session,
                         session_event_model::InputId::generate(),
-                        crate::ProviderTurnInput::Prompt(
-                            session_event_model::ProviderSubmission::plain(vec![text]),
-                        ),
+                        ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(
+                            vec![text],
+                        )),
                         (),
                         None,
                         None,
@@ -221,7 +286,7 @@ fn a_close_cannot_overtake_a_prompt_whose_turn_is_open() {
         assert!(
             matches!(
                 &prompted,
-                Err(crate::ExternalProviderRuntimeError::LocalBusy { answer })
+                Err(ExternalProviderRuntimeError::LocalBusy { answer })
                     if answer == "session is closing; wait for it"
             ),
             "{prompted:?}"
