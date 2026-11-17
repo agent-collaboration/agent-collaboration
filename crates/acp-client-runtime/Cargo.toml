@@ -14,6 +14,8 @@ test-observation = []
 
 [dependencies]
 agent-client-protocol.workspace = true
+# The type of the child the ACP SDK spawns (provider_transport.rs).
+async-process = "2.5.0"
 futures-util.workspace = true
 rustix.workspace = true
 session-event-model = { path = "../session-event-model", version = "0.1.40" }
@@ -28,6 +30,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
+# Client-level race scenarios (design note §11.8); dev-only, never a normal dependency.
+turmoil = { version = "=0.7.2", features = ["unstable-barriers"] }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4", default-features = false }
 tempfile = "3.27.0"
 tracing-subscriber.workspace = true

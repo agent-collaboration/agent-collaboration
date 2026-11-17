@@ -89,3 +89,28 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         .await
     }
 }
+
+impl<P: InteractionPort> AgentSessionClient<P> {
+    /// A connection to an in-process agent, for this crate's scenario tests
+    /// (design note §11.8): the same connection as `initialize`, over the
+    /// transport's duplex pair instead of a process's stdio.
+    #[cfg(test)]
+    pub(super) async fn initialize_in_process(
+        transport: super::provider_transport::ProviderTransport,
+        interaction_port: Arc<P>,
+        event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
+        Self::initialize_over_transport(
+            transport,
+            crate::ProviderPersistenceTarget::Unspecified,
+            crate::ProviderModelPicker::Standard,
+            INITIALIZE_TIMEOUT,
+            Vec::new(),
+            interaction_port,
+            event_sink,
+            behavior,
+        )
+        .await
+    }
+}

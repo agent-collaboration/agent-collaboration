@@ -3,22 +3,21 @@
 use super::{AtomicU64, ExternalProviderApprovalRefusalWarning};
 
 use super::{
-    AcpAgent, AcpProtocolVersion, ActiveApprovalContext, AgentSessionClient, Arc,
-    CancellationToken, Client, CreateAdmissionInputs, CursorPlanItems, Duration,
-    ExternalProviderAdmission, ExternalProviderApprovalRefusalReason, ExternalProviderLaunch,
-    ExternalProviderRuntimeError, HashMap, InteractionPort, Lines, MAX_ACP_FRAME_BYTES, McpServer,
-    NewSessionRequest, Ordering, PendingSessionAdmission, PermissionDispatchState, ProtocolVersion,
-    ProviderAuthStatusHandler, ProviderCapabilityReport, ProviderCommand,
-    ProviderConnectionActivity, ProviderCursorCreatePlanHandler, ProviderCursorQuestionHandler,
-    ProviderCursorTodoHandler, ProviderFormElicitationHandler, ProviderFrameObservation,
-    ProviderKnownSessions, ProviderPromptDispatchObservation, ProviderRequestFallback,
-    ProviderRequestSessionGuard, ProviderSessionActivity, ProviderSessionCommand,
-    ProviderSessionRuntimeHandles, RequestPermissionRequest, SessionEventSink,
-    StaticSessionActivation, ToolCallOwnershipHandler, active_turn_cancellation,
-    fail_pending_session_admission, initialize_provider_connection, provider_lifecycle_requests,
-    provider_session_restore, publish_pending_session_admission, record_permission_refusal,
-    register_provider_session, register_static_provider_session, run_create_admission,
-    spawn_external_approval_dispatch,
+    AcpProtocolVersion, ActiveApprovalContext, AgentSessionClient, Arc, CancellationToken, Client,
+    CreateAdmissionInputs, CursorPlanItems, Duration, ExternalProviderAdmission,
+    ExternalProviderApprovalRefusalReason, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    HashMap, InteractionPort, Lines, MAX_ACP_FRAME_BYTES, McpServer, NewSessionRequest, Ordering,
+    PendingSessionAdmission, PermissionDispatchState, ProtocolVersion, ProviderAuthStatusHandler,
+    ProviderCapabilityReport, ProviderCommand, ProviderConnectionActivity,
+    ProviderCursorCreatePlanHandler, ProviderCursorQuestionHandler, ProviderCursorTodoHandler,
+    ProviderFormElicitationHandler, ProviderFrameObservation, ProviderKnownSessions,
+    ProviderPromptDispatchObservation, ProviderRequestFallback, ProviderRequestSessionGuard,
+    ProviderSessionActivity, ProviderSessionCommand, ProviderSessionRuntimeHandles,
+    RequestPermissionRequest, SessionEventSink, StaticSessionActivation, ToolCallOwnershipHandler,
+    active_turn_cancellation, fail_pending_session_admission, initialize_provider_connection,
+    provider_lifecycle_requests, provider_session_restore, publish_pending_session_admission,
+    record_permission_refusal, register_provider_session, register_static_provider_session,
+    run_create_admission, spawn_external_approval_dispatch,
 };
 
 impl<P: InteractionPort> AgentSessionClient<P> {
@@ -31,12 +30,42 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         event_sink: Arc<dyn SessionEventSink>,
         behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
+        let transport = super::provider_transport::ProviderTransport::spawn(&launch)?;
+        Self::initialize_over_transport(
+            transport,
+            launch.persistence_target,
+            model_picker,
+            initialize_timeout,
+            configured_mcp_servers,
+            interaction_port,
+            event_sink,
+            behavior,
+        )
+        .await
+    }
+
+    /// Opens the ACP connection over `transport` and initializes it.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The connection's inputs, passed through from the public initializers."
+    )]
+    pub(super) async fn initialize_over_transport(
+        transport: super::provider_transport::ProviderTransport,
+        persistence_target: crate::ProviderPersistenceTarget,
+        model_picker: crate::ProviderModelPicker,
+        initialize_timeout: Duration,
+        configured_mcp_servers: Vec<McpServer>,
+        interaction_port: Arc<P>,
+        event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
         let initialize_deadline = tokio::time::Instant::now() + initialize_timeout;
-        let agent = AcpAgent::new(launch.sdk_config());
-        let persistence_target = launch.persistence_target;
-        let (stdin, stdout, stderr, mut child) = agent
-            .spawn_process()
-            .map_err(|error| ExternalProviderRuntimeError::Launch(error.to_string()))?;
+        let super::provider_transport::ProviderTransport {
+            writer,
+            reader,
+            stderr,
+            mut lifetime,
+        } = transport;
         let shutdown = CancellationToken::new();
         let sink_closed = CancellationToken::new();
         let client_sink_closed = sink_closed.clone();
@@ -146,44 +175,40 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task = tokio::spawn(async move {
             use futures_util::StreamExt as _;
             use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
-            use tokio_util::compat::{
-                FuturesAsyncReadCompatExt as _, FuturesAsyncWriteCompatExt as _,
-            };
 
-            let stderr_task =
-                tokio::spawn(crate::provider_transport_diagnostics::drain_provider_stderr(stderr));
+            let stderr_task = stderr.map(|stderr| {
+                tokio::spawn(crate::provider_transport_diagnostics::drain_provider_stderr(stderr))
+            });
             let outgoing = crate::provider_transport_diagnostics::ObservedProviderSink::new(
                 futures_util::SinkExt::<String>::sink_map_err(
-                    FramedWrite::new(stdin.compat_write(), LinesCodec::new()),
+                    FramedWrite::new(writer, LinesCodec::new()),
                     std::io::Error::other,
                 ),
             );
             let incoming_frame_observation = Arc::clone(&task_frame_observation);
-            let incoming = FramedRead::new(
-                stdout.compat(),
-                LinesCodec::new_with_max_length(MAX_ACP_FRAME_BYTES),
-            )
-            .map(move |line| {
-                if let Ok(frame) = &line {
-                    crate::provider_transport_diagnostics::record_incoming_frame(frame);
-                }
-                line.map_err(|error| {
-                    crate::provider_transport_diagnostics::record_incoming_error();
-                    if matches!(
-                        error,
-                        tokio_util::codec::LinesCodecError::MaxLineLengthExceeded
-                    ) {
-                        incoming_frame_observation.record_limit_exceeded();
-                    }
-                    std::io::Error::other(error)
-                })
-            })
-            .chain(futures_util::stream::once(async {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "provider stdout closed",
-                ))
-            }));
+            let incoming =
+                FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_ACP_FRAME_BYTES))
+                    .map(move |line| {
+                        if let Ok(frame) = &line {
+                            crate::provider_transport_diagnostics::record_incoming_frame(frame);
+                        }
+                        line.map_err(|error| {
+                            crate::provider_transport_diagnostics::record_incoming_error();
+                            if matches!(
+                                error,
+                                tokio_util::codec::LinesCodecError::MaxLineLengthExceeded
+                            ) {
+                                incoming_frame_observation.record_limit_exceeded();
+                            }
+                            std::io::Error::other(error)
+                        })
+                    })
+                    .chain(futures_util::stream::once(async {
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::UnexpectedEof,
+                            "provider stdout closed",
+                        ))
+                    }));
             let final_interaction_port = Arc::clone(&callback_interaction_port);
             let connection = Client.builder().name("codex-router-host")
                 .with_handler(ProviderRequestSessionGuard::new(request_known_sessions))
@@ -775,7 +800,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             tokio::pin!(connection);
             let child_exited = tokio::select! {
                 _result = &mut connection => false,
-                _status = child.status() => {
+                () = lifetime.exited() => {
                     // The exited child may have flushed its initialize response into stdout.
                     // Let the connection settle admission before retiring it.
                     tokio::select! {
@@ -796,18 +821,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             }
             .retire()
             .await;
-            #[cfg(unix)]
-            if !child_exited
-                && let Some(process_id) = rustix::process::Pid::from_raw(child.id().cast_signed())
-            {
-                let _result =
-                    rustix::process::kill_process_group(process_id, rustix::process::Signal::KILL);
-            }
             if !child_exited {
-                let _result = child.kill();
-                let _result = child.status().await;
+                lifetime.end().await;
             }
-            let _result = stderr_task.await;
+            if let Some(stderr_task) = stderr_task {
+                let _result = stderr_task.await;
+            }
         });
 
         let (admission, base_capabilities) =

@@ -310,9 +310,20 @@ impl Drop for CellTurnGuard {
     }
 }
 
+/// Named points a scenario test can observe or hold (design note §11.8),
+/// through Turmoil's barriers. Compiled only for this crate's tests.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ClientSimPoint {
+    /// A close reached its wait for the session's turn end.
+    CloseTurnWait,
+}
+
 /// Waits while the session's close is ending its running turn: the close
 /// frees the session only after that turn's end is recorded.
 pub(super) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &str) {
+    #[cfg(test)]
+    turmoil::barriers::trigger(ClientSimPoint::CloseTurnWait).await;
     cells
         .wait_while(session_id, |cell| {
             matches!(

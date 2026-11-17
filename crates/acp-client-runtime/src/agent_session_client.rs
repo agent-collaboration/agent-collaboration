@@ -27,6 +27,7 @@ mod provider_session_admission;
 mod provider_session_queue;
 mod provider_session_restore;
 pub(crate) mod provider_setting_application;
+mod provider_transport;
 mod session_cell_bookkeeping;
 pub(crate) use session_cell_bookkeeping::{
     apply_setting, busy_answer, hold_setting_at_create, report_actor_exit, settings_held,
@@ -341,3 +342,10 @@ mod turn_admission_tests;
 #[cfg(test)]
 #[path = "agent_session_client/submitted_prompt_test.rs"]
 mod submitted_prompt_tests;
+
+#[cfg(test)]
+mod scripted_line_agent;
+
+#[cfg(test)]
+#[path = "agent_session_client/close_turn_wait_sim_test.rs"]
+mod close_turn_wait_sim_tests;
