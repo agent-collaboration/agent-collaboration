@@ -37,7 +37,10 @@ jobs:
     permissions:
       contents: write
     runs-on: macos-15
-    timeout-minutes: 45
+    # Raised by the owner 2026-11-16 so a cold macOS release build (~54 min,
+    # after a cache eviction) still finishes and saves the cache again; a warm
+    # build is ~31 min.
+    timeout-minutes: 90
     outputs:
       asset_sha256: ${{ steps.artifact.outputs.sha256 }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
