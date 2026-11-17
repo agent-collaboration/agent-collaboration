@@ -1,6 +1,6 @@
 //! The engine's Hegel stateful (model-based) test on the native host. Random
 //! sequences of requests, alarm firings, clock advances across 5-minute marks,
-//! injected faults, admin repair and restarts drive the real engine; the five
+//! injected faults, admin repair and restarts drive the real engine; the
 //! invariants are checked after every step.
 //!
 //! hegeltest 0.52.6 `src/stateful.rs`: `#[hegel::state_machine]` turns `#[rule]`
@@ -9,9 +9,14 @@
 //! Rules are synchronous `fn(&mut self, TestCase)`, so the model owns one
 //! current-thread Tokio runtime and blocks on it; the host's alarm driver is a
 //! task on that runtime and only the injected `ManualClock` ever moves time.
+//!
+//! The model predicts, independently of the store, what every due-batch unit
+//! did to each subject (fired, failed, not applied, stale) and the failure
+//! record spec R4 then requires; the invariants compare the store exactly.
 // Test-only module: clippy's test allowances (clippy.toml) apply to it.
 #![cfg(test)]
 use super::engine_admin_support::*;
+use super::engine_stateful_attempts::{AttemptOutcome, ExpectedRecord};
 use super::support::*;
 use central_storage::SqlValue;
 use collaboration_central_core::{
@@ -25,7 +30,11 @@ use router_clock::RuntimeClock;
 use workspace_model::central_mail::{CentralMailAnswer, CentralMailOperation, CentralMailResult};
 
 const SPACING_MS: i64 = 30_000;
-const MARK_MS: i64 = 300_000;
+/// Scheduler turns `settle` gives the alarm driver to make visible progress.
+/// A live driver needs a handful per store round trip; a stalled or dead one
+/// never progresses, so the budget turns a hang into a failing case without
+/// reading any clock.
+const PROGRESS_TURNS: u32 = 5_000_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Kind {
@@ -46,12 +55,19 @@ impl Kind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Fate {
     Live,
-    /// Cancelled (wake) or stopped (probe) after this many firings.
-    Finished {
-        fired: i64,
-    },
+    /// Cancelled (wake) or stopped (probe).
+    Finished,
     /// Discarded by admin while retired.
     Discarded,
+}
+
+/// A one-shot commit fault armed on one subject's next commit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ArmedFault {
+    /// `DatabaseCode(19)`: the commit is rejected, a recorded failure.
+    Rejected,
+    AppliedAnswerLost,
+    NotAppliedAnswerLost,
 }
 
 #[derive(Debug)]
@@ -60,10 +76,15 @@ struct Subject {
     key: String,
     group: Option<String>,
     due: Time,
-    /// When the subject last became due to the engine: its due time, or the
-    /// moment an admin retry handed it back (V13: the next due batch works it).
+    /// When the subject last became due to the engine: its due time, the
+    /// moment an admin retry handed it back (V13), or the batch whose commit
+    /// answer was lost before it applied.
     eligible_at: Time,
     fate: Fate,
+    /// The model's own record of whether the occurrence fired.
+    fired: bool,
+    /// The failure record R4 requires, predicted from the attempts.
+    expected: ExpectedRecord,
     /// The original target while a corruption keeps the wake from decoding.
     corrupted_target: Option<SqlValue>,
 }
@@ -72,10 +93,16 @@ struct EngineModel {
     runtime: tokio::runtime::Runtime,
     engine: Option<EngineOrg>,
     subjects: Vec<Subject>,
-    /// Batch starts seen in this process lifetime (the floor is in memory).
+    /// Every due batch claimed in this process lifetime (the floor is in
+    /// memory), one entry per batch even at the same millisecond.
     batch_starts: Vec<i64>,
-    /// The key of the last armed one-shot commit fault (arming replaces it).
-    armed_fault: Option<String>,
+    /// How many unit starts and batch claims of this runtime were observed.
+    seen_units: usize,
+    seen_batches: usize,
+    /// The armed one-shot commit fault and its subject (arming replaces it).
+    armed_fault: Option<(String, ArmedFault)>,
+    /// Whether the armed fault was still pending when last observed.
+    fault_pending: bool,
 }
 
 impl EngineModel {
@@ -100,18 +127,111 @@ impl EngineModel {
         );
         indexes.get(choice).copied()
     }
-    /// Lets the host's own driver finish everything due at the current time.
+    fn commit_fault_pending(&self) -> bool {
+        self.block(async {
+            self.engine()
+                .runtime()
+                .await
+                .statement_host()
+                .engine_commit_fault_pending()
+        })
+    }
+    fn arm(&mut self, key: String, fault: ArmedFault) {
+        self.armed_fault = Some((key, fault));
+        self.fault_pending = true;
+    }
+    /// A request on `key` used up the armed fault with its own commit.
+    fn request_consumed_fault(&mut self, key: &str) {
+        if self
+            .armed_fault
+            .as_ref()
+            .is_some_and(|(armed, _)| armed == key)
+            && !self.commit_fault_pending()
+        {
+            self.armed_fault = None;
+            self.fault_pending = false;
+        }
+    }
+    /// Lets the host's own driver finish everything due at the current time,
+    /// then predicts what each new due-batch unit did.
     fn settle(&mut self) {
         let engine = self.engine();
         self.runtime.block_on(settle(engine));
-        let starts = self.block(engine.runtime()).due_unit_starts();
-        for start in starts {
-            if !self.batch_starts.contains(&start.batch_start_unix_millis) {
-                self.batch_starts.push(start.batch_start_unix_millis);
+        self.observe();
+    }
+    fn observe(&mut self) {
+        let runtime = self.block(self.engine().runtime());
+        let batches = runtime.due_batch_starts();
+        self.batch_starts
+            .extend_from_slice(&batches[self.seen_batches.min(batches.len())..]);
+        self.seen_batches = batches.len();
+        let units = runtime.due_unit_starts();
+        let new_units = units[self.seen_units.min(units.len())..].to_vec();
+        self.seen_units = units.len();
+        let pending_now = runtime.statement_host().engine_commit_fault_pending();
+        // The armed fault was used up during this step by one of its attempts.
+        let mut consumed = self
+            .armed_fault
+            .clone()
+            .filter(|_| self.fault_pending && !pending_now);
+        for unit in new_units {
+            let Some(index) = self.subjects.iter().position(|subject| {
+                subject.kind.machine() == unit.machine_kind && subject.key == unit.subject_key
+            }) else {
+                continue;
+            };
+            let outcome = self.attempt_outcome(index, &mut consumed);
+            let subject = &mut self.subjects[index];
+            let earliest = subject
+                .expected
+                .earliest_batch_ms(&subject.key, subject.due.timestamp_millis());
+            assert!(
+                unit.batch_start_unix_millis >= earliest,
+                "{} was worked by the batch at {} before {earliest} (due {})",
+                subject.key,
+                unit.batch_start_unix_millis,
+                subject.due
+            );
+            let batch = unit.batch_start_unix_millis;
+            match outcome {
+                AttemptOutcome::Fired => {
+                    subject.fired = true;
+                    subject.expected = ExpectedRecord::None;
+                }
+                AttemptOutcome::Failed => {
+                    subject.expected = subject.expected.after_failure(&subject.key, batch);
+                }
+                AttemptOutcome::NotApplied => {
+                    subject.eligible_at = chrono::DateTime::from_timestamp_millis(batch).unwrap();
+                }
+                AttemptOutcome::Stale => {}
             }
         }
+        if !pending_now {
+            self.armed_fault = None;
+        }
+        self.fault_pending = pending_now && self.armed_fault.is_some();
     }
-    fn fired(&self, subject: &Subject) -> i64 {
+    fn attempt_outcome(
+        &self,
+        index: usize,
+        consumed: &mut Option<(String, ArmedFault)>,
+    ) -> AttemptOutcome {
+        let subject = &self.subjects[index];
+        if subject.fate != Fate::Live || subject.fired {
+            return AttemptOutcome::Stale;
+        }
+        // A corrupt row fails before its commit, so it never uses a fault.
+        if subject.corrupted_target.is_some() {
+            return AttemptOutcome::Failed;
+        }
+        match consumed.take_if(|(key, _)| *key == subject.key) {
+            Some((_, ArmedFault::Rejected)) => AttemptOutcome::Failed,
+            Some((_, ArmedFault::NotAppliedAnswerLost)) => AttemptOutcome::NotApplied,
+            Some((_, ArmedFault::AppliedAnswerLost)) | None => AttemptOutcome::Fired,
+        }
+    }
+    fn fired_in_store(&self, subject: &Subject) -> i64 {
         let engine = self.engine();
         match subject.kind {
             Kind::Wake => self.block(engine.wake_messages(&subject.key)),
@@ -123,39 +243,28 @@ impl EngineModel {
     }
     /// A raw fixture statement on `key` would consume a commit fault armed on it.
     fn fault_armed_on(&self, key: &str) -> bool {
-        self.armed_fault.as_deref() == Some(key)
-            && self.block(async {
-                self.engine()
-                    .runtime()
-                    .await
-                    .statement_host()
-                    .engine_commit_fault_pending()
-            })
-    }
-    fn record(&self, subject: &Subject) -> Option<(String, i64, Option<i64>)> {
-        let rows = self.block(self.engine().record(subject.kind.machine(), &subject.key));
-        rows.first().map(|row| {
-            let state = match &row[0] {
-                SqlValue::Text(state) => state.clone(),
-                other => panic!("record state {other:?}"),
-            };
-            let count = match &row[1] {
-                SqlValue::Integer(count) => count.get(),
-                other => panic!("record count {other:?}"),
-            };
-            let next_try = match &row[2] {
-                SqlValue::Text(at) => Some(at.parse::<Time>().unwrap().timestamp_millis()),
-                SqlValue::Null => None,
-                other => panic!("record next_try_at {other:?}"),
-            };
-            (state, count, next_try)
-        })
+        self.armed_fault
+            .as_ref()
+            .is_some_and(|(armed, _)| armed == key)
+            && self.commit_fault_pending()
     }
 }
 
+/// Polls `check` between scheduler turns; a driver that stops making progress
+/// fails the case with `what` instead of hanging it.
+async fn within_progress_budget<T>(what: &str, mut check: impl FnMut() -> Option<T>) -> T {
+    for _ in 0..PROGRESS_TURNS {
+        if let Some(value) = check() {
+            return value;
+        }
+        tokio::task::yield_now().await;
+    }
+    panic!("the alarm driver made no progress toward {what} in {PROGRESS_TURNS} scheduler turns");
+}
+
 /// Waits on the host's actual alarm driver: until it completes a due alarm, or
-/// re-checks a future alarm at the current manual time. A failed drive parks the
-/// driver on a next-mark retry, so it fails the case instead of hanging.
+/// re-checks a future alarm at the current manual time. A failed, stalled or
+/// dead driver fails the case.
 async fn settle(engine: &EngineOrg) {
     let runtime = engine.runtime().await;
     assert!(
@@ -166,22 +275,33 @@ async fn settle(engine: &EngineOrg) {
     for _ in 0..16 {
         let completed = runtime.alarm_completion_count();
         let failures = runtime.alarm_failures().len();
+        let failed = || {
+            panic!(
+                "the alarm driver failed: {:?}; due batch {:?}",
+                runtime.alarm_failures(),
+                runtime.due_batch_snapshot()
+            )
+        };
         let now = engine.now().timestamp_millis();
         match runtime.statement_host().alarm() {
-            Some(alarm) if alarm.unix_millis() <= now => tokio::select! {
-                () = runtime.until_alarm_completed(completed + 1) => {}
-                () = runtime.until_alarm_failed(failures + 1) => panic!(
-                    "the alarm driver failed: {:?}; due batch {:?}",
-                    runtime.alarm_failures(),
-                    runtime.due_batch_snapshot()
-                ),
-            },
+            Some(alarm) if alarm.unix_millis() <= now => {
+                within_progress_budget("completing the due alarm", || {
+                    if runtime.alarm_failures().len() > failures {
+                        failed();
+                    }
+                    (runtime.alarm_completion_count() > completed).then_some(())
+                })
+                .await;
+            }
             Some(alarm) => {
-                engine
-                    .f
-                    .clock
-                    .not_due_check_now(engine.f.clock.wall_deadline(alarm))
-                    .await;
+                let deadline = engine.f.clock.wall_deadline(alarm);
+                within_progress_budget("re-checking the future alarm", || {
+                    if runtime.alarm_failures().len() > failures {
+                        failed();
+                    }
+                    engine.f.clock.has_not_due_check_now(deadline).then_some(())
+                })
+                .await;
                 return;
             }
             None => return,
@@ -206,6 +326,8 @@ impl EngineModel {
             due,
             eligible_at: due,
             fate: Fate::Live,
+            fired: false,
+            expected: ExpectedRecord::None,
             corrupted_target: None,
         });
         self.settle();
@@ -216,8 +338,9 @@ impl EngineModel {
         tc.assume(self.subjects.len() < 16);
         let seconds = tc.draw(gs::integers::<i64>().min_value(1).max_value(1_800));
         let due = self.engine().now() + chrono::Duration::seconds(seconds);
-        let key = uuid::Uuid::now_v7();
-        let group = uuid::Uuid::now_v7();
+        // Minted from the held clock, never the system clock.
+        let key = uuid::Uuid::parse_str(&self.engine().fresh()).unwrap();
+        let group = uuid::Uuid::parse_str(&self.engine().fresh()).unwrap();
         let seeded = self.block(async {
             self.engine()
                 .runtime()
@@ -244,6 +367,8 @@ impl EngineModel {
             due,
             eligible_at: due,
             fate: Fate::Live,
+            fired: false,
+            expected: ExpectedRecord::None,
             corrupted_target: None,
         });
         // The seed is not an event; the next event or alarm publishes it.
@@ -258,7 +383,6 @@ impl EngineModel {
         }) else {
             return;
         };
-        let fired = self.fired(&self.subjects[index]);
         let wake_id = self.subjects[index].key.clone();
         let answer = self.block(self.engine().central(CentralMailOperation::CancelWake {
             wake_id: wake_id.clone().try_into().unwrap(),
@@ -268,7 +392,11 @@ impl EngineModel {
             answer,
             CentralMailResult::Done(CentralMailAnswer::WakeCancelled { .. })
         ) {
-            self.subjects[index].fate = Fate::Finished { fired };
+            // R4: a finished subject has no failure record.
+            self.subjects[index].fate = Fate::Finished;
+            self.subjects[index].expected = ExpectedRecord::None;
+        } else {
+            self.request_consumed_fault(&wake_id);
         }
         self.settle();
     }
@@ -279,20 +407,25 @@ impl EngineModel {
             return;
         };
         let loss = tc.draw(gs::integers::<u8>().min_value(0).max_value(2));
-        let fired = self.fired(&self.subjects[index]);
         let key = self.subjects[index].key.clone();
-        if loss != 0 {
-            self.armed_fault = Some(key.clone());
+        let kind = match loss {
+            1 => Some((
+                EngineCommitFaultKind::AppliedAnswerLost,
+                ArmedFault::AppliedAnswerLost,
+            )),
+            2 => Some((
+                EngineCommitFaultKind::NotAppliedAnswerLost,
+                ArmedFault::NotAppliedAnswerLost,
+            )),
+            _ => None,
+        };
+        if let Some((_, armed)) = kind {
+            self.arm(key.clone(), armed);
         }
         let request_id = self.engine().fresh();
         let outcome = self.block(async {
             let runtime = self.engine().runtime().await;
-            let kind = match loss {
-                1 => Some(EngineCommitFaultKind::AppliedAnswerLost),
-                2 => Some(EngineCommitFaultKind::NotAppliedAnswerLost),
-                _ => None,
-            };
-            if let Some(kind) = kind {
+            if let Some((kind, _)) = kind {
                 runtime
                     .statement_host()
                     .inject_engine_commit_fault(EngineCommitFault {
@@ -313,7 +446,8 @@ impl EngineModel {
                 .unwrap()
         });
         tc.note(&format!("stop probe {key} (loss {loss}): {outcome:?}"));
-        // Invariant 3: the answer is stored with its effects, or neither.
+        self.request_consumed_fault(&key);
+        // The answer is stored with its effects, or neither.
         let stopped = self.block(self.engine().count(
             "SELECT COUNT(*) FROM engine_probe_items WHERE item_id=? AND state='stopped'",
             vec![text(&key)],
@@ -343,7 +477,8 @@ impl EngineModel {
             _ => {}
         }
         if stopped {
-            self.subjects[index].fate = Fate::Finished { fired };
+            self.subjects[index].fate = Fate::Finished;
+            self.subjects[index].expected = ExpectedRecord::None;
         }
         self.settle();
     }
@@ -355,7 +490,7 @@ impl EngineModel {
         };
         let key = self.subjects[index].key.clone();
         tc.note(&format!("reject the next commit of {key}"));
-        self.armed_fault = Some(key.clone());
+        self.arm(key.clone(), ArmedFault::Rejected);
         self.block(async {
             self.engine()
                 .runtime()
@@ -376,7 +511,7 @@ impl EngineModel {
             return;
         };
         let key = self.subjects[index].key.clone();
-        tc.assume(self.fired(&self.subjects[index]) == 0);
+        tc.assume(!self.subjects[index].fired);
         tc.assume(!self.fault_armed_on(&key));
         let original = self.block(
             self.engine()
@@ -393,22 +528,14 @@ impl EngineModel {
 
     #[rule(weight = 3.0)]
     fn repair_retired(&mut self, tc: TestCase) {
-        let retired: Vec<usize> = (0..self.subjects.len())
-            // The admin routes hide the test machine's kind (P8 contract).
-            .filter(|index| {
-                self.subjects[*index].kind == Kind::Wake
-                    && self.subjects[*index].fate == Fate::Live
-                    && self
-                        .record(&self.subjects[*index])
-                        .is_some_and(|(state, ..)| state == "retired")
-            })
-            .collect();
-        tc.assume(!retired.is_empty());
-        let index = retired[tc.draw(
-            gs::integers::<usize>()
-                .min_value(0)
-                .max_value(retired.len() - 1),
-        )];
+        // The model's own expectation picks the subject, not the store's record.
+        // The admin routes hide the test machine's kind (P8 contract).
+        let index = self.pick(&tc, |s| {
+            s.kind == Kind::Wake && s.fate == Fate::Live && s.expected == ExpectedRecord::Retired
+        });
+        let Some(index) = index else {
+            return;
+        };
         let (kind, key) = (self.subjects[index].kind, self.subjects[index].key.clone());
         tc.assume(!self.fault_armed_on(&key));
         let attempt = self.block(self.engine().attempt_id(kind.machine(), &key));
@@ -421,6 +548,7 @@ impl EngineModel {
             }
             let answer = self.block(self.engine().retry(&attempt));
             self.subjects[index].eligible_at = self.engine().now();
+            self.subjects[index].expected = ExpectedRecord::None;
             tc.note(&format!("retry {key}: {answer}"));
             assert_eq!(answer, serde_json::json!({"result":"engineRetried"}));
         } else {
@@ -428,6 +556,7 @@ impl EngineModel {
             tc.note(&format!("discard {key}: {answer}"));
             assert_eq!(answer, serde_json::json!({"result":"engineDiscarded"}));
             self.subjects[index].fate = Fate::Discarded;
+            self.subjects[index].expected = ExpectedRecord::None;
         }
         self.settle();
     }
@@ -465,7 +594,12 @@ impl EngineModel {
         let mut engine = self.engine.take().expect("engine open");
         self.runtime.block_on(engine.f.reopen()).unwrap();
         self.engine = Some(engine);
+        // A new process: the floor, the receipts and armed faults are in memory.
         self.batch_starts.clear();
+        self.seen_units = 0;
+        self.seen_batches = 0;
+        self.armed_fault = None;
+        self.fault_pending = false;
         self.block(self.engine().after_event());
         self.settle();
     }
@@ -475,10 +609,8 @@ impl EngineModel {
         let now = self.now_ms();
         let pending = self.subjects.iter().any(|subject| {
             subject.fate == Fate::Live
-                && self.fired(subject) == 0
-                && !self
-                    .record(subject)
-                    .is_some_and(|(state, ..)| state == "retired")
+                && !subject.fired
+                && subject.expected != ExpectedRecord::Retired
         });
         let alarm = self.block(self.engine().alarm_ms());
         if pending {
@@ -493,56 +625,55 @@ impl EngineModel {
     fn every_occurrence_fires_once_and_none_is_lost(&self, _: TestCase) {
         let now = self.now_ms();
         for subject in &self.subjects {
-            let fired = self.fired(subject);
-            assert!(fired <= 1, "{} fired {fired} times", subject.key);
-            let record = self.record(subject);
-            match subject.fate {
-                Fate::Finished { fired: before } => {
-                    assert_eq!(fired, before, "{} fired after it was finished", subject.key);
-                }
-                Fate::Discarded => assert_eq!(fired, 0, "{} fired after discard", subject.key),
-                Fate::Live => {
-                    let overdue = subject.eligible_at.timestamp_millis() + SPACING_MS <= now;
-                    if overdue && record.is_none() && subject.corrupted_target.is_none() {
-                        assert_eq!(fired, 1, "{} due {} was lost", subject.key, subject.due);
-                    }
-                }
+            let fired = self.fired_in_store(subject);
+            assert_eq!(
+                fired,
+                i64::from(subject.fired),
+                "{} fired {fired} times; the model expects {}",
+                subject.key,
+                i64::from(subject.fired)
+            );
+            if subject.fate != Fate::Live || subject.fired {
+                continue;
+            }
+            // When the next due batch must have worked it, unless retired.
+            let deadline = match subject.expected {
+                ExpectedRecord::None => Some(subject.eligible_at.timestamp_millis()),
+                ExpectedRecord::Failing { next_try_ms } => Some(next_try_ms),
+                ExpectedRecord::Retired => None,
+            };
+            if let Some(deadline) = deadline {
+                assert!(
+                    deadline + SPACING_MS > now,
+                    "{} due {} ({:?}) was never worked by {now}",
+                    subject.key,
+                    subject.due,
+                    subject.expected
+                );
             }
         }
     }
 
     #[invariant(always_run)]
-    fn failure_records_match_the_subjects_and_retry_on_marks(&self, _: TestCase) {
+    fn failure_records_follow_the_retirement_lifecycle(&self, _: TestCase) {
+        for subject in &self.subjects {
+            let stored = self.block(self.engine().record(subject.kind.machine(), &subject.key));
+            subject.expected.assert_stored(&subject.key, &stored);
+        }
         let rows = self.block(self.engine().rows(
-            "SELECT machine_kind,subject_key,state,failure_count,next_try_at FROM central_work_attempts",
+            "SELECT machine_kind,subject_key FROM central_work_attempts",
             vec![],
         ));
         for row in rows {
-            let [
-                SqlValue::Text(kind),
-                SqlValue::Text(key),
-                SqlValue::Text(state),
-                SqlValue::Integer(count),
-                next,
-            ] = row.as_slice()
-            else {
+            let [SqlValue::Text(kind), SqlValue::Text(key)] = row.as_slice() else {
                 panic!("failure record shape {row:?}")
             };
             assert!(
                 self.subjects
                     .iter()
                     .any(|subject| subject.kind.machine() == kind && &subject.key == key),
-                "a record for a subject the test never faulted: {kind} {key}"
+                "a failure record for no subject of this test: {kind} {key}"
             );
-            assert!(count.get() >= 1);
-            match (state.as_str(), next) {
-                ("failing", SqlValue::Text(at)) => {
-                    let at = at.parse::<Time>().unwrap().timestamp_millis();
-                    assert_eq!(at % MARK_MS, 0, "{key} retries off a 5-minute mark: {at}");
-                }
-                ("retired", SqlValue::Null) => {}
-                other => panic!("record {key} in state {other:?}"),
-            }
         }
     }
 
@@ -590,7 +721,10 @@ fn the_engine_keeps_its_invariants_under_random_requests_faults_and_restarts(tc:
         engine: Some(engine),
         subjects: Vec::new(),
         batch_starts: Vec::new(),
+        seen_units: 0,
+        seen_batches: 0,
         armed_fault: None,
+        fault_pending: false,
     };
     hegel::stateful::machine(model).steps(50).run(tc);
 }
