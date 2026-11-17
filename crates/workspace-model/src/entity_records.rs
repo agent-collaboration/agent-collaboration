@@ -146,8 +146,17 @@ pub enum Addressee {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReadScope {
-    Inbox,
-    Thread { thread_id: ThreadId },
+    /// One inbox mark per area and per project, so reading one scope never
+    /// marks another scope's items read.
+    InboxArea {
+        area_id: AreaId,
+    },
+    InboxProject {
+        project_id: ProjectId,
+    },
+    Thread {
+        thread_id: ThreadId,
+    },
 }
 
 /// A subject exists only for events about a holder/member; there is no nullable bag.

@@ -1,5 +1,5 @@
 use crate::{
-    ActorIdentityId, Area, AreaId, BacklogItem, ChangePosition, Deliverable, DeliverableId,
+    ActorIdentityId, Area, AreaId, BacklogItem, Change, ChangePosition, Deliverable, DeliverableId,
     DeliverableRoleAssignment, DeliverableStatus, Initiative, Issue, ItemRef, Post, Project,
     ProjectId, ProjectRoleAssignment, ReadScope, ResourceName, Thread, ThreadId, ThreadMember,
     ThreadState, WorkLogEntry, WorkStatus, Workspace,
@@ -283,6 +283,14 @@ pub enum InboxItem {
         thread_title: ResourceName,
         area_name: ResourceName,
         project_name: Option<ResourceName>,
+    },
+    /// A role, status or work-log change inside a Project-scope inbox.
+    ProjectChanged {
+        position: ChangePosition,
+        acknowledge: ReadScope,
+        change: Change,
+        project_name: ResourceName,
+        area_name: ResourceName,
     },
 }
 
