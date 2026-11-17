@@ -21,7 +21,10 @@ struct ScriptedRuns(std::sync::Mutex<(u64, bool)>);
 impl ScriptedRuns {
     /// The connection admits a new run.
     fn start(&self) -> SessionGeneration {
-        let mut run = self.0.lock().expect("run lock");
+        let mut run = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         run.0 += 1;
         run.1 = true;
         SessionGeneration::from_number(run.0)
@@ -29,7 +32,10 @@ impl ScriptedRuns {
 
     /// The run ends (its close is done), before its Closed is published.
     fn end(&self) {
-        self.0.lock().expect("run lock").1 = false;
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .1 = false;
     }
 }
 
@@ -40,7 +46,10 @@ impl SessionRuns for ScriptedRuns {
         claim: RunClaim,
         enqueue: &mut dyn FnMut() -> Result<(), EventSinkClosed>,
     ) -> Result<GenerationPublication, EventSinkClosed> {
-        let run = self.0.lock().expect("run lock");
+        let run = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (latest, running) = *run;
         let holds = match claim {
             RunClaim::Current => running || latest == 0,
@@ -55,7 +64,12 @@ impl SessionRuns for ScriptedRuns {
     }
 
     fn current_generation(&self, _session_id: &str) -> SessionGeneration {
-        SessionGeneration::from_number(self.0.lock().expect("run lock").0)
+        SessionGeneration::from_number(
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0,
+        )
     }
 }
 
