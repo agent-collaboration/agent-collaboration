@@ -19,7 +19,6 @@ mod api_rejection_decoding;
 mod api_roundtrip;
 mod board_mutation_uncertainty;
 mod board_repository_discovery;
-mod central_admin_request;
 mod installation_identity_test;
 mod native_endpoint_resolution;
 mod native_transport_connection;

@@ -11,7 +11,6 @@ workspace = true
 router-clock.workspace = true
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 reqwest = { workspace = true, features = ["json"] }
-collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 futures-util.workspace = true
 http.workspace = true
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-unix-socket"] }
