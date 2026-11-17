@@ -155,7 +155,6 @@ mod public_process_recovery;
 mod push_surface;
 mod question_api_path;
 mod read_cost_counter_contracts;
-mod read_cost_scope;
 mod reader_metadata_retention;
 mod reader_metadata_scopes;
 mod reader_state_corrections;
@@ -208,5 +207,3 @@ mod work_view_mcp;
 
 mod machine_sender_binding;
 
-#[path = "../support/fleet_maintenance_probe.rs"]
-mod fleet_maintenance_probe;

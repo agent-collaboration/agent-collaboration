@@ -12,8 +12,6 @@ use sql_cost_classification::DataStatementCounts;
 // Only the two data-budget proofs use per-kind equality.
 
 use sql_cost_classification::StatementTables;
-#[path = "alarm_read_costs.rs"]
-pub(crate) mod alarm_read_costs;
 // Only operation-cost proof targets consume observations.
 
 const CORE_TYPED_CANONICAL_INPUTS: &[&str] = &[
@@ -310,16 +308,6 @@ where
 #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn install() {
     tracing_subscriber::registry()
-        .with(
-            alarm_read_costs::AlarmReadCostLayer.with_filter(
-                tracing_subscriber::filter::Targets::new()
-                    .with_target("sqlx::query", tracing::Level::TRACE)
-                    .with_target(
-                        "collaboration_central_tokio::native_objects",
-                        tracing::Level::TRACE,
-                    ),
-            ),
-        )
         .with(
             ReadCostLayer(None).with_filter(
                 tracing_subscriber::filter::Targets::new()
