@@ -5,6 +5,8 @@ mod driver_task;
 #[cfg(test)]
 mod driver_test_support;
 mod link_transport;
+#[cfg(test)]
+mod overlay_property_test;
 
 pub use link_transport::{
     AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
