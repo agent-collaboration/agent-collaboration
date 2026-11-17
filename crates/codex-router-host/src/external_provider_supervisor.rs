@@ -142,6 +142,10 @@ struct SupervisorInner {
     /// before it enters the line.
     #[cfg(test)]
     queue_enqueue_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses one operation's settlement before its terminal write: its
+    /// outcome is known, nothing is stored yet, and its turn is still held.
+    #[cfg(test)]
+    terminal_write_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
     /// Steers in flight keep every turn's approver record (D1 C1).
     approver_pins: StdMutex<ApproverPins>,
 }
@@ -459,6 +463,8 @@ impl ExternalProviderSupervisor {
                 steer_injection_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 queue_enqueue_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                terminal_write_test_pause: StdMutex::new(None),
                 approver_pins: StdMutex::new(ApproverPins::default()),
             }),
         })

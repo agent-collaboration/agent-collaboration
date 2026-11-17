@@ -75,6 +75,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
@@ -228,6 +229,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
     let first_operation_id = collaboration_protocol::OperationId::generate();
@@ -464,6 +466,7 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let mut first_request = request(target.clone(), "first load failure");
@@ -626,6 +629,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let mut first_request = request(target.clone(), "first queued prompt");
@@ -801,6 +805,7 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),

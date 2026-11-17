@@ -72,6 +72,7 @@ async fn provider_process_transport_failure_remains_retryable() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
     let receipt = route
@@ -153,6 +154,7 @@ async fn live_peer_recheck_prevents_provider_load() {
         Arc::clone(&supervisor),
         store,
         Arc::new(LivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     assert!(matches!(
         route.presence(&target).await.expect("provider presence"),

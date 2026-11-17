@@ -194,6 +194,7 @@ async fn prepared_route(
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     (route, supervisor, target, generation)
 }

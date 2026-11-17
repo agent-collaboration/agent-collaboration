@@ -78,6 +78,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let contents = || {
         vec![
@@ -204,6 +205,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let idle_cancel = route
         .cancel_active_turn(target.clone(), target.clone().into())

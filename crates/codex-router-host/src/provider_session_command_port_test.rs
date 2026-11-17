@@ -97,6 +97,7 @@ async fn a_queued_input_waits_past_the_start_deadline_for_its_own_turn() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let port = Arc::new(HostSessionCommandPort::new(

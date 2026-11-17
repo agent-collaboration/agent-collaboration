@@ -75,6 +75,7 @@ async fn entry_refused_at_dispatch_is_recorded_not_sent_with_the_reason() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     let image = session_event_model::PromptContent::image(

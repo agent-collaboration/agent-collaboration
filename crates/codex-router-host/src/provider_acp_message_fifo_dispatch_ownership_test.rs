@@ -97,6 +97,7 @@ async fn shut_down_the_line_at(paused_at: PausedAt) -> Shutdown {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");

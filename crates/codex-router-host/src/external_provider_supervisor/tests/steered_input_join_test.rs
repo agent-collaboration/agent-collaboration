@@ -114,6 +114,7 @@ async fn steering_session_on(
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     SteeringSession {

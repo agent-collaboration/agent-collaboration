@@ -106,6 +106,7 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
         supervisor.clone(),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     assert_eq!(
         route

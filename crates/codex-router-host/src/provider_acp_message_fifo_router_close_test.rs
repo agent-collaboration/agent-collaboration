@@ -86,6 +86,7 @@ async fn a_send_reaching_the_line_after_a_router_close_loads_the_session_again()
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
@@ -276,6 +277,7 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     let load = tokio::spawn({
@@ -603,6 +605,7 @@ async fn a_load_continuation_held_past_a_router_close_publishes_nothing() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     let load = tokio::spawn({

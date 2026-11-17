@@ -79,6 +79,8 @@ type SharedLoad = Shared<BoxFuture<'static, Result<(), String>>>;
 struct SessionLine {
     /// Stops this session's worker at Router shutdown.
     stop: CancellationToken,
+    /// The one injected clock: the line's retries wait on it.
+    clock: Arc<dyn router_clock::RuntimeClock>,
     /// Wakes the worker when a payload arrives.
     arrived: tokio::sync::Notify,
     pending: StdMutex<BTreeMap<u64, OperationId>>,
@@ -93,9 +95,10 @@ struct SessionLine {
 }
 
 impl SessionLine {
-    fn new(stop: CancellationToken) -> Self {
+    fn new(stop: CancellationToken, clock: Arc<dyn router_clock::RuntimeClock>) -> Self {
         Self {
             stop,
+            clock,
             arrived: tokio::sync::Notify::new(),
             pending: StdMutex::new(BTreeMap::new()),
             reserved: AtomicUsize::new(0),
@@ -167,6 +170,8 @@ impl Drop for QueuePermit {
 }
 
 pub(crate) struct ProviderAcpMessageFifo {
+    /// The one injected clock, handed to each session line.
+    clock: Arc<dyn router_clock::RuntimeClock>,
     #[cfg(test)]
     wait_started: Arc<tokio::sync::Notify>,
     supervisor: Arc<ExternalProviderSupervisor>,
@@ -183,8 +188,10 @@ impl ProviderAcpMessageFifo {
         supervisor: Arc<ExternalProviderSupervisor>,
         store: Arc<Mutex<ProviderOperationStore>>,
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         Self {
+            clock,
             #[cfg(test)]
             wait_started: Arc::new(tokio::sync::Notify::new()),
             entries: Arc::new(QueuedEntries::new(&supervisor)),
@@ -277,7 +284,10 @@ impl ProviderAcpMessageFifo {
                 "provider session queue capacity exceeded",
             ));
         }
-        let line = Arc::new(SessionLine::new(self.shutdown.child_token()));
+        let line = Arc::new(SessionLine::new(
+            self.shutdown.child_token(),
+            Arc::clone(&self.clock),
+        ));
         line.reserved.fetch_add(1, Ordering::SeqCst);
         let worker = tokio::spawn(run_session_line(SessionLineWorker {
             target: target.clone(),
@@ -496,3 +506,7 @@ mod dispatch_ownership_tests;
 #[cfg(test)]
 #[path = "provider_acp_message_fifo_router_close_test.rs"]
 mod router_close_tests;
+
+#[cfg(test)]
+#[path = "provider_acp_message_fifo_settlement_test.rs"]
+mod settlement_tests;

@@ -175,6 +175,7 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
             Arc::clone(&supervisor),
             store,
             Arc::new(NoLivePeer),
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
         );
         let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
         let attempt = AttemptId::generate();

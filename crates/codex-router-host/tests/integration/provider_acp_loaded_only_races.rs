@@ -207,6 +207,7 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     assert_eq!(
         route.presence(&target).await.expect("loaded presence"),
@@ -273,6 +274,7 @@ async fn loaded_only_reports_non_retryable_unsupported_load_after_can_load_claim
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let mut request = request(target, "held batch");
     request.payload.load_policy = LoadPolicy::LoadedOnly;
@@ -326,6 +328,7 @@ async fn loaded_only_preserves_live_elsewhere_reason_after_can_load_claim() {
         Arc::clone(&supervisor),
         store,
         Arc::new(LivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let mut request = request(target, "held batch");
     request.payload.load_policy = LoadPolicy::LoadedOnly;
@@ -417,6 +420,7 @@ async fn loaded_only_reports_non_retryable_missing_record_after_can_load_claim()
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let mut request = request(target.clone(), "held batch");
     request.payload.load_policy = LoadPolicy::LoadedOnly;
@@ -489,6 +493,7 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let close_id = OperationId::generate();
     supervisor
@@ -576,6 +581,7 @@ async fn provider_and_absent_peer_presence_aggregates_to_not_running() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let peer_route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
         target.endpoint.clone(),

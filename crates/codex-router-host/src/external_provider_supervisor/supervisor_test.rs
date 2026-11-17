@@ -315,6 +315,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         Arc::clone(&backend),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let target = SessionRef {
         endpoint: endpoint(),
@@ -451,6 +452,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         Arc::clone(&backend),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let queued_id = OperationId::generate();
     let queued_input = session_event_model::InputId::generate();
@@ -563,6 +565,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         Arc::clone(&backend),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let queued_id = OperationId::generate();
     let queued_input_id = session_event_model::InputId::generate();

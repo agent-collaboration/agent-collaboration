@@ -243,6 +243,7 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let port = HostSessionCommandPort::new(
         Arc::clone(&supervisor),

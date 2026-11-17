@@ -278,7 +278,7 @@ async fn admit_delivery_at_head(
                 return HeadAdmission::Ended;
             }
         }
-        if !wait_before_retry(&line.stop, &retirement, retry_delay).await {
+        if !wait_before_retry(line.clock.as_ref(), &line.stop, &retirement, retry_delay).await {
             continue;
         }
         retry_delay = next_retry_delay(retry_delay);
@@ -341,7 +341,7 @@ async fn commit_when_allowed(
                 }
             }
         }
-        if !wait_before_retry(&line.stop, &retirement, retry_delay).await {
+        if !wait_before_retry(line.clock.as_ref(), &line.stop, &retirement, retry_delay).await {
             continue;
         }
         retry_delay = next_retry_delay(retry_delay);
@@ -384,7 +384,14 @@ async fn await_settlement(
                     supervisor.queued_operation_registry().clear(operation_id);
                     return;
                 }
-                if !wait_before_retry(&line.stop, &retirement, MIN_RETRY_DELAY).await {
+                if !wait_before_retry(
+                    line.clock.as_ref(),
+                    &line.stop,
+                    &retirement,
+                    MIN_RETRY_DELAY,
+                )
+                .await
+                {
                     return;
                 }
             }
@@ -393,6 +400,7 @@ async fn await_settlement(
 }
 
 async fn wait_before_retry(
+    clock: &dyn router_clock::RuntimeClock,
     stop: &CancellationToken,
     retirement: &CancellationToken,
     delay: std::time::Duration,
@@ -400,7 +408,7 @@ async fn wait_before_retry(
     tokio::select! {
         () = stop.cancelled() => false,
         () = retirement.cancelled() => false,
-        () = tokio::time::sleep(delay) => true,
+        () = clock.sleep_for(delay) => true,
     }
 }
 

@@ -59,6 +59,7 @@ impl DirectSupervisor {
             Arc::clone(&supervisor),
             store,
             Arc::new(NoLivePeer),
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
         );
         Self {
             root,

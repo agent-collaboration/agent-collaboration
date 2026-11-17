@@ -160,6 +160,7 @@ async fn a_loaded_only_message_after_a_close_is_refused_at_the_door_without_a_lo
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     supervisor
         .runtime_for(&target.endpoint)
@@ -320,6 +321,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let attempt_id = agent_automation::AttemptId::generate();
     let operation_id =
@@ -520,8 +522,12 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         })
         .await
         .expect("held prompt dispatched");
-    let queue =
-        ProviderAcpMessageFifo::new(supervisor.clone(), store.clone(), Arc::new(NoLivePeer));
+    let queue = ProviderAcpMessageFifo::new(
+        supervisor.clone(),
+        store.clone(),
+        Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+    );
     let queued_operation = OperationId::generate();
     let input_id = InputId::generate();
     let submission = selected();
@@ -705,6 +711,7 @@ async fn close_while_queued_marks_head_and_buffer_not_sent() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     supervisor.attach_message_fifo(&queue);
     let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");

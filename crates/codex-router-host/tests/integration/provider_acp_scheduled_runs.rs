@@ -288,6 +288,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let router = SessionDeliveryRouter::new(vec![route.clone() as Arc<dyn SessionDeliveryRoute>]);
     let preparation = RecordedPreparationIntent(tokio::sync::Mutex::new(Vec::new()));
@@ -563,6 +564,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         Arc::clone(&restarted_supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let restarted_router =
         SessionDeliveryRouter::new(vec![restarted_route as Arc<dyn SessionDeliveryRoute>]);

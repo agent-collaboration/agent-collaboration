@@ -20,6 +20,26 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
+        // A test holds this operation here, before its terminal write.
+        #[cfg(test)]
+        let terminal_write_test_pause = {
+            let mut pause = self
+                .terminal_write_test_pause
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            match pause.take() {
+                Some((held, pause)) if held == operation_id => Some(pause),
+                other => {
+                    *pause = other;
+                    None
+                }
+            }
+        };
+        #[cfg(test)]
+        if let Some(pause) = terminal_write_test_pause {
+            let _result = pause.entered.send(());
+            let _result = pause.release.await;
+        }
         // The operation's record takes its outcome first; an unknown one
         // stays live until the binding's uncertainty cell holds it.
         live.completed(match &completion {

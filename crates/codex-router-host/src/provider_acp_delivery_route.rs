@@ -81,6 +81,7 @@ impl ProviderAcpDeliveryRoute {
         supervisor: Arc<ExternalProviderSupervisor>,
         store: Arc<Mutex<ProviderOperationStore>>,
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let claim = ProviderAcpRouteClaim::new(
             service_id.clone(),
@@ -93,6 +94,7 @@ impl ProviderAcpDeliveryRoute {
             Arc::clone(&supervisor),
             Arc::clone(&store),
             Arc::clone(&ownership),
+            clock,
         ));
         // API prompts to a session that can't steer wait in this same line (D1 R12).
         supervisor.attach_message_fifo(&queue);
