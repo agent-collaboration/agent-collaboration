@@ -339,6 +339,18 @@ fn lifecycle_move(
                     next.line = line;
                 }
             }
+            // An accepted load opens the run's fresh line, so a message
+            // arriving while it loads joins it (design note §11.2); it
+            // commits only once the run is Live.
+            SessionLifecycleEffect::StartRestore { generation, .. } => {
+                if let Ok((line, _)) = QueueLineMachine::transition(
+                    &next.line,
+                    QueueLineEvent::OpenFresh { epoch: generation },
+                ) {
+                    next.line = line;
+                }
+                effects.push(SessionCellEffect::Lifecycle(effect));
+            }
             SessionLifecycleEffect::RegisterActor { generation } => {
                 if let Ok((line, _)) = QueueLineMachine::transition(
                     &next.line,
@@ -356,8 +368,7 @@ fn lifecycle_move(
                 end_line(&mut next, NotSentReason::AgentStopped, &mut effects);
                 effects.push(SessionCellEffect::Lifecycle(effect));
             }
-            SessionLifecycleEffect::StartRestore { .. }
-            | SessionLifecycleEffect::PublishActivation { .. }
+            SessionLifecycleEffect::PublishActivation { .. }
             | SessionLifecycleEffect::StartFree { .. }
             | SessionLifecycleEffect::PublishToHub { .. } => {
                 effects.push(SessionCellEffect::Lifecycle(effect))
@@ -472,7 +483,12 @@ impl StateMachine for SessionCellMachine {
                 lifecycle_move(cell, SessionLifecycleEvent::Loaded { attempt })
             }
             V::LoadFailed { attempt } => {
-                lifecycle_move(cell, SessionLifecycleEvent::LoadFailed { attempt })
+                // The failed load's run ends, and with it every message that
+                // waited in its line.
+                let (mut next, mut effects) =
+                    lifecycle_move(cell, SessionLifecycleEvent::LoadFailed { attempt })?;
+                end_line(&mut next, NotSentReason::LoadFailed, &mut effects);
+                Ok((next, effects))
             }
             V::CloseRequested { attempt } => {
                 let turn_running = matches!(

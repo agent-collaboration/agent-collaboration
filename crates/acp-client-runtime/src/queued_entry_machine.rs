@@ -22,6 +22,8 @@ pub(crate) enum NotSentReason {
     DispatchRecordUncertain,
     /// The session's actor exited while the message waited.
     AgentStopped,
+    /// The load the message waited for failed.
+    LoadFailed,
 }
 
 impl NotSentReason {
@@ -34,6 +36,7 @@ impl NotSentReason {
             Self::DispatchNotRecorded => "the dispatch couldn't be recorded",
             Self::DispatchRecordUncertain => "dispatch record uncertain; not sent",
             Self::AgentStopped => "the agent stopped",
+            Self::LoadFailed => "the session couldn't be loaded",
         }
     }
 }

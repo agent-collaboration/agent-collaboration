@@ -477,3 +477,107 @@ fn a_second_message_waits_until_the_first_ends() {
     );
     assert!(after_first_ends.is_ok(), "{after_first_ends:?}");
 }
+
+/// Oracle: design note §11.2 ("enqueue{op}: lifecycle Loading{g} or
+/// Live{g}"; "the next accepted load opens a fresh Line{epoch: g+1}") and the
+/// accepted door rule: a message arriving while the session loads joins the
+/// run's line, and commits only once the run is Live.
+#[test]
+fn a_message_arriving_while_the_session_loads_joins_the_line_and_commits_once_live() {
+    // Arrange
+    let mut effects = Vec::new();
+    let loading = step(
+        &SessionCell::fresh(),
+        SessionCellEvent::LoadRequested {
+            via: RestoreVia::Load,
+            attempt: load(1),
+        },
+        &mut effects,
+    );
+
+    // Act
+    let queued = SessionCellMachine::transition(
+        &loading,
+        SessionCellEvent::Enqueue {
+            operation: operation("a"),
+        },
+    );
+    let (queued, _) = queued
+        .clone()
+        .expect("the message joins the loading run's line");
+    let held = step(
+        &queued,
+        SessionCellEvent::Claim { sequence: 0 },
+        &mut effects,
+    );
+    let early_commit =
+        SessionCellMachine::transition(&held, SessionCellEvent::Commit { sequence: 0 });
+    let live = step(
+        &held,
+        SessionCellEvent::Loaded { attempt: load(1) },
+        &mut effects,
+    );
+    let commit = SessionCellMachine::transition(&live, SessionCellEvent::Commit { sequence: 0 });
+
+    // Assert
+    assert!(
+        matches!(
+            early_commit,
+            Err(TransitionError::Domain(SessionCellRefusal::NotLive))
+        ),
+        "nothing commits before the run is Live: {early_commit:?}"
+    );
+    assert!(commit.is_ok(), "the message commits once Live: {commit:?}");
+    assert_eq!(live.entries.len(), 1, "the loaded run kept the message");
+}
+
+/// Oracle: R14's one outcome per message: a load that fails ends every
+/// message waiting in its run's line not sent, "the session couldn't be
+/// loaded", and the session is NotLoaded.
+#[test]
+fn a_failed_load_ends_its_waiting_messages_not_sent() {
+    // Arrange
+    let mut effects = Vec::new();
+    let loading = step(
+        &SessionCell::fresh(),
+        SessionCellEvent::LoadRequested {
+            via: RestoreVia::Load,
+            attempt: load(1),
+        },
+        &mut effects,
+    );
+    let queued = step(
+        &loading,
+        SessionCellEvent::Enqueue {
+            operation: operation("a"),
+        },
+        &mut effects,
+    );
+    effects.clear();
+
+    // Act
+    let failed = step(
+        &queued,
+        SessionCellEvent::LoadFailed { attempt: load(1) },
+        &mut effects,
+    );
+
+    // Assert
+    assert!(matches!(
+        failed.lifecycle,
+        SessionLifecycle::NotLoaded { .. }
+    ));
+    assert!(failed.entries.is_empty(), "no message is left waiting");
+    assert_eq!(
+        effects,
+        vec![SessionCellEffect::Entry {
+            sequence: 0,
+            operation: operation("a"),
+            effect: QueuedEntryEffect::SettleNotSent(NotSentReason::LoadFailed),
+        }]
+    );
+    assert_eq!(
+        NotSentReason::LoadFailed.human_phrase(),
+        "the session couldn't be loaded"
+    );
+}
