@@ -382,18 +382,6 @@ pub(crate) fn busy_answer(
     })
 }
 
-/// The answer for a prompt to a session that isn't loaded or is still
-/// loading on this connection (D1 M8); none while the cell says otherwise.
-pub(super) fn not_live_answer(cells: &SessionCellTable, session_id: &str) -> Option<String> {
-    let state = cells.read(session_id, |cell| cell.lifecycle);
-    match state {
-        SessionLifecycle::NotLoaded { .. } | SessionLifecycle::Loading { .. } => {
-            Some(state_answer(&state))
-        }
-        SessionLifecycle::Live { .. } | SessionLifecycle::Closing { .. } => None,
-    }
-}
-
 /// A held setting's answer, read from the session's cell (D1 M8).
 pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
     settings_hold_answer(cells.read(

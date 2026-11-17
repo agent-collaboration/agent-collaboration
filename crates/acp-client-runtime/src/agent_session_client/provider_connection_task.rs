@@ -681,11 +681,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let Some(session) = sessions.get(&provider_session_id) else {
                                                 if let Some(dispatch) = dispatch {
-                                                    let observation = match super::session_cell_bookkeeping::not_live_answer(&session_cells, &provider_session_id) {
-                                                        Some(answer) => ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::NotLoaded { answer }),
-                                                        None => ProviderPromptDispatchObservation::NotSubmitted,
-                                                    };
-                                                    let _result = dispatch.send(observation);
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
                                                 }
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
                                                 continue;
