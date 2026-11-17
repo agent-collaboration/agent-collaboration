@@ -193,8 +193,10 @@ fn immediate_submission(
     request_id: Option<RequestId>,
 ) -> Submission {
     match (central, request_id) {
-        (FakeCentral::Unavailable | FakeCentral::NotEnrolled, _)
-        | (FakeCentral::AnswerLost, None) => Submission::Refused(SubmitRefusal::CentralUnavailable),
+        (FakeCentral::Unavailable | FakeCentral::NotEnrolled, _) => {
+            Submission::Refused(SubmitRefusal::CentralUnavailable)
+        }
+        (FakeCentral::AnswerLost, None) => Submission::ReadAnswerLost,
         (FakeCentral::AnswerLost, Some(request_id)) => {
             state.requests.insert(
                 request_id.clone(),

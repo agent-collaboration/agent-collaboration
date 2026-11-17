@@ -36,6 +36,9 @@ pub enum Submission {
     /// Immediate kinds: sent, answer lost; it may have applied. Reconcile with
     /// `request_status` or resubmit the same id; never retry with a new id.
     Uncertain { request: RequestId },
+    /// Reads only, no id: the read frame left and the answer was lost.
+    /// A read changes nothing, so reading again is safe.
+    ReadAnswerLost,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Link + Router retrofit · the seam between the tools and the link (FROZEN, draft 2)</title>
+<title>Link + Router retrofit · the seam between the tools and the link (FROZEN, draft 3)</title>
 <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
 <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
 </head>
@@ -11,7 +11,7 @@
 <ex-nav for="content"></ex-nav>
 <ex-document id="content">
 <h1>The seam: what a Router tool calls, and what it gets back</h1>
-<p><strong>FROZEN 2026-11-17</strong> (draft 2, after the CLI+MCP Lead's review). Lead A and the CLI+MCP Lead. The link (PR 3) builds below this seam and the tool surface (PR 4) builds above it, both at the same time. Authority: the owner's record (<code>2026-11-12-workspace-storage/owner-decisions.md</code>, 11-15 outbox and delivery entries). The canonical contract is <code>origin/main</code> <code>247c13231</code>.</p>
+<p><strong>FROZEN 2026-11-17</strong> (draft 3: adds ReadAnswerLost and RequestIdConflict). Lead A and the CLI+MCP Lead. The link (PR 3) builds below this seam and the tool surface (PR 4) builds above it, both at the same time. Authority: the owner's record (<code>2026-11-12-workspace-storage/owner-decisions.md</code>, 11-15 outbox and delivery entries). The canonical contract is <code>origin/main</code> <code>247c13231</code>.</p>
 
 <ex-mermaid id="seam-pic" data-width="canvas" label="The seam"><script type="text/plain">
 flowchart TB
@@ -38,7 +38,8 @@ pub enum Submission {
     Answered(ReplyPayload),         // immediate kinds: central's answer
     InOutbox(OutboxReceipt),        // outbox kinds: stored, sends on the next mark
     Refused(SubmitRefusal),         // nothing sent, nothing stored
-    Uncertain { request: RequestId },// immediate kinds: sent, answer lost; may have applied
+    Uncertain { request: RequestId },// immediate writes: sent, answer lost; may have applied
+    ReadAnswerLost,                 // reads only, no id: the frame left, the answer was lost; reading again is safe
 }
 
 pub struct OutboxReceipt {
@@ -57,6 +58,7 @@ pub enum RequestStatus {
 pub enum SubmitRefusal {
     CentralUnavailable,             // immediate kinds: nothing left the Mac
     OutboxUnavailable,              // outbox kinds: the local write failed; nothing stored
+    RequestIdConflict,              // the same RequestId was submitted with different content
     NotEnrolled,
     InvalidRequest(ProtocolError),
 }</code></pre>

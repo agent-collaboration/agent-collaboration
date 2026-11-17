@@ -262,3 +262,16 @@ async fn a_flush_sends_at_most_64_and_the_rest_wait_for_the_next_mark() {
 
     assert_eq!((first, repeat, second), (64, 0, 6));
 }
+
+#[tokio::test]
+async fn a_read_whose_answer_is_lost_is_read_answer_lost_and_records_nothing() {
+    let (_clock, calls) = fixture(MARK - 20_000);
+    calls.set_central(FakeCentral::AnswerLost);
+
+    let read = calls.submit(session_caller(1), list_areas()).await;
+    calls.set_central(FakeCentral::Answering);
+    let again = calls.submit(session_caller(1), list_areas()).await;
+
+    assert!(matches!(read, Submission::ReadAnswerLost), "{read:?}");
+    assert!(matches!(again, Submission::Answered(_)), "{again:?}");
+}

@@ -53,4 +53,4 @@ under the same RequestId. Nothing is armed while the outbox is empty.
 
 `FakeLinkCalls` (feature `test-support`, dev-only) honours the seam for tools
 built before the real link: InOutbox then Accepted after a flush on its mark,
-Uncertain when an answer is lost, NotFound for another caller's id.
+Uncertain when a write's answer is lost, ReadAnswerLost when a read's is, NotFound for another caller's id.
