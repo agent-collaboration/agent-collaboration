@@ -469,7 +469,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
                                         }
-                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, reply } => {
+                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, in_folder, requested_mode, reply } => {
                                             // A close since this restore was admitted made its attempt
                                             // stale: the late completion registers nothing, and a fresh
                                             // restore stays possible.
@@ -504,6 +504,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     #[cfg(any(test, feature = "test-observation"))] Arc::clone(&session_test_tool_calls),
                                                 )
                                             }).map(|_| generation);
+                                            let mut permission_mode = crate::PermissionModeReport::default();
                                             // The cell moves Loading to Live on a registered restore,
                                             // and back to NotLoaded on a failed one.
                                             crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
@@ -525,10 +526,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         result = Err(ExternalProviderRuntimeError::SinkClosed);
                                                     }
                                                     task_session_settings.write().await.insert(provider_session_id.clone(), catalog.clone());
+                                                    permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, in_folder, requested_mode.as_deref(), &catalog, task_runtime_handles.behavior.as_ref());
                                                 }
                                                 let _result = activation.send(());
                                             }
-                                            let _result = reply.send(result);
+                                            let _result = reply.send(result.map(|generation| super::RestoredSessionAdmission { generation, permission_mode }));
                                         }
                                         PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
                                             // A done close ends NotLoaded and can be loaded again (ACP
@@ -574,21 +576,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                     sessions.retain(|_, sender| !sender.is_closed());
                                     match command {
                                         ProviderCommand::Create { cwd, scratch_folder, work_roots, settings, reply } => {
-                                            let mut request = NewSessionRequest::new(&cwd)
-                                                .mcp_servers(session_mcp_servers.clone());
                                             // The scratch folder, then the work roots that exist (D1 R18).
-                                            let folders = crate::in_folder_allowance::session_folders(scratch_folder.as_deref(), &work_roots.roots);
-                                            if base_capabilities.supports_additional_directories && !folders.is_empty() {
-                                                request = request.additional_directories(folders.clone());
-                                            }
-                                            request.meta = task_runtime_handles.behavior.session_new_meta(&crate::SessionWorkRoots {
-                                                roots: folders,
-                                                ask_outside_command: work_roots.ask_outside_command.clone(),
-                                                router_auto: work_roots.router_auto,
-                                            });
-                                            let in_folder = scratch_folder.as_deref().and_then(|scratch_folder| {
-                                                crate::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder, &work_roots.roots)
-                                            });
+                                            let folders = crate::session_start_folders::session_start_folders(&cwd, scratch_folder.as_deref(), &work_roots, task_runtime_handles.behavior.as_ref(), base_capabilities.supports_additional_directories);
+                                            let mut request = NewSessionRequest::new(&cwd)
+                                                .mcp_servers(session_mcp_servers.clone())
+                                                .additional_directories(folders.additional_directories);
+                                            request.meta = folders.meta;
+                                            let in_folder = folders.in_folder;
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
                                             let pending_admission_tx = admission_tx.clone();
@@ -615,7 +609,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 .await;
                                             });
                                         }
-                                        ProviderCommand::Restore { provider_session_id, cwd, mode, admitted, reply } => {
+                                        ProviderCommand::Restore { provider_session_id, cwd, mode, setup, admitted, reply } => {
                                             // Only an admitted restore opens a new run; a refused
                                             // one leaves the live run alone (D1 R14).
                                             let attempt = provider_session_machines::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
@@ -634,7 +628,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = admitted.send(generation);
                                             }
                                             known_sessions.track(provider_session_id.clone()).await;
+                                            // The setup its create had, rebuilt (D1 R18; Decision 3).
+                                            let folders = crate::session_start_folders::session_start_folders(&cwd, setup.scratch_folder.as_deref(), &setup.work_roots, task_runtime_handles.behavior.as_ref(), base_capabilities.supports_additional_directories);
                                             let inputs = provider_session_restore::RestoreAdmissionInputs {
+                                                folders,
+                                                requested_mode: setup.requested_mode,
                                                 connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
                                                 behavior: Arc::clone(&task_runtime_handles.behavior),
                                                 connection: connection.clone(),

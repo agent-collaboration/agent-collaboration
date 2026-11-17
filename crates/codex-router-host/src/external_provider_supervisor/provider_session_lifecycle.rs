@@ -60,11 +60,30 @@ pub(super) fn resume(
                 let completion_target = target.clone();
                 let completion_inner = Arc::clone(&backend.inner);
                 backend.spawn_operation(operation_id.clone(), live, async move {
+                    let cwd = PathBuf::from(String::from(working_directory.clone()));
+                    // The setup its create had, rebuilt from its record (D1 R18; Decision 3).
+                    let setup = match crate::provider_session_setup::recorded_restore_setup(
+                        &completion_inner.store,
+                        runtime.session_setup(),
+                        &completion_target,
+                        &cwd,
+                    )
+                    .await
+                    {
+                        Ok(setup) => setup,
+                        Err(_) => {
+                            return ProviderOperationCompletion::Failure(failure(
+                                ConversationOperationFailureKind::Unavailable,
+                                ConversationOperationFailureStage::Dispatch,
+                                ProviderOperationEffect::None,
+                                "the session's record could not be read",
+                                operation_id,
+                                Some(completion_target),
+                            ));
+                        }
+                    };
                     match runtime
-                        .resume_session(
-                            provider_session_id.clone(),
-                            PathBuf::from(String::from(working_directory.clone())),
-                        )
+                        .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
                         .await
                     {
                         Ok(()) => {

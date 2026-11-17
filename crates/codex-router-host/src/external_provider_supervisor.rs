@@ -75,13 +75,6 @@ pub struct ExternalProviderBinding {
     pub runtime: ExternalProviderRuntime,
 }
 
-/// What a session was asked to run in and why its actual mode differs.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct RequestedModeRecord {
-    requested_mode: Option<String>,
-    mode_reason: Option<collaboration_protocol::ProviderModeReason>,
-}
-
 #[derive(Clone)]
 pub struct ExternalProviderSupervisor {
     inner: Arc<SupervisorInner>,
@@ -102,14 +95,8 @@ struct SupervisorInner {
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
     /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
     scratch_root: Option<PathBuf>,
-    /// Each provider's work-roots rule, as its startup configured it (D1 R18).
-    work_roots: StdMutex<HashMap<EndpointRef, crate::provider_work_roots::ProviderWorkRoots>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
-    /// The mode each session created here was asked for, and why its actual
-    /// mode differs (R3). In memory: after a Host restart show reports only the
-    /// agent's actual mode.
-    requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
     /// The approver of each prompt this Host dispatched: a message steered
@@ -207,29 +194,25 @@ impl ExternalProviderSupervisor {
         &self.inner.queued_operations
     }
 
-    /// Sets the work-roots rule sessions on `endpoint` start with (D1 R18).
+    /// Sets the work-roots rule sessions on `endpoint` start with (D1 R18);
+    /// the binding's runtime keeps it, so every path that restores one of its
+    /// sessions rebuilds the same roots.
     pub(crate) fn set_work_roots(
         &self,
-        endpoint: EndpointRef,
+        endpoint: &EndpointRef,
         work_roots: crate::provider_work_roots::ProviderWorkRoots,
     ) {
-        self.inner
-            .work_roots
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(endpoint, work_roots);
+        if let Some(runtime) = self.runtime_for(endpoint) {
+            runtime.session_setup().set_work_roots(work_roots);
+        }
     }
 
     fn work_roots_for(
         &self,
         endpoint: &EndpointRef,
     ) -> crate::provider_work_roots::ProviderWorkRoots {
-        self.inner
-            .work_roots
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(endpoint)
-            .cloned()
+        self.runtime_for(endpoint)
+            .map(|runtime| runtime.session_setup().work_roots())
             .unwrap_or_default()
     }
 
@@ -452,10 +435,8 @@ impl ExternalProviderSupervisor {
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
                 scratch_root,
-                work_roots: StdMutex::new(HashMap::new()),
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
-                requested_modes: Mutex::new(HashMap::new()),
                 catalog_tasks: Mutex::new(catalog_tasks),
                 started_at_ms: now_ms(),
                 #[cfg(test)]
@@ -678,10 +659,6 @@ impl SupervisorInner {
         catalog: acp_client_runtime::ProviderSettingsCatalog,
     ) {
         self.settings_catalogs.lock().await.insert(target, catalog);
-    }
-
-    async fn record_requested_mode(&self, target: SessionRef, record: RequestedModeRecord) {
-        self.requested_modes.lock().await.insert(target, record);
     }
 
     /// Publishes a live operation's result. Its protection from retention ends here, with

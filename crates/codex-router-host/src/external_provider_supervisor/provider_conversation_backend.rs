@@ -195,7 +195,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             }
                         };
                         let cwd = PathBuf::from(String::from(working_directory.clone()));
-                        let work_roots = session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots, auto);
+                        let work_roots = crate::provider_session_setup::session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots, auto);
                         let resume = crate::provider_operation_settlement::created_session_resume_inputs(requested_settings.mode.clone(), named_work_roots, scratch_folder.as_deref());
                         match runtime
                             .create_session_with_work_roots(
@@ -235,7 +235,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         observed.fast = created.effective_settings.fast.map(crate::provider_operation_settlement::provider_fast_state);
                                         observed.requested_mode = created.permission_mode.requested;
                                         observed.mode_reason = created.permission_mode.reason.map(crate::provider_operation_settlement::provider_mode_reason);
-                                        completion_inner.record_requested_mode(target.clone(), super::RequestedModeRecord { requested_mode: observed.requested_mode.clone(), mode_reason: observed.mode_reason }).await;
+                                        runtime.session_setup().record_requested_mode(&String::from(target.session_id.clone()), crate::provider_session_setup::RequestedModeRecord { requested_mode: observed.requested_mode.clone(), mode_reason: observed.mode_reason });
                                         ProviderOperationCompletion::Success {
                                             settlement: ConversationOperationSettlement::Created {
                                                 target: target.clone(),
@@ -279,7 +279,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         completion_inner.record_settings_catalog(target.clone(), catalog).await;
                                     }
                                     // Show keeps the requested mode and reason of a partial start too.
-                                    completion_inner.record_requested_mode(target.clone(), super::RequestedModeRecord { requested_mode: permission_mode.requested, mode_reason: permission_mode.reason.map(crate::provider_operation_settlement::provider_mode_reason) }).await;
+                                    runtime.session_setup().record_created_mode(&String::from(target.session_id.clone()), &permission_mode);
                                     ProviderOperationCompletion::Success {
                                         settlement: ConversationOperationSettlement::CreatedWithoutSettings {
                                             target: target.clone(),
@@ -400,11 +400,30 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let completion_target = target.clone();
                     let completion_inner = Arc::clone(&backend.inner);
                     backend.spawn_operation(operation_id.clone(), live, async move {
+                        let cwd = PathBuf::from(String::from(working_directory.clone()));
+                        // The setup its create had, rebuilt from its record (D1 R18; Decision 3).
+                        let setup = match crate::provider_session_setup::recorded_restore_setup(
+                            &completion_inner.store,
+                            runtime.session_setup(),
+                            &completion_target,
+                            &cwd,
+                        )
+                        .await
+                        {
+                            Ok(setup) => setup,
+                            Err(_) => {
+                                return ProviderOperationCompletion::Failure(failure(
+                                    ConversationOperationFailureKind::Unavailable,
+                                    ConversationOperationFailureStage::Dispatch,
+                                    ProviderOperationEffect::None,
+                                    "the session's record could not be read",
+                                    operation_id,
+                                    Some(completion_target),
+                                ));
+                            }
+                        };
                         match runtime
-                            .load_session(
-                                provider_session_id.clone(),
-                                PathBuf::from(String::from(working_directory.clone())),
-                            )
+                            .load_session_with_setup(provider_session_id.clone(), cwd, setup)
                             .await
                         {
                             Ok(()) => {
@@ -801,38 +820,3 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
 #[cfg(test)]
 #[path = "provider_conversation_backend_test.rs"]
 mod tests;
-
-/// A session's work roots (D1 R18): the configured list and its project's
-/// tmp/, and for Claude the hook command naming every folder it may write
-/// without asking, its working and scratch folders included.
-fn session_work_roots(
-    configured: &crate::provider_work_roots::ProviderWorkRoots,
-    cwd: &std::path::Path,
-    scratch_folder: Option<&std::path::Path>,
-    named: &[PathBuf],
-    router_auto: bool,
-) -> acp_client_runtime::SessionWorkRoots {
-    let ready_hook = match &configured.hook {
-        crate::provider_work_roots::WorkRootsHook::Ready(hook) => Some(hook),
-        _ => None,
-    };
-    if configured.roots.is_empty() && ready_hook.is_none() && named.is_empty() {
-        return acp_client_runtime::SessionWorkRoots {
-            router_auto,
-            ..acp_client_runtime::SessionWorkRoots::default()
-        };
-    }
-    let roots = crate::provider_work_roots::session_work_roots(&configured.roots, cwd, named);
-    let ask_outside_command = ready_hook.map(|hook| {
-        let inside = std::iter::once(cwd.to_path_buf())
-            .chain(scratch_folder.map(std::path::Path::to_path_buf))
-            .chain(roots.iter().cloned())
-            .collect::<Vec<_>>();
-        hook.command(&inside)
-    });
-    acp_client_runtime::SessionWorkRoots {
-        roots,
-        ask_outside_command,
-        router_auto,
-    }
-}

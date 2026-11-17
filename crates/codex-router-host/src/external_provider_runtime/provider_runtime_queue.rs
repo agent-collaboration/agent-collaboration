@@ -92,19 +92,23 @@ impl ExternalProviderRuntime {
         self: &Arc<Self>,
         provider_session_id: String,
         cwd: PathBuf,
+        setup: acp_client_runtime::SessionRestoreSetup,
     ) -> Result<
         futures_util::future::BoxFuture<'static, Result<(), ExternalProviderRuntimeError>>,
         ExternalProviderRuntimeError,
     > {
         let started = self
             .client
-            .begin_load_session(provider_session_id.clone(), cwd)
+            .begin_load_session(provider_session_id.clone(), cwd, setup)
             .await?;
         let runtime = Arc::clone(self);
         Ok(Box::pin(async move {
-            let generation = started.finished().await?;
+            let restored = started.finished().await?;
             runtime
-                .publish_active_session(&provider_session_id, Some(generation))
+                .session_setup
+                .record_restored_mode(&provider_session_id, &restored.permission_mode);
+            runtime
+                .publish_active_session(&provider_session_id, Some(restored.generation))
                 .await
         }))
     }

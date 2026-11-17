@@ -130,13 +130,14 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: provider_session_restore::RestoreHistoryMode,
+        /// What the restore rebuilds of the session's setup (D1 R18).
+        setup: crate::SessionRestoreSetup,
         /// Told the run's generation as soon as the session's cell admits the
         /// load, before the agent answers it.
         admitted:
             Option<tokio::sync::oneshot::Sender<provider_session_machines::SessionGeneration>>,
-        /// The generation the connection admitted the restore under.
         reply: tokio::sync::oneshot::Sender<
-            Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError>,
+            Result<RestoredSessionAdmission, ExternalProviderRuntimeError>,
         >,
     },
     List {
@@ -216,8 +217,12 @@ enum PendingSessionAdmission<P: InteractionPort> {
         /// load since then makes it stale.
         attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
         result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
+        /// The session's in-folder roots, granted once the restore registers.
+        in_folder: Option<crate::in_folder_allowance::InFolderGrant>,
+        /// The mode the session's create asked for.
+        requested_mode: Option<String>,
         reply: tokio::sync::oneshot::Sender<
-            Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError>,
+            Result<RestoredSessionAdmission, ExternalProviderRuntimeError>,
         >,
     },
     Close {
@@ -243,6 +248,15 @@ struct ProviderSessionRegistration<P: InteractionPort> {
 pub(crate) struct CreateAdmissionReply {
     pub(crate) result: Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
     pub(crate) generation: Option<provider_session_machines::SessionGeneration>,
+}
+
+/// A registered load or resume: the generation the connection admitted it
+/// under, and the session's permission mode judged against the mode its
+/// create asked for (D1 R18; owner Decision 3).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RestoredSessionAdmission {
+    pub generation: provider_session_machines::SessionGeneration,
+    pub permission_mode: crate::PermissionModeReport,
 }
 
 struct RestoredProviderSession {

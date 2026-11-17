@@ -27,6 +27,7 @@ pub use provider_acp_message_fifo::QUEUE_RETRY_DELAY;
 mod provider_acp_route_claim;
 mod provider_queue_operation_registry;
 mod provider_session_command_port;
+mod provider_session_setup;
 mod provider_work_roots;
 pub use provider_queue_operation_registry::{ProviderQueueCancellationError, ProviderQueuedInput};
 pub use provider_session_command_port::HostSessionCommandPort;

@@ -41,7 +41,9 @@ steering, queueing and not-sent answers), `provider_cache_warm` (Claude's
 idle cache warm on the Host's injected clock), `provider_full_access_refusal`
 (full-access modes refused at start and on settings set) and
 `provider_work_roots` (work roots reaching Claude and Cursor sessions started
-in auto). Each is bounded by the runner
+in auto) and `provider_resumed_work_roots` (a session loaded after a Host
+restart gets back the work-root layer and requested mode its create
+recorded). Each is bounded by the runner
 (`.config/nextest.toml`), never by a clock in test code.
 
 The aggregate declares shared helper implementations once. Other directories

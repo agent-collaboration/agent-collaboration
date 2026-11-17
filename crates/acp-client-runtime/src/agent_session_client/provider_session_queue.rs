@@ -294,14 +294,16 @@ impl SessionQueueDoor<'_> {
 pub struct SessionLoadStarted {
     pub generation: SessionGeneration,
     completion: tokio::sync::oneshot::Receiver<
-        Result<SessionGeneration, super::ExternalProviderRuntimeError>,
+        Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError>,
     >,
 }
 
 impl SessionLoadStarted {
     /// The load's result: the run is Live, or it failed and the messages
     /// that waited for it ended not sent.
-    pub async fn finished(self) -> Result<SessionGeneration, super::ExternalProviderRuntimeError> {
+    pub async fn finished(
+        self,
+    ) -> Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError> {
         self.completion
             .await
             .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?
@@ -309,13 +311,15 @@ impl SessionLoadStarted {
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {
-    /// Starts loading the session (session/load with replay) and returns as
-    /// soon as its cell admits the load, so a door can put messages in the
-    /// loading run's line in order.
+    /// Starts loading the session (session/load with replay), rebuilding the
+    /// setup its create had (D1 R18), and returns as soon as its cell admits
+    /// the load, so a door can put messages in the loading run's line in
+    /// order.
     pub async fn begin_load_session(
         &self,
         provider_session_id: String,
         cwd: std::path::PathBuf,
+        setup: crate::SessionRestoreSetup,
     ) -> Result<SessionLoadStarted, super::ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_load {
             return Err(super::ExternalProviderRuntimeError::UnsupportedCapability {
@@ -329,6 +333,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 provider_session_id,
                 cwd,
                 mode: super::provider_session_restore::RestoreHistoryMode::Replay,
+                setup,
                 admitted: Some(admitted),
                 reply,
             })

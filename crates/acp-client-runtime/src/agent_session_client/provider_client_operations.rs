@@ -334,18 +334,24 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/load",
             });
         }
-        self.load_session_with_generation(provider_session_id, cwd)
-            .await
-            .map(|_| ())
+        self.load_session_with_setup(
+            provider_session_id,
+            cwd,
+            crate::SessionRestoreSetup::default(),
+        )
+        .await
+        .map(|_| ())
     }
 
-    /// Loads the session; answers the generation the connection admitted it
-    /// under, which the caller's own publications for this run carry.
-    pub async fn load_session_with_generation(
+    /// Loads the session, rebuilding the setup its create had (D1 R18);
+    /// answers the generation the connection admitted it under, which the
+    /// caller's own publications for this run carry, and its mode report.
+    pub async fn load_session_with_setup(
         &self,
         provider_session_id: String,
         cwd: PathBuf,
-    ) -> Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError> {
+        setup: crate::SessionRestoreSetup,
+    ) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_load {
             return Err(ExternalProviderRuntimeError::UnsupportedCapability {
                 capability: "session/load",
@@ -355,6 +361,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             provider_session_id,
             cwd,
             super::provider_session_restore::RestoreHistoryMode::Replay,
+            setup,
         )
         .await
     }
@@ -369,18 +376,24 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/resume",
             });
         }
-        self.resume_session_with_generation(provider_session_id, cwd)
-            .await
-            .map(|_| ())
+        self.resume_session_with_setup(
+            provider_session_id,
+            cwd,
+            crate::SessionRestoreSetup::default(),
+        )
+        .await
+        .map(|_| ())
     }
 
-    /// Resumes the session; answers the generation the connection admitted
-    /// it under.
-    pub async fn resume_session_with_generation(
+    /// Resumes the session, rebuilding the setup its create had (D1 R18);
+    /// answers the generation the connection admitted it under and its mode
+    /// report.
+    pub async fn resume_session_with_setup(
         &self,
         provider_session_id: String,
         cwd: PathBuf,
-    ) -> Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError> {
+        setup: crate::SessionRestoreSetup,
+    ) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_resume {
             return Err(ExternalProviderRuntimeError::UnsupportedCapability {
                 capability: "session/resume",
@@ -390,6 +403,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             provider_session_id,
             cwd,
             super::provider_session_restore::RestoreHistoryMode::WithoutReplay,
+            setup,
         )
         .await
     }
@@ -399,13 +413,15 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: super::provider_session_restore::RestoreHistoryMode,
-    ) -> Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError> {
+        setup: crate::SessionRestoreSetup,
+    ) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Restore {
                 provider_session_id,
                 cwd,
                 mode,
+                setup,
                 admitted: None,
                 reply,
             })

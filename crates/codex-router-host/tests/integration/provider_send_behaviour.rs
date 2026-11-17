@@ -100,11 +100,20 @@ impl ComposedHost {
     }
 
     pub(crate) async fn create(&self, approver: &ProviderIdentity) -> SessionRef {
+        self.create_naming(approver, Vec::new()).await
+    }
+
+    /// Creates a session in auto whose creator names `work_roots`.
+    pub(crate) async fn create_naming(
+        &self,
+        approver: &ProviderIdentity,
+        work_roots: Vec<ProviderWorkingDirectory>,
+    ) -> SessionRef {
         let operation_id = OperationId::generate();
         submit_provider_create(
             &self.client,
             ConversationCreateRequest {
-                work_roots: Vec::new(),
+                work_roots,
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()

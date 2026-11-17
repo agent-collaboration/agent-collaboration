@@ -19,6 +19,10 @@
 //   offer-fast: sessions also offer a select option "fast" (false, true),
 //     starting at "true".
 //   refuse-fast-once: the first fast change is answered with an error.
+//   advertise-restore: the agent advertises session/load and session/resume,
+//     records each restore's additionalDirectories and _meta, and answers it
+//     with the session in its profile's start mode.
+//   restored-in-auto: with advertise-restore, a restored session is in auto.
 import { field } from "../exact-json.ts";
 import { requireArgument } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
@@ -35,6 +39,8 @@ const known = [
   "advertise-close",
   "offer-fast",
   "refuse-fast-once",
+  "advertise-restore",
+  "restored-in-auto",
 ];
 for (const behaviour of behaviours)
   if (!known.includes(behaviour)) throw new Error(`unknown fixture behaviour ${behaviour}`);
@@ -53,9 +59,11 @@ const agent = new AcpExchange();
 await agent.initialize(`${profile}-permission-fixture`, {
   authMethods: [{ id: "cursor_login", name: "Cursor login" }],
   agentCapabilities: {
+    ...(behaviours.has("advertise-restore") ? { loadSession: true } : {}),
     sessionCapabilities: {
       ...(directories === "grants-directories" ? { additionalDirectories: {} } : {}),
       ...(behaviours.has("advertise-close") ? { close: {} } : {}),
+      ...(behaviours.has("advertise-restore") ? { resume: {} } : {}),
     },
   },
 });
@@ -66,6 +74,12 @@ interface Observed {
   readonly fastRequests: { sessionId: unknown; value: unknown }[];
   readonly prompts: string[];
   readonly closes: string[];
+  readonly restores: {
+    method: string;
+    sessionId: string;
+    additionalDirectories: unknown;
+    meta: unknown;
+  }[];
   readonly permissionAnswers: { sessionId: string; answer: unknown }[];
 }
 const observed: Observed = {
@@ -74,6 +88,7 @@ const observed: Observed = {
   fastRequests: [],
   prompts: [],
   closes: [],
+  restores: [],
   permissionAnswers: [],
 };
 let permissionRequestId = 900;
@@ -181,6 +196,21 @@ for (;;) {
       observed.permissionAnswers.push({ sessionId, answer: field(answer, "result") });
       agent.receipt(receipt, observed);
       agent.endTurn(request);
+      break;
+    }
+    case "session/load":
+    case "session/resume": {
+      const sessionId = String(field(request, "params", "sessionId"));
+      const params = field(request, "params") as Record<string, unknown>;
+      observed.restores.push({
+        method: String(request.method),
+        sessionId,
+        additionalDirectories: params.additionalDirectories ?? null,
+        meta: params._meta ?? null,
+      });
+      currentMode.set(sessionId, behaviours.has("restored-in-auto") ? "auto" : chosen.start);
+      agent.receipt(receipt, observed);
+      agent.respond(request, { configOptions: configOptions(sessionId) });
       break;
     }
     case "session/close":

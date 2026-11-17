@@ -1,4 +1,4 @@
-//! Which in-folder grant a start leaves behind, read from the grant map the
+//! Which in-folder grant a start or a restore leaves behind, read from the grant map the
 //! permission path uses (D1 spec R2, R4).
 
 use crate::{
@@ -301,4 +301,137 @@ async fn closed_invalid_start_leaves_no_in_folder_grant() {
         kept_grant.is_some(),
         "a session that stays created keeps its grant"
     );
+}
+
+impl Fixture {
+    /// The setup a create in `mode` with this fixture's scratch folder had.
+    fn restore_setup(&self, mode: Option<&str>) -> crate::SessionRestoreSetup {
+        mode.map_or_else(crate::SessionRestoreSetup::default, |mode| {
+            crate::SessionRestoreSetup {
+                requested_mode: Some(mode.to_owned()),
+                scratch_folder: Some(self.scratch.clone()),
+                work_roots: crate::SessionWorkRoots {
+                    router_auto: mode == "auto",
+                    ..crate::SessionWorkRoots::default()
+                },
+            }
+        })
+    }
+}
+
+/// Oracle: owner Decision 3 and D1 R18, a resumed session gets back the
+/// folders and the allowance its create had: a load and a resume of a session
+/// created in auto send its scratch folder as an additional directory, and
+/// leave an active in-folder grant when the agent restored it in auto; each
+/// reports the requested mode auto.
+#[tokio::test]
+async fn a_restored_auto_session_gets_its_folders_and_an_active_grant() {
+    // Arrange
+    let fixture = Fixture::start(&["advertise-restore", "restored-in-auto"]).await;
+
+    // Act
+    let loaded = fixture
+        .client
+        .load_session_with_setup(
+            "loaded-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("auto")),
+        )
+        .await
+        .expect("load");
+    let resumed = fixture
+        .client
+        .resume_session_with_setup(
+            "resumed-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("auto")),
+        )
+        .await
+        .expect("resume");
+    let loaded_grant = fixture
+        .client
+        .in_folder_router_auto_for_test("loaded-session");
+    let resumed_grant = fixture
+        .client
+        .in_folder_router_auto_for_test("resumed-session");
+    fixture.client.shutdown().await;
+
+    // Assert
+    let restores = fixture.receipt()["restores"].clone();
+    assert_eq!(restores[0]["method"], "session/load");
+    assert_eq!(restores[1]["method"], "session/resume");
+    for restore in [&restores[0], &restores[1]] {
+        assert_eq!(
+            restore["additionalDirectories"],
+            json!([fixture.scratch.display().to_string()]),
+            "{restore}"
+        );
+    }
+    assert_eq!(loaded_grant, Some(true));
+    assert_eq!(resumed_grant, Some(true));
+    for restored in [&loaded, &resumed] {
+        assert_eq!(restored.permission_mode.requested.as_deref(), Some("auto"));
+        assert_eq!(restored.permission_mode.actual.as_deref(), Some("auto"));
+    }
+}
+
+/// Oracle: D1 R4, "the allowance follows the mode the agent confirmed": a
+/// session created in auto that the agent restores in another mode keeps its
+/// folders but its grant is off until its mode is auto again.
+#[tokio::test]
+async fn a_restored_session_no_longer_in_auto_has_its_grant_off() {
+    // Arrange
+    let fixture = Fixture::start(&["advertise-restore"]).await;
+
+    // Act
+    let resumed = fixture
+        .client
+        .resume_session_with_setup(
+            "resumed-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("auto")),
+        )
+        .await
+        .expect("resume");
+    let grant = fixture
+        .client
+        .in_folder_router_auto_for_test("resumed-session");
+    fixture.client.shutdown().await;
+
+    // Assert
+    assert_eq!(grant, Some(false));
+    assert_eq!(resumed.permission_mode.requested.as_deref(), Some("auto"));
+    assert_eq!(resumed.permission_mode.actual.as_deref(), Some("default"));
+}
+
+/// Oracle: owner Decision 3, "old rows keep the fallback": a restore with no
+/// recorded setup sends no additional directories and leaves no grant, so
+/// every request asks, as before.
+#[tokio::test]
+async fn a_restore_without_a_recorded_setup_grants_nothing() {
+    // Arrange
+    let fixture = Fixture::start(&["advertise-restore", "restored-in-auto"]).await;
+
+    // Act
+    let resumed = fixture
+        .client
+        .resume_session_with_setup(
+            "old-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(None),
+        )
+        .await
+        .expect("resume");
+    let grant = fixture.client.in_folder_router_auto_for_test("old-session");
+    fixture.client.shutdown().await;
+
+    // Assert
+    let restore = fixture.receipt()["restores"][0].clone();
+    assert!(
+        matches!(&restore["additionalDirectories"], Value::Null)
+            || restore["additionalDirectories"] == json!([]),
+        "{restore}"
+    );
+    assert_eq!(grant, None);
+    assert_eq!(resumed.permission_mode.requested, None);
 }

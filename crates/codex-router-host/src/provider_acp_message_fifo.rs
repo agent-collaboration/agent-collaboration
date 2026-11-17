@@ -317,7 +317,7 @@ impl ProviderAcpMessageFifo {
         target: &SessionRef,
         line: &Arc<SessionLine>,
     ) -> Result<(), QueueDoorRefusal> {
-        let working_directory = match inspect_provider_session_loadability(
+        let (working_directory, setup) = match inspect_provider_session_loadability(
             runtime,
             &self.store,
             self.ownership.as_ref(),
@@ -327,7 +327,10 @@ impl ProviderAcpMessageFifo {
         {
             // Loaded meanwhile: the message joins the live run's line.
             ProviderSessionLoadability::AlreadyLoaded => return Ok(()),
-            ProviderSessionLoadability::Loadable { working_directory } => working_directory,
+            ProviderSessionLoadability::Loadable {
+                working_directory,
+                setup,
+            } => (working_directory, setup),
             ProviderSessionLoadability::UnsupportedLoad => {
                 return Err(QueueDoorRefusal::Refused("unsupported: load".to_owned()));
             }
@@ -346,7 +349,11 @@ impl ProviderAcpMessageFifo {
             }
         };
         let finish = match runtime
-            .begin_load_session(String::from(target.session_id.clone()), working_directory)
+            .begin_load_session(
+                String::from(target.session_id.clone()),
+                working_directory,
+                setup,
+            )
             .await
         {
             Ok(finish) => finish,

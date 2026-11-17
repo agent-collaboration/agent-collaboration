@@ -298,7 +298,7 @@ pub(crate) async fn compose_provider_startup(
     };
     if let Some(supervisor) = &supervisor {
         for (endpoint, roots) in work_roots {
-            supervisor.set_work_roots(endpoint, roots);
+            supervisor.set_work_roots(&endpoint, roots);
         }
     }
     Ok(ProviderStartupComposition {

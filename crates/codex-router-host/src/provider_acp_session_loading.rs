@@ -32,11 +32,18 @@ pub(crate) enum ProviderSessionLoadOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ProviderSessionLoadability {
     AlreadyLoaded,
-    Loadable { working_directory: PathBuf },
+    /// Loadable in its recorded folder, with the setup its create had
+    /// rebuilt from its record (D1 R18; owner Decision 3).
+    Loadable {
+        working_directory: PathBuf,
+        setup: acp_client_runtime::SessionRestoreSetup,
+    },
     UnsupportedLoad,
     MissingRecord,
     LiveElsewhere,
-    Unavailable { reason: String },
+    Unavailable {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -95,7 +102,7 @@ pub(crate) async fn ensure_provider_session_loaded(
         return unavailable("provider runtime is unavailable");
     };
     let provider_session_id = String::from(target.session_id.clone());
-    let working_directory = match inspect_provider_session_loadability(
+    let (working_directory, setup) = match inspect_provider_session_loadability(
         runtime.as_ref(),
         store,
         ownership,
@@ -112,7 +119,10 @@ pub(crate) async fn ensure_provider_session_loaded(
         ProviderSessionLoadability::Loadable { .. } if load_policy == LoadPolicy::LoadedOnly => {
             return ProviderSessionLoadOutcome::NotLoaded;
         }
-        ProviderSessionLoadability::Loadable { working_directory } => working_directory,
+        ProviderSessionLoadability::Loadable {
+            working_directory,
+            setup,
+        } => (working_directory, setup),
         ProviderSessionLoadability::UnsupportedLoad => {
             return ProviderSessionLoadOutcome::UnsupportedLoad;
         }
@@ -127,7 +137,7 @@ pub(crate) async fn ensure_provider_session_loaded(
         }
     };
     match runtime
-        .load_session(provider_session_id, working_directory)
+        .load_session_with_setup(provider_session_id, working_directory, setup)
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,
@@ -254,8 +264,13 @@ pub(crate) async fn inspect_provider_session_loadability(
         }
         Err(error) => return unavailable_loadability(error.to_string()),
     }
+    let working_directory = PathBuf::from(String::from(record.working_directory));
+    let setup = runtime
+        .session_setup()
+        .restore_setup(&working_directory, &record.resume);
     ProviderSessionLoadability::Loadable {
-        working_directory: PathBuf::from(String::from(record.working_directory)),
+        working_directory,
+        setup,
     }
 }
 

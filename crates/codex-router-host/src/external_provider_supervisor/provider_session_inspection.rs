@@ -55,12 +55,12 @@ pub(super) async fn inspect(
             .cloned(),
     };
     let requested_mode = supervisor
-        .inner
-        .requested_modes
-        .lock()
-        .await
-        .get(&target)
-        .cloned()
+        .runtime_for(&target.endpoint)
+        .map(|runtime| {
+            runtime
+                .session_setup()
+                .requested_mode(&String::from(target.session_id.clone()))
+        })
         .unwrap_or_default();
     // Fast from the catalog this Host holds; absent when it holds none (D1 R11).
     let fast = catalog.as_ref().map(|catalog| {

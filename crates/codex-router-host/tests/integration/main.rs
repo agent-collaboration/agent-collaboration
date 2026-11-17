@@ -67,6 +67,7 @@ mod provider_pending_hub_races;
 mod provider_persistence_overlay;
 mod provider_queue_settlement;
 mod provider_queued_api_lifecycle;
+mod provider_resumed_work_roots;
 mod provider_router_close;
 mod provider_send_approvers;
 mod provider_send_behaviour;

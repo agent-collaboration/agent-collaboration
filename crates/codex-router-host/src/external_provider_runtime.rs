@@ -97,6 +97,8 @@ pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
     interaction_port: Arc<HostInteractionPort>,
     event_sink: Option<Arc<HubSessionEventSink>>,
+    /// The binding's work roots and each session's requested mode (D1 R18).
+    session_setup: crate::provider_session_setup::BindingSessionSetup,
     /// Test-only: holds the next create, load or resume after the client's success,
     /// before its activation is published.
     #[cfg(test)]
@@ -134,6 +136,7 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: None,
+            session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
         })
@@ -161,6 +164,7 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: None,
+            session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
         })
@@ -202,6 +206,7 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: Some(event_sink),
+            session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
         })
@@ -226,6 +231,7 @@ impl ExternalProviderRuntime {
             client,
             interaction_port,
             event_sink: None,
+            session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
         })
@@ -380,19 +386,42 @@ impl ExternalProviderRuntime {
         self.client.settings_catalog(provider_session_id).await
     }
 
+    /// The binding's work roots and each session's requested mode.
+    pub(crate) fn session_setup(&self) -> &crate::provider_session_setup::BindingSessionSetup {
+        &self.session_setup
+    }
+
     pub async fn load_session(
         &self,
         provider_session_id: String,
         cwd: PathBuf,
     ) -> Result<(), ExternalProviderRuntimeError> {
+        self.load_session_with_setup(
+            provider_session_id,
+            cwd,
+            acp_client_runtime::SessionRestoreSetup::default(),
+        )
+        .await
+    }
+
+    /// Loads the session, rebuilding the setup its create had (D1 R18), and
+    /// keeps its mode report for show.
+    pub(crate) async fn load_session_with_setup(
+        &self,
+        provider_session_id: String,
+        cwd: PathBuf,
+        setup: acp_client_runtime::SessionRestoreSetup,
+    ) -> Result<(), ExternalProviderRuntimeError> {
         // The generation the connection admitted this load under (D1 R14).
-        let generation = self
+        let restored = self
             .client
-            .load_session_with_generation(provider_session_id.clone(), cwd)
+            .load_session_with_setup(provider_session_id.clone(), cwd, setup)
             .await?;
+        self.session_setup
+            .record_restored_mode(&provider_session_id, &restored.permission_mode);
         #[cfg(test)]
         self.pause_before_activation().await;
-        self.publish_active_session(&provider_session_id, Some(generation))
+        self.publish_active_session(&provider_session_id, Some(restored.generation))
             .await
     }
 
@@ -401,10 +430,29 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        let generation = self
+        self.resume_session_with_setup(
+            provider_session_id,
+            cwd,
+            acp_client_runtime::SessionRestoreSetup::default(),
+        )
+        .await
+    }
+
+    /// Resumes the session, rebuilding the setup its create had (D1 R18), and
+    /// keeps its mode report for show.
+    pub(crate) async fn resume_session_with_setup(
+        &self,
+        provider_session_id: String,
+        cwd: PathBuf,
+        setup: acp_client_runtime::SessionRestoreSetup,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        let restored = self
             .client
-            .resume_session_with_generation(provider_session_id.clone(), cwd)
+            .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
             .await?;
+        self.session_setup
+            .record_restored_mode(&provider_session_id, &restored.permission_mode);
+        let generation = restored.generation;
         #[cfg(test)]
         self.pause_before_activation().await;
         if let Some(event_sink) = &self.event_sink {

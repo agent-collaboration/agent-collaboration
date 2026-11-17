@@ -29,6 +29,10 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) cwd: PathBuf,
     pub(super) mode: RestoreHistoryMode,
     pub(super) mcp_servers: Vec<McpServer>,
+    /// The session's folders and provider metadata, rebuilt as its create
+    /// sent them (D1 R18; owner Decision 3).
+    pub(super) folders: crate::session_start_folders::SessionStartFolders,
+    pub(super) requested_mode: Option<String>,
     pub(super) shutdown: CancellationToken,
     pub(super) event_sink: Arc<dyn SessionEventSink>,
     pub(super) behavior: Arc<dyn crate::ProviderBehavior>,
@@ -37,7 +41,7 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) generation: provider_session_machines::SessionGeneration,
     pub(super) attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
     pub(super) reply: tokio::sync::oneshot::Sender<
-        Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError>,
+        Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError>,
     >,
 }
 
@@ -48,6 +52,8 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         cwd,
         mode,
         mcp_servers,
+        folders,
+        requested_mode,
         shutdown,
         event_sink,
         behavior,
@@ -70,8 +76,10 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         Err(error) => Err(error),
         Ok(()) => match mode {
             RestoreHistoryMode::Replay => {
-                let request = LoadSessionRequest::new(provider_session_id.clone(), &cwd)
-                    .mcp_servers(mcp_servers);
+                let mut request = LoadSessionRequest::new(provider_session_id.clone(), &cwd)
+                    .mcp_servers(mcp_servers)
+                    .additional_directories(folders.additional_directories);
+                request.meta = folders.meta;
                 tokio::select! {
                     () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
                     result = connection.load_session_from(request).block_task().start_session() =>
@@ -93,8 +101,10 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                 }
             }
             RestoreHistoryMode::WithoutReplay => {
-                let request = ResumeSessionRequest::new(provider_session_id.clone(), &cwd)
-                    .mcp_servers(mcp_servers);
+                let mut request = ResumeSessionRequest::new(provider_session_id.clone(), &cwd)
+                    .mcp_servers(mcp_servers)
+                    .additional_directories(folders.additional_directories);
+                request.meta = folders.meta;
                 tokio::select! {
                     () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
                     result = connection.resume_session_from(request).block_task().start_session() =>
@@ -115,6 +125,8 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
             attempt,
             provider_session_id,
             result: Box::new(result),
+            in_folder: folders.in_folder,
+            requested_mode,
             reply,
         },
     )

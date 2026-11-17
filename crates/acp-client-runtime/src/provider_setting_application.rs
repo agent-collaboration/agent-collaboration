@@ -265,16 +265,96 @@ fn record_confirmed_mode(
     router_auto_requested: bool,
 ) {
     let actual = catalog.effective_settings().mode;
-    let fell_back = planned.accepted_fallback.is_some()
-        && actual.as_deref() == planned.accepted_fallback.as_deref();
-    outcome.permission_mode.reason = if fell_back {
-        Some(crate::PermissionModeReason::AgentFellBack)
-    } else {
-        planned.reason
-    };
-    outcome.router_auto_active =
-        router_auto_requested && (fell_back || actual.as_deref() == Some(planned.value.as_str()));
+    let judged = judge_agent_mode(planned, actual.as_deref(), router_auto_requested);
+    outcome.permission_mode.reason = judged.reason;
+    outcome.router_auto_active = judged.router_auto_active;
     outcome.permission_mode.actual = actual;
+}
+
+/// How the mode an agent reports answers a planned mode.
+struct JudgedMode {
+    reason: Option<crate::PermissionModeReason>,
+    /// Router auto was asked for and the agent runs the planned mode or its
+    /// accepted fallback.
+    router_auto_active: bool,
+}
+
+fn judge_agent_mode(
+    planned: &PlannedMode,
+    actual: Option<&str>,
+    router_auto_requested: bool,
+) -> JudgedMode {
+    let fell_back =
+        planned.accepted_fallback.is_some() && actual == planned.accepted_fallback.as_deref();
+    JudgedMode {
+        reason: if fell_back {
+            Some(crate::PermissionModeReason::AgentFellBack)
+        } else {
+            planned.reason
+        },
+        router_auto_active: router_auto_requested
+            && (fell_back || actual == Some(planned.value.as_str())),
+    }
+}
+
+/// A restored session's mode report and Router-auto answer (D1 R18; owner
+/// Decision 3).
+pub(crate) struct RestoredPermissionMode {
+    pub(crate) report: crate::PermissionModeReport,
+    pub(crate) router_auto_active: bool,
+}
+
+/// Judges the mode the agent restored a session in against the mode its
+/// create asked for, as a start judges the mode the agent confirmed. Nothing
+/// is sent: a restore keeps whatever mode the agent kept, so a session whose
+/// mode was changed away from auto since its create runs without the Router's
+/// allowance until its mode is auto again.
+pub(crate) fn restored_permission_mode(
+    requested: Option<&str>,
+    catalog: &ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+) -> RestoredPermissionMode {
+    let requested_mode = crate::RequestedPermissionMode::from_request(requested);
+    let actual = catalog.effective_settings().mode;
+    let mut restored = RestoredPermissionMode {
+        report: crate::PermissionModeReport {
+            requested: requested_mode.requested_name().map(str::to_owned),
+            actual: actual.clone(),
+            reason: None,
+        },
+        router_auto_active: false,
+    };
+    if requested_mode == crate::RequestedPermissionMode::Unspecified {
+        return restored;
+    }
+    let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
+    match crate::plan_permission_mode(
+        requested_mode,
+        &catalog.advertised_values(ProviderSettingKind::Mode),
+        behavior.auto_permission_mode(),
+    ) {
+        Err(_) => {}
+        Ok(crate::PermissionModePlan::Keep { reason, .. }) => restored.report.reason = reason,
+        Ok(crate::PermissionModePlan::Set {
+            mode,
+            accepted_fallback,
+            reason,
+            ..
+        }) => {
+            let judged = judge_agent_mode(
+                &PlannedMode {
+                    value: mode,
+                    accepted_fallback,
+                    reason,
+                },
+                actual.as_deref(),
+                router_auto_requested,
+            );
+            restored.report.reason = judged.reason;
+            restored.router_auto_active = judged.router_auto_active;
+        }
+    }
+    restored
 }
 
 async fn apply_one_setting(

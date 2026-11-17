@@ -16,6 +16,18 @@ pub struct SessionWorkRoots {
     pub router_auto: bool,
 }
 
+/// What a load or resume rebuilds of the setup a session was created with
+/// (D1 R18; owner Decision 3): the mode its create asked for, its scratch
+/// folder and its work roots, built as a create builds them. The default
+/// rebuilds nothing, as for a session recorded before these were kept: no
+/// additional folders, no Router allowance, every request asks.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SessionRestoreSetup {
+    pub requested_mode: Option<String>,
+    pub scratch_folder: Option<PathBuf>,
+    pub work_roots: SessionWorkRoots,
+}
+
 pub trait ProviderBehavior: Send + Sync {
     fn initialization_authentication(&self) -> ProviderInitializationAuthentication;
     fn can_reuse_setting_confirmation(
