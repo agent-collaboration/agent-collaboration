@@ -10,10 +10,7 @@ pub(super) async fn prepare_cleanup(
     database: DatabaseId,
     loss: CleanupLoss,
 ) -> ConformanceResult<PreparedCleanup> {
-    let at = RegistryTime(
-        chrono::DateTime::from_timestamp_millis(chrono::Utc::now().timestamp_millis())
-            .ok_or("cleanup fixture time is outside range")?,
-    );
+    let at = RegistryTime(imported_board_fixture::time_after_import(1)?);
     control(
         base,
         ObjectAddress::Fleet,
