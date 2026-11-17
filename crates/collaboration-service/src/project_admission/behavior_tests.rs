@@ -1,6 +1,4 @@
 //! Retained native behavioral claims use the existing crate-local deterministic admission seam.
-#[path = "behavior_tests/subscription_fixture.rs"]
-mod subscription_fixture;
 use chrono::Duration;
 use message_board::*;
 use subscription_fixture::*;

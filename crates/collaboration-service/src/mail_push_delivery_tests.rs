@@ -1,7 +1,5 @@
 //! Real native actor and library retry boundaries with explicit external seams.
 use super::*;
-#[path = "mail_push_delivery_fixture.rs"]
-mod native;
 #[path = "mail_delivery_runner_probe.rs"]
 mod runner_probe;
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, PushDeliveryState, PushId};

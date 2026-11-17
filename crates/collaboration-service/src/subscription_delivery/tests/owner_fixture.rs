@@ -90,8 +90,6 @@ impl HeldMailTestSignals {
         }
     }
 }
-#[path = "owner_setup.rs"]
-mod owner_setup;
 
 impl OwnerFixture {
     /// A real lifecycle journal, prepared and handed to readers this fixture starts.

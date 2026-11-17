@@ -18,13 +18,9 @@ use tokio::sync::Mutex as TokioMutex;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
-#[path = "push_surface/board_and_history_proofs.rs"]
-mod board_and_history_proofs;
 #[path = "push_surface/dm_read_proofs.rs"]
 mod dm_read_proofs;
 use crate::served_api;
-#[path = "push_surface/subscription_expansion_proofs.rs"]
-mod subscription_expansion_proofs;
 
 use crate::native_mail_owner;
 #[path = "push_surface/native_push_fixture.rs"]

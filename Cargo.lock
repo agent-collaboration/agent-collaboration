@@ -200,7 +200,6 @@ dependencies = [
  "agent-session-tui",
  "automation-storage",
  "axum",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
@@ -898,39 +897,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-central-test-support"
-version = "0.1.156"
-dependencies = [
- "axum",
- "board-fleet-sync",
- "board-sync-protocol",
- "codex-router-core",
- "codex-router-secret-store",
- "collaboration-central-admin-protocol",
- "collaboration-central-conformance",
- "collaboration-central-core",
- "collaboration-central-tokio",
- "collaboration-contracts",
- "collaboration-runtime",
- "collaboration-service",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "futures-util",
- "message-board",
- "message-board-storage",
- "reqwest 0.12.28",
- "reqwest-websocket",
- "runtime-primitives",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "board-fleet-sync"
 version = "0.1.156"
 dependencies = [
@@ -1471,7 +1437,6 @@ dependencies = [
  "agent-client-protocol",
  "automation-storage",
  "axum",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
@@ -1742,7 +1707,6 @@ name = "collaboration-application-test-support"
 version = "0.1.156"
 dependencies = [
  "automation-storage",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-native-integration",
@@ -1907,7 +1871,6 @@ name = "collaboration-client"
 version = "0.1.156"
 dependencies = [
  "automation-storage",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-acp-adapter",
@@ -1986,7 +1949,6 @@ dependencies = [
  "agent-collaboration",
  "automation-storage",
  "axum",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-acp-adapter",
@@ -2105,7 +2067,6 @@ dependencies = [
  "agent-automation",
  "automation-storage",
  "base64 0.22.1",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",

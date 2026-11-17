@@ -60,7 +60,6 @@ sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/
 fleet-sync-writer.workspace = true
 fleet-sync-lease.workspace = true
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
-board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
 fleet-sync-session.workspace = true
 fleet-sync-tokio-runner.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
