@@ -24,7 +24,7 @@ fn generation_exhaustion_and_invalid_id_sources_fail_without_a_plan() {
     );
     struct InvalidIds;
     impl IdSource for InvalidIds {
-        fn new_id(&self) -> durable_steps::Uuid {
+        fn new_id(&self) -> uuid::Uuid {
             uuid::Uuid::nil()
         }
     }

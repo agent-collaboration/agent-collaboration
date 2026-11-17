@@ -167,7 +167,7 @@ pub struct ReadChangeRecordsRequest {
     /// The last record ID of the previous page; absent or null for the first.
     #[serde(default)]
     #[schemars(with = "Option<String>", extend("format" = "uuid"))]
-    pub after: Option<durable_steps::Uuid>,
+    pub after: Option<uuid::Uuid>,
     pub limit: RecordPageLimit,
 }
 
@@ -184,7 +184,7 @@ pub struct EngineListRetiredRequest {
     /// The last attempt ID of the previous page; absent or null for the first.
     #[serde(default)]
     #[schemars(with = "Option<String>", extend("format" = "uuid"))]
-    pub after: Option<durable_steps::Uuid>,
+    pub after: Option<uuid::Uuid>,
     pub limit: RecordPageLimit,
 }
 
@@ -196,7 +196,7 @@ pub struct EngineAttemptRequest {
     pub organization_id: OrganizationId,
     pub operation_id: AdminOperationId,
     #[schemars(with = "String", extend("format" = "uuid"))]
-    pub attempt_id: durable_steps::Uuid,
+    pub attempt_id: uuid::Uuid,
 }
 
 /// Which route a request arrived on decides how its body is read; the body
@@ -370,7 +370,7 @@ struct WorkspaceLookupParams {}
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ReadChangeRecordsParams {
     #[schemars(with = "Option<String>", extend("format" = "uuid"))]
-    after: Option<durable_steps::Uuid>,
+    after: Option<uuid::Uuid>,
     limit: RecordPageLimit,
 }
 
@@ -378,7 +378,7 @@ struct ReadChangeRecordsParams {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EngineAttemptParams {
     #[schemars(with = "String", extend("format" = "uuid"))]
-    attempt_id: durable_steps::Uuid,
+    attempt_id: uuid::Uuid,
 }
 
 impl AdminOperation {

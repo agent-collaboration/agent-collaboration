@@ -8,7 +8,7 @@ use crate::organization_authority::{
     FleetOrganizationStatementRefusal, SignInVerification, StoredStampRead, StoredStatementFacts,
     VerifiedFleetOrganizationStatement,
 };
-use durable_steps::BoxFuture;
+use futures_util::future::BoxFuture;
 use fleet_identity_protocol::UnixSeconds;
 use runtime_primitives::SyncTime;
 use std::sync::{Arc, Mutex, RwLock};

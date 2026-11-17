@@ -44,7 +44,7 @@ impl CountingIds {
     }
 }
 impl IdSource for CountingIds {
-    fn new_id(&self) -> durable_steps::Uuid {
+    fn new_id(&self) -> uuid::Uuid {
         Uuid::parse_str(&id(self.0.fetch_add(1, Ordering::SeqCst))).unwrap()
     }
 }

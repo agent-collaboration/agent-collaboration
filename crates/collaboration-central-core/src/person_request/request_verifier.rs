@@ -12,7 +12,7 @@ use super::{
 use crate::{
     Ed25519Verification, IssuerKeySource, IssuerSignatureVerifier, SignatureValidity, VerifyFailure,
 };
-use durable_steps::Uuid;
+use uuid::Uuid;
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
