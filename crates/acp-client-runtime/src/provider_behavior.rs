@@ -18,7 +18,10 @@ pub struct SessionWorkRoots {
 
 pub trait ProviderBehavior: Send + Sync {
     fn initialization_authentication(&self) -> ProviderInitializationAuthentication;
-    fn can_reuse_setting_confirmation(&self, kind: crate::ProviderSettingKind) -> bool;
+    fn can_reuse_setting_confirmation(
+        &self,
+        kind: provider_session_machines::ProviderSettingKind,
+    ) -> bool;
     fn model_metadata_source(&self) -> crate::ModelMetadataSource;
     fn decode_model_metadata(&self, value: &serde_json::Value) -> crate::ModelReasoningMetadata;
     /// What `auto` means for this agent: its own mode realizing it, its ask-first

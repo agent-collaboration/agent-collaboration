@@ -14,14 +14,14 @@ use state_machine_core::{
 /// One load or resume attempt's identity, so a late reply from an earlier
 /// attempt is recognised (a UUIDv7 minted by the caller).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct LoadAttempt(pub(crate) uuid::Uuid);
+pub struct LoadAttempt(pub uuid::Uuid);
 
 /// One close attempt's identity.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct CloseAttempt(pub(crate) uuid::Uuid);
+pub struct CloseAttempt(pub uuid::Uuid);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum RestoreVia {
+pub enum RestoreVia {
     Load,
     Resume,
 }
@@ -29,20 +29,20 @@ pub(crate) enum RestoreVia {
 /// Where a close started: a failed close returns there (Live), or to
 /// NotLoaded when the close had already made a pending load stale.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CloseOrigin {
+pub enum CloseOrigin {
     Live,
     Loading,
 }
 
 /// A close first ends the running turn, then frees the session.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ClosePhase {
+pub enum ClosePhase {
     EndingTurn,
     Freeing,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionLifecycle {
+pub enum SessionLifecycle {
     NotLoaded {
         last: SessionGeneration,
     },
@@ -63,7 +63,7 @@ pub(crate) enum SessionLifecycle {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionLifecycleEvent {
+pub enum SessionLifecycleEvent {
     CreateAdmitted,
     LoadRequested {
         via: RestoreVia,
@@ -100,7 +100,7 @@ pub(crate) enum SessionLifecycleEvent {
 /// What the cell's runner does after a transition commits. Terminal facts
 /// (Closed, Unloaded) are always applied (design note §11.1).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionLifecycleEffect {
+pub enum SessionLifecycleEffect {
     StartRestore {
         generation: SessionGeneration,
         attempt: LoadAttempt,
@@ -139,7 +139,7 @@ pub(crate) enum SessionLifecycleEffect {
 /// Why the lifecycle refused an event. Each names the current state; the
 /// caller-facing answer adds the valid next steps (M8, [`refusal_answer`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionLifecycleRefusal {
+pub enum SessionLifecycleRefusal {
     DuplicateIdentity,
     SessionLoading,
     AlreadyLoaded,
@@ -243,7 +243,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("closing_freeing", "close_failed", "not_loaded"),
 ];
 
-pub(crate) struct SessionLifecycleMachine;
+pub struct SessionLifecycleMachine;
 
 fn next_generation(last: SessionGeneration) -> SessionGeneration {
     SessionGeneration::from_number(last.number().wrapping_add(1))

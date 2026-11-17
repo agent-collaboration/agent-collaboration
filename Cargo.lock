@@ -11,6 +11,7 @@ dependencies = [
  "codex-router-test-support",
  "futures-util",
  "hegeltest",
+ "provider-session-machines",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -32,6 +33,7 @@ version = "0.1.155"
 dependencies = [
  "acp-client-runtime",
  "codex-router-test-support",
+ "provider-session-machines",
  "serde",
  "serde_json",
  "session-event-model",
@@ -1533,6 +1535,7 @@ dependencies = [
  "node-test-fixture",
  "opentelemetry",
  "owned-process-test-support",
+ "provider-session-machines",
  "reqwest 0.12.28",
  "reqwest-websocket",
  "router-clock",
@@ -5164,6 +5167,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "provider-session-machines"
+version = "0.1.155"
+dependencies = [
+ "hegeltest",
+ "session-event-model",
+ "state-machine-core",
+ "uuid",
 ]
 
 [[package]]

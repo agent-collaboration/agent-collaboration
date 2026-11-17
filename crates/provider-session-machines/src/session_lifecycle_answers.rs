@@ -10,7 +10,7 @@ use state_machine_core::{StateMachine, StateTag};
 
 /// Something a caller can do next.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) enum CallerStep {
+pub enum CallerStep {
     /// A request that moves the session (a declared transition).
     Load,
     Resume,
@@ -54,7 +54,7 @@ fn observations(state: &SessionLifecycle) -> &'static [CallerStep] {
 
 /// The valid next steps from `state`: observations first, then the caller
 /// requests among the declared transitions leaving this state's tag.
-pub(crate) fn next_steps(state: &SessionLifecycle) -> Vec<CallerStep> {
+pub fn next_steps(state: &SessionLifecycle) -> Vec<CallerStep> {
     let mut steps: Vec<CallerStep> = observations(state).to_vec();
     let from = state.state_tag();
     for transition in SessionLifecycleMachine::transitions() {
@@ -94,13 +94,13 @@ fn joined(steps: &[CallerStep]) -> String {
 
 /// The session's state and its valid next steps, for a refusal whose
 /// reason the state alone says.
-pub(crate) fn state_answer(state: &SessionLifecycle) -> String {
+pub fn state_answer(state: &SessionLifecycle) -> String {
     format!("{}; {}", state_phrase(state), joined(&next_steps(state)))
 }
 
 /// The one-line answer for a refusal: the reason where the state alone
 /// doesn't say it, the state, then the valid next steps.
-pub(crate) fn refusal_answer(state: &SessionLifecycle, refusal: SessionLifecycleRefusal) -> String {
+pub fn refusal_answer(state: &SessionLifecycle, refusal: SessionLifecycleRefusal) -> String {
     let next = joined(&next_steps(state));
     match refusal {
         SessionLifecycleRefusal::DuplicateIdentity => {

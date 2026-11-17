@@ -4,10 +4,10 @@ use agent_client_protocol::schema::v1::{
     NewSessionResponse, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
     SessionConfigSelectOptions, SessionUpdate,
 };
+use provider_session_machines::ProviderSettingKind;
 
 use crate::{
-    ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice, ProviderSettingKind,
-    ProviderSettingsCatalog,
+    ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice, ProviderSettingsCatalog,
 };
 
 pub(crate) fn catalog_from_session_response(

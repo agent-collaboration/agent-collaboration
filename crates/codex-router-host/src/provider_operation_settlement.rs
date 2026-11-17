@@ -81,13 +81,13 @@ pub(crate) fn provider_fast_state(observed: acp_client_runtime::FastObserved) ->
 }
 
 pub(crate) fn provider_setting_name(
-    kind: acp_client_runtime::ProviderSettingKind,
+    kind: provider_session_machines::ProviderSettingKind,
 ) -> ProviderSettingName {
     match kind {
-        acp_client_runtime::ProviderSettingKind::Mode => ProviderSettingName::Mode,
-        acp_client_runtime::ProviderSettingKind::Model => ProviderSettingName::Model,
-        acp_client_runtime::ProviderSettingKind::Effort => ProviderSettingName::Effort,
-        acp_client_runtime::ProviderSettingKind::Fast => ProviderSettingName::Fast,
+        provider_session_machines::ProviderSettingKind::Mode => ProviderSettingName::Mode,
+        provider_session_machines::ProviderSettingKind::Model => ProviderSettingName::Model,
+        provider_session_machines::ProviderSettingKind::Effort => ProviderSettingName::Effort,
+        provider_session_machines::ProviderSettingKind::Fast => ProviderSettingName::Fast,
     }
 }
 

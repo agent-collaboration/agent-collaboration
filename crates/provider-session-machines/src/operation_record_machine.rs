@@ -10,17 +10,17 @@ use state_machine_core::{
 
 /// One dispatch attempt's identity (a UUIDv7, held in memory only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct DispatchAttempt(pub(crate) uuid::Uuid);
+pub struct DispatchAttempt(pub uuid::Uuid);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SettledEffect {
+pub enum SettledEffect {
     None,
     Applied,
     Unknown,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Reconciliation {
+pub enum Reconciliation {
     Unresolved,
     Confirmed,
     NotReconcilable,
@@ -29,7 +29,7 @@ pub(crate) enum Reconciliation {
 /// How a dispatched attempt ended, as the completion task classified it
 /// through today's error mapping (design note §16).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum AttemptEnding {
+pub enum AttemptEnding {
     Applied,
     /// The agent's own definite refusal (−32000, −32002, −32601, −32602).
     Refused,
@@ -37,7 +37,7 @@ pub(crate) enum AttemptEnding {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum OperationRecord {
+pub enum OperationRecord {
     Reserving,
     /// The reservation ended without a row of its own (a durable conflict or
     /// a failed insert); the index entry goes.
@@ -60,7 +60,7 @@ pub(crate) enum OperationRecord {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum OperationRecordEvent {
+pub enum OperationRecordEvent {
     DurableInserted,
     DurableConflict,
     DurableInsertFailed,
@@ -85,7 +85,7 @@ pub(crate) enum OperationRecordEvent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum OperationRecordEffect {
+pub enum OperationRecordEffect {
     /// Answer the caller: admitted, or answer from the existing row.
     AnswerAdmitted,
     AnswerFromExistingRow,
@@ -99,7 +99,7 @@ pub(crate) enum OperationRecordEffect {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum OperationRecordRefusal {
+pub enum OperationRecordRefusal {
     Settled,
 }
 
@@ -209,7 +209,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("settled_unresolved", "reconciled", "settled", true),
 ];
 
-pub(crate) struct OperationRecordMachine;
+pub struct OperationRecordMachine;
 
 impl StateMachine for OperationRecordMachine {
     type State = OperationRecord;

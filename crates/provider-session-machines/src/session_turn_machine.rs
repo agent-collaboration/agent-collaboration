@@ -8,17 +8,17 @@ use state_machine_core::{
 
 /// One turn's identity (a UUIDv7 minted at the handover, design note §13.1).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct TurnId(pub(crate) uuid::Uuid);
+pub struct TurnId(pub uuid::Uuid);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionTurn {
+pub enum SessionTurn {
     Idle,
     Running { turn: TurnId },
     Cancelling { turn: TurnId },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionTurnEvent {
+pub enum SessionTurnEvent {
     PromptStarted { turn: TurnId },
     SteerRequested { agent_steers: bool },
     CancelRequested,
@@ -26,7 +26,7 @@ pub(crate) enum SessionTurnEvent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionTurnEffect {
+pub enum SessionTurnEffect {
     InjectSteer {
         turn: TurnId,
     },
@@ -40,7 +40,7 @@ pub(crate) enum SessionTurnEffect {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionTurnRefusal {
+pub enum SessionTurnRefusal {
     /// "a turn is running; steer, queue, or cancel it" (M8).
     TurnRunning,
     /// "no running turn to steer; send it as a prompt".
@@ -66,7 +66,7 @@ impl RefusalTag for SessionTurnRefusal {
 }
 
 impl SessionTurnRefusal {
-    pub(crate) const fn human_phrase(self) -> &'static str {
+    pub const fn human_phrase(self) -> &'static str {
         match self {
             Self::TurnRunning => "a turn is running; steer, queue, or cancel it",
             Self::NoTurnToSteer => "no running turn to steer; send it as a prompt",
@@ -121,7 +121,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("cancelling", "turn_ended", "idle"),
 ];
 
-pub(crate) struct SessionTurnMachine;
+pub struct SessionTurnMachine;
 
 fn refused(refusal: SessionTurnRefusal) -> StateMachineResult<SessionTurnMachine> {
     Err(TransitionError::Domain(refusal))

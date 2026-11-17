@@ -34,7 +34,7 @@ impl ProviderBehavior for ClaudeAcpBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        _kind: acp_client_runtime::ProviderSettingKind,
+        _kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         // Only the qualified stock integration establishes per-query settings scope.
         matches!(self.source, ClaudeSkillSource::Annotated)

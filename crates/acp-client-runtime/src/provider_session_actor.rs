@@ -72,7 +72,7 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     /// The connection's session cells (D1 state machines).
     pub(crate) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     /// The run these handles serve; untracked until for_session_generation.
-    pub(crate) run_generation: crate::SessionGeneration,
+    pub(crate) run_generation: provider_session_machines::SessionGeneration,
     /// The agent advertises steering, so a busy refusal offers it (D1 M8).
     pub(crate) agent_steers: bool,
 }
@@ -80,7 +80,10 @@ pub(crate) struct ProviderSessionRuntimeHandles {
 impl ProviderSessionRuntimeHandles {
     /// These handles for one session admitted under `generation`: its
     /// actor, projections and settings work publish only into that run.
-    pub(crate) fn for_session_generation(&self, generation: crate::SessionGeneration) -> Self {
+    pub(crate) fn for_session_generation(
+        &self,
+        generation: provider_session_machines::SessionGeneration,
+    ) -> Self {
         let mut handles = self.clone();
         handles.event_sink = Arc::new(crate::session_event_sink::SessionGenerationSink::new(
             Arc::clone(&self.event_sink),

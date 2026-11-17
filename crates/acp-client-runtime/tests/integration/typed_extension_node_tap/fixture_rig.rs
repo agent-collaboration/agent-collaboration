@@ -115,7 +115,7 @@ impl ProviderBehavior for DiscoveryBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        kind: acp_client_runtime::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         crate::test_behavior::TestProviderBehavior.can_reuse_setting_confirmation(kind)
     }

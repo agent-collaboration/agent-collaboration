@@ -1,28 +1,24 @@
 use super::*;
-use collaboration_protocol::{EndpointId, EndpointRef, SessionId, UuidIdentity};
 use state_machine_core::check_state_machine_transitions;
 
-fn session(name: &str) -> SessionRef {
-    SessionRef {
-        endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service"),
-            endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint"),
-        },
-        session_id: SessionId::try_from(name.to_owned()).expect("session"),
-    }
+/// The Host keys the machine by its protocol identifiers; these tests use
+/// strings in their place.
+type Outcomes = UnknownOutcomes<String, String>;
+type Machine = UncertaintyCellMachine<String, String>;
+
+fn session(name: &str) -> String {
+    format!("cursor-local/{name}")
 }
 
-fn operation(suffix: u8) -> OperationId {
-    OperationId::try_from(format!("01a1e700-0000-7000-8000-0000000000{suffix:02x}"))
-        .expect("operation ID")
+fn operation(suffix: u8) -> String {
+    format!("01a1e700-0000-7000-8000-0000000000{suffix:02x}")
 }
 
 /// Oracle: design note §14.1 (M2).
 #[test]
 fn every_state_event_pair_reaches_exactly_the_declared_edges() {
     // Arrange
-    let clear = UnknownOutcomes::default();
+    let clear = Outcomes::default();
     let holding_one = seeded([(&operation(1), Some(&session("b")))]);
     let holding_two = seeded([
         (&operation(1), Some(&session("b"))),
@@ -50,14 +46,14 @@ fn every_state_event_pair_reaches_exactly_the_declared_edges() {
         });
 
     // Act
-    let checked = check_state_machine_transitions::<UncertaintyCellMachine>(cases);
+    let checked = check_state_machine_transitions::<Machine>(cases);
 
     // Assert
     assert_eq!(checked, Ok(()));
 }
 
-fn admits(state: &UnknownOutcomes, target: Option<&SessionRef>) -> bool {
-    UncertaintyCellMachine::transition(
+fn admits(state: &Outcomes, target: Option<&String>) -> bool {
+    Machine::transition(
         state,
         UncertaintyEvent::AdmissionCheck {
             target: target.cloned(),
@@ -66,8 +62,8 @@ fn admits(state: &UnknownOutcomes, target: Option<&SessionRef>) -> bool {
     .is_ok()
 }
 
-fn apply(state: UnknownOutcomes, event: UncertaintyEvent) -> UnknownOutcomes {
-    UncertaintyCellMachine::transition(&state, event)
+fn apply(state: Outcomes, event: UncertaintyEvent<String, String>) -> Outcomes {
+    Machine::transition(&state, event)
         .map(|(next, _)| next)
         .unwrap_or(state)
 }
@@ -110,7 +106,7 @@ fn a_targetless_unknown_blocks_every_session_until_reconciled() {
     let targetless = seeded([(&operation(7), None)]);
 
     // Act
-    let refused = UncertaintyCellMachine::transition(
+    let refused = Machine::transition(
         &targetless,
         UncertaintyEvent::AdmissionCheck {
             target: Some(session("other")),
@@ -128,11 +124,10 @@ fn a_targetless_unknown_blocks_every_session_until_reconciled() {
         panic!("a targetless unknown must block: {refused:?}");
     };
     assert_eq!(
-        refusal.human_answer(),
-        format!(
-            "an earlier send's outcome is unknown; reconcile {} first",
-            operation(7).as_str()
-        )
+        refusal,
+        UncertaintyRefusal::EarlierOutcomeUnknown {
+            operations: vec![operation(7)],
+        }
     );
     assert!(admits(&cleared, Some(&session("other"))));
 }
@@ -143,8 +138,8 @@ fn a_targetless_unknown_blocks_every_session_until_reconciled() {
 fn every_admission_matches_the_reference_set(case: hegel::TestCase) {
     use hegel::generators as gs;
     let targets = [Some(session("b")), Some(session("c")), None];
-    let mut state = UnknownOutcomes::default();
-    let mut model: Vec<(OperationId, Option<SessionRef>)> = Vec::new();
+    let mut state = Outcomes::default();
+    let mut model: Vec<(String, Option<String>)> = Vec::new();
     for _ in 0..case.draw(gs::integers::<u8>().min_value(1).max_value(60)) {
         let op = operation(case.draw(gs::integers::<u8>().max_value(5)));
         let target = targets[usize::from(case.draw(gs::integers::<u8>().max_value(2)))].clone();

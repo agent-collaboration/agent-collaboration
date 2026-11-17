@@ -4,7 +4,7 @@
 //! window; a turn started by the module's own warm input isn't real work; a
 //! refusal means "not now" and waits for the next turn end.
 
-use router_clock::ClockInstant;
+use crate::monotonic_instant::MonotonicInstant;
 use session_event_model::InputId;
 use state_machine_core::{
     EventTag, RefusalTag, StateMachine, StateMachineResult, StateTag, Transition, TransitionError,
@@ -14,44 +14,44 @@ use std::time::Duration;
 /// The endpoint's cadence: how often to warm, and for how long after the
 /// last real turn.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct WarmCadence {
-    pub(crate) every: Duration,
-    pub(crate) keep_warm_for: Duration,
+pub struct WarmCadence {
+    pub every: Duration,
+    pub keep_warm_for: Duration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum CacheWarm {
+pub enum CacheWarm {
     Cold {
-        last_real_end: Option<ClockInstant>,
+        last_real_end: Option<MonotonicInstant>,
     },
     Busy {
         real: bool,
-        last_real_end: Option<ClockInstant>,
+        last_real_end: Option<MonotonicInstant>,
         /// The warm prompt this turn runs, while it is the module's own.
         warm: Option<InputId>,
     },
     Armed {
-        last_real_end: ClockInstant,
-        fires_at: ClockInstant,
+        last_real_end: MonotonicInstant,
+        fires_at: MonotonicInstant,
     },
     Warming {
         input: InputId,
-        last_real_end: ClockInstant,
+        last_real_end: MonotonicInstant,
     },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum CacheWarmEvent {
+pub enum CacheWarmEvent {
     TurnStarted {
         input: Option<InputId>,
     },
     TurnEnded {
-        at: ClockInstant,
+        at: MonotonicInstant,
         cadence: WarmCadence,
     },
     TimerFired {
         input: InputId,
-        at: ClockInstant,
+        at: MonotonicInstant,
         cadence: WarmCadence,
     },
     /// An input joined the running turn (a steer, or the prompt itself).
@@ -63,15 +63,15 @@ pub(crate) enum CacheWarmEvent {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum CacheWarmEffect {
-    ArmTimer { at: ClockInstant },
+pub enum CacheWarmEffect {
+    ArmTimer { at: MonotonicInstant },
     Disarm,
     SubmitWarm { input: InputId },
 }
 
 /// Cache warm never refuses an event to a caller; it only ignores stale ones.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CacheWarmRefusal {}
+pub enum CacheWarmRefusal {}
 
 impl RefusalTag for CacheWarmRefusal {
     fn refusal_tag(&self) -> &'static str {
@@ -136,9 +136,9 @@ const TRANSITIONS: &[Transition] = &[
     edge("warming", "session_gone", "cold"),
 ];
 
-pub(crate) struct CacheWarmMachine;
+pub struct CacheWarmMachine;
 
-fn last_real(state: &CacheWarm) -> Option<ClockInstant> {
+fn last_real(state: &CacheWarm) -> Option<MonotonicInstant> {
     match state {
         CacheWarm::Cold { last_real_end } | CacheWarm::Busy { last_real_end, .. } => *last_real_end,
         CacheWarm::Armed { last_real_end, .. } | CacheWarm::Warming { last_real_end, .. } => {
@@ -194,7 +194,7 @@ impl StateMachine for CacheWarmMachine {
                     Some(last_real_end)
                         if at.saturating_duration_since(last_real_end) < cadence.keep_warm_for =>
                     {
-                        let fires_at = at + cadence.every;
+                        let fires_at = at.after(cadence.every);
                         Ok((
                             S::Armed {
                                 last_real_end,

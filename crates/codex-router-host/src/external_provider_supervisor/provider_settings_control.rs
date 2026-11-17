@@ -108,10 +108,10 @@ pub(super) async fn apply(
             )
         })?;
     let kind = match request.setting {
-        ProviderSettingName::Mode => acp_client_runtime::ProviderSettingKind::Mode,
-        ProviderSettingName::Model => acp_client_runtime::ProviderSettingKind::Model,
-        ProviderSettingName::Effort => acp_client_runtime::ProviderSettingKind::Effort,
-        ProviderSettingName::Fast => acp_client_runtime::ProviderSettingKind::Fast,
+        ProviderSettingName::Mode => provider_session_machines::ProviderSettingKind::Mode,
+        ProviderSettingName::Model => provider_session_machines::ProviderSettingKind::Model,
+        ProviderSettingName::Effort => provider_session_machines::ProviderSettingKind::Effort,
+        ProviderSettingName::Fast => provider_session_machines::ProviderSettingKind::Fast,
     };
     let observed = runtime
         .set_setting(

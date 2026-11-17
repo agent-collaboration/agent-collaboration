@@ -46,17 +46,17 @@ impl SupervisorInner {
         live.completed(match &completion {
             ProviderOperationCompletion::Success { .. }
             | ProviderOperationCompletion::FailureWithSession { .. } => {
-                crate::operation_record_machine::AttemptEnding::Applied
+                provider_session_machines::operation_record_machine::AttemptEnding::Applied
             }
             ProviderOperationCompletion::Failure(failure) => match failure.effect {
                 ProviderOperationEffect::Applied => {
-                    crate::operation_record_machine::AttemptEnding::Applied
+                    provider_session_machines::operation_record_machine::AttemptEnding::Applied
                 }
                 ProviderOperationEffect::None => {
-                    crate::operation_record_machine::AttemptEnding::Refused
+                    provider_session_machines::operation_record_machine::AttemptEnding::Refused
                 }
                 ProviderOperationEffect::Unknown => {
-                    crate::operation_record_machine::AttemptEnding::Unknown
+                    provider_session_machines::operation_record_machine::AttemptEnding::Unknown
                 }
             },
         });

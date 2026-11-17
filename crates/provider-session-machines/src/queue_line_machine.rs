@@ -10,7 +10,7 @@ use state_machine_core::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueueLine {
+pub enum QueueLine {
     Open {
         epoch: SessionGeneration,
         next_sequence: u64,
@@ -24,7 +24,7 @@ pub(crate) enum QueueLine {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueueLineEvent {
+pub enum QueueLineEvent {
     Enqueue { epoch: SessionGeneration },
     End { reason: NotSentReason },
     Reopen { epoch: SessionGeneration },
@@ -32,7 +32,7 @@ pub(crate) enum QueueLineEvent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueueLineEffect {
+pub enum QueueLineEffect {
     /// A new entry, Waiting, at this sequence.
     Admit { sequence: u64 },
     /// Every Waiting, Held or Committed entry ends not sent, and a Marking one
@@ -41,7 +41,7 @@ pub(crate) enum QueueLineEffect {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueueLineRefusal {
+pub enum QueueLineRefusal {
     /// The line has ended; the caller loads or resumes the session and sends
     /// again (M8).
     Ended(NotSentReason),
@@ -49,7 +49,7 @@ pub(crate) enum QueueLineRefusal {
 
 impl QueueLineRefusal {
     /// The refusal's answer with the caller's next step (M8).
-    pub(crate) fn human_phrase(self) -> String {
+    pub fn human_phrase(self) -> String {
         match self {
             Self::Ended(reason) => format!(
                 "not sent: the session's queue has ended ({}); load or resume the session and send again",
@@ -110,7 +110,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("open", "open_fresh", "open"),
 ];
 
-pub(crate) struct QueueLineMachine;
+pub struct QueueLineMachine;
 
 impl StateMachine for QueueLineMachine {
     type State = QueueLine;

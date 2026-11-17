@@ -9,6 +9,7 @@ members = [
     "crates/central-storage",
     "crates/central-engine-model",
     "crates/state-machine-core",
+    "crates/provider-session-machines",
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
@@ -82,6 +83,7 @@ workspace-model = { path = "crates/workspace-model", version = "0.1.149" }
 central-storage = { path = "crates/central-storage", version = "0.1.149" }
 central-engine-model = { path = "crates/central-engine-model", version = "0.1.153" }
 state-machine-core = { path = "crates/state-machine-core", version = "0.1.154" }
+provider-session-machines = { path = "crates/provider-session-machines" }
 router-clock = { path = "crates/router-clock", version = "0.1.136" }
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }

@@ -1,6 +1,6 @@
 use super::*;
-use crate::operation_record_machine::{Reconciliation, SettledEffect};
 use collaboration_protocol::{EndpointId, SessionId};
+use provider_session_machines::operation_record_machine::{Reconciliation, SettledEffect};
 
 fn endpoint() -> EndpointRef {
     EndpointRef {

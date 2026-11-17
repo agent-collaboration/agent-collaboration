@@ -24,7 +24,7 @@ impl<P: InteractionPort> ConnectionRetirement<P> {
         for session_id in self.session_cells.session_ids() {
             let _ended = self.session_cells.transition(
                 &session_id,
-                crate::session_cell_machine::SessionCellEvent::ConnectionClosed,
+                provider_session_machines::session_cell_machine::SessionCellEvent::ConnectionClosed,
                 crate::session_cell_table::EntryEffectRoute::Sink,
             );
         }

@@ -1,7 +1,8 @@
 //! Project agent-advertised model choices for one provider connection.
 
-use acp_client_runtime::{ModelReasoning, ProviderSettingKind, ProviderSettingsCatalog};
+use acp_client_runtime::{ModelReasoning, ProviderSettingsCatalog};
 use collaboration_runtime::{ProviderModelEntry, ProviderReasoningChoice};
+use provider_session_machines::ProviderSettingKind;
 
 pub(crate) struct SupervisorModelCatalog {
     supervisor: std::sync::Arc<crate::ExternalProviderSupervisor>,

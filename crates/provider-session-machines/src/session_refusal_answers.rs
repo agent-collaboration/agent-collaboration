@@ -16,7 +16,7 @@ use state_machine_core::{StateMachine, StateTag};
 /// A step a caller can take on a busy session or a held setting, in the
 /// order an answer names them: waiting first, then the gentlest change.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) enum RefusalStep {
+pub enum RefusalStep {
     Wait,
     Steer,
     Queue,
@@ -95,7 +95,7 @@ fn turn_observations(turn: SessionTurn) -> &'static [RefusalStep] {
 /// The valid next steps for a busy session in `turn`: the turn's caller
 /// moves from that exact state (steer only when the agent advertises
 /// steering), the open line's queue move, and the state's observations.
-pub(crate) fn busy_steps(turn: SessionTurn, agent_steers: bool) -> Vec<RefusalStep> {
+pub fn busy_steps(turn: SessionTurn, agent_steers: bool) -> Vec<RefusalStep> {
     let mut steps = turn_observations(turn).to_vec();
     actions_from(
         SessionTurnMachine::transitions(),
@@ -127,7 +127,7 @@ fn turn_answer(turn: SessionTurn, agent_steers: bool) -> String {
 
 /// A busy session's answer: a session that isn't Live answers its
 /// lifecycle state; a Live one answers its turn.
-pub(crate) fn session_busy_answer(
+pub fn session_busy_answer(
     lifecycle: &SessionLifecycle,
     turn: SessionTurn,
     agent_steers: bool,
@@ -142,7 +142,7 @@ pub(crate) fn session_busy_answer(
 
 /// The valid next steps for a session setting in `setting`: its caller
 /// moves from that exact state.
-pub(crate) fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
+pub fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
     let mut steps = Vec::new();
     actions_from(
         SessionSettingMachine::transitions(),
@@ -155,7 +155,7 @@ pub(crate) fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
 }
 
 /// Work refused because a setting holds the session, held for `cause`.
-pub(crate) fn settings_hold_answer(cause: UnresolvedCause) -> String {
+pub fn settings_hold_answer(cause: UnresolvedCause) -> String {
     let state = match cause {
         UnresolvedCause::DefiniteFailure => "a setting change was refused",
         UnresolvedCause::OutcomeUnknown => "a setting change's outcome is unknown",

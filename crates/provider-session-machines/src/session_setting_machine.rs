@@ -9,21 +9,21 @@ use state_machine_core::{
 
 /// A setting's value as the agent names it (an option or mode ID).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct SettingValueId(pub(crate) String);
+pub struct SettingValueId(pub String);
 
 /// One change attempt's identity (a UUIDv7), so an older change's result
 /// is recognised.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct SettingApplication(pub(crate) uuid::Uuid);
+pub struct SettingApplication(pub uuid::Uuid);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum UnresolvedCause {
+pub enum UnresolvedCause {
     DefiniteFailure,
     OutcomeUnknown,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SessionSetting {
+pub enum SessionSetting {
     Current {
         value: SettingValueId,
     },
@@ -39,7 +39,7 @@ pub(crate) enum SessionSetting {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SessionSettingEvent {
+pub enum SessionSettingEvent {
     SetRequested {
         to: SettingValueId,
         application: SettingApplication,
@@ -71,7 +71,7 @@ pub(crate) enum SessionSettingEvent {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SessionSettingEffect {
+pub enum SessionSettingEffect {
     SendChange {
         to: SettingValueId,
         application: SettingApplication,
@@ -82,7 +82,7 @@ pub(crate) enum SessionSettingEffect {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionSettingRefusal {
+pub enum SessionSettingRefusal {
     ChangeInProgress,
     OutcomeUnknown,
     NothingToAccept,
@@ -99,7 +99,7 @@ impl RefusalTag for SessionSettingRefusal {
 }
 
 impl SessionSettingRefusal {
-    pub(crate) const fn human_phrase(self) -> &'static str {
+    pub const fn human_phrase(self) -> &'static str {
         match self {
             Self::ChangeInProgress => "a setting change is in progress; wait for it",
             Self::OutcomeUnknown => "a setting change's outcome is unknown; set a value explicitly",
@@ -110,7 +110,7 @@ impl SessionSettingRefusal {
 
 /// Why a prompt must wait, if this setting holds prompts (design note §12.6:
 /// any Changing or Unresolved holds them).
-pub(crate) fn prompt_hold(state: &SessionSetting) -> Option<&'static str> {
+pub fn prompt_hold(state: &SessionSetting) -> Option<&'static str> {
     match state {
         SessionSetting::Current { .. } => None,
         SessionSetting::Changing { .. } => Some("settings are changing; wait for them"),
@@ -191,7 +191,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("unresolved_refused", "accept", "current"),
 ];
 
-pub(crate) struct SessionSettingMachine;
+pub struct SessionSettingMachine;
 
 fn refused(refusal: SessionSettingRefusal) -> StateMachineResult<SessionSettingMachine> {
     Err(TransitionError::Domain(refusal))

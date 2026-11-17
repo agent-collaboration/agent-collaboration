@@ -243,8 +243,8 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
     super::hold_setting_at_create(
         &fixture.client.session_cells,
         &fixture.session_id,
-        crate::ProviderSettingKind::Mode,
-        crate::session_setting_machine::UnresolvedCause::DefiniteFailure,
+        provider_session_machines::ProviderSettingKind::Mode,
+        provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure,
     );
     // The refusal names the held setting's state and its steps (D1 M8).
     assert!(matches!(

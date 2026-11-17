@@ -1,8 +1,8 @@
 use super::*;
 use state_machine_core::check_state_machine_transitions;
 
-fn at(seconds: u64) -> ClockInstant {
-    ClockInstant::ZERO.after(Duration::from_secs(seconds))
+fn at(seconds: u64) -> MonotonicInstant {
+    MonotonicInstant::ZERO.after(Duration::from_secs(seconds))
 }
 
 fn input(id: u128) -> InputId {

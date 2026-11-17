@@ -1,41 +1,49 @@
 //! One binding's unknown outcomes, as a pure machine: the single place an
 //! admission asks "is an earlier send's outcome unknown?" (D1 state machines;
 //! design note §14.1). Every write to the set and every admission check run
-//! under this one cell, so each admission sees one consistent moment.
+//! under this one cell, so each admission sees one consistent moment. The
+//! machine is generic over its operation and target keys; the Host uses its
+//! protocol identifiers and words the refusal.
 
-use collaboration_protocol::{OperationId, SessionRef};
 use state_machine_core::{
     EventTag, RefusalTag, StateMachine, StateMachineResult, StateTag, Transition, TransitionError,
 };
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
+use std::marker::PhantomData;
+
+/// What a key of the machine must be: an operation or a session target.
+pub trait UncertaintyKey: Clone + Debug + Ord {}
+
+impl<Key: Clone + Debug + Ord> UncertaintyKey for Key {}
 
 /// Operations whose outcome is unknown and that no live owner remains for.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct UnknownOutcomes {
-    by_target: BTreeMap<String, BTreeSet<String>>,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnknownOutcomes<Operation, Target> {
+    by_target: BTreeMap<Target, BTreeSet<Operation>>,
     /// Unknown operations with no target: they block every session on the
     /// binding, as today's scan treats them.
-    binding_wide: BTreeSet<String>,
+    binding_wide: BTreeSet<Operation>,
 }
 
-fn target_key(target: &SessionRef) -> String {
-    format!(
-        "{}/{}/{}",
-        String::from(target.endpoint.service_id.clone()),
-        String::from(target.endpoint.endpoint_id.clone()),
-        String::from(target.session_id.clone())
-    )
+impl<Operation, Target> Default for UnknownOutcomes<Operation, Target> {
+    fn default() -> Self {
+        Self {
+            by_target: BTreeMap::new(),
+            binding_wide: BTreeSet::new(),
+        }
+    }
 }
 
-impl UnknownOutcomes {
+impl<Operation: UncertaintyKey, Target: UncertaintyKey> UnknownOutcomes<Operation, Target> {
     /// What blocks an admission on `target`; a create has no target yet, and
     /// only binding-wide unknowns block it, as today's scan does.
-    fn blocking(&self, target: Option<&SessionRef>) -> Vec<String> {
+    fn blocking(&self, target: Option<&Target>) -> Vec<Operation> {
         self.binding_wide
             .iter()
             .chain(
                 target
-                    .and_then(|target| self.by_target.get(&target_key(target)))
+                    .and_then(|target| self.by_target.get(target))
                     .into_iter()
                     .flatten(),
             )
@@ -47,33 +55,32 @@ impl UnknownOutcomes {
         self.binding_wide.is_empty() && self.by_target.values().all(BTreeSet::is_empty)
     }
 
-    fn contains(&self, operation: &str) -> bool {
+    fn contains(&self, operation: &Operation) -> bool {
         self.binding_wide.contains(operation)
             || self.by_target.values().any(|set| set.contains(operation))
     }
 
-    fn with(&self, operation: &OperationId, target: Option<&SessionRef>) -> Self {
+    fn with(&self, operation: &Operation, target: Option<&Target>) -> Self {
         let mut next = self.clone();
-        let id = operation.as_str().to_owned();
         match target {
             Some(target) => {
                 next.by_target
-                    .entry(target_key(target))
+                    .entry(target.clone())
                     .or_default()
-                    .insert(id);
+                    .insert(operation.clone());
             }
             None => {
-                next.binding_wide.insert(id);
+                next.binding_wide.insert(operation.clone());
             }
         }
         next
     }
 
-    fn without(&self, operation: &OperationId) -> Self {
+    fn without(&self, operation: &Operation) -> Self {
         let mut next = self.clone();
-        next.binding_wide.remove(operation.as_str());
+        next.binding_wide.remove(operation);
         for set in next.by_target.values_mut() {
-            set.remove(operation.as_str());
+            set.remove(operation);
         }
         next.by_target.retain(|_, set| !set.is_empty());
         next
@@ -81,32 +88,33 @@ impl UnknownOutcomes {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum UncertaintyEvent {
+pub enum UncertaintyEvent<Operation, Target> {
     /// The operation's live owner records its unknown outcome, before its own
     /// cell becomes non-live.
     BecameUnknown {
-        operation: OperationId,
-        target: Option<SessionRef>,
+        operation: Operation,
+        target: Option<Target>,
     },
     /// Reconciliation committed durably.
-    Reconciled { operation: OperationId },
+    Reconciled { operation: Operation },
     /// An admission on `target` asks whether it may proceed.
-    AdmissionCheck { target: Option<SessionRef> },
+    AdmissionCheck { target: Option<Target> },
 }
 
 /// The admission check's answer when it passes; refusals carry the blockers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum UncertaintyEffect {
+pub enum UncertaintyEffect {
     Admit,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum UncertaintyRefusal {
-    /// "an earlier send's outcome is unknown; reconcile <ids> first" (M8).
-    EarlierOutcomeUnknown { operations: Vec<String> },
+pub enum UncertaintyRefusal<Operation> {
+    /// An earlier send's outcome is unknown: these must be reconciled
+    /// first. The Host words it (M8).
+    EarlierOutcomeUnknown { operations: Vec<Operation> },
 }
 
-impl RefusalTag for UncertaintyRefusal {
+impl<Operation: Debug> RefusalTag for UncertaintyRefusal<Operation> {
     fn refusal_tag(&self) -> &'static str {
         match self {
             Self::EarlierOutcomeUnknown { .. } => "earlier_outcome_unknown",
@@ -114,18 +122,9 @@ impl RefusalTag for UncertaintyRefusal {
     }
 }
 
-impl UncertaintyRefusal {
-    pub(crate) fn human_answer(&self) -> String {
-        match self {
-            Self::EarlierOutcomeUnknown { operations } => format!(
-                "an earlier send's outcome is unknown; reconcile {} first",
-                operations.join(", ")
-            ),
-        }
-    }
-}
-
-impl StateTag for UnknownOutcomes {
+impl<Operation: UncertaintyKey, Target: UncertaintyKey> StateTag
+    for UnknownOutcomes<Operation, Target>
+{
     fn state_tag(&self) -> &'static str {
         if self.is_empty() { "clear" } else { "holding" }
     }
@@ -135,7 +134,7 @@ impl StateTag for UnknownOutcomes {
     }
 }
 
-impl EventTag for UncertaintyEvent {
+impl<Operation: Debug, Target: Debug> EventTag for UncertaintyEvent<Operation, Target> {
     fn event_tag(&self) -> &'static str {
         match self {
             Self::BecameUnknown { .. } => "became_unknown",
@@ -163,20 +162,26 @@ const TRANSITIONS: &[Transition] = &[
     edge("holding", "admission_check", "holding"),
 ];
 
-pub(crate) struct UncertaintyCellMachine;
+/// The machine for one binding, keyed by `Operation` and `Target`.
+pub struct UncertaintyCellMachine<Operation, Target>(PhantomData<(Operation, Target)>);
 
-impl StateMachine for UncertaintyCellMachine {
-    type State = UnknownOutcomes;
-    type Event = UncertaintyEvent;
+impl<Operation: UncertaintyKey, Target: UncertaintyKey> StateMachine
+    for UncertaintyCellMachine<Operation, Target>
+{
+    type State = UnknownOutcomes<Operation, Target>;
+    type Event = UncertaintyEvent<Operation, Target>;
     type Effect = UncertaintyEffect;
-    type Error = UncertaintyRefusal;
+    type Error = UncertaintyRefusal<Operation>;
 
-    fn transition(state: &UnknownOutcomes, event: UncertaintyEvent) -> StateMachineResult<Self> {
+    fn transition(
+        state: &UnknownOutcomes<Operation, Target>,
+        event: UncertaintyEvent<Operation, Target>,
+    ) -> StateMachineResult<Self> {
         match event {
             UncertaintyEvent::BecameUnknown { operation, target } => {
                 Ok((state.with(&operation, target.as_ref()), Vec::new()))
             }
-            UncertaintyEvent::Reconciled { operation } if state.contains(operation.as_str()) => {
+            UncertaintyEvent::Reconciled { operation } if state.contains(&operation) => {
                 Ok((state.without(&operation), Vec::new()))
             }
             UncertaintyEvent::Reconciled { .. } => Err(TransitionError::Stale),
@@ -202,9 +207,9 @@ impl StateMachine for UncertaintyCellMachine {
 
 /// The start-up seed: today's durable scan of unknown rows, before any
 /// admission on the binding (design note §14.1).
-pub(crate) fn seeded<'a>(
-    rows: impl IntoIterator<Item = (&'a OperationId, Option<&'a SessionRef>)>,
-) -> UnknownOutcomes {
+pub fn seeded<'a, Operation: UncertaintyKey + 'a, Target: UncertaintyKey + 'a>(
+    rows: impl IntoIterator<Item = (&'a Operation, Option<&'a Target>)>,
+) -> UnknownOutcomes<Operation, Target> {
     rows.into_iter()
         .fold(UnknownOutcomes::default(), |seed, (operation, target)| {
             seed.with(operation, target)

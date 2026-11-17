@@ -1,6 +1,6 @@
 use super::*;
-use acp_client_runtime::ProviderSettingKind;
 use collaboration_protocol::ProviderSettingName;
+use provider_session_machines::ProviderSettingKind;
 
 #[test]
 fn replay_failure_mapping_preserves_pre_and_post_dispatch_provenance() {

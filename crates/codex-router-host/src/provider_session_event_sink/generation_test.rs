@@ -2,13 +2,15 @@
 //! nothing published for it afterwards reaches the hub, and a producer from
 //! an earlier run can't publish into a later one. The sink asks the
 //! connection's session runs; here a scripted run stands in for the
-//! session's cell, whose own rules acp-client-runtime's session_run_claims
-//! tests prove.
+//! session's cell, whose own rules provider-session-machines' run claims and
+//! acp-client-runtime's session_cell_table tests prove.
 
 use super::*;
 use collaboration_contracts::SessionEventHub;
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionEventHub};
 use message_board::{EndpointId, ServiceId};
+use provider_session_machines::SessionGeneration;
+use provider_session_machines::session_run_claims::RunClaim;
 use session_event_model::{CapabilityReport, SessionSettings, SessionState};
 use std::sync::Arc;
 use tokio::sync::Mutex;

@@ -1,5 +1,6 @@
 //! Host composition for the extracted ACP client.
 
+use provider_session_machines::SessionGeneration;
 #[cfg(test)]
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -18,7 +19,7 @@ use crate::acp_interaction_port::{HostInteractionPort, NoopSessionEventSink};
 use crate::provider_session_event_sink::HubSessionEventSink;
 #[cfg(test)]
 use crate::{ProviderSessionActivity, ProviderSteeringOutcome};
-use acp_client_runtime::{GenerationPublication, SessionGeneration};
+use acp_client_runtime::GenerationPublication;
 #[cfg(test)]
 use acp_client_runtime::{
     acp_operation_error_for_test as acp_operation_error,
@@ -349,7 +350,7 @@ impl ExternalProviderRuntime {
     pub fn setting_outcome_unknown(
         &self,
         provider_session_id: &str,
-        kind: acp_client_runtime::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         self.client
             .setting_outcome_unknown(provider_session_id, kind)

@@ -13,7 +13,7 @@ use state_machine_core::{
 
 /// Why a queued message wasn't sent.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum NotSentReason {
+pub enum NotSentReason {
     SessionClosed,
     CancelledFromQueue,
     RouterShuttingDown,
@@ -27,7 +27,7 @@ pub(crate) enum NotSentReason {
 }
 
 impl NotSentReason {
-    pub(crate) const fn human_phrase(self) -> &'static str {
+    pub const fn human_phrase(self) -> &'static str {
         match self {
             Self::SessionClosed => "session closed",
             Self::CancelledFromQueue => "cancelled from the queue",
@@ -43,7 +43,7 @@ impl NotSentReason {
 
 /// How a sent message's turn ended, as its completion task read it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SentOutcome {
+pub enum SentOutcome {
     Applied,
     /// The agent refused with a definite code: not applied (design note §16).
     Refused,
@@ -52,13 +52,13 @@ pub(crate) enum SentOutcome {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum EntryEnding {
+pub enum EntryEnding {
     Sent(SentOutcome),
     NotSent(NotSentReason),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueuedEntry {
+pub enum QueuedEntry {
     Waiting,
     Held,
     /// Committed to send; the runner hasn't claimed it yet.
@@ -74,7 +74,7 @@ pub(crate) enum QueuedEntry {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueuedEntryEvent {
+pub enum QueuedEntryEvent {
     Claimed,
     Commit,
     StartSendClaimed,
@@ -94,7 +94,7 @@ pub(crate) enum QueuedEntryEvent {
 
 /// The runner's work after a move (design note §11.1).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueuedEntryEffect {
+pub enum QueuedEntryEffect {
     StartSend,
     WriteMark,
     /// The handover: send the request and start its completion task.
@@ -110,7 +110,7 @@ pub(crate) enum QueuedEntryEffect {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QueuedEntryRefusal {
+pub enum QueuedEntryRefusal {
     /// Cancel on a message already handed over: cancel the turn instead.
     AlreadySent,
     /// The entry already has its ending.
@@ -118,7 +118,7 @@ pub(crate) enum QueuedEntryRefusal {
 }
 
 impl QueuedEntryRefusal {
-    pub(crate) const fn human_phrase(self) -> &'static str {
+    pub const fn human_phrase(self) -> &'static str {
         match self {
             Self::AlreadySent => "already sent; cancel the turn instead",
             Self::Settled => "the message already ended",
@@ -218,7 +218,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("sent", "turn_settled", "done_sent", true),
 ];
 
-pub(crate) struct QueuedEntryMachine;
+pub struct QueuedEntryMachine;
 
 fn not_sent(reason: NotSentReason) -> (QueuedEntry, Vec<QueuedEntryEffect>) {
     (

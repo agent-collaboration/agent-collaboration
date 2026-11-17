@@ -1,5 +1,7 @@
 //! Ordered Host publication into the Router-owned provider Session hub.
 
+use provider_session_machines::SessionGeneration;
+use provider_session_machines::session_run_claims::RunClaim;
 use std::{
     collections::HashSet,
     sync::{
@@ -10,7 +12,7 @@ use std::{
 
 use acp_client_runtime::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
-    RunClaim, SessionEventSink, SessionGeneration, SessionRuns,
+    SessionEventSink, SessionRuns,
 };
 use collaboration_runtime::ProviderSessionEventHub;
 use message_board::{SessionEndpointRef, SessionId, SessionRef};

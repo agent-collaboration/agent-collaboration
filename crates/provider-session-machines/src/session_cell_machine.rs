@@ -33,34 +33,34 @@ use std::collections::{BTreeMap, HashMap};
 
 /// A queued message's operation, as the Host names it.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct QueuedOperation(pub(crate) String);
+pub struct QueuedOperation(pub String);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct EntrySlot {
-    pub(crate) operation: QueuedOperation,
-    pub(crate) entry: QueuedEntry,
-    pub(crate) turn: Option<TurnId>,
+pub struct EntrySlot {
+    pub operation: QueuedOperation,
+    pub entry: QueuedEntry,
+    pub turn: Option<TurnId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct SessionCell {
-    pub(crate) lifecycle: SessionLifecycle,
-    pub(crate) line: QueueLine,
-    pub(crate) entries: BTreeMap<u64, EntrySlot>,
-    pub(crate) turn: SessionTurn,
+pub struct SessionCell {
+    pub lifecycle: SessionLifecycle,
+    pub line: QueueLine,
+    pub entries: BTreeMap<u64, EntrySlot>,
+    pub turn: SessionTurn,
     /// The caller asked to keep fast off: it lasts the session's lifetime,
     /// across actor exits, until fast-auto, accepting a refused fast, close,
     /// or a Router restart (R9; design note §12.3).
-    pub(crate) keep_fast_off: bool,
+    pub keep_fast_off: bool,
     /// Each setting kind's state this run (design note §11.6, §12.6, with
     /// the Lead's 3b-5 ruling: a prompt waits behind an in-flight change in
     /// the actor and is refused only while a kind is Unresolved).
-    pub(crate) settings: HashMap<ProviderSettingKind, SessionSetting>,
+    pub settings: HashMap<ProviderSettingKind, SessionSetting>,
 }
 
 impl SessionCell {
     /// A session this connection hasn't run yet.
-    pub(crate) fn fresh() -> Self {
+    pub fn fresh() -> Self {
         Self {
             lifecycle: SessionLifecycle::NotLoaded {
                 last: SessionGeneration::UNTRACKED,
@@ -77,7 +77,7 @@ impl SessionCell {
         }
     }
 
-    pub(crate) fn run_generation(&self) -> Option<SessionGeneration> {
+    pub fn run_generation(&self) -> Option<SessionGeneration> {
         match self.lifecycle {
             SessionLifecycle::Loading { generation, .. }
             | SessionLifecycle::Live { generation } => Some(generation),
@@ -96,14 +96,14 @@ impl SessionCell {
 
     /// A kind holds prompts: its last change was refused (where refusals
     /// hold) or its outcome is unknown.
-    pub(crate) fn settings_held(&self) -> bool {
+    pub fn settings_held(&self) -> bool {
         self.settings
             .values()
             .any(|setting| matches!(setting, SessionSetting::Unresolved { .. }))
     }
 
     /// Some held setting's last change has an unknown outcome.
-    pub(crate) fn any_setting_outcome_unknown(&self) -> bool {
+    pub fn any_setting_outcome_unknown(&self) -> bool {
         self.settings.values().any(|setting| {
             matches!(
                 setting,
@@ -116,7 +116,7 @@ impl SessionCell {
     }
 
     /// The kind's last change has an unknown outcome.
-    pub(crate) fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
+    pub fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
         matches!(
             self.settings.get(&kind),
             Some(SessionSetting::Unresolved {
@@ -153,7 +153,7 @@ impl SessionCell {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SessionCellEvent {
+pub enum SessionCellEvent {
     CreateAdmitted,
     LoadRequested {
         via: RestoreVia,
@@ -240,7 +240,7 @@ pub(crate) enum SessionCellEvent {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SessionCellEffect {
+pub enum SessionCellEffect {
     Lifecycle(SessionLifecycleEffect),
     /// A message joined the run's line under this number.
     Queued {
@@ -260,7 +260,7 @@ pub(crate) enum SessionCellEffect {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SessionCellRefusal {
+pub enum SessionCellRefusal {
     Lifecycle(SessionLifecycleRefusal),
     Line(QueueLineRefusal),
     Entry(QueuedEntryRefusal),
@@ -533,7 +533,7 @@ fn turn_ended(
     Ok((next, effects))
 }
 
-pub(crate) struct SessionCellMachine;
+pub struct SessionCellMachine;
 
 impl StateMachine for SessionCellMachine {
     type State = SessionCell;

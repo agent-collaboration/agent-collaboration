@@ -2,8 +2,9 @@
 
 use acp_client_runtime::{
     AppliedProviderSetting, EffectiveProviderSettings, ExternalProviderCreatedSession,
-    ProviderSettingKind, RequestedProviderSettings,
+    RequestedProviderSettings,
 };
+use provider_session_machines::ProviderSettingKind;
 
 /// Oracle: specification R14 reports the effective settings and every applied
 /// selection separately from a partially failed create.

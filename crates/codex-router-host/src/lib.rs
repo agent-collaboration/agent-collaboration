@@ -2,31 +2,7 @@
 
 mod acp_interaction_port;
 mod app_server_endpoint_guard;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the cache-warm cell wires this machine in a later D1 step"
-    )
-)]
-mod cache_warm_machine;
 mod live_session_ownership_check;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the operation cell wires this machine in a later D1 step"
-    )
-)]
-mod operation_record_machine;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the admission path wires this machine in a later D1 step"
-    )
-)]
-mod uncertainty_cell_machine;
 pub use live_session_ownership_check::{LiveSessionOwnership, LiveSessionOwnershipCheck};
 mod app_server_shutdown;
 mod auth_file_reload;

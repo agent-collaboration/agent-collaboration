@@ -32,7 +32,7 @@ struct CorrelatedProviderFailureProps {
 pub(super) fn invalid_setting_failure(
     operation_id: OperationId,
     target: Option<SessionRef>,
-    setting: acp_client_runtime::ProviderSettingKind,
+    setting: provider_session_machines::ProviderSettingKind,
     value: String,
     advertised: Vec<String>,
     disposition: acp_client_runtime::InvalidSettingSessionDisposition,

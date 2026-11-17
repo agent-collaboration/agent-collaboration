@@ -284,7 +284,7 @@ impl ExternalProviderSupervisor {
         if let Ok(cell) = self.inner.binding_uncertainty(binding).await {
             let _recorded = provider_operation_index::apply_uncertainty(
                 &cell,
-                crate::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
+                provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
                     operation: operation_id.clone(),
                     target,
                 },

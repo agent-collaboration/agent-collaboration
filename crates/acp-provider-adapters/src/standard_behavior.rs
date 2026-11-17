@@ -14,7 +14,7 @@ impl ProviderBehavior for StandardAcpBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        _kind: acp_client_runtime::ProviderSettingKind,
+        _kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         false
     }

@@ -20,7 +20,7 @@ use agent_client_protocol::schema::v1::ContentBlock;
 struct PendingCloseAdmissionGuard {
     cells: Arc<crate::session_cell_table::SessionCellTable>,
     provider_session_id: String,
-    attempt: crate::session_lifecycle_machine::CloseAttempt,
+    attempt: provider_session_machines::session_lifecycle_machine::CloseAttempt,
     submitted: bool,
 }
 
@@ -30,7 +30,9 @@ impl PendingCloseAdmissionGuard {
         cells: &Arc<crate::session_cell_table::SessionCellTable>,
         provider_session_id: &str,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let attempt = crate::session_lifecycle_machine::CloseAttempt(uuid::Uuid::now_v7());
+        let attempt = provider_session_machines::session_lifecycle_machine::CloseAttempt(
+            uuid::Uuid::now_v7(),
+        );
         super::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
         Ok(Self {
             cells: Arc::clone(cells),
@@ -105,7 +107,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     pub fn setting_outcome_unknown(
         &self,
         provider_session_id: &str,
-        kind: crate::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         super::session_cell_bookkeeping::setting_outcome_unknown(
             &self.session_cells,
@@ -131,7 +133,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             &self.session_cells,
             &provider_session_id,
         )?;
-        if accepted.contains(&crate::ProviderSettingKind::Fast) {
+        if accepted.contains(&provider_session_machines::ProviderSettingKind::Fast) {
             // The caller accepted a refused fast as it stands (D1 R8, R9).
             self.keep_fast_off
                 .write()
@@ -166,7 +168,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                     &self.session_cells,
                     &uncertain_session_id,
                     kind,
-                    crate::session_setting_machine::SessionSettingEvent::Lost,
+                    provider_session_machines::session_setting_machine::SessionSettingEvent::Lost,
                 );
                 Err(ExternalProviderRuntimeError::SettingOutcomeUnknown {
                     provider_session_id: uncertain_session_id,
@@ -299,7 +301,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         work_roots: crate::SessionWorkRoots,
     ) -> (
         Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
-        Option<crate::SessionGeneration>,
+        Option<provider_session_machines::SessionGeneration>,
     ) {
         let (reply, result) = tokio::sync::oneshot::channel();
         if self
@@ -343,7 +345,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
         cwd: PathBuf,
-    ) -> Result<crate::SessionGeneration, ExternalProviderRuntimeError> {
+    ) -> Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_load {
             return Err(ExternalProviderRuntimeError::UnsupportedCapability {
                 capability: "session/load",
@@ -378,7 +380,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
         cwd: PathBuf,
-    ) -> Result<crate::SessionGeneration, ExternalProviderRuntimeError> {
+    ) -> Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_resume {
             return Err(ExternalProviderRuntimeError::UnsupportedCapability {
                 capability: "session/resume",
@@ -397,7 +399,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: super::provider_session_restore::RestoreHistoryMode,
-    ) -> Result<crate::SessionGeneration, ExternalProviderRuntimeError> {
+    ) -> Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError> {
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Restore {

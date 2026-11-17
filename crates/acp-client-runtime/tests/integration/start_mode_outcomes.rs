@@ -9,9 +9,10 @@
 use acp_client_runtime::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
     ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    ProviderPersistenceTarget, ProviderSettingKind, ProviderSettingRequest, RefusedApprovalOffer,
+    ProviderPersistenceTarget, ProviderSettingRequest, RefusedApprovalOffer,
     RequestedProviderSettings, SessionEventSink,
 };
+use provider_session_machines::ProviderSettingKind;
 use serde_json::{Value, json};
 use session_event_model::{ApprovalRequest, InputId, SessionEvent};
 use std::path::PathBuf;

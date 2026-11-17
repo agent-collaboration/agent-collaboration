@@ -2,12 +2,14 @@
 //! the session's cell (D1 step 6).
 
 use super::*;
-use crate::session_cell_machine::SessionCellEvent;
+use crate::SessionRuns;
 use crate::session_cell_table::EntryEffectRoute;
 use crate::session_event_sink::GenerationPublication;
-use crate::session_lifecycle_machine::SessionLifecycle;
-use crate::session_lifecycle_machine::{CloseAttempt, LoadAttempt, RestoreVia};
-use crate::{RunClaim, SessionGeneration, SessionRuns};
+use provider_session_machines::SessionGeneration;
+use provider_session_machines::session_cell_machine::SessionCellEvent;
+use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
+use provider_session_machines::session_lifecycle_machine::{CloseAttempt, LoadAttempt, RestoreVia};
+use provider_session_machines::session_run_claims::RunClaim;
 use std::cell::RefCell;
 
 const SESSION: &str = "session-one";

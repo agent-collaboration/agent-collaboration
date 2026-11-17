@@ -1,5 +1,6 @@
 //! Nonblocking publication boundary for Router-owned Session events.
 
+use provider_session_machines::SessionGeneration;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use session_event_model::SessionEvent;
@@ -14,27 +15,6 @@ pub struct HistoryReplayUnavailable;
 
 pub type HistoryReplayFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), HistoryReplayUnavailable>> + Send + 'a>>;
-
-/// One run of a session, from the create, load or resume the connection
-/// admitted to its Closed (D1 R14). Every per-session publication carries the
-/// generation it was produced under; once Closed is published for a
-/// generation, a sink that tracks generations publishes nothing more for it.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct SessionGeneration(u64);
-
-impl SessionGeneration {
-    /// What a sink that doesn't track generations hands out.
-    pub const UNTRACKED: Self = Self(0);
-
-    /// A tracking sink's numbering.
-    pub const fn from_number(number: u64) -> Self {
-        Self(number)
-    }
-
-    pub const fn number(self) -> u64 {
-        self.0
-    }
-}
 
 /// Whether a publication tied to a generation went out or found it ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -10,9 +10,10 @@
 
 use super::acp_wire_fixture::AcpWireFixture;
 use acp_client_runtime::{
-    ExternalProviderRuntimeError, FastObserved, FastRequest, ProviderSettingKind,
-    ProviderSettingRequest, RequestedProviderSettings,
+    ExternalProviderRuntimeError, FastObserved, FastRequest, ProviderSettingRequest,
+    RequestedProviderSettings,
 };
+use provider_session_machines::ProviderSettingKind;
 use serde_json::{Value, json};
 use session_event_model::{InputId, ProviderSettingFailureReason};
 

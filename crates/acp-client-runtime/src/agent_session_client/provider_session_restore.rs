@@ -34,10 +34,10 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(super) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
-    pub(super) generation: crate::SessionGeneration,
-    pub(super) attempt: crate::session_lifecycle_machine::LoadAttempt,
+    pub(super) generation: provider_session_machines::SessionGeneration,
+    pub(super) attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
     pub(super) reply: tokio::sync::oneshot::Sender<
-        Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
+        Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError>,
     >,
 }
 

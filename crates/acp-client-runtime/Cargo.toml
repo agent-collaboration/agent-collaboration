@@ -14,6 +14,7 @@ test-observation = []
 
 [dependencies]
 agent-client-protocol.workspace = true
+provider-session-machines.workspace = true
 # The type of the child the ACP SDK spawns (provider_transport.rs).
 async-process = "2.5.0"
 futures-util.workspace = true

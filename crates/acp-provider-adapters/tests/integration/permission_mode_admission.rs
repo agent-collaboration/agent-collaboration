@@ -12,9 +12,10 @@ use acp_client_runtime::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
     ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
     PermissionModeReason, PermissionModeReport, ProviderBehavior, ProviderPersistenceTarget,
-    ProviderSettingKind, RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
+    RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
 };
 use acp_provider_adapters::{ClaudeAcpBehavior, ClaudeSkillSource, CursorAcpBehavior};
+use provider_session_machines::ProviderSettingKind;
 use serde_json::{Value, json};
 use session_event_model::{ApprovalRequest, SessionEvent};
 use std::path::{Path, PathBuf};

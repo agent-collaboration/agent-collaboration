@@ -1,5 +1,6 @@
 //! Typed provider Session settings at the ACP client boundary.
 use crate::provider_setting_choice::ProviderSettingChoice;
+use provider_session_machines::ProviderSettingKind;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RequestedProviderSettings {
@@ -48,26 +49,6 @@ pub struct EffectiveProviderSettings {
     pub model: Option<String>,
     pub effort: Option<String>,
     pub fast: Option<FastObserved>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ProviderSettingKind {
-    Mode,
-    Model,
-    Effort,
-    Fast,
-}
-
-impl ProviderSettingKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Mode => "mode",
-            Self::Model => "model",
-            Self::Effort => "effort",
-            Self::Fast => "fast",
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

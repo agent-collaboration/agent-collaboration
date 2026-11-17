@@ -1,13 +1,13 @@
 //! R1–R4: real ACP wires and returned catalogs, without native provider state.
 
+use provider_session_machines::ProviderSettingKind;
 #[path = "../cursor_model_settings/acp_wire_fixture.rs"]
 mod acp_wire_fixture;
 #[path = "../cursor_model_settings/cursor_fast_settings.rs"]
 mod cursor_fast_settings;
 
 use acp_client_runtime::{
-    ExternalProviderRuntimeError, ProviderConfigValue, ProviderSettingKind,
-    RequestedProviderSettings,
+    ExternalProviderRuntimeError, ProviderConfigValue, RequestedProviderSettings,
 };
 use acp_wire_fixture::AcpWireFixture;
 use session_event_model::ConfigValueState;

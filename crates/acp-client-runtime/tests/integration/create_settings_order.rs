@@ -314,7 +314,10 @@ async fn invalid_first_setting_closes_created_session() {
             std::fs::read_to_string(&receipt)
         )
     };
-    assert_eq!(setting, acp_client_runtime::ProviderSettingKind::Mode);
+    assert_eq!(
+        setting,
+        provider_session_machines::ProviderSettingKind::Mode
+    );
     assert_eq!(value, "impossible");
     assert_eq!(advertised, ["auto", "ask"]);
     assert_eq!(
@@ -367,14 +370,17 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
     assert_eq!(applied.len(), 1);
     assert_eq!(
         applied[0].kind,
-        acp_client_runtime::ProviderSettingKind::Mode
+        provider_session_machines::ProviderSettingKind::Mode
     );
-    assert_eq!(failed.kind, acp_client_runtime::ProviderSettingKind::Model);
+    assert_eq!(
+        failed.kind,
+        provider_session_machines::ProviderSettingKind::Model
+    );
     assert!(!failed.reason.as_str().contains("private agent detail"));
     assert_eq!(
         not_applied,
         vec![acp_client_runtime::NotAppliedProviderSetting {
-            kind: acp_client_runtime::ProviderSettingKind::Effort,
+            kind: provider_session_machines::ProviderSettingKind::Effort,
             value: "high".to_owned(),
         }]
         .into_boxed_slice()
@@ -462,7 +468,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         .set_setting(
             provider_session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Model,
+                kind: provider_session_machines::ProviderSettingKind::Model,
                 value: "b".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,

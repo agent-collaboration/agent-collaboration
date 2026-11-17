@@ -51,16 +51,10 @@ impl AdmissionBlockers {
         };
         let mut clauses = Vec::new();
         if !self.unknown.is_empty() {
-            clauses.push(
-                crate::uncertainty_cell_machine::UncertaintyRefusal::EarlierOutcomeUnknown {
-                    operations: self
-                        .unknown
-                        .iter()
-                        .map(|id| id.as_str().to_owned())
-                        .collect(),
-                }
-                .human_answer(),
-            );
+            clauses.push(format!(
+                "an earlier send's outcome is unknown; reconcile {} first",
+                ids(&self.unknown)
+            ));
         }
         if !self.in_flight.is_empty() {
             clauses.push(format!(
@@ -137,17 +131,14 @@ impl ExternalProviderSupervisor {
         let cell = self.inner.binding_uncertainty(binding).await?;
         let unknown = match super::provider_operation_index::apply_uncertainty(
             &cell,
-            crate::uncertainty_cell_machine::UncertaintyEvent::AdmissionCheck {
+            provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::AdmissionCheck {
                 target: known_target.cloned(),
             },
         ) {
             Ok(()) => Vec::new(),
-            Err(crate::uncertainty_cell_machine::UncertaintyRefusal::EarlierOutcomeUnknown {
+            Err(provider_session_machines::uncertainty_cell_machine::UncertaintyRefusal::EarlierOutcomeUnknown {
                 operations,
-            }) => operations
-                .into_iter()
-                .filter_map(|operation| OperationId::try_from(operation).ok())
-                .collect(),
+            }) => operations,
         };
         let in_flight = if mark == DispatchMark::AtAdmission {
             self.inner
@@ -542,7 +533,12 @@ impl super::SupervisorInner {
     ) -> Result<
         Arc<
             tokio::sync::OnceCell<
-                std::sync::Mutex<crate::uncertainty_cell_machine::UnknownOutcomes>,
+                std::sync::Mutex<
+                    provider_session_machines::uncertainty_cell_machine::UnknownOutcomes<
+                        OperationId,
+                        SessionRef,
+                    >,
+                >,
             >,
         >,
         (),
@@ -592,7 +588,7 @@ impl super::SupervisorInner {
         };
         let _recorded = super::provider_operation_index::apply_uncertainty(
             &cell,
-            crate::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
+            provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
                 operation: operation_id.clone(),
                 target: target.or_else(|| live.target()),
             },

@@ -152,10 +152,11 @@ enum ProviderCommand<P: InteractionPort> {
         mode: provider_session_restore::RestoreHistoryMode,
         /// Told the run's generation as soon as the session's cell admits the
         /// load, before the agent answers it.
-        admitted: Option<tokio::sync::oneshot::Sender<crate::SessionGeneration>>,
+        admitted:
+            Option<tokio::sync::oneshot::Sender<provider_session_machines::SessionGeneration>>,
         /// The generation the connection admitted the restore under.
         reply: tokio::sync::oneshot::Sender<
-            Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
+            Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError>,
         >,
     },
     List {
@@ -168,7 +169,7 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         /// The close attempt the session's cell admitted when the client
         /// asked to close; the connection settles it.
-        attempt: crate::session_lifecycle_machine::CloseAttempt,
+        attempt: provider_session_machines::session_lifecycle_machine::CloseAttempt,
         /// The agent offers no session/close: the session is only released
         /// here, and no request reaches the agent (D1 R14).
         release_only: bool,
@@ -223,26 +224,26 @@ enum PendingSessionAdmission<P: InteractionPort> {
         result: Box<Result<ProviderSessionRegistration<P>, ExternalProviderRuntimeError>>,
         /// The generation the connection admitted the session under; the
         /// actor starts only once it has it.
-        activation: tokio::sync::oneshot::Sender<crate::SessionGeneration>,
+        activation: tokio::sync::oneshot::Sender<provider_session_machines::SessionGeneration>,
         reply: tokio::sync::oneshot::Sender<CreateAdmissionReply>,
     },
     Restore {
         provider_session_id: String,
         /// The generation this restore was admitted under: its completion
         /// counts only while that is still the session's recorded run.
-        generation: crate::SessionGeneration,
+        generation: provider_session_machines::SessionGeneration,
         /// The load attempt the session's cell admitted; a close or another
         /// load since then makes it stale.
-        attempt: crate::session_lifecycle_machine::LoadAttempt,
+        attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
         result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
         reply: tokio::sync::oneshot::Sender<
-            Result<crate::SessionGeneration, ExternalProviderRuntimeError>,
+            Result<provider_session_machines::SessionGeneration, ExternalProviderRuntimeError>,
         >,
     },
     Close {
         provider_session_id: String,
         /// The close attempt the session's cell admitted.
-        attempt: crate::session_lifecycle_machine::CloseAttempt,
+        attempt: provider_session_machines::session_lifecycle_machine::CloseAttempt,
         result: Result<(), ExternalProviderRuntimeError>,
         reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
     },
@@ -261,7 +262,7 @@ struct ProviderSessionRegistration<P: InteractionPort> {
 /// one created without its settings), the generation it was admitted under.
 pub(crate) struct CreateAdmissionReply {
     pub(crate) result: Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
-    pub(crate) generation: Option<crate::SessionGeneration>,
+    pub(crate) generation: Option<provider_session_machines::SessionGeneration>,
 }
 
 struct RestoredProviderSession {

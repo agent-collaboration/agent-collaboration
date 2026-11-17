@@ -18,7 +18,10 @@ impl ProviderBehavior for SharedSettingsBehavior {
     ) -> acp_client_runtime::ProviderInitializationAuthentication {
         acp_client_runtime::ProviderInitializationAuthentication::NotRequested
     }
-    fn can_reuse_setting_confirmation(&self, _: acp_client_runtime::ProviderSettingKind) -> bool {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
         false
     }
     fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {

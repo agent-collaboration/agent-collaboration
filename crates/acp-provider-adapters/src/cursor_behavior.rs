@@ -23,10 +23,10 @@ impl ProviderBehavior for CursorAcpBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        kind: acp_client_runtime::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         // Cursor's shared model manager lets another Session change model/effort.
-        kind == acp_client_runtime::ProviderSettingKind::Mode
+        kind == provider_session_machines::ProviderSettingKind::Mode
     }
     fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
         acp_client_runtime::ModelMetadataSource::ConnectionRequest {

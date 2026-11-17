@@ -1,13 +1,14 @@
 //! Host lifecycle publication is ordered with replay and visible on return.
 
 use crate::{ExternalProviderLaunch, ExternalProviderRuntime};
-use acp_client_runtime::{ProviderPersistenceTarget, ProviderSettingKind};
+use acp_client_runtime::ProviderPersistenceTarget;
 use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
 use collaboration_runtime::ProviderSessionRecord;
 use message_board::{EndpointId, ServiceId, SessionEndpointRef, SessionId, SessionRef};
+use provider_session_machines::ProviderSettingKind;
 use session_event_model::{SessionEvent, SessionState};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;

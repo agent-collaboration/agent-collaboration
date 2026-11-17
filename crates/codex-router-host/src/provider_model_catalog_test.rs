@@ -1,5 +1,6 @@
 use super::*;
 use acp_client_runtime::{ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice};
+use provider_session_machines::ProviderSettingKind;
 
 #[test]
 fn model_choices_replace_provider_default_in_agent_order() {

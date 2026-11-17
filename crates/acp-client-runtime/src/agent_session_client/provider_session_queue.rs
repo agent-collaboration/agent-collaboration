@@ -6,15 +6,15 @@
 //! the Host's `QueueEntrySink`.
 
 use super::{AgentSessionClient, Arc, InteractionPort};
-use crate::SessionGeneration;
-use crate::queued_entry_machine::{QueuedEntryEffect, QueuedEntryRefusal};
-use crate::session_cell_machine::{
+use crate::session_cell_table::{EntryEffectRoute, QueueEntrySink, SessionCellTable};
+use provider_session_machines::SessionGeneration;
+use provider_session_machines::queued_entry_machine::{QueuedEntryEffect, QueuedEntryRefusal};
+use provider_session_machines::session_cell_machine::{
     QueuedOperation, SessionCellEffect, SessionCellEvent, SessionCellRefusal,
 };
-use crate::session_cell_table::{EntryEffectRoute, QueueEntrySink, SessionCellTable};
-use crate::session_lifecycle_answers::refusal_answer;
-use crate::session_lifecycle_machine::SessionLifecycleRefusal;
-use crate::session_turn_machine::TurnId;
+use provider_session_machines::session_lifecycle_answers::refusal_answer;
+use provider_session_machines::session_lifecycle_machine::SessionLifecycleRefusal;
+use provider_session_machines::session_turn_machine::TurnId;
 use state_machine_core::TransitionError;
 
 /// A message's place in its session's line: the run it joined and its

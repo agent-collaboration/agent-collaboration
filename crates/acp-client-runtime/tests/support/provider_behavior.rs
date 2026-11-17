@@ -12,7 +12,7 @@ impl ProviderBehavior for TestProviderBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        _kind: acp_client_runtime::ProviderSettingKind,
+        _kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         true
     }
@@ -55,7 +55,7 @@ impl ProviderBehavior for ClaudeLikeAutoBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        kind: acp_client_runtime::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         TestProviderBehavior.can_reuse_setting_confirmation(kind)
     }

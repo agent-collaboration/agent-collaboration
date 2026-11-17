@@ -55,60 +55,10 @@ mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the session cell wires the queue machines in the next D1 step"
-    )
-)]
-mod queue_line_machine;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the session cell wires the queue machines in the next D1 step"
-    )
-)]
-mod queued_entry_machine;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the connection task wires the session cell in the next D1 step"
-    )
-)]
-mod session_cell_machine;
 mod session_cell_table;
 mod session_event_sink;
-mod session_lifecycle_answers;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the session cell wires the lifecycle machine in the next D1 step"
-    )
-)]
-mod session_lifecycle_machine;
-mod session_refusal_answers;
-mod session_run_claims;
-pub use session_run_claims::{RunClaim, SessionRuns};
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the session cell wires the setting machine in the next D1 step"
-    )
-)]
-mod session_setting_machine;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the session cell wires the turn machine in the next D1 step"
-    )
-)]
-mod session_turn_machine;
+mod session_runs;
+pub use session_runs::SessionRuns;
 mod state_machine_cell;
 
 #[cfg(test)]
@@ -142,14 +92,14 @@ pub use provider_session_actor::{
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
     FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
-    ProviderConfigValue, ProviderSettingKind, ProviderSettingRequest, ProviderSettingsCatalog,
+    ProviderConfigValue, ProviderSettingRequest, ProviderSettingsCatalog,
     RequestedProviderSettings,
 };
 pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_cell_table::QueueEntrySink;
 pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
-    SessionEventSink, SessionGeneration,
+    SessionEventSink,
 };
 pub use state_machine_cell::{CellEffects, CellRuntime, MachineCell};
 

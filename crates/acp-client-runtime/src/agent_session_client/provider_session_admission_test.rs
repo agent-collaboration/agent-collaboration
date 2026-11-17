@@ -4,9 +4,10 @@
 use crate::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
     ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    InvalidSettingSessionDisposition, ProviderPersistenceTarget, ProviderSettingKind,
-    ProviderSettingRequest, RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
+    InvalidSettingSessionDisposition, ProviderPersistenceTarget, ProviderSettingRequest,
+    RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
 };
+use provider_session_machines::ProviderSettingKind;
 use serde_json::{Value, json};
 use session_event_model::{ApprovalRequest, InputId, SessionEvent};
 use std::path::PathBuf;

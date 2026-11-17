@@ -1,10 +1,8 @@
-//! Which run a sink publication belongs to, checked against the session's
-//! cell (D1 step 6, design note §4). The cell is the one copy of run state:
-//! the sink keeps no generation table and asks the cell instead, enqueuing
-//! under the cell's lock, so nothing of a run lands after its terminal fact.
+//! Which run a sink publication belongs to, decided by the session's
+//! lifecycle (D1 step 6, design note §4). The cell is the one copy of run
+//! state: a sink asks it instead of keeping generations of its own.
 
 use crate::SessionGeneration;
-use crate::session_event_sink::{EventSinkClosed, GenerationPublication};
 use crate::session_lifecycle_machine::SessionLifecycle;
 
 /// The run a publication claims.
@@ -22,7 +20,8 @@ pub enum RunClaim {
 }
 
 /// Whether `claim` holds for a session in `lifecycle`.
-pub(crate) fn run_admits(lifecycle: &SessionLifecycle, claim: RunClaim) -> bool {
+#[must_use]
+pub fn run_admits(lifecycle: &SessionLifecycle, claim: RunClaim) -> bool {
     match (lifecycle, claim) {
         (
             SessionLifecycle::Loading { .. }
@@ -48,21 +47,4 @@ pub(crate) fn run_admits(lifecycle: &SessionLifecycle, claim: RunClaim) -> bool 
             RunClaim::Terminal(_),
         ) => false,
     }
-}
-
-/// A connection's session runs, as the sink reads them.
-pub trait SessionRuns: Send + Sync {
-    /// Runs `enqueue` under the session cell's lock when `claim` holds;
-    /// Ended, without running it, when it doesn't. `enqueue` must not block
-    /// or await: it pushes onto the sink's unbounded pipe.
-    fn publish_if(
-        &self,
-        session_id: &str,
-        claim: RunClaim,
-        enqueue: &mut dyn FnMut() -> Result<(), EventSinkClosed>,
-    ) -> Result<GenerationPublication, EventSinkClosed>;
-
-    /// The session's run now: its loading, live or closing generation, or
-    /// the last one it ended.
-    fn current_generation(&self, session_id: &str) -> SessionGeneration;
 }

@@ -12,12 +12,12 @@ mod supervisor_submitter;
 
 pub(crate) use supervisor_submitter::SupervisorWarmPromptSubmitter;
 
-use crate::cache_warm_machine::{
-    CacheWarm, CacheWarmEffect, CacheWarmEvent, CacheWarmMachine, WarmCadence,
-};
 use crate::provider_session_event_sink::LiveSessionEventObserver;
 use crate::provider_settings_section::CacheWarmSetting;
 use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
+use provider_session_machines::cache_warm_machine::{
+    CacheWarm, CacheWarmEffect, CacheWarmEvent, CacheWarmMachine, WarmCadence,
+};
 use router_clock::{ClockInstant, RuntimeClock};
 use session_event_model::{InputId, SessionEvent, SessionState};
 use state_machine_core::StateMachine;
@@ -166,7 +166,7 @@ impl LiveSessionEventObserver for ProviderCacheWarm {
                 input: Some(input_id.clone()),
             },
             SessionEvent::TurnEnded { .. } => CacheWarmEvent::TurnEnded {
-                at: inner.clock.monotonic_now(),
+                at: machine_instant(inner.clock.as_ref()),
                 cadence: inner.cadence,
             },
             SessionEvent::StateChanged {
@@ -219,7 +219,9 @@ impl WarmInner {
         let mut submit = None;
         for effect in effects {
             match effect {
-                CacheWarmEffect::ArmTimer { at } => self.arm_timer(cell, session_id, at),
+                CacheWarmEffect::ArmTimer { at } => {
+                    self.arm_timer(cell, session_id, ClockInstant::ZERO.after(at.elapsed()));
+                }
                 CacheWarmEffect::Disarm => cell.disarm(),
                 CacheWarmEffect::SubmitWarm { input } => submit = Some(input),
             }
@@ -268,7 +270,7 @@ impl WarmInner {
             cell.timer = None;
             let event = CacheWarmEvent::TimerFired {
                 input: InputId::generate(),
-                at: self.clock.monotonic_now(),
+                at: machine_instant(self.clock.as_ref()),
                 cadence: self.cadence,
             };
             match self.apply(&mut cell, &session_id, event) {
@@ -302,6 +304,16 @@ fn lock<T>(mutex: &StdMutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// The injected clock's now, as the cache-warm machine receives it: the
+/// time elapsed since the clock's origin.
+fn machine_instant(clock: &dyn RuntimeClock) -> provider_session_machines::MonotonicInstant {
+    provider_session_machines::MonotonicInstant::from_elapsed(
+        clock
+            .monotonic_now()
+            .saturating_duration_since(ClockInstant::ZERO),
+    )
 }
 
 #[cfg(test)]

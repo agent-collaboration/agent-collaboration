@@ -1,16 +1,19 @@
 //! Apply one advertised setting while its Session actor is idle.
 
 use agent_client_protocol::{ActiveSession, Agent};
+use provider_session_machines::ProviderSettingKind;
 
 use crate::agent_session_client::ExternalProviderRuntimeError;
 use crate::agent_session_client::provider_setting_application::{
     FAST_OFF, SettingSetupFailure, apply_initial_settings,
 };
 use crate::provider_session_actor::ProviderSessionRuntimeHandles;
-use crate::session_setting_machine::{SessionSettingEvent, SettingApplication, SettingValueId};
 use crate::{
-    EffectiveProviderSettings, FastRequest, InvalidSettingSessionDisposition, ProviderSettingKind,
+    EffectiveProviderSettings, FastRequest, InvalidSettingSessionDisposition,
     ProviderSettingsCatalog, RequestedProviderSettings,
+};
+use provider_session_machines::session_setting_machine::{
+    SessionSettingEvent, SettingApplication, SettingValueId,
 };
 use session_event_model::SessionEvent;
 

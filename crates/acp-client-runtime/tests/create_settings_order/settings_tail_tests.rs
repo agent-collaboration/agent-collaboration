@@ -21,7 +21,7 @@ async fn explicit_setting_rejection_does_not_gate_session() {
         .set_setting(
             session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Mode,
+                kind: provider_session_machines::ProviderSettingKind::Mode,
                 value: "ask".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
@@ -81,7 +81,7 @@ async fn malformed_legacy_set_mode_response_is_outcome_unknown() {
         .set_setting(
             session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Mode,
+                kind: provider_session_machines::ProviderSettingKind::Mode,
                 value: "ask".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
@@ -119,7 +119,7 @@ async fn disconnected_after_setting_submission_is_outcome_unknown() {
         client.set_setting(
             session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Mode,
+                kind: provider_session_machines::ProviderSettingKind::Mode,
                 value: "ask".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
@@ -151,7 +151,10 @@ impl ProviderBehavior for NonReusableTestBehavior {
     ) -> acp_client_runtime::ProviderInitializationAuthentication {
         acp_client_runtime::ProviderInitializationAuthentication::NotRequested
     }
-    fn can_reuse_setting_confirmation(&self, _: acp_client_runtime::ProviderSettingKind) -> bool {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
         false
     }
     fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
@@ -218,7 +221,7 @@ async fn queued_prompt_is_gated_after_in_flight_setting_becomes_uncertain() {
     let setting = client.set_setting(
         session_id.clone(),
         acp_client_runtime::ProviderSettingRequest {
-            kind: acp_client_runtime::ProviderSettingKind::Mode,
+            kind: provider_session_machines::ProviderSettingKind::Mode,
             value: "ask".to_owned(),
             intent: session_event_model::SettingApplicationIntent::ExplicitChange,
             expected_model: None,
@@ -304,7 +307,7 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
         client.set_setting(
             session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Mode,
+                kind: provider_session_machines::ProviderSettingKind::Mode,
                 value: "ask".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
@@ -370,7 +373,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
             .set_setting(
                 session_id.clone(),
                 acp_client_runtime::ProviderSettingRequest {
-                    kind: acp_client_runtime::ProviderSettingKind::Mode,
+                    kind: provider_session_machines::ProviderSettingKind::Mode,
                     value: "ask".to_owned(),
                     intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                     expected_model: None,
@@ -379,7 +382,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
             .await;
         assert!(
             matches!(&result, Err(acp_client_runtime::ExternalProviderRuntimeError::SettingOutcomeUnknown {
-        provider_session_id, setting: acp_client_runtime::ProviderSettingKind::Mode, value,
+        provider_session_id, setting: provider_session_machines::ProviderSettingKind::Mode, value,
     }) if provider_session_id == &session_id && value == "ask"),
             "setting result: {result:?}"
         );
@@ -394,7 +397,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
                 client.set_setting(
                     session_id.clone(),
                     acp_client_runtime::ProviderSettingRequest {
-                        kind: acp_client_runtime::ProviderSettingKind::Mode,
+                        kind: provider_session_machines::ProviderSettingKind::Mode,
                         value: value.into(),
                         intent: session_event_model::SettingApplicationIntent::TurnContext,
                         expected_model: None,

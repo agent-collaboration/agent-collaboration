@@ -25,6 +25,7 @@ workspace = true
 [dependencies]
 router-clock.workspace = true
 state-machine-core.workspace = true
+provider-session-machines.workspace = true
 uuid.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true

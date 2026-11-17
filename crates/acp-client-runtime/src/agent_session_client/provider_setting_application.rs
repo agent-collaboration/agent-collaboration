@@ -5,11 +5,10 @@ use agent_client_protocol::schema::v1::{
     SetSessionModeRequest,
 };
 use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
+use provider_session_machines::ProviderSettingKind;
 
 use super::{ActiveSession, Agent, acp_operation_error};
-use crate::{
-    AppliedProviderSetting, ProviderSettingKind, ProviderSettingsCatalog, RequestedProviderSettings,
-};
+use crate::{AppliedProviderSetting, ProviderSettingsCatalog, RequestedProviderSettings};
 use std::time::Duration;
 
 const SETTING_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);

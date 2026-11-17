@@ -1,4 +1,5 @@
 use super::*;
+use provider_session_machines::ProviderSettingKind;
 use session_event_model::{ConfigValue, ConfigValueState};
 
 #[test]

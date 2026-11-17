@@ -5,17 +5,21 @@
 //! the caller runs the ACP calls and actor registration it calls for.
 
 use super::ExternalProviderRuntimeError;
-use crate::SessionGeneration;
-use crate::queued_entry_machine::SentOutcome;
-use crate::session_cell_machine::{SessionCellEffect, SessionCellEvent, SessionCellRefusal};
 use crate::session_cell_table::SessionCellTable;
-use crate::session_lifecycle_answers::{refusal_answer, state_answer};
-use crate::session_lifecycle_machine::{
+use provider_session_machines::SessionGeneration;
+use provider_session_machines::queued_entry_machine::SentOutcome;
+use provider_session_machines::session_cell_machine::{
+    SessionCellEffect, SessionCellEvent, SessionCellRefusal,
+};
+use provider_session_machines::session_lifecycle_answers::{refusal_answer, state_answer};
+use provider_session_machines::session_lifecycle_machine::{
     CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle, SessionLifecycleEffect,
     SessionLifecycleRefusal,
 };
-use crate::session_refusal_answers::{session_busy_answer, settings_hold_answer};
-use crate::session_turn_machine::TurnId;
+use provider_session_machines::session_refusal_answers::{
+    session_busy_answer, settings_hold_answer,
+};
+use provider_session_machines::session_turn_machine::TurnId;
 use state_machine_core::TransitionError;
 
 /// Admits a created identity: NotLoaded to Live under the run's next
@@ -319,7 +323,7 @@ pub(super) async fn wait_for_close_turn(cells: &SessionCellTable, session_id: &s
             matches!(
                 cell.lifecycle,
                 SessionLifecycle::Closing {
-                    phase: crate::session_lifecycle_machine::ClosePhase::EndingTurn,
+                    phase: provider_session_machines::session_lifecycle_machine::ClosePhase::EndingTurn,
                     ..
                 }
             )
@@ -360,7 +364,7 @@ pub(crate) fn report_actor_exit(
 pub(crate) fn settings_held(cells: &SessionCellTable, session_id: &str) -> bool {
     cells.read(
         session_id,
-        crate::session_cell_machine::SessionCell::settings_held,
+        provider_session_machines::session_cell_machine::SessionCell::settings_held,
     )
 }
 
@@ -380,12 +384,12 @@ pub(crate) fn busy_answer(
 pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
     let outcome_unknown = cells.read(
         session_id,
-        crate::session_cell_machine::SessionCell::any_setting_outcome_unknown,
+        provider_session_machines::session_cell_machine::SessionCell::any_setting_outcome_unknown,
     );
     settings_hold_answer(if outcome_unknown {
-        crate::session_setting_machine::UnresolvedCause::OutcomeUnknown
+        provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown
     } else {
-        crate::session_setting_machine::UnresolvedCause::DefiniteFailure
+        provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure
     })
 }
 
@@ -393,7 +397,7 @@ pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &st
 pub(crate) fn setting_outcome_unknown(
     cells: &SessionCellTable,
     session_id: &str,
-    kind: crate::ProviderSettingKind,
+    kind: provider_session_machines::ProviderSettingKind,
 ) -> bool {
     cells.read(session_id, |cell| cell.setting_outcome_unknown(kind))
 }
@@ -402,8 +406,8 @@ pub(crate) fn setting_outcome_unknown(
 pub(crate) fn apply_setting(
     cells: &SessionCellTable,
     session_id: &str,
-    kind: crate::ProviderSettingKind,
-    event: crate::session_setting_machine::SessionSettingEvent,
+    kind: provider_session_machines::ProviderSettingKind,
+    event: provider_session_machines::session_setting_machine::SessionSettingEvent,
 ) {
     let _applied = cells.transition(
         session_id,
@@ -417,10 +421,12 @@ pub(crate) fn apply_setting(
 pub(crate) fn hold_setting_at_create(
     cells: &SessionCellTable,
     session_id: &str,
-    kind: crate::ProviderSettingKind,
-    cause: crate::session_setting_machine::UnresolvedCause,
+    kind: provider_session_machines::ProviderSettingKind,
+    cause: provider_session_machines::session_setting_machine::UnresolvedCause,
 ) {
-    use crate::session_setting_machine::{SessionSettingEvent, SettingApplication, SettingValueId};
+    use provider_session_machines::session_setting_machine::{
+        SessionSettingEvent, SettingApplication, SettingValueId,
+    };
     let application = SettingApplication(uuid::Uuid::now_v7());
     apply_setting(
         cells,
@@ -436,10 +442,10 @@ pub(crate) fn hold_setting_at_create(
         session_id,
         kind,
         match cause {
-            crate::session_setting_machine::UnresolvedCause::DefiniteFailure => {
+            provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure => {
                 SessionSettingEvent::Failed { application }
             }
-            crate::session_setting_machine::UnresolvedCause::OutcomeUnknown => {
+            provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown => {
                 SessionSettingEvent::OutcomeUnknown { application }
             }
         },
@@ -452,7 +458,7 @@ pub(crate) fn hold_setting_at_create(
 pub(crate) fn accept_settings(
     cells: &SessionCellTable,
     session_id: &str,
-) -> Result<Vec<crate::ProviderSettingKind>, ExternalProviderRuntimeError> {
+) -> Result<Vec<provider_session_machines::ProviderSettingKind>, ExternalProviderRuntimeError> {
     let effects = cells
         .transition(
             session_id,

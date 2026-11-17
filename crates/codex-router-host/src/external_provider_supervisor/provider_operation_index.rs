@@ -7,15 +7,15 @@
 //! unknown, and the live operations say which sends are still in flight.
 //! Every lock here is short and never held across an await.
 
-use crate::operation_record_machine::{
-    AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
-};
-use crate::uncertainty_cell_machine::{
-    UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes, seeded,
-};
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationSettlement, EndpointRef, OperationId,
     SessionRef,
+};
+use provider_session_machines::operation_record_machine::{
+    AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
+};
+use provider_session_machines::uncertainty_cell_machine::{
+    UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes, seeded,
 };
 use state_machine_core::{StateMachine, TransitionError};
 use std::collections::{HashMap, VecDeque};
@@ -212,7 +212,7 @@ impl LiveOperations {
 
 /// One binding's uncertainty cell, seeded once from the durable rows before
 /// its first use.
-type BindingUncertainty = tokio::sync::OnceCell<StdMutex<UnknownOutcomes>>;
+type BindingUncertainty = tokio::sync::OnceCell<StdMutex<UnknownOutcomes<OperationId, SessionRef>>>;
 
 /// Every binding's uncertainty cell (design note §14.1).
 #[derive(Default)]
@@ -251,13 +251,13 @@ impl UncertaintyCells {
 /// Applies one event to a seeded binding cell under its lock.
 pub(super) fn apply_uncertainty(
     cell: &BindingUncertainty,
-    event: UncertaintyEvent,
-) -> Result<(), UncertaintyRefusal> {
+    event: UncertaintyEvent<OperationId, SessionRef>,
+) -> Result<(), UncertaintyRefusal<OperationId>> {
     let Some(outcomes) = cell.get() else {
         return Ok(());
     };
     let mut outcomes = lock(outcomes);
-    match UncertaintyCellMachine::transition(&outcomes, event) {
+    match UncertaintyCellMachine::<OperationId, SessionRef>::transition(&outcomes, event) {
         Ok((next, _effects)) => {
             *outcomes = next;
             Ok(())

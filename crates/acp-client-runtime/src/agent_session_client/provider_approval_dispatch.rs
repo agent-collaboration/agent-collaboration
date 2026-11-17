@@ -81,7 +81,8 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
         let turn = match queued_turn {
             Some(crate::QueueTurn(turn)) => turn,
             None => {
-                let turn = crate::session_turn_machine::TurnId(uuid::Uuid::now_v7());
+                let turn =
+                    provider_session_machines::session_turn_machine::TurnId(uuid::Uuid::now_v7());
                 if let Err(refusal) = super::session_cell_bookkeeping::start_direct_turn(
                     &self.session_cells,
                     &provider_session_id,

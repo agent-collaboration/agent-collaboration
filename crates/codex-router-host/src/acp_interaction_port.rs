@@ -1,11 +1,11 @@
 //! Host policy adapter for the ACP client's provider interactions.
 
+use provider_session_machines::SessionGeneration;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use acp_client_runtime::{
-    ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer,
-    SessionEventSink, SessionGeneration,
+    ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer, SessionEventSink,
 };
 use collaboration_protocol::OperationId;
 use collaboration_runtime::RefusedApprovalOption;

@@ -16,7 +16,7 @@ fn post_send_transport_loss_names_unknown_setting_state() {
         &request,
         ExternalProviderRuntimeError::SettingOutcomeUnknown {
             provider_session_id: "provider-session".into(),
-            setting: acp_client_runtime::ProviderSettingKind::Mode,
+            setting: provider_session_machines::ProviderSettingKind::Mode,
             value: "ask".into(),
         },
     );

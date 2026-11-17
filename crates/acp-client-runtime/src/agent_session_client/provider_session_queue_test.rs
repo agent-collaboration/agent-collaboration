@@ -1,5 +1,5 @@
 use super::*;
-use crate::session_lifecycle_machine::CloseAttempt;
+use provider_session_machines::session_lifecycle_machine::CloseAttempt;
 use std::sync::Mutex;
 
 /// Records every message the sink is told ended not sent.

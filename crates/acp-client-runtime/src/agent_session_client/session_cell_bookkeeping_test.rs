@@ -1,4 +1,5 @@
 use super::*;
+use provider_session_machines::SessionGeneration;
 
 const SESSION: &str = "session-one";
 
@@ -208,7 +209,9 @@ fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
         .transition(
             SESSION,
             SessionCellEvent::Enqueue {
-                operation: crate::session_cell_machine::QueuedOperation("waiting".to_owned()),
+                operation: provider_session_machines::session_cell_machine::QueuedOperation(
+                    "waiting".to_owned(),
+                ),
             },
             crate::session_cell_table::EntryEffectRoute::Caller,
         )

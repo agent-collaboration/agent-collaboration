@@ -10,8 +10,8 @@
 //! failed load, an actor exit, a stop) and the Host must settle the messages
 //! it ended.
 
-use crate::queued_entry_machine::QueuedEntryEffect;
-use crate::session_cell_machine::{
+use provider_session_machines::queued_entry_machine::QueuedEntryEffect;
+use provider_session_machines::session_cell_machine::{
     SessionCell, SessionCellEffect, SessionCellEvent, SessionCellMachine, SessionCellRefusal,
 };
 use state_machine_core::{StateMachine, TransitionError};
@@ -173,14 +173,14 @@ impl crate::SessionRuns for SessionCellTable {
     fn publish_if(
         &self,
         session_id: &str,
-        claim: crate::RunClaim,
+        claim: provider_session_machines::session_run_claims::RunClaim,
         enqueue: &mut dyn FnMut() -> Result<(), crate::session_event_sink::EventSinkClosed>,
     ) -> Result<
         crate::session_event_sink::GenerationPublication,
         crate::session_event_sink::EventSinkClosed,
     > {
         self.read(session_id, |cell| {
-            if crate::session_run_claims::run_admits(&cell.lifecycle, claim) {
+            if provider_session_machines::session_run_claims::run_admits(&cell.lifecycle, claim) {
                 enqueue().map(|()| crate::session_event_sink::GenerationPublication::Published)
             } else {
                 Ok(crate::session_event_sink::GenerationPublication::Ended)
@@ -188,14 +188,22 @@ impl crate::SessionRuns for SessionCellTable {
         })
     }
 
-    fn current_generation(&self, session_id: &str) -> crate::SessionGeneration {
+    fn current_generation(&self, session_id: &str) -> provider_session_machines::SessionGeneration {
         self.read(session_id, |cell| match cell.lifecycle {
-            crate::session_lifecycle_machine::SessionLifecycle::NotLoaded { last } => last,
-            crate::session_lifecycle_machine::SessionLifecycle::Loading { generation, .. }
-            | crate::session_lifecycle_machine::SessionLifecycle::Live { generation }
-            | crate::session_lifecycle_machine::SessionLifecycle::Closing { generation, .. } => {
-                generation
+            provider_session_machines::session_lifecycle_machine::SessionLifecycle::NotLoaded {
+                last,
+            } => last,
+            provider_session_machines::session_lifecycle_machine::SessionLifecycle::Loading {
+                generation,
+                ..
             }
+            | provider_session_machines::session_lifecycle_machine::SessionLifecycle::Live {
+                generation,
+            }
+            | provider_session_machines::session_lifecycle_machine::SessionLifecycle::Closing {
+                generation,
+                ..
+            } => generation,
         })
     }
 }

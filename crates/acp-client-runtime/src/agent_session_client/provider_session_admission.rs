@@ -21,20 +21,26 @@ use agent_client_protocol::schema::v1::CloseSessionRequest;
 fn untried_settings(
     requested: &crate::RequestedProviderSettings,
     catalog: &crate::ProviderSettingsCatalog,
-    failed_kind: crate::ProviderSettingKind,
+    failed_kind: provider_session_machines::ProviderSettingKind,
 ) -> Vec<crate::NotAppliedProviderSetting> {
     let fast_off = FAST_OFF.to_owned();
     let fast = fast_off_requested(requested.fast, catalog).then_some(&fast_off);
     let mut after_failure = false;
     let mut untried = Vec::new();
     for (kind, value) in [
-        (crate::ProviderSettingKind::Mode, requested.mode.as_ref()),
-        (crate::ProviderSettingKind::Model, requested.model.as_ref()),
         (
-            crate::ProviderSettingKind::Effort,
+            provider_session_machines::ProviderSettingKind::Mode,
+            requested.mode.as_ref(),
+        ),
+        (
+            provider_session_machines::ProviderSettingKind::Model,
+            requested.model.as_ref(),
+        ),
+        (
+            provider_session_machines::ProviderSettingKind::Effort,
             requested.effort.as_ref(),
         ),
-        (crate::ProviderSettingKind::Fast, fast),
+        (provider_session_machines::ProviderSettingKind::Fast, fast),
     ] {
         if after_failure && let Some(value) = value {
             untried.push(crate::NotAppliedProviderSetting {

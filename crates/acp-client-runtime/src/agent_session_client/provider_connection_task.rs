@@ -129,7 +129,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             in_folder_grants: Arc::clone(&in_folder_grants),
             keep_fast_off: Arc::clone(&keep_fast_off),
             session_cells: Arc::clone(&session_cells),
-            run_generation: crate::SessionGeneration::UNTRACKED,
+            run_generation: provider_session_machines::SessionGeneration::UNTRACKED,
             agent_steers: false,
         };
         let task_event_sink = Arc::clone(&event_sink);
@@ -429,7 +429,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     created.effective_settings = catalog.effective_settings();
                                                     if task_event_sink.publish_in(
                                                         &created.provider_session_id,
-                                                        created_generation.unwrap_or(crate::SessionGeneration::UNTRACKED),
+                                                        created_generation.unwrap_or(provider_session_machines::SessionGeneration::UNTRACKED),
                                                         session_event_model::SessionEvent::SettingsChanged {
                                                             settings: catalog.to_session_settings(),
                                                         },
@@ -443,8 +443,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 // A setting the create couldn't apply holds the
                                                 // session's prompts until it's resolved.
                                                 let unresolved_kind = match setup_error.as_ref() {
-                                                    Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, crate::session_setting_machine::UnresolvedCause::DefiniteFailure)),
-                                                    Some(ExternalProviderRuntimeError::CreatedWithoutSettings { failed, .. }) => Some((failed.kind, if failed.reason == session_event_model::ProviderSettingFailureReason::OutcomeUnknown { crate::session_setting_machine::UnresolvedCause::OutcomeUnknown } else { crate::session_setting_machine::UnresolvedCause::DefiniteFailure })),
+                                                    Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure)),
+                                                    Some(ExternalProviderRuntimeError::CreatedWithoutSettings { failed, .. }) => Some((failed.kind, if failed.reason == session_event_model::ProviderSettingFailureReason::OutcomeUnknown { provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown } else { provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure })),
                                                     _ => None,
                                                 };
                                                 if let Some((kind, cause)) = unresolved_kind {
@@ -452,7 +452,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 }
                                                 if let Some(ExternalProviderRuntimeError::CreatedWithoutSettings { not_applied, .. }) = setup_error.as_ref() {
                                                     for setting in not_applied.iter() {
-                                                        super::hold_setting_at_create(&session_cells, &created.provider_session_id, setting.kind, crate::session_setting_machine::UnresolvedCause::DefiniteFailure);
+                                                        super::hold_setting_at_create(&session_cells, &created.provider_session_id, setting.kind, provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure);
                                                     }
                                                 }
                                             }
@@ -618,10 +618,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         ProviderCommand::Restore { provider_session_id, cwd, mode, admitted, reply } => {
                                             // Only an admitted restore opens a new run; a refused
                                             // one leaves the live run alone (D1 R14).
-                                            let attempt = crate::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
+                                            let attempt = provider_session_machines::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
                                             let via = match mode {
-                                                provider_session_restore::RestoreHistoryMode::Replay => crate::session_lifecycle_machine::RestoreVia::Load,
-                                                provider_session_restore::RestoreHistoryMode::WithoutReplay => crate::session_lifecycle_machine::RestoreVia::Resume,
+                                                provider_session_restore::RestoreHistoryMode::Replay => provider_session_machines::session_lifecycle_machine::RestoreVia::Load,
+                                                provider_session_restore::RestoreHistoryMode::WithoutReplay => provider_session_machines::session_lifecycle_machine::RestoreVia::Resume,
                                             };
                                             let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, via, attempt) {
                                                 Ok(generation) => generation,

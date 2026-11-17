@@ -181,14 +181,14 @@ pub enum ExternalProviderRuntimeError {
     SettingsOutcomeUncertain,
     #[error("provider setting could not be applied")]
     SettingFailed {
-        setting: crate::ProviderSettingKind,
+        setting: provider_session_machines::ProviderSettingKind,
         value: String,
         reason: String,
     },
     #[error("outcomeUnknown: provider setting effect is not confirmed")]
     SettingOutcomeUnknown {
         provider_session_id: String,
-        setting: crate::ProviderSettingKind,
+        setting: provider_session_machines::ProviderSettingKind,
         value: String,
     },
     #[error("provider does not advertise steering")]
@@ -249,7 +249,7 @@ pub enum ExternalProviderRuntimeError {
     SinkClosed,
     #[error("invalidSetting: value requires an unambiguous advertised provider setting option")]
     InvalidSetting {
-        setting: crate::ProviderSettingKind,
+        setting: provider_session_machines::ProviderSettingKind,
         value: String,
         advertised: Vec<String>,
         provider_session_id: String,
