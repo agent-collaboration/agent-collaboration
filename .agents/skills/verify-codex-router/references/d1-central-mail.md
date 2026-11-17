@@ -35,6 +35,8 @@ The driver copies only the declared executable bytes into its fresh Codex home, 
 
 ## Three-Host Tokio driver
 
+**Cannot run on this source.** PR 1 of the central rip-out removed the driver's `d1-central` action with the old Tokio central edge (`TokioServer`, `/v1/session`, machine enrollment) it started. `--d1-harness` still issues `d1-central` and fails there; `d1-host` remains but has no fixture producer. The journey needs rewriting against the new central link once it exists. The rest of this section describes the removed driver.
+
 The maintained executable entry is:
 
 ```sh

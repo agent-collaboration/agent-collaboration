@@ -1,7 +1,6 @@
 //! Isolated tailnet verification Host; never a product or release binary.
 
 pub mod bounded_command;
-pub mod d1_central_runtime;
 pub mod d1_host_lifecycle;
 pub mod d1_host_plan;
 pub mod d1_native_runtime;
