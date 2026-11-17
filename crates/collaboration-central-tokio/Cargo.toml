@@ -75,6 +75,7 @@ sqlx-core.workspace = true
 tempfile = "3.27.0"
 tracing-subscriber.workspace = true
 turso_parser = { version = "=0.8.1", features = ["serde"] }
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 
 [[example]]
 name = "step_scope_workerd"

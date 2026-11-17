@@ -156,6 +156,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn due_unit_starts(&self) -> Vec<crate::DueUnitStart> {
         self.due_batches.unit_starts()
     }
+    /// Test-support record of every claimed due-batch start, one per batch.
+    #[cfg(feature = "test-support")]
+    pub fn due_batch_starts(&self) -> Vec<i64> {
+        self.due_batches.claimed_starts()
+    }
     #[cfg(feature = "test-support")]
     pub fn legacy_unit_invocations(&self) -> LegacyUnitInvocations {
         *self

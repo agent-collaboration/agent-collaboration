@@ -7,7 +7,9 @@ use super::{
     store_adapter::SubjectVersion,
 };
 use crate::ObjectHost as _;
-use central_engine_model::{FailureRecord, ItemFailureClass, RetirementThreshold, after_failure};
+use central_engine_model::{
+    FailureRecord, FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
+};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
 use workspace_model::WorkspaceId;
 
@@ -107,20 +109,16 @@ impl<R: EngineHost> Engine<'_, R> {
             Some(Err(corruption)) => (None, corruption.failure_class()),
             None => (None, class),
         };
-        if record.is_some_and(|record| {
-            matches!(
-                record.state,
-                central_engine_model::AttemptState::Retired { .. }
-            )
-        }) {
-            return FailureOutcome::Superseded;
-        }
         let now = match self.now() {
             Ok(now) => now,
             Err(failure) => return FailureOutcome::StoreDown(failure),
         };
+        // The pure transition decides against the record just read, and the
+        // write below is guarded by that same record: a failure seen before the
+        // next try, or after retirement, writes nothing (R4).
         let record = match after_failure(record, class, now, threshold, self.ids().new_id()) {
-            Ok(record) => record,
+            Ok(FailureTransition::Record(record)) => record,
+            Ok(FailureTransition::Unchanged) => return FailureOutcome::Superseded,
             Err(_) => {
                 return FailureOutcome::StoreDown(crate::workspace_decode_error::corrupt(
                     "central_work_attempts.failure_update",

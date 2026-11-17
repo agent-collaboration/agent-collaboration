@@ -224,7 +224,7 @@ impl EngineOrg {
         })
         .await;
     }
-    async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
+    pub async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
         let caller = self.f.machine_caller("engine-admin").await.unwrap();
         self.f
             .host
