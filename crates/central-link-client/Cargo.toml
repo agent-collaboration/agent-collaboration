@@ -6,16 +6,24 @@ license.workspace = true
 publish = false
 autotests = false
 
+[features]
+# Dev-only stand-in for the link below the tools' seam (FakeLinkCalls).
+test-support = []
+
 [dependencies]
 central-link-protocol.workspace = true
 workspace-model.workspace = true
 router-clock.workspace = true
+runtime-primitives.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 router-clock = { workspace = true, features = ["test-support"] }
+serde.workspace = true
 serde_json.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
 
 [lints]
 workspace = true

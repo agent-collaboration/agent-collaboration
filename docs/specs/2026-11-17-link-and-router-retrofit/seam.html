@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link + Router retrofit · the seam between the tools and the link (FROZEN, draft 3)</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content"></ex-nav>
+<ex-document id="content">
+<h1>The seam: what a Router tool calls, and what it gets back</h1>
+<p><strong>FROZEN 2026-11-17</strong> (draft 3: adds ReadAnswerLost and RequestIdConflict). Lead A and the CLI+MCP Lead. The link (PR 3) builds below this seam and the tool surface (PR 4) builds above it, both at the same time. Authority: the owner's record (<code>2026-11-12-workspace-storage/owner-decisions.md</code>, 11-15 outbox and delivery entries). The canonical contract is <code>origin/main</code> <code>247c13231</code>.</p>
+
+<ex-mermaid id="seam-pic" data-width="canvas" label="The seam"><script type="text/plain">
+flowchart TB
+  tool["Router tool (MCP, CLI): CLI+MCP Lead"]
+  seam["SEAM: LinkCalls::submit(caller, payload) -> Submission"]
+  imm["Immediate: send now over the link,<br/>wait for central's answer"]
+  ob["Outbox: store in provider_operations.sqlite,<br/>flush on the next 1-minute mark (±3 s)"]
+  link["Link client + central link server: Lead A"]
+  tool --> seam
+  seam -- "every other operation" --> imm --> link
+  seam -- "SendMessage, ThreadPost" --> ob --> link
+</script></ex-mermaid>
+
+<h2 id="types">1 · The call</h2>
+<pre><code>// central-link-client (Lead A). Async; one injected clock.
+pub trait LinkCalls {
+    // payload carries a caller-minted UUIDv7 RequestId on every write (already in the contract).
+    async fn submit(&amp;self, caller: Caller, payload: RequestPayload) -&gt; Submission;
+    // scoped to the caller's own requests: another session's id answers NotFound.
+    async fn request_status(&amp;self, caller: Caller, request: RequestId) -&gt; RequestStatus;
+}
+
+pub enum Submission {
+    Answered(ReplyPayload),         // immediate kinds: central's answer
+    InOutbox(OutboxReceipt),        // outbox kinds: stored, sends on the next mark
+    Refused(SubmitRefusal),         // nothing sent, nothing stored
+    Uncertain { request: RequestId },// immediate writes: sent, answer lost; may have applied
+    ReadAnswerLost,                 // reads only, no id: the frame left, the answer was lost; reading again is safe
+}
+
+pub struct OutboxReceipt {
+    pub id: OutboxReceiptId,        // = the write's RequestId (UUIDv7)
+    pub flush_at: SyncTime,         // the next 1-minute mark
+}
+
+pub enum RequestStatus {
+    NotFound,
+    InOutbox { flush_at: SyncTime },
+    Sent,                           // flushed; central's answer not yet in
+    Accepted(ReplyPayload),
+    Refused(RefusalReason),
+}
+
+pub enum SubmitRefusal {
+    CentralUnavailable,             // immediate kinds: nothing left the Mac
+    OutboxUnavailable,              // outbox kinds: the local write failed; nothing stored
+    RequestIdConflict,              // the same RequestId was submitted with different content
+    NotEnrolled,
+    InvalidRequest(ProtocolError),
+}</code></pre>
+<ul>
+<li><strong><code>Caller</code>, <code>RequestPayload</code> and <code>ReplyPayload</code> already exist and are merged:</strong> <code>workspace-model/src/request_contract.rs:43</code> (<code>Caller::Session(SessionAddress)</code>, <code>Caller::Person</code>) and <code>central-link-protocol/src/link_request.rs:45,75</code> (<code>Workspace(WorkspaceRequest)</code>, <code>Mail(CentralMailRequest)</code>). The seam adds no new identity field. The session rides in <code>caller</code>, as the Router claims it today. Agent session tokens stay parked by the owner and are decided with him before Feature 2's authentication builds on them.</li>
+<li><strong>The kind of an operation picks its path; the caller doesn't choose.</strong></li>
+<li><strong>Safe replay:</strong> the caller mints the write's <code>RequestId</code> (owner, 2026-11-13: "the caller mints a UUIDv7 request id"). Central keeps the first answer for 24 hours, so resubmitting the same id returns it and never applies twice. The same id with different content is refused as a conflict. Doors that take an <code>itemId</code>/<code>operationId</code> pass it through as the <code>RequestId</code>.</li>
+<li><strong><code>Uncertain</code></strong> means the frame left the Mac and the answer was lost. The agent reconciles with <code>request_status</code>, or resubmits the same id. It never retries blind with a new id. <code>CentralUnavailable</code> is used only when nothing left the Mac.</li>
+</ul>
+
+<h2 id="which">2 · Which operations go through the outbox (owner, 2026-11-15)</h2>
+<div class="ex-table-scroll" data-width="canvas"><table>
+<thead><tr><th>Path</th><th>Operations</th><th>Owner's words</th></tr></thead>
+<tbody>
+<tr><td>Outbox</td><td><code>CentralMailOperation::SendMessage</code>; <code>WorkspaceOperation::ThreadPost</code></td><td>"yes sending thread should be batched in outbox"; direct messages in outbox</td></tr>
+<tr><td>Immediate</td><td>every other write: the commands (CreateArea, CreateProject, CreateThread, roles, statuses, backlog, references, links, work log, SetWake, SetAutomation, SetNoticeCadence …)</td><td>"creation of thread should be immediate. this is not for commands"</td></tr>
+<tr><td>Immediate</td><td>reads (Show, List, Inbox, MarkRead)</td><td>reads go at once</td></tr>
+<tr><td>Immediate</td><td>approvals</td><td>"approvals immediate"</td></tr>
+</tbody></table></div>
+
+<h2 id="receipts">3 · Receipts and what the agent sees</h2>
+<ul>
+<li>An outbox write returns <code>InOutbox</code> at once with a short receipt. The agent sees "in outbox" (owner: "'in outbox' is fine").</li>
+<li>The agent's own reads show its unsent posts and messages marked "in outbox" (owner: "show as pending or in outbox").</li>
+<li><strong>Outcomes come back batched,</strong> one compact receipt per session per flush. Only accepted counts and refusals with reasons are pushed (owner: "batched by session and token-efficient"; "outcomes and problems only").</li>
+<li><strong>Outcome pushes reach the session through the Router's existing per-session delivery,</strong> arriving like any notice in the session's inbox. There is no separate stream.</li>
+<li><strong>Any receipt can be pulled</strong> with <code>request_status</code>, exposed as an MCP/API status request (owner: "able to pull the status with a request … in the api of the mcp").</li>
+<li><strong>The wording</strong> of receipts, "in outbox" and refusals belongs to the CLI+MCP Lead, in the same style as the session refusals: the state plus valid next steps, with short successes.</li>
+</ul>
+
+<h2 id="down">4 · When central is unreachable</h2>
+<ul>
+<li><strong>Outbox kinds:</strong> they stay in the outbox and send after reconnect. That's what the outbox is for (owner 11-15: "covers network drops").</li>
+<li><strong>Immediate kinds:</strong> <code>Refused(CentralUnavailable)</code> at once. Nothing is queued, so a command never runs late without the agent knowing. Lead A's call, recorded.</li>
+<li><strong>Outbox expiry is OPEN in the owner's record</strong> ("not expired properly", 11-15). Until he decides, nothing expires. A full HTML decision page on it goes to the Chief.</li>
+<li><strong>Withdrawing an outbox item before it flushes</strong> isn't in v1. The owner's record doesn't decide it, so it goes on the same decision page as expiry.</li>
+</ul>
+
+<h2 id="split">5 · Who builds what</h2>
+<ul>
+<li><strong>Lead A, below the seam:</strong> <code>LinkCalls</code>; the outbox table and flush loop; <code>machine_local.sqlite</code>/<code>provider_operations.sqlite</code>; the link client wiring; the central link server; the inbox, Welcome resend and de-duplication; the batch frame (at most 64 writes per flush).</li>
+<li><strong>CLI+MCP Lead, above the seam:</strong> every tool and command mapped to a <code>RequestPayload</code> or deleted; the agent-facing wording; the status tool.</li>
+<li><strong>Stand-ins while both build:</strong> Lead A ships a <code>FakeLinkCalls</code> (dev-only) that honours this contract, including <code>InOutbox</code> and later <code>Accepted</code>. The tools build against it until the real link lands.</li>
+<li><strong>A seam change</strong> needs both Leads' agreement, posted on the shared thread.</li>
+</ul>
+</ex-document>
+</body>
+</html>

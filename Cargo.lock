@@ -1097,9 +1097,13 @@ name = "central-link-client"
 version = "0.1.154"
 dependencies = [
  "central-link-protocol",
+ "hegeltest",
  "router-clock",
+ "runtime-primitives",
+ "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
  "workspace-model",
 ]
@@ -2134,6 +2138,8 @@ dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
  "board-sync-protocol",
+ "central-link-client",
+ "central-link-protocol",
  "chrono",
  "codex-acp-adapter",
  "codex-native-integration",
@@ -2150,6 +2156,7 @@ dependencies = [
  "fleet-sync-writer",
  "futures-util",
  "getrandom 0.3.4",
+ "hegeltest",
  "interaction-storage",
  "lifecycle-observation",
  "message-board",
@@ -2171,6 +2178,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-model",
 ]
 
 [[package]]

@@ -15,6 +15,9 @@ workspace = true
 
 [dependencies]
 router-clock.workspace = true
+central-link-client = { path = "../central-link-client", version = "0.1.154" }
+central-link-protocol.workspace = true
+workspace-model.workspace = true
 sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", optional = true }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
@@ -55,6 +58,7 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.114", features = ["test-support"] }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
 router-clock = { workspace = true, features = ["test-support"] }
