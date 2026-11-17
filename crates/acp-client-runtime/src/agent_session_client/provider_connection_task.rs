@@ -101,6 +101,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         // client's close and the connection's admissions are transitions on
         // the same cell.
         let session_cells = Arc::new(crate::session_cell_table::SessionCellTable::default());
+        // The cells own every run; the sink checks each publication against
+        // them instead of keeping its own generations (D1 step 6).
+        event_sink.attach_session_runs(Arc::clone(&session_cells) as Arc<dyn crate::SessionRuns>);
         let task_session_cells = Arc::clone(&session_cells);
         let retirement_session_cells = Arc::clone(&session_cells);
         let tool_registry = Arc::new(ProviderConnectionActivity::default());
@@ -403,7 +406,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let mut result = (*result).and_then(|mut registration| {
                                                 setup_error = registration.setup_error.take();
                                                 let provider_session_id = registration.provider_session_id.clone();
-                                                let generation = super::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id))?;
+                                                let generation = super::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id, crate::SessionGeneration::UNTRACKED)?;
                                                 match register_provider_session(registration, &mut sessions) {
                                                     Ok(created) => {
                                                         created_generation = Some(generation);
@@ -415,9 +418,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     }
                                                 }
                                             });
-                                            if let (Ok(created), Some(generation)) = (&result, created_generation) {
-                                                task_event_sink.adopt_generation(&created.provider_session_id, generation);
-                                            }
                                             let mut settings_sink_closed = false;
                                             if let Ok(created) = &mut result {
                                                 known_sessions.track(created.provider_session_id.clone()).await;
@@ -623,14 +623,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 provider_session_restore::RestoreHistoryMode::Replay => crate::session_lifecycle_machine::RestoreVia::Load,
                                                 provider_session_restore::RestoreHistoryMode::WithoutReplay => crate::session_lifecycle_machine::RestoreVia::Resume,
                                             };
-                                            let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, task_event_sink.current_generation(&provider_session_id), via, attempt) {
+                                            let generation = match super::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, crate::SessionGeneration::UNTRACKED, via, attempt) {
                                                 Ok(generation) => generation,
                                                 Err(error) => {
                                                     let _result = reply.send(Err(error));
                                                     continue;
                                                 }
                                             };
-                                            task_event_sink.adopt_generation(&provider_session_id, generation);
                                             if let Some(admitted) = admitted {
                                                 let _result = admitted.send(generation);
                                             }

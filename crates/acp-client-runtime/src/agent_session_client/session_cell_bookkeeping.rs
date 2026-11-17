@@ -363,13 +363,7 @@ pub(crate) fn report_actor_exit(
             generation,
         }) = effect
         {
-            let _published = event_sink.publish_in(
-                session_id,
-                generation,
-                session_event_model::SessionEvent::StateChanged {
-                    state: session_event_model::SessionState::Unloaded,
-                },
-            );
+            let _published = event_sink.publish_unloaded(session_id, generation);
         }
     }
 }

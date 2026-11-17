@@ -1,7 +1,7 @@
 //! Ordered Host publication into the Router-owned provider Session hub.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     sync::{
         Arc, Mutex as StdMutex,
         atomic::{AtomicUsize, Ordering},
@@ -10,7 +10,7 @@ use std::{
 
 use acp_client_runtime::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
-    SessionEventSink, SessionGeneration,
+    RunClaim, SessionEventSink, SessionGeneration, SessionRuns,
 };
 use collaboration_runtime::ProviderSessionEventHub;
 use message_board::{SessionEndpointRef, SessionId, SessionRef};
@@ -46,34 +46,17 @@ enum HubCommand {
     },
 }
 
-/// A session's current run at this sink (D1 R14). The connection opens a
-/// generation when it admits a create, load or resume, and ends it with that
-/// run's Closed; a publication from any other generation is dropped.
-#[derive(Default)]
-struct GenerationState {
-    current: u64,
-    closed: bool,
-}
-
-/// The generation a publication belongs to.
-#[derive(Clone, Copy)]
-enum GenerationClaim {
-    /// Whatever is current, unless it is closed: connection-wide
-    /// publishers only (auth status, provider exit).
-    Current,
-    /// Exactly this one, still open: a runtime continuation.
-    Exact(SessionGeneration),
-    /// Exactly this one, still open; publishing it closes it.
-    Closing(SessionGeneration),
-}
-
 /// One provider connection has one queue and one consumer. The synchronous ACP
 /// reader only enqueues; replay waits behind every earlier publication.
-/// Every enqueue is checked against its session's generation under one lock,
-/// so a generation's Closed is ordered against everything published for it.
+/// Every publication claims a run, and the connection's session cells decide
+/// it: the claim is checked and the publication enqueued under the session
+/// cell's lock, so nothing of a run lands after its terminal fact (D1 step
+/// 6). The sink keeps no generations of its own.
 pub(crate) struct HubSessionEventSink {
     endpoint: SessionEndpointRef,
-    generations: StdMutex<HashMap<String, GenerationState>>,
+    /// The connection's session cells, once the connection has attached
+    /// them; until then the sink is a plain pipe.
+    runs: StdMutex<Option<Arc<dyn SessionRuns>>>,
     sender: StdMutex<Option<mpsc::UnboundedSender<HubCommand>>>,
     consumer: Mutex<Option<JoinHandle<()>>>,
     backlog: Arc<AtomicUsize>,
@@ -199,7 +182,7 @@ impl HubSessionEventSink {
         });
         Self {
             endpoint,
-            generations: StdMutex::new(HashMap::new()),
+            runs: StdMutex::new(None),
             sender: StdMutex::new(Some(sender)),
             consumer: Mutex::new(Some(consumer)),
             backlog,
@@ -227,39 +210,36 @@ impl HubSessionEventSink {
         })
     }
 
-    /// Enqueues `commands` together when `claim` holds; Ended, with nothing
-    /// enqueued, when its generation is closed or no longer current.
+    /// Enqueues `commands` together when the session's cell admits `claim`;
+    /// Ended, with nothing enqueued, when it doesn't. The check and the
+    /// enqueue happen under the cell's lock; the enqueue is a push onto the
+    /// unbounded pipe and never waits.
     fn enqueue_for(
         &self,
         session_id: &str,
-        claim: GenerationClaim,
+        claim: RunClaim,
         commands: Vec<HubCommand>,
     ) -> Result<GenerationPublication, EventSinkClosed> {
-        let mut generations = self
-            .generations
+        let runs = self
+            .runs
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let state = generations.entry(session_id.to_owned()).or_default();
-        let holds = match claim {
-            GenerationClaim::Current => !state.closed,
-            GenerationClaim::Exact(generation) | GenerationClaim::Closing(generation) => {
-                !state.closed && generation.number() == state.current
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let mut commands = Some(commands);
+        let mut enqueue = || {
+            for command in commands.take().unwrap_or_default() {
+                self.enqueue(session_id, command)?;
             }
+            Ok(())
         };
-        if !holds {
-            tracing::debug!(
-                session_id,
-                "provider Session event dropped: its generation ended"
-            );
-            return Ok(GenerationPublication::Ended);
+        let published = match runs {
+            Some(runs) => runs.publish_if(session_id, claim, &mut enqueue)?,
+            None => enqueue().map(|()| GenerationPublication::Published)?,
+        };
+        if published == GenerationPublication::Ended {
+            tracing::debug!(session_id, "provider Session event dropped: its run ended");
         }
-        for command in commands {
-            self.enqueue(session_id, command)?;
-        }
-        if matches!(claim, GenerationClaim::Closing(_)) {
-            state.closed = true;
-        }
-        Ok(GenerationPublication::Published)
+        Ok(published)
     }
 
     fn enqueue(&self, session_id: &str, command: HubCommand) -> Result<(), EventSinkClosed> {
@@ -332,7 +312,7 @@ impl HubSessionEventSink {
         let published = self
             .enqueue_for(
                 session_id,
-                GenerationClaim::Exact(generation),
+                RunClaim::Exact(generation),
                 vec![HubCommand::BeginUnavailable {
                     session,
                     completion,
@@ -358,7 +338,7 @@ impl HubSessionEventSink {
         let (completion, result) = oneshot::channel();
         let published = self.enqueue_for(
             session_id,
-            GenerationClaim::Exact(generation),
+            RunClaim::Exact(generation),
             vec![
                 HubCommand::Publish {
                     session: session.clone(),
@@ -411,7 +391,7 @@ fn observe_live_event(
 }
 
 impl HubSessionEventSink {
-    fn begin_replay(&self, session_id: &str, claim: GenerationClaim) -> HistoryReplayFuture<'_> {
+    fn begin_replay(&self, session_id: &str, claim: RunClaim) -> HistoryReplayFuture<'_> {
         let session = self.session(session_id);
         let session_id = session_id.to_owned();
         Box::pin(async move {
@@ -457,14 +437,14 @@ impl SessionEventSink for HubSessionEventSink {
         let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
         self.enqueue_for(
             session_id,
-            GenerationClaim::Current,
+            RunClaim::Current,
             vec![HubCommand::SkillView { session, view }],
         )
         .map(|_| ())
     }
 
     fn begin_history_replay(&self, session_id: &str) -> HistoryReplayFuture<'_> {
-        self.begin_replay(session_id, GenerationClaim::Current)
+        self.begin_replay(session_id, RunClaim::Current)
     }
 
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
@@ -479,7 +459,7 @@ impl SessionEventSink for HubSessionEventSink {
         // late event never tears down the connection.
         let published = self.enqueue_for(
             session_id,
-            GenerationClaim::Current,
+            RunClaim::Current,
             vec![HubCommand::Publish {
                 session,
                 event,
@@ -492,35 +472,21 @@ impl SessionEventSink for HubSessionEventSink {
         Ok(())
     }
 
-    fn open_generation(&self, session_id: &str) -> SessionGeneration {
-        let mut generations = self
-            .generations
+    fn attach_session_runs(&self, runs: Arc<dyn SessionRuns>) {
+        *self
+            .runs
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let state = generations.entry(session_id.to_owned()).or_default();
-        state.current = state.current.wrapping_add(1);
-        state.closed = false;
-        SessionGeneration::from_number(state.current)
-    }
-
-    fn adopt_generation(&self, session_id: &str, generation: SessionGeneration) {
-        let mut generations = self
-            .generations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let state = generations.entry(session_id.to_owned()).or_default();
-        state.current = generation.number();
-        state.closed = false;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(runs);
     }
 
     fn current_generation(&self, session_id: &str) -> SessionGeneration {
-        SessionGeneration::from_number(
-            self.generations
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get(session_id)
-                .map_or(0, |state| state.current),
-        )
+        self.runs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .map_or(SessionGeneration::UNTRACKED, |runs| {
+                runs.current_generation(session_id)
+            })
     }
 
     fn publish_in(
@@ -538,7 +504,7 @@ impl SessionEventSink for HubSessionEventSink {
         let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
         let published = self.enqueue_for(
             session_id,
-            GenerationClaim::Exact(generation),
+            RunClaim::Exact(generation),
             vec![HubCommand::Publish {
                 session,
                 event,
@@ -560,7 +526,7 @@ impl SessionEventSink for HubSessionEventSink {
         let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
         self.enqueue_for(
             session_id,
-            GenerationClaim::Exact(generation),
+            RunClaim::Exact(generation),
             vec![HubCommand::SkillView { session, view }],
         )
         .map(|_| ())
@@ -571,26 +537,54 @@ impl SessionEventSink for HubSessionEventSink {
         session_id: &str,
         generation: SessionGeneration,
     ) -> HistoryReplayFuture<'_> {
-        self.begin_replay(session_id, GenerationClaim::Exact(generation))
+        self.begin_replay(session_id, RunClaim::Exact(generation))
     }
 
-    /// Ends `generation` (or, for a session never admitted here, the
-    /// current one) with Closed.
+    /// Closed, `generation`'s terminal fact (or, for a session never
+    /// admitted here, the last run's).
     fn publish_closed(
         &self,
         session_id: &str,
         generation: Option<SessionGeneration>,
     ) -> Result<GenerationPublication, EventSinkClosed> {
         let generation = generation.unwrap_or_else(|| self.current_generation(session_id));
+        self.publish_terminal(
+            session_id,
+            generation,
+            session_event_model::SessionState::Closed,
+        )
+    }
+
+    /// Unloaded, `generation`'s terminal fact after its actor exited (S2).
+    fn publish_unloaded(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        self.publish_terminal(
+            session_id,
+            generation,
+            session_event_model::SessionState::Unloaded,
+        )
+    }
+}
+
+impl HubSessionEventSink {
+    /// A run's terminal state, which passes only once the session has ended
+    /// with that run as its last.
+    fn publish_terminal(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+        state: session_event_model::SessionState,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
         let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
         self.enqueue_for(
             session_id,
-            GenerationClaim::Closing(generation),
+            RunClaim::Terminal(generation),
             vec![HubCommand::Publish {
                 session,
-                event: SessionEvent::StateChanged {
-                    state: session_event_model::SessionState::Closed,
-                },
+                event: SessionEvent::StateChanged { state },
                 completion: None,
             }],
         )

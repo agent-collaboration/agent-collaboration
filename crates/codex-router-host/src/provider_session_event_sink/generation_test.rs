@@ -1,6 +1,9 @@
-//! A session's generation at the sink ends with its Closed (D1 R14): nothing
-//! published for it afterwards reaches the hub, and a producer from an earlier
-//! run can't publish into a later one.
+//! A session's run at the sink ends with its terminal fact (D1 R14, step 6):
+//! nothing published for it afterwards reaches the hub, and a producer from
+//! an earlier run can't publish into a later one. The sink asks the
+//! connection's session runs; here a scripted run stands in for the
+//! session's cell, whose own rules acp-client-runtime's session_run_claims
+//! tests prove.
 
 use super::*;
 use collaboration_contracts::SessionEventHub;
@@ -10,11 +13,58 @@ use session_event_model::{CapabilityReport, SessionSettings, SessionState};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// The one session's run, as its cell would hold it: the latest run and
+/// whether it is still running.
+#[derive(Default)]
+struct ScriptedRuns(std::sync::Mutex<(u64, bool)>);
+
+impl ScriptedRuns {
+    /// The connection admits a new run.
+    fn start(&self) -> SessionGeneration {
+        let mut run = self.0.lock().expect("run lock");
+        run.0 += 1;
+        run.1 = true;
+        SessionGeneration::from_number(run.0)
+    }
+
+    /// The run ends (its close is done), before its Closed is published.
+    fn end(&self) {
+        self.0.lock().expect("run lock").1 = false;
+    }
+}
+
+impl SessionRuns for ScriptedRuns {
+    fn publish_if(
+        &self,
+        _session_id: &str,
+        claim: RunClaim,
+        enqueue: &mut dyn FnMut() -> Result<(), EventSinkClosed>,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        let run = self.0.lock().expect("run lock");
+        let (latest, running) = *run;
+        let holds = match claim {
+            RunClaim::Current => running || latest == 0,
+            RunClaim::Exact(claimed) => running && claimed.number() == latest,
+            RunClaim::Terminal(claimed) => !running && claimed.number() == latest,
+        };
+        if holds {
+            enqueue().map(|()| GenerationPublication::Published)
+        } else {
+            Ok(GenerationPublication::Ended)
+        }
+    }
+
+    fn current_generation(&self, _session_id: &str) -> SessionGeneration {
+        SessionGeneration::from_number(self.0.lock().expect("run lock").0)
+    }
+}
+
 struct SinkFixture {
     _root: tempfile::TempDir,
     hub: Arc<ProviderSessionEventHub>,
     session: SessionRef,
     sink: HubSessionEventSink,
+    runs: Arc<ScriptedRuns>,
 }
 
 async fn sink_fixture() -> SinkFixture {
@@ -33,11 +83,14 @@ async fn sink_fixture() -> SinkFixture {
         session_id: SessionId::try_from("session-one".to_owned()).expect("session"),
     };
     let sink = HubSessionEventSink::new(Arc::clone(&hub), endpoint);
+    let runs = Arc::new(ScriptedRuns::default());
+    sink.attach_session_runs(Arc::clone(&runs) as Arc<dyn SessionRuns>);
     SinkFixture {
         _root: root,
         hub,
         session,
         sink,
+        runs,
     }
 }
 
@@ -86,7 +139,7 @@ async fn nothing_reaches_the_hub_for_a_generation_after_its_closed() {
     // Arrange: a run the connection admitted, published idle.
     let fixture = sink_fixture().await;
     let sink = &fixture.sink;
-    let first = sink.open_generation("session-one");
+    let first = fixture.runs.start();
     let activated = sink
         .publish_activation("session-one", first, CapabilityReport::default())
         .await
@@ -99,6 +152,7 @@ async fn nothing_reaches_the_hub_for_a_generation_after_its_closed() {
 
     // Act: the run closes; its producer and activation arrive late; a newer
     // run is admitted, the old one tries again, and the new one activates.
+    fixture.runs.end();
     let closed = sink
         .publish_closed("session-one", Some(first))
         .expect("Closed is enqueued");
@@ -121,7 +175,7 @@ async fn nothing_reaches_the_hub_for_a_generation_after_its_closed() {
         .publish_activation("session-one", first, CapabilityReport::default())
         .await
         .expect("late activation");
-    let second = sink.open_generation("session-one");
+    let second = fixture.runs.start();
     let stale_activation = sink
         .publish_activation("session-one", first, CapabilityReport::default())
         .await
@@ -174,7 +228,7 @@ async fn a_producer_from_an_earlier_run_never_publishes_into_a_later_one() {
     // Arrange: run A, admitted, active and closed.
     let fixture = sink_fixture().await;
     let sink = &fixture.sink;
-    let run_a = sink.open_generation("session-one");
+    let run_a = fixture.runs.start();
     sink.publish_activation("session-one", run_a, CapabilityReport::default())
         .await
         .expect("A active");
@@ -183,13 +237,14 @@ async fn a_producer_from_an_earlier_run_never_publishes_into_a_later_one() {
         .attach(fixture.session.clone())
         .await
         .expect("attach");
+    fixture.runs.end();
     sink.publish_closed("session-one", Some(run_a))
         .expect("Closed is enqueued");
     until_hub_closed(&mut before_close).await;
 
     // Act: run B is admitted and publishes its settings; A's delayed
     // producer publishes; B's resume invalidates history and activates.
-    let run_b = sink.open_generation("session-one");
+    let run_b = fixture.runs.start();
     let b_settings = sink
         .publish_in(
             "session-one",
@@ -247,4 +302,108 @@ async fn a_producer_from_an_earlier_run_never_publishes_into_a_later_one() {
         ),
         "B's history holds B's settings, then its activation: {history:?}"
     );
+}
+
+/// Oracle: the Lead's step 6 conditions at the hub: run 1's events all land
+/// before its Closed; run 2, whose actor exits on its own, ends with its
+/// Unloaded as its terminal fact, and a late event of run 2 is dropped
+/// (M4: once a run has ended, nothing of it is published).
+#[tokio::test]
+async fn a_runs_events_precede_its_terminal_fact_and_unloaded_ends_a_run() {
+    // Arrange
+    let fixture = sink_fixture().await;
+    let sink = &fixture.sink;
+    let running = || SessionEvent::StateChanged {
+        state: SessionState::Running,
+    };
+
+    // Act: run 1 publishes, then closes.
+    let run_one = fixture.runs.start();
+    sink.publish_activation("session-one", run_one, CapabilityReport::default())
+        .await
+        .expect("run 1 active");
+    let mut watching = fixture
+        .hub
+        .attach(fixture.session.clone())
+        .await
+        .expect("attach");
+    sink.publish_in("session-one", run_one, running())
+        .expect("run 1 running");
+    fixture.runs.end();
+    sink.publish_closed("session-one", Some(run_one))
+        .expect("run 1 closed");
+    let history_one = events_until_closed(&mut watching).await;
+    // Run 2 starts, then its actor exits on its own.
+    let run_two = fixture.runs.start();
+    sink.publish_activation("session-one", run_two, CapabilityReport::default())
+        .await
+        .expect("run 2 active");
+    let mut watching_two = fixture
+        .hub
+        .attach(fixture.session.clone())
+        .await
+        .expect("attach");
+    fixture.runs.end();
+    let unloaded = sink
+        .publish_unloaded("session-one", run_two)
+        .expect("run 2 unloaded");
+    let late = sink
+        .publish_in("session-one", run_two, running())
+        .expect("late event");
+    let history_two = events_until(&mut watching_two, SessionState::Unloaded).await;
+    sink.shutdown().await.expect("sink shutdown");
+
+    // Assert
+    assert!(
+        matches!(
+            history_one.as_slice(),
+            [
+                ..,
+                SessionEvent::StateChanged {
+                    state: SessionState::Running
+                },
+                SessionEvent::StateChanged {
+                    state: SessionState::Closed
+                }
+            ]
+        ),
+        "run 1's events land before its Closed: {history_one:?}"
+    );
+    assert_eq!(unloaded, GenerationPublication::Published);
+    assert_eq!(late, GenerationPublication::Ended);
+    assert!(
+        matches!(
+            history_two.as_slice(),
+            [SessionEvent::StateChanged {
+                state: SessionState::Unloaded
+            }]
+        ),
+        "Unloaded is run 2's terminal fact and nothing follows it: {history_two:?}"
+    );
+}
+
+/// The live events the hub delivers up to and including the session's
+/// Closed, without a timer.
+async fn events_until_closed(
+    attachment: &mut collaboration_contracts::SessionEventAttachment,
+) -> Vec<SessionEvent> {
+    events_until(attachment, SessionState::Closed).await
+}
+
+/// The live events the hub delivers up to and including a change to
+/// `state`, without a timer.
+async fn events_until(
+    attachment: &mut collaboration_contracts::SessionEventAttachment,
+    state: SessionState,
+) -> Vec<SessionEvent> {
+    let mut events = Vec::new();
+    loop {
+        let event = attachment.receiver.recv().await.expect("hub event").event;
+        let reached =
+            matches!(&event, SessionEvent::StateChanged { state: reached } if *reached == state);
+        events.push(event);
+        if reached {
+            return events;
+        }
+    }
 }

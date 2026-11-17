@@ -91,6 +91,8 @@ mod session_lifecycle_answers;
 )]
 mod session_lifecycle_machine;
 mod session_refusal_answers;
+mod session_run_claims;
+pub use session_run_claims::{RunClaim, SessionRuns};
 #[cfg_attr(
     not(test),
     expect(

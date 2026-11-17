@@ -58,14 +58,10 @@ pub trait SessionEventSink: Send + Sync + 'static {
     /// status, provider exit), which speak for whatever run is current.
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed>;
 
-    /// A new generation for a session the connection has just admitted.
-    fn open_generation(&self, _session_id: &str) -> SessionGeneration {
-        SessionGeneration::UNTRACKED
-    }
-
-    /// The session cell opened `generation` for an admitted create or
-    /// restore; a tracking sink makes it current (D1 state machines).
-    fn adopt_generation(&self, _session_id: &str, _generation: SessionGeneration) {}
+    /// The connection's session cells, which own every run: a sink checks
+    /// each publication's claim against them (D1 step 6). Called once the
+    /// connection exists, before any session runs.
+    fn attach_session_runs(&self, _runs: Arc<dyn crate::SessionRuns>) {}
 
     /// The session's generation now, for a callback starting work on it.
     fn current_generation(&self, _session_id: &str) -> SessionGeneration {
@@ -116,6 +112,22 @@ pub trait SessionEventSink: Send + Sync + 'static {
         )
         .map(|()| GenerationPublication::Published)
     }
+
+    /// The session's actor exited on its own: Unloaded is `generation`'s
+    /// terminal fact (S2).
+    fn publish_unloaded(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        self.publish_in(
+            session_id,
+            generation,
+            SessionEvent::StateChanged {
+                state: session_event_model::SessionState::Unloaded,
+            },
+        )
+    }
 }
 
 /// One admitted session's view of the sink: every publication carries the
@@ -155,10 +167,6 @@ impl SessionEventSink for SessionGenerationSink {
             .map(|_| ())
     }
 
-    fn open_generation(&self, session_id: &str) -> SessionGeneration {
-        self.inner.open_generation(session_id)
-    }
-
     fn current_generation(&self, _session_id: &str) -> SessionGeneration {
         self.generation
     }
@@ -195,6 +203,14 @@ impl SessionEventSink for SessionGenerationSink {
         _generation: Option<SessionGeneration>,
     ) -> Result<GenerationPublication, EventSinkClosed> {
         self.inner.publish_closed(session_id, Some(self.generation))
+    }
+
+    fn publish_unloaded(
+        &self,
+        session_id: &str,
+        _generation: SessionGeneration,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        self.inner.publish_unloaded(session_id, self.generation)
     }
 }
 
