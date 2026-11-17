@@ -262,3 +262,97 @@ fn an_actor_exit_ends_the_run_and_the_session_loads_again() {
         Some(generation.number() + 1)
     );
 }
+
+/// Oracle: Lead V4: the Lost of a change whose reply never came back speaks
+/// only for the run it was sent to. An ended run's Lost, landing after a
+/// newer run is live, leaves the newer run's setting untouched; the current
+/// run's own Lost still holds it.
+#[test]
+fn an_ended_runs_lost_setting_leaves_the_newer_runs_setting_untouched() {
+    // Arrange
+    let cells = SessionCellTable::default();
+    let first = admit_create(&cells, SESSION).expect("created");
+    let second = end_run_and_load_next_for_test(&cells, SESSION, first);
+
+    // Act
+    apply_setting_in_run(
+        &cells,
+        SESSION,
+        first,
+        provider_session_machines::ProviderSettingKind::Effort,
+        provider_session_machines::session_setting_machine::SessionSettingEvent::Lost,
+    );
+    let held_by_ended_run = settings_held(&cells, SESSION);
+    apply_setting_in_run(
+        &cells,
+        SESSION,
+        second,
+        provider_session_machines::ProviderSettingKind::Effort,
+        provider_session_machines::session_setting_machine::SessionSettingEvent::Lost,
+    );
+    let held_by_current_run = settings_held(&cells, SESSION);
+
+    // Assert
+    assert!(!held_by_ended_run, "an ended run's Lost held the newer run");
+    assert!(
+        held_by_current_run,
+        "the current run's Lost holds its setting"
+    );
+}
+
+/// Oracle: Lead V5 and note §12.3 ("settings sub-machines keep the run's
+/// lifetime"): an unresolved setting on run g holds run g's prompts, and
+/// none of run g+1's after the session reloads.
+#[test]
+fn an_unresolved_setting_on_one_run_never_holds_the_next() {
+    // Arrange
+    let cells = SessionCellTable::default();
+    let first = admit_create(&cells, SESSION).expect("created");
+    hold_setting_at_create(
+        &cells,
+        SESSION,
+        provider_session_machines::ProviderSettingKind::Effort,
+        provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown,
+    );
+    let held_on_first = settings_held(&cells, SESSION);
+
+    // Act
+    let _second = end_run_and_load_next_for_test(&cells, SESSION, first);
+
+    // Assert
+    assert!(held_on_first, "the unresolved setting holds its own run");
+    assert!(
+        !settings_held(&cells, SESSION),
+        "the reloaded run inherited the earlier run's hold"
+    );
+}
+
+/// Oracle: note §12.3 (R2-3) and the Lead's keep-fast-off ruling: the fast
+/// hold is the session's. It survives an actor exit and a reload, and a
+/// late write from the ended run changes nothing; a close ends it.
+#[test]
+fn the_fast_hold_outlives_its_run_and_ignores_an_ended_runs_write() {
+    // Arrange
+    let cells = SessionCellTable::default();
+    let first = admit_create(&cells, SESSION).expect("created");
+    set_keep_fast_off_in_run(&cells, SESSION, first, true);
+
+    // Act
+    let second = end_run_and_load_next_for_test(&cells, SESSION, first);
+    let kept_after_reload = keep_fast_off(&cells, SESSION);
+    set_keep_fast_off_in_run(&cells, SESSION, first, false);
+    let kept_after_stale_write = keep_fast_off(&cells, SESSION);
+    set_keep_fast_off_in_run(&cells, SESSION, second, false);
+    let after_current_run_ends_it = keep_fast_off(&cells, SESSION);
+
+    // Assert
+    assert!(
+        kept_after_reload,
+        "the hold survives the actor exit and reload"
+    );
+    assert!(
+        kept_after_stale_write,
+        "an ended run's write changed the hold"
+    );
+    assert!(!after_current_run_ends_it, "the current run can end it");
+}

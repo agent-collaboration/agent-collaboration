@@ -409,6 +409,47 @@ pub(crate) fn apply_setting(
     );
 }
 
+/// A setting event from run `generation`'s own work, such as the Lost of a
+/// change whose reply never came back: it applies only while that run is
+/// the session's current one (Lead V4).
+pub(crate) fn apply_setting_in_run(
+    cells: &SessionCellTable,
+    session_id: &str,
+    generation: SessionGeneration,
+    kind: provider_session_machines::ProviderSettingKind,
+    event: provider_session_machines::session_setting_machine::SessionSettingEvent,
+) {
+    let _applied = cells.transition_in_run(
+        session_id,
+        generation,
+        SessionCellEvent::Setting { kind, event },
+        crate::session_cell_table::EntryEffectRoute::Sink,
+    );
+}
+
+/// Whether the caller wants the session's fast kept off (note §12.3, R2-3):
+/// the session's hold, kept across actor exits and reloads until R9's
+/// events end it.
+pub(crate) fn keep_fast_off(cells: &SessionCellTable, session_id: &str) -> bool {
+    cells.read(session_id, |cell| cell.keep_fast_off)
+}
+
+/// Sets or ends the fast hold from run `generation`'s work; an ended run's
+/// late write changes nothing (note §12.3; Lead, keep-fast-off point).
+pub(crate) fn set_keep_fast_off_in_run(
+    cells: &SessionCellTable,
+    session_id: &str,
+    generation: SessionGeneration,
+    keep: bool,
+) {
+    let _set = cells.transition_in_run(
+        session_id,
+        generation,
+        SessionCellEvent::KeepFastOff(keep),
+        crate::session_cell_table::EntryEffectRoute::Caller,
+    );
+}
+
 /// A setting the session couldn't take when it was created holds it: a
 /// refused value (any kind, as today) or an unknown outcome.
 pub(crate) fn hold_setting_at_create(

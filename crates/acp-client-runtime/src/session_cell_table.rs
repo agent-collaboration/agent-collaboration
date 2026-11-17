@@ -14,6 +14,7 @@ use provider_session_machines::queued_entry_machine::QueuedEntryEffect;
 use provider_session_machines::session_cell_machine::{
     SessionCell, SessionCellEffect, SessionCellEvent, SessionCellMachine, SessionCellRefusal,
 };
+use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
 use state_machine_core::{StateMachine, TransitionError};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
@@ -60,6 +61,44 @@ impl SessionCellTable {
         route: EntryEffectRoute,
     ) -> Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>> {
         let effects = self.apply(session_id, event)?;
+        self.changed.notify_waiters();
+        Ok(match route {
+            EntryEffectRoute::Caller => effects,
+            EntryEffectRoute::Sink => self.deliver_entry_effects(session_id, effects),
+        })
+    }
+
+    /// Applies `event` only while the session's run is `generation` (Live
+    /// or Closing): a claim made by that run's own work, checked with the
+    /// move under the cell's lock (design note §11.3; Lead V4). For an ended
+    /// run, or a session this connection never ran, it changes nothing and
+    /// answers Stale.
+    pub(crate) fn transition_in_run(
+        &self,
+        session_id: &str,
+        generation: provider_session_machines::SessionGeneration,
+        event: SessionCellEvent,
+        route: EntryEffectRoute,
+    ) -> Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>> {
+        let cell = lock(&self.cells)
+            .get(session_id)
+            .map(Arc::clone)
+            .ok_or(TransitionError::Stale)?;
+        let effects = {
+            let mut cell = lock(&cell);
+            let in_run = matches!(
+                cell.lifecycle,
+                SessionLifecycle::Live { generation: run }
+                    | SessionLifecycle::Closing { generation: run, .. }
+                    if run == generation
+            );
+            if !in_run {
+                return Err(TransitionError::Stale);
+            }
+            let (next, effects) = SessionCellMachine::transition(&cell, event)?;
+            *cell = next;
+            effects
+        };
         self.changed.notify_waiters();
         Ok(match route {
             EntryEffectRoute::Caller => effects,

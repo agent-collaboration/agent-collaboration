@@ -114,10 +114,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let in_folder_grants: crate::in_folder_allowance::InFolderGrants = Arc::new(
             crate::run_owned_state::RunOwnedMap::new(Arc::clone(&session_cells)),
         );
-        let keep_fast_off: crate::provider_session_runtime_handles::KeepFastOff = Arc::new(
-            crate::run_owned_state::RunOwnedMap::new(Arc::clone(&session_cells)),
-        );
-        let task_keep_fast_off = Arc::clone(&keep_fast_off);
         #[cfg(test)]
         let client_in_folder_grants = Arc::clone(&in_folder_grants);
         let (actor_exit_tx, mut actor_exit_rx) = tokio::sync::mpsc::unbounded_channel::<
@@ -133,7 +129,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             session_settings: Arc::clone(&task_session_settings),
             session_capabilities: Arc::clone(&task_session_capabilities),
             in_folder_grants: Arc::clone(&in_folder_grants),
-            keep_fast_off: Arc::clone(&keep_fast_off),
             session_cells: Arc::clone(&session_cells),
             run_generation: provider_session_machines::SessionGeneration::UNTRACKED,
             agent_steers: false,
@@ -437,7 +432,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         let _written = in_folder_grants.write(&created.provider_session_id, generation, grant);
                                                     }
                                                     if keep_fast_off {
-                                                        let _written = task_keep_fast_off.write(&created.provider_session_id, generation, ());
+                                                        crate::session_cell_bookkeeping::set_keep_fast_off_in_run(&session_cells, &created.provider_session_id, generation, true);
                                                     }
                                                 }
                                                 if let Some(report) = report {
@@ -546,6 +541,24 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     }
                                                     let _written = task_session_settings.write(&provider_session_id, generation, catalog.clone());
                                                     permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, requested_mode.as_deref(), &catalog, task_runtime_handles.behavior.as_ref());
+                                                    // The session's fast hold outlives its runs (note §12.3): a
+                                                    // restored run whose agent reads fast on has it turned off
+                                                    // again, ahead of anything else in its mailbox.
+                                                    if crate::session_cell_bookkeeping::keep_fast_off(&session_cells, &provider_session_id)
+                                                        && catalog.fast_observed() == crate::FastObserved::On
+                                                        && let Some(session) = sessions.get(&provider_session_id)
+                                                    {
+                                                        let (reply, _answer) = tokio::sync::oneshot::channel();
+                                                        let _queued = session.send(ProviderSessionCommand::SetSetting {
+                                                            request: crate::ProviderSettingRequest {
+                                                                kind: provider_session_machines::ProviderSettingKind::Fast,
+                                                                value: crate::provider_setting_application::FAST_OFF.to_owned(),
+                                                                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                                                                expected_model: None,
+                                                            },
+                                                            reply,
+                                                        });
+                                                    }
                                                 }
                                                 let _result = activation.send(());
                                             }
@@ -566,7 +579,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 sessions.remove(&provider_session_id);
                                                 known_sessions.forget(&provider_session_id).await;
                                                 if let Some(generation) = closed_generation {
-                                                    crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants, &task_keep_fast_off);
+                                                    crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
                                                 }
                                                 task_tool_registry.turn_ended(&provider_session_id);
                                                 task_todo_state.forget_session(&provider_session_id);
@@ -584,7 +597,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                     sessions.retain(|_, sender| !sender.is_closed());
                                     if crate::session_cell_bookkeeping::report_actor_exit(&session_cells, task_event_sink.as_ref(), &exit.provider_session_id, exit.generation) {
                                         known_sessions.forget(&exit.provider_session_id).await;
-                                        crate::run_owned_state::end_run_state(&exit.provider_session_id, exit.generation, &task_session_capabilities, &task_session_settings, &in_folder_grants, &task_keep_fast_off);
+                                        crate::run_owned_state::end_run_state(&exit.provider_session_id, exit.generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
                                         task_tool_registry.turn_ended(&exit.provider_session_id);
                                         task_todo_state.forget_session(&exit.provider_session_id);
                                     }
@@ -910,7 +923,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             test_tool_calls,
             #[cfg(test)]
             in_folder_grants: client_in_folder_grants,
-            keep_fast_off,
         })
     }
 }

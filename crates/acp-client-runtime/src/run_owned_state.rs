@@ -1,6 +1,7 @@
 //! State one run of a session owns (design note §11.3): the settings
-//! catalog, the capability report, the in-folder grant and the wish to keep
-//! fast off. Each entry carries the generation that wrote it. A write from a
+//! catalog, the capability report and the in-folder grant. (The fast hold
+//! is the session's, not a run's: it lives in the session cell, §12.3.)
+//! Each entry carries the generation that wrote it. A write from a
 //! run that isn't the session's current one, or older than the stored
 //! entry, changes nothing; a read answers only for the session's current
 //! run. So a task of an ended run (a held settings continuation, a late
@@ -149,12 +150,10 @@ pub(crate) fn end_run_state(
     capabilities: &RunOwnedMap<crate::ProviderCapabilityReport>,
     settings: &RunOwnedMap<crate::ProviderSettingsCatalog>,
     grants: &RunOwnedMap<crate::in_folder_allowance::SessionInFolderGrant>,
-    keep_fast_off: &RunOwnedMap<()>,
 ) {
     capabilities.end_run(session_id, generation);
     settings.end_run(session_id, generation);
     grants.end_run(session_id, generation);
-    keep_fast_off.end_run(session_id, generation);
 }
 
 /// The run a session has now, if it has one.

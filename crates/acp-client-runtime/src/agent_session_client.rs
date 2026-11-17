@@ -22,7 +22,7 @@ mod provider_session_queue;
 mod provider_session_restore;
 mod provider_transport;
 pub(crate) use crate::session_cell_bookkeeping::{
-    apply_setting, busy_answer, hold_setting_at_create, settings_held, settings_hold_answer_for,
+    busy_answer, hold_setting_at_create, settings_held, settings_hold_answer_for,
 };
 
 use crate::ProviderCapabilityReport;
@@ -304,8 +304,6 @@ pub struct AgentSessionClient<P: InteractionPort> {
     /// Crate tests read whether a session's in-folder grant is in Router auto.
     #[cfg(test)]
     in_folder_grants: crate::in_folder_allowance::InFolderGrants,
-    /// Accepting a refused fast as it stands ends keeping it off (D1 R8).
-    keep_fast_off: crate::provider_session_runtime_handles::KeepFastOff,
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {

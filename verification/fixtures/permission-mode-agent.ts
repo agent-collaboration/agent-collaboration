@@ -23,6 +23,8 @@
 //     records each restore's additionalDirectories and _meta, and answers it
 //     with the session in its profile's start mode.
 //   restored-in-auto: with advertise-restore, a restored session is in auto.
+//   restore-fast-on: with advertise-restore and offer-fast, a restored
+//     session reads fast on, as an agent that forgot its fast setting.
 import { field } from "../exact-json.ts";
 import { requireArgument } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
@@ -41,6 +43,7 @@ const known = [
   "refuse-fast-once",
   "advertise-restore",
   "restored-in-auto",
+  "restore-fast-on",
 ];
 for (const behaviour of behaviours)
   if (!known.includes(behaviour)) throw new Error(`unknown fixture behaviour ${behaviour}`);
@@ -209,6 +212,7 @@ for (;;) {
         meta: params._meta ?? null,
       });
       currentMode.set(sessionId, behaviours.has("restored-in-auto") ? "auto" : chosen.start);
+      if (behaviours.has("restore-fast-on")) currentFast.set(sessionId, "true");
       agent.receipt(receipt, observed);
       agent.respond(request, { configOptions: configOptions(sessionId) });
       break;

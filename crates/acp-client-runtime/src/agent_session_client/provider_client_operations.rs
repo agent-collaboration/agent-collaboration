@@ -129,7 +129,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 self.session_cells.as_ref(),
                 &provider_session_id,
             );
-            let _cleared = self.keep_fast_off.clear(&provider_session_id, run);
+            crate::session_cell_bookkeeping::set_keep_fast_off_in_run(
+                &self.session_cells,
+                &provider_session_id,
+                run,
+                false,
+            );
         }
         Ok(catalog.effective_settings())
     }
@@ -142,6 +147,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let uncertain_session_id = provider_session_id.clone();
         let uncertain_value = request.value.clone();
         let kind = request.kind;
+        // The run this change is sent to: a lost reply speaks only for it.
+        let run = crate::SessionRuns::current_generation(
+            self.session_cells.as_ref(),
+            &provider_session_id,
+        );
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::SetSetting {
@@ -154,10 +164,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         match result.await {
             Ok(result) => result,
             Err(_) => {
-                // The reply never came back: the change's outcome is unknown.
-                super::apply_setting(
+                // The reply never came back: the change's outcome is unknown,
+                // for the run it was sent to and no later one (Lead V4).
+                crate::session_cell_bookkeeping::apply_setting_in_run(
                     &self.session_cells,
                     &uncertain_session_id,
+                    run,
                     kind,
                     provider_session_machines::session_setting_machine::SessionSettingEvent::Lost,
                 );

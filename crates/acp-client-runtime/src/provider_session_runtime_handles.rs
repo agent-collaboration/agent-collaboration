@@ -26,9 +26,6 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     pub(crate) session_capabilities: Arc<RunOwnedMap<crate::ProviderCapabilityReport>>,
     /// In-folder grants, so a confirmed mode change can turn auto's grant on or off.
     pub(crate) in_folder_grants: crate::in_folder_allowance::InFolderGrants,
-    /// Sessions whose caller wants fast kept off (D1 R9). It records the wish;
-    /// the session cell's fast setting records whether it's applied.
-    pub(crate) keep_fast_off: KeepFastOff,
     /// The connection's session cells (D1 state machines).
     pub(crate) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     /// The run these handles serve; untracked until for_session_generation.
@@ -71,7 +68,6 @@ impl ProviderSessionRuntimeHandles {
             session_settings: Arc::new(RunOwnedMap::new(Arc::clone(&cells))),
             session_capabilities: Arc::new(RunOwnedMap::new(Arc::clone(&cells))),
             in_folder_grants: Arc::new(RunOwnedMap::new(Arc::clone(&cells))),
-            keep_fast_off: Arc::new(RunOwnedMap::new(Arc::clone(&cells))),
             session_cells: cells,
             run_generation: provider_session_machines::SessionGeneration::UNTRACKED,
             agent_steers: false,
@@ -102,6 +98,3 @@ impl ProviderSessionRuntimeHandles {
         handles
     }
 }
-
-/// The runs whose caller wants fast kept off (D1 R9): present means kept off.
-pub(crate) type KeepFastOff = Arc<RunOwnedMap<()>>;

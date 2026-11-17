@@ -57,9 +57,12 @@ pub(crate) async fn apply_loaded_setting(
     if kind == ProviderSettingKind::Fast && value == FAST_AUTO {
         // A policy change only: nothing reaches the agent, and every hold
         // stays exactly as it was (D1 R7).
-        let _cleared = handles
-            .keep_fast_off
-            .clear(&provider_session_id, handles.run_generation);
+        crate::session_cell_bookkeeping::set_keep_fast_off_in_run(
+            &handles.session_cells,
+            &provider_session_id,
+            handles.run_generation,
+            false,
+        );
         return Ok(current);
     }
     let current_value = match kind {
@@ -81,10 +84,12 @@ pub(crate) async fn apply_loaded_setting(
         ProviderSettingKind::Effort => requested.effort = Some(value.clone()),
         ProviderSettingKind::Fast if value == FAST_OFF => {
             requested.fast = FastRequest::Off;
-            let _kept =
-                handles
-                    .keep_fast_off
-                    .write(&provider_session_id, handles.run_generation, ());
+            crate::session_cell_bookkeeping::set_keep_fast_off_in_run(
+                &handles.session_cells,
+                &provider_session_id,
+                handles.run_generation,
+                true,
+            );
         }
         ProviderSettingKind::Fast => {
             return Err(ExternalProviderRuntimeError::InvalidSetting {
@@ -180,10 +185,10 @@ pub(crate) async fn apply_loaded_setting(
             commit_confirmed_setting(handles, &provider_session_id, kind, application, &catalog)?;
             if kind == ProviderSettingKind::Model
                 && catalog.offers_fast()
-                && handles
-                    .keep_fast_off
-                    .read_in(&provider_session_id, handles.run_generation)
-                    .is_some()
+                && crate::session_cell_bookkeeping::keep_fast_off(
+                    &handles.session_cells,
+                    &provider_session_id,
+                )
             {
                 return keep_fast_off_after_model(session, handles, &provider_session_id, catalog)
                     .await;

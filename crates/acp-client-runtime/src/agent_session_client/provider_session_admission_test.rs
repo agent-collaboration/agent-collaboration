@@ -504,3 +504,72 @@ async fn a_restore_without_a_grant_leaves_no_earlier_runs_allowance() {
         "the agent asked for the edit's permission: {answers}"
     );
 }
+
+/// Oracle: note §12.3 (R2-3) and the Lead's ruling, "a restore reapplies
+/// it": a session created with fast kept off loses its actor and is
+/// resumed; its agent reads fast on again. The client turns fast off ahead
+/// of the session's next command, so the session keeps fast off.
+#[tokio::test]
+async fn a_restored_session_keeps_fast_off() {
+    // Arrange: created with the Router's create default, which keeps fast off.
+    let fixture = Fixture::start(&["offer-fast", "advertise-restore", "restore-fast-on"]).await;
+    let created = fixture
+        .client
+        .create_session_with_settings(
+            fixture.project.clone(),
+            Some(fixture.scratch.clone()),
+            RequestedProviderSettings {
+                mode: Some("auto".to_owned()),
+                fast: crate::FastRequest::OffIfOffered,
+                ..RequestedProviderSettings::default()
+            },
+        )
+        .await
+        .expect("created");
+    let session = created.provider_session_id;
+    fixture
+        .client
+        .end_session_actor(session.clone())
+        .await
+        .expect("the connection takes the command");
+    while fixture
+        .client
+        .session_activity(session.clone())
+        .await
+        .expect("activity")
+        != crate::ProviderSessionActivity::NotLoaded
+    {
+        tokio::task::yield_now().await;
+    }
+
+    // Act: resumed; the agent reads fast on.
+    fixture
+        .client
+        .resume_session_with_setup(
+            session.clone(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("auto")),
+        )
+        .await
+        .expect("resume");
+    // The session's next command runs after anything queued ahead of it.
+    let _idle = fixture.client.wait_session_idle(session.clone()).await;
+    let fast = fixture
+        .client
+        .settings_catalog(&session)
+        .map(|catalog| catalog.fast_observed());
+    fixture.client.shutdown().await;
+
+    // Assert
+    let receipt = fixture.receipt();
+    let requests = receipt["fastRequests"].clone();
+    assert_eq!(
+        requests,
+        json!([
+            {"sessionId": session, "value": "false"},
+            {"sessionId": session, "value": "false"},
+        ]),
+        "fast is turned off at create and again after the restore: {receipt}"
+    );
+    assert_eq!(fast, Some(crate::FastObserved::Off));
+}

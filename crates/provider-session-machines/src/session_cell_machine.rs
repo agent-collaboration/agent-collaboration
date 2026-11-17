@@ -434,6 +434,10 @@ fn lifecycle_move(
                 effects.push(SessionCellEffect::Lifecycle(effect));
             }
             SessionLifecycleEffect::PublishUnloaded { .. } => {
+                // The run ends: its settings sub-machines go with it, as on
+                // Closed; the fast hold is the session's and stays (note
+                // §12.3, R2-3; Lead V5).
+                next.settings.clear();
                 end_line(&mut next, NotSentReason::AgentStopped, &mut effects);
                 effects.push(SessionCellEffect::Lifecycle(effect));
             }
