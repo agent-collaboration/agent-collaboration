@@ -4,14 +4,14 @@
 //! session's cell allows, then dispatches it and waits for its settlement
 //! before the next.
 
+use super::entries::{QueuedEntries, mark_entry_not_sent};
 use super::{
     CONNECTION_CLOSED, MAX_RETRY_DELAY, MIN_RETRY_DELAY, ProviderQueuedPrompt, ROUTER_SHUTDOWN,
     SESSION_CLOSED, SETTLEMENT_WAIT_SECONDS, SessionLine, lock,
 };
-use crate::provider_acp_fifo_entries::{QueuedEntries, mark_entry_not_sent};
-use crate::provider_queued_send::QueuedSend;
+use crate::external_provider_supervisor::QueuedSend;
 use crate::{
-    ExternalProviderRuntime, ExternalProviderSupervisor,
+    ExternalProviderSupervisor, external_provider_supervisor::ProviderLineRuntime,
     external_provider_supervisor::ProviderPromptDispatch,
 };
 use acp_client_runtime::QueueRefusal;
@@ -61,7 +61,7 @@ pub(super) async fn run_session_line(worker: SessionLineWorker) {
             entries.settle_load_failed(&operation_id, &line.load_failure());
             continue;
         };
-        let runtime = Arc::clone(&record.runtime);
+        let runtime = record.runtime.clone();
         if let Some(load) = line.current_load() {
             let loaded = tokio::select! {
                 () = line.stop.cancelled() => continue,
@@ -122,7 +122,7 @@ pub(super) async fn run_session_line(worker: SessionLineWorker) {
         let Some(record) = entries.take(&operation_id) else {
             continue;
         };
-        let queued_send = QueuedSend::new(Arc::clone(&runtime), session_id.clone(), sequence);
+        let queued_send = QueuedSend::new(runtime.clone(), session_id.clone(), sequence);
         if !supervisor
             .queued_operation_registry()
             .try_start(&operation_id)
@@ -227,7 +227,7 @@ async fn admit_delivery_at_head(
     line: &SessionLine,
     entries: &QueuedEntries,
     supervisor: &ExternalProviderSupervisor,
-    runtime: &ExternalProviderRuntime,
+    runtime: &ProviderLineRuntime,
     operation_id: &OperationId,
 ) -> HeadAdmission {
     let Some(record) = entries.get(operation_id) else {
@@ -304,7 +304,7 @@ async fn commit_when_allowed(
     line: &SessionLine,
     entries: &QueuedEntries,
     supervisor: &ExternalProviderSupervisor,
-    runtime: &ExternalProviderRuntime,
+    runtime: &ProviderLineRuntime,
     session_id: &str,
     sequence: u64,
     operation_id: &OperationId,
@@ -352,7 +352,7 @@ async fn commit_when_allowed(
 /// then clears its queue record.
 async fn await_settlement(
     line: &SessionLine,
-    runtime: &ExternalProviderRuntime,
+    runtime: &ProviderLineRuntime,
     supervisor: &ExternalProviderSupervisor,
     operation_id: &OperationId,
 ) {

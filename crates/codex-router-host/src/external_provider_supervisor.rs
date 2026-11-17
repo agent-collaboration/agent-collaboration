@@ -1,6 +1,10 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
+mod provider_line_runtime;
+mod provider_queued_send;
+pub(crate) use provider_queued_send::{QueuedSend, QueuedSendStep};
 mod provider_operation_admission;
+pub(crate) use provider_line_runtime::ProviderLineRuntime;
 mod provider_operation_index;
 #[cfg(test)]
 pub(crate) use provider_operation_index::HeldResult;

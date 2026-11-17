@@ -10,7 +10,7 @@ use super::{
     ConversationOperationFailureStage, ExternalProviderSupervisor, LiveOperation, OperationId,
     ProviderOperationCompletion, ProviderOperationEffect, SessionRef, failure,
 };
-use crate::provider_queued_send::{QueuedSend, QueuedSendStep};
+use crate::external_provider_supervisor::{QueuedSend, QueuedSendStep};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The admitted, unsettled operation an API queue entry carries. Opaque to

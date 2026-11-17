@@ -5,9 +5,9 @@
 //! session cell's moves that the Host didn't drive (a close, a failed load,
 //! a stop, a closed connection) reach this sink and settle it not sent.
 
-use crate::ExternalProviderRuntime;
+use super::ProviderQueuedPrompt;
 use crate::ExternalProviderSupervisor;
-use crate::provider_acp_message_fifo::ProviderQueuedPrompt;
+use crate::external_provider_supervisor::ProviderLineRuntime;
 use collaboration_protocol::{OperationId, SessionRef};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -21,7 +21,7 @@ const LOAD_FAILED: &str = "the session couldn't be loaded";
 #[derive(Clone)]
 pub(crate) struct QueuedRecord {
     pub(crate) target: SessionRef,
-    pub(crate) runtime: Arc<ExternalProviderRuntime>,
+    pub(crate) runtime: ProviderLineRuntime,
     pub(crate) prompt: ProviderQueuedPrompt,
     /// A delivery admitted when it reached the head (an API prompt is
     /// admitted before it is queued); it dispatches as a delivery.

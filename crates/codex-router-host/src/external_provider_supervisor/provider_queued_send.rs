@@ -5,9 +5,8 @@
 //! handover into a withdrawal, and the owner undoes the mark and settles the
 //! message not sent. Replaces the line's submission gate.
 
-use crate::ExternalProviderRuntime;
+use super::ProviderLineRuntime;
 use acp_client_runtime::QueueMarkStep;
-use std::sync::Arc;
 
 /// What happened after the dispatch mark was written.
 pub(crate) enum QueuedSendStep {
@@ -19,14 +18,14 @@ pub(crate) enum QueuedSendStep {
 
 #[derive(Clone)]
 pub(crate) struct QueuedSend {
-    runtime: Arc<ExternalProviderRuntime>,
+    runtime: ProviderLineRuntime,
     provider_session_id: String,
     sequence: u64,
 }
 
 impl QueuedSend {
     pub(crate) fn new(
-        runtime: Arc<ExternalProviderRuntime>,
+        runtime: ProviderLineRuntime,
         provider_session_id: String,
         sequence: u64,
     ) -> Self {

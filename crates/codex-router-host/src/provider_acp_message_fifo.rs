@@ -7,18 +7,21 @@
 //! closed connection that wins ends the messages it reaches. The FIFO keeps
 //! only the payloads, in number order, and settles each message once.
 
-use crate::provider_acp_fifo_entries::{QueuedEntries, QueuedRecord};
+#[path = "provider_acp_fifo_entries.rs"]
+mod entries;
 use crate::provider_acp_session_loading::{
     ProviderSessionLoadability, inspect_provider_session_loadability, load_error_reason,
 };
 use crate::{
-    ExternalProviderRuntime, ExternalProviderRuntimeError, ExternalProviderSupervisor,
-    LiveSessionOwnershipCheck, external_provider_supervisor::ProviderPromptContentsRequest,
+    ExternalProviderRuntimeError, ExternalProviderSupervisor, LiveSessionOwnershipCheck,
+    external_provider_supervisor::ProviderLineRuntime,
+    external_provider_supervisor::ProviderPromptContentsRequest,
 };
 use acp_client_runtime::{QueueEntrySink, QueueRefusal};
 use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{OperationId, SessionRef};
 use collaboration_runtime::ProviderOperationStore;
+use entries::{QueuedEntries, QueuedRecord};
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
 use std::collections::{BTreeMap, HashMap};
@@ -124,7 +127,7 @@ impl SessionLine {
 pub(crate) struct QueuePermit {
     line: Arc<SessionLine>,
     entries: Arc<QueuedEntries>,
-    runtime: Arc<ExternalProviderRuntime>,
+    runtime: ProviderLineRuntime,
     target: SessionRef,
     operation_id: OperationId,
     sequence: u64,
@@ -136,7 +139,7 @@ impl QueuePermit {
         self.sent = true;
         let queued = self.entries.insert(QueuedRecord {
             target: self.target.clone(),
-            runtime: Arc::clone(&self.runtime),
+            runtime: self.runtime.clone(),
             prompt,
             admitted_at_head: false,
         });
@@ -207,7 +210,7 @@ impl ProviderAcpMessageFifo {
         if self.shutdown.is_cancelled() {
             return Err(QueueDoorRefusal::Busy("provider queue is shutting down"));
         }
-        let Some(runtime) = self.supervisor.runtime_for(&target.endpoint) else {
+        let Some(runtime) = self.supervisor.line_runtime_for(&target.endpoint) else {
             return Err(QueueDoorRefusal::Refused(
                 "provider runtime is unavailable".to_owned(),
             ));
@@ -295,7 +298,7 @@ impl ProviderAcpMessageFifo {
     /// and the line's worker commits nothing before it does.
     async fn load_at_door(
         &self,
-        runtime: &Arc<ExternalProviderRuntime>,
+        runtime: &ProviderLineRuntime,
         target: &SessionRef,
         line: &Arc<SessionLine>,
     ) -> Result<(), QueueDoorRefusal> {
@@ -445,11 +448,11 @@ impl ProviderAcpMessageFifo {
     /// Ends every line before its worker stops, so a message either
     /// committed its send already or ends not sent (D1 R14).
     fn stop_lines(&self) {
-        let runtimes: Vec<Arc<ExternalProviderRuntime>> = {
+        let runtimes: Vec<ProviderLineRuntime> = {
             let lines = lock(&self.lines);
             lines
                 .keys()
-                .filter_map(|target| self.supervisor.runtime_for(&target.endpoint))
+                .filter_map(|target| self.supervisor.line_runtime_for(&target.endpoint))
                 .collect()
         };
         for runtime in runtimes {

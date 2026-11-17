@@ -105,7 +105,7 @@ impl ExternalProviderSupervisor {
         &self,
         request: ProviderPromptContentsRequest,
         admitted: &super::AdmittedApiPrompt,
-        queued_send: crate::provider_queued_send::QueuedSend,
+        queued_send: crate::external_provider_supervisor::QueuedSend,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -127,8 +127,8 @@ impl ExternalProviderSupervisor {
             return Err(Box::new(marker_failure));
         }
         let turn = match queued_send.mark_written() {
-            crate::provider_queued_send::QueuedSendStep::Send(turn) => turn,
-            crate::provider_queued_send::QueuedSendStep::Withdraw => {
+            crate::external_provider_supervisor::QueuedSendStep::Send(turn) => turn,
+            crate::external_provider_supervisor::QueuedSendStep::Withdraw => {
                 // A close, cancel or stop won first: the marker is undone and
                 // the operation settles not sent.
                 let unmarked = self
