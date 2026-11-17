@@ -141,9 +141,11 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
         .await
         .expect("second queued");
     let retry_deadline = ClockInstant::ZERO.after(MIN_RETRY_DELAY);
+    // Either the queued message sleeps on the injected clock, or (a wrong
+    // build) its wait ends first: sent and settled, or never on that clock.
     let second_waited = tokio::select! {
-        () = clock.not_due_check_now(retry_deadline) => true,
-        _settled = wait(&second) => false,
+        () = clock.not_due_check_now(retry_deadline) => Ok(()),
+        settled = wait(&second) => Err(settled),
     };
     let prompts_while_held = recorded_requests(&receipt, "session/prompt");
     release_first.send(()).expect("release the first");
@@ -159,8 +161,9 @@ async fn a_queued_message_commits_only_after_the_previous_settlement_is_written(
 
     // Assert
     assert!(
-        second_waited,
-        "the second message was sent while the first's settlement was held"
+        second_waited.is_ok(),
+        "the queued message didn't sleep on the injected clock while the prompt's \
+         settlement was held: {second_waited:?}"
     );
     assert_eq!(prompts_while_held, 1, "only the first reached the agent");
     assert_eq!(
