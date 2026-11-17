@@ -1,5 +1,5 @@
 use super::*;
-use central_link_client::PendingWriteState;
+use central_link_client::{LinkAdmissionRefusal, PendingWriteState};
 use central_link_protocol::ReplyPayload;
 use hegel::{TestCase, generators as gs};
 use serde_json::json;
@@ -54,7 +54,7 @@ fn accepted_reply() -> ReplyPayload {
 }
 
 fn accepted() -> MemberOutcome {
-    MemberOutcome::Accepted(accepted_reply())
+    MemberOutcome::Answered(accepted_reply())
 }
 
 fn at(millis: i64) -> SyncTime {
@@ -111,7 +111,7 @@ async fn a_write_moves_in_outbox_sent_accepted_and_survives_a_reopen() {
         }]
     );
     assert_eq!(after_send, RequestStatus::Sent);
-    assert_eq!(after_reopen, RequestStatus::Accepted(accepted_reply()));
+    assert_eq!(after_reopen, RequestStatus::Answered(accepted_reply()));
 }
 
 #[tokio::test]
@@ -184,7 +184,7 @@ async fn unanswered_writes_return_with_their_receipt_mark_and_refusals_are_kept(
         .return_unanswered(std::slice::from_ref(&first.request), at(MARK + 70_000))
         .await
         .unwrap();
-    let refusal = MemberOutcome::Refused(RefusalReason::MachineRevoked);
+    let refusal = MemberOutcome::Refused(LinkAdmissionRefusal::MachineRevoked);
     MacOutbox::new(&mut store)
         .record_outcome(&second.request, &refusal, at(MARK + 70_000))
         .await
@@ -202,7 +202,7 @@ async fn unanswered_writes_return_with_their_receipt_mark_and_refusals_are_kept(
             .request_status(&second.caller, &second.request)
             .await
             .unwrap(),
-        RequestStatus::Refused(RefusalReason::MachineRevoked)
+        RequestStatus::Refused(LinkAdmissionRefusal::MachineRevoked)
     );
 }
 
@@ -271,7 +271,7 @@ async fn an_invalid_stored_row_is_refused_not_coerced() {
     let bad_state = MacOutbox::new(&mut store)
         .request_status(&write.caller, &write.request)
         .await;
-    sqlx::query("UPDATE outbox_items SET item_state = 'accepted', outcome_json = NULL")
+    sqlx::query("UPDATE outbox_items SET item_state = 'answered', outcome_json = NULL")
         .execute(&mut store.connection)
         .await
         .unwrap();
@@ -319,8 +319,8 @@ impl ModelWrite {
                 flush_at: self.flush_at,
             },
             ModelState::Sent => RequestStatus::Sent,
-            ModelState::Accepted => RequestStatus::Accepted(accepted_reply()),
-            ModelState::Refused => RequestStatus::Refused(RefusalReason::RequestIdReused),
+            ModelState::Accepted => RequestStatus::Answered(accepted_reply()),
+            ModelState::Refused => RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict),
         }
     }
 }
@@ -414,7 +414,7 @@ impl OutboxStoreModel {
                 ModelState::SentAnswerLost
             }
             1 => {
-                let refusal = MemberOutcome::Refused(RefusalReason::RequestIdReused);
+                let refusal = MemberOutcome::Refused(LinkAdmissionRefusal::RequestIdConflict);
                 self.runtime
                     .block_on(outbox.record_outcome(&id, &refusal, at(now)))
                     .unwrap();

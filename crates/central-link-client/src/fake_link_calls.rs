@@ -1,6 +1,6 @@
 //! Dev-only stand-in for the link below the seam. It honours the frozen
 //! contract so tools can be built before the real link lands: outbox kinds
-//! answer InOutbox and become Accepted after a flush on their mark; immediate
+//! answer InOutbox and become Answered after a flush on their mark; immediate
 //! kinds answer, or are Uncertain when the answer is lost; another caller's
 //! request id answers NotFound. It proves nothing about the real link.
 use crate::flush_marks::{earliest_open_mark, mark_in_window};
@@ -16,7 +16,7 @@ use router_clock::RuntimeClock;
 use runtime_primitives::SyncTime;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use workspace_model::{Caller, RefusalReason, RequestId};
+use workspace_model::{Caller, RequestId};
 
 /// How the fake central behaves for the next calls and flushes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,7 +107,7 @@ impl FakeLinkCalls {
             sent += 1;
             request.status = match central {
                 FakeCentral::Answering => {
-                    RequestStatus::Accepted((self.responder)(&request.caller, &request.payload))
+                    RequestStatus::Answered((self.responder)(&request.caller, &request.payload))
                 }
                 FakeCentral::AnswerLost | FakeCentral::Unavailable | FakeCentral::NotEnrolled => {
                     RequestStatus::Sent
@@ -118,7 +118,7 @@ impl FakeLinkCalls {
     }
 
     /// Central refuses a request it was sent or will be sent.
-    pub fn refuse(&self, request: &RequestId, reason: RefusalReason) {
+    pub fn refuse(&self, request: &RequestId, reason: crate::LinkAdmissionRefusal) {
         if let Some(entry) = self.lock().requests.get_mut(request) {
             entry.status = RequestStatus::Refused(reason);
         }
@@ -218,7 +218,7 @@ fn immediate_submission(
                     FakeRequest {
                         caller,
                         payload,
-                        status: RequestStatus::Accepted(reply.clone()),
+                        status: RequestStatus::Answered(reply.clone()),
                     },
                 );
             }
@@ -243,7 +243,7 @@ fn resubmitted_outbox_write(
             id: request_id,
             flush_at,
         }),
-        RequestStatus::Accepted(ref reply) => Submission::Answered(reply.clone()),
+        RequestStatus::Answered(ref reply) => Submission::Answered(reply.clone()),
         RequestStatus::Sent | RequestStatus::Refused(_) | RequestStatus::NotFound => {
             Submission::Uncertain {
                 request: request_id,

@@ -5,8 +5,8 @@ use crate::outbox_flush::MemberOutcome;
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use workspace_model::{
-    Caller, PostText, RefusalReason, RequestId, SessionAddress, ThreadId, WorkspaceId,
-    WorkspaceOperation, central_mail::CentralMailOperation,
+    Caller, PostText, RequestId, SessionAddress, ThreadId, WorkspaceId, WorkspaceOperation,
+    central_mail::CentralMailOperation,
 };
 
 /// An outbox write as the overlay shows it: a thread post or a direct message.
@@ -77,8 +77,8 @@ pub struct PendingWrite {
 /// How central answered a flushed write.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OutgoingOutcome {
-    Accepted(ReplyPayload),
-    Refused(RefusalReason),
+    Answered(ReplyPayload),
+    Refused(crate::link_calls::LinkAdmissionRefusal),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

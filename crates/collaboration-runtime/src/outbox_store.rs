@@ -4,13 +4,13 @@
 use crate::ProviderOperationStore;
 use crate::provider_operation_store::OneStatementWrite;
 use central_link_client::{
-    MemberOutcome, OutboxWriteContent, OutgoingOutcome, OutgoingWrite, PendingWrite,
-    PendingWriteState, RequestStatus,
+    LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutgoingOutcome, OutgoingWrite,
+    PendingWrite, PendingWriteState, RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use sqlite_storage_maintenance::TransactionStart;
-use workspace_model::{Caller, RefusalReason, RequestId};
+use workspace_model::{Caller, RequestId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OutboxStoreError {
@@ -39,7 +39,7 @@ enum OutboxItemState {
     /// resent with the same id, and may already be in central.
     SentAnswerLost,
     Sent,
-    Accepted,
+    Answered,
     Refused,
 }
 
@@ -49,7 +49,7 @@ impl OutboxItemState {
             Self::InOutbox => "inOutbox",
             Self::SentAnswerLost => "sentAnswerLost",
             Self::Sent => "sent",
-            Self::Accepted => "accepted",
+            Self::Answered => "answered",
             Self::Refused => "refused",
         }
     }
@@ -59,7 +59,7 @@ impl OutboxItemState {
             "inOutbox" => Some(Self::InOutbox),
             "sentAnswerLost" => Some(Self::SentAnswerLost),
             "sent" => Some(Self::Sent),
-            "accepted" => Some(Self::Accepted),
+            "answered" => Some(Self::Answered),
             "refused" => Some(Self::Refused),
             _ => None,
         }
@@ -237,10 +237,10 @@ impl<'store> MacOutbox<'store> {
                 (OutboxItemState::SentAnswerLost | OutboxItemState::Sent, _) => {
                     PendingWriteState::SentAnswerLost
                 }
-                (OutboxItemState::Accepted, RequestStatus::Accepted(reply)) => {
+                (OutboxItemState::Answered, RequestStatus::Answered(reply)) => {
                     PendingWriteState::Answered(reply)
                 }
-                (OutboxItemState::Accepted | OutboxItemState::Refused, _) => {
+                (OutboxItemState::Answered | OutboxItemState::Refused, _) => {
                     return Err(corrupt_row(&row.request_id, "item_state"));
                 }
             };
@@ -261,7 +261,7 @@ impl<'store> MacOutbox<'store> {
         limit: u16,
     ) -> Result<Vec<OutgoingWrite>, OutboxStoreError> {
         let caller_json = serde_json::to_string(caller)?;
-        let accepted = OutboxItemState::Accepted.as_str();
+        let answered = OutboxItemState::Answered.as_str();
         let refused = OutboxItemState::Refused.as_str();
         let limit = i64::from(limit);
         let rows = sqlx::query_as!(
@@ -271,7 +271,7 @@ impl<'store> MacOutbox<'store> {
                FROM outbox_items WHERE caller_json = ? AND item_state IN (?, ?)
                ORDER BY updated_at DESC, request_id DESC LIMIT ?"#,
             caller_json,
-            accepted,
+            answered,
             refused,
             limit
         )
@@ -291,7 +291,7 @@ impl<'store> MacOutbox<'store> {
             };
             let stored = decode_owned_row(&row, caller)?;
             let outcome = match stored.status {
-                RequestStatus::Accepted(reply) => OutgoingOutcome::Accepted(reply),
+                RequestStatus::Answered(reply) => OutgoingOutcome::Answered(reply),
                 RequestStatus::Refused(reason) => OutgoingOutcome::Refused(reason),
                 RequestStatus::NotFound | RequestStatus::InOutbox { .. } | RequestStatus::Sent => {
                     return Err(corrupt_row(&request_id, "item_state"));
@@ -313,11 +313,11 @@ impl<'store> MacOutbox<'store> {
         now: SyncTime,
     ) -> Result<u64, OutboxStoreError> {
         let cutoff = now.unix_millis().saturating_sub(ANSWERED_RETENTION_MILLIS);
-        let accepted = OutboxItemState::Accepted.as_str();
+        let answered = OutboxItemState::Answered.as_str();
         let refused = OutboxItemState::Refused.as_str();
         Ok(sqlx::query!(
             "DELETE FROM outbox_items WHERE item_state IN (?, ?) AND updated_at <= ?",
-            accepted,
+            answered,
             refused,
             cutoff
         )
@@ -414,8 +414,8 @@ impl<'store> MacOutbox<'store> {
         now: SyncTime,
     ) -> Result<(), OutboxStoreError> {
         let (state, outcome_json) = match outcome {
-            MemberOutcome::Accepted(reply) => {
-                (OutboxItemState::Accepted, serde_json::to_string(reply)?)
+            MemberOutcome::Answered(reply) => {
+                (OutboxItemState::Answered, serde_json::to_string(reply)?)
             }
             MemberOutcome::Refused(reason) => {
                 (OutboxItemState::Refused, serde_json::to_string(reason)?)
@@ -498,17 +498,18 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
             }
         }
         (OutboxItemState::Sent, None) => RequestStatus::Sent,
-        (OutboxItemState::Accepted, Some(outcome)) => RequestStatus::Accepted(
+        (OutboxItemState::Answered, Some(outcome)) => RequestStatus::Answered(
             serde_json::from_str::<ReplyPayload>(outcome).map_err(|_| corrupt("outcome_json"))?,
         ),
         (OutboxItemState::Refused, Some(outcome)) => RequestStatus::Refused(
-            serde_json::from_str::<RefusalReason>(outcome).map_err(|_| corrupt("outcome_json"))?,
+            serde_json::from_str::<LinkAdmissionRefusal>(outcome)
+                .map_err(|_| corrupt("outcome_json"))?,
         ),
         (
             OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost | OutboxItemState::Sent,
             Some(_),
         )
-        | (OutboxItemState::Accepted | OutboxItemState::Refused, None) => {
+        | (OutboxItemState::Answered | OutboxItemState::Refused, None) => {
             return Err(corrupt("outcome_json"));
         }
     };

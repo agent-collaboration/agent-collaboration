@@ -16,8 +16,8 @@ pub use flush_marks::{
     FLUSH_INTERVAL_MILLIS, FLUSH_JITTER_MILLIS, earliest_open_mark, mark_in_window, next_mark_after,
 };
 pub use link_calls::{
-    LinkCallFuture, LinkCalls, OutboxReceipt, OutboxReceiptId, RequestStatus, Submission,
-    SubmitRefusal,
+    LinkAdmissionRefusal, LinkCallFuture, LinkCalls, OutboxReceipt, OutboxReceiptId, RequestStatus,
+    Submission, SubmitRefusal,
 };
 pub use link_state::{
     ClientAction, ClientEvent, ConnectionAttempt, LinkClient, LinkStatus, RefusalReason,

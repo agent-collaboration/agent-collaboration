@@ -51,8 +51,8 @@ pub enum RequestStatus {
     NotFound,
     InOutbox { flush_at: SyncTime },
     Sent,                           // flushed; central's answer not yet in
-    Accepted(ReplyPayload),
-    Refused(RefusalReason),
+    Answered(ReplyPayload),         // central's whole answer, domain refusals included
+    Refused(LinkAdmissionRefusal),  // central never admitted the frame (token, enrollment, request id conflict)
 }
 
 pub enum SubmitRefusal {
@@ -101,7 +101,7 @@ pub enum SubmitRefusal {
 <ul>
 <li><strong>Lead A, below the seam:</strong> <code>LinkCalls</code>; the outbox table and flush loop; <code>machine_local.sqlite</code>/<code>provider_operations.sqlite</code>; the link client wiring; the central link server; the inbox, Welcome resend and de-duplication; the batch frame (at most 64 writes per flush).</li>
 <li><strong>CLI+MCP Lead, above the seam:</strong> every tool and command mapped to a <code>RequestPayload</code> or deleted; the agent-facing wording; the status tool.</li>
-<li><strong>Stand-ins while both build:</strong> Lead A ships a <code>FakeLinkCalls</code> (dev-only) that honours this contract, including <code>InOutbox</code> and later <code>Accepted</code>. The tools build against it until the real link lands.</li>
+<li><strong>Stand-ins while both build:</strong> Lead A ships a <code>FakeLinkCalls</code> (dev-only) that honours this contract, including <code>InOutbox</code> and later <code>Answered</code>. The tools build against it until the real link lands.</li>
 <li><strong>A seam change</strong> needs both Leads' agreement, posted on the shared thread.</li>
 </ul>
 </ex-document>

@@ -4,7 +4,7 @@
 use central_link_protocol::{ProtocolError, ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use std::{future::Future, pin::Pin};
-use workspace_model::{Caller, RefusalReason, RequestId};
+use workspace_model::{Caller, RequestId};
 
 /// An outbox receipt is identified by the write's caller-minted UUIDv7 RequestId.
 pub type OutboxReceiptId = RequestId;
@@ -56,8 +56,24 @@ pub enum RequestStatus {
     },
     /// Flushed; central's answer not yet in.
     Sent,
-    Accepted(ReplyPayload),
-    Refused(RefusalReason),
+    /// Central's whole answer, including domain refusals in WorkspaceResult
+    /// and CentralMailResult.
+    Answered(ReplyPayload),
+    /// Central never admitted the frame.
+    Refused(LinkAdmissionRefusal),
+}
+
+/// Why central never admitted a frame: the link's own admission, not a domain
+/// refusal (those arrive inside an answered reply).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkAdmissionRefusal {
+    /// The machine token was refused.
+    CredentialRefused,
+    /// The enrollment is revoked, superseded or expired.
+    MachineRevoked,
+    /// The request id was already used for different content.
+    RequestIdConflict,
 }
 
 #[derive(Debug, thiserror::Error)]
