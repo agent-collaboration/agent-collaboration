@@ -364,7 +364,13 @@ async fn a_runs_events_precede_its_terminal_fact_and_unloaded_ends_a_run() {
     let late = sink
         .publish_in("session-one", run_two, running())
         .expect("late event");
-    let history_two = events_until(&mut watching_two, SessionState::Unloaded).await;
+    // Waits on the hub only for an Unloaded the sink took; a refused one
+    // fails the assertions below instead of hanging.
+    let history_two = if unloaded == GenerationPublication::Published {
+        events_until(&mut watching_two, SessionState::Unloaded).await
+    } else {
+        Vec::new()
+    };
     sink.shutdown().await.expect("sink shutdown");
 
     // Assert
