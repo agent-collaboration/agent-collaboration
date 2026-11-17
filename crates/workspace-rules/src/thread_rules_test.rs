@@ -8,7 +8,10 @@ use workspace_model::{
 fn r4_creator_only_and_repeated_resolution() {
     let mut context = context();
     let mut thread = thread();
-    let command = ThreadCommand::ResolveThread { thread_id: id(8) };
+    let command = ThreadCommand::ResolveThread {
+        thread_id: id(8),
+        closing_post: None,
+    };
     context.actor = id(99);
     assert_eq!(
         change_thread(
@@ -277,5 +280,219 @@ fn r32_self_join_promotes_only_the_callers_observer_and_preserves_notifications(
             .statement
             .args
             .contains(&central_storage::SqlValue::Text("participant".to_owned()))
+    );
+}
+
+fn sql_of(plan: &crate::RulePlan) -> Vec<&'static str> {
+    plan.batch
+        .statements
+        .iter()
+        .map(|row| {
+            let words: Vec<&'static str> = row.statement.sql.split(' ').collect();
+            match words.first() {
+                Some(&"INSERT") => words.get(2).copied().unwrap_or(""),
+                _ => words.get(1).copied().unwrap_or(""),
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn creating_a_thread_writes_the_thread_membership_and_first_post_as_one_batch() {
+    let context = context();
+    let area = crate::fixtures::area();
+    let plan = change_thread(
+        &context,
+        &ThreadCommand::CreateThread {
+            thread_id: id(8),
+            member_id: id(9),
+            area_id: id(4),
+            title: crate::fixtures::name("Thread"),
+            first_post: crate::fixtures::first_post(31, 32),
+        },
+        ThreadReads {
+            area: Some(&area),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        sql_of(&plan),
+        vec!["threads", "thread_members", "changes", "posts", "changes"]
+    );
+    let statements = &plan.batch.statements;
+    let post_change = &statements[4].statement.args;
+    assert_eq!(
+        post_change[1],
+        central_storage::SqlValue::Text("posted".to_owned())
+    );
+    assert_eq!(
+        post_change[2],
+        central_storage::SqlValue::Text("post".to_owned())
+    );
+    let thread_id: workspace_model::ThreadId = id(8);
+    assert_eq!(
+        post_change[4],
+        central_storage::SqlValue::Text(thread_id.to_string())
+    );
+    let post_change_id: workspace_model::ChangeId = id(32);
+    assert_eq!(
+        post_change[0],
+        central_storage::SqlValue::Text(post_change_id.to_string())
+    );
+    assert!(matches!(
+        plan.answer,
+        workspace_model::RuleAnswer::Created {
+            item: workspace_model::ItemRef::Thread(_)
+        }
+    ));
+}
+
+#[test]
+fn an_unheld_role_addressee_refuses_the_whole_thread_creation() {
+    let area = crate::fixtures::area();
+    let mut first_post = crate::fixtures::first_post(31, 32);
+    first_post.addressees = vec![workspace_model::Addressee::ProjectRole {
+        project_id: id(5),
+        role: workspace_model::ProjectRole::Advisor,
+    }];
+    let refused = change_thread(
+        &context(),
+        &ThreadCommand::CreateThread {
+            thread_id: id(8),
+            member_id: id(9),
+            area_id: id(4),
+            title: crate::fixtures::name("Thread"),
+            first_post,
+        },
+        ThreadReads {
+            area: Some(&area),
+            ..Default::default()
+        },
+    );
+    assert_eq!(refused.unwrap_err(), RefusalReason::UnheldAddressee);
+}
+
+#[test]
+fn a_closing_post_is_written_before_the_thread_resolves_in_the_same_batch() {
+    let context = context();
+    let thread = thread();
+    let creator = member(id(2), MemberRole::Participant);
+    let command = ThreadCommand::ResolveThread {
+        thread_id: id(8),
+        closing_post: Some(crate::fixtures::first_post(31, 32)),
+    };
+    let plan = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            caller_member: Some(&creator),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mut observer = member(id(2), MemberRole::Observer);
+    let as_observer = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            caller_member: Some(&observer),
+            ..Default::default()
+        },
+    );
+    observer.state = MembershipState::Left {
+        at: "2026-11-13T12:00:00Z".parse().unwrap(),
+    };
+    let after_leaving = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            caller_member: Some(&observer),
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(
+        sql_of(&plan),
+        vec!["posts", "changes", "threads", "changes"]
+    );
+    assert_eq!(
+        plan.batch.statements[3].statement.args[1],
+        central_storage::SqlValue::Text("resolved".to_owned())
+    );
+    assert!(matches!(
+        as_observer,
+        Err(RefusalReason::NotParticipant { .. })
+    ));
+    assert!(matches!(
+        after_leaving,
+        Err(RefusalReason::NotMember { .. })
+    ));
+}
+
+/// A drawn first or closing post is admitted only as valid PostText, lands in
+/// the same batch as its thread step, and the same command plans the same batch.
+#[hegel::test]
+fn thread_steps_with_posts_are_atomic_and_deterministic(case: hegel::TestCase) {
+    use hegel::generators as gs;
+    let raw: String = case.draw(gs::text().max_size(200));
+    let closing = case.draw(gs::booleans());
+    let Ok(body) = PostText::try_from(raw.clone()) else {
+        assert!(raw.trim().is_empty() || raw.chars().any(char::is_control));
+        return;
+    };
+    let draft = workspace_model::ThreadPostDraft {
+        post_id: id(31),
+        change_id: id(32),
+        body,
+        addressees: vec![],
+    };
+    let area = crate::fixtures::area();
+    let thread = thread();
+    let creator = member(id(2), MemberRole::Participant);
+    let command = if closing {
+        ThreadCommand::ResolveThread {
+            thread_id: id(8),
+            closing_post: Some(draft),
+        }
+    } else {
+        ThreadCommand::CreateThread {
+            thread_id: id(8),
+            member_id: id(9),
+            area_id: id(4),
+            title: crate::fixtures::name("Thread"),
+            first_post: draft,
+        }
+    };
+    let reads = || ThreadReads {
+        area: Some(&area),
+        thread: Some(&thread),
+        caller_member: Some(&creator),
+        ..Default::default()
+    };
+
+    let first = change_thread(&context(), &command, reads()).unwrap();
+    let second = change_thread(&context(), &command, reads()).unwrap();
+
+    assert_eq!(first, second);
+    let tables = sql_of(&first);
+    assert_eq!(tables.iter().filter(|table| **table == "posts").count(), 1);
+    assert_eq!(
+        tables.iter().filter(|table| **table == "changes").count(),
+        2
+    );
+    let post_row = first
+        .batch
+        .statements
+        .iter()
+        .find(|row| row.statement.sql.starts_with("INSERT INTO posts"))
+        .unwrap();
+    assert_eq!(
+        post_row.statement.args[3],
+        central_storage::SqlValue::Text(raw)
     );
 }

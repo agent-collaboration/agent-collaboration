@@ -78,3 +78,11 @@ pub fn member(actor: ActorIdentityId, role: MemberRole) -> ThreadMember {
         state: MembershipState::Joined,
     }
 }
+pub fn first_post(post: u32, change: u32) -> workspace_model::ThreadPostDraft {
+    workspace_model::ThreadPostDraft {
+        post_id: id(post),
+        change_id: id(change),
+        body: workspace_model::PostText::try_from("First".to_owned()).unwrap(),
+        addressees: vec![],
+    }
+}

@@ -1,6 +1,8 @@
 //! Commands and declared rows in; guarded batches and decisions out. No IO.
 mod backlog_rules;
 mod dependency_rules;
+mod inbox_rules;
+mod list_rules;
 mod organization_rules;
 mod read_rules;
 mod reference_rules;
@@ -12,6 +14,8 @@ mod work_log_rules;
 
 pub use backlog_rules::*;
 pub use dependency_rules::*;
+pub use inbox_rules::*;
+pub use list_rules::*;
 pub use organization_rules::*;
 pub use read_rules::*;
 pub use reference_rules::*;

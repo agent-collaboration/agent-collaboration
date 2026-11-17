@@ -92,6 +92,7 @@ fn r1_b_thread_and_backlog_cannot_use_another_workspaces_area() {
             member_id: id(9),
             area_id: id(4),
             title: name("Thread"),
+            first_post: crate::fixtures::first_post(31, 32),
         },
         crate::ThreadReads {
             area: Some(&area),
@@ -141,6 +142,7 @@ fn e7_a_rules_in_two_workspaces_use_the_same_resolved_identity_without_registry_
                 member_id: id(9),
                 area_id: id(4),
                 title: name("Thread"),
+                first_post: crate::fixtures::first_post(31, 32),
             },
             crate::ThreadReads {
                 area: Some(&area),
@@ -216,4 +218,159 @@ fn r33_c_creating_an_open_child_in_a_closed_project_names_the_parent() {
         )
         .is_ok()
     );
+}
+
+#[test]
+fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_project() {
+    let context = context();
+    let area = area();
+    let project = crate::fixtures::project();
+    let deliverable = crate::fixtures::deliverable(10);
+    let issue = crate::fixtures::issue(20, 10, workspace_model::WorkStatus::Open);
+    let cases = [
+        (
+            OrganizationCommand::UpdateArea {
+                area_id: id(4),
+                name: name("Renamed"),
+            },
+            "UPDATE areas SET name=?",
+            None,
+        ),
+        (
+            OrganizationCommand::UpdateProject {
+                project_id: id(5),
+                title: name("Renamed"),
+            },
+            "UPDATE projects SET title=?",
+            Some(id::<workspace_model::ProjectId>(5)),
+        ),
+        (
+            OrganizationCommand::UpdateIssue {
+                issue_id: id(20),
+                title: workspace_model::IssueTitle::try_from("Renamed".to_owned()).unwrap(),
+            },
+            "UPDATE issues SET title=?",
+            Some(id::<workspace_model::ProjectId>(5)),
+        ),
+    ];
+    for (command, sql, project_column) in cases {
+        let missing = organize_work(&context, &command, OrganizationReads::default());
+        let plan = organize_work(
+            &context,
+            &command,
+            OrganizationReads {
+                area: Some(&area),
+                project: Some(&project),
+                deliverable: Some(&deliverable),
+                issue: Some(&issue),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(missing, Err(RefusalReason::NotFound { .. })));
+        let statements = &plan.batch.statements;
+        assert_eq!(statements.len(), 2);
+        assert!(statements[0].statement.sql.starts_with(sql));
+        assert_eq!(
+            statements[0].statement.args[0],
+            central_storage::SqlValue::Text("Renamed".to_owned())
+        );
+        assert_eq!(
+            statements[1].statement.args[5],
+            project_column.map_or(central_storage::SqlValue::Null, |id| {
+                central_storage::SqlValue::Text(id.to_string())
+            })
+        );
+        assert!(matches!(
+            plan.answer,
+            workspace_model::RuleAnswer::Updated { .. }
+        ));
+    }
+}
+
+#[test]
+fn an_area_update_refuses_another_workspaces_area() {
+    let mut foreign = area();
+    foreign.workspace_id = id(99);
+    let refused = organize_work(
+        &context(),
+        &OrganizationCommand::UpdateArea {
+            area_id: id(4),
+            name: name("Renamed"),
+        },
+        OrganizationReads {
+            area: Some(&foreign),
+            ..Default::default()
+        },
+    );
+    assert!(matches!(refused, Err(RefusalReason::NotFound { .. })));
+}
+
+/// Every name the vocabulary admits is written verbatim; anything it refuses
+/// never reaches a rule; the same update always plans the same batch.
+#[hegel::test]
+fn update_rules_write_admitted_names_verbatim_and_deterministically(case: hegel::TestCase) {
+    use hegel::generators as gs;
+    let raw: String = case.draw(gs::text().max_size(300));
+    let which = case.draw(gs::integers::<u8>().min_value(0).max_value(2));
+    let area = area();
+    let project = crate::fixtures::project();
+    let issue = crate::fixtures::issue(20, 10, workspace_model::WorkStatus::Open);
+    let reads = || OrganizationReads {
+        area: Some(&area),
+        project: Some(&project),
+        issue: Some(&issue),
+        ..Default::default()
+    };
+    let drawn = match which {
+        0 => workspace_model::ResourceName::try_from(raw.clone())
+            .ok()
+            .map(|name| {
+                (
+                    name.as_str().to_owned(),
+                    OrganizationCommand::UpdateArea {
+                        area_id: id(4),
+                        name,
+                    },
+                )
+            }),
+        1 => workspace_model::ResourceName::try_from(raw.clone())
+            .ok()
+            .map(|title| {
+                (
+                    title.as_str().to_owned(),
+                    OrganizationCommand::UpdateProject {
+                        project_id: id(5),
+                        title,
+                    },
+                )
+            }),
+        _ => workspace_model::IssueTitle::try_from(raw.clone())
+            .ok()
+            .map(|title| {
+                (
+                    title.as_str().to_owned(),
+                    OrganizationCommand::UpdateIssue {
+                        issue_id: id(20),
+                        title,
+                    },
+                )
+            }),
+    };
+    let Some((admitted, command)) = drawn else {
+        // Refused at the vocabulary boundary: blank, too long or not admitted text.
+        assert!(raw.trim().is_empty() || raw.len() > 256 || raw.chars().any(char::is_control));
+        return;
+    };
+
+    let first = organize_work(&context(), &command, reads()).unwrap();
+    let second = organize_work(&context(), &command, reads()).unwrap();
+
+    assert_eq!(first, second);
+    let written = match &first.batch.statements[0].statement.args[0] {
+        central_storage::SqlValue::Text(value) => value.clone(),
+        other => panic!("name must be text: {other:?}"),
+    };
+    assert_eq!(written, admitted);
 }

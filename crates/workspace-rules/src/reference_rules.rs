@@ -23,7 +23,11 @@ pub fn reference_source(item: ItemRef) -> Result<ReferenceSource, RefusalReason>
         | ItemRef::Project(_)
         | ItemRef::Area(_)
         | ItemRef::Reference(_)
-        | ItemRef::Link(_)) => Err(RefusalReason::SourceKindNotAllowed { item }),
+        | ItemRef::Link(_)
+        | ItemRef::Workspace(_)
+        | ItemRef::ThreadMember(_)
+        | ItemRef::ProjectRole(_)
+        | ItemRef::DeliverableRole(_)) => Err(RefusalReason::SourceKindNotAllowed { item }),
     }
 }
 #[derive(Default)]
