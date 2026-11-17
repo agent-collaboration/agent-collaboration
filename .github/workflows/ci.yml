@@ -611,9 +611,16 @@ jobs:
           if-no-files-found: ignore
 
   wasm:
-    name: Central Worker build and local workerd conformance
+    name: Central Worker build and local workerd conformance (${{ matrix.partition }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # The storage boundary cases split across two runners by nextest partition.
+    # Both build the same test-support bundles and run the same leak checks;
+    # every other check runs once, in partition 1.
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
     env:
       CARGO_TERM_COLOR: always
       RUST_TOOLCHAIN: 1.98.1
@@ -659,11 +666,13 @@ jobs:
           pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact --allow-build workerd miniflare@5.20261012.0-beta
           echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
       - name: Check the workspace wasm shell and portable test contract
+        if: matrix.partition == 1
         run: |
           cargo fmt --manifest-path crates/collaboration-central-cloudflare/Cargo.toml -- --check
           cargo clippy --locked --manifest-path crates/collaboration-central-cloudflare/Cargo.toml --target wasm32-unknown-unknown --all-features -- -D warnings
           cargo check --locked -p collaboration-central-conformance --no-default-features --target wasm32-unknown-unknown
       - name: Build the production profile and reject test controls
+        if: matrix.partition == 1
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           node verification/tooling/check-central-worker-bundle.ts production
@@ -671,9 +680,11 @@ jobs:
       # under decisions508/513. Their remaining functional obligations, including
       # normal Worker session/holder equivalence and G18, stay in the removal map.
       - name: Build the legacy scenario launchers once
+        if: matrix.partition == 1
         run: |
           cargo build --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd --example step_scope_workerd --example bootstrap_scope_workerd --example session_scope_workerd
       - name: Prove legacy workerd scenarios with two isolated processes
+        if: matrix.partition == 1
         shell: bash
         run: |
           set -euo pipefail
@@ -742,13 +753,14 @@ jobs:
             if ((batch_status != 0)); then exit "$batch_status"; fi
           done
       - name: Print legacy scenario logs after failure or cancellation
-        if: failure() || cancelled()
+        if: matrix.partition == 1 && (failure() || cancelled())
         shell: bash
         run: |
           shopt -s nullglob
           case_logs=("$RUNNER_TEMP"/central-legacy-logs/*.log)
           if ((${#case_logs[@]})); then cat "${case_logs[@]}"; fi
       - name: Build the deployment candidate without test features
+        if: matrix.partition == 1
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           node verification/tooling/check-central-worker-bundle.ts production
@@ -758,7 +770,7 @@ jobs:
       # SQLite-backed Durable Objects under the pinned Miniflare and workerd.
       - name: Install pinned native integration runner
         uses: ./.github/actions/install-ci-tools
-      - name: Run the storage boundary cases in workerd
+      - name: Build the storage boundary test bundles
         shell: bash
         run: |
           # Every workerd test boots its own process and compiles the test wasm;
@@ -767,12 +779,20 @@ jobs:
           # profile (debug assertions, overflow checks, line tables) is unchanged.
           CARGO_PROFILE_DEV_OPT_LEVEL=1 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
           CARGO_PROFILE_DEV_OPT_LEVEL=1 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
-          pnpm --dir verification run test:workerd
-          cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration --color never 2>&1 | tee "$RUNNER_TEMP/central-worker-nextest.log"
+      - name: Run the TypeScript workerd targets
+        if: matrix.partition == 1
+        run: pnpm --dir verification run test:workerd
+      - name: Run the storage boundary cases in workerd
+        shell: bash
+        run: |
+          cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration --partition "count:${{ matrix.partition }}/2" --color never 2>&1 | tee "$RUNNER_TEMP/central-worker-nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$RUNNER_TEMP/central-worker-nextest.log"; then
             echo "Worker child lifecycle leak detected" >&2
             exit 1
           fi
+      - name: Check the workerd bridge
+        if: matrix.partition == 1
+        run: |
           pnpm --dir verification exec oxlint --deny-warnings "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec oxfmt --check "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec tsc --ignoreConfig --noEmit --strict --target esnext --module nodenext --allowImportingTsExtensions --skipLibCheck --typeRoots node_modules/@types "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
@@ -784,7 +804,7 @@ jobs:
             exit 1
           fi
       - name: Save pinned Worker build tool
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
+        if: matrix.partition == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/central-worker-tools
