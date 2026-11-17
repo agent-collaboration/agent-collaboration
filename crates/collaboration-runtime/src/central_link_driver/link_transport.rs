@@ -16,7 +16,7 @@ pub enum LinkTransportError {
 }
 
 /// One open link socket carrying text frames.
-pub trait LinkSocket: Send {
+pub trait LinkSocket: Send + Sync {
     fn send_text(&mut self, text: String) -> TransportFuture<'_, Result<(), LinkTransportError>>;
     /// The next text frame; None once the socket closed or failed.
     fn next_text(&mut self) -> TransportFuture<'_, Option<String>>;
@@ -32,9 +32,33 @@ pub trait LinkTransport: Send + Sync {
     ) -> TransportFuture<'call, Result<Box<dyn LinkSocket>, LinkTransportError>>;
 }
 
-/// Supplies the current sign-in-issued machine token for a connection.
+/// Where the Router's sign-in machine token stands (B3 owns the policy).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TokenAvailability {
+    /// A token to connect or renew with.
+    Ready(MachineTokenText),
+    /// The source is refreshing at sign-in; try again when it changes.
+    RefreshPending,
+    /// The enrollment needs a new code from a person; the link stops retrying
+    /// and reports "not enrolled; new code needed" until the source changes.
+    NeedsNewCode,
+}
+
+/// The Router's machine token, supplied by the sign-in machine-login lane (B3).
+/// Stand-in: until B3's Router token source lands, the Host configures none
+/// and the link reports not enrolled while outbox writes wait.
 pub trait MachineTokenSource: Send + Sync {
-    fn current(&self) -> TransportFuture<'_, Option<MachineTokenText>>;
+    /// The current state, read without waiting.
+    fn availability(&self) -> TokenAvailability;
+    /// Resolves when the availability changes, e.g. after a refresh at sign-in.
+    /// The driver is the one waiter and drops this future whenever another
+    /// event wins its select, so it must be cancel-safe: a change made while no
+    /// call was waiting resolves the next call (a `watch` receiver held by the
+    /// source does this). No time-based polling: it waits on the source.
+    fn changed(&self) -> TransportFuture<'_, ()>;
+    /// Every RenewMachineToken result, so the source can refresh once more or
+    /// move to NeedsNewCode (B3 M4).
+    fn report_renewal(&self, outcome: &central_link_protocol::TokenRenewalResult);
 }
 
 /// The production transport: a WebSocket to the configured link URL.
@@ -49,9 +73,8 @@ impl WebSocketLinkTransport {
     }
 }
 
-type Stream = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type Stream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 struct WebSocketLink(Stream);
 
