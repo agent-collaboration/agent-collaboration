@@ -100,7 +100,8 @@ impl SessionQueueDoor<'_> {
                 }),
                 SessionCellEffect::Lifecycle(_)
                 | SessionCellEffect::Entry { .. }
-                | SessionCellEffect::Turn(_) => None,
+                | SessionCellEffect::Turn(_)
+                | SessionCellEffect::SettingAccepted { .. } => None,
             })
             .ok_or(QueueRefusal::EntryEnded)
     }
@@ -276,6 +277,11 @@ impl SessionQueueDoor<'_> {
             )) => QueueRefusal::Refused {
                 answer: refusal.human_phrase().to_owned(),
             },
+            TransitionError::Domain(SessionCellRefusal::Setting(refusal)) => {
+                QueueRefusal::Refused {
+                    answer: refusal.human_phrase().to_owned(),
+                }
+            }
             TransitionError::Domain(SessionCellRefusal::NotHead | SessionCellRefusal::NotLive) => {
                 QueueRefusal::NotYet
             }
@@ -448,7 +454,8 @@ fn has_entry_effect(
         SessionCellEffect::Entry { effect, .. } => wanted(effect),
         SessionCellEffect::Lifecycle(_)
         | SessionCellEffect::Queued { .. }
-        | SessionCellEffect::Turn(_) => false,
+        | SessionCellEffect::Turn(_)
+        | SessionCellEffect::SettingAccepted { .. } => false,
     })
 }
 
@@ -473,7 +480,8 @@ fn not_sent_reason(effects: &[SessionCellEffect]) -> Option<&'static str> {
         }
         | SessionCellEffect::Lifecycle(_)
         | SessionCellEffect::Queued { .. }
-        | SessionCellEffect::Turn(_) => None,
+        | SessionCellEffect::Turn(_)
+        | SessionCellEffect::SettingAccepted { .. } => None,
     })
 }
 

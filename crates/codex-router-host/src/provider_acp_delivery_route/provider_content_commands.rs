@@ -137,10 +137,7 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
-        {
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
         let capabilities = runtime
@@ -204,10 +201,7 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
-        {
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
         let capabilities = runtime
@@ -269,10 +263,7 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
-        {
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved);
         }
         let capabilities = runtime

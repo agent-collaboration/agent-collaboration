@@ -7,7 +7,7 @@ use crate::agent_session_client::provider_setting_application::{
     FAST_OFF, SettingSetupFailure, apply_initial_settings,
 };
 use crate::provider_session_actor::ProviderSessionRuntimeHandles;
-use crate::provider_session_settings::UnresolvedSettingCause;
+use crate::session_setting_machine::{SessionSettingEvent, SettingApplication, SettingValueId};
 use crate::{
     EffectiveProviderSettings, FastRequest, InvalidSettingSessionDisposition, ProviderSettingKind,
     ProviderSettingsCatalog, RequestedProviderSettings,
@@ -37,11 +37,7 @@ pub(crate) async fn apply_loaded_setting(
         .cloned()
         .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
     if intent == session_event_model::SettingApplicationIntent::TurnContext
-        && handles
-            .settings_unresolved
-            .read()
-            .await
-            .contains_key(&provider_session_id)
+        && crate::agent_session_client::settings_held(&handles.session_cells, &provider_session_id)
     {
         return Err(ExternalProviderRuntimeError::SettingsUnresolved);
     }
@@ -97,10 +93,29 @@ pub(crate) async fn apply_loaded_setting(
             });
         }
     }
+    // The change is in flight on the kind's cell; a prompt waits behind it
+    // in this actor, as today (the Lead's 3b-5 ruling).
+    let application = SettingApplication(uuid::Uuid::now_v7());
+    record(
+        handles,
+        &provider_session_id,
+        kind,
+        SessionSettingEvent::SetRequested {
+            to: SettingValueId(value.clone()),
+            application,
+        },
+    );
     let outcome =
         apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
     match outcome.failure {
         Some(SettingSetupFailure::Invalid { advertised, .. }) => {
+            // An unadvertised value holds nothing, as today.
+            record(
+                handles,
+                &provider_session_id,
+                kind,
+                SessionSettingEvent::Refused { application },
+            );
             Err(ExternalProviderRuntimeError::InvalidSetting {
                 setting: kind,
                 value,
@@ -114,13 +129,20 @@ pub(crate) async fn apply_loaded_setting(
                 // A session meant to be non-fast never quietly runs fast (R8):
                 // a refused explicit off holds prompts, with the agent's catalog.
                 keep_returned_catalog(handles, &provider_session_id, &catalog).await?;
-                hold(
+                record(
                     handles,
                     &provider_session_id,
                     kind,
-                    UnresolvedSettingCause::DefiniteFailure,
-                )
-                .await;
+                    SessionSettingEvent::Failed { application },
+                );
+            } else {
+                // A refused mode, model or effort holds nothing, as today.
+                record(
+                    handles,
+                    &provider_session_id,
+                    kind,
+                    SessionSettingEvent::Refused { application },
+                );
             }
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: kind,
@@ -129,13 +151,12 @@ pub(crate) async fn apply_loaded_setting(
             })
         }
         Some(SettingSetupFailure::Uncertain { .. }) => {
-            hold(
+            record(
                 handles,
                 &provider_session_id,
                 kind,
-                UnresolvedSettingCause::OutcomeUnknown,
-            )
-            .await;
+                SessionSettingEvent::OutcomeUnknown { application },
+            );
             Err(ExternalProviderRuntimeError::SettingOutcomeUnknown {
                 provider_session_id,
                 setting: kind,
@@ -152,7 +173,8 @@ pub(crate) async fn apply_loaded_setting(
                     outcome.router_auto_active,
                 );
             }
-            commit_confirmed_setting(handles, &provider_session_id, kind, &catalog).await?;
+            commit_confirmed_setting(handles, &provider_session_id, kind, application, &catalog)
+                .await?;
             if kind == ProviderSettingKind::Model
                 && catalog.offers_fast()
                 && handles
@@ -182,23 +204,33 @@ async fn keep_fast_off_after_model(
         fast: FastRequest::Off,
         ..RequestedProviderSettings::default()
     };
+    let fast = ProviderSettingKind::Fast;
+    let application = SettingApplication(uuid::Uuid::now_v7());
+    record(
+        handles,
+        provider_session_id,
+        fast,
+        SessionSettingEvent::SetRequested {
+            to: SettingValueId(FAST_OFF.to_owned()),
+            application,
+        },
+    );
     let outcome =
         apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
-    let fast = ProviderSettingKind::Fast;
     match outcome.failure {
         None => {
-            commit_confirmed_setting(handles, provider_session_id, fast, &catalog).await?;
+            commit_confirmed_setting(handles, provider_session_id, fast, application, &catalog)
+                .await?;
             Ok(catalog.effective_settings())
         }
         Some(SettingSetupFailure::Agent { reason, .. }) => {
             keep_returned_catalog(handles, provider_session_id, &catalog).await?;
-            hold(
+            record(
                 handles,
                 provider_session_id,
                 fast,
-                UnresolvedSettingCause::DefiniteFailure,
-            )
-            .await;
+                SessionSettingEvent::Failed { application },
+            );
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: fast,
                 value: FAST_OFF.to_owned(),
@@ -206,13 +238,12 @@ async fn keep_fast_off_after_model(
             })
         }
         Some(SettingSetupFailure::Invalid { .. }) => {
-            hold(
+            record(
                 handles,
                 provider_session_id,
                 fast,
-                UnresolvedSettingCause::DefiniteFailure,
-            )
-            .await;
+                SessionSettingEvent::Failed { application },
+            );
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: fast,
                 value: FAST_OFF.to_owned(),
@@ -220,13 +251,12 @@ async fn keep_fast_off_after_model(
             })
         }
         Some(SettingSetupFailure::Uncertain { .. }) => {
-            hold(
+            record(
                 handles,
                 provider_session_id,
                 fast,
-                UnresolvedSettingCause::OutcomeUnknown,
-            )
-            .await;
+                SessionSettingEvent::OutcomeUnknown { application },
+            );
             Err(ExternalProviderRuntimeError::SettingOutcomeUnknown {
                 provider_session_id: provider_session_id.to_owned(),
                 setting: fast,
@@ -236,20 +266,19 @@ async fn keep_fast_off_after_model(
     }
 }
 
-/// Records an unresolved setting, so prompts are held until it's resolved.
-async fn hold(
+/// Records one setting event on the session's cell for this kind.
+fn record(
     handles: &ProviderSessionRuntimeHandles,
     provider_session_id: &str,
     kind: ProviderSettingKind,
-    cause: UnresolvedSettingCause,
+    event: SessionSettingEvent,
 ) {
-    handles
-        .settings_unresolved
-        .write()
-        .await
-        .entry(provider_session_id.to_owned())
-        .or_default()
-        .insert(kind, cause);
+    crate::agent_session_client::apply_setting(
+        &handles.session_cells,
+        provider_session_id,
+        kind,
+        event,
+    );
 }
 
 /// Publishes and keeps the catalog the agent last answered with.
@@ -275,22 +304,30 @@ async fn keep_returned_catalog(
     Ok(())
 }
 
-/// Publishes and keeps a setting the agent confirmed, and ends its hold.
+/// Publishes and keeps a setting the agent confirmed, and ends its change.
 async fn commit_confirmed_setting(
     handles: &ProviderSessionRuntimeHandles,
     provider_session_id: &str,
     kind: ProviderSettingKind,
+    application: SettingApplication,
     catalog: &ProviderSettingsCatalog,
 ) -> Result<(), ExternalProviderRuntimeError> {
     keep_returned_catalog(handles, provider_session_id, catalog).await?;
-    let mut unresolved = handles.settings_unresolved.write().await;
-    if let Some(kinds) = unresolved.get_mut(provider_session_id) {
-        kinds.remove(&kind);
-        if kinds.is_empty() {
-            unresolved.remove(provider_session_id);
-        }
-    }
-    drop(unresolved);
+    let confirmed = match kind {
+        ProviderSettingKind::Mode => catalog.effective_settings().mode,
+        ProviderSettingKind::Model => catalog.effective_settings().model,
+        ProviderSettingKind::Effort => catalog.effective_settings().effort,
+        ProviderSettingKind::Fast => None,
+    };
+    record(
+        handles,
+        provider_session_id,
+        kind,
+        SessionSettingEvent::Applied {
+            application,
+            value: SettingValueId(confirmed.unwrap_or_default()),
+        },
+    );
     if let Some(capabilities) = handles
         .session_capabilities
         .read()

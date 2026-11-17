@@ -68,14 +68,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             crate::ProviderSettingsCatalog,
         >::new()));
         let task_session_settings = Arc::clone(&session_settings);
-        let settings_unresolved = Arc::new(tokio::sync::RwLock::new(HashMap::<
-            String,
-            HashMap<
-                crate::ProviderSettingKind,
-                crate::provider_session_settings::UnresolvedSettingCause,
-            >,
-        >::new()));
-        let task_settings_unresolved = Arc::clone(&settings_unresolved);
         // One typed lifecycle per provider session (design note §11.2): the
         // client's close and the connection's admissions are transitions on
         // the same cell.
@@ -102,7 +94,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             todo_state: Arc::clone(&todo_state),
             session_settings: Arc::clone(&task_session_settings),
             session_capabilities: Arc::clone(&task_session_capabilities),
-            settings_unresolved: Arc::clone(&task_settings_unresolved),
             in_folder_grants: Arc::clone(&in_folder_grants),
             keep_fast_off: Arc::clone(&keep_fast_off),
             session_cells: Arc::clone(&session_cells),
@@ -422,19 +413,19 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     }
                                                     task_session_settings.write().await.insert(created.provider_session_id.clone(), catalog.clone());
                                                 }
+                                                // A setting the create couldn't apply holds the
+                                                // session's prompts until it's resolved.
                                                 let unresolved_kind = match setup_error.as_ref() {
-                                                    Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, crate::provider_session_settings::UnresolvedSettingCause::DefiniteFailure)),
-                                                    Some(ExternalProviderRuntimeError::CreatedWithoutSettings { failed, .. }) => Some((failed.kind, if failed.reason == session_event_model::ProviderSettingFailureReason::OutcomeUnknown { crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown } else { crate::provider_session_settings::UnresolvedSettingCause::DefiniteFailure })),
+                                                    Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, crate::session_setting_machine::UnresolvedCause::DefiniteFailure)),
+                                                    Some(ExternalProviderRuntimeError::CreatedWithoutSettings { failed, .. }) => Some((failed.kind, if failed.reason == session_event_model::ProviderSettingFailureReason::OutcomeUnknown { crate::session_setting_machine::UnresolvedCause::OutcomeUnknown } else { crate::session_setting_machine::UnresolvedCause::DefiniteFailure })),
                                                     _ => None,
                                                 };
                                                 if let Some((kind, cause)) = unresolved_kind {
-                                                    task_settings_unresolved.write().await.entry(created.provider_session_id.clone()).or_default().insert(kind, cause);
+                                                    super::hold_setting_at_create(&session_cells, &created.provider_session_id, kind, cause);
                                                 }
                                                 if let Some(ExternalProviderRuntimeError::CreatedWithoutSettings { not_applied, .. }) = setup_error.as_ref() {
-                                                    let mut unresolved = task_settings_unresolved.write().await;
-                                                    let unresolved_kinds = unresolved.entry(created.provider_session_id.clone()).or_default();
                                                     for setting in not_applied.iter() {
-                                                        unresolved_kinds.insert(setting.kind, crate::provider_session_settings::UnresolvedSettingCause::DefiniteFailure);
+                                                        super::hold_setting_at_create(&session_cells, &created.provider_session_id, setting.kind, crate::session_setting_machine::UnresolvedCause::DefiniteFailure);
                                                     }
                                                 }
                                             }
@@ -528,7 +519,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 known_sessions.forget(&provider_session_id).await;
                                                 task_session_capabilities.write().await.remove(&provider_session_id);
                                                 task_session_settings.write().await.remove(&provider_session_id);
-                                                task_settings_unresolved.write().await.remove(&provider_session_id);
                                                 if let Ok(mut grants) = in_folder_grants.write() {
                                                     grants.remove(&provider_session_id);
                                                 }
@@ -678,7 +668,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }
-                                            if task_settings_unresolved.read().await.contains_key(&provider_session_id) {
+                                            if super::settings_held(&session_cells, &provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
                                                     let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
                                                 }
@@ -711,7 +701,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }
-                                            if task_settings_unresolved.read().await.contains_key(&provider_session_id) {
+                                            if super::settings_held(&session_cells, &provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                                                 continue;
                                             }
@@ -843,7 +833,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             session_capabilities,
             auth_status,
             session_settings,
-            settings_unresolved,
             session_cells,
             shutdown,
             sink_closed: client_sink_closed,

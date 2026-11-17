@@ -64,21 +64,10 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     pub(crate) session_capabilities: Arc<
         tokio::sync::RwLock<std::collections::HashMap<String, crate::ProviderCapabilityReport>>,
     >,
-    pub(crate) settings_unresolved: Arc<
-        tokio::sync::RwLock<
-            std::collections::HashMap<
-                String,
-                std::collections::HashMap<
-                    crate::ProviderSettingKind,
-                    crate::provider_session_settings::UnresolvedSettingCause,
-                >,
-            >,
-        >,
-    >,
     /// In-folder grants, so a confirmed mode change can turn auto's grant on or off.
     pub(crate) in_folder_grants: crate::agent_session_client::InFolderGrants,
     /// Sessions whose caller wants fast kept off (D1 R9). It records the wish;
-    /// settings_unresolved records whether it's applied.
+    /// the session cell's fast setting records whether it's applied.
     pub(crate) keep_fast_off: KeepFastOff,
     /// The connection's session cells (D1 state machines).
     pub(crate) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
@@ -238,7 +227,7 @@ async fn run_session_loop<P: InteractionPort>(
                 let Some(command) = command else { break; };
                 match command {
                     ProviderSessionCommand::Prompt { input_id, operation_id, prompt, turn_cancellation, dispatch, reply } => {
-                        if runtime_handles.settings_unresolved.read().await.contains_key(session.session_id().0.as_ref()) {
+                        if crate::agent_session_client::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
                             if let Some(dispatch) = dispatch {
                                 let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
                             }
@@ -470,7 +459,7 @@ async fn run_session_loop<P: InteractionPort>(
                                             let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                         }
                                         Some(ProviderSessionCommand::Steer { input_id, prompt, reply }) => {
-                                            if runtime_handles.settings_unresolved.read().await.contains_key(provider_session_id.0.as_ref()) {
+                                            if crate::agent_session_client::settings_held(&runtime_handles.session_cells, provider_session_id.0.as_ref()) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                                                 continue;
                                             }
@@ -513,7 +502,7 @@ async fn run_session_loop<P: InteractionPort>(
                         let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
                     }
                     ProviderSessionCommand::Steer { input_id, prompt, reply } => {
-                        if runtime_handles.settings_unresolved.read().await.contains_key(session.session_id().0.as_ref()) {
+                        if crate::agent_session_client::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
                             let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                             continue;
                         }

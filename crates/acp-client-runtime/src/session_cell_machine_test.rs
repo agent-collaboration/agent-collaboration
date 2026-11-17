@@ -412,7 +412,8 @@ fn any_interleaving_keeps_one_in_flight_and_no_send_after_close(case: hegel::Tes
                 SessionCellEffect::Entry { .. }
                 | SessionCellEffect::Lifecycle(_)
                 | SessionCellEffect::Queued { .. }
-                | SessionCellEffect::Turn(_) => {}
+                | SessionCellEffect::Turn(_)
+                | SessionCellEffect::SettingAccepted { .. } => {}
             }
         }
         if let (
@@ -665,5 +666,134 @@ fn a_closed_connection_ends_its_waiting_messages() {
             operation: operation("a"),
             effect: QueuedEntryEffect::SettleNotSent(NotSentReason::ProviderConnectionClosed),
         }]
+    );
+}
+
+fn setting(
+    cell: &SessionCell,
+    kind: crate::ProviderSettingKind,
+    event: SessionSettingEvent,
+) -> SessionCell {
+    SessionCellMachine::transition(cell, SessionCellEvent::Setting { kind, event })
+        .map(|(next, _)| next)
+        .expect("the setting event applies")
+}
+
+fn change(id: u128) -> crate::session_setting_machine::SettingApplication {
+    crate::session_setting_machine::SettingApplication(uuid::Uuid::from_u128(id))
+}
+
+/// Oracle: the Lead's 3b-5 ruling (today's behaviour): an in-flight change
+/// holds no prompt (a prompt waits behind it in the actor); a refused fast
+/// or an unknown outcome does.
+#[test]
+fn only_unresolved_settings_hold_prompts() {
+    // Arrange
+    let live = live_with_one_queued();
+    let to = crate::session_setting_machine::SettingValueId("b".to_owned());
+
+    // Act
+    let changing = setting(
+        &live,
+        crate::ProviderSettingKind::Model,
+        SessionSettingEvent::SetRequested {
+            to: to.clone(),
+            application: change(1),
+        },
+    );
+    let refused_model = setting(
+        &changing,
+        crate::ProviderSettingKind::Model,
+        SessionSettingEvent::Refused {
+            application: change(1),
+        },
+    );
+    let fast_changing = setting(
+        &refused_model,
+        crate::ProviderSettingKind::Fast,
+        SessionSettingEvent::SetRequested {
+            to,
+            application: change(2),
+        },
+    );
+    let fast_failed = setting(
+        &fast_changing,
+        crate::ProviderSettingKind::Fast,
+        SessionSettingEvent::Failed {
+            application: change(2),
+        },
+    );
+
+    // Assert
+    assert!(
+        !changing.settings_held(),
+        "an in-flight change holds nothing"
+    );
+    assert!(
+        !refused_model.settings_held(),
+        "a refused model holds nothing"
+    );
+    assert!(fast_failed.settings_held(), "a refused fast holds prompts");
+}
+
+/// Oracle: the Lead's 3b-5 ruling (today's accept): accept clears every
+/// refused setting at once, leaves an in-flight change alone, and is refused
+/// while any outcome is unknown.
+#[test]
+fn accept_leaves_an_in_flight_change_and_refuses_an_unknown_outcome() {
+    // Arrange
+    let live = live_with_one_queued();
+    let value = crate::session_setting_machine::SettingValueId("x".to_owned());
+    let held = setting(
+        &setting(
+            &live,
+            crate::ProviderSettingKind::Fast,
+            SessionSettingEvent::SetRequested {
+                to: value.clone(),
+                application: change(1),
+            },
+        ),
+        crate::ProviderSettingKind::Fast,
+        SessionSettingEvent::Failed {
+            application: change(1),
+        },
+    );
+    let held_and_changing = setting(
+        &held,
+        crate::ProviderSettingKind::Mode,
+        SessionSettingEvent::SetRequested {
+            to: value,
+            application: change(2),
+        },
+    );
+    let unknown = setting(
+        &held,
+        crate::ProviderSettingKind::Effort,
+        SessionSettingEvent::Lost,
+    );
+
+    // Act
+    let accepted =
+        SessionCellMachine::transition(&held_and_changing, SessionCellEvent::AcceptSettings);
+    let refused = SessionCellMachine::transition(&unknown, SessionCellEvent::AcceptSettings);
+
+    // Assert
+    let (after, effects) = accepted.expect("accept goes through past an in-flight change");
+    assert_eq!(
+        effects,
+        vec![SessionCellEffect::SettingAccepted {
+            kind: crate::ProviderSettingKind::Fast
+        }]
+    );
+    assert!(!after.settings_held());
+    assert!(matches!(
+        after.settings.get(&crate::ProviderSettingKind::Mode),
+        Some(SessionSetting::Changing { .. })
+    ));
+    assert_eq!(
+        refused.map(|_| ()),
+        Err(TransitionError::Domain(SessionCellRefusal::Setting(
+            crate::session_setting_machine::SessionSettingRefusal::OutcomeUnknown
+        )))
     );
 }

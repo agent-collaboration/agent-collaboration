@@ -240,12 +240,11 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
             .expect("non-single-Text prompt");
     }
     let wire_before_rejection = fixture.wire_prompts();
-    fixture.client.settings_unresolved.write().await.insert(
-        fixture.session_id.clone(),
-        std::collections::HashMap::from([(
-            crate::ProviderSettingKind::Mode,
-            crate::provider_session_settings::UnresolvedSettingCause::DefiniteFailure,
-        )]),
+    super::hold_setting_at_create(
+        &fixture.client.session_cells,
+        &fixture.session_id,
+        crate::ProviderSettingKind::Mode,
+        crate::session_setting_machine::UnresolvedCause::DefiniteFailure,
     );
     assert!(matches!(
         fixture.prompt(vec![text_block("rejected settings")]).await,

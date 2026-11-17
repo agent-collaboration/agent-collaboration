@@ -48,9 +48,19 @@ pub(crate) enum SessionSettingEvent {
         application: SettingApplication,
         value: SettingValueId,
     },
+    /// The agent refused the change, and the kind holds prompts (fast, or a
+    /// setting a create couldn't apply).
     Failed {
         application: SettingApplication,
     },
+    /// The agent refused the change, and the kind holds nothing (mode, model
+    /// or effort changed live, as today): it keeps the value it had.
+    Refused {
+        application: SettingApplication,
+    },
+    /// The change's reply never came back: its outcome is unknown, whatever
+    /// the kind was before.
+    Lost,
     OutcomeUnknown {
         application: SettingApplication,
     },
@@ -144,6 +154,8 @@ impl EventTag for SessionSettingEvent {
             Self::SetRequested { .. } => "set_requested",
             Self::Applied { .. } => "applied",
             Self::Failed { .. } => "failed",
+            Self::Refused { .. } => "refused",
+            Self::Lost => "lost",
             Self::OutcomeUnknown { .. } => "outcome_unknown",
             Self::Observed { .. } => "observed",
             Self::Accept => "accept",
@@ -166,6 +178,11 @@ const TRANSITIONS: &[Transition] = &[
     edge("unresolved_unknown", "set_requested", "changing"),
     edge("changing", "applied", "current"),
     edge("changing", "failed", "unresolved_refused"),
+    edge("changing", "refused", "current"),
+    edge("current", "lost", "unresolved_unknown"),
+    edge("changing", "lost", "unresolved_unknown"),
+    edge("unresolved_refused", "lost", "unresolved_unknown"),
+    edge("unresolved_unknown", "lost", "unresolved_unknown"),
     edge("changing", "outcome_unknown", "unresolved_unknown"),
     edge("current", "observed", "current"),
     edge("changing", "observed", "changing"),
@@ -234,6 +251,26 @@ impl StateMachine for SessionSettingMachine {
                     observed,
                     ..
                 },
+                V::Refused { application },
+            ) if *current == application => Ok((
+                S::Current {
+                    value: observed.clone(),
+                },
+                Vec::new(),
+            )),
+            (S::Current { .. } | S::Changing { .. } | S::Unresolved { .. }, V::Lost) => Ok((
+                S::Unresolved {
+                    cause: UnresolvedCause::OutcomeUnknown,
+                    observed: observed_now(state),
+                },
+                Vec::new(),
+            )),
+            (
+                S::Changing {
+                    application: current,
+                    observed,
+                    ..
+                },
                 V::OutcomeUnknown { application },
             ) if *current == application => Ok((
                 S::Unresolved {
@@ -244,7 +281,7 @@ impl StateMachine for SessionSettingMachine {
             )),
             (
                 S::Current { .. } | S::Changing { .. } | S::Unresolved { .. },
-                V::Applied { .. } | V::Failed { .. } | V::OutcomeUnknown { .. },
+                V::Applied { .. } | V::Failed { .. } | V::Refused { .. } | V::OutcomeUnknown { .. },
             ) => Err(TransitionError::Stale),
             (S::Current { .. }, V::Observed { value }) => {
                 Ok((S::Current { value }, vec![E::PublishSettings]))

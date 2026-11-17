@@ -44,7 +44,8 @@ pub(super) fn admit_create(
             SessionCellEffect::Lifecycle(_)
             | SessionCellEffect::Queued { .. }
             | SessionCellEffect::Entry { .. }
-            | SessionCellEffect::Turn(_) => None,
+            | SessionCellEffect::Turn(_)
+            | SessionCellEffect::SettingAccepted { .. } => None,
         })
         .ok_or(ExternalProviderRuntimeError::LocalBusy)
 }
@@ -94,7 +95,8 @@ pub(super) fn admit_load(
             SessionCellEffect::Lifecycle(_)
             | SessionCellEffect::Queued { .. }
             | SessionCellEffect::Entry { .. }
-            | SessionCellEffect::Turn(_) => None,
+            | SessionCellEffect::Turn(_)
+            | SessionCellEffect::SettingAccepted { .. } => None,
         })
         .ok_or(ExternalProviderRuntimeError::LocalBusy)
 }
@@ -183,7 +185,8 @@ pub(super) fn settle_close(
         SessionCellEffect::Lifecycle(_)
         | SessionCellEffect::Queued { .. }
         | SessionCellEffect::Entry { .. }
-        | SessionCellEffect::Turn(_) => None,
+        | SessionCellEffect::Turn(_)
+        | SessionCellEffect::SettingAccepted { .. } => None,
     })
 }
 
@@ -237,7 +240,8 @@ pub(super) fn start_direct_turn(
             | SessionCellRefusal::Entry(_)
             | SessionCellRefusal::NotHead
             | SessionCellRefusal::UnknownEntry
-            | SessionCellRefusal::NotLive,
+            | SessionCellRefusal::NotLive
+            | SessionCellRefusal::Setting(_),
         )
         | TransitionError::NotAllowed { .. }
         | TransitionError::Stale => busy,
@@ -344,6 +348,101 @@ pub(crate) fn report_actor_exit(
     }
 }
 
+/// A setting kind holds the session's prompts: its last change was refused
+/// where refusals hold, or its outcome is unknown. An in-flight change holds
+/// nothing here: a prompt waits behind it in the session's actor.
+pub(crate) fn settings_held(cells: &SessionCellTable, session_id: &str) -> bool {
+    cells.read(
+        session_id,
+        crate::session_cell_machine::SessionCell::settings_held,
+    )
+}
+
+/// The kind's last change has an unknown outcome.
+pub(crate) fn setting_outcome_unknown(
+    cells: &SessionCellTable,
+    session_id: &str,
+    kind: crate::ProviderSettingKind,
+) -> bool {
+    cells.read(session_id, |cell| cell.setting_outcome_unknown(kind))
+}
+
+/// Applies one setting kind's event; a stale result changes nothing.
+pub(crate) fn apply_setting(
+    cells: &SessionCellTable,
+    session_id: &str,
+    kind: crate::ProviderSettingKind,
+    event: crate::session_setting_machine::SessionSettingEvent,
+) {
+    let _applied = cells.transition(
+        session_id,
+        SessionGeneration::UNTRACKED,
+        SessionCellEvent::Setting { kind, event },
+        crate::session_cell_table::EntryEffectRoute::Sink,
+    );
+}
+
+/// A setting the session couldn't take when it was created holds it: a
+/// refused value (any kind, as today) or an unknown outcome.
+pub(crate) fn hold_setting_at_create(
+    cells: &SessionCellTable,
+    session_id: &str,
+    kind: crate::ProviderSettingKind,
+    cause: crate::session_setting_machine::UnresolvedCause,
+) {
+    use crate::session_setting_machine::{SessionSettingEvent, SettingApplication, SettingValueId};
+    let application = SettingApplication(uuid::Uuid::now_v7());
+    apply_setting(
+        cells,
+        session_id,
+        kind,
+        SessionSettingEvent::SetRequested {
+            to: SettingValueId(String::new()),
+            application,
+        },
+    );
+    apply_setting(
+        cells,
+        session_id,
+        kind,
+        match cause {
+            crate::session_setting_machine::UnresolvedCause::DefiniteFailure => {
+                SessionSettingEvent::Failed { application }
+            }
+            crate::session_setting_machine::UnresolvedCause::OutcomeUnknown => {
+                SessionSettingEvent::OutcomeUnknown { application }
+            }
+        },
+    );
+}
+
+/// Accepts every refused setting at once (one session-cell event); an
+/// in-flight change is left alone. Refused when any kind's outcome is
+/// unknown. Returns the kinds it accepted.
+pub(crate) fn accept_settings(
+    cells: &SessionCellTable,
+    session_id: &str,
+) -> Result<Vec<crate::ProviderSettingKind>, ExternalProviderRuntimeError> {
+    let effects = cells
+        .transition(
+            session_id,
+            SessionGeneration::UNTRACKED,
+            SessionCellEvent::AcceptSettings,
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        )
+        .map_err(|_| ExternalProviderRuntimeError::SettingsOutcomeUncertain)?;
+    Ok(effects
+        .into_iter()
+        .filter_map(|effect| match effect {
+            SessionCellEffect::SettingAccepted { kind } => Some(kind),
+            SessionCellEffect::Lifecycle(_)
+            | SessionCellEffect::Queued { .. }
+            | SessionCellEffect::Entry { .. }
+            | SessionCellEffect::Turn(_) => None,
+        })
+        .collect())
+}
+
 /// The session is closing on this connection.
 pub(super) fn is_closing(cells: &SessionCellTable, session_id: &str) -> bool {
     cells.read(session_id, |cell| {
@@ -384,7 +483,8 @@ fn lifecycle_refusal_error(
             | SessionCellRefusal::Turn(_)
             | SessionCellRefusal::NotHead
             | SessionCellRefusal::UnknownEntry
-            | SessionCellRefusal::NotLive,
+            | SessionCellRefusal::NotLive
+            | SessionCellRefusal::Setting(_),
         )
         | TransitionError::NotAllowed { .. }
         | TransitionError::Stale => ExternalProviderRuntimeError::LocalBusy,

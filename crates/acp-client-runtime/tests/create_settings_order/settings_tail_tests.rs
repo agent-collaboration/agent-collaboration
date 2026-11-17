@@ -35,7 +35,7 @@ async fn explicit_setting_rejection_does_not_gate_session() {
         ),
         "setting result: {result:?}"
     );
-    assert!(!client.settings_unresolved(&session_id).await);
+    assert!(!client.settings_unresolved(&session_id));
     client
         .submit_with_approval_dispatch_for_input(
             session_id,
@@ -95,7 +95,7 @@ async fn malformed_legacy_set_mode_response_is_outcome_unknown() {
         ),
         "legacy setting result: {result:?}"
     );
-    assert!(client.settings_unresolved(&session_id).await);
+    assert!(client.settings_unresolved(&session_id));
     client.shutdown().await;
 }
 
@@ -135,7 +135,7 @@ async fn disconnected_after_setting_submission_is_outcome_unknown() {
         ),
         "disconnected setting result: {result:?}"
     );
-    assert!(client.settings_unresolved(&session_id).await);
+    assert!(client.settings_unresolved(&session_id));
     client.shutdown().await;
 }
 
@@ -322,7 +322,7 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
             acp_client_runtime::ExternalProviderRuntimeError::SettingOutcomeUnknown { .. }
         ))
     ));
-    assert!(client.settings_unresolved(&session_id).await);
+    assert!(client.settings_unresolved(&session_id));
     let blocked = client
         .submit_with_approval_dispatch_for_input(
             session_id,
@@ -383,7 +383,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
     }) if provider_session_id == &session_id && value == "ask"),
             "setting result: {result:?}"
         );
-        assert!(client.settings_unresolved(&session_id).await);
+        assert!(client.settings_unresolved(&session_id));
         assert!(matches!(
             client.accept_session_settings(session_id.clone()).await,
             Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsOutcomeUncertain)

@@ -49,6 +49,10 @@ fn every_event() -> Vec<SessionSettingEvent> {
         SessionSettingEvent::OutcomeUnknown {
             application: application(1),
         },
+        SessionSettingEvent::Refused {
+            application: application(1),
+        },
+        SessionSettingEvent::Lost,
         SessionSettingEvent::Observed { value: value("x") },
         SessionSettingEvent::Accept,
     ]
@@ -145,7 +149,7 @@ fn any_event_order_keeps_changes_and_holds(case: hegel::TestCase) {
         let app = application(u128::from(case.draw(gs::integers::<u8>().max_value(3))));
         let name =
             value(["a", "b", "c"][usize::from(case.draw(gs::integers::<u8>().max_value(2)))]);
-        let event = match case.draw(gs::integers::<u8>().max_value(5)) {
+        let event = match case.draw(gs::integers::<u8>().max_value(7)) {
             0 => SessionSettingEvent::SetRequested {
                 to: name,
                 application: app,
@@ -157,6 +161,8 @@ fn any_event_order_keeps_changes_and_holds(case: hegel::TestCase) {
             2 => SessionSettingEvent::Failed { application: app },
             3 => SessionSettingEvent::OutcomeUnknown { application: app },
             4 => SessionSettingEvent::Observed { value: name },
+            5 => SessionSettingEvent::Refused { application: app },
+            6 => SessionSettingEvent::Lost,
             _ => SessionSettingEvent::Accept,
         };
         let before = state.clone();
@@ -166,12 +172,30 @@ fn any_event_order_keeps_changes_and_holds(case: hegel::TestCase) {
         if let SessionSetting::Changing { application, .. } = &before
             && !matches!(next, SessionSetting::Changing { .. })
         {
+            assert!(
+                matches!(
+                    &event,
+                    SessionSettingEvent::Applied { application: from, .. }
+                        | SessionSettingEvent::Failed { application: from }
+                        | SessionSettingEvent::Refused { application: from }
+                        | SessionSettingEvent::OutcomeUnknown { application: from }
+                        if from == application
+                ) || matches!(&event, SessionSettingEvent::Lost)
+            );
+        }
+        if matches!(event, SessionSettingEvent::Refused { .. }) {
+            assert!(
+                matches!(next, SessionSetting::Current { .. }),
+                "a refusal of a kind that doesn't hold left a hold: {next:?}"
+            );
+        }
+        if matches!(event, SessionSettingEvent::Lost) {
             assert!(matches!(
-                &event,
-                SessionSettingEvent::Applied { application: from, .. }
-                    | SessionSettingEvent::Failed { application: from }
-                    | SessionSettingEvent::OutcomeUnknown { application: from }
-                    if from == application
+                next,
+                SessionSetting::Unresolved {
+                    cause: UnresolvedCause::OutcomeUnknown,
+                    ..
+                }
             ));
         }
         if matches!(before, SessionSetting::Unresolved { .. })
@@ -193,4 +217,67 @@ fn any_event_order_keeps_changes_and_holds(case: hegel::TestCase) {
         }
         state = next;
     }
+}
+
+/// Oracle: today's provider_session_setting_update.rs (the Lead's ruling on
+/// 3b-5): an agent's definite refusal of mode, model or effort holds
+/// nothing: the kind returns to the value it had before the change.
+#[test]
+fn a_refused_change_of_a_kind_that_does_not_hold_returns_to_its_value() {
+    // Arrange
+    let changing = SessionSetting::Changing {
+        to: value("b"),
+        application: application(1),
+        observed: value("a"),
+    };
+
+    // Act
+    let refused = SessionSettingMachine::transition(
+        &changing,
+        SessionSettingEvent::Refused {
+            application: application(1),
+        },
+    );
+    let stale = SessionSettingMachine::transition(
+        &changing,
+        SessionSettingEvent::Refused {
+            application: application(9),
+        },
+    );
+
+    // Assert
+    assert_eq!(
+        refused.map(|(next, _)| next),
+        Ok(SessionSetting::Current { value: value("a") })
+    );
+    assert_eq!(stale, Err(TransitionError::Stale));
+}
+
+/// Oracle: today's set_setting (provider_client_operations.rs): a change
+/// whose reply never came back holds the kind as an unknown outcome,
+/// whatever it was before.
+#[test]
+fn a_lost_reply_holds_the_kind_as_an_unknown_outcome() {
+    // Arrange
+    let states = every_state();
+
+    // Act
+    let held: Vec<SessionSetting> = states
+        .iter()
+        .filter_map(|state| {
+            SessionSettingMachine::transition(state, SessionSettingEvent::Lost)
+                .ok()
+                .map(|(next, _)| next)
+        })
+        .collect();
+
+    // Assert
+    assert_eq!(held.len(), states.len());
+    assert!(held.iter().all(|state| matches!(
+        state,
+        SessionSetting::Unresolved {
+            cause: UnresolvedCause::OutcomeUnknown,
+            ..
+        }
+    )));
 }

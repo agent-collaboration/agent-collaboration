@@ -5,6 +5,7 @@
 //! cell, so exactly one of them wins. Each move delegates to the sub-machine
 //! that owns it, whose table is checked on its own.
 
+use crate::ProviderSettingKind;
 use crate::SessionGeneration;
 use crate::queue_line_machine::{
     QueueLine, QueueLineEffect, QueueLineEvent, QueueLineMachine, QueueLineRefusal,
@@ -17,6 +18,10 @@ use crate::session_lifecycle_machine::{
     CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle, SessionLifecycleEffect,
     SessionLifecycleEvent, SessionLifecycleMachine, SessionLifecycleRefusal,
 };
+use crate::session_setting_machine::{
+    SessionSetting, SessionSettingEvent, SessionSettingMachine, SessionSettingRefusal,
+    SettingValueId, UnresolvedCause,
+};
 use crate::session_turn_machine::{
     SessionTurn, SessionTurnEffect, SessionTurnEvent, SessionTurnMachine, SessionTurnRefusal,
     TurnId,
@@ -24,7 +29,7 @@ use crate::session_turn_machine::{
 use state_machine_core::{
     EventTag, RefusalTag, StateMachine, StateMachineResult, StateTag, Transition, TransitionError,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// A queued message's operation, as the Host names it.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -47,6 +52,10 @@ pub(crate) struct SessionCell {
     /// across actor exits, until fast-auto, accepting a refused fast, close,
     /// or a Router restart (R9; design note §12.3).
     pub(crate) keep_fast_off: bool,
+    /// Each setting kind's state this run (design note §11.6, §12.6, with
+    /// the Lead's 3b-5 ruling: a prompt waits behind an in-flight change in
+    /// the actor and is refused only while a kind is Unresolved).
+    pub(crate) settings: HashMap<ProviderSettingKind, SessionSetting>,
 }
 
 impl SessionCell {
@@ -68,6 +77,7 @@ impl SessionCell {
             entries: BTreeMap::new(),
             turn: SessionTurn::Idle,
             keep_fast_off: false,
+            settings: HashMap::new(),
         }
     }
 
@@ -86,6 +96,25 @@ impl SessionCell {
             | SessionLifecycle::Loading { .. }
             | SessionLifecycle::Closing { .. } => None,
         }
+    }
+
+    /// A kind holds prompts: its last change was refused (where refusals
+    /// hold) or its outcome is unknown.
+    pub(crate) fn settings_held(&self) -> bool {
+        self.settings
+            .values()
+            .any(|setting| matches!(setting, SessionSetting::Unresolved { .. }))
+    }
+
+    /// The kind's last change has an unknown outcome.
+    pub(crate) fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
+        matches!(
+            self.settings.get(&kind),
+            Some(SessionSetting::Unresolved {
+                cause: UnresolvedCause::OutcomeUnknown,
+                ..
+            })
+        )
     }
 
     fn line_open_for(&self, generation: SessionGeneration) -> bool {
@@ -189,6 +218,15 @@ pub(crate) enum SessionCellEvent {
     Stop,
     /// The provider connection ended: its lines end.
     ConnectionClosed,
+    /// One setting kind's event (a change requested, its result, an
+    /// observation, a lost reply).
+    Setting {
+        kind: ProviderSettingKind,
+        event: SessionSettingEvent,
+    },
+    /// The caller accepts every refused change at once; an in-flight change
+    /// is left alone, and an unknown outcome refuses the whole accept.
+    AcceptSettings,
     KeepFastOff(bool),
 }
 
@@ -206,6 +244,10 @@ pub(crate) enum SessionCellEffect {
         effect: QueuedEntryEffect,
     },
     Turn(SessionTurnEffect),
+    /// The caller accepted this kind's refused change.
+    SettingAccepted {
+        kind: ProviderSettingKind,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -219,6 +261,7 @@ pub(crate) enum SessionCellRefusal {
     UnknownEntry,
     /// The session isn't Live in the line's run, so nothing commits.
     NotLive,
+    Setting(SessionSettingRefusal),
 }
 
 impl RefusalTag for SessionCellRefusal {
@@ -231,6 +274,7 @@ impl RefusalTag for SessionCellRefusal {
             Self::NotHead => "not_head",
             Self::UnknownEntry => "unknown_entry",
             Self::NotLive => "not_live",
+            Self::Setting(refusal) => refusal.refusal_tag(),
         }
     }
 }
@@ -272,6 +316,8 @@ impl EventTag for SessionCellEvent {
             Self::TurnEnded { .. } => "turn_ended",
             Self::Stop => "stop",
             Self::ConnectionClosed => "connection_closed",
+            Self::Setting { .. } => "setting",
+            Self::AcceptSettings => "accept_settings",
             Self::KeepFastOff(_) => "keep_fast_off",
         }
     }
@@ -375,6 +421,7 @@ fn lifecycle_move(
             }
             SessionLifecycleEffect::PublishClosed { .. } => {
                 next.keep_fast_off = false;
+                next.settings.clear();
                 effects.push(SessionCellEffect::Lifecycle(effect));
             }
             SessionLifecycleEffect::PublishUnloaded { .. } => {
@@ -698,6 +745,50 @@ impl StateMachine for SessionCellMachine {
                     NotSentReason::ProviderConnectionClosed,
                     &mut effects,
                 );
+                Ok((next, effects))
+            }
+            V::Setting { kind, event } => {
+                let current =
+                    cell.settings
+                        .get(&kind)
+                        .cloned()
+                        .unwrap_or(SessionSetting::Current {
+                            value: SettingValueId(String::new()),
+                        });
+                let (setting, _effects) = SessionSettingMachine::transition(&current, event)
+                    .map_err(|refusal| lift(refusal, SessionCellRefusal::Setting))?;
+                let mut next = cell.clone();
+                next.settings.insert(kind, setting);
+                Ok((next, Vec::new()))
+            }
+            V::AcceptSettings => {
+                if cell.settings.values().any(|setting| {
+                    matches!(
+                        setting,
+                        SessionSetting::Unresolved {
+                            cause: UnresolvedCause::OutcomeUnknown,
+                            ..
+                        }
+                    )
+                }) {
+                    return Err(TransitionError::Domain(SessionCellRefusal::Setting(
+                        SessionSettingRefusal::OutcomeUnknown,
+                    )));
+                }
+                let mut next = cell.clone();
+                let mut effects = Vec::new();
+                for (kind, setting) in &cell.settings {
+                    if let SessionSetting::Unresolved {
+                        cause: UnresolvedCause::DefiniteFailure,
+                        ..
+                    } = setting
+                        && let Ok((accepted, _)) =
+                            SessionSettingMachine::transition(setting, SessionSettingEvent::Accept)
+                    {
+                        next.settings.insert(*kind, accepted);
+                        effects.push(SessionCellEffect::SettingAccepted { kind: *kind });
+                    }
+                }
                 Ok((next, effects))
             }
             V::KeepFastOff(keep) => {

@@ -379,7 +379,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         }]
         .into_boxed_slice()
     );
-    assert!(client.settings_unresolved(&provider_session_id).await);
+    assert!(client.settings_unresolved(&provider_session_id));
     let blocked = client
         .submit_with_approval_dispatch_for_input(
             provider_session_id.clone(),
@@ -479,12 +479,12 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         assert_eq!(settings[0].model.as_deref(), Some("a"));
         assert_eq!(settings[1].model.as_deref(), Some("b"));
     }
-    assert!(client.settings_unresolved(&provider_session_id).await);
+    assert!(client.settings_unresolved(&provider_session_id));
     client
         .accept_session_settings(provider_session_id.clone())
         .await
         .expect("accept remaining untried setting");
-    assert!(!client.settings_unresolved(&provider_session_id).await);
+    assert!(!client.settings_unresolved(&provider_session_id));
     let prompt = client
         .submit_with_approval_dispatch_for_input(
             provider_session_id,

@@ -94,37 +94,30 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             .cloned()
     }
 
-    pub async fn settings_unresolved(&self, provider_session_id: &str) -> bool {
-        self.settings_unresolved
-            .read()
-            .await
-            .contains_key(provider_session_id)
+    /// A setting holds the session's prompts: refused where refusals hold, or
+    /// its outcome unknown.
+    pub fn settings_unresolved(&self, provider_session_id: &str) -> bool {
+        super::settings_held(&self.session_cells, provider_session_id)
     }
 
     /// True while this setting's last change has an unknown outcome, so a
     /// reader never reports the catalog's old value as confirmed (D1 R2).
-    pub async fn setting_outcome_unknown(
+    pub fn setting_outcome_unknown(
         &self,
         provider_session_id: &str,
         kind: crate::ProviderSettingKind,
     ) -> bool {
-        self.settings_unresolved
-            .read()
-            .await
-            .get(provider_session_id)
-            .and_then(|kinds| kinds.get(&kind))
-            .is_some_and(|cause| {
-                *cause == crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown
-            })
+        super::session_cell_bookkeeping::setting_outcome_unknown(
+            &self.session_cells,
+            provider_session_id,
+            kind,
+        )
     }
 
     pub async fn accept_session_settings(
         &self,
         provider_session_id: String,
     ) -> Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        if self.settings_unresolved.read().await.get(&provider_session_id).is_some_and(|kinds| kinds.values().any(|cause| *cause == crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown)) {
-            return Err(ExternalProviderRuntimeError::SettingsOutcomeUncertain);
-        }
         let catalog = self
             .session_settings
             .read()
@@ -132,12 +125,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             .get(&provider_session_id)
             .cloned()
             .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
-        let cleared = self
-            .settings_unresolved
-            .write()
-            .await
-            .remove(&provider_session_id);
-        if cleared.is_some_and(|kinds| kinds.contains_key(&crate::ProviderSettingKind::Fast)) {
+        // One session-cell event across kinds: refused while any outcome is
+        // unknown; an in-flight change is left alone, as today.
+        let accepted = super::session_cell_bookkeeping::accept_settings(
+            &self.session_cells,
+            &provider_session_id,
+        )?;
+        if accepted.contains(&crate::ProviderSettingKind::Fast) {
             // The caller accepted a refused fast as it stands (D1 R8, R9).
             self.keep_fast_off
                 .write()
@@ -167,15 +161,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         match result.await {
             Ok(result) => result,
             Err(_) => {
-                self.settings_unresolved
-                    .write()
-                    .await
-                    .entry(uncertain_session_id.clone())
-                    .or_default()
-                    .insert(
-                        kind,
-                        crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown,
-                    );
+                // The reply never came back: the change's outcome is unknown.
+                super::apply_setting(
+                    &self.session_cells,
+                    &uncertain_session_id,
+                    kind,
+                    crate::session_setting_machine::SessionSettingEvent::Lost,
+                );
                 Err(ExternalProviderRuntimeError::SettingOutcomeUnknown {
                     provider_session_id: uncertain_session_id,
                     setting: kind,

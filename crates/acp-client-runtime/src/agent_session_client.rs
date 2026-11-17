@@ -28,7 +28,9 @@ mod provider_session_queue;
 mod provider_session_restore;
 pub(crate) mod provider_setting_application;
 mod session_cell_bookkeeping;
-pub(crate) use session_cell_bookkeeping::report_actor_exit;
+pub(crate) use session_cell_bookkeeping::{
+    apply_setting, hold_setting_at_create, report_actor_exit, settings_held,
+};
 
 use crate::ProviderCapabilityReport;
 use crate::provider_connection_activity::{ProviderConnectionActivity, ToolCallOwnershipHandler};
@@ -273,17 +275,6 @@ pub struct AgentSessionClient<P: InteractionPort> {
     session_capabilities: Arc<tokio::sync::RwLock<HashMap<String, ProviderCapabilityReport>>>,
     auth_status: Arc<tokio::sync::RwLock<session_event_model::ProviderAuthStatus>>,
     session_settings: Arc<tokio::sync::RwLock<HashMap<String, crate::ProviderSettingsCatalog>>>,
-    settings_unresolved: Arc<
-        tokio::sync::RwLock<
-            HashMap<
-                String,
-                HashMap<
-                    crate::ProviderSettingKind,
-                    crate::provider_session_settings::UnresolvedSettingCause,
-                >,
-            >,
-        >,
-    >,
     /// Each provider session's typed lifecycle, shared with the connection.
     session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     shutdown: CancellationToken,

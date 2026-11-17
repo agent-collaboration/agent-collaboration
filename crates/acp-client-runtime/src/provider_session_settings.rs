@@ -58,12 +58,6 @@ pub enum ProviderSettingKind {
     Fast,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum UnresolvedSettingCause {
-    DefiniteFailure,
-    OutcomeUnknown,
-}
-
 impl ProviderSettingKind {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
