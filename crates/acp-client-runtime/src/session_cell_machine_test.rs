@@ -405,6 +405,7 @@ fn any_interleaving_keeps_one_in_flight_and_no_send_after_close(case: hegel::Tes
                 }
                 SessionCellEffect::Entry { .. }
                 | SessionCellEffect::Lifecycle(_)
+                | SessionCellEffect::Queued { .. }
                 | SessionCellEffect::Turn(_) => {}
             }
         }

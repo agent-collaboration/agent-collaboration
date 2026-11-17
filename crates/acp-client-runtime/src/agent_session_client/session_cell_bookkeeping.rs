@@ -26,7 +26,12 @@ pub(super) fn admit_create(
     last_published: SessionGeneration,
 ) -> Result<SessionGeneration, ExternalProviderRuntimeError> {
     let effects = cells
-        .transition(session_id, last_published, SessionCellEvent::CreateAdmitted)
+        .transition(
+            session_id,
+            last_published,
+            SessionCellEvent::CreateAdmitted,
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        )
         .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))?;
     effects
         .iter()
@@ -35,6 +40,7 @@ pub(super) fn admit_create(
                 Some(*generation)
             }
             SessionCellEffect::Lifecycle(_)
+            | SessionCellEffect::Queued { .. }
             | SessionCellEffect::Entry { .. }
             | SessionCellEffect::Turn(_) => None,
         })
@@ -53,6 +59,7 @@ pub(super) fn abandon_run(
         session_id,
         SessionGeneration::UNTRACKED,
         SessionCellEvent::ActorExited { generation },
+        crate::session_cell_table::EntryEffectRoute::Sink,
     );
 }
 
@@ -72,6 +79,7 @@ pub(super) fn admit_load(
             session_id,
             last_published,
             SessionCellEvent::LoadRequested { via, attempt },
+            crate::session_cell_table::EntryEffectRoute::Sink,
         )
         .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))?;
     effects
@@ -82,6 +90,7 @@ pub(super) fn admit_load(
                 ..
             }) => Some(*generation),
             SessionCellEffect::Lifecycle(_)
+            | SessionCellEffect::Queued { .. }
             | SessionCellEffect::Entry { .. }
             | SessionCellEffect::Turn(_) => None,
         })
@@ -117,7 +126,12 @@ pub(super) fn settle_load(
         SessionCellEvent::LoadFailed { attempt }
     };
     // Stale only when a close already replaced this load; the caller checked.
-    let _ignored = cells.transition(session_id, SessionGeneration::UNTRACKED, event);
+    let _ignored = cells.transition(
+        session_id,
+        SessionGeneration::UNTRACKED,
+        event,
+        crate::session_cell_table::EntryEffectRoute::Sink,
+    );
 }
 
 /// Admits a close: Live or Loading to Closing. Closing refuses it as busy;
@@ -132,6 +146,7 @@ pub(super) fn admit_close(
             session_id,
             SessionGeneration::UNTRACKED,
             SessionCellEvent::CloseRequested { attempt },
+            crate::session_cell_table::EntryEffectRoute::Sink,
         )
         .map(|_effects| ())
         .map_err(|refusal| lifecycle_refusal_error(cells, session_id, refusal))
@@ -152,13 +167,19 @@ pub(super) fn settle_close(
         SessionCellEvent::CloseFailed { attempt }
     };
     let effects = cells
-        .transition(session_id, SessionGeneration::UNTRACKED, event)
+        .transition(
+            session_id,
+            SessionGeneration::UNTRACKED,
+            event,
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        )
         .ok()?;
     effects.iter().find_map(|effect| match effect {
         SessionCellEffect::Lifecycle(SessionLifecycleEffect::PublishClosed { generation }) => {
             Some(*generation)
         }
         SessionCellEffect::Lifecycle(_)
+        | SessionCellEffect::Queued { .. }
         | SessionCellEffect::Entry { .. }
         | SessionCellEffect::Turn(_) => None,
     })

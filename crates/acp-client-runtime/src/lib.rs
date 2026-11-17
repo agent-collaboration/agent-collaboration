@@ -143,6 +143,7 @@ pub use provider_session_settings::{
     RequestedProviderSettings,
 };
 pub use provider_setting_choice::ProviderSettingChoice;
+pub use session_cell_table::QueueEntrySink;
 pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
     SessionEventSink, SessionGeneration,

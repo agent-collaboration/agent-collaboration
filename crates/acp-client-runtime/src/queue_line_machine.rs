@@ -47,6 +47,18 @@ pub(crate) enum QueueLineRefusal {
     Ended(NotSentReason),
 }
 
+impl QueueLineRefusal {
+    /// The refusal's answer with the caller's next step (M8).
+    pub(crate) fn human_phrase(self) -> String {
+        match self {
+            Self::Ended(reason) => format!(
+                "not sent: the session's queue has ended ({}); load or resume the session and send again",
+                reason.human_phrase()
+            ),
+        }
+    }
+}
+
 impl RefusalTag for QueueLineRefusal {
     fn refusal_tag(&self) -> &'static str {
         match self {
@@ -159,17 +171,26 @@ impl StateMachine for QueueLineMachine {
                 Vec::new(),
             )),
             (S::Open { .. } | S::Ended { .. }, V::Reopen { .. }) => Err(TransitionError::Stale),
-            (S::Open { epoch: old, .. } | S::Ended { epoch: old, .. }, V::OpenFresh { epoch })
-                if epoch.number() > old.number() =>
-            {
-                Ok((
-                    S::Open {
-                        epoch,
-                        next_sequence: 0,
-                    },
-                    Vec::new(),
-                ))
-            }
+            // A fresh run continues the session's numbering, so a number held
+            // from an earlier run never names a message in this one.
+            (
+                S::Open {
+                    epoch: old,
+                    next_sequence,
+                }
+                | S::Ended {
+                    epoch: old,
+                    next_sequence,
+                    ..
+                },
+                V::OpenFresh { epoch },
+            ) if epoch.number() > old.number() => Ok((
+                S::Open {
+                    epoch,
+                    next_sequence,
+                },
+                Vec::new(),
+            )),
             (S::Open { .. } | S::Ended { .. }, V::OpenFresh { .. }) => Err(TransitionError::Stale),
         }
     }

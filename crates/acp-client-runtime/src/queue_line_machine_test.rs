@@ -160,3 +160,37 @@ fn any_event_order_keeps_sequences_unique_and_epochs_forward(case: hegel::TestCa
         state = next;
     }
 }
+
+/// Oracle: §11.2's "an old entry can't enter the new run's line", held by the
+/// numbering: a fresh run's line continues the session's sequence numbers,
+/// so a message number held from an earlier run never names one in the new
+/// run.
+#[test]
+fn a_fresh_runs_line_continues_the_sequence_numbers() {
+    // Arrange
+    let first = SessionGeneration::from_number(1);
+    let second = SessionGeneration::from_number(2);
+    let (open, _) = QueueLineMachine::transition(
+        &QueueLine::Ended {
+            epoch: SessionGeneration::UNTRACKED,
+            reason: NotSentReason::SessionClosed,
+            next_sequence: 0,
+        },
+        QueueLineEvent::OpenFresh { epoch: first },
+    )
+    .expect("the first run's line opens");
+    let (after_one, _) =
+        QueueLineMachine::transition(&open, QueueLineEvent::Enqueue { epoch: first })
+            .expect("one message");
+
+    // Act
+    let (fresh, _) =
+        QueueLineMachine::transition(&after_one, QueueLineEvent::OpenFresh { epoch: second })
+            .expect("the next run's line opens");
+    let (_, admitted) =
+        QueueLineMachine::transition(&fresh, QueueLineEvent::Enqueue { epoch: second })
+            .expect("a message in the new run");
+
+    // Assert
+    assert_eq!(admitted, vec![QueueLineEffect::Admit { sequence: 1 }]);
+}

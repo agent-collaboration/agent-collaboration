@@ -117,6 +117,15 @@ pub(crate) enum QueuedEntryRefusal {
     Settled,
 }
 
+impl QueuedEntryRefusal {
+    pub(crate) const fn human_phrase(self) -> &'static str {
+        match self {
+            Self::AlreadySent => "already sent; cancel the turn instead",
+            Self::Settled => "the message already ended",
+        }
+    }
+}
+
 impl RefusalTag for QueuedEntryRefusal {
     fn refusal_tag(&self) -> &'static str {
         match self {

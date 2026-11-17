@@ -189,6 +189,11 @@ pub(crate) enum SessionCellEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum SessionCellEffect {
     Lifecycle(SessionLifecycleEffect),
+    /// A message joined the run's line under this number.
+    Queued {
+        generation: SessionGeneration,
+        sequence: u64,
+    },
     Entry {
         sequence: u64,
         operation: QueuedOperation,
@@ -532,9 +537,14 @@ impl StateMachine for SessionCellMachine {
                 .map_err(|refusal| lift(refusal, SessionCellRefusal::Line))?;
                 let mut next = cell.clone();
                 next.line = line;
+                let mut effects = Vec::new();
                 for effect in line_effects {
                     match effect {
                         QueueLineEffect::Admit { sequence } => {
+                            effects.push(SessionCellEffect::Queued {
+                                generation,
+                                sequence,
+                            });
                             next.entries.insert(
                                 sequence,
                                 EntrySlot {
@@ -545,11 +555,11 @@ impl StateMachine for SessionCellMachine {
                             );
                         }
                         QueueLineEffect::WithdrawAll { reason } => {
-                            withdraw_all(&mut next, reason, &mut Vec::new())
+                            withdraw_all(&mut next, reason, &mut effects)
                         }
                     }
                 }
-                Ok((next, Vec::new()))
+                Ok((next, effects))
             }
             V::Claim { sequence } => {
                 if cell.head() != Some(sequence) {

@@ -22,6 +22,7 @@ mod provider_model_discovery;
 mod provider_prompt_dispatch;
 mod provider_request_fallback;
 mod provider_session_admission;
+mod provider_session_queue;
 mod provider_session_restore;
 pub(crate) mod provider_setting_application;
 mod session_cell_bookkeeping;
@@ -85,6 +86,9 @@ use provider_session_admission::{
     CreateAdmissionInputs, StaticSessionActivation, fail_pending_session_admission,
     publish_pending_session_admission, register_provider_session, register_static_provider_session,
     run_create_admission,
+};
+pub use provider_session_queue::{
+    QueueCancel, QueueMarkStep, QueueRefusal, QueueTicket, QueueTurn,
 };
 use session_event_model::InputId;
 use session_event_model::StopReason as ProviderPromptStopReason;
