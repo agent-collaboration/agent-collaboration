@@ -227,7 +227,7 @@ impl ExternalProviderSupervisor {
             }
             Ok(None) => {
                 // A durable row already existed: this reservation ends.
-                self.drop_reservation(&operation_id, &live);
+                self.drop_reservation(&operation_id, &live, true);
                 match self
                     .stored_operation(&operation_id, &failure_target)
                     .await?
@@ -239,7 +239,7 @@ impl ExternalProviderSupervisor {
                 }
             }
             Err(admission_failure) => {
-                self.drop_reservation(&operation_id, &live);
+                self.drop_reservation(&operation_id, &live, false);
                 Err(admission_failure)
             }
         }
@@ -308,7 +308,7 @@ impl ExternalProviderSupervisor {
         };
         let record = match mark {
             DispatchMark::AtAdmission => {
-                live.set_dispatched(true);
+                live.dispatch_marked();
                 self.inner
                     .store
                     .lock()
@@ -381,8 +381,14 @@ impl ExternalProviderSupervisor {
         }
     }
 
-    /// Ends a reservation that got no row of its own.
-    fn drop_reservation(&self, operation_id: &OperationId, live: &Arc<LiveOperation>) {
+    /// Ends a reservation that got no row of its own: a durable row already
+    /// existed (`conflict`), or the insert failed.
+    fn drop_reservation(
+        &self,
+        operation_id: &OperationId,
+        live: &Arc<LiveOperation>,
+        conflict: bool,
+    ) {
         let mut operations = self
             .inner
             .live_operations
@@ -396,7 +402,7 @@ impl ExternalProviderSupervisor {
             operations.operations.remove(operation_id);
         }
         drop(operations);
-        live.admitted();
+        live.dropped(conflict);
     }
 
     /// Marks a Deferred admission as possibly dispatched, right before its
@@ -410,7 +416,7 @@ impl ExternalProviderSupervisor {
         operation_id: &OperationId,
         target: &SessionRef,
     ) -> Result<ConversationOperationSnapshot, ConversationOperationFailure> {
-        self.set_live_dispatched(operation_id, true);
+        self.with_live(operation_id, LiveOperation::dispatch_marked);
         let record = self
             .inner
             .store
@@ -452,7 +458,7 @@ impl ExternalProviderSupervisor {
             .await
             .map(|_| ());
         if undone.is_ok() {
-            self.set_live_dispatched(operation_id, false);
+            self.with_live(operation_id, LiveOperation::undispatched);
         }
         undone.map_err(|_| {
             admission_failure(
@@ -463,17 +469,18 @@ impl ExternalProviderSupervisor {
         })
     }
 
-    /// Records on the live owner whether its send may have left.
-    fn set_live_dispatched(&self, operation_id: &OperationId, dispatched: bool) {
-        if let Some(live) = self
+    /// Applies `step` to the operation's live owner, when it has one.
+    fn with_live(&self, operation_id: &OperationId, step: impl FnOnce(&LiveOperation)) {
+        let live = self
             .inner
             .live_operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .operations
             .get(operation_id)
-        {
-            live.set_dispatched(dispatched);
+            .cloned();
+        if let Some(live) = live {
+            step(&live);
         }
     }
 }
@@ -546,5 +553,6 @@ impl super::SupervisorInner {
                 target: target.or_else(|| live.target()),
             },
         );
+        live.uncertainty_recorded();
     }
 }

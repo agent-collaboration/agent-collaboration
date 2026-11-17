@@ -331,6 +331,31 @@ impl ExternalProviderSupervisor {
         true
     }
 
+    /// Whether the operation reached its terminal outcome: its live cell
+    /// answers while the live index holds it, its durable row after that.
+    pub(crate) async fn operation_reached_terminal(&self, operation_id: &OperationId) -> bool {
+        let live = self
+            .inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned();
+        if let Some(live) = live {
+            return live.published.load(Ordering::Acquire);
+        }
+        self.inner
+            .store
+            .lock()
+            .await
+            .inspect(operation_id)
+            .await
+            .ok()
+            .flatten()
+            .is_some_and(|record| record.stage == ProviderOperationStage::Terminal)
+    }
+
     /// A receiver that wakes after each live operation publishes its result. Subscribe
     /// before checking an operation, so a completion in between is not missed.
     #[must_use]
@@ -648,6 +673,25 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
+        // The operation's record takes its outcome first; an unknown one
+        // stays live until the binding's uncertainty cell holds it.
+        live.completed(match &completion {
+            ProviderOperationCompletion::Success { .. }
+            | ProviderOperationCompletion::FailureWithSession { .. } => {
+                crate::operation_record_machine::AttemptEnding::Applied
+            }
+            ProviderOperationCompletion::Failure(failure) => match failure.effect {
+                ProviderOperationEffect::Applied => {
+                    crate::operation_record_machine::AttemptEnding::Applied
+                }
+                ProviderOperationEffect::None => {
+                    crate::operation_record_machine::AttemptEnding::Refused
+                }
+                ProviderOperationEffect::Unknown => {
+                    crate::operation_record_machine::AttemptEnding::Unknown
+                }
+            },
+        });
         let result = match completion {
             ProviderOperationCompletion::Success {
                 settlement,

@@ -20,10 +20,8 @@ use collaboration_protocol::{
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, OperationId,
     PositiveSeconds, ProviderOperationStage, SessionRef,
 };
-use collaboration_runtime::ProviderOperationStore;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 pub(super) struct SessionLineWorker {
@@ -31,7 +29,6 @@ pub(super) struct SessionLineWorker {
     pub(super) line: Arc<SessionLine>,
     pub(super) entries: Arc<QueuedEntries>,
     pub(super) supervisor: Arc<ExternalProviderSupervisor>,
-    pub(super) store: Arc<Mutex<ProviderOperationStore>>,
     #[cfg(test)]
     pub(super) wait_started: Arc<tokio::sync::Notify>,
 }
@@ -45,7 +42,6 @@ pub(super) async fn run_session_line(worker: SessionLineWorker) {
         line,
         entries,
         supervisor,
-        store,
         #[cfg(test)]
         wait_started,
     } = worker;
@@ -117,7 +113,7 @@ pub(super) async fn run_session_line(worker: SessionLineWorker) {
                 let _cancelled =
                     runtime.queue_cancel(&session_id, &String::from(operation_id.clone()));
                 if entries.take(&operation_id).is_some() {
-                    await_settlement(&line, &runtime, &supervisor, &store, &operation_id).await;
+                    await_settlement(&line, &runtime, &supervisor, &operation_id).await;
                 }
                 continue;
             }
@@ -189,7 +185,7 @@ pub(super) async fn run_session_line(worker: SessionLineWorker) {
             }
         };
         if operation_admitted {
-            await_settlement(&line, &runtime, &supervisor, &store, &operation_id).await;
+            await_settlement(&line, &runtime, &supervisor, &operation_id).await;
         }
     }
 }
@@ -358,7 +354,6 @@ async fn await_settlement(
     line: &SessionLine,
     runtime: &ExternalProviderRuntime,
     supervisor: &ExternalProviderSupervisor,
-    store: &Arc<Mutex<ProviderOperationStore>>,
     operation_id: &OperationId,
 ) {
     let Ok(wait_seconds) = PositiveSeconds::try_from(SETTLEMENT_WAIT_SECONDS) else {
@@ -383,10 +378,9 @@ async fn await_settlement(
             }
             Ok(_) => {}
             Err(_failure) => {
-                let terminal_record = store.lock().await.inspect(operation_id).await;
-                if let Ok(Some(record)) = terminal_record
-                    && record.stage == ProviderOperationStage::Terminal
-                {
+                // The operation's live cell answers; its durable row only
+                // once the live index no longer holds it.
+                if supervisor.operation_reached_terminal(operation_id).await {
                     supervisor.queued_operation_registry().clear(operation_id);
                     return;
                 }

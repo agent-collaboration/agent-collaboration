@@ -7,6 +7,9 @@
 //! unknown, and the live operations say which sends are still in flight.
 //! Every lock here is short and never held across an await.
 
+use crate::operation_record_machine::{
+    AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
+};
 use crate::uncertainty_cell_machine::{
     UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes, seeded,
 };
@@ -26,8 +29,10 @@ pub(super) struct LiveOperations {
     pub(super) terminal_order: VecDeque<OperationId>,
 }
 
-/// One operation's live owner: its result once published, and while it is
-/// live, its binding, its target and whether its send may have left.
+/// One operation's live owner: its result once published, its binding and
+/// target, and its record on the operation record machine (design note
+/// §11.5, §12.5): reserving, admitted, may-have-dispatched under one
+/// attempt, settling an unknown outcome, settled.
 pub(super) struct LiveOperation {
     pub(super) result:
         Mutex<Option<Result<ConversationOperationSettlement, ConversationOperationFailure>>>,
@@ -38,34 +43,53 @@ pub(super) struct LiveOperation {
     /// The binding it runs on; none for an operation a test holds.
     binding: Option<EndpointRef>,
     target: StdMutex<Option<SessionRef>>,
-    /// Marked may-have-dispatched and not undone.
-    dispatched: AtomicBool,
-    /// Reserved, its durable insert not yet answered.
-    reserving: AtomicBool,
+    record: StdMutex<OperationRecord>,
 }
 
 impl LiveOperation {
     /// An operation held live with no binding, as a test does.
     #[cfg(test)]
     pub(super) fn pending() -> Self {
-        Self::new(None, None, false)
+        Self::new(None, None, OperationRecord::Admitted { queued: false })
     }
 
     /// An operation reserved on `binding`, before its durable insert.
     pub(super) fn reserving(binding: EndpointRef, target: Option<SessionRef>) -> Self {
-        Self::new(Some(binding), target, true)
+        Self::new(Some(binding), target, OperationRecord::Reserving)
     }
 
-    fn new(binding: Option<EndpointRef>, target: Option<SessionRef>, reserving: bool) -> Self {
+    fn new(
+        binding: Option<EndpointRef>,
+        target: Option<SessionRef>,
+        record: OperationRecord,
+    ) -> Self {
         Self {
             result: Mutex::new(None),
             published: AtomicBool::new(false),
             changed: Notify::new(),
             binding,
             target: StdMutex::new(target),
-            dispatched: AtomicBool::new(false),
-            reserving: AtomicBool::new(reserving),
+            record: StdMutex::new(record),
         }
+    }
+
+    /// Applies one event to the operation's record. A move the record no
+    /// longer allows (a stale attempt, an operation already settled) changes
+    /// nothing.
+    fn advance(&self, event: OperationRecordEvent) -> bool {
+        let mut record = lock(&self.record);
+        match OperationRecordMachine::transition(&record, event) {
+            Ok((next, _effects)) => {
+                *record = next;
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// The operation's record now.
+    pub(super) fn record(&self) -> OperationRecord {
+        *lock(&self.record)
     }
 
     pub(super) fn binding(&self) -> Option<&EndpointRef> {
@@ -76,24 +100,74 @@ impl LiveOperation {
         lock(&self.target).clone()
     }
 
-    /// The durable insert answered: the reservation is now an admitted
-    /// operation.
+    /// The durable insert answered with a row of its own: the reservation
+    /// is now an admitted operation.
     pub(super) fn admitted(&self) {
-        self.reserving.store(false, Ordering::SeqCst);
+        self.advance(OperationRecordEvent::DurableInserted);
+        self.changed.notify_waiters();
+    }
+
+    /// The reservation ended without a row of its own: a durable row already
+    /// existed (`conflict`), or the insert failed.
+    pub(super) fn dropped(&self, conflict: bool) {
+        self.advance(if conflict {
+            OperationRecordEvent::DurableConflict
+        } else {
+            OperationRecordEvent::DurableInsertFailed
+        });
         self.changed.notify_waiters();
     }
 
     pub(super) fn is_reserving(&self) -> bool {
-        self.reserving.load(Ordering::SeqCst)
+        matches!(self.record(), OperationRecord::Reserving)
     }
 
-    pub(super) fn set_dispatched(&self, dispatched: bool) {
-        self.dispatched.store(dispatched, Ordering::SeqCst);
+    /// Its dispatch marker is being written: a new attempt may leave.
+    pub(super) fn dispatch_marked(&self) {
+        self.advance(OperationRecordEvent::DispatchMarked {
+            attempt: DispatchAttempt(uuid::Uuid::now_v7()),
+        });
+    }
+
+    /// Its dispatch marker was undone: nothing left under that attempt.
+    pub(super) fn undispatched(&self) {
+        if let OperationRecord::MayHaveDispatched { attempt } = self.record() {
+            self.advance(OperationRecordEvent::Undispatched { attempt });
+        }
+    }
+
+    /// The operation's outcome: `ending` for an attempt that may have left,
+    /// not sent for one that never did. An unknown ending stays live
+    /// (SettlingUnknown) until `uncertainty_recorded`.
+    pub(super) fn completed(&self, ending: AttemptEnding) {
+        match self.record() {
+            OperationRecord::MayHaveDispatched { attempt } => {
+                self.advance(OperationRecordEvent::Completed { attempt, ending });
+            }
+            OperationRecord::Admitted { .. } => {
+                self.advance(OperationRecordEvent::NotSent);
+            }
+            OperationRecord::Reserving
+            | OperationRecord::Dropped
+            | OperationRecord::SettlingUnknown { .. }
+            | OperationRecord::Settled { .. } => {}
+        }
+    }
+
+    /// Its unknown outcome is on the binding's uncertainty cell: it stops
+    /// counting as live.
+    pub(super) fn uncertainty_recorded(&self) {
+        if let OperationRecord::SettlingUnknown { attempt } = self.record() {
+            self.advance(OperationRecordEvent::UncertaintyRecorded { attempt });
+        }
     }
 
     /// A send that may have left and whose result isn't published yet.
     fn in_flight(&self) -> bool {
-        self.dispatched.load(Ordering::SeqCst) && !self.published.load(Ordering::Acquire)
+        matches!(
+            self.record(),
+            OperationRecord::MayHaveDispatched { .. } | OperationRecord::SettlingUnknown { .. }
+        ) && !self.published.load(Ordering::Acquire)
     }
 }
 
@@ -194,3 +268,7 @@ pub(super) fn apply_uncertainty(
 fn lock<T>(mutex: &StdMutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
+
+#[cfg(test)]
+#[path = "provider_operation_index_test.rs"]
+mod tests;

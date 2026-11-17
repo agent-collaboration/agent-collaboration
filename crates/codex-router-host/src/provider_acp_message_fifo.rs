@@ -281,7 +281,6 @@ impl ProviderAcpMessageFifo {
             line: Arc::clone(&line),
             entries: Arc::clone(&self.entries),
             supervisor: Arc::clone(&self.supervisor),
-            store: Arc::clone(&self.store),
             #[cfg(test)]
             wait_started: Arc::clone(&self.wait_started),
         }));
