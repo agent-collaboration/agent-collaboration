@@ -15,11 +15,38 @@ fn advance_to(f: &Fixture, at: m::Timestamp) {
     let delta = at - now(f);
     f.clock.advance(delta.to_std().unwrap()).unwrap();
 }
+/// Advances to `at` and waits for the host's driver to complete that alarm.
+/// Instead of waiting forever it fails loudly when the driver reports a failed
+/// drive (its retry is the next mark, which this manual clock never reaches) or
+/// re-checks its published alarm and finds it not due at `at`.
 async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
     let count = r.alarm_completion_count();
+    let failures = r.alarm_failures().len();
     advance_to(f, at);
-    r.until_alarm_completed(count + 1).await;
+    let published = r.statement_host().alarm();
+    let not_due = async {
+        match published {
+            Some(alarm) if alarm.unix_millis() > at.timestamp_millis() => {
+                f.clock
+                    .not_due_check_now(f.clock.wall_deadline(alarm))
+                    .await;
+            }
+            _ => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        () = r.until_alarm_completed(count + 1) => {}
+        () = r.until_alarm_failed(failures + 1) => panic!(
+            "the alarm driver failed at {at} instead of completing: {:?}; published alarm {published:?}; due batch {:?}",
+            r.alarm_failures(),
+            r.due_batch_snapshot()
+        ),
+        () = not_due => panic!(
+            "the published alarm {published:?} is after the dispatch time {at}; due batch {:?}",
+            r.due_batch_snapshot()
+        ),
+    }
     assert_eq!(r.alarm_completion_count(), count + 1);
 }
 async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: Op) -> Result {

@@ -210,9 +210,23 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     let safety_mark = now(f) + chrono::Duration::seconds(5);
     let callbacks = r.alarm_completion_count();
     assert!(r.statement_host().alarm().unwrap().unix_millis() > safety_mark.timestamp_millis());
-    f.clock
-        .not_due_check_now(f.clock.wall_deadline(r.statement_host().alarm().unwrap()))
-        .await;
+    // A failed drive parks the driver on its next-mark retry, so it would never
+    // check this alarm; fail loudly with its error instead of waiting forever.
+    let failures = r.alarm_failures().len();
+    tokio::select! {
+        () = f
+            .clock
+            .not_due_check_now(f.clock.wall_deadline(r.statement_host().alarm().unwrap())) => {}
+        () = r.until_alarm_failed(failures + 1) => panic!(
+            "the alarm driver failed instead of checking its alarm: {:?}",
+            r.alarm_failures()
+        ),
+    }
+    assert!(
+        r.alarm_failures().is_empty(),
+        "earlier failed drives: {:?}",
+        r.alarm_failures()
+    );
     advance_to(f, safety_mark);
     assert_eq!(r.alarm_completion_count(), callbacks);
     drop(r);

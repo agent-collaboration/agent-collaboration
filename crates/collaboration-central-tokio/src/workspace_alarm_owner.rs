@@ -82,6 +82,8 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                     }
                     Err(error) => {
                         tracing::warn!(?error, "central alarm drive failed; retrying");
+                        #[cfg(feature = "test-support")]
+                        runtime.mark_alarm_failed(format!("{error:?}"));
                         retry = Some(next_mark_deadline(clock.as_ref(), clock.utc_now().timestamp_millis()));
                     }
                 }
