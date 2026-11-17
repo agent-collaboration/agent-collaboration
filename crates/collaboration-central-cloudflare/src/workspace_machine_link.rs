@@ -219,6 +219,13 @@ impl CentralObject {
         Ok(MachineRequestResult::Reply(reply))
     }
 
+    #[cfg_attr(
+        not(feature = "test-support"),
+        expect(
+            clippy::unused_async,
+            reason = "only the test-support witness awaits before the reply is sent"
+        )
+    )]
     async fn reply_to_machine(
         &self,
         socket: &WebSocket,
