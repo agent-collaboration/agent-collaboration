@@ -7,9 +7,11 @@
 use crate::queue_line_machine::QueueLineMachine;
 use crate::session_lifecycle_answers::state_answer;
 use crate::session_lifecycle_machine::SessionLifecycle;
-use crate::session_setting_machine::{SessionSettingMachine, UnresolvedCause};
+use crate::session_setting_machine::{
+    SessionSetting, SessionSettingMachine, SettingValueId, UnresolvedCause,
+};
 use crate::session_turn_machine::{SessionTurn, SessionTurnMachine};
-use state_machine_core::StateMachine;
+use state_machine_core::{StateMachine, StateTag};
 
 /// A step a caller can take on a busy session or a held setting, in the
 /// order an answer names them: waiting first, then the gentlest change.
@@ -80,21 +82,28 @@ fn actions_from(
     }
 }
 
-/// The valid next steps while a turn runs (`cancelling`: its cancel is in
-/// flight): steer only when the agent advertises steering; a message can
-/// always join the run's open line.
-pub(crate) fn busy_steps(cancelling: bool, agent_steers: bool) -> Vec<RefusalStep> {
-    let mut steps = Vec::new();
-    if cancelling {
-        steps.push(RefusalStep::Wait);
+/// Observations a busy turn offers: they change no state (§13.5). A
+/// running turn is acted on; a cancelling one, or a queued message about to
+/// start its turn, can be waited for.
+fn turn_observations(turn: SessionTurn) -> &'static [RefusalStep] {
+    match turn {
+        SessionTurn::Running { .. } => &[],
+        SessionTurn::Idle | SessionTurn::Cancelling { .. } => &[RefusalStep::Wait],
     }
-    let from = if cancelling { "cancelling" } else { "running" };
+}
+
+/// The valid next steps for a busy session in `turn`: the turn's caller
+/// moves from that exact state (steer only when the agent advertises
+/// steering), the open line's queue move, and the state's observations.
+pub(crate) fn busy_steps(turn: SessionTurn, agent_steers: bool) -> Vec<RefusalStep> {
+    let mut steps = turn_observations(turn).to_vec();
     actions_from(
         SessionTurnMachine::transitions(),
-        from,
+        turn.state_tag(),
         |step| step != RefusalStep::Steer || agent_steers,
         &mut steps,
     );
+    // A Live session's line is open.
     actions_from(
         QueueLineMachine::transitions(),
         "open",
@@ -105,49 +114,39 @@ pub(crate) fn busy_steps(cancelling: bool, agent_steers: bool) -> Vec<RefusalSte
     steps
 }
 
-/// A prompt refused because a turn is running.
-pub fn turn_busy_answer(agent_steers: bool) -> String {
-    format!(
-        "a turn is running; {}",
-        joined(&busy_steps(false, agent_steers))
-    )
+/// A Live session's busy answer: its turn's state, then the valid next
+/// steps.
+fn turn_answer(turn: SessionTurn, agent_steers: bool) -> String {
+    let state = match turn {
+        SessionTurn::Idle => "a queued message is being sent",
+        SessionTurn::Running { .. } => "a turn is running",
+        SessionTurn::Cancelling { .. } => "a turn is being cancelled",
+    };
+    format!("{state}; {}", joined(&busy_steps(turn, agent_steers)))
 }
 
 /// A busy session's answer: a session that isn't Live answers its
-/// lifecycle state; a Live one answers its turn, a cancelling turn taking
-/// no second cancel.
+/// lifecycle state; a Live one answers its turn.
 pub(crate) fn session_busy_answer(
     lifecycle: &SessionLifecycle,
     turn: SessionTurn,
     agent_steers: bool,
 ) -> String {
-    match (lifecycle, turn) {
-        (SessionLifecycle::Live { .. }, SessionTurn::Cancelling { .. }) => format!(
-            "a turn is being cancelled; {}",
-            joined(&busy_steps(true, agent_steers))
-        ),
-        (SessionLifecycle::Live { .. }, SessionTurn::Running { .. } | SessionTurn::Idle) => {
-            turn_busy_answer(agent_steers)
-        }
-        (
-            SessionLifecycle::NotLoaded { .. }
-            | SessionLifecycle::Loading { .. }
-            | SessionLifecycle::Closing { .. },
-            _,
-        ) => state_answer(lifecycle),
+    match lifecycle {
+        SessionLifecycle::Live { .. } => turn_answer(turn, agent_steers),
+        SessionLifecycle::NotLoaded { .. }
+        | SessionLifecycle::Loading { .. }
+        | SessionLifecycle::Closing { .. } => state_answer(lifecycle),
     }
 }
 
-/// The valid next steps for a held setting.
-pub(crate) fn hold_steps(cause: UnresolvedCause) -> Vec<RefusalStep> {
-    let from = match cause {
-        UnresolvedCause::DefiniteFailure => "unresolved_refused",
-        UnresolvedCause::OutcomeUnknown => "unresolved_unknown",
-    };
+/// The valid next steps for a session setting in `setting`: its caller
+/// moves from that exact state.
+pub(crate) fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
     let mut steps = Vec::new();
     actions_from(
         SessionSettingMachine::transitions(),
-        from,
+        setting.state_tag(),
         |_| true,
         &mut steps,
     );
@@ -155,20 +154,17 @@ pub(crate) fn hold_steps(cause: UnresolvedCause) -> Vec<RefusalStep> {
     steps
 }
 
-/// Work refused because a setting holds the session.
-pub fn settings_hold_answer(outcome_unknown: bool) -> String {
-    let (state, cause) = if outcome_unknown {
-        (
-            "a setting change's outcome is unknown",
-            UnresolvedCause::OutcomeUnknown,
-        )
-    } else {
-        (
-            "a setting change was refused",
-            UnresolvedCause::DefiniteFailure,
-        )
+/// Work refused because a setting holds the session, held for `cause`.
+pub(crate) fn settings_hold_answer(cause: UnresolvedCause) -> String {
+    let state = match cause {
+        UnresolvedCause::DefiniteFailure => "a setting change was refused",
+        UnresolvedCause::OutcomeUnknown => "a setting change's outcome is unknown",
     };
-    format!("{state}; {}", joined(&hold_steps(cause)))
+    let held = SessionSetting::Unresolved {
+        cause,
+        observed: SettingValueId(String::new()),
+    };
+    format!("{state}; {}", joined(&hold_steps(&held)))
 }
 
 #[cfg(test)]

@@ -384,10 +384,15 @@ pub(crate) fn busy_answer(
 
 /// A held setting's answer, read from the session's cell (D1 M8).
 pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
-    settings_hold_answer(cells.read(
+    let outcome_unknown = cells.read(
         session_id,
         crate::session_cell_machine::SessionCell::any_setting_outcome_unknown,
-    ))
+    );
+    settings_hold_answer(if outcome_unknown {
+        crate::session_setting_machine::UnresolvedCause::OutcomeUnknown
+    } else {
+        crate::session_setting_machine::UnresolvedCause::DefiniteFailure
+    })
 }
 
 /// The kind's last change has an unknown outcome.
