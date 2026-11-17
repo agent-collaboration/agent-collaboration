@@ -189,3 +189,34 @@ fn stop_ends_every_line_through_the_sink() {
         vec![("waiting".to_owned(), "Router shutting down")]
     );
 }
+
+/// Oracle: M1 / inventory S1 (§11.9): after a close fails, a new send is
+/// accepted; nothing stays half-closed or banned. The close ended the line;
+/// its failure reopens it under the same run.
+#[test]
+fn a_send_after_a_failed_close_is_accepted() {
+    // Arrange
+    let (cells, _sink) = live_table();
+    let door = SessionQueueDoor { cells: &cells };
+    let attempt = CloseAttempt(uuid::Uuid::from_u128(9));
+    close(&cells);
+    let refused_while_closing = door.queue_enqueue(SESSION, "during-close");
+
+    // Act
+    cells
+        .transition(
+            SESSION,
+            SessionGeneration::UNTRACKED,
+            SessionCellEvent::CloseFailed { attempt },
+            EntryEffectRoute::Sink,
+        )
+        .expect("the close fails");
+    let after_failure = door.queue_enqueue(SESSION, "after-failure");
+
+    // Assert
+    assert!(
+        matches!(refused_while_closing, Err(QueueRefusal::Refused { .. })),
+        "{refused_while_closing:?}"
+    );
+    assert!(after_failure.is_ok(), "{after_failure:?}");
+}
