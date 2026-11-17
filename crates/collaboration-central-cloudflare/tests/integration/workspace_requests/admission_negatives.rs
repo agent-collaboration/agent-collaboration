@@ -2,8 +2,9 @@ use super::*;
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
+use collaboration_central_conformance::signin_fixtures as signed;
 #[tokio::test]
-async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_directory_without_domain_writes()
+async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directory_without_domain_writes()
  {
     let f = Fixture::new().await;
     let runtime = f.host.central(&f.caller.organization_id).await;
@@ -11,7 +12,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         name: name("Must not be written"),
     };
     let mut wrong = f.caller.clone();
-    wrong.credential_hash = "incorrect fixture digest".to_owned();
+    wrong.token = signed::tamper_signature(&wrong.token).unwrap();
     assert_eq!(
         call(
             &f.host,
@@ -24,18 +25,33 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
     );
+    let mut expired = f.caller.clone();
+    expired.token = signed::machine_token(
+        expired.organization_id.as_str(),
+        &expired.caller.machine_id().to_string(),
+        &expired.enrollment_id,
+        FIXTURE_NOW - 600,
+        FIXTURE_NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        call(
+            &f.host,
+            &expired,
+            Some(f.workspace.clone()),
+            959,
+            operation.clone()
+        )
+        .await
+        .result,
+        m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
+    );
     let edits = [
         (
-            "UPDATE machines SET state='revoked' WHERE machine_id=?",
+            "UPDATE machines SET state='revoked' WHERE installation_id=?",
             text(f.caller.caller.machine_id()),
             m::RefusalReason::MachineRevoked,
-            "UPDATE machines SET state='enrolled' WHERE machine_id=?",
-        ),
-        (
-            "UPDATE machine_credentials SET expires_at='2000-01-01T00:00:00Z' WHERE machine_id=?",
-            text(f.caller.caller.machine_id()),
-            m::RefusalReason::MachineRevoked,
-            "UPDATE machine_credentials SET expires_at='2030-01-01T00:00:00Z' WHERE machine_id=?",
+            "UPDATE machines SET state='enrolled' WHERE installation_id=?",
         ),
         (
             "UPDATE workspaces SET state='archived' WHERE workspace_id=?",
@@ -44,10 +60,10 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
             "UPDATE workspaces SET state='active' WHERE workspace_id=?",
         ),
         (
-            "UPDATE machines SET allowed_workspaces='[]' WHERE machine_id=?",
+            "UPDATE machines SET allowed_workspaces='[]' WHERE installation_id=?",
             text(f.caller.caller.machine_id()),
             m::RefusalReason::WorkspaceNotAllowed,
-            "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+            "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
         ),
     ];
     for (index, (sql, key, refusal, restore)) in edits.into_iter().enumerate() {

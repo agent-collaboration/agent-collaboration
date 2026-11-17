@@ -56,7 +56,7 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let counts_query = || Statement {
@@ -72,7 +72,11 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
     let mut new_caller = fixture.caller.clone();
     let mut new_session = session(&fixture.caller);
     new_session.session_id = "range-new-caller".to_owned().try_into().unwrap();
-    new_caller.caller = workspace_model::Caller::Session(new_session);
+    new_caller = collaboration_central_core::WorkspaceCaller::new(
+        new_caller.connection().clone(),
+        workspace_model::Caller::Session(new_session),
+    )
+    .unwrap();
     let invalid = chrono::DateTime::from_timestamp_millis(
         collaboration_central_core::MAX_ALARM_UNIX_MILLIS + 1000,
     )
@@ -193,7 +197,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())

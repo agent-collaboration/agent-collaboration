@@ -9,10 +9,11 @@ use workspace_model::central_mail::{
 };
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
+    let caller = fresh_auth(&fixture.host, &fixture.caller);
     fixture
         .host
         .request_central(
-            &fixture.caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,

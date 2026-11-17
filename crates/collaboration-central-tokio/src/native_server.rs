@@ -37,6 +37,7 @@ pub struct TokioServer {
     base_url: String,
     platform: TokioCentralPlatform,
     stop: CancellationToken,
+    workspace: Option<(crate::WorkspaceLink, Arc<crate::TokioWorkspaceHost>)>,
     task: Option<tokio::task::JoinHandle<Result<(), std::io::Error>>>,
 }
 
@@ -135,11 +136,41 @@ impl TokioServer {
         .await
     }
 
+    /// Mounts the modern link on the same public listener as the retained legacy routes.
+    pub async fn start_with_workspace_host(
+        settings: TokioSettings,
+        listen: SocketAddr,
+        host: Arc<crate::TokioWorkspaceHost>,
+    ) -> Result<Self, TokioServerError> {
+        let platform = TokioCentralPlatform::new(
+            &settings.jwks_url,
+            host.shared_clock(),
+            crate::native_logging::observe,
+            &settings.root,
+            settings.registry,
+            settings.delivery,
+            settings.holder_answer_timeout,
+            settings.copy_ack_wait,
+        )
+        .await?;
+        Self::serve_platform_with_workspace(settings, listen, platform, None, Some(host)).await
+    }
+
     async fn serve_platform(
         settings: TokioSettings,
         listen: SocketAddr,
         platform: TokioCentralPlatform,
         keys: Option<collaboration_central_core::AccessJwks>,
+    ) -> Result<Self, TokioServerError> {
+        Self::serve_platform_with_workspace(settings, listen, platform, keys, None).await
+    }
+
+    async fn serve_platform_with_workspace(
+        settings: TokioSettings,
+        listen: SocketAddr,
+        platform: TokioCentralPlatform,
+        keys: Option<collaboration_central_core::AccessJwks>,
+        workspace_host: Option<Arc<crate::TokioWorkspaceHost>>,
     ) -> Result<Self, TokioServerError> {
         let application = match CentralApplication::new(
             platform.clone(),
@@ -164,7 +195,12 @@ impl TokioServer {
         let base_url = format!("http://{}", listener.local_addr()?);
         let stop = CancellationToken::new();
         let stopped = stop.clone();
+        let workspace = workspace_host.map(|host| (crate::WorkspaceLink::new(host.clone()), host));
         let router = central_router(application);
+        let router = match &workspace {
+            Some((link, _)) => router.merge(link.router()),
+            None => router,
+        };
         let router = if let Some(keys) = keys {
             collaboration_central_core::central_jwks_router(keys).merge(router)
         } else {
@@ -182,6 +218,7 @@ impl TokioServer {
             base_url,
             platform,
             stop,
+            workspace,
             task: Some(task),
         })
     }
@@ -198,11 +235,18 @@ impl TokioServer {
     pub async fn shutdown(mut self) -> Result<(), TokioServerError> {
         self.stop.cancel();
         self.platform.begin_shutdown();
+        if let Some((link, _)) = &self.workspace {
+            link.begin_shutdown();
+        }
         // Finish HTTP requests before draining upgrades and closing their store.
         let served = match self.task.take() {
             Some(task) => task.await,
             None => Ok(Ok(())),
         };
+        if let Some((link, host)) = self.workspace.take() {
+            link.shutdown().await;
+            host.close().await;
+        }
         let stopped = self.platform.shutdown().await;
         served??;
         stopped?;
@@ -214,5 +258,8 @@ impl Drop for TokioServer {
     fn drop(&mut self) {
         self.stop.cancel();
         self.platform.begin_shutdown();
+        if let Some((link, _)) = &self.workspace {
+            link.begin_shutdown();
+        }
     }
 }

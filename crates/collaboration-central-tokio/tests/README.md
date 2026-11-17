@@ -63,7 +63,7 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   milliseconds minted through that same object, including a later clock advance.
 
 - `workspace_requests`: the modern org-scoped request owner on approved central and
-  workspace SQLite schemas. Cases cover live credential allowance, org isolation,
+  workspace SQLite schemas. Cases cover signed machine admission, live enrollment and allowance, org isolation,
   pure-rule dispatch, views/search/inbox/read marks, actor identities, atomic role
   replacement, dependency walks, status closure, reference/link/backlog/log rows,
   cached success/refusal/no-op and 24-hour expiry, corruption rejection, clock-behind
@@ -77,8 +77,9 @@ The kept enrollment, Access and session-upgrade behavior is proven by
 - `workspace_requests::mail`: central queue replay/expiry, typed senders and bodies,
   wake/automation lifecycle, finite and late schedules, actual injected-clock driver,
   interrupted alarm publication and earlier-deadline ordering, transaction rollback,
-  timestamp bounds and sign-in stamp identity on startup. Fixtures seed the stamp;
-  provisioning and signature verification remain slice 4.
+  timestamp bounds and sign-in stamp identity on startup. Fixtures use signed stamps
+  and verified machine tokens; the private-link suite below owns provisioning and
+  person-proof journeys.
 - `workspace_requests::notices`: addressed and role activity joins session windows,
   stored shared epoch 15/25/55-minute cadences, cancellations, explicit non-session skips/inbox retention,
   workspace-turn races, independent uniqueness, before/after commit recovery,
@@ -186,3 +187,18 @@ Ported from the paused reliability branch (alarm robustness):
 - `organization_signin::engine_unit_revival`: V2 notice units and `engine_source` on the
   native host; each unit recovers by itself, restarts its 60-day period, retires at 60
   days, stays stopped and returns only by EngineRetry; a retired source is never read.
+
+
+The integration `workspace_link` module mounts the authenticated route on the
+real native public listener, sharing its injected clock. It covers installation
+identity, header-only machine JWT admission, correlated concurrent calls, actual
+renewal on a fresh socket, original-grant expiry, lost-answer replay and shutdown.
+Its three-write Batch requires success, a typed FutureTime refusal and later
+success, with exact owning-store rows and independent replies. The held-read
+revocation case requires refusal before either the workspace write or drain
+preset. C3 owns the Router outbox; C4/D own delivery and message status.
+
+The warm reconnect cases remove only the physical alarm while preserving the
+cached runtime and healthy wake row. Observing the next Welcome must follow the
+canonical alarm recompute attempt. A publication failure still delivers Welcome
+and reports its typed failure without retrying or changing the stored wake.

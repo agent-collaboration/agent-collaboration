@@ -45,6 +45,7 @@ pub(crate) fn trust_settings(env: &Env) -> worker::Result<Option<SignInTrustSett
     let audience = variable("CENTRAL_SIGN_IN_AUDIENCE")?;
     let jwks_url = variable("CENTRAL_SIGN_IN_JWKS_URL")?;
     let admin_audience = variable("CENTRAL_ADMIN_AUDIENCE")?;
+    let machine_audience = variable("CENTRAL_MACHINE_AUDIENCE")?;
     let public_origin = variable("CENTRAL_PUBLIC_ORIGIN")?;
     let service_id = variable("CENTRAL_SIGN_IN_SERVICE_ID")?;
     if [
@@ -52,6 +53,7 @@ pub(crate) fn trust_settings(env: &Env) -> worker::Result<Option<SignInTrustSett
         &audience,
         &jwks_url,
         &admin_audience,
+        &machine_audience,
         &public_origin,
         &service_id,
     ]
@@ -69,6 +71,7 @@ pub(crate) fn trust_settings(env: &Env) -> worker::Result<Option<SignInTrustSett
         issuer: required(issuer)?,
         audience: required(audience)?,
         admin_audience: required(admin_audience)?,
+        machine_audience: required(machine_audience)?,
         public_origin: required(public_origin)?,
         jwks_url: required(jwks_url)?,
         service_id: service_id
@@ -76,6 +79,9 @@ pub(crate) fn trust_settings(env: &Env) -> worker::Result<Option<SignInTrustSett
             .transpose()
             .map_err(|_| invalid_configuration())?,
     };
+    if !settings.machine_audience_is_valid() {
+        return Err(invalid_configuration());
+    }
     // These are deployment addresses, never addresses read from a token.
     let origin =
         worker::Url::parse(&settings.public_origin).map_err(|_| invalid_configuration())?;

@@ -123,7 +123,7 @@ pub(crate) async fn assert_every_written_attempt_id_is_uuid_v7(
 pub(super) async fn witness_fixture_attempt_ids(fixture: &super::support::Fixture) {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     install_attempt_id_witness(runtime.statement_host()).await;
@@ -135,7 +135,7 @@ pub(super) async fn assert_fixture_attempt_ids_are_uuid_v7(
 ) -> usize {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     assert_every_written_attempt_id_is_uuid_v7(runtime.statement_host(), test, planted).await

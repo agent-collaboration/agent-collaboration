@@ -85,13 +85,9 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     request: &m::WorkspaceRequest,
     directory: DirectoryRequest<'_>,
 ) -> Result<m::WorkspaceReply, StoreFailure> {
-    // Machine admission first; a workspace's own state is checked after replay,
-    // so a retried archive replays its answer instead of being refused.
-    if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
-        return Ok(reply(m::WorkspaceResult::Refused(refusal)));
-    }
     match directory {
         DirectoryRequest::Show { workspace_id } => {
+            let _central = runtime.take_central_turn().await;
             if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace_id)).await? {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
@@ -108,6 +104,10 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             cursor,
             limit,
         } => {
+            let _central = runtime.take_central_turn().await;
+            if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+                return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+            }
             let workspaces: Vec<m::Workspace> =
                 crate::workspace_directory_rows::read_all(runtime.host.as_ref())
                     .await?
@@ -140,7 +140,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     request: &m::WorkspaceRequest,
     directory: DirectoryRequest<'_>,
 ) -> Result<m::WorkspaceReply, StoreFailure> {
-    let identity = match &caller.caller {
+    let identity = match caller.caller() {
         m::Caller::Session(session) => m::Identity::AgentSession {
             session: session.clone(),
         },
@@ -152,7 +152,13 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .request_id
         .as_ref()
         .ok_or_else(|| corrupt("request_id"))?;
+    // Machine admission under the central turn first; a workspace's own state
+    // is checked after replay, so a retried archive replays its answer instead
+    // of being refused.
     let _turn = runtime.take_central_turn().await;
+    if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+        return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+    }
     let now = runtime.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     let digest = crate::workspace_request_log::digest(&request.operation)?;

@@ -4,7 +4,11 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     let mut recipient = f.caller.clone();
     let mut address = session(&recipient);
     address.session_id = "shorter-cadence".to_owned().try_into().unwrap();
-    recipient.caller = m::Caller::Session(address.clone());
+    recipient = collaboration_central_core::WorkspaceCaller::new(
+        recipient.connection().clone(),
+        m::Caller::Session(address.clone()),
+    )
+    .unwrap();
     assert!(matches!(
         request(
             f,
@@ -17,7 +21,7 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         .await,
         Result::Done(_)
     ));
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let row=r.statement_host().read(Statement{sql:"SELECT actor_identity_id FROM actor_identities WHERE identity LIKE '%shorter-cadence%'",args:vec![]}).await.unwrap();
     let central_storage::SqlValue::Text(actor) = &row.rows[0][0] else {
         panic!("actor")
@@ -61,7 +65,7 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     ));
     let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(900) + 1) * 900, 0)
         .unwrap();
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let row = r
         .statement_host()
         .read(Statement {
@@ -88,14 +92,14 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     advance_to(f, due + chrono::Duration::minutes(1));
     created(f.call(46006, post()).await);
     let next = due + chrono::Duration::minutes(15);
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
         r.statement_host().alarm().map(|at| at.unix_millis()),
         Some(next.timestamp_millis())
     );
     drop(r);
     dispatch_to(f, next).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let batches = r.queued_for_session(&address).await.unwrap();
     assert_eq!(
         batches
@@ -120,7 +124,7 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
     };
     assert_eq!(first.timestamp().rem_euclid(300), 0);
     dispatch_to(f, first).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let batch = r.queued_for_session(&target).await.unwrap();
     let fired:Vec<_>=batch.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..}if id==&automation_id)).collect();
     assert_eq!(fired.len(), 1);
@@ -167,7 +171,7 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
         Result::Done(_)
     ));
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     // A retired rule is not reinterpreted against the current timezone database.
     assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE automations SET timing_rule=? WHERE automation_id=?",args:vec![text(r#"{"kind":"cron","expression":"*/5 * * * *","timezone":"Retired/Timezone"}"#),text(&automation_id)]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     assert!(matches!(
@@ -203,7 +207,11 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     let mut caller = f.caller.clone();
     let mut address = session(&caller);
     address.session_id = "late-drain-recipient".to_owned().try_into().unwrap();
-    caller.caller = m::Caller::Session(address.clone());
+    caller = collaboration_central_core::WorkspaceCaller::new(
+        caller.connection().clone(),
+        m::Caller::Session(address.clone()),
+    )
+    .unwrap();
     request(
         f,
         &caller,
@@ -215,7 +223,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     .await;
     let area = f.area(46201).await;
     let thread = f.thread(46202, area).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let actor=r.statement_host().read(Statement{sql:"SELECT actor_identity_id FROM actor_identities WHERE identity LIKE '%late-drain-recipient%'",args:vec![]}).await.unwrap().rows[0][0].clone();
     let central_storage::SqlValue::Text(id) = &actor else {
         panic!("recipient")
@@ -297,7 +305,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     if retry < due {
         dispatch_to(f, retry).await;
     }
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let record = r.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains'", args: vec![] }).await.unwrap();
     assert_eq!(
         record.rows,
@@ -307,7 +315,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     );
     drop(r);
     dispatch_to(f, due).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let batch = r.queued_for_session(&address).await.unwrap();
     assert_eq!(batch.messages.len(), 1);
     assert_eq!(batch.messages[0].created_at, due);
@@ -322,7 +330,11 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     let mut caller = f.caller.clone();
     let mut address = session(&caller);
     address.session_id = "rollback-cadence".to_owned().try_into().unwrap();
-    caller.caller = m::Caller::Session(address.clone());
+    caller = collaboration_central_core::WorkspaceCaller::new(
+        caller.connection().clone(),
+        m::Caller::Session(address.clone()),
+    )
+    .unwrap();
     assert_eq!(
         request(
             f,
@@ -339,7 +351,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     );
     let area = f.area(46301).await;
     let thread = f.thread(46302, area).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = r.statement_host().read(Statement {sql:"SELECT actor_identity_id FROM actor_identities WHERE json_extract(identity,'$.session.sessionId')='rollback-cadence'",args:vec![]}).await.unwrap();
     assert_eq!(actors.rows.len(), 1);
     let actor = actors.rows[0][0].clone();
@@ -454,7 +466,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     );
     drop(r);
     f.reopen().await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
         r.statement_host().read(snapshot()).await.unwrap().rows,
         expected
@@ -467,7 +479,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     );
     drop(r);
     dispatch_to(f, due).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let queue = r.queued_for_session(&address).await.unwrap();
     assert_eq!(queue.messages.len(), 1);
     assert_eq!(queue.messages[0].created_at, due);

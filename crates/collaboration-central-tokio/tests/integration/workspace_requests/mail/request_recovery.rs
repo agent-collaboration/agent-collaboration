@@ -33,7 +33,7 @@ async fn future_wake(f: &Fixture) -> TestResult<m::Timestamp> {
     }
 }
 async fn drop_alarm(f: &Fixture) -> TestResult<()> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     let applied = runtime
         .statement_host()
         .run_batch(central_storage::StatementBatch {
@@ -50,11 +50,11 @@ async fn drop_alarm(f: &Fixture) -> TestResult<()> {
     Ok(())
 }
 async fn alarm(f: &Fixture) -> TestResult<Option<i64>> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime.statement_host().alarm().map(|at| at.unix_millis()))
 }
 async fn fail_rearm(f: &Fixture) -> TestResult<()> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     runtime
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
@@ -65,7 +65,7 @@ async fn rows(
     sql: &'static str,
     args: Vec<central_storage::SqlValue>,
 ) -> TestResult<ReadOutcome> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime
         .statement_host()
         .read(Statement { sql, args })
@@ -90,7 +90,7 @@ async fn warm_show_read_rearms_a_physically_missing_alarm() -> TestResult<()> {
     let f = Fixture::new().await;
     let area = f.area(8601).await;
     let due = future_wake(&f).await?;
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     let operation = m::WorkspaceOperation::Show {
         item: m::ItemRef::Area(area),
     };
@@ -109,7 +109,7 @@ async fn warm_show_read_rearms_a_physically_missing_alarm() -> TestResult<()> {
     let actual = f.call(8603, operation).await;
     assert_eq!(actual, expected);
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
-    let after = f.host.central(&f.caller.organization_id).await?;
+    let after = f.host.central(f.caller.organization_id()).await?;
     assert!(
         Arc::ptr_eq(&runtime, &after),
         "recovery must use the same cached native runtime"
@@ -126,7 +126,7 @@ async fn warm_show_read_rearms_a_physically_missing_alarm() -> TestResult<()> {
 async fn warm_generic_create_and_replay_each_rearm_a_physically_missing_alarm() -> TestResult<()> {
     let f = Fixture::new().await;
     let due = future_wake(&f).await?;
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     let request = create(8610);
     drop_alarm(&f).await?;
     assert_eq!(alarm(&f).await?, None);
@@ -155,7 +155,7 @@ async fn warm_generic_create_and_replay_each_rearm_a_physically_missing_alarm() 
     assert_eq!(f.host.request(&f.caller, request).await?, first);
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
     assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM workspaces WHERE workspace_id=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",vec![text(&created_id),text(id::<m::RequestId>(8610))]).await?.rows,before);
-    let after = f.host.central(&f.caller.organization_id).await?;
+    let after = f.host.central(f.caller.organization_id()).await?;
     assert!(
         Arc::ptr_eq(&runtime, &after),
         "recovery must use the same cached native runtime"
@@ -173,7 +173,7 @@ async fn completion_rearm_failure_preserves_committed_create_and_exact_replay() 
     let f = Fixture::new().await;
     let area = f.area(8620).await;
     let due = future_wake(&f).await?;
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     let request = create(8621);
     drop_alarm(&f).await?;
     assert_eq!(alarm(&f).await?, None);
@@ -234,7 +234,7 @@ async fn completion_rearm_failure_preserves_committed_create_and_exact_replay() 
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Item { .. })
     ));
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
-    let after = f.host.central(&f.caller.organization_id).await?;
+    let after = f.host.central(f.caller.organization_id()).await?;
     assert!(
         Arc::ptr_eq(&runtime, &after),
         "recovery must use the same cached native runtime"

@@ -46,7 +46,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
         panic!("second workspace")
     };
     let other = workspace.workspace_id;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     // The other workspace has a past drain due that only the due batch will drain.
     let past = (f.clock.utc_now() - chrono::Duration::seconds(1))
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

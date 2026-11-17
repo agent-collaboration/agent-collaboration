@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) async fn exercise_stored_validation(f: &Fixture) {
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let actor = r
         .statement_host()
         .read(Statement {
@@ -47,7 +47,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         let result = f
             .host
             .request_central(
-                &f.caller,
+                &f.fresh_caller(&f.caller).await,
                 CentralMailRequest {
                     request_id: id(number),
                     operation: Op::SendMessage {
@@ -106,7 +106,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
     let invalid = f
         .host
         .request_central(
-            &f.caller,
+            &f.fresh_caller(&f.caller).await,
             CentralMailRequest {
                 request_id: id(42111),
                 operation: Op::CancelWake {
@@ -189,7 +189,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
     let Result::Done(Answer::WakeSet { wake_id, .. }) = wake else {
         panic!("stored wake setup: {wake:?}")
     };
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let pending = runtime.statement_host().read(Statement {sql:"SELECT w.window_id FROM notification_windows w JOIN actor_identities a ON a.actor_identity_id=w.recipient_actor WHERE json_extract(a.identity,'$.session.sessionId')='cadence-2'",args:vec![]}).await.unwrap();
     assert_eq!(pending.rows.len(), 1);
     for (index, select, update, row_id, invalid_value, column) in [
@@ -277,7 +277,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         let result = f
             .host
             .request_central(
-                &f.caller,
+                &f.fresh_caller(&f.caller).await,
                 CentralMailRequest {
                     request_id: id(42130 + index),
                     operation: Op::SendMessage {

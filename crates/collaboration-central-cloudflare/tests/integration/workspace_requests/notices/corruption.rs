@@ -139,7 +139,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let _: bool = runtime.control("hold", &pause).await.unwrap();
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = fresh_auth(&f.host, &f.caller);
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -258,7 +258,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
     let _: bool = runtime.control("hold", &pause).await.unwrap();
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = fresh_auth(&f.host, &f.caller);
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,

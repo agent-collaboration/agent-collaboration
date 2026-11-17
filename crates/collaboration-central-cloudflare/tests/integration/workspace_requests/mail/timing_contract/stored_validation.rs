@@ -3,6 +3,8 @@ use super::*;
 
 pub(super) async fn exercise_stored_validation(f: &Fixture) {
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
+    // Earlier steps moved the clock past the fixture token; mint one for now.
+    let caller = super::super::super::support::fresh_auth(&f.host, &f.caller);
     let r = f.host.central(&f.caller.organization_id).await;
     let actor = r
         .statement_host()
@@ -47,7 +49,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         let result = f
             .host
             .request_central(
-                &f.caller,
+                &caller,
                 CentralMailRequest {
                     request_id: id(number),
                     operation: Op::SendMessage {
@@ -72,7 +74,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         .unwrap();
     let result = request(
         f,
-        &f.caller,
+        &caller,
         42110,
         Op::SetWake {
             target: session(&f.caller),
@@ -106,7 +108,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
     let invalid = f
         .host
         .request_central(
-            &f.caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(42111),
                 operation: Op::CancelWake {
@@ -143,7 +145,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         central_storage::BatchOutcome::Applied { .. }
     ));
     assert!(matches!(
-        request(f, &f.caller, 42112, Op::CancelWake { wake_id }).await,
+        request(f, &caller, 42112, Op::CancelWake { wake_id }).await,
         Result::Done(_)
     ));
     exercise_timing_row_corruption(f).await;
@@ -280,7 +282,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         let result = f
             .host
             .request_central(
-                &f.caller,
+                &super::super::super::support::fresh_auth(&f.host, &f.caller),
                 CentralMailRequest {
                     request_id: id(42130 + index),
                     operation: Op::SendMessage {
@@ -334,11 +336,23 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         );
     }
     assert!(matches!(
-        request(f, &f.caller, 42135, Op::DisableAutomation { automation_id }).await,
+        request(
+            f,
+            &super::super::super::support::fresh_auth(&f.host, &f.caller),
+            42135,
+            Op::DisableAutomation { automation_id }
+        )
+        .await,
         Result::Done(_)
     ));
     assert!(matches!(
-        request(f, &f.caller, 42136, Op::CancelWake { wake_id }).await,
+        request(
+            f,
+            &super::super::super::support::fresh_auth(&f.host, &f.caller),
+            42136,
+            Op::CancelWake { wake_id }
+        )
+        .await,
         Result::Done(_)
     ));
 }

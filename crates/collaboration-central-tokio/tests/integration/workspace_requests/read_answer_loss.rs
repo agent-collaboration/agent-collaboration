@@ -46,7 +46,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             f.root
                 .path()
                 .join("central")
-                .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
+                .join(format!("{}.sqlite", f.caller.organization_id().as_str())),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
         .with_engine_publication(
@@ -62,7 +62,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
     let runtime = WorkspaceRuntime::new(
-        f.caller.organization_id.clone(),
+        f.caller.organization_id().clone(),
         central.clone(),
         LoseFirstRead {
             store: store.clone(),
@@ -71,6 +71,12 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         f.clock.clone(),
         Arc::new(ClockIds::new(ArcClock(f.clock.clone()))),
         due_batches,
+    )
+    .with_sign_in_verification(
+        collaboration_central_tokio::NativeSignInTrust::new(settings(&f.keys.url))
+            .unwrap()
+            .for_organization(f.caller.organization_id().clone(), f.clock.clone())
+            .unwrap(),
     );
     let request = m::WorkspaceRequest {
         request_id: Some(id(891)),

@@ -87,11 +87,21 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
 async fn person_create_records_checked_origin_without_machine_rights() {
     let f = ready().await;
     let machine = "019f0000-0000-7000-8000-00000000d751";
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'setup machine','enrolled','[]','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text(machine.into()),SqlValue::Text("019f0000-0000-7000-8000-00000000d752".into())]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'setup-machine-hash','2035-01-01T00:00:00Z','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text("019f0000-0000-7000-8000-00000000d753".into()),SqlValue::Text(machine.into())]).await;
+    let caller = super::super::super::support::machine_caller(
+        f.org.clone(),
+        workspace_model::Caller::Session(workspace_model::SessionAddress {
+            machine_id: "019f0000-0000-7000-8000-00000000d752".parse().unwrap(),
+            endpoint: "codex-local".to_owned().try_into().unwrap(),
+            session_id: "setup-origin-machine".to_owned().try_into().unwrap(),
+        }),
+        "019f0000-0000-7000-8000-00000000d753".to_owned(),
+        NOW_SECONDS,
+    );
+    super::super::super::support::seed_enrollment(&f.host, &caller, machine, "[]", NOW_SECONDS)
+        .await;
     let before = f.read("SELECT * FROM machines ORDER BY machine_id").await;
-    let credentials = f
-        .read("SELECT * FROM machine_credentials ORDER BY credential_id")
+    let approvals = f
+        .read("SELECT * FROM machine_approvals ORDER BY approval_id")
         .await;
     let operation = operation(0x742);
     assert_eq!(
@@ -104,21 +114,10 @@ async fn person_create_records_checked_origin_without_machine_rights() {
         before
     );
     assert_eq!(
-        f.read("SELECT * FROM machine_credentials ORDER BY credential_id")
+        f.read("SELECT * FROM machine_approvals ORDER BY approval_id")
             .await,
-        credentials
+        approvals
     );
-    // B4b approval/generation columns and legacy originInstallation/originMachine
-    // do not exist in this modern schema; no synthetic observations are invented.
-    let caller = collaboration_central_core::WorkspaceCaller {
-        organization_id: f.org.clone(),
-        caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
-            machine_id: machine.to_owned().try_into().unwrap(),
-            endpoint: "codex-local".to_owned().try_into().unwrap(),
-            session_id: "setup-origin-machine".to_owned().try_into().unwrap(),
-        }),
-        credential_hash: "setup-machine-hash".into(),
-    };
     let request = workspace_model::WorkspaceRequest {
         request_id: Some(super::support::operation(0x754).try_into().unwrap()),
         workspace_id: Some(operation.clone().try_into().unwrap()),
@@ -156,17 +155,18 @@ async fn person_create_records_checked_origin_without_machine_rights() {
 async fn generic_create_trims_names_defaults_description_and_shares_name_uniqueness() {
     let f = ready().await;
     let machine = "019f0000-0000-7000-8000-00000000d761";
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'generic machine','enrolled','[]','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text(machine.into()),SqlValue::Text("019f0000-0000-7000-8000-00000000d762".into())]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'generic-machine-hash','2035-01-01T00:00:00Z','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text("019f0000-0000-7000-8000-00000000d763".into()),SqlValue::Text(machine.into())]).await;
-    let caller = collaboration_central_core::WorkspaceCaller {
-        organization_id: f.org.clone(),
-        caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
-            machine_id: machine.to_owned().try_into().unwrap(),
+    let caller = super::super::super::support::machine_caller(
+        f.org.clone(),
+        workspace_model::Caller::Session(workspace_model::SessionAddress {
+            machine_id: "019f0000-0000-7000-8000-00000000d762".parse().unwrap(),
             endpoint: "codex-local".to_owned().try_into().unwrap(),
             session_id: "generic-setup".to_owned().try_into().unwrap(),
         }),
-        credential_hash: "generic-machine-hash".into(),
-    };
+        "019f0000-0000-7000-8000-00000000d763".to_owned(),
+        NOW_SECONDS,
+    );
+    super::super::super::support::seed_enrollment(&f.host, &caller, machine, "[]", NOW_SECONDS)
+        .await;
     let request = |serial, name: &str| workspace_model::WorkspaceRequest {
         request_id: Some(operation(serial).try_into().unwrap()),
         workspace_id: None,

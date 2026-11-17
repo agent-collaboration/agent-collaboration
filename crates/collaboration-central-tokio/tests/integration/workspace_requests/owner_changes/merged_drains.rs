@@ -7,7 +7,7 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
     let project = f.project(2201, area.clone()).await;
     let target = m::ItemRef::Deliverable(f.deliverable(2202, project).await);
     let item = add_backlog(&f, 2203, area).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let cursor_query = || Statement {
         sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
         args: vec![text(&f.workspace)],

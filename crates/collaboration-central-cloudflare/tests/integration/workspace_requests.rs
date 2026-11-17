@@ -134,6 +134,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
     let clock = Arc::new(HeldClock(AtomicI64::new(1_861_920_000_000)));
     let host = WorkerdHost::open(clock).await.unwrap();
     let first = caller();
+    seed_organization(&host, &first).await;
     assert!(matches!(
         call(
             &host,
@@ -148,11 +149,13 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
     ));
-    seed(&host, &first).await;
+    seed_enrollment(&host, &first, id::<m::WorkspaceId>(3), "[]", FIXTURE_NOW).await;
     let workspace = create_workspace(&host, &first).await;
     let mut second = first.clone();
     second.organization_id =
         serde_json::from_str(&format!("\"{}\"", id::<m::WorkspaceId>(99))).unwrap();
+    second = fresh_auth(&host, &second);
+    seed_organization(&host, &second).await;
     assert!(matches!(
         call(
             &host,
@@ -167,7 +170,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
     ));
-    seed(&host, &second).await;
+    seed_enrollment(&host, &second, id::<m::WorkspaceId>(3), "[]", FIXTURE_NOW).await;
     assert!(matches!(
         call(
             &host,
@@ -324,7 +327,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
 async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_are_new() {
     let clock = Arc::new(HeldClock(AtomicI64::new(1_861_920_000_000)));
     let host = WorkerdHost::open(clock.clone()).await.unwrap();
-    let caller = caller();
+    let mut caller = caller();
     seed(&host, &caller).await;
     let workspace = create_workspace(&host, &caller).await;
     let m::ItemRef::Area(area_id) = created(
@@ -411,6 +414,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         m::WorkspaceResult::Refused(m::RefusalReason::RequestIdReused)
     ));
     clock.0.fetch_add(86_400_001, Ordering::SeqCst);
+    caller = fresh_auth(&host, &caller);
     let recreated = call(
         &host,
         &caller,
@@ -482,3 +486,5 @@ mod organization_signin;
 mod engine_v2_support;
 
 mod engine_evidence;
+
+mod machine_link;

@@ -107,7 +107,11 @@ async fn archive_initiative_update_role_release_and_any_member_backlog_edit_use_
     let mut nonlead = f.caller.clone();
     let mut nonlead_session = session(&nonlead);
     nonlead_session.session_id = "nonlead-editor".to_owned().try_into().unwrap();
-    nonlead.caller = m::Caller::Session(nonlead_session);
+    nonlead = collaboration_central_core::WorkspaceCaller::new(
+        nonlead.connection().clone(),
+        m::Caller::Session(nonlead_session),
+    )
+    .unwrap();
     let nonlead_item = created(
         call(
             &f.host,

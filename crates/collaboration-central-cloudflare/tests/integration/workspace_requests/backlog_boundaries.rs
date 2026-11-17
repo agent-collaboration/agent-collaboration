@@ -44,7 +44,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
                         args: vec![
                             text(serde_json::to_string(&[&f.workspace, &other]).unwrap()),
                             text(f.caller.caller.machine_id())

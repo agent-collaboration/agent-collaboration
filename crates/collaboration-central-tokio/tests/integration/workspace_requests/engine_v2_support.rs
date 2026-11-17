@@ -41,7 +41,7 @@ pub(super) fn next_mark(at: Time) -> Time {
 pub(super) async fn runtime(fixture: &Fixture) -> Runtime {
     fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap()
 }

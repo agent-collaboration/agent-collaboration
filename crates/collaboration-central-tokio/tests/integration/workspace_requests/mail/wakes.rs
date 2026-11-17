@@ -7,10 +7,11 @@ use workspace_model::central_mail::{
 };
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
+    let caller = fixture.fresh_caller(&fixture.caller).await;
     fixture
         .host
         .request_central(
-            &fixture.caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,
@@ -40,7 +41,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let now = fixture.clock.utc_now();
@@ -184,7 +185,7 @@ async fn native_driver_fires_after_manual_clock_advance() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
@@ -215,7 +216,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     let mut fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
@@ -256,7 +257,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     fixture.reopen().await;
     let reopened = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     assert!(reopened.statement_host().alarm().is_some());

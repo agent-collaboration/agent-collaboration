@@ -45,7 +45,8 @@ async fn owning_rows(f: &Fixture) -> Vec<ReadOutcome> {
         "SELECT * FROM request_log",
         "SELECT * FROM workspaces",
         "SELECT * FROM machines",
-        "SELECT * FROM machine_credentials",
+        "SELECT * FROM machine_approvals",
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
     ] {
         rows.push(f.read(sql).await);
     }

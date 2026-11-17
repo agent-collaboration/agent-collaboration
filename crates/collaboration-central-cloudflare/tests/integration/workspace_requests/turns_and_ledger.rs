@@ -264,7 +264,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
 
 #[tokio::test]
 async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     let area = m::WorkspaceOperation::CreateArea {
         name: name("Same content"),
     };
@@ -293,6 +293,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     };
     let first_ledger = runtime.statement_host().read(ledger_query()).await.unwrap();
     f.clock.0.fetch_add(86_400_001, Ordering::SeqCst);
+    f.caller = fresh_auth(&f.host, &f.caller);
     let next = f.call(360, area).await;
     assert!(matches!(
         next.result,

@@ -37,7 +37,7 @@ fn fired() -> ProbeAnswer {
 
 #[tokio::test]
 async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous_alarm() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
     let (pending, pending_group) = (probe_id(30000), probe_id(30001));
@@ -60,17 +60,14 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
             .take_alarm_publication_failures()
             .is_empty()
     );
-    // The fixture credential expires in 2030; the upper edge needs a live one.
-    raw(
-        &runtime,
-        "UPDATE machine_credentials SET expires_at=?",
-        vec![text("2263-01-01T00:00:00Z")],
-    )
-    .await;
     // A due batch claimed here has no representable 30 s floor, so the
     // decision fails only after the database committed.
     let edge = MAX_ALARM_UNIX_MILLIS - 10_000;
-    fixture.clock.set_utc(from_ms(edge));
+    // The upper edge needs organization authority and a machine token live then.
+    fixture.relocate_authority(from_ms(edge)).await;
+    fixture.refresh_caller().await;
+    // Relocating publishes at the edge too; only the request's failures are measured.
+    let _relocation_failures = runtime.statement_host().take_alarm_publication_failures();
 
     let answer = runtime
         .request_probe(
@@ -191,7 +188,7 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
     assert_eq!(
         fixture
             .host
-            .central(&fixture.caller.organization_id)
+            .central(fixture.caller.organization_id())
             .await
             .err(),
         Some(unpublishable().failure),

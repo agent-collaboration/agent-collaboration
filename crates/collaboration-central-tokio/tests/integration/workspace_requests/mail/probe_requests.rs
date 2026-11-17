@@ -15,7 +15,7 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let item = uuid(8600);
@@ -96,11 +96,11 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
 
 #[tokio::test]
 async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_millisecond_boundary() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -126,6 +126,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
         .await
         .unwrap();
     fixture.clock.set_utc(start + chrono::Duration::hours(24));
+    fixture.refresh_caller().await;
     assert_eq!(
         runtime.request_probe(&fixture.caller, first).await.unwrap(),
         original
@@ -150,6 +151,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
     fixture
         .clock
         .set_utc(start + chrono::Duration::hours(24) + chrono::Duration::milliseconds(1));
+    fixture.refresh_caller().await;
 
     let answer = runtime
         .request_probe(
@@ -205,7 +207,7 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     for (number, kind, applied) in [
@@ -294,7 +296,7 @@ async fn a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let group = uuid(8630);

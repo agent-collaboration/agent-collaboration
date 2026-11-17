@@ -143,7 +143,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     let _: bool = runtime.control("hold", &pause).await.unwrap();
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = super::super::support::fresh_auth(&f.host, &f.caller);
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -205,6 +205,8 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     assert_eq!(notice.rows, vec![vec![text(&later)]]);
     let posted_position: m::ChangePosition =
         u64::try_from(position.get()).unwrap().try_into().unwrap();
+    // The observer's token predates the clock moving back; mint one for now.
+    let observer = super::super::support::fresh_auth(&f.host, &observer);
     let inbox = call(
         &f.host,
         &observer,

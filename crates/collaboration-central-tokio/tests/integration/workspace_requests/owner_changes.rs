@@ -151,7 +151,7 @@ async fn r21_close_persists_note_reference_and_change_and_refuses_closed_edits()
         matches!(references.result, m::WorkspaceResult::Done(m::WorkspaceAnswer::Page { items, .. })
         if matches!(&items[..], [m::ItemView::Reference(reference)] if reference.source==m::ReferenceSource::BacklogItem(first.clone()) && reference.target.as_item_ref()==&target))
     );
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let effects = runtime.inspect_workspace(&f.workspace, Statement {
         sql: "SELECT (SELECT COUNT(*) FROM changes WHERE item_kind='backlogItem' AND item_id=?1 AND change_kind='stateChanged'),(SELECT COUNT(*) FROM item_references WHERE source_kind='backlogItem' AND source_id=?2)",
         args: vec![text(&first), text(&second)],
@@ -207,7 +207,7 @@ async fn r21_invalid_close_and_late_reference_failure_leave_all_effects_unapplie
         m::WorkspaceResult::NotFound { .. }
     ));
     assert_eq!(show_backlog(&f, &item).await, original);
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let snapshot = || Statement {
         sql: "SELECT status,closing_note,(SELECT COUNT(*) FROM item_references),(SELECT COUNT(*) FROM changes) FROM backlog_items WHERE item_id=?",
         args: vec![text(&item)],
@@ -266,7 +266,11 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     let mut other = f.caller.clone();
     let mut address = session(&other);
     address.session_id = "owner-change-self-join".to_owned().try_into().unwrap();
-    other.caller = m::Caller::Session(address);
+    other = collaboration_central_core::WorkspaceCaller::new(
+        other.connection().clone(),
+        m::Caller::Session(address),
+    )
+    .unwrap();
     let join = |role| m::WorkspaceOperation::JoinThread {
         thread_id: thread.clone(),
         role,
@@ -309,7 +313,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
     created(call(&f.host, &other, Some(f.workspace.clone()), 2045, post()).await);
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let creator = runtime
         .inspect_workspace(
             &f.workspace,
@@ -367,7 +371,11 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     let mut fresh = other.clone();
     let mut address = session(&fresh);
     address.session_id = "fresh-self-participant".to_owned().try_into().unwrap();
-    fresh.caller = m::Caller::Session(address);
+    fresh = collaboration_central_core::WorkspaceCaller::new(
+        fresh.connection().clone(),
+        m::Caller::Session(address),
+    )
+    .unwrap();
     // Register the third actor through an ordinary read, before it is a member.
     call(
         &f.host,

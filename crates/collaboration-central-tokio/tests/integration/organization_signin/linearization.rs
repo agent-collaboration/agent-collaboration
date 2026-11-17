@@ -1,5 +1,6 @@
 use super::support::*;
 use collaboration_central_core::PausePoint;
+use router_clock::RuntimeClock;
 use serde_json::json;
 use std::time::Duration;
 
@@ -150,45 +151,10 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
 #[tokio::test]
 async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_alarm_calls() -> Result
 {
-    use collaboration_central_core::WorkspaceCaller;
-    use router_clock::RuntimeClock;
-    use workspace_model::central_mail::{
-        CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
-    };
     let mut f = Fixture::new().await?;
     f.seed_machine().await?;
-    let target = workspace_model::SessionAddress {
-        machine_id: MACHINE.to_owned().try_into()?,
-        endpoint: "codex-local".to_owned().try_into()?,
-        session_id: "wake-session".to_owned().try_into()?,
-    };
-    let caller = WorkspaceCaller {
-        organization_id: org(A)?,
-        caller: workspace_model::Caller::Session(target.clone()),
-        credential_hash: "signin-fixture-hash".into(),
-    };
-    let due = chrono::DateTime::from_timestamp(
-        (f.clock.utc_now().timestamp().div_euclid(300) + 1) * 300,
-        0,
-    )
-    .ok_or("wake grid mark exceeds timestamp range")?;
-    let answer = f
-        .host
-        .request_central(
-            &caller,
-            CentralMailRequest {
-                request_id: signed::fresh_request_id(signed::NOW_SECONDS)?.try_into()?,
-                operation: CentralMailOperation::SetWake {
-                    target,
-                    due_at: due,
-                    text: "pending before first stamp".to_owned().try_into()?,
-                },
-            },
-        )
-        .await?;
-    let CentralMailResult::Done(CentralMailAnswer::WakeSet { wake_id, .. }) = answer else {
-        return Err("unstamped wake setup refused".into());
-    };
+    // Pending durable work predates provisioning; C2 correctly cannot authenticate an unstamped org.
+    let (wake_id, due) = f.seed_pending_wake("wake-session").await?;
     let runtime = f.runtime(A).await?;
     assert_eq!(runtime.statement_host().alarm(), None);
     let mut alarm = runtime.statement_host().subscribe_alarm();

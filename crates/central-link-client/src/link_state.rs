@@ -256,7 +256,10 @@ impl LinkClient {
             }
             LinkFrame::Ping
             | LinkFrame::Data(
-                DataFrame::Welcome { .. } | DataFrame::Request { .. } | DataFrame::Ack { .. },
+                DataFrame::Welcome { .. }
+                | DataFrame::Request { .. }
+                | DataFrame::Batch { .. }
+                | DataFrame::Ack { .. },
             ) => Err(ClientError::UnexpectedFrame),
         }
     }

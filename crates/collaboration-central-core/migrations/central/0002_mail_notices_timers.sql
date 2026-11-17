@@ -1,6 +1,6 @@
 CREATE TABLE workspace_drains (workspace_id TEXT PRIMARY KEY REFERENCES workspaces(workspace_id), drained_through_position INTEGER NOT NULL, drain_due_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE INDEX workspace_drains_due ON workspace_drains(drain_due_at) WHERE drain_due_at IS NOT NULL;
-CREATE TABLE messages (message_id TEXT PRIMARY KEY, sender TEXT NOT NULL, target_machine_id TEXT NOT NULL REFERENCES machines(machine_id), target_session TEXT NOT NULL, message_kind TEXT NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL, failure_reason TEXT, source_change_id TEXT, recipient_actor TEXT, source_workspace_id TEXT, source_thread_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE messages (message_id TEXT PRIMARY KEY, sender TEXT NOT NULL, target_machine_id TEXT NOT NULL REFERENCES machines(installation_id), target_session TEXT NOT NULL, message_kind TEXT NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL, failure_reason TEXT, source_change_id TEXT, recipient_actor TEXT, source_workspace_id TEXT, source_thread_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE INDEX messages_queued_by_machine ON messages(target_machine_id, message_id) WHERE state = 'queued';
 CREATE UNIQUE INDEX messages_one_per_source ON messages(source_change_id, recipient_actor) WHERE source_change_id IS NOT NULL;
 CREATE INDEX messages_queued_by_thread ON messages(source_workspace_id, source_thread_id, recipient_actor) WHERE state = 'queued';

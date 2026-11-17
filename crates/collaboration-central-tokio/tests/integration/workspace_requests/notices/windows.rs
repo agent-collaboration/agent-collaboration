@@ -9,7 +9,7 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
     let area = f.area(7250).await;
     let thread = f.thread(7251, area).await;
     let (_, recipient) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
         .statement_host()
         .read(Statement {

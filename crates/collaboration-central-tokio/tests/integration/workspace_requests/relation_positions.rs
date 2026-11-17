@@ -84,7 +84,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
             matches!(page.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Page{items,next_cursor:None}) if items.iter().map(m::ItemView::item_ref).collect::<Vec<_>>()==vec![second])
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     for item in [
         &first_reference,
         &second_reference,

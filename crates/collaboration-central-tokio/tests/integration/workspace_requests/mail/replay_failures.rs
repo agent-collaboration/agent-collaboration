@@ -29,7 +29,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
@@ -102,7 +102,7 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())

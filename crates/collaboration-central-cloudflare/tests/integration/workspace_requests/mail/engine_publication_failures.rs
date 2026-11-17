@@ -34,15 +34,6 @@ fn fired() -> ProbeAnswer {
         },
     }
 }
-/// The fixture credential expires in 2030; the upper range needs a live one.
-async fn credential_through_the_upper_range(runtime: &Runtime) {
-    raw(
-        runtime,
-        "UPDATE machine_credentials SET expires_at=?",
-        vec![text("2263-01-01T00:00:00Z")],
-    )
-    .await;
-}
 async fn last_receipt(runtime: &Runtime) -> AlarmReceipt {
     let receipt: Option<AlarmReceipt> = runtime.control("raw-alarm-status", &()).await.unwrap();
     receipt.unwrap()
@@ -50,9 +41,18 @@ async fn last_receipt(runtime: &Runtime) -> AlarmReceipt {
 
 #[tokio::test]
 async fn an_unpublishable_request_batch_rolls_back_inside_its_transaction() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = now(&fixture);
+    // The upper range needs organization authority live there. Relocate an hour
+    // before it, with nothing due yet, while a later grid mark is publishable.
+    set_now(
+        &fixture,
+        chrono::DateTime::from_timestamp_millis(NO_LATER_MARK_UNIX_MILLIS - 3_600_000).unwrap(),
+    );
+    fixture.caller =
+        super::super::support::relocate_authority(&fixture.host, &fixture.caller).await;
+    set_now(&fixture, start);
     let (overdue, overdue_group) = (probe_id(30000), probe_id(30001));
     seed_probe(
         &runtime,
@@ -62,8 +62,9 @@ async fn an_unpublishable_request_batch_rolls_back_inside_its_transaction() {
         "overdue",
     )
     .await;
-    credential_through_the_upper_range(&runtime).await;
     set_now(&fixture, no_later_mark());
+    // A machine token minted at the edge itself.
+    fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
 
     let result = send_message(&fixture, 30002).await;
 

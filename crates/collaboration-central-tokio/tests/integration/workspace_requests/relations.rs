@@ -190,7 +190,7 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
         );
     }
     // Each removal leaves its own change; removals are not inbox items.
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let removals = runtime
         .inspect_workspace(
             &f.workspace,

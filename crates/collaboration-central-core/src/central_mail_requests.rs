@@ -32,10 +32,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
         use mail::{CentralMailRefusal as Refusal, CentralMailResult as Result};
+        let _turn = self.take_central_turn().await;
         if let Err(reason) = self.admit_workspace(caller, None).await? {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
-        let identity = match &caller.caller {
+        let identity = match caller.caller() {
             m::Caller::Session(session) => m::Identity::AgentSession {
                 session: session.clone(),
             },
@@ -44,7 +45,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             },
         };
         let digest = crate::workspace_request_log::digest(&request.operation)?;
-        let _turn = self.take_central_turn().await;
         let now = self.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let rows = self
@@ -101,7 +101,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
             &request.operation
         {
-            if !matches!(caller.caller, m::Caller::Session(_)) {
+            if !matches!(caller.caller(), m::Caller::Session(_)) {
                 Err(Refusal::NotSession)
             } else {
                 let encoded =

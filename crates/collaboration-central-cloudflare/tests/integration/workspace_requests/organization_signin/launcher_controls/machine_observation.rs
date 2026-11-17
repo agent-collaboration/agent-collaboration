@@ -17,7 +17,8 @@ fn write_plan(path: &Path, keys: &signed::SignInKeys) -> ConformanceResult<()> {
     std::fs::write(
         path,
         serde_json::to_vec(&json!({"textBindings":{
-            "CENTRAL_SIGN_IN_ISSUER":signed::ISSUER,
+            "CENTRAL_MACHINE_AUDIENCE":signed::MACHINE_AUDIENCE,
+                "CENTRAL_SIGN_IN_ISSUER":signed::ISSUER,
             "CENTRAL_SIGN_IN_AUDIENCE":signed::AUDIENCE,
             "CENTRAL_SIGN_IN_JWKS_URL":"https://signin.test/.well-known/jwks.json",
             "CENTRAL_ADMIN_AUDIENCE":signed::ADMIN_AUDIENCE,

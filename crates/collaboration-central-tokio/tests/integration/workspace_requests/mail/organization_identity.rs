@@ -74,7 +74,7 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let (wake_id, due) = set_wake(&fixture, 1500).await;
@@ -123,7 +123,7 @@ async fn matching_stamp_restores_timer_on_startup() {
     fixture.reopen().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let rows = runtime
@@ -137,8 +137,14 @@ async fn matching_stamp_restores_timer_on_startup() {
     assert_eq!(
         rows.rows,
         vec![vec![
-            text(fixture.caller.organization_id.as_str()),
-            text("fixture organization statement")
+            text(fixture.caller.organization_id().as_str()),
+            text(
+                signed::stamp(
+                    organization().as_str(),
+                    fixture.clock.utc_now().timestamp() - 3600
+                )
+                .unwrap()
+            )
         ]]
     );
     assert_eq!(
@@ -180,7 +186,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         let fixture = Fixture::new().await;
         let runtime = fixture
             .host
-            .central(&fixture.caller.organization_id)
+            .central(fixture.caller.organization_id())
             .await
             .unwrap();
         let (wake_id, due) = set_wake(&fixture, number).await;
@@ -208,12 +214,16 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         fixture.host.close().await;
         // Isolation (O4): opening the host no longer fails for every organization;
         // the invalid one is still refused with no business effects.
-        let reopened = TokioWorkspaceHost::open(fixture.root.path(), fixture.clock.clone())
-            .await
-            .unwrap();
+        let reopened = TokioWorkspaceHost::open_with_signin(
+            fixture.root.path(),
+            fixture.clock.clone(),
+            settings(&fixture.keys.url),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             reopened
-                .central(&fixture.caller.organization_id)
+                .central(fixture.caller.organization_id())
                 .await
                 .err(),
             Some(expected.clone())
@@ -222,7 +232,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         let raw = ObjectStorage::new(
             fixture.root.path().join("central").join(format!(
                 "{}.sqlite",
-                fixture.caller.organization_id.as_str()
+                fixture.caller.organization_id().as_str()
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         );

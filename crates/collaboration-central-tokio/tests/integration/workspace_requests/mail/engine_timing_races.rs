@@ -207,7 +207,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         ObjectStorage::new(
             fixture.root.path().join("central").join(format!(
                 "{}.sqlite",
-                fixture.caller.organization_id.as_str()
+                fixture.caller.organization_id().as_str()
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
@@ -222,7 +222,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
     let runtime = Arc::new(WorkspaceRuntime::new(
-        fixture.caller.organization_id.clone(),
+        fixture.caller.organization_id().clone(),
         central.clone(),
         WorkspaceStore(workspace.clone()),
         fixture.clock.clone(),

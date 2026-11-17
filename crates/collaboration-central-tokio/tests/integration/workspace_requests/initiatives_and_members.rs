@@ -137,7 +137,11 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
     let mut other = f.caller.clone();
     let mut other_session = session(&other);
     other_session.session_id = "other-participant".to_owned().try_into().unwrap();
-    other.caller = m::Caller::Session(other_session);
+    other = collaboration_central_core::WorkspaceCaller::new(
+        other.connection().clone(),
+        m::Caller::Session(other_session),
+    )
+    .unwrap();
     let join = m::WorkspaceOperation::JoinThread {
         thread_id: thread.clone(),
         role: m::MemberRole::Observer,
@@ -205,7 +209,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             thread_id: thread.clone()
         })
     );
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
         .statement_host()
         .read(Statement {

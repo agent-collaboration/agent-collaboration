@@ -7,7 +7,7 @@ use workspace_model::central_mail::{
 
 async fn request(
     fixture: &Fixture,
-    caller: &collaboration_central_core::WorkspaceCaller,
+    caller: &FixtureCaller,
     number: u32,
     operation: Operation,
 ) -> Result {
@@ -100,26 +100,20 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
     second.machine_id = id(1001);
     second.session_id = "second-session".to_owned().try_into().unwrap();
     second_caller.caller = m::Caller::Session(second.clone());
-    second_caller.credential_hash = "second-credential-digest".to_owned();
-    let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    use central_storage::{
-        AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
-    };
-    let statements = vec![
-        ("INSERT INTO machines (machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,?,'enrolled',?,?,?)", vec![text(&second.machine_id), text(id::<m::WorkspaceId>(1005)), text("Second"), text("[]"), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]),
-        ("INSERT INTO machine_credentials (credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)", vec![text(id::<m::WorkspaceId>(1006)), text(&second.machine_id), text(&second_caller.credential_hash), text("2030-01-01T00:00:00Z"), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]),
-    ].into_iter().map(|(sql, args)| GuardedStatement { statement: Statement { sql, args }, expect: RowExpectation::Exactly(1) }).collect();
-    assert!(matches!(
-        runtime
-            .statement_host()
-            .run_batch(StatementBatch {
-                statements,
-                alarm: AlarmUpdate::Unchanged
-            })
-            .await
-            .unwrap(),
-        BatchOutcome::Applied { .. }
-    ));
+    second_caller = machine_caller(
+        fixture.caller.organization_id.clone(),
+        second_caller.caller,
+        id::<m::WorkspaceId>(1006).to_string(),
+        FIXTURE_NOW,
+    );
+    seed_enrollment(
+        &fixture.host,
+        &second_caller,
+        id::<m::WorkspaceId>(1005),
+        "[]",
+        FIXTURE_NOW,
+    )
+    .await;
     // Resolve the second session as an admitted caller before targeting it.
     assert!(matches!(
         request(
@@ -162,6 +156,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         .clock
         .0
         .fetch_add(86_400_001, std::sync::atomic::Ordering::SeqCst);
+    fixture.caller = fresh_auth(&fixture.host, &fixture.caller);
     let after_expiry = request(&fixture, &fixture.caller, 1000, operation).await;
     assert!(matches!(after_expiry, Result::Done(Answer::Queued { .. })));
     assert_ne!(after_expiry, answer);
@@ -169,6 +164,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         .clock
         .0
         .fetch_add(86_400_001, std::sync::atomic::Ordering::SeqCst);
+    fixture.caller = fresh_auth(&fixture.host, &fixture.caller);
     assert!(matches!(
         request(
             &fixture,

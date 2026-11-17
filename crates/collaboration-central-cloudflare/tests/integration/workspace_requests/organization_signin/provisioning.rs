@@ -348,23 +348,41 @@ async fn competing_first_inputs_and_renewals_share_one_org_turn() {
     f.close().await;
 }
 #[tokio::test]
-async fn provisioning_does_not_rewrite_existing_workspace_machine_or_credential_rows() {
+async fn provisioning_does_not_rewrite_existing_workspace_machine_or_enrollment_rows() {
     use central_storage::SqlValue;
     let f = Fixture::new().await;
     f.execute("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d231','Existing','active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d232','019f0000-0000-7000-8000-00000000d233','Existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d234','019f0000-0000-7000-8000-00000000d232','fixture credential','2040-01-01T00:00:00Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
+    let caller = super::super::support::machine_caller(
+        f.org.clone(),
+        workspace_model::Caller::Person {
+            machine_id: "019f0000-0000-7000-8000-00000000d233".parse().unwrap(),
+            person_id: "019f0000-0000-7000-8000-00000000d235".parse().unwrap(),
+        },
+        "019f0000-0000-7000-8000-00000000d234".to_owned(),
+        NOW_SECONDS,
+    );
+    super::super::support::seed_enrollment(
+        &f.host,
+        &caller,
+        "019f0000-0000-7000-8000-00000000d232",
+        "[]",
+        NOW_SECONDS,
+    )
+    .await;
+    assert!(
+        f.read("SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'")
+            .await
+            .rows
+            .is_empty()
+    );
     let workspaces = f.read("SELECT * FROM workspaces").await;
     let machines = f.read("SELECT * FROM machines").await;
-    let credentials = f.read("SELECT * FROM machine_credentials").await;
+    let approvals = f.read("SELECT * FROM machine_approvals").await;
     assert_eq!(f.provision().await.0, 200);
     assert_eq!(f.provision().await.0, 200);
     assert_eq!(f.read("SELECT * FROM workspaces").await, workspaces);
     assert_eq!(f.read("SELECT * FROM machines").await, machines);
-    assert_eq!(
-        f.read("SELECT * FROM machine_credentials").await,
-        credentials
-    );
+    assert_eq!(f.read("SELECT * FROM machine_approvals").await, approvals);
     assert_eq!(
         f.counts().await.rows[0][0],
         SqlValue::Integer(1.try_into().unwrap())

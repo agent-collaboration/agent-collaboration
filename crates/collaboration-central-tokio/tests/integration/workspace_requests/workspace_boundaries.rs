@@ -21,7 +21,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
     else {
         panic!("workspace");
     };
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
             .statement_host()
@@ -34,7 +34,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
                                 serde_json::to_string(&[&f.workspace, &other.workspace_id])
                                     .unwrap()
                             ),
-                            text(f.caller.caller.machine_id())
+                            text(id::<m::WorkspaceId>(3))
                         ]
                     },
                     expect: RowExpectation::Exactly(1)
@@ -307,7 +307,7 @@ async fn backlog_removal_cascades_both_reference_directions_and_literal_link_tex
         m::WorkspaceOperation::RemoveBacklogItem { item_id: item },
     )
     .await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let rows = runtime
         .inspect_workspace(
             &f.workspace,
@@ -341,10 +341,14 @@ async fn host_stamped_person_uses_the_same_allowance_and_has_a_distinct_typed_id
     let f = Fixture::new().await;
     let area = f.area(830).await;
     let mut person = f.caller.clone();
-    person.caller = m::Caller::Person {
-        machine_id: f.caller.caller.machine_id().clone(),
-        person_id: id(831),
-    };
+    person = collaboration_central_core::WorkspaceCaller::new(
+        person.connection().clone(),
+        m::Caller::Person {
+            machine_id: f.caller.caller().machine_id().clone(),
+            person_id: id(831),
+        },
+    )
+    .unwrap();
     let operation = m::WorkspaceOperation::CreateThread {
         area_id: area,
         title: name("Person's thread"),

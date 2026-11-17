@@ -11,7 +11,11 @@ async fn joined_observer(
     let mut observer = f.caller.clone();
     let mut address = session(&observer);
     address.session_id = "notice-observer".to_owned().try_into().unwrap();
-    observer.caller = m::Caller::Session(address);
+    observer = collaboration_central_core::WorkspaceCaller::new(
+        observer.connection().clone(),
+        m::Caller::Session(address),
+    )
+    .unwrap();
     let joined = call(
         &f.host,
         &observer,
@@ -27,7 +31,7 @@ async fn joined_observer(
         joined.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
         .statement_host()
         .read(Statement {
@@ -65,7 +69,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
     let area = f.area(7101).await;
     let thread = f.thread(7102, area).await;
     let (_, actor) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let first_time = f.clock.utc_now();
     created(f.call(7103, post(&thread, vec![])).await);
     let read_window = || Statement {
@@ -122,7 +126,7 @@ async fn concurrent_drains_hold_workspace_turn_and_do_not_duplicate_notice() {
     let area = f.area(7110).await;
     let thread = f.thread(7111, area).await;
     let (_, actor) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut held = runtime
         .pause_points()
         .hold(&f.workspace, PausePoint::BeforeDrainCommit);
@@ -241,7 +245,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
             .await
             .unwrap();
         assert!(matches!(sent, CentralMailResult::Done(_)));
-        let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+        let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
         let before = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             before.rows,
@@ -300,7 +304,7 @@ async fn restart_driver_drains_applied_workspace_write_without_another_request()
     let area = f.area(7130).await;
     let thread = f.thread(7131, area).await;
     let (_, actor) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut held = runtime
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
@@ -341,7 +345,7 @@ async fn restart_driver_drains_applied_workspace_write_without_another_request()
     let _ = request.await;
     drop(held);
     f.reopen().await;
-    let reopened = f.host.central(&f.caller.organization_id).await.unwrap();
+    let reopened = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut drained = reopened
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterDrainCommit);
@@ -371,7 +375,7 @@ async fn session_cadence_sets_nondefault_window_deadline() {
     let area = f.area(7140).await;
     let thread = f.thread(7141, area).await;
     let (observer, actor) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let defaults = runtime
         .statement_host()
         .read(Statement {

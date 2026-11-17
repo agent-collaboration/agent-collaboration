@@ -57,6 +57,7 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
         matches!(serde_json::from_str::<MessageBody>(body).unwrap(), MessageBody::Notice { items } if items.len() == 1)
     );
     assert_eq!(before.rows[0][3], text("queued"));
+    let observer = fresh_auth(&f.host, &observer);
     let left = call(
         &f.host,
         &observer,

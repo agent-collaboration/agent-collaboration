@@ -1,13 +1,9 @@
 //! Native notice decisions and durable drain coordination.
 use super::{SqlValue, Statement, support::*};
-use collaboration_central_core::WorkspaceCaller;
 use std::sync::atomic::Ordering;
 use workspace_model as m;
 
-async fn joined_observer(
-    f: &Fixture,
-    thread: &m::ThreadId,
-) -> (WorkspaceCaller, m::ActorIdentityId) {
+async fn joined_observer(f: &Fixture, thread: &m::ThreadId) -> (FixtureCaller, m::ActorIdentityId) {
     let mut observer = f.caller.clone();
     let mut address = session(&observer);
     address.session_id = "notice-observer".to_owned().try_into().unwrap();
@@ -100,7 +96,7 @@ async fn posted_notice_item(
 
 #[tokio::test]
 async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     let area = f.area(7101).await;
     let thread = f.thread(7102, area).await;
     let (_, actor) = joined_observer(&f, &thread).await;
@@ -149,6 +145,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
     assert_eq!(&second.rows[0][..2], &first.rows[0][..2]);
     assert_eq!(second.rows[0][2], SqlValue::Integer(2.try_into().unwrap()));
     f.clock.0.fetch_add(420_000, Ordering::SeqCst);
+    f.caller = fresh_auth(&f.host, &f.caller);
     expected.push(posted_notice_item(&f, 7106, &thread, &author, vec![]).await);
     let third = runtime.statement_host().read(read_window()).await.unwrap();
     assert_eq!(&third.rows[0][..2], &first.rows[0][..2]);

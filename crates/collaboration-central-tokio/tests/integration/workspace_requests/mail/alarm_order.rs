@@ -11,7 +11,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
