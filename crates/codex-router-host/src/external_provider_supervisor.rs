@@ -334,7 +334,12 @@ impl ExternalProviderSupervisor {
         };
         let result = Err(unavailable_failure(operation_id.clone(), None));
         self.inner
-            .publish_result(operation_id.clone(), &live, result)
+            .publish_result(
+                operation_id.clone(),
+                &live,
+                result,
+                provider_operation_finish::Retention::Settled,
+            )
             .await;
         true
     }
@@ -703,6 +708,7 @@ impl SupervisorInner {
         operation_id: OperationId,
         live: &LiveOperation,
         result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
+        retention: provider_operation_finish::Retention,
     ) {
         *live.result.lock().await = Some(result);
         live.published.store(true, Ordering::Release);
@@ -713,14 +719,24 @@ impl SupervisorInner {
             .live_operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        operations.terminal_order.push_back(operation_id);
-        while operations.terminal_order.len() > MAX_RETAINED_SETTLEMENTS {
-            if let Some(expired) = operations.terminal_order.pop_front() {
-                operations.operations.remove(&expired);
-                // A turn's approver goes with its retained settlement, unless
-                // a steer in flight still needs it.
-                self.release_turn_approver(expired);
+        let order = match retention {
+            provider_operation_finish::Retention::Settled => &mut operations.terminal_order,
+            provider_operation_finish::Retention::PersistenceFailed => {
+                &mut operations.persistence_failed_order
             }
+        };
+        order.push_back(operation_id);
+        let mut expired_operations = Vec::new();
+        while order.len() > MAX_RETAINED_SETTLEMENTS {
+            if let Some(expired) = order.pop_front() {
+                expired_operations.push(expired);
+            }
+        }
+        for expired in expired_operations {
+            operations.operations.remove(&expired);
+            // A turn's approver goes with its retained settlement, unless a
+            // steer in flight still needs it.
+            self.release_turn_approver(expired);
         }
     }
 }

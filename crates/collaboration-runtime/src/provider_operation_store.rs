@@ -146,6 +146,10 @@ pub enum ProviderOperationAdmissionResult {
 pub struct ProviderOperationStore {
     pub(crate) connection: SqliteConnection,
     commits: CommitSignal,
+    /// Test support (StoreFault, design note §11.8): the next terminal write
+    /// of this operation fails without touching its row.
+    #[cfg(any(test, feature = "test-support"))]
+    terminal_write_fault: Option<OperationId>,
 }
 
 /// Runs one write statement as a one-statement transaction through
@@ -210,6 +214,8 @@ impl ProviderOperationStore {
         Ok(Self {
             connection,
             commits: CommitSignal::new(),
+            #[cfg(any(test, feature = "test-support"))]
+            terminal_write_fault: None,
         })
     }
 
@@ -488,6 +494,13 @@ impl ProviderOperationStore {
         terminal_stop_reason: Option<ProviderPromptStopReason>,
         terminal_at_ms: i64,
     ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if self.terminal_write_fault.as_ref() == Some(operation_id) {
+            self.terminal_write_fault = None;
+            return Err(ProviderOperationStoreError::Database(
+                sqlx::Error::Protocol("injected terminal write failure".to_owned()),
+            ));
+        }
         let encoded_stop_reason = terminal_stop_reason.as_ref().map(encode_enum).transpose()?;
         let result = sqlx::query!(
             "UPDATE provider_operations
@@ -800,6 +813,15 @@ async fn validate_schema(
         Ok(())
     } else {
         Err(ProviderOperationStoreError::InvalidRecord)
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ProviderOperationStore {
+    /// StoreFault (design note §11.8): the next terminal write of
+    /// `operation_id` fails and leaves its row as it was.
+    pub fn fail_next_terminal_write_of(&mut self, operation_id: &OperationId) {
+        self.terminal_write_fault = Some(operation_id.clone());
     }
 }
 

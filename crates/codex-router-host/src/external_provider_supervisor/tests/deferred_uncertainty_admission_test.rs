@@ -266,7 +266,11 @@ impl StoppedControl {
     }
 }
 
-fn recorded_frames(receipt: &std::path::Path, method: &str, text: Option<&str>) -> usize {
+pub(super) fn recorded_frames(
+    receipt: &std::path::Path,
+    method: &str,
+    text: Option<&str>,
+) -> usize {
     std::fs::read(receipt)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Vec<serde_json::Value>>(&bytes).ok())

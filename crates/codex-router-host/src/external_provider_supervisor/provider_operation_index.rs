@@ -27,6 +27,9 @@ use tokio::sync::{Mutex, Notify};
 pub(super) struct LiveOperations {
     pub(super) operations: HashMap<OperationId, Arc<LiveOperation>>,
     pub(super) terminal_order: VecDeque<OperationId>,
+    /// Results whose durable write failed, in their own bounded window
+    /// (design note §12.5): later settlements never evict them.
+    pub(super) persistence_failed_order: VecDeque<OperationId>,
 }
 
 /// One operation's live owner: its result once published, its binding and
