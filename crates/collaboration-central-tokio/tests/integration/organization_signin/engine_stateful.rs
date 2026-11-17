@@ -180,8 +180,7 @@ impl EngineModel {
             }) else {
                 continue;
             };
-            let outcome =
-                self.attempt_outcome(index, unit.batch_start_unix_millis, &mut consumed);
+            let outcome = self.attempt_outcome(index, unit.batch_start_unix_millis, &mut consumed);
             let subject = &mut self.subjects[index];
             let earliest = subject
                 .expected
