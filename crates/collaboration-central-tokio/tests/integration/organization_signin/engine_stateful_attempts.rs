@@ -103,4 +103,7 @@ pub(super) enum AttemptOutcome {
     NotApplied,
     /// The subject was already finished: superseded, never a failure.
     Stale,
+    /// Failing and listed by the look-ahead before its next try: the control
+    /// gate skips it until the next try (R4 retries on the mark).
+    Skipped,
 }

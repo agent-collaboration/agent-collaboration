@@ -180,7 +180,8 @@ impl EngineModel {
             }) else {
                 continue;
             };
-            let outcome = self.attempt_outcome(index, &mut consumed);
+            let outcome =
+                self.attempt_outcome(index, unit.batch_start_unix_millis, &mut consumed);
             let subject = &mut self.subjects[index];
             let earliest = subject
                 .expected
@@ -204,7 +205,7 @@ impl EngineModel {
                 AttemptOutcome::NotApplied => {
                     subject.eligible_at = chrono::DateTime::from_timestamp_millis(batch).unwrap();
                 }
-                AttemptOutcome::Stale => {}
+                AttemptOutcome::Stale | AttemptOutcome::Skipped => {}
             }
         }
         if !pending_now {
@@ -215,11 +216,18 @@ impl EngineModel {
     fn attempt_outcome(
         &self,
         index: usize,
+        batch_ms: i64,
         consumed: &mut Option<(String, ArmedFault)>,
     ) -> AttemptOutcome {
         let subject = &self.subjects[index];
         if subject.fate != Fate::Live || subject.fired {
             return AttemptOutcome::Stale;
+        }
+        // The gate runs before decoding or committing, so a skip uses no fault.
+        if let ExpectedRecord::Failing { next_try_ms } = subject.expected
+            && batch_ms < next_try_ms
+        {
+            return AttemptOutcome::Skipped;
         }
         // A corrupt row fails before its commit, so it never uses a fault.
         if subject.corrupted_target.is_some() {
