@@ -220,6 +220,42 @@ pub enum ListOrder {
     OldestFirst,
     NewestFirst,
 }
+/// Where a list page continues: a position and the direction it continues in.
+/// Oldest-first continues strictly after the position, newest-first strictly
+/// before it; without a position the page starts from that direction's end.
+/// Callers start with [`ListCursor::start`] and otherwise hand back the
+/// `next_cursor` of the previous page.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ListCursor {
+    order: ListOrder,
+    position: Option<ChangePosition>,
+}
+impl ListCursor {
+    #[must_use]
+    pub const fn start(order: ListOrder) -> Self {
+        Self {
+            order,
+            position: None,
+        }
+    }
+    /// The cursor that continues past `position` in the same direction.
+    #[must_use]
+    pub const fn continue_past(self, position: ChangePosition) -> Self {
+        Self {
+            order: self.order,
+            position: Some(position),
+        }
+    }
+    #[must_use]
+    pub const fn order(self) -> ListOrder {
+        self.order
+    }
+    #[must_use]
+    pub const fn position(self) -> Option<ChangePosition> {
+        self.position
+    }
+}
 /// One inbox item, with the names a reader needs to place it. Reading moves no
 /// read mark; `acknowledge` is what MarkRead takes for it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

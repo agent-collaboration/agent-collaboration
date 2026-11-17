@@ -288,7 +288,6 @@ pub enum ListQuery {
     },
     Posts {
         scope: PostScope,
-        order: crate::ListOrder,
     },
     Deliverables {
         project_id: ProjectId,
@@ -312,7 +311,6 @@ pub enum ListQuery {
     WorkLog {
         project_id: ProjectId,
         tag: Option<TrailTag>,
-        order: crate::ListOrder,
     },
     Backlog {
         area_id: AreaId,
@@ -329,7 +327,6 @@ pub enum ListQuery {
     SearchPosts {
         scope: PostScope,
         text: crate::SearchQuery,
-        order: crate::ListOrder,
     },
     /// Areas, initiatives and projects whose name, title or description contains
     /// the text.

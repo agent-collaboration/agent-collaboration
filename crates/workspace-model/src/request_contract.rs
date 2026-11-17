@@ -246,7 +246,7 @@ pub enum WorkspaceOperation {
     },
     List {
         query: ListQuery,
-        after: ChangePosition,
+        cursor: crate::ListCursor,
         limit: crate::PageLimit,
     },
     Inbox {
@@ -301,15 +301,15 @@ pub enum WorkspaceAnswer {
     },
     Page {
         items: Vec<ItemView>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     References {
         items: Vec<crate::Reference>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     Links {
         items: Vec<ExternalLink>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     Inbox {
         scope: crate::InboxScope,
