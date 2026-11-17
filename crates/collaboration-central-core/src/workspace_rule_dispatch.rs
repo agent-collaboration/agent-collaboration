@@ -29,6 +29,24 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     area_id: area_id.clone(),
                 })
             }
+            Op::UpdateArea { area_id, name } => {
+                m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateArea {
+                    area_id: area_id.clone(),
+                    name: name.clone(),
+                })
+            }
+            Op::UpdateProject { project_id, title } => {
+                m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateProject {
+                    project_id: project_id.clone(),
+                    title: title.clone(),
+                })
+            }
+            Op::UpdateIssue { issue_id, title } => {
+                m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateIssue {
+                    issue_id: issue_id.clone(),
+                    title: title.clone(),
+                })
+            }
             Op::CreateProject {
                 area_id,
                 title,
@@ -125,12 +143,26 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 deliverable_id: deliverable_id.clone(),
                 role: *role,
             }),
-            Op::CreateThread { area_id, title } => {
+            Op::CreateThread {
+                area_id,
+                title,
+                body,
+                addressees,
+            } => {
+                if let Err(refusal) = self.named_actor_addressees(addressees).await? {
+                    return Ok(Err(refusal));
+                }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::CreateThread {
                     thread_id: self.mint()?,
                     member_id: self.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
+                    first_post: m::ThreadPostDraft {
+                        post_id: self.mint()?,
+                        change_id: self.mint()?,
+                        body: body.clone(),
+                        addressees: addressees.clone(),
+                    },
                 })
             }
             Op::JoinThread { thread_id, role } => {
@@ -173,14 +205,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 body,
                 addressees,
             } => {
-                for addressee in addressees {
-                    if let m::Addressee::Actor { actor_identity_id } = addressee
-                        && !self.named_actor(actor_identity_id).await?
-                    {
-                        return Ok(Err(m::RefusalReason::UnknownActor {
-                            actor_identity_id: actor_identity_id.clone(),
-                        }));
-                    }
+                if let Err(refusal) = self.named_actor_addressees(addressees).await? {
+                    return Ok(Err(refusal));
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ThreadPost {
                     post_id: self.mint()?,
@@ -189,9 +215,22 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     addressees: addressees.clone(),
                 })
             }
-            Op::ResolveThread { thread_id } => {
+            Op::ResolveThread {
+                thread_id,
+                closing_post,
+            } => {
+                let closing_post = match closing_post {
+                    Some(body) => Some(m::ThreadPostDraft {
+                        post_id: self.mint()?,
+                        change_id: self.mint()?,
+                        body: body.clone(),
+                        addressees: vec![],
+                    }),
+                    None => None,
+                };
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ResolveThread {
                     thread_id: thread_id.clone(),
+                    closing_post,
                 })
             }
             Op::AddDependency { blocking, blocked } => {
@@ -342,7 +381,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 scope: scope.clone(),
                 through: *through,
             },
-            Op::Show { .. } | Op::List { .. } | Op::Inbox { .. } | Op::CreateWorkspace { .. } => {
+            Op::Show { .. }
+            | Op::List { .. }
+            | Op::Inbox { .. }
+            | Op::CreateWorkspace { .. }
+            | Op::UpdateWorkspace { .. }
+            | Op::ArchiveWorkspace => {
                 return Err(corrupt("operation dispatch"));
             }
         };
@@ -351,5 +395,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             tag_ids: tags,
             read_mark_id: self.mint()?,
         }))
+    }
+    /// Actor addressees must name known actors; role addressees are checked by the rule.
+    async fn named_actor_addressees(
+        &self,
+        addressees: &[m::Addressee],
+    ) -> Result<Result<(), m::RefusalReason>, StoreFailure> {
+        for addressee in addressees {
+            if let m::Addressee::Actor { actor_identity_id } = addressee
+                && !self.named_actor(actor_identity_id).await?
+            {
+                return Ok(Err(m::RefusalReason::UnknownActor {
+                    actor_identity_id: actor_identity_id.clone(),
+                }));
+            }
+        }
+        Ok(Ok(()))
     }
 }

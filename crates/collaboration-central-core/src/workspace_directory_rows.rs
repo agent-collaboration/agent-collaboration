@@ -20,9 +20,16 @@ fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure
     if rows.rows.len() > 1 {
         return Err(corrupt("workspaces.workspace_id"));
     }
-    let Some(row) = rows.rows.first() else {
-        return Ok(None);
-    };
+    rows.rows
+        .first()
+        .map(|row| decode_row(rows, row))
+        .transpose()
+}
+
+fn decode_row(
+    rows: &ReadOutcome,
+    row: &[central_storage::SqlValue],
+) -> Result<DirectoryWorkspace, StoreFailure> {
     let workspace_id = string(rows, row, "workspace_id")?
         .parse()
         .map_err(|_| corrupt("workspaces.workspace_id"))?;
@@ -48,12 +55,33 @@ fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure
             .parse()
             .map_err(|_| corrupt(&format!("workspaces.{column}")))?;
     }
-    Ok(Some(DirectoryWorkspace {
+    Ok(DirectoryWorkspace {
         workspace_id,
         name,
         description,
         state,
-    }))
+    })
+}
+impl From<DirectoryWorkspace> for workspace_model::Workspace {
+    fn from(row: DirectoryWorkspace) -> Self {
+        Self {
+            workspace_id: row.workspace_id,
+            name: row.name,
+            description: row.description,
+            state: row.state,
+        }
+    }
+}
+
+/// Every workspace of the organization, archived ones included.
+pub(crate) async fn read_all(
+    host: &impl ObjectHost,
+) -> Result<Vec<DirectoryWorkspace>, StoreFailure> {
+    let rows = host.read(Statement {
+        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM workspaces ORDER BY workspace_id",
+        args: vec![],
+    }).await?;
+    rows.rows.iter().map(|row| decode_row(&rows, row)).collect()
 }
 
 pub(crate) async fn read_by_id(

@@ -50,4 +50,51 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         }
         Ok(Ok(()))
     }
+    /// The workspaces the admitted caller's machine may use. Call after admission.
+    pub(crate) async fn allowed_workspaces(
+        &self,
+        caller: &WorkspaceCaller,
+    ) -> Result<Vec<WorkspaceId>, StoreFailure> {
+        let rows = self
+            .host
+            .read(Statement {
+                sql: "SELECT allowed_workspaces FROM machines WHERE machine_id=?",
+                args: vec![SqlValue::Text(caller.caller.machine_id().to_string())],
+            })
+            .await?;
+        let row = rows
+            .rows
+            .first()
+            .ok_or_else(|| corrupt("machines.machine_id"))?;
+        json(
+            string(&rows, row, "allowed_workspaces")?,
+            "allowed_workspaces",
+        )
+    }
+    /// The machine a Router installation enrolled as. The installation id is
+    /// any canonical RFC UUID, so live installations keep their v4 ids; the
+    /// machine id is central's own UUIDv7.
+    pub async fn machine_for_installation(
+        &self,
+        installation: &workspace_model::InstallationId,
+    ) -> Result<Option<MachineId>, StoreFailure> {
+        let rows = self
+            .host
+            .read(Statement {
+                sql: "SELECT machine_id FROM machines WHERE installation_id=?",
+                args: vec![SqlValue::Text(installation.as_str().to_owned())],
+            })
+            .await?;
+        if rows.rows.len() > 1 {
+            return Err(corrupt("machines.installation_id"));
+        }
+        rows.rows
+            .first()
+            .map(|row| {
+                string(&rows, row, "machine_id")?
+                    .parse()
+                    .map_err(|_| corrupt("machines.machine_id"))
+            })
+            .transpose()
+    }
 }

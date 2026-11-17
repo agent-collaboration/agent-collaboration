@@ -208,6 +208,8 @@ impl Fixture {
                 m::WorkspaceOperation::CreateThread {
                     area_id,
                     title: name(&format!("Thread {request}")),
+                    body: "First post".to_owned().try_into().unwrap(),
+                    addressees: vec![],
                 },
             )
             .await,

@@ -11,6 +11,7 @@ mod statement_plans;
 mod status_rules;
 mod thread_rules;
 mod work_log_rules;
+mod workspace_directory_rules;
 
 pub use backlog_rules::*;
 pub use dependency_rules::*;
@@ -24,6 +25,7 @@ pub use statement_plans::{RulePlan, WriteContext};
 pub use status_rules::*;
 pub use thread_rules::*;
 pub use work_log_rules::*;
+pub use workspace_directory_rules::*;
 
 #[cfg(test)]
 #[path = "rule_fixtures.rs"]

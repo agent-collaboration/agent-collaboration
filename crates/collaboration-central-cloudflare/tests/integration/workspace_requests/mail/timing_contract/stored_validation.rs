@@ -53,6 +53,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
                     operation: Op::SendMessage {
                         to: session(&f.caller),
                         body: body(),
+                        delivery: workspace_model::central_mail::MessageDelivery::Auto,
                     },
                 },
             )
@@ -284,6 +285,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
                     operation: Op::SendMessage {
                         to: session(&f.caller),
                         body: body(),
+                        delivery: workspace_model::central_mail::MessageDelivery::Auto,
                     },
                 },
             )

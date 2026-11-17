@@ -65,6 +65,8 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             m::WorkspaceOperation::CreateThread {
                 area_id: second_area.clone(),
                 title: name("Foreign"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
             m::ItemRef::Area(second_area.clone()),
         ),
@@ -105,6 +107,8 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             m::WorkspaceOperation::CreateThread {
                 area_id: second_area,
                 title: name("Other thread"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
         )
         .await,
@@ -160,6 +164,8 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             m::WorkspaceOperation::CreateThread {
                 area_id: third_area,
                 title: name("Reference source"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
         )
         .await,
@@ -270,7 +276,7 @@ async fn backlog_removal_cascades_both_reference_directions_and_literal_link_tex
                 query: m::ListQuery::ReferencesTo {
                     item: m::ItemRef::BacklogItem(item.clone()),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 10.try_into().unwrap(),
             },
         )
@@ -342,6 +348,8 @@ async fn host_stamped_person_uses_the_same_allowance_and_has_a_distinct_typed_id
     let operation = m::WorkspaceOperation::CreateThread {
         area_id: area,
         title: name("Person's thread"),
+        body: "First post".to_owned().try_into().unwrap(),
+        addressees: vec![],
     };
     let created_reply = call(
         &f.host,

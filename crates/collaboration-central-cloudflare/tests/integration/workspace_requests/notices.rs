@@ -233,6 +233,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
                     operation: CentralMailOperation::SendMessage {
                         to: session(&observer),
                         body: "Direct message".to_owned().try_into().unwrap(),
+                        delivery: workspace_model::central_mail::MessageDelivery::Auto,
                     },
                 },
             )
@@ -267,6 +268,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
                 &f.caller,
                 m::WorkspaceOperation::ResolveThread {
                     thread_id: thread.clone(),
+                    closing_post: None,
                 },
             ),
         };

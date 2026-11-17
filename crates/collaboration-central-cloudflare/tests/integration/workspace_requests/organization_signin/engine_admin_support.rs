@@ -206,6 +206,8 @@ impl EngineOrg {
             .write(m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: "Engine thread".to_owned().try_into().unwrap(),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             })
             .await
         else {

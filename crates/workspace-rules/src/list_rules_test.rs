@@ -60,6 +60,7 @@ struct Fixture {
     items: Vec<PositionedItem<ItemView>>,
     threads: Vec<Thread>,
     members: Vec<ThreadMember>,
+    deliverables: Vec<workspace_model::Deliverable>,
 }
 impl Fixture {
     fn new(items: Vec<PositionedItem<ItemView>>) -> Self {
@@ -77,11 +78,19 @@ impl Fixture {
                 _ => None,
             })
             .collect();
+        let deliverables = items
+            .iter()
+            .filter_map(|row| match &row.item {
+                ItemView::Deliverable { view, .. } => Some(view.deliverable.clone()),
+                _ => None,
+            })
+            .collect();
         Self {
             reader: context().actor,
             items,
             threads,
             members,
+            deliverables,
         }
     }
     fn list(
@@ -100,6 +109,7 @@ impl Fixture {
                     items: &self.items,
                     threads: &self.threads,
                     memberships: &self.members,
+                    deliverables: &self.deliverables,
                 },
             )
             .unwrap(),
@@ -263,6 +273,7 @@ fn deliverables_list_projects_the_computed_status() {
                 items: &fixture.items,
                 threads: &[],
                 memberships: &[],
+                deliverables: &[],
             },
         )
         .unwrap(),
@@ -474,6 +485,7 @@ fn organization_lists_are_refused_inside_a_workspace_store() {
             items: &[],
             threads: &[],
             memberships: &[],
+            deliverables: &[],
         },
     );
     assert!(matches!(refused, Err(RefusalReason::InvalidInput { .. })));

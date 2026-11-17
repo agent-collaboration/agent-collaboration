@@ -102,11 +102,12 @@ fn r22_a_c_missing_foreign_and_complete_reverse_lookup() {
             items: &rows,
             threads: &[],
             memberships: &[],
+            deliverables: &[],
         },
     )
     .unwrap();
     assert!(
-        matches!(answer, workspace_model::WorkspaceAnswer::References { items, .. } if items.len() == 2)
+        matches!(answer, workspace_model::WorkspaceAnswer::Page { items, .. } if items.len() == 2)
     );
 }
 #[test]

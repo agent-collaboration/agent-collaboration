@@ -66,17 +66,17 @@ pub fn inbox_answer(
         .collect();
     let order = match read_mode {
         InboxReadMode::Unread => {
-            items.sort_by_key(item_position);
+            items.sort_by_key(InboxItem::position);
             ListOrder::OldestFirst
         }
         InboxReadMode::Latest => {
-            items.sort_by_key(|item| std::cmp::Reverse(item_position(item)));
+            items.sort_by_key(|item| std::cmp::Reverse(item.position()));
             ListOrder::NewestFirst
         }
     };
     let take = usize::from(limit.get());
     let next_after_position = (items.len() > take)
-        .then(|| items.get(take.saturating_sub(1)).map(item_position))
+        .then(|| items.get(take.saturating_sub(1)).map(InboxItem::position))
         .flatten();
     items.truncate(take);
     Ok(WorkspaceAnswer::Inbox {
@@ -88,15 +88,6 @@ pub fn inbox_answer(
         unavailable_projects: Vec::new(),
         next_after_position,
     })
-}
-
-#[must_use]
-pub const fn item_position(item: &InboxItem) -> ChangePosition {
-    match item {
-        InboxItem::PostCreated { position, .. }
-        | InboxItem::ThreadStateChanged { position, .. }
-        | InboxItem::ProjectChanged { position, .. } => *position,
-    }
 }
 
 /// The area's name, and for a project scope the project's title.

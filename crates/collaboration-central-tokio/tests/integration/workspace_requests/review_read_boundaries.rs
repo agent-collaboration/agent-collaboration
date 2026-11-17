@@ -4,8 +4,9 @@ use central_storage::{CorruptReason, RowExpectation, StoreFailure};
 async fn inbox_cursor_never_precedes_the_stored_mark_and_an_ahead_cursor_pages_normally() {
     let f = Fixture::new().await;
     let area = f.area(1100).await;
-    let thread = f.thread(1101, area).await;
-    for request in 1102..1108 {
+    let thread = f.thread(1101, area.clone()).await;
+    // Positions: area 1, thread 2, its first post 3, these posts 4..8.
+    for request in 1102..1107 {
         created(
             f.call(
                 request,
@@ -22,7 +23,9 @@ async fn inbox_cursor_never_precedes_the_stored_mark_and_an_ahead_cursor_pages_n
     f.call(
         1108,
         m::WorkspaceOperation::MarkRead {
-            scope: m::ReadScope::Inbox,
+            scope: m::ReadScope::InboxArea {
+                area_id: area.clone(),
+            },
             through: mark,
         },
     )
@@ -31,24 +34,29 @@ async fn inbox_cursor_never_precedes_the_stored_mark_and_an_ahead_cursor_pages_n
         .call(
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area {
+                    area_id: area.clone(),
+                },
+                read_mode: m::InboxReadMode::Unread,
                 after: Some(2_u64.try_into().unwrap()),
                 limit: 2.try_into().unwrap(),
             },
         )
         .await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox {
-        entries,
+        items: entries,
         next_after_position,
-        read_through,
+        high_water,
+        ..
     }) = stale.result
     else {
         panic!("inbox");
     };
-    assert_eq!(read_through, mark);
+    assert_eq!(high_water.get(), 8);
     assert_eq!(
         entries
             .iter()
-            .map(|row| row.position.get())
+            .map(|row| row.position().get())
             .collect::<Vec<_>>(),
         vec![6, 7]
     );
@@ -57,13 +65,15 @@ async fn inbox_cursor_never_precedes_the_stored_mark_and_an_ahead_cursor_pages_n
         .call(
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area { area_id: area },
+                read_mode: m::InboxReadMode::Unread,
                 after: Some(7_u64.try_into().unwrap()),
                 limit: 2.try_into().unwrap(),
             },
         )
         .await;
     assert!(
-        matches!(ahead.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,next_after_position:None,..}) if entries.iter().map(|row|row.position.get()).collect::<Vec<_>>()==vec![8])
+        matches!(ahead.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{items,next_after_position:None,..}) if items.iter().map(|row|row.position().get()).collect::<Vec<_>>()==vec![8])
     );
     f.host.close().await;
 }
@@ -91,7 +101,7 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
             1123,
             m::WorkspaceOperation::AddReference {
                 source: m::ReferenceSource::Post(post_id.clone()),
-                target: m::ReferenceTarget::try_from(m::ItemRef::Area(area)).unwrap(),
+                target: m::ReferenceTarget::try_from(m::ItemRef::Area(area.clone())).unwrap(),
                 details: Some(serde_json::json!({"valid":true})),
             },
         )
@@ -118,7 +128,9 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
     f.call(
         1125,
         m::WorkspaceOperation::MarkRead {
-            scope: m::ReadScope::Inbox,
+            scope: m::ReadScope::InboxArea {
+                area_id: area.clone(),
+            },
             through: m::ChangePosition::ZERO,
         },
     )
@@ -141,9 +153,11 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
                 m::WorkspaceOperation::Show { item: post.clone() },
                 m::WorkspaceOperation::List {
                     query: m::ListQuery::Posts {
-                        thread_id: thread.clone(),
+                        scope: m::PostScope::Thread {
+                            thread_id: thread.clone(),
+                        },
                     },
-                    after: m::ChangePosition::ZERO,
+                    cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                     limit: 10.try_into().unwrap(),
                 },
                 m::WorkspaceOperation::AddLink {
@@ -210,7 +224,9 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
     f.call(
         1131,
         m::WorkspaceOperation::MarkRead {
-            scope: m::ReadScope::Inbox,
+            scope: m::ReadScope::InboxArea {
+                area_id: area.clone(),
+            },
             through: 1_u64.try_into().unwrap(),
         },
     )
@@ -223,11 +239,17 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
     .await;
     for operation in [
         m::WorkspaceOperation::Inbox {
+            scope: m::InboxScope::Area {
+                area_id: area.clone(),
+            },
+            read_mode: m::InboxReadMode::Unread,
             after: None,
             limit: 10.try_into().unwrap(),
         },
         m::WorkspaceOperation::MarkRead {
-            scope: m::ReadScope::Inbox,
+            scope: m::ReadScope::InboxArea {
+                area_id: area.clone(),
+            },
             through: 2_u64.try_into().unwrap(),
         },
     ] {
@@ -251,22 +273,42 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
             })
         );
     }
+    let inbox = || m::WorkspaceRequest {
+        request_id: None,
+        workspace_id: Some(f.workspace.clone()),
+        operation: m::WorkspaceOperation::Inbox {
+            scope: m::InboxScope::Area {
+                area_id: area.clone(),
+            },
+            read_mode: m::InboxReadMode::Unread,
+            after: None,
+            limit: 10.try_into().unwrap(),
+        },
+    };
+    // The retired single inbox scope is valid JSON but no ReadScope: the whole
+    // mark record is refused, never read as an area mark.
     f.workspace_execute(
         "UPDATE read_marks SET scope='{\"kind\":\"inbox\"}'",
         vec![],
         RowExpectation::Exactly(1),
     )
     .await;
-    assert!(matches!(
-        f.call(
-            0,
-            m::WorkspaceOperation::Inbox {
-                after: None,
-                limit: 10.try_into().unwrap()
+    assert_eq!(
+        f.host.request(&f.caller, inbox()).await,
+        Err(StoreFailure::Corrupt {
+            reason: CorruptReason::BadValue {
+                column: "read_marks".to_owned()
             }
-        )
-        .await
-        .result,
+        })
+    );
+    f.workspace_execute(
+        "UPDATE read_marks SET scope=json_object('kind','inboxArea','area_id',?)",
+        vec![text(&area)],
+        RowExpectation::Exactly(1),
+    )
+    .await;
+    assert!(matches!(
+        f.host.request(&f.caller, inbox()).await.unwrap().result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { .. })
     ));
     f.host.close().await;

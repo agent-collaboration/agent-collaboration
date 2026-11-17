@@ -28,6 +28,7 @@ fn send(to: m::SessionAddress, body: &str) -> Operation {
     Operation::SendMessage {
         to,
         body: body.to_owned().try_into().unwrap(),
+        delivery: workspace_model::central_mail::MessageDelivery::Auto,
     }
 }
 
@@ -91,7 +92,8 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
     assert_eq!(
         serde_json::from_str::<workspace_model::central_mail::MessageBody>(body).unwrap(),
         workspace_model::central_mail::MessageBody::Direct {
-            body: "one".to_owned().try_into().unwrap()
+            body: "one".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
         }
     );
 
@@ -234,5 +236,40 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
         request(&fixture, &fixture.caller, 1010, operation).await,
         replay
     );
+    fixture.host.close().await;
+}
+
+#[tokio::test]
+async fn a_chosen_delivery_is_stored_in_the_message_body_for_the_recipient_router() {
+    let fixture = Fixture::new().await;
+    let target = session(&fixture.caller);
+    let answer = request(
+        &fixture,
+        &fixture.caller,
+        1050,
+        Operation::SendMessage {
+            to: target,
+            body: "steer this".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Steer,
+        },
+    )
+    .await;
+    let Result::Done(Answer::Queued { message_id }) = &answer else {
+        panic!("message not queued: {answer:?}")
+    };
+    let runtime = fixture
+        .host
+        .central(&fixture.caller.organization_id)
+        .await
+        .unwrap();
+    let rows = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT json_extract(body,'$.delivery') FROM messages WHERE message_id=?",
+            args: vec![text(message_id)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(rows.rows, vec![vec![text("steer")]]);
     fixture.host.close().await;
 }

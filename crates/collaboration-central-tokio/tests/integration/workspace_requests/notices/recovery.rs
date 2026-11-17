@@ -435,7 +435,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
 async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards() {
     let mut f = Fixture::new().await;
     let area = f.area(7240).await;
-    let thread = f.thread(7241, area).await;
+    let thread = f.thread(7241, area.clone()).await;
     let (observer, actor) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let first = f
@@ -560,18 +560,23 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         Some(f.workspace.clone()),
         0,
         m::WorkspaceOperation::Inbox {
+            scope: m::InboxScope::Area {
+                area_id: area.clone(),
+            },
+            read_mode: m::InboxReadMode::Unread,
             after: None,
             limit: 100.try_into().unwrap(),
         },
     )
     .await;
-    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { entries, .. }) = inbox.result else {
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items: entries, .. }) = inbox.result
+    else {
         panic!("observer inbox")
     };
     let post_positions: Vec<_> = entries
         .iter()
-        .filter(|entry| entry.position == first_position || entry.position == second_position)
-        .map(|entry| entry.position)
+        .filter(|entry| entry.position() == first_position || entry.position() == second_position)
+        .map(|entry| entry.position())
         .collect();
     assert_eq!(post_positions, vec![first_position, second_position]);
     f.host.close().await;

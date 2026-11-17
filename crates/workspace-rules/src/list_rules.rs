@@ -13,6 +13,8 @@ pub struct ListReads<'a> {
     pub items: &'a [PositionedItem<ItemView>],
     pub threads: &'a [Thread],
     pub memberships: &'a [ThreadMember],
+    /// Deliverables that place issues in projects, whether or not they are listed.
+    pub deliverables: &'a [workspace_model::Deliverable],
 }
 
 /// The selected items in the cursor's direction, at most `limit` of them, and
@@ -77,56 +79,14 @@ pub fn list_answer(
         .cloned()
         .collect();
     let page = cursor_page(&selected, cursor, limit);
-    Ok(match query {
-        ListQuery::ReferencesTo { .. } | ListQuery::ReferencesFrom { .. } => {
-            WorkspaceAnswer::References {
-                items: page
-                    .items
-                    .into_iter()
-                    .filter_map(|item| match item {
-                        ItemView::Reference(row) => Some(row),
-                        _ => None,
-                    })
-                    .collect(),
-                next_cursor: page.next_cursor,
-            }
-        }
-        ListQuery::Links { .. } => WorkspaceAnswer::Links {
-            items: page
-                .items
-                .into_iter()
-                .filter_map(|item| match item {
-                    ItemView::Link(row) => Some(row),
-                    _ => None,
-                })
-                .collect(),
-            next_cursor: page.next_cursor,
-        },
-        ListQuery::Workspaces { .. }
-        | ListQuery::SearchWorkspaces { .. }
-        | ListQuery::Areas { .. }
-        | ListQuery::Initiatives
-        | ListQuery::Projects { .. }
-        | ListQuery::Threads { .. }
-        | ListQuery::ThreadMembers { .. }
-        | ListQuery::Posts { .. }
-        | ListQuery::Deliverables { .. }
-        | ListQuery::Issues { .. }
-        | ListQuery::ProjectIssues { .. }
-        | ListQuery::ProjectRoles { .. }
-        | ListQuery::DeliverableRoles { .. }
-        | ListQuery::WorkLog { .. }
-        | ListQuery::Backlog { .. }
-        | ListQuery::SearchPosts { .. }
-        | ListQuery::SearchItems { .. } => WorkspaceAnswer::Page {
-            items: page.items,
-            next_cursor: page.next_cursor,
-        },
+    Ok(WorkspaceAnswer::Page {
+        items: page.items,
+        next_cursor: page.next_cursor,
     })
 }
 
 /// Literal, ASCII-case-insensitive containment, as the ported post search did.
-fn contains_text(haystack: &str, needle: &workspace_model::SearchQuery) -> bool {
+pub(crate) fn contains_text(haystack: &str, needle: &workspace_model::SearchQuery) -> bool {
     haystack
         .to_ascii_lowercase()
         .contains(&needle.as_str().to_ascii_lowercase())
@@ -152,11 +112,10 @@ fn deliverable_in_project(
     project_id: &workspace_model::ProjectId,
     reads: &ListReads<'_>,
 ) -> bool {
-    reads.items.iter().any(|row| {
-        matches!(&row.item, ItemView::Deliverable { view, .. }
-            if view.deliverable.deliverable_id == *deliverable_id
-                && view.deliverable.project_id == *project_id)
-    })
+    reads
+        .deliverables
+        .iter()
+        .any(|row| row.deliverable_id == *deliverable_id && row.project_id == *project_id)
 }
 
 fn selects(query: &ListQuery, item: &ItemView, reads: &ListReads<'_>) -> bool {

@@ -143,6 +143,10 @@ pub(super) async fn control(
     let runtime = object.runtime(organization.clone()).await?;
     match path.as_str() {
         "/test/legacy-unit-invocations" => Response::from_json(&runtime.legacy_unit_invocations()),
+        "/test/machine-for-installation" => {
+            let installation: workspace_model::InstallationId = request.json().await?;
+            Response::from_json(&runtime.machine_for_installation(&installation).await)
+        }
         "/test/due-unit-starts" => Response::from_json(&runtime.due_unit_starts()),
         "/test/engine-commit-fault-pending" => Response::from_json(
             &object

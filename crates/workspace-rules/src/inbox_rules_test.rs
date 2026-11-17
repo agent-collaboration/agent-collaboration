@@ -1,4 +1,4 @@
-use super::{InboxReads, ScopedChange, inbox_answer, item_position};
+use super::{InboxReads, ScopedChange, inbox_answer};
 use crate::fixtures::{area, context, id, member, project, thread};
 use hegel::{TestCase, generators as gs};
 use workspace_model::{
@@ -75,7 +75,7 @@ fn read(
     assert!(unavailable_projects.is_empty());
     Page {
         order,
-        positions: items.iter().map(|item| item_position(item).get()).collect(),
+        positions: items.iter().map(|item| item.position().get()).collect(),
         items,
         next: next_after_position,
     }

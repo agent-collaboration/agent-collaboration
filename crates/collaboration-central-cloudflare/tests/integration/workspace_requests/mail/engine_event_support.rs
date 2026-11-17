@@ -67,6 +67,7 @@ pub(super) async fn send_message(
                 operation: CentralMailOperation::SendMessage {
                     to: session(&fixture.caller),
                     body: "traffic".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
                 },
             },
         )

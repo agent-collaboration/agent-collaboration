@@ -293,6 +293,16 @@ pub enum InboxItem {
         area_name: ResourceName,
     },
 }
+impl InboxItem {
+    #[must_use]
+    pub const fn position(&self) -> ChangePosition {
+        match self {
+            Self::PostCreated { position, .. }
+            | Self::ThreadStateChanged { position, .. }
+            | Self::ProjectChanged { position, .. } => *position,
+        }
+    }
+}
 
 #[must_use]
 pub fn named_project(project: &Project) -> NamedItem {

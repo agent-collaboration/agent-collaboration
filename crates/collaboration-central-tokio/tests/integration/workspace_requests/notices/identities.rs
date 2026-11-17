@@ -7,7 +7,7 @@ use central_storage::{
 async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_workspace() {
     let f = Fixture::new().await;
     let area = f.area(7220).await;
-    let thread = f.thread(7221, area).await;
+    let thread = f.thread(7221, area.clone()).await;
     let (observer, agent) = joined_observer(&f, &thread).await;
     let person: m::ActorIdentityId = id(7222);
     let component: m::ActorIdentityId = id(7223);
@@ -87,7 +87,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     let rows = runtime.statement_host().read(Statement { sql: "SELECT w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM notification_window_items WHERE thread_id=i.thread_id)", args: vec![text(&thread)] }).await.unwrap();
     assert_eq!(rows.rows, vec![vec![text(&agent)]]);
     let workspace_rows = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT c.position,m.actor_identity_id FROM changes c JOIN thread_members m ON m.thread_id=c.thread_id WHERE c.change_kind='posted' AND c.thread_id=? AND m.actor_identity_id IN (?,?) AND m.left_at IS NULL AND m.notifications=1 ORDER BY m.actor_identity_id",
+        sql: "SELECT c.position,m.actor_identity_id FROM changes c JOIN thread_members m ON m.thread_id=c.thread_id WHERE c.change_kind='posted' AND c.thread_id=? AND c.position=(SELECT MAX(position) FROM changes WHERE thread_id=c.thread_id AND change_kind='posted') AND m.actor_identity_id IN (?,?) AND m.left_at IS NULL AND m.notifications=1 ORDER BY m.actor_identity_id",
         args: vec![text(&thread), text(&person), text(&component)],
     }).await.unwrap();
     assert_eq!(workspace_rows.rows.len(), 2);
@@ -120,19 +120,24 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
             Some(f.workspace.clone()),
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area {
+                    area_id: area.clone(),
+                },
+                read_mode: m::InboxReadMode::Unread,
                 after: None,
                 limit: 100.try_into().unwrap(),
             },
         )
         .await;
-        let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { entries, .. }) = reply.result
+        let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items: entries, .. }) =
+            reply.result
         else {
             panic!("inbox refused: {reply:?}")
         };
         assert!(
             entries
                 .iter()
-                .any(|entry| entry.position == posted_position),
+                .any(|entry| entry.position() == posted_position),
             "posted change missing from inbox: {entries:?}"
         );
     }

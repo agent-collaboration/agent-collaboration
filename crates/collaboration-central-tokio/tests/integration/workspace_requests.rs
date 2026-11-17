@@ -61,6 +61,8 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
             m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: name("Thread"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
         )
         .await,
@@ -74,6 +76,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
         14,
         m::WorkspaceOperation::ResolveThread {
             thread_id: thread_id.clone(),
+            closing_post: None,
         },
     )
     .await;
@@ -88,7 +91,8 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
             Some(workspace.clone()),
             14,
             m::WorkspaceOperation::ResolveThread {
-                thread_id: thread_id.clone()
+                thread_id: thread_id.clone(),
+                closing_post: None,
             }
         )
         .await,
@@ -100,7 +104,10 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
             &caller,
             Some(workspace.clone()),
             15,
-            m::WorkspaceOperation::ResolveThread { thread_id }
+            m::WorkspaceOperation::ResolveThread {
+                thread_id,
+                closing_post: None,
+            }
         )
         .await
         .result,
@@ -363,6 +370,8 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: name("Thread"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
         )
         .await,
@@ -373,6 +382,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     runtime.lose_reply_after_apply(id(32));
     let operation = m::WorkspaceOperation::ResolveThread {
         thread_id: thread_id.clone(),
+        closing_post: None,
     };
     assert_eq!(
         call(
@@ -468,6 +478,8 @@ mod roles_dependencies;
 mod turns_and_ledger;
 mod workspace_boundaries;
 
+mod contract_additions;
+mod installation_lookup;
 mod relation_positions;
 
 mod admission_negatives;

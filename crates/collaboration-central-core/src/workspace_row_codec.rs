@@ -33,6 +33,13 @@ pub(crate) fn json<T: DeserializeOwned>(value: &str, field: &str) -> Result<T, S
     serde_json::from_str(value).map_err(|_| corrupt(field))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ListedItem {
+    pub item: workspace_model::ItemRef,
+    pub position: workspace_model::ChangePosition,
+}
+
 #[derive(Default)]
 pub(crate) struct WorkspaceRows {
     pub areas: Vec<workspace_model::Area>,
@@ -53,6 +60,8 @@ pub(crate) struct WorkspaceRows {
     pub marks: Vec<workspace_model::ReadMark>,
     pub changes: Vec<crate::workspace_change_records::StoredChange>,
     pub high_water: workspace_model::ChangePosition,
+    /// The page a list read selected, each with its position in the list.
+    pub listed: Vec<ListedItem>,
     pub created_positions:
         std::collections::BTreeMap<workspace_model::ItemRef, workspace_model::ChangePosition>,
 }
@@ -117,6 +126,7 @@ impl WorkspaceRows {
                 )?),
                 "change" => rows.changes.push(json(payload, "changes")?),
                 "highWater" => rows.high_water = json(payload, "position")?,
+                "listed" => rows.listed.push(json(payload, "listed")?),
                 _ => {
                     return Err(StoreFailure::Corrupt {
                         reason: CorruptReason::UnknownKind {

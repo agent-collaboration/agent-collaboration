@@ -281,6 +281,10 @@ pub enum WorkspaceAnswer {
     WorkspaceCreated {
         workspace: Workspace,
     },
+    /// The workspace after an update or archive.
+    WorkspaceUpdated {
+        workspace: Workspace,
+    },
     Created {
         item: ItemRef,
         position: ChangePosition,

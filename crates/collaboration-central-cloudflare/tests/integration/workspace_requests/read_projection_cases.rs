@@ -39,14 +39,14 @@ async fn list_deliverables_computes_empty_on_hold_and_closed_and_pages_by_positi
                 query: m::ListQuery::Deliverables {
                     project_id: project.clone(),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 2.try_into().unwrap(),
             },
         )
         .await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Page {
         items,
-        next_after_position: Some(cursor),
+        next_cursor: Some(cursor),
     }) = first.result
     else {
         panic!("first page");
@@ -61,13 +61,13 @@ async fn list_deliverables_computes_empty_on_hold_and_closed_and_pages_by_positi
                 query: m::ListQuery::Deliverables {
                     project_id: project.clone(),
                 },
-                after: cursor,
+                cursor,
                 limit: 2.try_into().unwrap(),
             },
         )
         .await;
     assert!(
-        matches!(second.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Page{items,next_after_position:None}) if matches!(&items[..],[m::ItemView::Deliverable{view,..}] if view.deliverable.deliverable_id==closed&&view.status==m::DeliverableStatus::Closed))
+        matches!(second.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Page{items,next_cursor:None}) if matches!(&items[..],[m::ItemView::Deliverable{view,..}] if view.deliverable.deliverable_id==closed&&view.status==m::DeliverableStatus::Closed))
     );
     let refused = f
         .call(
@@ -131,8 +131,9 @@ async fn work_log_redaction_is_null_in_reopened_store_and_retains_original_order
             m::WorkspaceOperation::List {
                 query: m::ListQuery::WorkLog {
                     project_id: project,
+                    tags: vec![],
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 10.try_into().unwrap(),
             },
         )
