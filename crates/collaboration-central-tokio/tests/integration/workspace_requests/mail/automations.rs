@@ -9,10 +9,11 @@ use workspace_model::central_mail::{
 };
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
+    let caller = fixture.fresh_caller(&fixture.caller).await;
     fixture
         .host
         .request_central(
-            &fixture.caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,
@@ -28,7 +29,7 @@ async fn interval_catches_up_once_and_after_finishes() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -301,7 +302,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -387,7 +388,7 @@ async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let timing =

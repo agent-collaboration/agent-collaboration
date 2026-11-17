@@ -4,6 +4,8 @@ use crate::ConformanceResult;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde_json::{Value, json};
+mod machine_tokens;
+pub use machine_tokens::{MACHINE_AUDIENCE, machine_token};
 mod person_requests;
 pub use person_requests::{
     CREATE, LOOKUP, MEMBER, MEMBER_SUBJECT, ORGANIZATION, OWNER, OWNER_SUBJECT, POLICY, Person,

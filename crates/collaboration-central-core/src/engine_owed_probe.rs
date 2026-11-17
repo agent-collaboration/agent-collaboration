@@ -67,7 +67,7 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
         if let Err(reason) = self.admit_workspace(caller, None).await? {
             return Ok(EngineRequestOutcome::NotPermitted { reason });
         }
-        let identity = match &caller.caller {
+        let identity = match caller.caller() {
             workspace_model::Caller::Session(session) => workspace_model::Identity::AgentSession {
                 session: session.clone(),
             },

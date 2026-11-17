@@ -7,7 +7,7 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
     let project = f.project(7201, area.clone()).await;
     let thread = f.thread(7202, area).await;
     let (_, old_holder) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
         .statement_host()
         .read(Statement {

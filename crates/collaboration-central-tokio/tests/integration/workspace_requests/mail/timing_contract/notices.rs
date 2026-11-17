@@ -2,31 +2,9 @@
 use super::*;
 
 pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
-    // Pin an explicit epoch fixture; credentials remain valid for this future scenario.
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    use central_storage::{
-        AlarmUpdate as ClockAlarm, GuardedStatement as ClockStatement, RowExpectation as ClockRows,
-        StatementBatch as ClockBatch,
-    };
-    assert!(matches!(
-        runtime
-            .statement_host()
-            .run_batch(ClockBatch {
-                statements: vec![ClockStatement {
-                    statement: Statement {
-                        sql: "UPDATE machine_credentials SET expires_at='2033-01-01T00:00:00Z'",
-                        args: vec![]
-                    },
-                    expect: ClockRows::Any
-                }],
-                alarm: ClockAlarm::Unchanged
-            })
-            .await
-            .unwrap(),
-        central_storage::BatchOutcome::Applied { .. }
-    ));
-    drop(runtime);
-    advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap());
+    // Move the scenario epoch with a renewed signed statement and fresh machine connection.
+    f.relocate_authority("2030-01-01T00:01:00Z".parse().unwrap())
+        .await;
     let mut recipients = Vec::new();
     for (index, (cadence, seconds)) in [
         (m::NoticeCadence::M15, 900_i64),
@@ -39,7 +17,11 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         let mut caller = f.caller.clone();
         let mut address = session(&caller);
         address.session_id = format!("cadence-{index}").try_into().unwrap();
-        caller.caller = m::Caller::Session(address.clone());
+        caller = collaboration_central_core::WorkspaceCaller::new(
+            caller.connection().clone(),
+            m::Caller::Session(address.clone()),
+        )
+        .unwrap();
         request(
             f,
             &caller,
@@ -49,8 +31,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         .await;
         recipients.push((caller, address, cadence, seconds));
     }
-    let created_workspace = call(
-        &f.host,
+    let created_workspace = workspace_request(
+        f,
         &f.caller,
         None,
         41005,
@@ -64,7 +46,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     else {
         panic!("second workspace")
     };
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
     assert!(matches!(
         r.statement_host()
@@ -80,7 +62,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
                                 ])
                                 .unwrap()
                             ),
-                            text(f.caller.caller.machine_id())
+                            text(id::<m::WorkspaceId>(3))
                         ]
                     },
                     expect: RowExpectation::Exactly(1)
@@ -94,8 +76,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     drop(r);
     let area = f.area(41010).await;
     let second_area = created(
-        call(
-            &f.host,
+        workspace_request(
+            f,
             &f.caller,
             Some(second.workspace_id.clone()),
             41011,
@@ -121,8 +103,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             second_area.clone()
         };
         let thread = created(
-            call(
-                &f.host,
+            workspace_request(
+                f,
                 &f.caller,
                 Some(workspace.clone()),
                 41020 + index,
@@ -137,8 +119,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             panic!("thread")
         };
         for (recipient_index, (caller, _, _, _)) in recipients.iter().enumerate() {
-            let reply = call(
-                &f.host,
+            let reply = workspace_request(
+                f,
                 caller,
                 Some(workspace.clone()),
                 41100 + index * 3 + u32::try_from(recipient_index).unwrap(),
@@ -160,8 +142,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             start + chrono::Duration::seconds(i64::try_from(index).unwrap() * 10),
         );
         let item = created(
-            call(
-                &f.host,
+            workspace_request(
+                f,
                 &f.caller,
                 Some(workspace.clone()),
                 41200 + u32::try_from(index).unwrap(),
@@ -175,7 +157,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         );
         post_ids.push((workspace.clone(), item));
     }
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let windows=r.statement_host().read(Statement{sql:"SELECT COUNT(*) FROM notification_windows WHERE recipient_actor IN (SELECT actor_identity_id FROM actor_identities WHERE identity LIKE '%cadence-%')",args:vec![]}).await.unwrap();
     assert_eq!(
         windows.rows,
@@ -242,7 +224,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         if now(f) < due {
             dispatch_to(f, due).await;
         }
-        let r = f.host.central(&f.caller.organization_id).await.unwrap();
+        let r = f.host.central(f.caller.organization_id()).await.unwrap();
         let batch = r.queued_for_session(address).await.unwrap();
         assert_eq!(
             batch.messages.len(),
@@ -274,8 +256,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     let mut second_posts = Vec::new();
     for (index, (workspace, thread)) in threads.iter().enumerate() {
         let post = created(
-            call(
-                &f.host,
+            workspace_request(
+                f,
                 &f.caller,
                 Some(workspace.clone()),
                 41300 + u32::try_from(index).unwrap(),
@@ -323,7 +305,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         sql: "SELECT a.notice_cadence,w.due_at FROM actor_identities a JOIN notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.identity LIKE '%cadence-0%'",
         args: vec![],
     };
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let expected_policy = vec![vec![
         text("m55"),
         text(changed_due.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
@@ -334,7 +316,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     );
     drop(r);
     f.reopen().await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
         r.statement_host().read(read_policy()).await.unwrap().rows,
         expected_policy
@@ -349,7 +331,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     );
     drop(r);
     dispatch_to(f, changed_due).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let before = notice_contents(r.queued_for_session(&recipients[0].1).await.unwrap());
     assert_eq!(before.len(), 2);
     let second_items = &before[1].2;
@@ -387,11 +369,11 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         } else {
             &recipients[0].0
         };
-        let r = f.host.central(&f.caller.organization_id).await.unwrap();
+        let r = f.host.central(f.caller.organization_id()).await.unwrap();
         let before = notice_contents(r.queued_for_session(&recipients[0].1).await.unwrap());
         drop(r);
-        let reply = call(
-            &f.host,
+        let reply = workspace_request(
+            f,
             caller,
             Some(workspace.clone()),
             41400 + action,
@@ -399,7 +381,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         )
         .await;
         assert!(matches!(reply.result, m::WorkspaceResult::Done(_)));
-        let r = f.host.central(&f.caller.organization_id).await.unwrap();
+        let r = f.host.central(f.caller.organization_id()).await.unwrap();
         let after = notice_contents(r.queued_for_session(&recipients[0].1).await.unwrap());
         assert_retained_notices(before, after, workspace, thread);
     }

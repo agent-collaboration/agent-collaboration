@@ -1,4 +1,4 @@
-use crate::{CorrelationId, LinkRequest, ProtocolError, ReplyPayload};
+use crate::{CorrelationId, LinkRequest, LinkRequestBatch, ProtocolError, ReplyPayload};
 use serde::{Deserialize, Serialize};
 use workspace_ids::MessageId;
 use workspace_model::{MachineId, Timestamp, central_mail::MessageRecord};
@@ -32,6 +32,9 @@ pub enum DataFrame {
     Request {
         request: Box<LinkRequest>,
     },
+    Batch {
+        requests: LinkRequestBatch,
+    },
     Reply {
         correlation_id: CorrelationId,
         result: Box<ReplyPayload>,
@@ -50,7 +53,7 @@ impl LinkFrame {
             Self::Ping => direction == FrameDirection::ToCentral,
             Self::Pong => direction == FrameDirection::ToRouter,
             Self::Data(data) => match data {
-                DataFrame::Request { .. } | DataFrame::Ack { .. } => {
+                DataFrame::Request { .. } | DataFrame::Batch { .. } | DataFrame::Ack { .. } => {
                     direction == FrameDirection::ToCentral
                 }
                 DataFrame::Welcome { .. } | DataFrame::Reply { .. } | DataFrame::Deliver { .. } => {

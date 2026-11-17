@@ -285,7 +285,7 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
     let request: Result<Result<ProbeAnswer, StoreFailure>, StoreFailure> = runtime
         .control(
             "engine-probe-request",
-            &serde_json::json!({"caller": fixture.caller.caller, "credentialHash": fixture.caller.credential_hash, "request": probe_request(35705, traffic, ProbeEvent::Run)}),
+            &serde_json::json!({"caller": fixture.caller.caller, "token": fixture.caller.token, "request": probe_request(35705, traffic, ProbeEvent::Run)}),
         )
         .await;
 

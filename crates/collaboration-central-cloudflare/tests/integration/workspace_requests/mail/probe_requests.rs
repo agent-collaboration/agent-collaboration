@@ -95,7 +95,7 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
 
 #[tokio::test]
 async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_millisecond_boundary() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
@@ -125,6 +125,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
         (start + chrono::Duration::hours(24)).timestamp_millis(),
         Ordering::SeqCst,
     );
+    fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
     assert_eq!(
         runtime.request_probe(&fixture.caller, first).await.unwrap(),
         original
@@ -151,6 +152,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
             .timestamp_millis(),
         Ordering::SeqCst,
     );
+    fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
 
     let answer = runtime
         .request_probe(

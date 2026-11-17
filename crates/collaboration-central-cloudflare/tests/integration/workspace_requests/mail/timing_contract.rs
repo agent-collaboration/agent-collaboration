@@ -1,6 +1,5 @@
 //! R34 through admitted requests, owning storage and the host's actual alarm driver.
 use super::super::{Statement, support::*};
-use collaboration_central_core::WorkspaceCaller;
 use std::sync::atomic::Ordering;
 use workspace_model as m;
 use workspace_model::central_mail::{
@@ -28,10 +27,11 @@ async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
         count + 1
     );
 }
-async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: Op) -> Result {
+async fn request(f: &Fixture, caller: &FixtureCaller, number: u32, operation: Op) -> Result {
+    let caller = fresh_auth(&f.host, caller);
     f.host
         .request_central(
-            caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,
@@ -39,6 +39,16 @@ async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: 
         )
         .await
         .unwrap()
+}
+async fn call(
+    host: &super::super::workerd_host::WorkerdHost,
+    caller: &FixtureCaller,
+    workspace: Option<m::WorkspaceId>,
+    number: u32,
+    operation: m::WorkspaceOperation,
+) -> m::WorkspaceReply {
+    let caller = fresh_auth(host, caller);
+    super::super::support::call(host, &caller, workspace, number, operation).await
 }
 fn body() -> m::PostText {
     "timing contract".to_owned().try_into().unwrap()

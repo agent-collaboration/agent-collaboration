@@ -2,31 +2,9 @@
 use super::*;
 
 pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
-    // Pin an explicit epoch fixture; credentials remain valid for this future scenario.
-    let runtime = f.host.central(&f.caller.organization_id).await;
-    use central_storage::{
-        AlarmUpdate as ClockAlarm, GuardedStatement as ClockStatement, RowExpectation as ClockRows,
-        StatementBatch as ClockBatch,
-    };
-    assert!(matches!(
-        runtime
-            .statement_host()
-            .run_batch(ClockBatch {
-                statements: vec![ClockStatement {
-                    statement: Statement {
-                        sql: "UPDATE machine_credentials SET expires_at='2033-01-01T00:00:00Z'",
-                        args: vec![]
-                    },
-                    expect: ClockRows::Any
-                }],
-                alarm: ClockAlarm::Unchanged
-            })
-            .await
-            .unwrap(),
-        central_storage::BatchOutcome::Applied { .. }
-    ));
-    drop(runtime);
+    // Relocate the signed organization/enrollment precondition with this explicit future epoch.
     advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap());
+    f.caller = relocate_authority(&f.host, &f.caller).await;
     let mut recipients = Vec::new();
     for (index, (cadence, seconds)) in [
         (m::NoticeCadence::M15, 900_i64),
@@ -71,7 +49,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![

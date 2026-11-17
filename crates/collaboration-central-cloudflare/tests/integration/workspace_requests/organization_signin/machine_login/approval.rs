@@ -41,7 +41,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         ]]
     );
     assert!(
-        f.rows("SELECT * FROM machine_credentials")
+        f.rows("SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'")
             .await?
             .is_empty()
     );

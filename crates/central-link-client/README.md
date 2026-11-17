@@ -1,7 +1,7 @@
 # Central link client policy
 
-The Host creates one client with its machine id and injected RuntimeClock, then
-owns socket I/O. `poll_time` emits connection, heartbeat or call-expiry actions;
+The Host creates one client with its installation/service identity and injected
+RuntimeClock, then owns socket I/O. Welcome echoes that installation identity. `poll_time` emits connection, heartbeat or call-expiry actions;
 `next_deadline` tells that owner when to poll again using the same clock.
 Drain `poll_time` until None before processing socket events, including when
 several deadlines coincide. Every accepted call has a 30-second deadline; a
@@ -54,3 +54,7 @@ under the same RequestId. Nothing is armed while the outbox is empty.
 `FakeLinkCalls` (feature `test-support`, dev-only) honours the seam for tools
 built before the real link: InOutbox then Accepted after a flush on its mark,
 Uncertain when a write's answer is lost, ReadAnswerLost when a read's is, NotFound for another caller's id.
+
+A socket owner can combine registered write requests into a validated
+`LinkRequestBatch` of one to 64 members. Each call keeps its own transport
+correlation, durable request ID and Reply. Reads use single Request frames.

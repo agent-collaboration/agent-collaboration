@@ -28,7 +28,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&[&f.workspace, &other.workspace_id])

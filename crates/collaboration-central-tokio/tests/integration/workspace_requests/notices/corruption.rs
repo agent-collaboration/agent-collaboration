@@ -5,7 +5,7 @@ use central_storage::{
 };
 
 async fn execute(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let result = runtime
         .statement_host()
         .run_batch(StatementBatch {
@@ -41,7 +41,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         let thread = f.thread(7501, area).await;
         let (_, actor) = joined_observer(&f, &thread).await;
         created(f.call(7502, post(&thread, vec![])).await);
-        let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+        let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
         let read = || Statement {
             sql: "SELECT (SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')",
             args: vec![text(&f.workspace), text(&thread)],
@@ -97,7 +97,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let area = f.area(7510).await;
     let thread = f.thread(7511, area).await;
     let (_, observer) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     // Addressing the author adds a second recipient while the observer remains in the same batch window.
     let actors = runtime
         .statement_host()
@@ -139,7 +139,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = f.fresh_caller(&f.caller).await;
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -222,7 +222,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
         )
         .await,
     );
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     f.clock
         .advance(std::time::Duration::from_secs(900))
         .unwrap();
@@ -240,7 +240,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = f.fresh_caller(&f.caller).await;
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -277,7 +277,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
 
 #[tokio::test]
 async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_back_drain() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     let area = f.area(7530).await;
     let thread = f.thread(7531, area).await;
     let (_, recipient) = joined_observer(&f, &thread).await;
@@ -295,13 +295,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         .result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    execute(
-        &f,
-        "UPDATE machine_credentials SET expires_at='9999-12-31T23:59:59Z' WHERE machine_id=?",
-        vec![text(f.caller.caller.machine_id())],
-    )
-    .await;
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let prior = runtime
         .statement_host()
         .read(Statement {
@@ -326,7 +320,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         collaboration_central_core::MAX_ALARM_UNIX_MILLIS - 30_000,
     )
     .unwrap();
-    f.clock.set_utc(near_ceiling);
+    f.relocate_authority(near_ceiling).await;
     let mut held = runtime
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);

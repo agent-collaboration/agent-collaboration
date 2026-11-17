@@ -43,6 +43,7 @@ mod storage_cases;
 mod store_wire;
 mod worker_clock;
 mod workspace_central_object;
+mod workspace_link_entry;
 mod workspace_store_object;
 #[cfg(feature = "test-support")]
 pub use driver_scenarios::DriverScenarioObject;
@@ -61,6 +62,9 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         Ok(response) => return Ok(response),
         Err(request) => request,
     };
+    if workspace_link_entry::organization(&request.path()).is_some() {
+        return workspace_link_entry::forward(request, &env).await;
+    }
     let labels = access_verification::InvocationLabels::for_request(&request)?;
     let request: worker::HttpRequest = request.try_into()?;
     let (parts, body) = request.into_parts();

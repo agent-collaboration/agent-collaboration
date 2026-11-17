@@ -10,7 +10,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         let area = f.area(7210).await;
         let thread = f.thread(7211, area).await;
         let (_, actor) = joined_observer(&f, &thread).await;
-        let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+        let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
         let workspace_id = f.workspace.clone();
         let read_cursor = || Statement {
             sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
@@ -134,7 +134,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         drop(held);
         drop(runtime);
         f.reopen().await;
-        let reopened = f.host.central(&f.caller.organization_id).await.unwrap();
+        let reopened = f.host.central(f.caller.organization_id()).await.unwrap();
         assert_eq!(
             reopened
                 .statement_host()
@@ -275,7 +275,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         panic!("workspace creation")
     };
     let second_workspace = workspace.workspace_id;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
             .statement_host()
@@ -291,7 +291,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
                                 ])
                                 .unwrap()
                             ),
-                            text(f.caller.caller.machine_id())
+                            text(id::<m::WorkspaceId>(3))
                         ]
                     },
                     expect: RowExpectation::Exactly(1),
@@ -362,9 +362,10 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         if second == 30 {
             runtime.until_alarm_completed(completed + 1).await;
         }
+        let caller = f.fresh_caller(&f.caller).await;
         let other = call(
             &f.host,
-            &f.caller,
+            &caller,
             Some(second_workspace.clone()),
             7300 + second,
             m::WorkspaceOperation::CreateArea {
@@ -437,7 +438,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
     let area = f.area(7240).await;
     let thread = f.thread(7241, area).await;
     let (observer, actor) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let first = f
         .call(
             7242,
@@ -474,7 +475,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
     f.clock.set_utc(previous_time - chrono::Duration::hours(1));
     drop(runtime);
     f.reopen().await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
         runtime
             .statement_host()
@@ -554,6 +555,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         notice.rows,
         vec![vec![text(later_id)], vec![text(first_id)]]
     );
+    let observer = f.fresh_caller(&observer).await;
     let inbox = call(
         &f.host,
         &observer,

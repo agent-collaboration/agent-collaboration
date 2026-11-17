@@ -31,7 +31,9 @@ async fn first_grant_uses_the_codes_exact_deadline_and_lapse_keeps_the_working_l
             .rows("SELECT * FROM organization_change_records ORDER BY id")
             .await?;
         let credentials = f
-            .rows("SELECT * FROM machine_credentials ORDER BY credential_id")
+            .rows(
+                "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+            )
             .await?;
         f.advance(elapsed_ms).await?;
         let answer = f.post(TOKEN, &token(&b, &b)).await?;
@@ -69,7 +71,7 @@ async fn first_grant_uses_the_codes_exact_deadline_and_lapse_keeps_the_working_l
                     == records
             );
             assert!(
-                f.rows("SELECT * FROM machine_credentials ORDER BY credential_id")
+                f.rows("SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'")
                     .await?
                     == credentials
             );

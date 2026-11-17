@@ -19,7 +19,11 @@ pub(super) async fn exercise_continued_activity(
         let mut caller = f.caller.clone();
         let mut address = session(&caller);
         address.session_id = format!("sustained-cadence-{index}").try_into().unwrap();
-        caller.caller = m::Caller::Session(address.clone());
+        caller = collaboration_central_core::WorkspaceCaller::new(
+            caller.connection().clone(),
+            m::Caller::Session(address.clone()),
+        )
+        .unwrap();
         assert!(matches!(
             request(
                 f,
@@ -32,7 +36,7 @@ pub(super) async fn exercise_continued_activity(
         ));
         recipients.push(address);
     }
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let rows = r.statement_host().read(Statement {sql:"SELECT identity,actor_identity_id FROM actor_identities WHERE identity LIKE '%sustained-cadence-%'",args:vec![]}).await.unwrap();
     let addressees: Vec<_> = recipients
         .iter()
@@ -99,7 +103,7 @@ pub(super) async fn exercise_continued_activity(
     let mut posts = Vec::new();
     for minute in 0..=110_i64 {
         let at = start + chrono::Duration::minutes(minute);
-        let r = f.host.central(&f.caller.organization_id).await.unwrap();
+        let r = f.host.central(f.caller.organization_id()).await.unwrap();
         let alarm = r.statement_host().alarm().map(|due| due.unix_millis());
         drop(r);
         if alarm.is_some_and(|alarm| alarm <= at.timestamp_millis()) {
@@ -111,8 +115,8 @@ pub(super) async fn exercise_continued_activity(
             let (workspace, thread) = sources[usize::try_from(minute).unwrap() % sources.len()];
             let selected = [0, if minute % 2 == 0 { 1 } else { 3 }, 2];
             let item = created(
-                call(
-                    &f.host,
+                workspace_request(
+                    f,
                     &f.caller,
                     Some(workspace.clone()),
                     44000 + u32::try_from(minute).unwrap(),
@@ -129,7 +133,7 @@ pub(super) async fn exercise_continued_activity(
             );
             posts.push((minute, workspace.clone(), thread.clone(), item, selected));
         }
-        let r = f.host.central(&f.caller.organization_id).await.unwrap();
+        let r = f.host.central(f.caller.organization_id()).await.unwrap();
         for (recipient_index, address) in recipients.iter().enumerate() {
             let queue = r.queued_for_session(address).await.unwrap();
             let elapsed: Vec<_> = slots[recipient_index]

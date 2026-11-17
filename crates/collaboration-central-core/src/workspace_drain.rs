@@ -12,7 +12,8 @@ use crate::{
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn preset_workspace_drain(
+    /// The caller holds central admission through this deadline and the workspace batch.
+    pub(crate) async fn preset_workspace_drain_held(
         &self,
         workspace: &WorkspaceId,
         now: Timestamp,
@@ -20,8 +21,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let due = now
             .checked_add_signed(chrono::Duration::seconds(5))
             .ok_or_else(|| corrupt("drain_due_at"))?;
-        let _turn = self.take_central_turn().await;
-
         applied(self.host.run_batch(StatementBatch{statements:vec![exact("INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:alarm_update()}).await?)
     }
     pub async fn drain_workspace(

@@ -1,10 +1,9 @@
 use super::*;
-use collaboration_central_core::WorkspaceCaller;
 async fn held_pair(
     f: &Fixture,
     first: m::WorkspaceOperation,
     second: m::WorkspaceOperation,
-    second_caller: WorkspaceCaller,
+    second_caller: FixtureCaller,
 ) -> (m::WorkspaceReply, m::WorkspaceReply) {
     let runtime = f.host.central(&f.caller.organization_id).await;
     let target = serde_json::json!({"workspace":f.workspace,"point":"afterReads"});

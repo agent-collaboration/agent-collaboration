@@ -9,7 +9,7 @@ use workspace_model::central_mail::{
 async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     assert!(matches!(
@@ -37,7 +37,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     created(fixture.call(8212, post(&thread, vec![])).await);
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let window = runtime
@@ -184,7 +184,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
     };
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let drains = runtime
@@ -267,7 +267,7 @@ async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_r
     let thread = fixture.thread(8311, area).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let now = fixture.clock.utc_now();

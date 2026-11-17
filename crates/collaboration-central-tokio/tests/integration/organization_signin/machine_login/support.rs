@@ -130,7 +130,7 @@ pub(super) async fn snapshot(f: &MachineFixture) -> Result<Vec<Vec<Vec<SqlValue>
         "SELECT * FROM machines ORDER BY machine_id",
         "SELECT * FROM machine_approvals ORDER BY approval_id",
         "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM machine_credentials ORDER BY credential_id",
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
     ] {
         rows.push(f.rows(sql).await?);
     }

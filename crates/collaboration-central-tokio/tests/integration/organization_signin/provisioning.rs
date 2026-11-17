@@ -20,7 +20,13 @@ async fn provision_repeat_restart_and_predecessor_renewal_preserve_existing_mode
             .await?,
         f.rows(
             A,
-            "SELECT * FROM machine_credentials ORDER BY credential_id",
+            "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+            vec![],
+        )
+        .await?,
+        f.rows(
+            A,
+            "SELECT * FROM machine_approvals ORDER BY approval_id",
             vec![],
         )
         .await?,
@@ -102,12 +108,18 @@ async fn provision_repeat_restart_and_predecessor_renewal_preserve_existing_mode
                 .await?,
             f.rows(
                 A,
-                "SELECT * FROM machine_credentials ORDER BY credential_id",
+                "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+                vec![]
+            )
+            .await?,
+            f.rows(
+                A,
+                "SELECT * FROM machine_approvals ORDER BY approval_id",
                 vec![]
             )
             .await?,
         ) == business,
-        "provisioning preserves every modern workspace, machine and credential column"
+        "provisioning preserves every modern workspace, machine and enrollment column; credential schema stays absent"
     );
     f.close().await
 }

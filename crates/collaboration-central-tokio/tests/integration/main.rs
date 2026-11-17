@@ -294,3 +294,6 @@ mod workspace_store_calls;
 #[cfg(test)]
 #[cfg(feature = "test-support")]
 mod workspace_requests;
+
+#[cfg(feature = "test-support")]
+mod workspace_link;

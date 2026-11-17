@@ -53,13 +53,16 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             },
         )));
     }
-    if let Err(refusal) = runtime
-        .admit_workspace(caller, request.workspace_id.as_ref())
-        .await?
     {
-        return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        let _central = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime
+            .admit_workspace(caller, request.workspace_id.as_ref())
+            .await?
+        {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
     }
-    let identity = match &caller.caller {
+    let identity = match caller.caller() {
         m::Caller::Session(session) => m::Identity::AgentSession {
             session: session.clone(),
         },
@@ -73,6 +76,9 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             .as_ref()
             .ok_or_else(|| corrupt("request_id"))?;
         let _turn = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
         let now = runtime.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let digest = crate::workspace_request_log::digest(&request.operation)?;
@@ -133,10 +139,14 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     }
     let actor = {
         let _turn = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime
+            .admit_workspace(caller, request.workspace_id.as_ref())
+            .await?
+        {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
         runtime.resolve_identity(&identity).await?
     };
-    let now = runtime.now()?;
-    let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     let digest = crate::workspace_request_log::digest(&request.operation)?;
     let workspace = request
         .workspace_id
@@ -147,6 +157,12 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     } else {
         None
     };
+    let admission_turn = runtime.take_central_turn().await;
+    if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+        return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+    }
+    let now = runtime.now()?;
+    let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     if request.operation.is_write() {
         let request_id = request
             .request_id
@@ -159,6 +175,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             )
             .await?;
         if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+            drop(admission_turn);
             if let Err(error) = runtime.drain_after_request(workspace).await {
                 return drain_failure(error);
             }
@@ -191,6 +208,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         )
         .await;
     }
+    drop(admission_turn);
     #[cfg(feature = "test-support")]
     runtime
         .pauses
@@ -240,16 +258,6 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .request_id
         .as_ref()
         .ok_or_else(|| corrupt("request_id"))?;
-    if matches!(
-        answer,
-        m::WorkspaceResult::Done(
-            m::WorkspaceAnswer::Created { .. }
-                | m::WorkspaceAnswer::Updated { .. }
-                | m::WorkspaceAnswer::Removed { .. }
-        )
-    ) {
-        runtime.preset_workspace_drain(workspace, now).await?;
-    }
     batch
         .statements
         .extend(crate::workspace_request_log::retain(
@@ -260,8 +268,26 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             &now.to_rfc3339(),
             &cutoff,
         )?);
-    if let Some(result) = store_result(runtime.batch_workspace(workspace, batch).await)? {
-        return Ok(reply(result));
+    {
+        // The workspace turn precedes central, matching the drain's lock order.
+        // Revocation and the admitted batch cannot pass each other inside this turn.
+        let _central = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
+        if matches!(
+            answer,
+            m::WorkspaceResult::Done(
+                m::WorkspaceAnswer::Created { .. }
+                    | m::WorkspaceAnswer::Updated { .. }
+                    | m::WorkspaceAnswer::Removed { .. }
+            )
+        ) {
+            runtime.preset_workspace_drain_held(workspace, now).await?;
+        }
+        if let Some(result) = store_result(runtime.batch_workspace(workspace, batch).await)? {
+            return Ok(reply(result));
+        }
     }
     #[cfg(feature = "test-support")]
     runtime

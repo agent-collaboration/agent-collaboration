@@ -15,7 +15,7 @@ use workspace_model::central_mail::{
 async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let outcome = runtime
@@ -61,7 +61,11 @@ async fn creator_window(fixture: &Fixture) -> SqlValue {
     let mut observer = fixture.caller.clone();
     let mut address = session(&observer);
     address.session_id = "row-use-observer".to_owned().try_into().unwrap();
-    observer.caller = m::Caller::Session(address);
+    observer = collaboration_central_core::WorkspaceCaller::new(
+        observer.connection().clone(),
+        m::Caller::Session(address),
+    )
+    .unwrap();
     let joined = call(
         &fixture.host,
         &observer,
@@ -79,7 +83,7 @@ async fn creator_window(fixture: &Fixture) -> SqlValue {
     ));
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let windows = runtime
@@ -153,7 +157,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
         };
         let runtime = fixture
             .host
-            .central(&fixture.caller.organization_id)
+            .central(fixture.caller.organization_id())
             .await
             .unwrap();
         // Arrange: store one invalid value and pick that row's own use, the due

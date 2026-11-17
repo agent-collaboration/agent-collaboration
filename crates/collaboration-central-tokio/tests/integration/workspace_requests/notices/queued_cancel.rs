@@ -12,7 +12,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     let area = f.area(7400).await;
     let thread = f.thread(7401, area).await;
     let (observer, recipient) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let posted = f.call(7402, post(&thread, vec![])).await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { position, .. }) = posted.result
     else {
@@ -76,6 +76,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         ]]
     );
     fired.release();
+    let observer = f.fresh_caller(&observer).await;
     let left = call(
         &f.host,
         &observer,

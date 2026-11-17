@@ -11,7 +11,7 @@ use workspace_model::central_mail::{
 /// delivers" half is deferred under the original name to the notice deliverable,
 /// because windows run as one whole unit (P5).
 async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplicates() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     let second = call(
         &f.host,
         &f.caller,
@@ -34,7 +34,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![f.workspace.clone(), other.clone()])
@@ -301,6 +301,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         later_due.timestamp_millis(),
         std::sync::atomic::Ordering::SeqCst,
     );
+    f.caller = super::super::support::fresh_auth(&f.host, &f.caller);
     f.workspace_execute(
         "ALTER TABLE outage_changes RENAME TO changes",
         vec![],

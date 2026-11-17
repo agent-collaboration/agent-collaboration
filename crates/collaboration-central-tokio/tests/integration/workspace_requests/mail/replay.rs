@@ -1,7 +1,4 @@
 use super::super::{Statement, support::*};
-use central_storage::{
-    AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
-};
 use workspace_model::central_mail::{
     AutomationState, CentralMailAnswer as Answer, CentralMailOperation as Operation,
     CentralMailRefusal as Refusal, CentralMailRequest, CentralMailResult as Result,
@@ -9,36 +6,19 @@ use workspace_model::central_mail::{
 
 #[tokio::test]
 async fn relative_timer_replay_precedes_new_time_validation() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let ceiling =
         chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
             .unwrap();
-    assert!(matches!(
-        runtime
-            .statement_host()
-            .run_batch(StatementBatch {
-                statements: vec![GuardedStatement {
-                    statement: Statement {
-                        sql: "UPDATE machine_credentials SET expires_at='2263-01-01T00:00:00Z'",
-                        args: vec![],
-                    },
-                    expect: RowExpectation::Exactly(1)
-                }],
-                alarm: AlarmUpdate::Unchanged,
-            })
-            .await
-            .unwrap(),
-        BatchOutcome::Applied { .. }
-    ));
     let last_grid =
         chrono::DateTime::from_timestamp(ceiling.timestamp().div_euclid(300) * 300, 0).unwrap();
     let start = ceiling - chrono::Duration::days(7) - chrono::Duration::seconds(30);
-    fixture.clock.set_utc(start);
+    fixture.relocate_authority(start).await;
     let request = CentralMailRequest {
         request_id: id(1700),
         operation: Operation::SetAutomation {
@@ -49,7 +29,10 @@ async fn relative_timer_replay_precedes_new_time_validation() {
     };
     let first = fixture
         .host
-        .request_central(&fixture.caller, request.clone())
+        .request_central(
+            &fixture.fresh_caller(&fixture.caller).await,
+            request.clone(),
+        )
         .await
         .unwrap();
     assert!(
@@ -70,7 +53,10 @@ async fn relative_timer_replay_precedes_new_time_validation() {
     assert_eq!(
         fixture
             .host
-            .request_central(&fixture.caller, request.clone())
+            .request_central(
+                &fixture.fresh_caller(&fixture.caller).await,
+                request.clone()
+            )
             .await
             .unwrap(),
         first
@@ -89,7 +75,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
     assert_eq!(
         fixture
             .host
-            .request_central(&fixture.caller, fresh)
+            .request_central(&fixture.fresh_caller(&fixture.caller).await, fresh)
             .await
             .unwrap(),
         Result::Refused(Refusal::TimeOutOfRange {
@@ -114,7 +100,7 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);

@@ -38,7 +38,7 @@ async fn exercise_isolation(corruption: &'static str, failure_column: &str) {
     let healthy = set_wake(&fixture, 3001, "healthy").await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let applied = runtime
@@ -137,7 +137,7 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
     let healthy = set_wake(&fixture, 3031, "healthy").await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let rejected = runtime.statement_host().run_batch(StatementBatch {
@@ -231,7 +231,7 @@ async fn corrupt_due_automation_timing_does_not_block_due_wake() {
     };
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     runtime
@@ -312,7 +312,7 @@ async fn set_wake_at(
 async fn wake_state(fixture: &Fixture, wake: &workspace_ids::WakeId) -> Vec<Vec<SqlValue>> {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     runtime.statement_host().read(Statement {
@@ -345,7 +345,7 @@ async fn corrupt_queued_message_does_not_block_due_wake() {
     };
     let healthy = set_wake_at(&f, 3021, due, "healthy").await;
     let future = set_wake_at(&f, 3022, later, "future").await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let applied = runtime
         .statement_host()
         .run_batch(StatementBatch {

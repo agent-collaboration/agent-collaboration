@@ -3,19 +3,54 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
 #[tokio::test]
-async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_directory_without_domain_writes()
+async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_directory_without_domain_writes()
  {
     let f = Fixture::new().await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("Must not be written"),
     };
-    let mut wrong = f.caller.clone();
-    wrong.credential_hash = "incorrect fixture digest".to_owned();
+    let now = router_clock::RuntimeClock::utc_now(f.clock.as_ref()).timestamp();
+    let valid_token = signed::machine_token(
+        organization().as_str(),
+        &id::<m::MachineId>(2).to_string(),
+        &id::<m::WorkspaceId>(4).to_string(),
+        now,
+        now + 600,
+    )
+    .unwrap();
+    let mut mismatched = session(&f.caller);
+    mismatched.machine_id = id(999);
+    assert!(
+        collaboration_central_core::WorkspaceCaller::new(
+            f.caller.connection().clone(),
+            m::Caller::Session(mismatched)
+        )
+        .is_err()
+    );
+    let wrong = signed::tamper_signature(&valid_token).unwrap();
+    assert!(
+        runtime
+            .admit_machine_connection(&wrong)
+            .await
+            .unwrap()
+            .is_err()
+    );
+    // The original socket deadline remains binding after activity from another grant.
+    f.clock
+        .advance(std::time::Duration::from_secs(600))
+        .unwrap();
+    let renewal = runtime.decide_machine_token(&serde_json::from_value(serde_json::json!({
+        "organizationId":organization(),"enrollmentId":id::<m::WorkspaceId>(4),"clientId":id::<m::WorkspaceId>(4)
+    })).unwrap()).await.unwrap();
+    assert!(matches!(
+        renewal,
+        collaboration_central_core::identity_contract::MachineTokenDecision::Grant { .. }
+    ));
     assert_eq!(
         call(
             &f.host,
-            &wrong,
+            &f.caller,
             Some(f.workspace.clone()),
             960,
             operation.clone()
@@ -24,18 +59,13 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
     );
+    let renewed = f.fresh_caller(&f.caller).await;
     let edits = [
         (
             "UPDATE machines SET state='revoked' WHERE machine_id=?",
-            text(f.caller.caller.machine_id()),
+            text(id::<m::WorkspaceId>(3)),
             m::RefusalReason::MachineRevoked,
             "UPDATE machines SET state='enrolled' WHERE machine_id=?",
-        ),
-        (
-            "UPDATE machine_credentials SET expires_at='2000-01-01T00:00:00Z' WHERE machine_id=?",
-            text(f.caller.caller.machine_id()),
-            m::RefusalReason::MachineRevoked,
-            "UPDATE machine_credentials SET expires_at='2030-01-01T00:00:00Z' WHERE machine_id=?",
         ),
         (
             "UPDATE workspaces SET state='archived' WHERE workspace_id=?",
@@ -45,7 +75,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         ),
         (
             "UPDATE machines SET allowed_workspaces='[]' WHERE machine_id=?",
-            text(f.caller.caller.machine_id()),
+            text(id::<m::WorkspaceId>(3)),
             m::RefusalReason::WorkspaceNotAllowed,
             "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         ),
@@ -67,9 +97,15 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
             BatchOutcome::Applied { .. }
         ));
         assert_eq!(
-            f.call(961 + u32::try_from(index).unwrap(), operation.clone())
-                .await
-                .result,
+            call(
+                &f.host,
+                &renewed,
+                Some(f.workspace.clone()),
+                961 + u32::try_from(index).unwrap(),
+                operation.clone()
+            )
+            .await
+            .result,
             m::WorkspaceResult::Refused(refusal)
         );
         let args = if restore.contains("allowed_workspaces") {
@@ -94,7 +130,9 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         );
     }
     assert!(matches!(
-        f.call(970, operation).await.result,
+        call(&f.host, &renewed, Some(f.workspace.clone()), 970, operation)
+            .await
+            .result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
     f.host.close().await;

@@ -9,7 +9,7 @@ use workspace_model as m;
 async fn generic(f: &Fixture, request: &str, name: &str) -> Result<m::WorkspaceReply> {
     Ok(f.host
         .request(
-            &caller()?,
+            &caller(f).await?,
             m::WorkspaceRequest {
                 request_id: Some(request.to_owned().try_into()?),
                 workspace_id: None,
@@ -282,7 +282,10 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
     );
     let denied = f
         .host
-        .request(&caller()?, request("019f0000-0000-7000-8000-00000000d7b2")?)
+        .request(
+            &caller(&f).await?,
+            request("019f0000-0000-7000-8000-00000000d7b2")?,
+        )
         .await?;
     assert_eq!(
         denied.result,
@@ -304,7 +307,10 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
     .await?;
     let allowed = f
         .host
-        .request(&caller()?, request("019f0000-0000-7000-8000-00000000d7b3")?)
+        .request(
+            &caller(&f).await?,
+            request("019f0000-0000-7000-8000-00000000d7b3")?,
+        )
         .await?;
     assert!(
         matches!(

@@ -35,7 +35,7 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
     ));
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     assert!(matches!(
@@ -131,7 +131,7 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
     ));
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     // The pending wake must not be run by the real driver at its due time, so its
@@ -224,7 +224,7 @@ async fn request_event_runs_due_work_inside_the_fifty_second_horizon() {
     ));
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let rows = runtime.statement_host().read(Statement {

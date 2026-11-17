@@ -123,7 +123,11 @@ pub(super) async fn open_notice_window(fixture: &Fixture, first_request: u32) {
     let mut observer = fixture.caller.clone();
     let mut address = session(&observer);
     address.session_id = "event-observer".to_owned().try_into().unwrap();
-    observer.caller = m::Caller::Session(address);
+    observer = collaboration_central_core::WorkspaceCaller::new(
+        observer.connection().clone(),
+        m::Caller::Session(address),
+    )
+    .unwrap();
     let joined = call(
         &fixture.host,
         &observer,

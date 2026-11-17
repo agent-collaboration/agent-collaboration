@@ -206,12 +206,20 @@ impl TokioWorkspaceHost {
         orgs.insert(organization.clone(), runtime.clone());
         Ok(runtime)
     }
+    pub fn current_time(&self) -> SyncTime {
+        self.clock.now()
+    }
+
+    pub(crate) fn shared_clock(&self) -> Arc<dyn Clock> {
+        Arc::new(ClockHandle(self.clock.clone()))
+    }
+
     pub async fn request(
         &self,
         caller: &WorkspaceCaller,
         request: WorkspaceRequest,
     ) -> Result<WorkspaceReply, StoreFailure> {
-        self.central(&caller.organization_id)
+        self.central(caller.organization_id())
             .await?
             .request(caller, request)
             .await
@@ -221,7 +229,7 @@ impl TokioWorkspaceHost {
         caller: &WorkspaceCaller,
         request: CentralMailRequest,
     ) -> Result<CentralMailResult, StoreFailure> {
-        self.central(&caller.organization_id)
+        self.central(caller.organization_id())
             .await?
             .request_central(caller, request)
             .await

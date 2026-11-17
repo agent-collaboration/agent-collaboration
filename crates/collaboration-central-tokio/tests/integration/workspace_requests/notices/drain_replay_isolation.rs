@@ -6,7 +6,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
     let f = Fixture::new().await;
     let area = f.area(8240).await;
     let thread = f.thread(8241, area).await;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut held = r
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);

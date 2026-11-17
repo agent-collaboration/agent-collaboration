@@ -11,7 +11,7 @@ use workspace_model::central_mail::{
 async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<central_storage::SqlValue>) {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let outcome = runtime
@@ -41,7 +41,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
         let fixture = Fixture::new().await;
         let runtime = fixture
             .host
-            .central(&fixture.caller.organization_id)
+            .central(fixture.caller.organization_id())
             .await
             .unwrap();
         let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
@@ -128,7 +128,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);

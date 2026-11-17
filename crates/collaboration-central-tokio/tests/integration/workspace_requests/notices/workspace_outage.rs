@@ -28,19 +28,19 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         panic!("second workspace")
     };
     let other = workspace.workspace_id;
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         r.statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![f.workspace.clone(), other.clone()])
                                     .unwrap()
                             ),
-                            text(f.caller.caller.machine_id())
+                            text(f.caller.caller().machine_id())
                         ]
                     },
                     expect: RowExpectation::Exactly(1),
@@ -105,7 +105,11 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         let mut observer = f.caller.clone();
         let mut address = session(&observer);
         address.session_id = suffix.to_owned().try_into().unwrap();
-        observer.caller = m::Caller::Session(address);
+        observer = collaboration_central_core::WorkspaceCaller::new(
+            observer.connection().clone(),
+            m::Caller::Session(address),
+        )
+        .unwrap();
         assert!(matches!(
             call(
                 &f.host,

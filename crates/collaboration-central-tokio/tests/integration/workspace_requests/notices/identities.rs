@@ -25,11 +25,11 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
             "routerComponent",
             format!(
                 "{{\"component\":\"Router\",\"kind\":\"routerComponent\",\"machineId\":\"{}\"}}",
-                f.caller.caller.machine_id()
+                f.caller.caller().machine_id()
             ),
         ),
     ];
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let statements = identities.into_iter().map(|(actor, kind, identity)| GuardedStatement {
         statement: Statement { sql: "INSERT INTO actor_identities(actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?)", args: vec![text(actor), text(kind), text(identity), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")] }, expect: RowExpectation::Exactly(1),
     }).collect();
@@ -109,10 +109,14 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     let posted_position: m::ChangePosition =
         u64::try_from(position.get()).unwrap().try_into().unwrap();
     let mut person_caller = f.caller.clone();
-    person_caller.caller = m::Caller::Person {
-        machine_id: f.caller.caller.machine_id().clone(),
-        person_id: id(7224),
-    };
+    person_caller = collaboration_central_core::WorkspaceCaller::new(
+        person_caller.connection().clone(),
+        m::Caller::Person {
+            machine_id: f.caller.caller().machine_id().clone(),
+            person_id: id(7224),
+        },
+    )
+    .unwrap();
     for caller in [&person_caller, &observer] {
         let reply = call(
             &f.host,

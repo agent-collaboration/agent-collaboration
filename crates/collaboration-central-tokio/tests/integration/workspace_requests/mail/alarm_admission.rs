@@ -22,7 +22,7 @@ fn number(value: i64) -> TestResult<SqlValue> {
     Ok(SqlValue::Integer(value.try_into()?))
 }
 async fn rows(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) -> TestResult<ReadOutcome> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime
         .statement_host()
         .read(Statement { sql, args })
@@ -33,7 +33,7 @@ async fn batch(
     statements: Vec<GuardedStatement>,
     alarm: AlarmUpdate,
 ) -> TestResult<()> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     if !matches!(
         runtime
             .statement_host()
@@ -69,7 +69,7 @@ async fn clear_alarm(f: &Fixture) -> TestResult<()> {
     .await
 }
 async fn alarm(f: &Fixture) -> TestResult<Option<i64>> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime.statement_host().alarm().map(|at| at.unix_millis()))
 }
 async fn request(f: &Fixture, serial: u32, operation: Op) -> TestResult<MailResult> {
@@ -187,7 +187,7 @@ async fn corrupt_done_wake_does_not_prevent_cold_runtime_startup() -> TestResult
     .rows;
     clear_alarm(&f).await?;
     f.reopen().await;
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     runtime.recompute_alarm().await?;
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
     assert!(

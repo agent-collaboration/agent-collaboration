@@ -114,6 +114,7 @@ async fn cold_concurrent_requests_share_the_reopened_org_turn_owner() {
         panic!("post");
     };
     f.clock.0.fetch_sub(100_000, Ordering::SeqCst);
+    f.caller = super::support::fresh_auth(&f.host, &f.caller);
     f.reopen().await;
     let runtime = f.host.central(&f.caller.organization_id).await;
     let mut pending = vec![];

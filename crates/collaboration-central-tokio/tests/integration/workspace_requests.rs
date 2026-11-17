@@ -1,6 +1,5 @@
 //! Real org core requests, actual approved migrations and owning SQLite readback.
 use central_storage::{SqlValue, Statement};
-use collaboration_central_tokio::TokioWorkspaceHost;
 use std::sync::Arc;
 use workspace_model as m;
 
@@ -9,20 +8,14 @@ use support::*;
 
 #[tokio::test]
 async fn central_replay_and_real_workspace_project_thread_rules() {
-    let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(
-        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_794_571_200_000,
-        ))
-        .unwrap(),
-    );
-    let host = TokioWorkspaceHost::open(root.path(), clock).await.unwrap();
-    let caller = caller();
-    seed(&host, &caller).await;
-    let workspace = create_workspace(&host, &caller).await;
+    let f = Fixture::new().await;
+    let host = &f.host;
+    let caller = f.caller.clone();
+    let workspace = f.workspace.clone();
+
     let operation = m::WorkspaceOperation::CreateArea { name: name("Area") };
     let first = call(
-        &host,
+        host,
         &caller,
         Some(workspace.clone()),
         11,
@@ -30,7 +23,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     )
     .await;
     assert_eq!(
-        call(&host, &caller, Some(workspace.clone()), 11, operation).await,
+        call(host, &caller, Some(workspace.clone()), 11, operation).await,
         first
     );
     let m::ItemRef::Area(area_id) = created(first) else {
@@ -38,7 +31,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     };
     let m::ItemRef::Project(project_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             12,
@@ -54,7 +47,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     };
     let m::ItemRef::Thread(thread_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             13,
@@ -68,7 +61,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
         panic!("wrong thread id");
     };
     let resolved = call(
-        &host,
+        host,
         &caller,
         Some(workspace.clone()),
         14,
@@ -83,7 +76,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     ));
     assert_eq!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             14,
@@ -96,7 +89,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     );
     assert!(matches!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             15,
@@ -108,7 +101,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     ));
     assert!(matches!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             16,
@@ -126,54 +119,69 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
 
 #[tokio::test]
 async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
-    let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(
-        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_794_571_200_000,
-        ))
-        .unwrap(),
+    use runtime_primitives::Clock;
+    let f = Fixture::new().await;
+    let now = f.clock.now().unix_millis().div_euclid(1000);
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
+    let missing = signed::machine_token(
+        organization().as_str(),
+        &id::<m::MachineId>(98).to_string(),
+        &id::<m::WorkspaceId>(97).to_string(),
+        now,
+        now + 600,
+    )
+    .unwrap();
+    assert!(
+        runtime
+            .admit_machine_connection(&missing)
+            .await
+            .unwrap()
+            .is_err()
     );
-    let host = TokioWorkspaceHost::open(root.path(), clock).await.unwrap();
-    let first = caller();
-    assert!(matches!(
-        call(
-            &host,
-            &first,
-            None,
-            10,
-            m::WorkspaceOperation::CreateWorkspace {
-                name: name("Denied")
-            }
+    let other: fleet_identity_protocol::OrganizationId =
+        id::<m::WorkspaceId>(99).to_string().try_into().unwrap();
+    let second_runtime = f.host.central(&other).await.unwrap();
+    second_runtime
+        .provision_organization(
+            &collaboration_central_core::identity_contract::ProvisionOrganization {
+                organization_id: other.clone(),
+                organization_statement: signed::stamp(other.as_str(), now - 3600)
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            },
         )
         .await
-        .result,
-        m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
-    ));
-    seed(&host, &first).await;
-    let workspace = create_workspace(&host, &first).await;
-    let mut second = first.clone();
-    second.organization_id =
-        serde_json::from_str(&format!("\"{}\"", id::<m::WorkspaceId>(99))).unwrap();
-    assert!(matches!(
-        call(
-            &host,
-            &second,
-            Some(workspace.clone()),
-            11,
-            m::WorkspaceOperation::CreateArea {
-                name: name("Denied")
-            }
-        )
+        .unwrap();
+    let token = signed::machine_token(
+        other.as_str(),
+        &id::<m::MachineId>(2).to_string(),
+        &id::<m::WorkspaceId>(4).to_string(),
+        now,
+        now + 600,
+    )
+    .unwrap();
+    assert!(
+        second_runtime
+            .admit_machine_connection(&token)
+            .await
+            .unwrap()
+            .is_err()
+    );
+    seed_machine_for(&f.host, &other, &id(2), 3, 4, now).await;
+    let connection = second_runtime
+        .admit_machine_connection(&token)
         .await
-        .result,
-        m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
-    ));
-    seed(&host, &second).await;
+        .unwrap()
+        .unwrap();
+    let second =
+        collaboration_central_core::WorkspaceCaller::new(connection, f.caller.caller().clone())
+            .unwrap();
     assert!(matches!(
         call(
-            &host,
+            &f.host,
             &second,
-            Some(workspace),
+            Some(f.workspace.clone()),
             11,
             m::WorkspaceOperation::CreateArea {
                 name: name("Denied")
@@ -183,26 +191,20 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNotAllowed)
     ));
-    assert_ne!(first.organization_id, second.organization_id);
-    host.close().await;
+    assert_ne!(f.caller.organization_id(), second.organization_id());
+    f.host.close().await;
 }
 
 #[tokio::test]
 async fn real_issue_status_and_computed_views_guard_project_closure() {
-    let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(
-        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_794_571_200_000,
-        ))
-        .unwrap(),
-    );
-    let host = TokioWorkspaceHost::open(root.path(), clock).await.unwrap();
-    let caller = caller();
-    seed(&host, &caller).await;
-    let workspace = create_workspace(&host, &caller).await;
+    let f = Fixture::new().await;
+    let host = &f.host;
+    let caller = f.caller.clone();
+    let workspace = f.workspace.clone();
+
     let m::ItemRef::Area(area_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             20,
@@ -214,7 +216,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
     };
     let m::ItemRef::Project(project_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             21,
@@ -230,7 +232,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
     };
     let m::ItemRef::Deliverable(deliverable_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             22,
@@ -248,14 +250,14 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
         status: m::WorkStatus::Closed,
     };
     assert!(matches!(
-        call(&host, &caller, Some(workspace.clone()), 23, close.clone())
+        call(host, &caller, Some(workspace.clone()), 23, close.clone())
             .await
             .result,
         m::WorkspaceResult::Refused(m::RefusalReason::ChildrenNotClosed { .. })
     ));
     let m::ItemRef::Issue(issue_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             24,
@@ -275,7 +277,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
     ] {
         assert!(matches!(
             call(
-                &host,
+                host,
                 &caller,
                 Some(workspace.clone()),
                 request,
@@ -290,7 +292,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
         ));
     }
     let shown = call(
-        &host,
+        host,
         &caller,
         Some(workspace.clone()),
         0,
@@ -304,14 +306,14 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
         "{shown:?}"
     );
     assert!(matches!(
-        call(&host, &caller, Some(workspace.clone()), 28, close)
+        call(host, &caller, Some(workspace.clone()), 28, close)
             .await
             .result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
     assert!(matches!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace),
             29,
@@ -329,22 +331,15 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
 
 #[tokio::test]
 async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_are_new() {
-    let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(
-        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_794_571_200_000,
-        ))
-        .unwrap(),
-    );
-    let host = TokioWorkspaceHost::open(root.path(), clock.clone())
-        .await
-        .unwrap();
-    let caller = caller();
-    seed(&host, &caller).await;
-    let workspace = create_workspace(&host, &caller).await;
+    let f = Fixture::new().await;
+    let host = &f.host;
+    let mut caller = f.caller.clone();
+    let workspace = f.workspace.clone();
+    let clock = f.clock.clone();
+
     let m::ItemRef::Area(area_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             30,
@@ -356,7 +351,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     };
     let m::ItemRef::Thread(thread_id) = created(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             31,
@@ -369,14 +364,14 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     ) else {
         panic!("thread");
     };
-    let runtime = host.central(&caller.organization_id).await.unwrap();
+    let runtime = host.central(caller.organization_id()).await.unwrap();
     runtime.lose_reply_after_apply(id(32));
     let operation = m::WorkspaceOperation::ResolveThread {
         thread_id: thread_id.clone(),
     };
     assert_eq!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             32,
@@ -393,7 +388,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         "lost answer must follow the actual effect and durable answer"
     );
     let retry = call(
-        &host,
+        host,
         &caller,
         Some(workspace.clone()),
         32,
@@ -405,12 +400,12 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
     assert_eq!(
-        call(&host, &caller, Some(workspace.clone()), 32, operation).await,
+        call(host, &caller, Some(workspace.clone()), 32, operation).await,
         retry
     );
     assert!(matches!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace.clone()),
             32,
@@ -425,8 +420,9 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     clock
         .advance(std::time::Duration::from_millis(86_400_001))
         .unwrap();
+    caller = f.fresh_caller(&caller).await;
     let recreated = call(
-        &host,
+        host,
         &caller,
         None,
         10,
@@ -441,7 +437,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     ));
     assert!(matches!(
         call(
-            &host,
+            host,
             &caller,
             Some(workspace),
             32,

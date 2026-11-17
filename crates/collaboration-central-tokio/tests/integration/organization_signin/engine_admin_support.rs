@@ -46,15 +46,7 @@ impl EngineOrg {
         let f = Fixture::new().await.unwrap();
         f.ready().await.unwrap();
         f.seed_machine().await.unwrap();
-        let caller = WorkspaceCaller {
-            organization_id: org(A).unwrap(),
-            caller: m::Caller::Session(m::SessionAddress {
-                machine_id: MACHINE.to_owned().try_into().unwrap(),
-                endpoint: "codex-local".to_owned().try_into().unwrap(),
-                session_id: "engine-admin".to_owned().try_into().unwrap(),
-            }),
-            credential_hash: "signin-fixture-hash".to_owned(),
-        };
+        let caller = f.machine_caller("engine-admin").await.unwrap();
         let mut engine = Self {
             f,
             caller,
@@ -132,10 +124,11 @@ impl EngineOrg {
         workspace: Option<m::WorkspaceId>,
         operation: m::WorkspaceOperation,
     ) -> m::WorkspaceReply {
+        let caller = self.f.machine_caller("engine-admin").await.unwrap();
         self.f
             .host
             .request(
-                &self.caller,
+                &caller,
                 m::WorkspaceRequest {
                     request_id: operation
                         .is_write()
@@ -184,11 +177,7 @@ impl EngineOrg {
     }
     /// Joins a second session as observer and returns its actor identity.
     pub async fn observer(&self, thread: &m::ThreadId) -> m::ActorIdentityId {
-        let mut observer = self.caller.clone();
-        let m::Caller::Session(address) = &mut observer.caller else {
-            panic!("session caller")
-        };
-        address.session_id = "engine-observer".to_owned().try_into().unwrap();
+        let observer = self.f.machine_caller("engine-observer").await.unwrap();
         let joined = self
             .f
             .host
@@ -236,10 +225,11 @@ impl EngineOrg {
         .await;
     }
     async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
+        let caller = self.f.machine_caller("engine-admin").await.unwrap();
         self.f
             .host
             .request_central(
-                &self.caller,
+                &caller,
                 CentralMailRequest {
                     request_id: self.fresh().try_into().unwrap(),
                     operation,
@@ -249,7 +239,7 @@ impl EngineOrg {
             .unwrap()
     }
     pub fn target(&self) -> m::SessionAddress {
-        let m::Caller::Session(address) = &self.caller.caller else {
+        let m::Caller::Session(address) = self.caller.caller() else {
             panic!("session caller")
         };
         address.clone()

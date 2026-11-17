@@ -59,20 +59,13 @@ pub(super) async fn machine_rows(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>>
     let mut rows = vec![];
     for sql in [
         "SELECT * FROM machines ORDER BY machine_id",
-        "SELECT * FROM machine_credentials ORDER BY credential_id",
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+        "SELECT * FROM machine_approvals ORDER BY approval_id",
     ] {
         rows.push(f.rows(A, sql, vec![]).await?);
     }
     Ok(rows)
 }
-pub(super) fn caller() -> Result<collaboration_central_core::WorkspaceCaller> {
-    Ok(collaboration_central_core::WorkspaceCaller {
-        organization_id: org(A)?,
-        caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
-            machine_id: MACHINE.to_owned().try_into()?,
-            endpoint: "codex-local".to_owned().try_into()?,
-            session_id: "setup-machine-session".to_owned().try_into()?,
-        }),
-        credential_hash: "signin-fixture-hash".to_owned(),
-    })
+pub(super) async fn caller(f: &Fixture) -> Result<collaboration_central_core::WorkspaceCaller> {
+    f.machine_caller("setup-machine-session").await
 }

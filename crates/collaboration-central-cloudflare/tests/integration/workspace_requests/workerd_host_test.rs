@@ -109,8 +109,9 @@ async fn control_http_connection_reopens_after_real_upstream_idle_close() {
         let upstream_address = format!("127.0.0.1:{}", upstream.port().unwrap());
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let request_url = format!(
-            "http://{}/test-support/workspace/019f0000-0000-7000-8000-00000000d201/clock",
+            "http://{}{}/test-support/workspace/019f0000-0000-7000-8000-00000000d201/clock",
             listener.local_addr().unwrap(),
+            upstream.path(),
         );
         let (warm_done, warm_receipt) = oneshot::channel();
         let (closed, close_receipt) = oneshot::channel();

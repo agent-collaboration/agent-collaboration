@@ -3,6 +3,10 @@
 
 mod clock_ids;
 mod engine;
+/// Test support: the engine's alarm-input aggregate, one row of
+/// `(on_grid_due, legacy_due)` in UTC milliseconds or NULL.
+#[cfg(feature = "test-support")]
+pub const ENGINE_ALARM_INPUTS: &str = engine::query_registry::ALARM_INPUTS;
 #[cfg(feature = "test-support")]
 pub mod engine_owed_probe;
 #[cfg(feature = "test-support")]
@@ -15,6 +19,8 @@ pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineR
 pub use engine::{AlarmNotPublished, EventCompletion};
 pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
+pub mod machine_token;
+
 #[cfg(feature = "test-support")]
 pub mod signin_test_observation;
 #[cfg(feature = "test-support")]
@@ -63,6 +69,8 @@ pub use connection_admission::AdmissionOrigin;
 mod object_host;
 mod platform_capabilities;
 pub use object_host::ObjectHost;
+mod machine_connection;
+mod machine_connection_admission;
 mod machine_login_plans;
 mod machine_login_reads;
 mod machine_login_row_values;
@@ -70,6 +78,7 @@ mod machine_login_rows;
 #[cfg(feature = "test-support")]
 mod machine_login_test_control;
 mod machine_login_writes;
+pub use machine_connection::{MachineConnectionAttachment, ValidatedMachineConnection};
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};

@@ -109,7 +109,7 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
         ));
     }
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let identities = runtime
         .statement_host()
         .read(Statement {
@@ -147,7 +147,11 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
         vec![&vec![text(&new), SqlValue::Null]]
     );
     let mut nonlead = f.caller.clone();
-    nonlead.caller = m::Caller::Session(second);
+    nonlead = collaboration_central_core::WorkspaceCaller::new(
+        nonlead.connection().clone(),
+        m::Caller::Session(second),
+    )
+    .unwrap();
     let refused = call(
         &f.host,
         &nonlead,

@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap};
 use worker::{Env, Request, Response, Result};
 use worker::{Headers, Method, RequestInit, js_sys};
+#[path = "workspace_fixture_admission.rs"]
+mod fixture_admission;
 
 #[derive(Default)]
 pub(crate) struct Controls {
@@ -23,6 +25,9 @@ pub(crate) struct Controls {
     central_holds: RefCell<BTreeMap<Point, HeldPause>>,
     engine_holds: RefCell<BTreeMap<u64, HeldPause>>,
     next_engine_hold: std::cell::Cell<u64>,
+    /// A probe caller admitted once, ahead of a held turn, so a request can
+    /// run without its own admission.
+    admitted_probe_caller: RefCell<Option<collaboration_central_core::WorkspaceCaller>>,
     alarm_waiters: RefCell<Vec<futures_channel::oneshot::Sender<()>>>,
 }
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -110,13 +115,7 @@ pub(crate) async fn route(
     init.with_method(Method::Post)
         .with_headers(headers)
         .with_body(Some(js_sys::Uint8Array::from(body.as_slice()).into()));
-    let path = if operation == "request" {
-        "/request".to_owned()
-    } else if operation == "mail" {
-        "/mail".to_owned()
-    } else {
-        format!("/test/{operation}")
-    };
+    let path = format!("/test/{operation}");
     let forwarded = Request::new_with_init(&format!("https://central.internal{path}"), &init)?;
     Ok(Ok(crate::cloudflare_transport::stub(env, &address)?
         .fetch_with_request(forwarded)
@@ -134,6 +133,9 @@ pub(super) async fn control(
         return Response::from_json(
             &collaboration_central_core::machine_login_control(runtime.as_ref(), control).await,
         );
+    }
+    if matches!(path.as_str(), "/test/request" | "/test/mail") {
+        return fixture_admission::dispatch(object, organization, request).await;
     }
     // Holding time before initialization also pins the first minted identity.
     if path == "/test/clock" {
@@ -178,14 +180,14 @@ pub(super) async fn control(
             #[serde(rename_all = "camelCase", deny_unknown_fields)]
             struct ProbeCall {
                 caller: workspace_model::Caller,
-                credential_hash: String,
+                token: String,
                 request: collaboration_central_core::engine_probe::ProbeRequest,
             }
             let call: ProbeCall = request.json().await?;
-            let caller = collaboration_central_core::WorkspaceCaller {
-                organization_id: organization.clone(),
-                caller: call.caller,
-                credential_hash: call.credential_hash,
+            let Some(caller) =
+                fixture_admission::admitted_caller(&runtime, &call.token, call.caller).await?
+            else {
+                return Response::error("probe caller not admitted", 401);
             };
             Response::from_json(&runtime.request_probe(&caller, call.request).await)
         }
@@ -197,14 +199,14 @@ pub(super) async fn control(
             #[serde(rename_all = "camelCase", deny_unknown_fields)]
             struct OwedCall {
                 caller: workspace_model::Caller,
-                credential_hash: String,
+                token: String,
                 request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
             }
             let call: OwedCall = request.json().await?;
-            let caller = collaboration_central_core::WorkspaceCaller {
-                organization_id: organization.clone(),
-                caller: call.caller,
-                credential_hash: call.credential_hash,
+            let Some(caller) =
+                fixture_admission::admitted_caller(&runtime, &call.token, call.caller).await?
+            else {
+                return Response::error("probe caller not admitted", 401);
             };
             Response::from_json(&runtime.request_owed_reply(&caller, call.request).await)
         }
@@ -282,6 +284,35 @@ pub(super) async fn control(
             let count: usize = request.json().await?;
             runtime.until_central_waiting(count).await;
             Response::from_json(&true)
+        }
+        "/test/until-admission-waiting" => {
+            let count: usize = request.json().await?;
+            runtime.until_admission_waiting(count).await;
+            Response::from_json(&true)
+        }
+        "/test/admission-waiting" => Response::from_json(&runtime.admission_waiting_now()),
+        "/test/engine-probe-admit" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct AdmitCall {
+                caller: workspace_model::Caller,
+                token: String,
+            }
+            let call: AdmitCall = request.json().await?;
+            let admitted =
+                fixture_admission::admitted_caller(&runtime, &call.token, call.caller).await?;
+            let accepted = admitted.is_some();
+            *object.controls.admitted_probe_caller.borrow_mut() = admitted;
+            Response::from_json(&accepted)
+        }
+        "/test/engine-probe-request-admitted" => {
+            let probe: collaboration_central_core::engine_probe::ProbeRequest =
+                request.json().await?;
+            let admitted = object.controls.admitted_probe_caller.borrow().clone();
+            let Some(caller) = admitted else {
+                return Response::error("no admitted probe caller", 409);
+            };
+            Response::from_json(&runtime.request_probe(&caller, probe).await)
         }
         "/test/until-held-central" => {
             let point: Point = request.json().await?;

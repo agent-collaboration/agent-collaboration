@@ -35,6 +35,7 @@ impl Fixture {
         let access = collaboration_central_conformance::fixture_policy();
         let access_team = access.issuer.strip_prefix("https://").unwrap();
         std::fs::write(&plan,serde_json::to_vec(&json!({"textBindings":{
+            "CENTRAL_MACHINE_AUDIENCE":fixture::MACHINE_AUDIENCE,
             "CENTRAL_SIGN_IN_ISSUER":issuer,"CENTRAL_SIGN_IN_AUDIENCE":fixture::AUDIENCE,
             "CENTRAL_SIGN_IN_JWKS_URL":"https://signin.test/.well-known/jwks.json",
             "CENTRAL_ADMIN_AUDIENCE":fixture::ADMIN_AUDIENCE,"CENTRAL_PUBLIC_ORIGIN":fixture::PUBLIC_ORIGIN,
@@ -177,4 +178,32 @@ pub fn org_revision(revision: i64, state: &str) -> Value {
 }
 pub fn person_revision(revision: i64, state: &str) -> Value {
     json!({"kind":"person","organizationId":ORG,"personId":fixture::OWNER,"subjectId":fixture::OWNER_SUBJECT,"revision":revision,"state":state})
+}
+
+/// The engine fixtures' private machine row, public installation and enrollment.
+pub const FIXTURE_MACHINE: &str = "019f0000-0000-7000-8000-00000000b302";
+pub const FIXTURE_INSTALLATION: &str = "019f0000-0000-7000-8000-00000000b303";
+pub const FIXTURE_ENROLLMENT: &str = "019f0000-0000-7000-8000-00000000b304";
+impl Fixture {
+    /// Enrolls the fixture machine through its rows and returns a session caller
+    /// whose sign-in token is admitted by the real Worker link admission.
+    pub async fn enrolled_session_caller(
+        &self,
+        label: &'static str,
+        session: &str,
+    ) -> super::super::support::FixtureCaller {
+        self.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,?,'enrolled','[]',1,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![super::super::support::text(FIXTURE_MACHINE),super::super::support::text(FIXTURE_INSTALLATION),super::super::support::text(label)]).await;
+        self.execute("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,?,'[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:56:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![super::super::support::text(FIXTURE_ENROLLMENT),super::super::support::text(FIXTURE_ENROLLMENT),super::super::support::text(FIXTURE_MACHINE),super::super::support::text(label),super::super::support::text(fixture::OWNER),super::super::support::text(FIXTURE_ENROLLMENT)]).await;
+        let now = runtime_primitives::Clock::now(self.clock.as_ref()).unix_millis() / 1000;
+        super::super::support::machine_caller(
+            self.org.clone(),
+            workspace_model::Caller::Session(workspace_model::SessionAddress {
+                machine_id: FIXTURE_INSTALLATION.to_owned().try_into().unwrap(),
+                endpoint: "codex-local".to_owned().try_into().unwrap(),
+                session_id: session.to_owned().try_into().unwrap(),
+            }),
+            FIXTURE_ENROLLMENT.to_owned(),
+            now,
+        )
+    }
 }

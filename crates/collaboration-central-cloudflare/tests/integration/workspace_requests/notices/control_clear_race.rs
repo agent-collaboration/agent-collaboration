@@ -16,7 +16,7 @@ const DRAINS: &str = "legacy_workspace_drains";
 
 #[tokio::test]
 async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     witness_fixture_attempt_ids(&f).await;
     f.area(9900).await;
     let created = call(
@@ -38,7 +38,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     let runtime = runtime(&f).await;
     raw(
         &runtime,
-        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+        "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
         vec![
             text(serde_json::to_string(&[&f.workspace, &late]).unwrap()),
             text(f.caller.caller.machine_id()),
@@ -66,6 +66,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     // before it clears the record it observed (none).
     let held = runtime.hold_engine("beforeControlClear", DRAINS).await;
     set_now(&f, at);
+    f.caller = super::super::support::fresh_auth(&f.host, &f.caller);
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }

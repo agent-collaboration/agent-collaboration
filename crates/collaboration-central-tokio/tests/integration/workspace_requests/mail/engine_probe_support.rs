@@ -25,7 +25,7 @@ pub(super) fn key(item: uuid::Uuid) -> InstanceKey {
 pub(super) async fn runtime(fixture: &Fixture) -> Runtime {
     fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap()
 }

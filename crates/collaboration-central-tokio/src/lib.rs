@@ -27,6 +27,8 @@ pub use object_storage::ObjectStorage;
 pub use object_storage::StoreMigrations;
 mod workspace_host;
 pub use workspace_host::{TokioWorkspaceHost, TokioWorkspaceStores};
+mod workspace_link;
+pub use workspace_link::WorkspaceLink;
 mod platform;
 mod self_hosted_issuer;
 pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};

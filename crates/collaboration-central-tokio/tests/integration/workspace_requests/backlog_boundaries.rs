@@ -37,7 +37,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
         panic!("second workspace");
     };
     let other = other.workspace_id;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
             .statement_host()
@@ -47,7 +47,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
                         sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(serde_json::to_string(&[&f.workspace, &other]).unwrap()),
-                            text(f.caller.caller.machine_id())
+                            text(id::<m::WorkspaceId>(3))
                         ],
                     },
                     expect: RowExpectation::Exactly(1)

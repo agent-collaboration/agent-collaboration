@@ -1,7 +1,55 @@
 use crate::ProtocolError;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
 use workspace_model::{Caller, RequestId, WorkspaceReply, WorkspaceRequest};
+
+pub const MAX_LINK_REQUEST_BATCH_SIZE: usize = 64;
+
+/// A nonempty bounded collection of independent writes with distinct correlations.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "Vec<LinkRequest>", into = "Vec<LinkRequest>")]
+pub struct LinkRequestBatch(Vec<LinkRequest>);
+
+impl LinkRequestBatch {
+    pub fn new(requests: Vec<LinkRequest>) -> Result<Self, ProtocolError> {
+        if requests.is_empty() || requests.len() > MAX_LINK_REQUEST_BATCH_SIZE {
+            return Err(ProtocolError::InvalidBatch);
+        }
+        let mut correlations = BTreeSet::new();
+        for request in &requests {
+            if request.payload().write_request_id().is_none()
+                || !correlations.insert(request.correlation_id())
+            {
+                return Err(ProtocolError::InvalidBatch);
+            }
+        }
+        Ok(Self(requests))
+    }
+
+    #[must_use]
+    pub fn requests(&self) -> &[LinkRequest] {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_requests(self) -> Vec<LinkRequest> {
+        self.0
+    }
+}
+
+impl TryFrom<Vec<LinkRequest>> for LinkRequestBatch {
+    type Error = ProtocolError;
+    fn try_from(requests: Vec<LinkRequest>) -> Result<Self, Self::Error> {
+        Self::new(requests)
+    }
+}
+
+impl From<LinkRequestBatch> for Vec<LinkRequest> {
+    fn from(batch: LinkRequestBatch) -> Self {
+        batch.into_requests()
+    }
+}
 
 /// Transport correlation has a separate type and lifetime from durable write idempotency.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]

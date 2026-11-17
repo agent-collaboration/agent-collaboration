@@ -1,8 +1,10 @@
 //! Rust-owned control transport for one isolated real workerd process.
+use super::support::FixtureCaller;
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{AlarmResult, DrainResult, WorkspaceCaller};
+use collaboration_central_conformance::signin_fixtures as signed;
+use collaboration_central_core::{AlarmResult, DrainResult};
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -96,6 +98,8 @@ impl AlarmReceipt {
 #[path = "workerd_bridge_process.rs"]
 mod bridge_process;
 pub(super) use bridge_process::Process;
+#[path = "workerd_c2_controls.rs"]
+pub(super) mod c2_controls;
 struct Transport {
     origin: String,
     client: reqwest::Client,
@@ -161,6 +165,8 @@ pub(super) struct WorkerdHost {
     orgs: Mutex<BTreeMap<OrganizationId, Arc<RemoteRuntime>>>,
     captured_logs: Arc<Mutex<Vec<String>>>,
     log_changed: tokio::sync::watch::Sender<usize>,
+    _fixture_keys: Option<signed::SignInKeys>,
+    _fixture_plan: Option<tempfile::TempDir>,
 }
 impl Drop for WorkerdHost {
     fn drop(&mut self) {
@@ -176,16 +182,21 @@ impl Drop for WorkerdHost {
 }
 impl WorkerdHost {
     pub async fn open(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
-        Self::open_configured(clock, None).await
+        c2_controls::open_fixture(clock).await
+    }
+    pub fn now_seconds(&self) -> i64 {
+        self.clock.now().unix_millis().div_euclid(1000)
     }
     pub async fn open_signin(clock: Arc<dyn Clock>, plan: &Path) -> Result<Self, StoreFailure> {
-        Self::open_configured(clock, Some(plan.to_owned())).await
+        Self::open_configured(clock, Some(plan.to_owned()), false).await
     }
     async fn open_configured(
         clock: Arc<dyn Clock>,
         plan: Option<std::path::PathBuf>,
+        c2_witness: bool,
     ) -> Result<Self, StoreFailure> {
         let signin = plan.is_some();
+        let initial_time_ms = clock.now().unix_millis();
         let captured_logs = Arc::new(Mutex::new(Vec::new()));
         let log_changed = tokio::sync::watch::channel(0usize).0;
         let process_logs = captured_logs.clone();
@@ -197,6 +208,12 @@ impl WorkerdHost {
             command.arg(manifest.join("tests/support/workerd-bridge.mts"));
             if let Some(plan) = plan {
                 command.arg("--signin-plan").arg(plan);
+            }
+            if c2_witness {
+                command
+                    .arg("--c2-witness")
+                    .arg("--launcher-time-ms")
+                    .arg(initial_time_ms.to_string());
             }
             let child = command
                 .current_dir(root)
@@ -214,7 +231,9 @@ impl WorkerdHost {
             let process = Arc::new(Process::own(child));
             let (stdout, stderr) =
                 process.with_child(|child| (child.stdout.take().unwrap(), child.stderr.take()));
+            let reply_sender = process.reply_sender();
             let error_drain = stderr.map(|stderr| {
+                let replies = reply_sender.clone();
                 let logs = process_logs.clone();
                 let changed = process_changed.clone();
                 std::thread::spawn(move || {
@@ -222,11 +241,15 @@ impl WorkerdHost {
                         .lines()
                         .map_while(std::result::Result::ok)
                     {
+                        if c2_controls::is_control_reply(&line) {
+                            let _ = replies.send(Some(line.clone()));
+                        }
                         logs.lock()
                             .unwrap_or_else(PoisonError::into_inner)
                             .push(line);
                         changed.send_modify(|count| *count += 1);
                     }
+                    let _ = replies.send(None);
                 })
             });
             process.set_error_drain(error_drain);
@@ -292,6 +315,8 @@ impl WorkerdHost {
             orgs: Mutex::new(BTreeMap::new()),
             captured_logs,
             log_changed,
+            _fixture_keys: None,
+            _fixture_plan: None,
         })
     }
     pub fn captured_logs(&self) -> Vec<String> {
@@ -354,7 +379,7 @@ impl WorkerdHost {
     }
     pub async fn request(
         &self,
-        caller: &WorkspaceCaller,
+        caller: &FixtureCaller,
         request: WorkspaceRequest,
     ) -> Result<WorkspaceReply, StoreFailure> {
         self.cold_runtime(&caller.organization_id)
@@ -363,7 +388,7 @@ impl WorkerdHost {
     }
     pub async fn request_central(
         &self,
-        caller: &WorkspaceCaller,
+        caller: &FixtureCaller,
         request: CentralMailRequest,
     ) -> Result<CentralMailResult, StoreFailure> {
         self.cold_runtime(&caller.organization_id)
@@ -474,7 +499,7 @@ impl RemoteRuntime {
     }
     pub async fn request_owed_reply(
         &self,
-        caller: &WorkspaceCaller,
+        caller: &super::support::FixtureCaller,
         request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
     ) -> Result<
         collaboration_central_core::engine_owed_probe::EngineRequestOutcome<
@@ -484,11 +509,26 @@ impl RemoteRuntime {
         StoreFailure,
     > {
         self.apply_clock().await;
-        self.control("engine-owed-request",&serde_json::json!({"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+        self.control(
+            "engine-owed-request",
+            &serde_json::json!({"caller":caller.caller,"token":caller.token,"request":request}),
+        )
+        .await?
     }
-    pub async fn request_probe(
+    /// Admits a probe caller once, as an open socket would be, ahead of a held turn.
+    pub async fn admit_probe_caller(&self, caller: &super::support::FixtureCaller) -> bool {
+        self.apply_clock().await;
+        self.control(
+            "engine-probe-admit",
+            &serde_json::json!({"caller":caller.caller,"token":caller.token}),
+        )
+        .await
+        .unwrap()
+    }
+    /// A probe request from the caller admitted by `admit_probe_caller`, with no
+    /// admission of its own.
+    pub async fn request_probe_admitted(
         &self,
-        caller: &WorkspaceCaller,
         request: collaboration_central_core::engine_probe::ProbeRequest,
     ) -> Result<
         collaboration_central_core::engine_probe::EngineRequestOutcome<
@@ -498,7 +538,26 @@ impl RemoteRuntime {
         StoreFailure,
     > {
         self.apply_clock().await;
-        self.control("engine-probe-request",&serde_json::json!({"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+        self.control("engine-probe-request-admitted", &request)
+            .await?
+    }
+    pub async fn request_probe(
+        &self,
+        caller: &super::support::FixtureCaller,
+        request: collaboration_central_core::engine_probe::ProbeRequest,
+    ) -> Result<
+        collaboration_central_core::engine_probe::EngineRequestOutcome<
+            collaboration_central_core::engine_probe::ProbeState,
+            collaboration_central_core::engine_probe::ProbeRefusal,
+        >,
+        StoreFailure,
+    > {
+        self.apply_clock().await;
+        self.control(
+            "engine-probe-request",
+            &serde_json::json!({"caller":caller.caller,"token":caller.token,"request":request}),
+        )
+        .await?
     }
     async fn apply_clock(&self) {
         let _: bool = self
@@ -520,7 +579,7 @@ impl RemoteRuntime {
     }
     pub async fn request_central(
         &self,
-        caller: &WorkspaceCaller,
+        caller: &FixtureCaller,
         request: CentralMailRequest,
     ) -> Result<CentralMailResult, StoreFailure> {
         self.apply_clock().await;
@@ -533,7 +592,11 @@ impl RemoteRuntime {
         for id in losses {
             let _: bool = self.control("lose-reply", &id).await?;
         }
-        self.control("mail", &serde_json::json!({"organizationId":caller.organization_id,"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+        self.control(
+            "mail",
+            &serde_json::json!({"token":caller.token,"caller":caller.caller,"request":request}),
+        )
+        .await?
     }
     pub async fn drain_workspace(
         &self,
@@ -623,7 +686,7 @@ impl RemoteRuntime {
     }
     pub async fn request(
         &self,
-        caller: &WorkspaceCaller,
+        caller: &FixtureCaller,
         request: WorkspaceRequest,
     ) -> Result<WorkspaceReply, StoreFailure> {
         self.apply_clock().await;
@@ -636,6 +699,10 @@ impl RemoteRuntime {
         for id in losses {
             let _: bool = self.control("lose-reply", &id).await?;
         }
-        self.control("request",&serde_json::json!({"organizationId":caller.organization_id,"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+        self.control(
+            "request",
+            &serde_json::json!({"token":caller.token,"caller":caller.caller,"request":request}),
+        )
+        .await?
     }
 }
