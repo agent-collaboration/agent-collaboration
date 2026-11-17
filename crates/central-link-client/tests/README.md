@@ -15,3 +15,13 @@ its fixture helpers. It covers individual 30-second call deadlines, a ten-second
 Welcome deadline, safe default send classification, typed late replies,
 actual-probe heartbeat counting and close/refuse ordering. Eight cases were
 first run against the old implementation and failed at their intended assertions.
+
+Below the seam, colocated Hegel tests cover: `submission_path_test.rs` (every
+operation sample against the owner's outbox kinds, with serde's variant list
+guarding that no operation is missing); `flush_marks_test.rs` (the ±3 s window
+and the open mark); `outbox_flush_test.rs` (a stateful machine: nothing lost,
+nothing sent twice while awaiting its answer, nothing before its mark, at most
+64 per batch; and a drain property that a connected link empties the outbox at
+64 per mark). Seeded wrong builds (send before the mark; drop in-flight members
+on link loss; classify SetWake as outbox) each fail these tests.
+`fake_link_calls_test.rs` covers the stand-in's contract.

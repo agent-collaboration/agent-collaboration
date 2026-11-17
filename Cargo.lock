@@ -1097,9 +1097,13 @@ name = "central-link-client"
 version = "0.1.154"
 dependencies = [
  "central-link-protocol",
+ "hegeltest",
  "router-clock",
+ "runtime-primitives",
+ "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
  "workspace-model",
 ]
