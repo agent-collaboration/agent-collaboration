@@ -143,6 +143,8 @@ pub enum ThreadCommand {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadPostDraft {
     pub post_id: PostId,
+    /// The post's own change row, so inbox and notices see it as a post.
+    pub change_id: ChangeId,
     pub body: PostText,
     pub addressees: Vec<Addressee>,
 }
@@ -307,10 +309,11 @@ pub enum ListQuery {
         deliverable_id: DeliverableId,
         include_ended: bool,
     },
-    /// A project's work log, optionally only entries carrying `tag`.
+    /// A project's work log. With tags, only entries that carry every listed
+    /// tag; with none, every entry.
     WorkLog {
         project_id: ProjectId,
-        tag: Option<TrailTag>,
+        tags: Vec<TrailTag>,
     },
     Backlog {
         area_id: AreaId,
