@@ -12,3 +12,6 @@ __pycache__/
 
 # Local document-reader preferences.
 *.mindle.json
+
+# Hegel property-test example databases (local test state)
+.hegel/

@@ -24,6 +24,8 @@ workspace = true
 
 [dependencies]
 router-clock.workspace = true
+state-machine-core.workspace = true
+uuid.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
@@ -75,6 +77,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 router-clock = { workspace = true, features = ["test-support"] }
 collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.126", features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
@@ -97,7 +100,6 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 agent-client-protocol.workspace = true
 tempfile = "3.27.0"
 sqlx = { workspace = true, features = ["sqlite"] }
-uuid.workspace = true
 tokio = { workspace = true, features = ["io-std", "test-util"] }
 futures-util.workspace = true
 tokio-tungstenite.workspace = true
