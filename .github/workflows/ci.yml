@@ -615,8 +615,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # The storage boundary cases split across two runners by nextest partition.
-    # Both build the same test-support bundles and run the same leak checks;
-    # every other check runs once, in partition 1.
+    # Both build the deployment candidate (a storage case boots its build/
+    # bundle) and the same test-support bundles, and run the same leak checks.
+    # The legacy scenarios run in partition 2; every other check runs once, in
+    # partition 1.
     strategy:
       fail-fast: false
       matrix:
@@ -680,11 +682,11 @@ jobs:
       # under decisions508/513. Their remaining functional obligations, including
       # normal Worker session/holder equivalence and G18, stay in the removal map.
       - name: Build the legacy scenario launchers once
-        if: matrix.partition == 1
+        if: matrix.partition == 2
         run: |
           cargo build --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd --example step_scope_workerd --example bootstrap_scope_workerd --example session_scope_workerd
       - name: Prove legacy workerd scenarios with two isolated processes
-        if: matrix.partition == 1
+        if: matrix.partition == 2
         shell: bash
         run: |
           set -euo pipefail
@@ -753,14 +755,13 @@ jobs:
             if ((batch_status != 0)); then exit "$batch_status"; fi
           done
       - name: Print legacy scenario logs after failure or cancellation
-        if: matrix.partition == 1 && (failure() || cancelled())
+        if: matrix.partition == 2 && (failure() || cancelled())
         shell: bash
         run: |
           shopt -s nullglob
           case_logs=("$RUNNER_TEMP"/central-legacy-logs/*.log)
           if ((${#case_logs[@]})); then cat "${case_logs[@]}"; fi
       - name: Build the deployment candidate without test features
-        if: matrix.partition == 1
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           node verification/tooling/check-central-worker-bundle.ts production

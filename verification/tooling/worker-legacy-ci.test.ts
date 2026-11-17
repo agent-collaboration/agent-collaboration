@@ -136,7 +136,7 @@ test("a failed case rejects its pair and the following recovery step prints reta
     assert.match(result.stdout, /SCENARIO composed_scope_workerd\/composed-transactions/);
     assert.match(
       workflow,
-      /name: Print legacy scenario logs after failure or cancellation\n\s+if: failure\(\) \|\| cancelled\(\)/,
+      /name: Print legacy scenario logs after failure or cancellation\n\s+if: matrix\.partition == 2 && \(failure\(\) \|\| cancelled\(\)\)/,
     );
     const recovery = runLegacyStep({
       root,
