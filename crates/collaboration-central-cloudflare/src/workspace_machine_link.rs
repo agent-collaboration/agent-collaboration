@@ -135,7 +135,10 @@ impl CentralObject {
                     MachineRequestResult::Reply(reply) => {
                         self.reply_to_machine(&socket, &request, reply).await
                     }
+                    // The request is answered before the close, as on the native host.
                     MachineRequestResult::AuthorityRefused => {
+                        let reply = refused_reply(request.payload(), RefusalReason::MachineRevoked);
+                        self.reply_to_machine(&socket, &request, reply).await?;
                         close(&socket, "machine authority expired or revoked")
                     }
                     MachineRequestResult::Unavailable => {
@@ -144,6 +147,7 @@ impl CentralObject {
                 }
             }
             IncomingRequests::Batch(requests) => {
+                let mut lapsed = false;
                 for request in requests.requests() {
                     // Every member restores live provenance and enters its own applying turn.
                     // Semantic refusals are replies, so they cannot skip later members.
@@ -153,11 +157,16 @@ impl CentralObject {
                     {
                         MachineRequestResult::Reply(reply) => reply,
                         MachineRequestResult::AuthorityRefused => {
+                            lapsed = true;
                             refused_reply(request.payload(), RefusalReason::MachineRevoked)
                         }
                         MachineRequestResult::Unavailable => unavailable_reply(request.payload()),
                     };
                     self.reply_to_machine(&socket, request, reply).await?;
+                }
+                // A lapsed authority closes the link once every member is answered.
+                if lapsed {
+                    return close(&socket, "machine authority expired or revoked");
                 }
                 Ok(())
             }

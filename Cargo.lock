@@ -8095,6 +8095,8 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "workspace-ids",
 ]

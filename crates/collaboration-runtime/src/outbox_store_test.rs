@@ -166,6 +166,13 @@ async fn an_answer_or_refusal_drops_the_text_from_the_row_and_every_view() {
         .insert(&answered, at(MARK + 2_000))
         .await
         .unwrap();
+    // The same id and target with a different body is another write.
+    let mut different = answered.clone();
+    different.payload = thread_post(answered.request.as_str(), "a different body");
+    let conflicting = MacOutbox::new(&mut store)
+        .insert(&different, at(MARK + 2_000))
+        .await
+        .unwrap();
 
     assert!(matches!(
         &unsent[0].state,
@@ -184,6 +191,7 @@ async fn an_answer_or_refusal_drops_the_text_from_the_row_and_every_view() {
         resubmitted,
         OutboxInsert::AlreadyStored(RequestStatus::Answered(accepted_reply()))
     );
+    assert_eq!(conflicting, OutboxInsert::ConflictingContent);
 }
 
 #[tokio::test]
@@ -354,7 +362,8 @@ async fn an_invalid_stored_row_is_refused_not_coerced() {
         .request_status(&write.caller, &write.request)
         .await;
     let body_free = json!({"requestId": write.request.as_str(), "target": {
-        "kind": "thread", "workspaceId": uuid_v7(60_001), "threadId": uuid_v7(60_002)}});
+        "kind": "thread", "workspaceId": uuid_v7(60_001), "threadId": uuid_v7(60_002)},
+        "contentDigest": "0".repeat(64)});
     sqlx::query("UPDATE outbox_items SET payload_json = ?, outcome_json = NULL")
         .bind(body_free.to_string())
         .execute(&mut store.connection)

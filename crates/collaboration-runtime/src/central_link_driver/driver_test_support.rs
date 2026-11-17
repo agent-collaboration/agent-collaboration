@@ -53,7 +53,9 @@ pub(crate) fn reply() -> ReplyPayload {
 /// The test's end of one socket: frames from the driver, and a sender to it.
 pub(crate) struct CentralEnd {
     pub(crate) from_router: mpsc::UnboundedReceiver<String>,
-    pub(crate) to_router: mpsc::UnboundedSender<String>,
+    pub(crate) to_router: mpsc::UnboundedSender<LinkInbound>,
+    /// The token this connection was opened with.
+    pub(crate) token: MachineTokenText,
 }
 
 impl CentralEnd {
@@ -68,9 +70,15 @@ impl CentralEnd {
         }
     }
     pub(crate) fn send(&self, frame: LinkFrame) {
+        let _ = self.to_router.send(LinkInbound::Text(
+            encode_text(&frame, FrameDirection::ToRouter).unwrap(),
+        ));
+    }
+    /// Central closes the link as authority lapsed (1008).
+    pub(crate) fn close_lapsed(&self) {
         let _ = self
             .to_router
-            .send(encode_text(&frame, FrameDirection::ToRouter).unwrap());
+            .send(LinkInbound::Closed(LinkClosed::AuthorityLapsed));
     }
     pub(crate) fn welcome(&self) {
         self.send(LinkFrame::Data(DataFrame::Welcome {
@@ -82,7 +90,7 @@ impl CentralEnd {
 
 pub(crate) struct ChannelSocket {
     to_central: mpsc::UnboundedSender<String>,
-    from_central: mpsc::UnboundedReceiver<String>,
+    from_central: mpsc::UnboundedReceiver<LinkInbound>,
 }
 
 impl LinkSocket for ChannelSocket {
@@ -93,8 +101,13 @@ impl LinkSocket for ChannelSocket {
             .map_err(|_| LinkTransportError::Send);
         Box::pin(async move { sent })
     }
-    fn next_text(&mut self) -> TransportFuture<'_, Option<String>> {
-        Box::pin(self.from_central.recv())
+    fn next_inbound(&mut self) -> TransportFuture<'_, LinkInbound> {
+        Box::pin(async move {
+            self.from_central
+                .recv()
+                .await
+                .unwrap_or(LinkInbound::Closed(LinkClosed::Other))
+        })
     }
     fn close(&mut self) -> TransportFuture<'_, ()> {
         self.from_central.close();
@@ -110,13 +123,14 @@ pub(crate) struct ChannelTransport {
 impl LinkTransport for ChannelTransport {
     fn connect<'call>(
         &'call self,
-        _token: &'call MachineTokenText,
+        token: &'call MachineTokenText,
     ) -> TransportFuture<'call, Result<Box<dyn LinkSocket>, LinkTransportError>> {
         let (to_central, from_router) = mpsc::unbounded_channel();
         let (to_router, from_central) = mpsc::unbounded_channel();
         let _ = self.connections.send(CentralEnd {
             from_router,
             to_router,
+            token: token.clone(),
         });
         Box::pin(async move {
             Ok(Box::new(ChannelSocket {

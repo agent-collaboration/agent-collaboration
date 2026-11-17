@@ -15,11 +15,31 @@ pub enum LinkTransportError {
     Send,
 }
 
+/// Why central closed the link.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LinkClosed {
+    /// 1008 "machine authority expired or revoked": the connection's deadline
+    /// passed or its enrollment ended; only a fresh token connects again.
+    AuthorityLapsed,
+    /// Any other close, a failure or the end of the stream.
+    Other,
+}
+
+/// What the next read from the socket gives.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LinkInbound {
+    Text(String),
+    Closed(LinkClosed),
+}
+
+/// The close code and reason both hosts send when a connection's authority lapsed.
+pub const AUTHORITY_LAPSED_CLOSE: (u16, &str) = (1008, "machine authority expired or revoked");
+
 /// One open link socket carrying text frames.
 pub trait LinkSocket: Send + Sync {
     fn send_text(&mut self, text: String) -> TransportFuture<'_, Result<(), LinkTransportError>>;
-    /// The next text frame; None once the socket closed or failed.
-    fn next_text(&mut self) -> TransportFuture<'_, Option<String>>;
+    /// The next text frame, or how the socket closed.
+    fn next_inbound(&mut self) -> TransportFuture<'_, LinkInbound>;
     fn close(&mut self) -> TransportFuture<'_, ()>;
 }
 
@@ -110,13 +130,24 @@ impl LinkSocket for WebSocketLink {
         })
     }
 
-    fn next_text(&mut self) -> TransportFuture<'_, Option<String>> {
+    fn next_inbound(&mut self) -> TransportFuture<'_, LinkInbound> {
         Box::pin(async move {
             loop {
-                match self.0.next().await? {
-                    Ok(Message::Text(text)) => return Some(text.to_string()),
+                let Some(message) = self.0.next().await else {
+                    return LinkInbound::Closed(LinkClosed::Other);
+                };
+                match message {
+                    Ok(Message::Text(text)) => return LinkInbound::Text(text.to_string()),
                     Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)) => {}
-                    Ok(Message::Binary(_) | Message::Close(_)) | Err(_) => return None,
+                    Ok(Message::Close(Some(frame)))
+                        if (u16::from(frame.code), frame.reason.as_str())
+                            == AUTHORITY_LAPSED_CLOSE =>
+                    {
+                        return LinkInbound::Closed(LinkClosed::AuthorityLapsed);
+                    }
+                    Ok(Message::Binary(_) | Message::Close(_)) | Err(_) => {
+                        return LinkInbound::Closed(LinkClosed::Other);
+                    }
                 }
             }
         })
@@ -128,3 +159,7 @@ impl LinkSocket for WebSocketLink {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "link_transport_test.rs"]
+mod tests;

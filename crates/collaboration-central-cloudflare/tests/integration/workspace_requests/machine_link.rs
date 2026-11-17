@@ -404,15 +404,27 @@ async fn denied_journey(fixture: &Fixture, change: AuthorityChange) -> Result<()
     fixture.host.c2_witness(WitnessPhase::Deciding).await?;
     let request = link.request_as(fixture::session_caller()?, create_area(&workspace)?)?;
     fixture::send(&mut link.socket, &request).await?;
+    // Both hosts answer the request MachineRevoked under its correlation, then
+    // close: the Router's only way on is a fresh connection.
+    let reply = fixture::receive(&mut link.socket).await?;
+    let refused = matches!(
+        &reply,
+        DataFrame::Reply { correlation_id, .. } if correlation_id == correlation(&request)?
+    ) && workspace_reply(&reply)?.result
+        == WorkspaceResult::Refused(RefusalReason::MachineRevoked);
+    if !refused {
+        return Err(format!("stale authority must answer MachineRevoked first: {reply:?}").into());
+    }
     match link.socket.next().await {
         Some(Ok(Message::Close {
             code: CloseCode::Policy,
-            ..
-        })) => {}
-        _ => {
-            return Err(
-                "stale authority must close the original socket before a semantic effect".into(),
-            );
+            reason,
+        })) if reason == "machine authority expired or revoked" => {}
+        other => {
+            return Err(format!(
+                "stale authority must close the original socket before a semantic effect: {other:?}"
+            )
+            .into());
         }
     }
     let deciding = fixture.host.c2_witness(WitnessPhase::Deciding).await?;

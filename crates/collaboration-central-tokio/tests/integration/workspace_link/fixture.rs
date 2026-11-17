@@ -122,6 +122,10 @@ impl Fixture {
         })
     }
 
+    pub fn keys(&self) -> &signed::SignInKeys {
+        &self.keys
+    }
+
     pub fn root_path(&self) -> &std::path::Path {
         self._root.path()
     }

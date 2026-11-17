@@ -1,7 +1,9 @@
 //! The one task that owns the Router's central link: the C1 link client, the
 //! socket, the outbox flush reducer and the calls waiting on them. Every
 //! deadline comes from the one injected clock.
-use super::link_transport::{LinkSocket, LinkTransport, MachineTokenSource, TokenAvailability};
+use super::link_transport::{
+    LinkClosed, LinkInbound, LinkSocket, LinkTransport, MachineTokenSource, TokenAvailability,
+};
 use super::{DriverCommand, FlushJitter};
 use crate::ProviderOperationStore;
 use crate::outbox_store::{MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError};
@@ -61,6 +63,9 @@ pub(super) struct LinkDriver {
     renewal_ids: uuid::ContextV7,
     /// When a renewal central could not answer (CentralUnavailable) is tried again.
     renew_retry_at: Option<ClockInstant>,
+    /// The token whose connection central closed as authority lapsed; the link
+    /// waits for the source to offer a different one before connecting again.
+    lapsed_token: Option<MachineTokenText>,
 }
 
 impl LinkDriver {
@@ -91,6 +96,7 @@ impl LinkDriver {
             renewing: None,
             renewal_ids: uuid::ContextV7::new(),
             renew_retry_at: None,
+            lapsed_token: None,
         }
     }
 
@@ -120,7 +126,7 @@ impl LinkDriver {
                     Some(command) => self.handle_command(command).await,
                     None => break,
                 },
-                text = next_text(&mut self.socket) => self.handle_text(text).await,
+                inbound = next_inbound(&mut self.socket) => self.handle_inbound(inbound).await,
                 () = sleep_until(clock.as_ref(), deadline) => {}
             }
         }
@@ -183,8 +189,9 @@ impl LinkDriver {
 
     async fn connect(&mut self, attempt: ConnectionAttempt) {
         let token = match self.tokens.availability() {
-            TokenAvailability::Ready(token) => token,
-            TokenAvailability::RefreshPending => {
+            TokenAvailability::Ready(token) if self.lapsed_token.as_ref() != Some(&token) => token,
+            // The lapsed token cannot connect again: wait, as for a refresh.
+            TokenAvailability::Ready(_) | TokenAvailability::RefreshPending => {
                 if let Ok(failed) = self.client.closed(&attempt) {
                     self.settle_failed(failed).await;
                 }
@@ -225,10 +232,20 @@ impl LinkDriver {
         self.apply_flush(FlushEvent::LinkLost).await;
     }
 
-    async fn handle_text(&mut self, text: Option<String>) {
-        let Some(text) = text else {
-            self.socket_closed().await;
-            return;
+    async fn handle_inbound(&mut self, inbound: LinkInbound) {
+        let text = match inbound {
+            LinkInbound::Text(text) => text,
+            // Central refused a frame past the deadline or after revocation and
+            // closed: reconnect only with a fresh token.
+            LinkInbound::Closed(LinkClosed::AuthorityLapsed) => {
+                self.lapsed_token = self.connected_token.take();
+                self.socket_closed().await;
+                return;
+            }
+            LinkInbound::Closed(LinkClosed::Other) => {
+                self.socket_closed().await;
+                return;
+            }
         };
         let Some((attempt, _)) = &self.socket else {
             return;
@@ -245,7 +262,10 @@ impl LinkDriver {
             }
         };
         match event {
-            ClientEvent::Welcomed => self.apply_flush(FlushEvent::LinkConnected).await,
+            ClientEvent::Welcomed => {
+                self.lapsed_token = None;
+                self.apply_flush(FlushEvent::LinkConnected).await;
+            }
             ClientEvent::Reply {
                 correlation_id,
                 result,
@@ -584,11 +604,11 @@ fn request_correlation(frame: &LinkFrame) -> Option<CorrelationId> {
     }
 }
 
-async fn next_text(
+async fn next_inbound(
     socket: &mut Option<(ConnectionAttempt, Box<dyn LinkSocket>)>,
-) -> Option<String> {
+) -> LinkInbound {
     match socket {
-        Some((_, socket)) => socket.next_text().await,
+        Some((_, socket)) => socket.next_inbound().await,
         None => std::future::pending().await,
     }
 }

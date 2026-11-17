@@ -139,6 +139,11 @@ impl Fixture {
         )
     }
 
+    /// The sign-in key server this Worker fetches its key set from.
+    pub fn keys(&self) -> &signed::SignInKeys {
+        &self.keys
+    }
+
     pub fn runtime(&self) -> Arc<RemoteRuntime> {
         self.host.cold_runtime(&self.organization)
     }

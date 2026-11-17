@@ -10,7 +10,7 @@ use central_link_client::{
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use sqlite_storage_maintenance::TransactionStart;
-use workspace_model::{Caller, RequestId};
+use workspace_model::{Caller, RequestId, operation_content_digest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OutboxStoreError {
@@ -23,6 +23,8 @@ pub enum OutboxStoreError {
         request_id: String,
         field: &'static str,
     },
+    #[error("outbox write content could not be digested")]
+    Digest,
     #[error("the payload does not carry request id {request}")]
     RequestIdMismatch { request: RequestId },
     #[error("outbox item {request} is not {expected}")]
@@ -156,10 +158,11 @@ impl<'store> MacOutbox<'store> {
             let stored = decode_row(&row)?;
             let same_write = match &stored.payload {
                 StoredPayload::Unanswered(payload) => payload == &item.payload,
-                // The text is gone once answered: the same caller, id and target is
-                // the same write (central's request log answers the rest).
-                StoredPayload::Answered(answered) => OutboxWriteContent::of(&item.payload)
-                    .is_some_and(|content| content.target == answered.target),
+                // The text is gone once answered; the digest still tells the same
+                // write (replay its answer) from a different one (a conflict).
+                StoredPayload::Answered(answered) => {
+                    payload_content_digest(&item.payload)? == answered.content_digest
+                }
             };
             return Ok(if stored.caller == item.caller && same_write {
                 OutboxInsert::AlreadyStored(stored.status)
@@ -472,6 +475,7 @@ impl<'store> MacOutbox<'store> {
         let answered = AnsweredWrite {
             request_id: request.clone(),
             target: outbox_content(request_id, &payload)?.target,
+            content_digest: payload_content_digest(&payload)?,
         };
         let payload_json = serde_json::to_string(&answered)?;
         let changed = sqlx::query!(
@@ -524,12 +528,15 @@ impl<'store> MacOutbox<'store> {
     }
 }
 
-/// What `payload_json` holds after central answered: the target, no text.
+/// What `payload_json` holds after central answered: the target and the content
+/// digest central's request log uses, no text.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AnsweredWrite {
     request_id: RequestId,
     target: OutboxWriteTarget,
+    /// Tells a resubmit of the same write from a different write under the same id.
+    content_digest: String,
 }
 
 /// `payload_json` by row state: the whole write until central answers, then
@@ -616,6 +623,15 @@ fn outbox_content(
     payload: &RequestPayload,
 ) -> Result<OutboxWriteContent, OutboxStoreError> {
     OutboxWriteContent::of(payload).ok_or_else(|| corrupt_row(request_id, "payload_json"))
+}
+
+/// The digest central's request log keys this write's content by.
+fn payload_content_digest(payload: &RequestPayload) -> Result<String, OutboxStoreError> {
+    let digest = match payload {
+        RequestPayload::Workspace(request) => operation_content_digest(&request.operation),
+        RequestPayload::Mail(request) => operation_content_digest(&request.operation),
+    };
+    digest.map_err(|_| OutboxStoreError::Digest)
 }
 
 fn corrupt_row(request_id: &str, field: &'static str) -> OutboxStoreError {

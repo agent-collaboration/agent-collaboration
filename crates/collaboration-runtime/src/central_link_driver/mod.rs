@@ -7,8 +7,8 @@ mod driver_test_support;
 mod link_transport;
 
 pub use link_transport::{
-    LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource, TokenAvailability,
-    TransportFuture, WebSocketLinkTransport,
+    AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
+    MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
 
 use crate::ProviderOperationStore;

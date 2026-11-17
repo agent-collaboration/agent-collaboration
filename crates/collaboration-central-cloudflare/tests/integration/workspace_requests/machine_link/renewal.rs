@@ -3,11 +3,16 @@
 //! the old expiry.
 use super::fixture::{self, Fixture, INSTALLATION, ORGANIZATION};
 use super::{baseline, create_area};
+use central_link_protocol::RequestPayload;
 use central_link_protocol::{DataFrame, TokenRenewalRefusal, TokenRenewalResult};
 use collaboration_central_conformance::{ConformanceResult as Result, signin_fixtures as signed};
+use futures_util::StreamExt;
+use reqwest_websocket::{CloseCode, Message};
 use runtime_primitives::Clock;
 use std::time::Duration;
-use workspace_model::{WorkspaceId, WorkspaceOperation, WorkspaceRequest};
+use workspace_model::{
+    RefusalReason, WorkspaceId, WorkspaceOperation, WorkspaceRequest, WorkspaceResult,
+};
 
 fn renew(correlation: &str, token: &str) -> Result<DataFrame> {
     Ok(DataFrame::RenewMachineToken {
@@ -350,6 +355,107 @@ async fn superseded_journey(fixture: &Fixture) -> Result<()> {
 
     if answer != not_active() {
         return Err(format!("a superseded enrollment cannot renew: {answer:?}").into());
+    }
+    drop(link);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_batch_after_the_deadline_refuses_every_member_and_then_closes() -> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = lapsed_batch_journey(&fixture).await;
+    fixture.close().await?;
+    result
+}
+
+async fn lapsed_batch_journey(fixture: &Fixture) -> Result<()> {
+    let (mut link, _, workspace, _, _) = baseline(fixture).await?;
+    advance(fixture, 600).await?;
+
+    // The batch helper checks each reply's correlation and order.
+    let (_, replies) = link
+        .batch(vec![
+            RequestPayload::Workspace(area(
+                "019f0000-0000-7000-8000-00000000cf41",
+                "Lapsed member A",
+                &workspace,
+            )?),
+            RequestPayload::Workspace(area(
+                "019f0000-0000-7000-8000-00000000cf42",
+                "Lapsed member B",
+                &workspace,
+            )?),
+        ])
+        .await?;
+    let closed = link.socket.next().await;
+
+    for reply in &replies {
+        let refused = matches!(
+            reply,
+            DataFrame::Reply { result, .. } if matches!(
+                result.as_ref(),
+                central_link_protocol::ReplyPayload::Workspace(reply)
+                    if reply.result == WorkspaceResult::Refused(RefusalReason::MachineRevoked)
+            )
+        );
+        if !refused {
+            return Err(format!("each lapsed member is refused: {reply:?}").into());
+        }
+    }
+    match closed {
+        Some(Ok(Message::Close {
+            code: CloseCode::Policy,
+            reason,
+        })) if reason == "machine authority expired or revoked" => Ok(()),
+        other => Err(format!("the lapsed link closes after the batch: {other:?}").into()),
+    }
+}
+
+#[tokio::test]
+async fn a_renewal_whose_key_cannot_be_fetched_is_central_unavailable() -> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = key_fetch_journey(&fixture).await;
+    fixture.close().await?;
+    result
+}
+
+async fn key_fetch_journey(fixture: &Fixture) -> Result<()> {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    let (mut link, _, workspace, _, _) = baseline(fixture).await?;
+    fixture.keys().fail_fetches();
+    // A fresh token whose header names a key central never cached.
+    let fresh = fresh(fixture, 0, 900)?;
+    let rest = fresh.split_once('.').ok_or("token header")?.1;
+    let header =
+        URL_SAFE_NO_PAD.encode(br#"{"alg":"EdDSA","typ":"at+jwt","kid":"stamp-uncached"}"#);
+
+    let answer = renewal(
+        &mut link,
+        renew(
+            "019f0000-0000-7000-8000-00000000c351",
+            &format!("{header}.{rest}"),
+        )?,
+    )
+    .await?;
+    let still_open = link
+        .call_as(
+            fixture::session_caller()?,
+            area(
+                "019f0000-0000-7000-8000-00000000cf51",
+                "Still open",
+                &workspace,
+            )?,
+        )
+        .await?;
+
+    let unavailable = TokenRenewalResult::Refused {
+        reason: TokenRenewalRefusal::CentralUnavailable,
+    };
+    if answer != unavailable {
+        return Err(format!("an unreachable key set is CentralUnavailable: {answer:?}").into());
+    }
+    if !is_done(&still_open.reply) {
+        return Err(format!("the link stays up: {:?}", still_open.reply).into());
     }
     drop(link);
     Ok(())

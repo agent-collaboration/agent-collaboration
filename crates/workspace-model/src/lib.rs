@@ -3,6 +3,7 @@ pub mod central_mail;
 mod entity_records;
 mod item_references;
 mod request_contract;
+mod request_digest;
 mod rule_commands;
 mod rule_results;
 mod validated_values;
@@ -10,6 +11,7 @@ pub use request_contract::*;
 
 pub use entity_records::*;
 pub use item_references::*;
+pub use request_digest::{DigestError, operation_content_digest};
 pub use rule_commands::*;
 pub use rule_results::*;
 pub use validated_values::*;
