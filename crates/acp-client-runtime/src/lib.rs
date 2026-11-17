@@ -56,6 +56,22 @@ mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
 mod session_event_sink;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the session cell wires the lifecycle machine in the next D1 step"
+    )
+)]
+mod session_lifecycle_answers;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the session cell wires the lifecycle machine in the next D1 step"
+    )
+)]
+mod session_lifecycle_machine;
 
 #[cfg(test)]
 extern crate self as acp_client_runtime;
