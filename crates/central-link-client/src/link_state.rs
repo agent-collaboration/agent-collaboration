@@ -5,6 +5,7 @@ use crate::{
 };
 use central_link_protocol::{
     CorrelationId, DataFrame, LinkFrame, LinkRequest, ReplyPayload, RequestPayload,
+    TokenRenewalResult,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
@@ -78,6 +79,11 @@ pub enum ClientEvent {
     },
     Deliver {
         message: MessageRecord,
+    },
+    /// Central's answer to a RenewMachineToken the Host sent.
+    TokenRenewal {
+        correlation_id: CorrelationId,
+        result: TokenRenewalResult,
     },
 }
 
@@ -254,12 +260,22 @@ impl LinkClient {
             LinkFrame::Data(DataFrame::Deliver { message }) => {
                 Ok(ClientEvent::Deliver { message: *message })
             }
+            // The Host owns renewal correlation (it sent the frame); the client
+            // only surfaces central's answer.
+            LinkFrame::Data(DataFrame::MachineTokenRenewal {
+                correlation_id,
+                result,
+            }) => Ok(ClientEvent::TokenRenewal {
+                correlation_id,
+                result,
+            }),
             LinkFrame::Ping
             | LinkFrame::Data(
                 DataFrame::Welcome { .. }
                 | DataFrame::Request { .. }
                 | DataFrame::Batch { .. }
-                | DataFrame::Ack { .. },
+                | DataFrame::Ack { .. }
+                | DataFrame::RenewMachineToken { .. },
             ) => Err(ClientError::UnexpectedFrame),
         }
     }

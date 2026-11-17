@@ -79,6 +79,7 @@ mod machine_login_rows;
 mod machine_login_test_control;
 mod machine_login_writes;
 pub use machine_connection::{MachineConnectionAttachment, ValidatedMachineConnection};
+pub use machine_connection_admission::MachineTokenRenewalRefusal;
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};

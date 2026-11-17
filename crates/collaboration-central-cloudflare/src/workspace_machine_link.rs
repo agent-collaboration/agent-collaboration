@@ -17,6 +17,10 @@ use workspace_model::{RefusalReason, WorkspaceReply, WorkspaceResult};
 enum IncomingRequests {
     Single(Box<LinkRequest>),
     Batch(LinkRequestBatch),
+    Renewal {
+        correlation_id: central_link_protocol::CorrelationId,
+        token: central_link_protocol::MachineTokenText,
+    },
 }
 enum MachineRequestResult {
     Reply(ReplyPayload),
@@ -80,6 +84,13 @@ impl CentralObject {
         let requests = match frame {
             LinkFrame::Data(DataFrame::Request { request }) => IncomingRequests::Single(request),
             LinkFrame::Data(DataFrame::Batch { requests }) => IncomingRequests::Batch(requests),
+            LinkFrame::Data(DataFrame::RenewMachineToken {
+                correlation_id,
+                token,
+            }) => IncomingRequests::Renewal {
+                correlation_id,
+                token,
+            },
             // Literal ping/pong is answered by the platform without calling this handler.
             LinkFrame::Ping
             | LinkFrame::Pong
@@ -87,7 +98,8 @@ impl CentralObject {
                 DataFrame::Welcome { .. }
                 | DataFrame::Reply { .. }
                 | DataFrame::Deliver { .. }
-                | DataFrame::Ack { .. },
+                | DataFrame::Ack { .. }
+                | DataFrame::MachineTokenRenewal { .. },
             ) => return close(&socket, "unsupported link event"),
         };
         let attachment = match socket.deserialize_attachment::<MachineConnectionAttachment>() {
@@ -102,6 +114,19 @@ impl CentralObject {
         super::signin_launcher_controls::sample_clock(self, &organization).await?;
         let runtime = self.runtime(organization).await?;
         match requests {
+            IncomingRequests::Renewal {
+                correlation_id,
+                token,
+            } => {
+                let result = renew(&socket, runtime.as_ref(), &attachment, token.expose()).await?;
+                send(
+                    &socket,
+                    DataFrame::MachineTokenRenewal {
+                        correlation_id,
+                        result,
+                    },
+                )
+            }
             IncomingRequests::Single(request) => {
                 match self
                     .dispatch_machine_request(runtime.as_ref(), &attachment, &request)
@@ -239,4 +264,47 @@ fn send(socket: &WebSocket, frame: DataFrame) -> Result<()> {
 }
 fn close(socket: &WebSocket, reason: &str) -> Result<()> {
     socket.close(Some(1008), Some(reason))
+}
+
+/// R40/V32 renewal on the open hibernating socket. A renewed connection's
+/// attachment replaces the old one, so a restored socket carries the renewed
+/// expiry; on refusal the old attachment and its expiry stand.
+async fn renew(
+    socket: &WebSocket,
+    runtime: &OrgRuntime,
+    attachment: &MachineConnectionAttachment,
+    token: &str,
+) -> Result<central_link_protocol::TokenRenewalResult> {
+    use central_link_protocol::{TokenRenewalRefusal, TokenRenewalResult};
+    use collaboration_central_core::MachineTokenRenewalRefusal as Refusal;
+    let refused = |reason| TokenRenewalResult::Refused { reason };
+    // The current connection is restored against live rows first; a socket
+    // whose authority already lapsed cannot renew.
+    let current = match runtime.restore_machine_connection(attachment).await {
+        Ok(Ok(current)) => current,
+        Ok(Err(_)) => return Ok(refused(TokenRenewalRefusal::EnrollmentNotActive)),
+        Err(_) => return Ok(refused(TokenRenewalRefusal::CentralUnavailable)),
+    };
+    Ok(
+        match runtime.renew_machine_connection(&current, token).await {
+            Ok(Ok(renewed)) => {
+                let Some(effective_expires_at) =
+                    chrono::DateTime::from_timestamp(renewed.effective_expires_at().0, 0)
+                else {
+                    return Ok(refused(TokenRenewalRefusal::CentralUnavailable));
+                };
+                socket.serialize_attachment(renewed.attachment())?;
+                TokenRenewalResult::Renewed {
+                    effective_expires_at,
+                }
+            }
+            Ok(Err(refusal)) => refused(match refusal {
+                Refusal::TokenRejected => TokenRenewalRefusal::TokenRejected,
+                Refusal::EnrollmentNotActive => TokenRenewalRefusal::EnrollmentNotActive,
+                Refusal::DifferentMachine => TokenRenewalRefusal::DifferentMachine,
+                Refusal::DifferentEnrollment => TokenRenewalRefusal::DifferentEnrollment,
+            }),
+            Err(_) => refused(TokenRenewalRefusal::CentralUnavailable),
+        },
+    )
 }

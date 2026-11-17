@@ -366,7 +366,7 @@ pub(super) async fn send(socket: &mut WebSocket, frame: &DataFrame) -> Result<()
     Ok(())
 }
 
-async fn receive(socket: &mut WebSocket) -> Result<DataFrame> {
+pub(super) async fn receive(socket: &mut WebSocket) -> Result<DataFrame> {
     let message = socket
         .next()
         .await

@@ -2,7 +2,10 @@
 use super::fixture::{Fixture, INSTALLATION, receive, send};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use central_link_client::{ClientAction, ClientEvent, ConnectionAttempt, LinkClient};
-use central_link_protocol::{CorrelationId, DataFrame, LinkFrame, ReplyPayload, RequestPayload};
+use central_link_protocol::{
+    CorrelationId, DataFrame, LinkFrame, ReplyPayload, RequestPayload, TokenRenewalRefusal,
+    TokenRenewalResult,
+};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
@@ -128,11 +131,11 @@ fn workspace_store(fixture: &Fixture, workspace: &WorkspaceId) -> ObjectStorage 
     reason = "Assertions compare real socket outcomes and owning rows with literal grant boundaries."
 )]
 #[tokio::test]
-async fn renewal_requires_a_fresh_socket_and_never_extends_the_original_connection() -> Result<()> {
+async fn renew_machine_token_extends_the_open_connection_and_a_refusal_keeps_its_expiry()
+-> Result<()> {
     // Arrange: an ordinary client opens with the actual initial 600-second grant.
     let fixture = Fixture::new().await?;
-    let (mut original, original_attempt, mut original_socket) =
-        connect_client(&fixture, &fixture.token).await?;
+    let (mut client, attempt, mut socket) = connect_client(&fixture, &fixture.token).await?;
     let runtime = fixture
         .host
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
@@ -146,7 +149,21 @@ async fn renewal_requires_a_fresh_socket_and_never_extends_the_original_connecti
         signed::NOW_SECONDS + 600
     );
 
-    // Act: renewal changes the real enrollment row, and only a fresh socket receives it.
+    // A token that fails sign-in verification is refused; the old expiry stands.
+    send(
+        &mut socket,
+        &renew_frame("019f0000-0000-7000-8000-00000000c201", "not.a.token")?,
+    )
+    .await?;
+    assert_eq!(
+        renewal_result(&mut socket).await?,
+        TokenRenewalResult::Refused {
+            reason: TokenRenewalRefusal::TokenRejected
+        }
+    );
+
+    // Act: at 300 s sign-in decides a fresh grant (read live), and the Router
+    // sends the fresh token on the open connection (R40/V32, B3 renewal).
     fixture.clock.advance(Duration::from_secs(300))?;
     let grant = runtime.decide_machine_token(&serde_json::from_value(json!({
         "organizationId":signed::ORGANIZATION,"enrollmentId":connection.enrollment_id(),"clientId":connection.client_id(),
@@ -155,46 +172,28 @@ async fn renewal_requires_a_fresh_socket_and_never_extends_the_original_connecti
         matches!(&grant, MachineTokenDecision::Grant { decided_at, grant_expires_at, .. }
         if decided_at.0 == signed::NOW_SECONDS + 300 && grant_expires_at.0 == signed::NOW_SECONDS + 900)
     );
-    let stored = runtime
-        .statement_host()
-        .read(Statement {
-            sql: "SELECT last_grant_at FROM machine_approvals WHERE approval_id=?",
-            args: vec![SqlValue::Text(
-                connection.enrollment_id().as_str().to_owned(),
-            )],
-        })
-        .await?;
-    let [row] = stored.rows.as_slice() else {
-        return Err("renewed enrollment missing".into());
-    };
-    let [SqlValue::Text(last_grant)] = row.as_slice() else {
-        return Err("renewal timestamp missing".into());
-    };
-    let last_grant: chrono::DateTime<chrono::Utc> = last_grant.parse()?;
-    assert_eq!(last_grant.timestamp(), signed::NOW_SECONDS + 300);
     let token = renewed_token(&fixture.token, &grant, connection.client_id().as_str())?;
-    let (mut renewed, renewed_attempt, mut renewed_socket) =
-        connect_client(&fixture, &token).await?;
-
-    fixture.clock.advance(Duration::from_secs(300))?;
-    send(&mut original_socket, &LinkFrame::Ping).await?;
-    assert_eq!(receive(&mut original_socket).await?, LinkFrame::Pong);
-    let blocked = original.begin_request(
-        caller()?,
-        create_workspace("019f0000-0000-7000-8000-00000000d101", "Expired original")?,
-    )?;
-    send(&mut original_socket, &blocked).await?;
-    let (reply_id, reply) =
-        workspace_reply(&mut original, &original_attempt, &mut original_socket).await?;
-    assert_eq!(reply_id, correlation(&blocked)?);
+    send(
+        &mut socket,
+        &renew_frame("019f0000-0000-7000-8000-00000000c202", &token)?,
+    )
+    .await?;
     assert_eq!(
-        reply.result,
-        WorkspaceResult::Refused(RefusalReason::MachineRevoked)
+        renewal_result(&mut socket).await?,
+        TokenRenewalResult::Renewed {
+            effective_expires_at: chrono::DateTime::from_timestamp(signed::NOW_SECONDS + 900, 0)
+                .ok_or("renewed expiry")?,
+        }
     );
 
-    // Assert: the renewed connection works at 600 and 899 seconds, then refuses at 900.
+    // Assert: the same socket runs past its first token's expiry, at 600 and
+    // 899 s, and is refused at 900 s, the grant boundary with no leeway.
     for (advance, request_id, name) in [
-        (0, "019f0000-0000-7000-8000-00000000d102", "Renewed at 600"),
+        (
+            300,
+            "019f0000-0000-7000-8000-00000000d102",
+            "Renewed at 600",
+        ),
         (
             299,
             "019f0000-0000-7000-8000-00000000d103",
@@ -202,20 +201,21 @@ async fn renewal_requires_a_fresh_socket_and_never_extends_the_original_connecti
         ),
     ] {
         fixture.clock.advance(Duration::from_secs(advance))?;
-        let request = renewed.begin_request(caller()?, create_workspace(request_id, name)?)?;
-        send(&mut renewed_socket, &request).await?;
-        let (reply_id, reply) =
-            workspace_reply(&mut renewed, &renewed_attempt, &mut renewed_socket).await?;
+        send(&mut socket, &LinkFrame::Ping).await?;
+        assert_eq!(receive(&mut socket).await?, LinkFrame::Pong);
+        let request = client.begin_request(caller()?, create_workspace(request_id, name)?)?;
+        send(&mut socket, &request).await?;
+        let (reply_id, reply) = workspace_reply(&mut client, &attempt, &mut socket).await?;
         assert_eq!(reply_id, correlation(&request)?);
         assert_eq!(created_workspace(&reply)?.name.as_str(), name);
     }
     fixture.clock.advance(Duration::from_secs(1))?;
-    let expired = renewed.begin_request(
+    let expired = client.begin_request(
         caller()?,
         create_workspace("019f0000-0000-7000-8000-00000000d104", "Expired renewal")?,
     )?;
-    send(&mut renewed_socket, &expired).await?;
-    let (_, reply) = workspace_reply(&mut renewed, &renewed_attempt, &mut renewed_socket).await?;
+    send(&mut socket, &expired).await?;
+    let (_, reply) = workspace_reply(&mut client, &attempt, &mut socket).await?;
     assert_eq!(
         reply.result,
         WorkspaceResult::Refused(RefusalReason::MachineRevoked)
@@ -234,13 +234,24 @@ async fn renewal_requires_a_fresh_socket_and_never_extends_the_original_connecti
             vec![SqlValue::Text("Renewed at 899".into())]
         ]
     );
-    original_socket
-        .close(reqwest_websocket::CloseCode::Normal, None)
-        .await?;
-    renewed_socket
+    socket
         .close(reqwest_websocket::CloseCode::Normal, None)
         .await?;
     fixture.close().await
+}
+
+fn renew_frame(correlation_id: &str, token: &str) -> Result<LinkFrame> {
+    Ok(LinkFrame::Data(DataFrame::RenewMachineToken {
+        correlation_id: correlation_id.parse()?,
+        token: token.to_owned().try_into()?,
+    }))
+}
+
+async fn renewal_result(socket: &mut WebSocket) -> Result<TokenRenewalResult> {
+    match receive(socket).await? {
+        LinkFrame::Data(DataFrame::MachineTokenRenewal { result, .. }) => Ok(result),
+        other => Err(format!("expected a renewal answer, got {other:?}").into()),
+    }
 }
 
 #[expect(

@@ -1,4 +1,7 @@
-use crate::{CorrelationId, LinkRequest, LinkRequestBatch, ProtocolError, ReplyPayload};
+use crate::{
+    CorrelationId, LinkRequest, LinkRequestBatch, MachineTokenText, ProtocolError, ReplyPayload,
+    TokenRenewalResult,
+};
 use serde::{Deserialize, Serialize};
 use workspace_ids::MessageId;
 use workspace_model::{MachineId, Timestamp, central_mail::MessageRecord};
@@ -45,6 +48,16 @@ pub enum DataFrame {
     Ack {
         message_id: MessageId,
     },
+    /// Router to central: a fresh machine token for the open connection.
+    RenewMachineToken {
+        correlation_id: CorrelationId,
+        token: MachineTokenText,
+    },
+    /// Central to Router: the answer to one RenewMachineToken.
+    MachineTokenRenewal {
+        correlation_id: CorrelationId,
+        result: TokenRenewalResult,
+    },
 }
 
 impl LinkFrame {
@@ -53,12 +66,14 @@ impl LinkFrame {
             Self::Ping => direction == FrameDirection::ToCentral,
             Self::Pong => direction == FrameDirection::ToRouter,
             Self::Data(data) => match data {
-                DataFrame::Request { .. } | DataFrame::Batch { .. } | DataFrame::Ack { .. } => {
-                    direction == FrameDirection::ToCentral
-                }
-                DataFrame::Welcome { .. } | DataFrame::Reply { .. } | DataFrame::Deliver { .. } => {
-                    direction == FrameDirection::ToRouter
-                }
+                DataFrame::Request { .. }
+                | DataFrame::Batch { .. }
+                | DataFrame::Ack { .. }
+                | DataFrame::RenewMachineToken { .. } => direction == FrameDirection::ToCentral,
+                DataFrame::Welcome { .. }
+                | DataFrame::Reply { .. }
+                | DataFrame::Deliver { .. }
+                | DataFrame::MachineTokenRenewal { .. } => direction == FrameDirection::ToRouter,
             },
         };
         if valid {

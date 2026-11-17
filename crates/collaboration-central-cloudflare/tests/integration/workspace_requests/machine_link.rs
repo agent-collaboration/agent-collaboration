@@ -4,6 +4,7 @@ mod batch;
 mod fixture;
 mod probe_diagnostic;
 mod receipt;
+mod renewal;
 mod witness_assertions;
 
 use super::workerd_host::c2_controls::{

@@ -1,8 +1,12 @@
 //! The closed Router–central wire vocabulary, without a runtime or storage driver.
 mod link_codec;
+mod link_renewal;
 mod link_request;
 
 pub use link_codec::{DataFrame, FrameDirection, LinkFrame, decode_text, encode_text};
+pub use link_renewal::{
+    InvalidMachineToken, MachineTokenText, TokenRenewalRefusal, TokenRenewalResult,
+};
 pub use link_request::{
     CorrelationId, LinkRequest, LinkRequestBatch, MAX_LINK_REQUEST_BATCH_SIZE, ReplyPayload,
     RequestPayload,
