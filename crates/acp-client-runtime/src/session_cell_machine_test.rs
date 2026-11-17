@@ -502,9 +502,7 @@ fn a_message_arriving_while_the_session_loads_joins_the_line_and_commits_once_li
             operation: operation("a"),
         },
     );
-    let (queued, _) = queued
-        .clone()
-        .expect("the message joins the loading run's line");
+    let (queued, _) = queued.expect("the message joins the loading run's line");
     let held = step(
         &queued,
         SessionCellEvent::Claim { sequence: 0 },
