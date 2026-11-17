@@ -1,6 +1,6 @@
 # UW-15: Turso CTE metadata misclassifies generated JSON text
 
-Status: in place, 2026-11-14. Tested engine/SDK: `turso 0.8.1`.
+Status: removed. 2026-11-17: after PR 1, the old central rip-out, central no longer runs this query on Turso; both hosts read it through SQLite, and the CAST stays as plain SQL. Was in place from 2026-11-14. Tested engine/SDK: `turso 0.8.1`.
 Adapter: `sqlx-turso 0.4.0`, agent-fleet-sync revision
 `b75d072c116afa46cfa82facd34db6317f380687`.
 

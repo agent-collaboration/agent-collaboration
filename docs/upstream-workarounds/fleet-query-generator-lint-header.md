@@ -1,5 +1,8 @@
 # Generated query headers and the Clippy baseline
 
+Status: removed. 2026-11-17: PR 1, the old central rip-out, deleted every generated
+query module and the generator dependency, so no expectation remains.
+
 `fleet-sync-query-gen` v0.3.0 emits
 `#![allow(clippy::manual_async_fn)]` in every generated query module. The
 workspace's `clippy::allow_attributes_without_reason` deny rejects that header.
