@@ -4,19 +4,28 @@
 use crate::outbox_flush::MemberOutcome;
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
+use serde::{Deserialize, Serialize};
 use workspace_model::{
     Caller, PostText, RequestId, SessionAddress, ThreadId, WorkspaceId, WorkspaceOperation,
     central_mail::CentralMailOperation,
 };
 
-/// An outbox write as the overlay shows it: a thread post or a direct message.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Where an outbox write goes: a thread post or a direct message. It holds no
+/// text, so the Mac may keep it after central answers.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum OutboxWriteTarget {
     Thread {
         workspace_id: Option<WorkspaceId>,
         thread_id: ThreadId,
     },
-    Session(SessionAddress),
+    Session {
+        to: SessionAddress,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,7 +54,7 @@ impl OutboxWriteContent {
             },
             RequestPayload::Mail(request) => match &request.operation {
                 CentralMailOperation::SendMessage { to, body } => Some(Self {
-                    target: OutboxWriteTarget::Session(to.clone()),
+                    target: OutboxWriteTarget::Session { to: to.clone() },
                     body: body.clone(),
                 }),
                 _ => None,
@@ -55,13 +64,16 @@ impl OutboxWriteContent {
 }
 
 /// Where a pending write stands. A write that went out in a batch whose answer
-/// was lost may already be in central; it is resent under the same id.
+/// was lost may already be in central; it is resent under the same id. Its text
+/// stays on the Mac only until central answers (owner, 2026-11-15: "unsent text
+/// in the Mac outbox: allowed until central answers"), so only the unanswered
+/// states carry the body.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PendingWriteState {
     /// Never left the Mac.
-    Unsent,
+    Unsent { body: PostText },
     /// Went out in a batch whose answer was lost; resent with the same id.
-    SentAnswerLost,
+    SentAnswerLost { body: PostText },
     /// Central answered; the read layer drops it once it sees the created id.
     Answered(ReplyPayload),
 }
@@ -69,7 +81,7 @@ pub enum PendingWriteState {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingWrite {
     pub request_id: RequestId,
-    pub content: OutboxWriteContent,
+    pub target: OutboxWriteTarget,
     pub flush_at: SyncTime,
     pub state: PendingWriteState,
 }
@@ -81,10 +93,11 @@ pub enum OutgoingOutcome {
     Refused(crate::link_calls::LinkAdmissionRefusal),
 }
 
+/// An answered write, without its text: central holds the post or message now.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutgoingWrite {
     pub request_id: RequestId,
-    pub content: OutboxWriteContent,
+    pub target: OutboxWriteTarget,
     pub outcome: OutgoingOutcome,
     pub answered_at: SyncTime,
 }

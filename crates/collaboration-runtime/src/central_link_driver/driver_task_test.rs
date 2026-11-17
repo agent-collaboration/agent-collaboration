@@ -81,7 +81,10 @@ async fn a_lost_link_returns_the_batch_as_sent_answer_lost_and_resends_the_same_
     };
 
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].state, PendingWriteState::SentAnswerLost);
+    assert!(matches!(
+        pending[0].state,
+        PendingWriteState::SentAnswerLost { ref body } if body.as_str() == "hi"
+    ));
     let outcomes = harness.outcomes.0.lock().unwrap().clone();
     assert!(matches!(outcomes.as_slice(), [report] if !report.complete));
     let resent = &requests.requests()[0];

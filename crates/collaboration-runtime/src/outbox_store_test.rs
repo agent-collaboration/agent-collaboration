@@ -4,7 +4,7 @@ use central_link_protocol::ReplyPayload;
 use hegel::{TestCase, generators as gs};
 use serde_json::json;
 use std::collections::BTreeMap;
-use workspace_model::{WorkspaceReply, WorkspaceResult};
+use workspace_model::{PostText, WorkspaceReply, WorkspaceResult};
 
 const MARK: i64 = 1_763_380_800_000;
 
@@ -112,6 +112,78 @@ async fn a_write_moves_in_outbox_sent_accepted_and_survives_a_reopen() {
     );
     assert_eq!(after_send, RequestStatus::Sent);
     assert_eq!(after_reopen, RequestStatus::Answered(accepted_reply()));
+}
+
+#[tokio::test]
+async fn an_answer_or_refusal_drops_the_text_from_the_row_and_every_view() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = open(&root).await;
+    let answered = item(11, "first secret text", MARK);
+    let refused = item(12, "second secret text", MARK);
+    for write in [&answered, &refused] {
+        MacOutbox::new(&mut store)
+            .insert(write, at(MARK - 20_000))
+            .await
+            .unwrap();
+    }
+    let unsent = MacOutbox::new(&mut store)
+        .pending_for(&answered.caller)
+        .await
+        .unwrap();
+    MacOutbox::new(&mut store)
+        .mark_sent(
+            &[answered.request.clone(), refused.request.clone()],
+            at(MARK),
+        )
+        .await
+        .unwrap();
+
+    MacOutbox::new(&mut store)
+        .record_outcome(&answered.request, &accepted(), at(MARK + 1_000))
+        .await
+        .unwrap();
+    MacOutbox::new(&mut store)
+        .record_outcome(
+            &refused.request,
+            &MemberOutcome::Refused(LinkAdmissionRefusal::CredentialRefused),
+            at(MARK + 1_000),
+        )
+        .await
+        .unwrap();
+    let rows: Vec<String> = sqlx::query_scalar("SELECT payload_json FROM outbox_items")
+        .fetch_all(&mut store.connection)
+        .await
+        .unwrap();
+    let pending = MacOutbox::new(&mut store)
+        .pending_for(&answered.caller)
+        .await
+        .unwrap();
+    let outgoing = MacOutbox::new(&mut store)
+        .outgoing_for(&answered.caller, 10)
+        .await
+        .unwrap();
+    let resubmitted = MacOutbox::new(&mut store)
+        .insert(&answered, at(MARK + 2_000))
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        &unsent[0].state,
+        PendingWriteState::Unsent { body } if body.as_str() == "first secret text"
+    ));
+    assert_eq!(rows.len(), 2);
+    for row in &rows {
+        assert!(!row.contains("secret text"), "stored row keeps text: {row}");
+    }
+    let views = format!("{pending:?}{outgoing:?}");
+    assert!(!views.contains("secret text"), "a view keeps text: {views}");
+    assert_eq!(pending.len(), 1, "the refused write is not pending");
+    assert_eq!(pending[0].target, outgoing[1].target);
+    assert_eq!(outgoing.len(), 2);
+    assert_eq!(
+        resubmitted,
+        OutboxInsert::AlreadyStored(RequestStatus::Answered(accepted_reply()))
+    );
 }
 
 #[tokio::test]
@@ -271,7 +343,20 @@ async fn an_invalid_stored_row_is_refused_not_coerced() {
     let bad_state = MacOutbox::new(&mut store)
         .request_status(&write.caller, &write.request)
         .await;
-    sqlx::query("UPDATE outbox_items SET item_state = 'answered', outcome_json = NULL")
+    // An answered row that still holds the write's text is refused.
+    let answer = serde_json::to_string(&accepted_reply()).unwrap();
+    sqlx::query("UPDATE outbox_items SET item_state = 'answered', outcome_json = ?")
+        .bind(&answer)
+        .execute(&mut store.connection)
+        .await
+        .unwrap();
+    let answered_with_text = MacOutbox::new(&mut store)
+        .request_status(&write.caller, &write.request)
+        .await;
+    let body_free = json!({"requestId": write.request.as_str(), "target": {
+        "kind": "thread", "workspaceId": uuid_v7(60_001), "threadId": uuid_v7(60_002)}});
+    sqlx::query("UPDATE outbox_items SET payload_json = ?, outcome_json = NULL")
+        .bind(body_free.to_string())
         .execute(&mut store.connection)
         .await
         .unwrap();
@@ -283,6 +368,13 @@ async fn an_invalid_stored_row_is_refused_not_coerced() {
         bad_state,
         Err(OutboxStoreError::CorruptItem {
             field: "item_state",
+            ..
+        })
+    ));
+    assert!(matches!(
+        answered_with_text,
+        Err(OutboxStoreError::CorruptItem {
+            field: "payload_json",
             ..
         })
     ));
@@ -325,6 +417,15 @@ impl ModelWrite {
     }
 }
 
+/// Each model write's own text, so a leftover body is attributable.
+fn body_of(request_id: &str) -> String {
+    format!("unsent text {request_id}")
+}
+
+fn post_text(request_id: &RequestId) -> PostText {
+    PostText::try_from(body_of(request_id.as_str())).unwrap()
+}
+
 const RETENTION_MS: i64 = 60 * 24 * 60 * 60 * 1000;
 
 /// The real SQLite store against a model of each write's state.
@@ -353,7 +454,8 @@ impl OutboxStoreModel {
     fn store_a_write(&mut self, tc: TestCase) {
         tc.assume(self.next_seed < 1_000);
         let marks_ahead = tc.draw(gs::integers::<i64>().min_value(1).max_value(3));
-        let write = item(self.next_seed, "body", MARK + marks_ahead * 60_000);
+        let body = body_of(&uuid_v7(self.next_seed));
+        let write = item(self.next_seed, &body, MARK + marks_ahead * 60_000);
         self.next_seed += 1;
         let result = self
             .runtime
@@ -483,9 +585,13 @@ impl OutboxStoreModel {
             .iter()
             .filter_map(|(id, write)| {
                 let state = match write.state {
-                    ModelState::Unsent => PendingWriteState::Unsent,
+                    ModelState::Unsent => PendingWriteState::Unsent {
+                        body: post_text(id),
+                    },
                     ModelState::Sent | ModelState::SentAnswerLost => {
-                        PendingWriteState::SentAnswerLost
+                        PendingWriteState::SentAnswerLost {
+                            body: post_text(id),
+                        }
                     }
                     ModelState::Accepted => PendingWriteState::Answered(accepted_reply()),
                     ModelState::Refused => return None,
@@ -521,6 +627,27 @@ impl OutboxStoreModel {
                 .collect::<Vec<_>>(),
             expected_outgoing
         );
+        // Owner, 2026-11-15: unsent text stays on the Mac only until central
+        // answers. An answered or refused row keeps no text, in the row itself.
+        for (id, write) in &self.model {
+            if !matches!(write.state, ModelState::Accepted | ModelState::Refused) {
+                continue;
+            }
+            let stored: String = self
+                .runtime
+                .block_on(
+                    sqlx::query_scalar(
+                        "SELECT payload_json FROM outbox_items WHERE request_id = ?",
+                    )
+                    .bind(id.as_str())
+                    .fetch_one(&mut self.store.connection),
+                )
+                .unwrap();
+            assert!(
+                !stored.contains(&body_of(id.as_str())),
+                "answered row {id} still holds its text"
+            );
+        }
         let foreign = self
             .runtime
             .block_on(MacOutbox::new(&mut self.store).pending_for(&caller(2)))

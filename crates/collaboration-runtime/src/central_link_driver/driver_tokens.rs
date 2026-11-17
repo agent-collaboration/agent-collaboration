@@ -6,8 +6,12 @@ use super::super::link_transport::TokenAvailability;
 use super::LinkDriver;
 use central_link_client::{LinkStatus, RefusalReason};
 use central_link_protocol::{
-    CorrelationId, DataFrame, LinkFrame, MachineTokenText, TokenRenewalResult,
+    CorrelationId, DataFrame, LinkFrame, MachineTokenText, TokenRenewalRefusal, TokenRenewalResult,
 };
+use std::time::Duration;
+
+/// How long after a CentralUnavailable renewal answer the driver tries again.
+const RENEWAL_RETRY: Duration = Duration::from_secs(5);
 
 impl LinkDriver {
     /// The source changed state: a Ready token after a NeedsNewCode refusal
@@ -25,6 +29,7 @@ impl LinkDriver {
     }
 
     async fn renew_with(&mut self, token: MachineTokenText) {
+        self.renew_retry_at = None;
         let already_sent = self.connected_token.as_ref() == Some(&token)
             || self
                 .renewing
@@ -59,10 +64,36 @@ impl LinkDriver {
             self.renewing = Some((sent, token));
             return;
         }
-        if matches!(result, TokenRenewalResult::Renewed { .. }) {
-            self.connected_token = Some(token);
+        match result {
+            TokenRenewalResult::Renewed { .. } => self.connected_token = Some(token),
+            // Transient: the source keeps Ready, so no change will arrive; the
+            // driver keeps the link and sends the renewal again shortly.
+            TokenRenewalResult::Refused {
+                reason: TokenRenewalRefusal::CentralUnavailable,
+            } => {
+                self.renew_retry_at = Some(self.clock.monotonic_now().after(RENEWAL_RETRY));
+            }
+            TokenRenewalResult::Refused { .. } => {}
         }
         self.tokens.report_renewal(result);
+    }
+
+    /// Retries a renewal central could not answer, once its delay has passed,
+    /// if the link is still open and the source still offers a newer token.
+    pub(super) async fn drive_renewal_retry(&mut self) {
+        if !self
+            .renew_retry_at
+            .is_some_and(|at| self.clock.monotonic_now() >= at)
+        {
+            return;
+        }
+        self.renew_retry_at = None;
+        if !matches!(self.client.status(), LinkStatus::Connected { .. }) {
+            return;
+        }
+        if let TokenAvailability::Ready(token) = self.tokens.availability() {
+            self.renew_with(token).await;
+        }
     }
 
     /// Refused by a NeedsNewCode source: "not enrolled; new code needed".

@@ -59,6 +59,8 @@ pub(super) struct LinkDriver {
     /// A RenewMachineToken on the wire and the token it carries.
     renewing: Option<(CorrelationId, MachineTokenText)>,
     renewal_ids: uuid::ContextV7,
+    /// When a renewal central could not answer (CentralUnavailable) is tried again.
+    renew_retry_at: Option<ClockInstant>,
 }
 
 impl LinkDriver {
@@ -88,6 +90,7 @@ impl LinkDriver {
             connected_token: None,
             renewing: None,
             renewal_ids: uuid::ContextV7::new(),
+            renew_retry_at: None,
         }
     }
 
@@ -99,10 +102,14 @@ impl LinkDriver {
         self.restore_outbox().await;
         loop {
             self.drive_time().await;
-            let deadline = [self.client.next_deadline(), self.flush_wake]
-                .into_iter()
-                .flatten()
-                .min();
+            let deadline = [
+                self.client.next_deadline(),
+                self.flush_wake,
+                self.renew_retry_at,
+            ]
+            .into_iter()
+            .flatten()
+            .min();
             let clock = self.clock.clone();
             let tokens = self.tokens.clone();
             tokio::select! {
@@ -144,6 +151,7 @@ impl LinkDriver {
         while let Some(action) = self.client.poll_time() {
             self.handle_action(action).await;
         }
+        self.drive_renewal_retry().await;
         if self
             .flush_wake
             .is_some_and(|wake| self.clock.monotonic_now() >= wake)

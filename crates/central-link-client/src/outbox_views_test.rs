@@ -32,7 +32,7 @@ fn a_thread_post_and_a_direct_message_are_outbox_writes_and_commands_are_not() {
         OutboxWriteTarget::Thread { ref thread_id, .. } if thread_id.as_str() == THREAD
     ));
     assert_eq!(post.body.as_str(), "hi");
-    assert!(matches!(message.target, OutboxWriteTarget::Session(_)));
+    assert!(matches!(message.target, OutboxWriteTarget::Session { .. }));
     assert_eq!(message.body.as_str(), "hello");
     assert_eq!(OutboxWriteContent::of(&create_thread), None);
 }

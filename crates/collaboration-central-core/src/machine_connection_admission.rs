@@ -53,12 +53,26 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
     /// renewed connection counts until the new token's
     /// min(exp + 60 s, grant_expires_at), which may extend it; on refusal the
     /// caller keeps the current connection and its expiry.
+    ///
+    /// A renewal is a frame on the current connection, so it is refused like any
+    /// frame once that connection's effective deadline has passed (no leeway,
+    /// refused at equality) or its enrollment is no longer live, with the same
+    /// EnrollmentNotActive answer on both hosts; the Router reconnects with a
+    /// fresh token. The deadline is checked before the token and again under the
+    /// turn, since verification may wait across it.
     pub async fn renew_machine_connection(
         &self,
         current: &ValidatedMachineConnection,
         token: &str,
     ) -> Renewal {
         use MachineTokenRenewalRefusal as Refusal;
+        match self
+            .restore_machine_connection(&current.attachment())
+            .await?
+        {
+            Ok(_) => {}
+            Err(_) => return Ok(Err(Refusal::EnrollmentNotActive)),
+        }
         let check = self
             .signin_authority
             .check()
@@ -84,6 +98,9 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             return Ok(Err(Refusal::DifferentEnrollment));
         }
         let time = self.machine_login_time(verified.organization_id()).await?;
+        if time.now_ms.div_euclid(1000) >= current.effective_expires_at().0 {
+            return Ok(Err(Refusal::EnrollmentNotActive));
+        }
         let facts = self
             .connection_facts(verified.installation_id(), verified.enrollment_id())
             .await?;
