@@ -2,18 +2,20 @@
 //! owning task (`driver_task`) runs the central link, the Mac outbox and its
 //! minute flush on the injected clock.
 mod driver_task;
+#[cfg(test)]
+mod driver_test_support;
 mod link_transport;
 
 pub use link_transport::{
-    LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource, TransportFuture,
-    WebSocketLinkTransport,
+    LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource, TokenAvailability,
+    TransportFuture, WebSocketLinkTransport,
 };
 
 use crate::ProviderOperationStore;
 use crate::outbox_store::OutboxStoreError;
 use central_link_client::{
-    FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, OutgoingWrite, PendingWrite,
-    RequestStatus, Submission, SubmitRefusal,
+    FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, LinkStatus, OutgoingWrite,
+    PendingWrite, RequestStatus, Submission, SubmitRefusal,
 };
 use central_link_protocol::RequestPayload;
 use router_clock::RuntimeClock;
@@ -75,6 +77,9 @@ pub(crate) enum DriverCommand {
         limit: u16,
         reply: oneshot::Sender<Result<Vec<OutgoingWrite>, OutboxStoreError>>,
     },
+    LinkStatus {
+        reply: oneshot::Sender<LinkStatus>,
+    },
 }
 
 /// Everything the driver needs, created once by the Host.
@@ -128,6 +133,18 @@ impl RouterLinkCalls {
             .await
             .map_err(|_| OutboxReadError::DriverStopped)?;
         Ok(answer.await.map_err(|_| OutboxReadError::DriverStopped)??)
+    }
+
+    /// Where the link stands. `Refused { reason: CredentialRefused }` is "not
+    /// enrolled; new code needed": the token source answered NeedsNewCode and
+    /// the link waits for it to change. None once the driver has stopped.
+    pub async fn link_status(&self) -> Option<LinkStatus> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(DriverCommand::LinkStatus { reply })
+            .await
+            .ok()?;
+        answer.await.ok()
     }
 
     /// The caller's recently answered outbox writes, newest first.

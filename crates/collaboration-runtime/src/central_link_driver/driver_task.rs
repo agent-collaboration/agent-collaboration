@@ -1,19 +1,19 @@
 //! The one task that owns the Router's central link: the C1 link client, the
 //! socket, the outbox flush reducer and the calls waiting on them. Every
 //! deadline comes from the one injected clock.
-use super::link_transport::{LinkSocket, LinkTransport, MachineTokenSource};
+use super::link_transport::{LinkSocket, LinkTransport, MachineTokenSource, TokenAvailability};
 use super::{DriverCommand, FlushJitter};
 use crate::ProviderOperationStore;
 use crate::outbox_store::{MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError};
 use central_link_client::{
     CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEffect, FlushEvent,
     FlushOutcome, FlushOutcomeSink, FlushOutcomes, LinkAdmissionRefusal, LinkClient, MemberOutcome,
-    OutboxFlushState, OutboxReceipt, PendingWrite, RequestStatus, Submission, SubmissionPath,
-    SubmitRefusal, submission_path, transition,
+    OutboxFlushState, OutboxReceipt, PendingWrite, RefusalReason as LinkRefusal, RequestStatus,
+    Submission, SubmissionPath, SubmitRefusal, submission_path, transition,
 };
 use central_link_protocol::{
     CorrelationId, DataFrame, FrameDirection, LinkFrame, LinkRequest, LinkRequestBatch,
-    RequestPayload, decode_text, encode_text,
+    MachineTokenText, RequestPayload, decode_text, encode_text,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use runtime_primitives::SyncTime;
@@ -54,6 +54,11 @@ pub(super) struct LinkDriver {
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
     deferred_pending: Vec<(Caller, PendingReply)>,
+    /// The token the open connection was admitted or last renewed with.
+    connected_token: Option<MachineTokenText>,
+    /// A RenewMachineToken on the wire and the token it carries.
+    renewing: Option<(CorrelationId, MachineTokenText)>,
+    renewal_ids: uuid::ContextV7,
 }
 
 impl LinkDriver {
@@ -80,6 +85,9 @@ impl LinkDriver {
             batch: None,
             flush_wake: None,
             deferred_pending: Vec::new(),
+            connected_token: None,
+            renewing: None,
+            renewal_ids: uuid::ContextV7::new(),
         }
     }
 
@@ -96,9 +104,11 @@ impl LinkDriver {
                 .flatten()
                 .min();
             let clock = self.clock.clone();
+            let tokens = self.tokens.clone();
             tokio::select! {
                 biased;
                 () = stop.cancelled() => break,
+                () = tokens.changed() => self.token_changed().await,
                 command = commands.recv() => match command {
                     Some(command) => self.handle_command(command).await,
                     None => break,
@@ -164,13 +174,30 @@ impl LinkDriver {
     }
 
     async fn connect(&mut self, attempt: ConnectionAttempt) {
-        let token = self.tokens.current().await;
-        let socket = match token {
-            Some(token) => self.transport.connect(&token).await.ok(),
-            None => None,
+        let token = match self.tokens.availability() {
+            TokenAvailability::Ready(token) => token,
+            TokenAvailability::RefreshPending => {
+                if let Ok(failed) = self.client.closed(&attempt) {
+                    self.settle_failed(failed).await;
+                }
+                return;
+            }
+            // Not enrolled; new code needed: stop retrying until the source changes.
+            TokenAvailability::NeedsNewCode => {
+                if let Ok(failed) = self
+                    .client
+                    .refused(&attempt, LinkRefusal::CredentialRefused)
+                {
+                    self.settle_failed(failed).await;
+                }
+                return;
+            }
         };
-        match socket {
-            Some(socket) => self.socket = Some((attempt, socket)),
+        match self.transport.connect(&token).await.ok() {
+            Some(socket) => {
+                self.socket = Some((attempt, socket));
+                self.connected_token = Some(token);
+            }
             None => {
                 if let Ok(failed) = self.client.closed(&attempt) {
                     self.settle_failed(failed).await;
@@ -216,11 +243,12 @@ impl LinkDriver {
                 result,
             } => self.reply_arrived(&correlation_id, result).await,
             // Pong resets the client's heartbeat; a late reply was settled.
-            // Delivery and renewal answers belong to later slices (2c, renewal).
-            ClientEvent::Pong
-            | ClientEvent::LateReply { .. }
-            | ClientEvent::Deliver { .. }
-            | ClientEvent::TokenRenewal { .. } => {}
+            // Delivery belongs to 2c.
+            ClientEvent::TokenRenewal {
+                correlation_id,
+                result,
+            } => self.renewal_answered(&correlation_id, &result),
+            ClientEvent::Pong | ClientEvent::LateReply { .. } | ClientEvent::Deliver { .. } => {}
         }
     }
 
@@ -284,6 +312,9 @@ impl LinkDriver {
                     let submission = self.submit_to_outbox(caller, payload).await;
                     let _ = reply.send(submission);
                 }
+                SubmissionPath::Immediate if self.not_enrolled() => {
+                    let _ = reply.send(Submission::Refused(SubmitRefusal::NotEnrolled));
+                }
                 SubmissionPath::Immediate => self.submit_now(caller, payload, reply).await,
             },
             DriverCommand::Status {
@@ -305,6 +336,9 @@ impl LinkDriver {
                     let pending = pending_for(&self.store, &caller).await;
                     let _ = reply.send(pending);
                 }
+            }
+            DriverCommand::LinkStatus { reply } => {
+                let _ = reply.send(self.client.status());
             }
             DriverCommand::Outgoing {
                 caller,
@@ -565,6 +599,9 @@ async fn pending_for(
     let mut store = store.lock().await;
     MacOutbox::new(&mut store).pending_for(caller).await
 }
+
+#[path = "driver_tokens.rs"]
+mod driver_tokens;
 
 #[cfg(test)]
 #[path = "driver_task_test.rs"]

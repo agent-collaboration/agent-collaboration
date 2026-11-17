@@ -38,8 +38,8 @@ mod central_link_driver;
 mod outbox_store;
 pub use central_link_driver::{
     CentralLinkParts, FlushJitter, InstallationFlushJitter, LinkSocket, LinkTransport,
-    LinkTransportError, MachineTokenSource, OutboxReadError, RouterLinkCalls, TransportFuture,
-    WebSocketLinkTransport,
+    LinkTransportError, MachineTokenSource, OutboxReadError, RouterLinkCalls, TokenAvailability,
+    TransportFuture, WebSocketLinkTransport,
 };
 mod provider_session_event_hub;
 mod provider_session_record;
