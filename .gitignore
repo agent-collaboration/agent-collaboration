@@ -12,3 +12,6 @@ __pycache__/
 
 # Local document-reader preferences.
 *.mindle.json
+
+# Hegel keeps failing property-test examples here to replay them locally.
+.hegel/

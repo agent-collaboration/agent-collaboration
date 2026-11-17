@@ -235,7 +235,7 @@ impl EngineOrg {
         })
         .await;
     }
-    async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
+    pub async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
         self.f
             .host
             .request_central(

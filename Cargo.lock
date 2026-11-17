@@ -1952,6 +1952,7 @@ dependencies = [
  "fleet-sync-tokio-runner",
  "fleet-sync-writer",
  "futures-util",
+ "hegeltest",
  "message-board",
  "message-board-storage",
  "reqwest 0.12.28",
