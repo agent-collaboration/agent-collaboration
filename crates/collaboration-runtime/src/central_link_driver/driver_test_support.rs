@@ -43,6 +43,14 @@ pub(crate) fn list_areas() -> RequestPayload {
     .unwrap()
 }
 
+/// Central's answer when link admission refuses a write it did not apply.
+pub(crate) fn machine_revoked() -> ReplyPayload {
+    ReplyPayload::Workspace(WorkspaceReply {
+        result: WorkspaceResult::Refused(workspace_model::RefusalReason::MachineRevoked),
+        actors: Vec::new(),
+    })
+}
+
 pub(crate) fn reply() -> ReplyPayload {
     ReplyPayload::Workspace(WorkspaceReply {
         result: WorkspaceResult::Conflict,

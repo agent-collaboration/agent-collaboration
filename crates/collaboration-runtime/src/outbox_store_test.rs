@@ -173,6 +173,22 @@ async fn an_answer_or_refusal_drops_the_text_from_the_row_and_every_view() {
         .insert(&different, at(MARK + 2_000))
         .await
         .unwrap();
+    // The same id and body in another workspace is another write too.
+    let mut moved = answered.clone();
+    moved.payload = serde_json::from_value(json!({
+        "kind": "workspace",
+        "request": {
+            "requestId": answered.request.as_str(),
+            "workspaceId": uuid_v7(60_003),
+            "operation": {"kind": "threadPost", "threadId": uuid_v7(60_002),
+                "body": "first secret text", "addressees": []},
+        },
+    }))
+    .unwrap();
+    let moved_conflict = MacOutbox::new(&mut store)
+        .insert(&moved, at(MARK + 2_000))
+        .await
+        .unwrap();
 
     assert!(matches!(
         &unsent[0].state,
@@ -192,6 +208,7 @@ async fn an_answer_or_refusal_drops_the_text_from_the_row_and_every_view() {
         OutboxInsert::AlreadyStored(RequestStatus::Answered(accepted_reply()))
     );
     assert_eq!(conflicting, OutboxInsert::ConflictingContent);
+    assert_eq!(moved_conflict, OutboxInsert::ConflictingContent);
 }
 
 #[tokio::test]

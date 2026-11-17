@@ -81,6 +81,13 @@ impl FlushModel {
                     assert!(self.awaiting_answer.remove(request));
                 }
             }
+            FlushEffect::ReturnUnapplied { request } => {
+                assert!(self.awaiting_answer.remove(request));
+                assert!(
+                    !self.answered.contains(request),
+                    "an unapplied write was final"
+                );
+            }
             FlushEffect::WakeAt { mark } => {
                 assert_eq!(mark.unix_millis().rem_euclid(FLUSH_INTERVAL_MILLIS), 0);
                 self.armed_wake = Some(*mark);
@@ -183,7 +190,12 @@ impl FlushModel {
         let members = self.in_flight();
         tc.assume(!members.is_empty());
         let request = tc.draw(gs::sampled_from(members));
-        let outcome = MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked);
+        // Final (a domain answer) or not applied (link admission refused it).
+        let outcome = if tc.draw(gs::booleans()) {
+            MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict)
+        } else {
+            MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked)
+        };
         self.apply(FlushEvent::MemberAnswered { request, outcome });
     }
 
@@ -202,7 +214,7 @@ impl FlushModel {
             self.state.clone(),
             FlushEvent::MemberAnswered {
                 request: stray,
-                outcome: MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked),
+                outcome: MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict),
             },
         );
 
@@ -270,7 +282,7 @@ fn a_connected_link_drains_the_outbox_64_per_mark(tc: TestCase) {
             if let FlushEffect::SendBatch { requests, .. } = effect {
                 for request in requests {
                     let outcome =
-                        MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked);
+                        MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict);
                     model.apply(FlushEvent::MemberAnswered { request, outcome });
                 }
             }
@@ -292,4 +304,86 @@ fn a_tick_outside_any_window_sends_nothing_and_rearms_for_the_open_mark() {
     let effects = model.apply(FlushEvent::Tick { now: at(model.now) });
 
     assert_eq!(effects, vec![FlushEffect::WakeAt { mark: at(mark) }]);
+}
+
+fn workspace_reply(result: WorkspaceResult) -> MemberOutcome {
+    MemberOutcome::Answered(ReplyPayload::Workspace(workspace_model::WorkspaceReply {
+        result,
+        actors: Vec::new(),
+    }))
+}
+
+#[test]
+fn only_domain_answers_are_final_and_link_admission_refusals_are_not_applied() {
+    let cases = [
+        (workspace_reply(WorkspaceResult::Conflict), true),
+        (
+            workspace_reply(WorkspaceResult::Refused(RefusalReason::WorkspaceNotAllowed)),
+            true,
+        ),
+        (
+            workspace_reply(WorkspaceResult::Refused(RefusalReason::MachineRevoked)),
+            false,
+        ),
+        (
+            MemberOutcome::Answered(ReplyPayload::Mail(CentralMailResult::Refused(
+                CentralMailRefusal::Workspace(RefusalReason::MachineRevoked),
+            ))),
+            false,
+        ),
+        (
+            MemberOutcome::Refused(crate::LinkAdmissionRefusal::CredentialRefused),
+            false,
+        ),
+        (
+            MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked),
+            false,
+        ),
+        (
+            MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict),
+            true,
+        ),
+    ];
+
+    for (outcome, is_final) in cases {
+        assert_eq!(outcome.is_final(), is_final, "{outcome:?}");
+    }
+}
+
+#[test]
+fn a_machine_revoked_member_returns_unsent_with_its_mark_and_is_resent_next_mark() {
+    let mut model = FlushModel::new();
+    model.apply(FlushEvent::LinkConnected);
+    model.store_next();
+    model.store_next();
+    let first = model.wake_as_host(0);
+    let FlushEffect::SendBatch { requests, .. } = &first[0] else {
+        panic!("one batch: {first:?}");
+    };
+    let (revoked, decided) = (requests[0].clone(), requests[1].clone());
+
+    let returned = model.apply(FlushEvent::MemberAnswered {
+        request: revoked.clone(),
+        outcome: workspace_reply(WorkspaceResult::Refused(RefusalReason::MachineRevoked)),
+    });
+    let recorded = model.apply(FlushEvent::MemberAnswered {
+        request: decided.clone(),
+        outcome: workspace_reply(WorkspaceResult::Refused(RefusalReason::WorkspaceNotAllowed)),
+    });
+    let resent = model.wake_as_host(0);
+
+    assert_eq!(
+        returned,
+        vec![FlushEffect::ReturnUnapplied {
+            request: revoked.clone()
+        }]
+    );
+    assert!(matches!(
+        recorded.as_slice(),
+        [FlushEffect::RecordOutcome { request, .. }, ..] if *request == decided
+    ));
+    assert!(matches!(
+        resent.as_slice(),
+        [FlushEffect::SendBatch { requests, .. }, ..] if *requests == vec![revoked]
+    ));
 }

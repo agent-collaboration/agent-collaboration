@@ -10,7 +10,10 @@ use crate::link_calls::LinkAdmissionRefusal;
 use central_link_protocol::ReplyPayload;
 use runtime_primitives::SyncTime;
 use std::collections::{BTreeMap, BTreeSet};
-use workspace_model::RequestId;
+use workspace_model::{
+    RefusalReason, RequestId, WorkspaceResult,
+    central_mail::{CentralMailRefusal, CentralMailResult},
+};
 
 /// The link batch frame's cap (Lead, 2026-11-15).
 pub const MAX_BATCH_WRITES: usize = 64;
@@ -70,6 +73,32 @@ pub enum MemberOutcome {
     Refused(LinkAdmissionRefusal),
 }
 
+impl MemberOutcome {
+    /// Whether central applied or decided this write. A MachineRevoked refusal
+    /// (the machine is revoked, unknown, or its credential lapsed) is link
+    /// admission, not a domain answer: central did not apply the write, so it
+    /// returns to the outbox and is resent after a fresh-token reconnect
+    /// (Lead A, 2026-11-17). Only domain refusals inside a reply are final.
+    #[must_use]
+    pub fn is_final(&self) -> bool {
+        match self {
+            Self::Answered(ReplyPayload::Workspace(reply)) => {
+                reply.result != WorkspaceResult::Refused(RefusalReason::MachineRevoked)
+            }
+            Self::Answered(ReplyPayload::Mail(result)) => {
+                *result
+                    != CentralMailResult::Refused(CentralMailRefusal::Workspace(
+                        RefusalReason::MachineRevoked,
+                    ))
+            }
+            Self::Refused(
+                LinkAdmissionRefusal::CredentialRefused | LinkAdmissionRefusal::MachineRevoked,
+            ) => false,
+            Self::Refused(LinkAdmissionRefusal::RequestIdConflict) => true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FlushEffect {
     /// Mark these writes sent and send them as one batch frame.
@@ -84,6 +113,9 @@ pub enum FlushEffect {
     },
     /// These writes were not answered; they are back in the outbox.
     ReturnToOutbox { requests: Vec<RequestId> },
+    /// Central did not apply this write (link admission refused it); it is
+    /// back in the outbox, unsent, under the same RequestId.
+    ReturnUnapplied { request: RequestId },
     /// Wake at this mark plus the Host's ±3 s jitter and send a Tick.
     WakeAt { mark: SyncTime },
 }
@@ -164,13 +196,18 @@ pub fn transition(
                 .in_flight
                 .as_mut()
                 .ok_or(FlushTransitionError::NoBatchInFlight)?;
-            if batch.members.remove(&request).is_none() {
+            let Some(flush_at) = batch.members.remove(&request) else {
                 return Err(FlushTransitionError::NotInFlight { request });
-            }
+            };
             if batch.members.is_empty() {
                 state.in_flight = None;
             }
-            effects.push(FlushEffect::RecordOutcome { request, outcome });
+            if outcome.is_final() {
+                effects.push(FlushEffect::RecordOutcome { request, outcome });
+            } else {
+                state.waiting.insert((flush_at, request.clone()));
+                effects.push(FlushEffect::ReturnUnapplied { request });
+            }
         }
         FlushEvent::BatchExpired => {
             let effect =

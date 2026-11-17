@@ -158,10 +158,13 @@ impl<'store> MacOutbox<'store> {
             let stored = decode_row(&row)?;
             let same_write = match &stored.payload {
                 StoredPayload::Unanswered(payload) => payload == &item.payload,
-                // The text is gone once answered; the digest still tells the same
-                // write (replay its answer) from a different one (a conflict).
+                // The text is gone once answered. The same write (replay its answer)
+                // has the same target, workspace included, and the same content
+                // digest; any difference is a conflict. The outbox spans workspaces.
                 StoredPayload::Answered(answered) => {
-                    payload_content_digest(&item.payload)? == answered.content_digest
+                    OutboxWriteContent::of(&item.payload)
+                        .is_some_and(|content| content.target == answered.target)
+                        && payload_content_digest(&item.payload)? == answered.content_digest
                 }
             };
             return Ok(if stored.caller == item.caller && same_write {
@@ -495,6 +498,32 @@ impl<'store> MacOutbox<'store> {
         expect_one(changed, request, "sent")?;
         transaction.commit().await?;
         Ok(())
+    }
+
+    /// A sent write central did not apply (link admission refused it) goes back
+    /// to the outbox unsent, with its receipt mark, to be resent after a
+    /// fresh-token reconnect.
+    pub async fn return_unapplied(
+        &mut self,
+        request: &RequestId,
+        now: SyncTime,
+    ) -> Result<(), OutboxStoreError> {
+        let from = OutboxItemState::Sent.as_str();
+        let to = OutboxItemState::InOutbox.as_str();
+        let now_ms = now.unix_millis();
+        let request_id = request.as_str();
+        let changed = sqlx::query!(
+            "UPDATE outbox_items SET item_state = ?, updated_at = ?
+                 WHERE request_id = ? AND item_state = ?",
+            to,
+            now_ms,
+            request_id,
+            from
+        )
+        .execute_as_transaction(self.store)
+        .await?
+        .rows_affected();
+        expect_one(changed, request, "sent")
     }
 
     /// Sent writes left unanswered go back to the outbox with their receipt

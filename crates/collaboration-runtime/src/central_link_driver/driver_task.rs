@@ -38,6 +38,8 @@ struct BatchInFlight {
     /// Every member's caller for the whole batch, for the outcome report.
     callers: BTreeMap<RequestId, Caller>,
     outcomes: Vec<FlushOutcome>,
+    /// Some member went back to the outbox unapplied; the report is incomplete.
+    returned: bool,
 }
 
 type PendingReply = oneshot::Sender<Result<Vec<PendingWrite>, OutboxStoreError>>;
@@ -492,9 +494,18 @@ impl LinkDriver {
                         outcome,
                     });
                 }
-                if self.flush.in_flight_members().next().is_none() {
-                    self.finish_batch(true);
+                self.finish_batch_if_answered();
+            }
+            FlushEffect::ReturnUnapplied { request } => {
+                let mut store = self.store.lock().await;
+                let _ = MacOutbox::new(&mut store)
+                    .return_unapplied(&request, now)
+                    .await;
+                drop(store);
+                if let Some(batch) = self.batch.as_mut() {
+                    batch.returned = true;
                 }
+                self.finish_batch_if_answered();
             }
             FlushEffect::ReturnToOutbox { requests } => {
                 let mut store = self.store.lock().await;
@@ -551,6 +562,7 @@ impl LinkDriver {
                 callers: members.values().cloned().collect(),
                 members,
                 outcomes: Vec::new(),
+                returned: false,
             });
             self.apply_flush(FlushEvent::LinkLost).await;
             return;
@@ -561,6 +573,7 @@ impl LinkDriver {
             members,
             callers,
             outcomes: Vec::new(),
+            returned: false,
         });
         let sent = match LinkRequestBatch::new(frames) {
             Ok(batch) => {
@@ -571,6 +584,15 @@ impl LinkDriver {
         };
         if !sent {
             self.socket_closed().await;
+        }
+    }
+
+    /// Ends the batch once no member is in flight; it is complete unless a
+    /// member went back to the outbox.
+    fn finish_batch_if_answered(&mut self) {
+        if self.flush.in_flight_members().next().is_none() {
+            let complete = !self.batch.as_ref().is_some_and(|batch| batch.returned);
+            self.finish_batch(complete);
         }
     }
 
