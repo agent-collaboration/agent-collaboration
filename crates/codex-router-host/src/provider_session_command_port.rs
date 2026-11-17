@@ -497,7 +497,7 @@ fn map_runtime_failure(error: ExternalProviderRuntimeError) -> CommandFailure {
             acp_client_runtime::ProviderError::Unsupported
             | acp_client_runtime::ProviderError::SourceUnavailable,
         ) => CommandFailure::Unsupported,
-        ExternalProviderRuntimeError::LocalBusy => CommandFailure::Busy,
+        ExternalProviderRuntimeError::LocalBusy { .. } => CommandFailure::Busy,
         // An agent that can't steer: a busy ACP prompt queues instead (D1 R12).
         ExternalProviderRuntimeError::UnsupportedSteering => {
             CommandFailure::UnsupportedOperation { operation: "steer" }
@@ -507,7 +507,9 @@ fn map_runtime_failure(error: ExternalProviderRuntimeError) -> CommandFailure {
         | ExternalProviderRuntimeError::ProviderSessionNotFound { .. } => {
             CommandFailure::SessionNotFound
         }
-        ExternalProviderRuntimeError::SettingsUnresolved => CommandFailure::SettingsUnresolved,
+        ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
+            CommandFailure::SettingsUnresolved
+        }
         ExternalProviderRuntimeError::UnsupportedContent { content_type } => {
             CommandFailure::UnsupportedContent(content_type)
         }

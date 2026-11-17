@@ -336,7 +336,7 @@ impl ProviderAcpMessageFifo {
         {
             Ok(finish) => finish,
             // Another door's load is in flight: the message joins its line.
-            Err(ExternalProviderRuntimeError::LocalBusy) => return Ok(()),
+            Err(ExternalProviderRuntimeError::LocalBusy { .. }) => return Ok(()),
             Err(error) => return Err(QueueDoorRefusal::Refused(load_error_reason(error))),
         };
         let load: SharedLoad = finish

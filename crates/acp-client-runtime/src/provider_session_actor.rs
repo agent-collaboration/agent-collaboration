@@ -35,7 +35,7 @@ pub enum ProviderSteeringOutcome<OperationId> {
     Failed,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderPromptDispatchObservation {
     Submitted,
     NotSubmitted,
@@ -73,6 +73,8 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     pub(crate) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     /// The run these handles serve; untracked until for_session_generation.
     pub(crate) run_generation: crate::SessionGeneration,
+    /// The agent advertises steering, so a busy refusal offers it (D1 M8).
+    pub(crate) agent_steers: bool,
 }
 
 impl ProviderSessionRuntimeHandles {
@@ -228,10 +230,11 @@ async fn run_session_loop<P: InteractionPort>(
                 match command {
                     ProviderSessionCommand::Prompt { input_id, operation_id, prompt, turn_cancellation, dispatch, reply } => {
                         if crate::agent_session_client::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
+                            let answer = crate::agent_session_client::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref());
                             if let Some(dispatch) = dispatch {
-                                let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
+                                let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved { answer: answer.clone() }));
                             }
-                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
+                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer }));
                             continue;
                         }
                         let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
@@ -455,12 +458,13 @@ async fn run_session_loop<P: InteractionPort>(
                                             let _result = reply.send(result);
                                         }
                                         Some(ProviderSessionCommand::Prompt { reply, dispatch, .. }) => {
-                                            if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy)); }
-                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
+                                            let answer = crate::agent_session_client::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers);
+                                            if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy { answer: answer.clone() })); }
+                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer }));
                                         }
                                         Some(ProviderSessionCommand::Steer { input_id, prompt, reply }) => {
                                             if crate::agent_session_client::settings_held(&runtime_handles.session_cells, provider_session_id.0.as_ref()) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::agent_session_client::settings_hold_answer_for(&runtime_handles.session_cells, provider_session_id.0.as_ref()) }));
                                                 continue;
                                             }
                                             let submitted_text = Some(prompt.submitted_text());
@@ -490,7 +494,7 @@ async fn run_session_loop<P: InteractionPort>(
                                         }
                                         Some(ProviderSessionCommand::WaitIdle { reply }) => idle_waiters.push(reply),
                                         Some(ProviderSessionCommand::SetSetting { reply, .. }) => {
-                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
+                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: crate::agent_session_client::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers) }));
                                         }
                                         None => return,
                                     }
@@ -503,7 +507,7 @@ async fn run_session_loop<P: InteractionPort>(
                     }
                     ProviderSessionCommand::Steer { input_id, prompt, reply } => {
                         if crate::agent_session_client::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
-                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
+                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::agent_session_client::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref()) }));
                             continue;
                         }
                         let submitted_text = Some(prompt.submitted_text());

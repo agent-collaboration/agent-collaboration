@@ -164,7 +164,7 @@ async fn a_close_during_a_prompt_frees_only_after_the_turn_ends() {
     let generation = admit_create(&cells, SESSION, SessionGeneration::UNTRACKED).expect("created");
     let turn = TurnId(uuid::Uuid::from_u128(5));
     assert!(
-        start_direct_turn(&cells, SESSION, turn).is_ok(),
+        start_direct_turn(&cells, SESSION, turn, false).is_ok(),
         "the prompt's turn opens"
     );
     let mut guard = CellTurnGuard::new(&cells, SESSION, turn);

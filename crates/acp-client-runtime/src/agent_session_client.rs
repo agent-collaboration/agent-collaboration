@@ -29,7 +29,8 @@ mod provider_session_restore;
 pub(crate) mod provider_setting_application;
 mod session_cell_bookkeeping;
 pub(crate) use session_cell_bookkeeping::{
-    apply_setting, hold_setting_at_create, report_actor_exit, settings_held,
+    apply_setting, busy_answer, hold_setting_at_create, report_actor_exit, settings_held,
+    settings_hold_answer_for,
 };
 
 use crate::ProviderCapabilityReport;

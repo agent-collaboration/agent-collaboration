@@ -194,7 +194,7 @@ async fn lost_auto_answer_is_unconfirmed_held_and_has_no_allowance() {
     assert!(
         matches!(
             first_prompt,
-            Err(ExternalProviderRuntimeError::SettingsUnresolved)
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
         ),
         "{first_prompt:?}"
     );
@@ -208,7 +208,7 @@ async fn lost_auto_answer_is_unconfirmed_held_and_has_no_allowance() {
     assert!(
         matches!(
             second_prompt,
-            Err(ExternalProviderRuntimeError::SettingsUnresolved)
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
         ),
         "{second_prompt:?}"
     );

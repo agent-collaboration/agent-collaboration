@@ -212,7 +212,10 @@ async fn refused_auto_is_created_without_settings_held_and_has_no_allowance() {
     assert_eq!(failed.value, "auto");
     assert_eq!(current_mode.as_deref(), Some("default"));
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     assert_eq!(

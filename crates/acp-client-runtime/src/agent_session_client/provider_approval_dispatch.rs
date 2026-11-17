@@ -86,6 +86,7 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                     &self.session_cells,
                     &provider_session_id,
                     turn,
+                    self.admission.supports_steering,
                 ) {
                     if let Some(dispatch) = dispatch {
                         let _result = dispatch.send(refusal.observation);
@@ -133,13 +134,20 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                 )
             })?;
             if contexts.contains_key(&provider_session_id) {
+                let answer = super::busy_answer(
+                    &self.session_cells,
+                    &provider_session_id,
+                    self.admission.supports_steering,
+                );
                 if let Some(dispatch) = dispatch {
                     let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(
-                        crate::ProviderDispatchRefusal::Busy,
+                        crate::ProviderDispatchRefusal::Busy {
+                            answer: answer.clone(),
+                        },
                     ));
                 }
                 turn_end.0.not_sent();
-                return Err(ExternalProviderRuntimeError::LocalBusy);
+                return Err(ExternalProviderRuntimeError::LocalBusy { answer });
             }
             contexts.insert(
                 provider_session_id.clone(),

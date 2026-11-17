@@ -257,9 +257,15 @@ async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
         .await
         .expect("delivery prompt admission");
 
+    // Nothing was sent, and the refusal says why (D1 M8); every delivery
+    // consumer handles it as not submitted.
     assert_eq!(
         dispatch,
-        provider_delivery_submission::ProviderPromptDispatch::NotSubmitted
+        provider_delivery_submission::ProviderPromptDispatch::Refused(
+            acp_client_runtime::ProviderDispatchRefusal::NotLoaded {
+                answer: "session is not loaded; load it or resume it".to_owned()
+            }
+        )
     );
     backend.shutdown().await.expect("shutdown");
 }
@@ -734,7 +740,9 @@ fn typed_runtime_failure_mapping_never_classifies_provider_text() {
         assert_eq!(failure.provider_code, Some(-32603));
     }
     for error in [
-        ExternalProviderRuntimeError::LocalBusy,
+        ExternalProviderRuntimeError::LocalBusy {
+            answer: "a turn is running; queue the message or cancel the turn".to_owned(),
+        },
         ExternalProviderRuntimeError::LocalNotFound,
         ExternalProviderRuntimeError::LocalCancelTargetMismatch,
         ExternalProviderRuntimeError::AuthenticationRequired {

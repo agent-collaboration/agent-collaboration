@@ -396,7 +396,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         .await;
     assert!(matches!(
         blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
+        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved { .. })
     ));
     client
         .accept_session_settings(provider_session_id.clone())

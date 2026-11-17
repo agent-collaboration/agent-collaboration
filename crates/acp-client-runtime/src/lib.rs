@@ -90,6 +90,7 @@ mod session_lifecycle_answers;
     )
 )]
 mod session_lifecycle_machine;
+mod session_refusal_answers;
 #[cfg_attr(
     not(test),
     expect(
@@ -148,6 +149,7 @@ pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
     SessionEventSink, SessionGeneration,
 };
+pub use session_refusal_answers::{settings_hold_answer, turn_busy_answer};
 pub use state_machine_cell::{CellEffects, CellRuntime, MachineCell};
 
 #[cfg(feature = "test-observation")]

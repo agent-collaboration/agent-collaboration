@@ -197,7 +197,10 @@ async fn refused_fast_off_holds_until_set_again() -> TestResult {
     assert_eq!(failed.kind, ProviderSettingKind::Fast);
     assert_ne!(failed.reason, ProviderSettingFailureReason::OutcomeUnknown);
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     released?;
@@ -242,7 +245,10 @@ async fn lost_fast_off_answer_is_unknown_and_cannot_be_accepted() -> TestResult 
     assert_eq!(failed.kind, ProviderSettingKind::Fast);
     assert_eq!(failed.reason, ProviderSettingFailureReason::OutcomeUnknown);
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     assert!(
@@ -269,7 +275,10 @@ async fn fast_off_reply_still_on_is_refused_and_held() -> TestResult {
     assert_eq!(failed.kind, ProviderSettingKind::Fast);
     assert_ne!(failed.reason, ProviderSettingFailureReason::OutcomeUnknown);
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     assert_eq!(observed, Some(FastObserved::On));
@@ -289,7 +298,10 @@ async fn fast_off_reply_without_fast_option_is_refused_and_held() -> TestResult 
     assert_eq!(failed.kind, ProviderSettingKind::Fast);
     assert_ne!(failed.reason, ProviderSettingFailureReason::OutcomeUnknown);
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     // The reported catalog is the one the agent returned, never the stale one (V14).
@@ -383,7 +395,10 @@ async fn model_ok_then_fast_refused_keeps_model_and_keeps_fast_off() -> TestResu
     }
     assert_eq!(model.as_deref(), Some("fixture-a"));
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     released?;
@@ -424,7 +439,10 @@ async fn model_ok_then_fast_reply_lost_is_unknown_and_needs_a_confirmed_off() ->
     }
     assert_eq!(model.as_deref(), Some("fixture-a"));
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     assert!(
@@ -450,7 +468,10 @@ async fn assert_fast_auto_keeps_the_hold(fixture: &AcpWireFixture) -> TestResult
     );
     let held = prompt(fixture).await;
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     Ok(())
@@ -576,7 +597,10 @@ async fn explicit_fast_off_refused_after_fast_auto_holds_prompts() -> TestResult
         other => return Err(format!("expected a refused fast off, got {other:?}").into()),
     }
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     released?;
@@ -608,7 +632,10 @@ async fn explicit_fast_off_reply_without_fast_option_keeps_the_returned_catalog_
     );
     assert_eq!(observed, Some(FastObserved::NoOption));
     assert!(
-        matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved)),
+        matches!(
+            held,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
         "{held:?}"
     );
     Ok(())

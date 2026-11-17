@@ -610,7 +610,7 @@ async fn send_right_after_an_unknown_steer_is_refused() {
     assert_eq!(
         String::from(refusal.message.clone()),
         format!(
-            "provider binding has unresolved operations: {}",
+            "an earlier send's outcome is unknown; reconcile {} first",
             unknown.as_str()
         ),
         "the refusal names the unknown operation"

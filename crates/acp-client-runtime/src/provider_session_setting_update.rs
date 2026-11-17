@@ -39,7 +39,12 @@ pub(crate) async fn apply_loaded_setting(
     if intent == session_event_model::SettingApplicationIntent::TurnContext
         && crate::agent_session_client::settings_held(&handles.session_cells, &provider_session_id)
     {
-        return Err(ExternalProviderRuntimeError::SettingsUnresolved);
+        return Err(ExternalProviderRuntimeError::SettingsUnresolved {
+            answer: crate::agent_session_client::settings_hold_answer_for(
+                &handles.session_cells,
+                &provider_session_id,
+            ),
+        });
     }
     let current = catalog.effective_settings();
     if expected_model

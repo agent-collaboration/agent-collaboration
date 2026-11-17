@@ -112,7 +112,10 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
     // Checked here, so a refused attempt that ended the admitted run fails
     // at once rather than leaving the close below without its Closed.
     assert!(
-        matches!(competing, Err(ExternalProviderRuntimeError::LocalBusy)),
+        matches!(
+            competing,
+            Err(ExternalProviderRuntimeError::LocalBusy { .. })
+        ),
         "the competing load is refused: {competing:?}"
     );
     assert!(first.is_ok(), "the admitted load activates: {first:?}");
@@ -155,7 +158,7 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
     assert!(
         matches!(
             refused_before_close,
-            Err(ExternalProviderRuntimeError::LocalBusy)
+            Err(ExternalProviderRuntimeError::LocalBusy { .. })
         ),
         "{refused_before_close:?}"
     );

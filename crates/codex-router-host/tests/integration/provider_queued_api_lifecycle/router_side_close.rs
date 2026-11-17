@@ -105,8 +105,8 @@ async fn close_on_an_agent_without_session_close_interrupts_and_closes_it_here()
     };
     assert_eq!(
         String::from(refusal.message),
-        "provider input was not submitted",
-        "the later prompt meets a session that isn't loaded"
+        "session is not loaded; load it or resume it",
+        "the later prompt meets a session that isn't loaded (M8)"
     );
     assert_eq!(
         prompts,

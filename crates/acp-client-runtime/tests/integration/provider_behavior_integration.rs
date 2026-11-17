@@ -527,12 +527,14 @@ async fn busy_compact_reports_closed_refusal_before_any_second_prompt() {
     fixture.close().await.expect("owned shutdown");
     assert!(matches!(
         compact,
-        Err(ExternalProviderRuntimeError::LocalBusy)
+        Err(ExternalProviderRuntimeError::LocalBusy { .. })
     ));
     assert_eq!(
         report,
         Ok(ProviderPromptDispatchObservation::Refused(
-            ProviderDispatchRefusal::Busy
+            ProviderDispatchRefusal::Busy {
+                answer: "a turn is running; queue the message or cancel the turn".to_owned()
+            }
         ))
     );
     assert_eq!(requests, 1);

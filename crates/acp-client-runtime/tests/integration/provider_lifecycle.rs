@@ -241,7 +241,7 @@ async fn close_admission_rejects_a_new_prompt_before_close_command_is_processed(
         matches!(
             prompt_result,
             std::task::Poll::Ready(Err(
-                acp_client_runtime::ExternalProviderRuntimeError::LocalBusy
+                acp_client_runtime::ExternalProviderRuntimeError::LocalBusy { .. }
             ))
         ),
         "the prompt is refused before the close completes: {prompt_result:?}"
@@ -405,7 +405,7 @@ async fn dropped_close_waiter_keeps_mark_until_submitted_close_settles() {
         .await;
     assert!(matches!(
         blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::LocalBusy)
+        Err(acp_client_runtime::ExternalProviderRuntimeError::LocalBusy { .. })
     ));
     tokio::task::spawn_blocking(move || {
         use std::io::Write;

@@ -128,7 +128,7 @@ pub(super) async fn apply(
             ExternalProviderRuntimeError::SettingsContextChanged => {
                 SettingControlFailure::ContextChanged(request.target.clone())
             }
-            ExternalProviderRuntimeError::SettingsUnresolved => {
+            ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
                 SettingControlFailure::Unresolved(request.target.clone())
             }
             other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
@@ -294,11 +294,13 @@ fn plain_error(
     target: &SessionRef,
     error: ExternalProviderRuntimeError,
 ) -> ProviderSettingsFailure {
+    let busy_answer;
     let (kind, message) = match error {
-        ExternalProviderRuntimeError::LocalBusy => (
-            ProviderSettingsFailureKind::Busy,
-            "provider Session has running work",
-        ),
+        // The session's answer names its state and the valid next steps (D1 M8).
+        ExternalProviderRuntimeError::LocalBusy { answer } => {
+            busy_answer = answer;
+            (ProviderSettingsFailureKind::Busy, busy_answer.as_str())
+        }
         ExternalProviderRuntimeError::LocalNotFound => (
             ProviderSettingsFailureKind::NotFound,
             "provider Session is not loaded",

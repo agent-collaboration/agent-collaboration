@@ -217,11 +217,11 @@ impl ExternalProviderSupervisor {
                 // Settled by the dispatch itself; the worker observes the outcome.
                 Err(_) => ProviderPromptDispatch::Existing,
             }),
-            AdmittedPromptDispatch::TurnRunning { .. } => {
+            AdmittedPromptDispatch::TurnRunning { refusal, .. } => {
                 admitted.settled.store(false, Ordering::SeqCst);
                 Err(Box::new(
                     super::provider_prompt_contents::dispatch_refusal_failure(
-                        acp_client_runtime::ProviderDispatchRefusal::Busy,
+                        refusal,
                         operation_id,
                         target,
                     ),
@@ -247,7 +247,9 @@ impl ExternalProviderSupervisor {
             .admission_blockers(binding, Some(target), DispatchMark::Deferred)
             .await
             .map_err(|()| super::unavailable_failure(own.clone(), Some(target.clone())))?;
-        Ok(blocking.iter().any(|operation_id| operation_id != own))
+        Ok(blocking
+            .operations()
+            .any(|operation_id| operation_id != own))
     }
 
     /// The one completion owner for an API entry that leaves the line before

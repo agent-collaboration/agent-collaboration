@@ -106,6 +106,19 @@ impl SessionCell {
             .any(|setting| matches!(setting, SessionSetting::Unresolved { .. }))
     }
 
+    /// Some held setting's last change has an unknown outcome.
+    pub(crate) fn any_setting_outcome_unknown(&self) -> bool {
+        self.settings.values().any(|setting| {
+            matches!(
+                setting,
+                SessionSetting::Unresolved {
+                    cause: UnresolvedCause::OutcomeUnknown,
+                    ..
+                }
+            )
+        })
+    }
+
     /// The kind's last change has an unknown outcome.
     pub(crate) fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
         matches!(

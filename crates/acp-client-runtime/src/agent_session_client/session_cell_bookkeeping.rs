@@ -9,11 +9,12 @@ use crate::SessionGeneration;
 use crate::queued_entry_machine::SentOutcome;
 use crate::session_cell_machine::{SessionCellEffect, SessionCellEvent, SessionCellRefusal};
 use crate::session_cell_table::SessionCellTable;
-use crate::session_lifecycle_answers::refusal_answer;
+use crate::session_lifecycle_answers::{refusal_answer, state_answer};
 use crate::session_lifecycle_machine::{
     CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle, SessionLifecycleEffect,
     SessionLifecycleRefusal,
 };
+use crate::session_refusal_answers::{session_busy_answer, settings_hold_answer};
 use crate::session_turn_machine::TurnId;
 use state_machine_core::TransitionError;
 
@@ -47,7 +48,7 @@ pub(super) fn admit_create(
             | SessionCellEffect::Turn(_)
             | SessionCellEffect::SettingAccepted { .. } => None,
         })
-        .ok_or(ExternalProviderRuntimeError::LocalBusy)
+        .ok_or_else(|| lifecycle_busy(cells, session_id))
 }
 
 /// Returns an admitted run whose actor never registered to NotLoaded,
@@ -98,7 +99,7 @@ pub(super) fn admit_load(
             | SessionCellEffect::Turn(_)
             | SessionCellEffect::SettingAccepted { .. } => None,
         })
-        .ok_or(ExternalProviderRuntimeError::LocalBusy)
+        .ok_or_else(|| lifecycle_busy(cells, session_id))
 }
 
 /// The restore admitted as `attempt` is still the session's load: no close
@@ -198,11 +199,13 @@ pub(super) struct DirectTurnRefusal {
 }
 
 /// Opens the session's turn for a direct prompt: only while Live, with no
-/// turn running and no queued message in flight.
+/// turn running and no queued message in flight. A refusal answers with the
+/// session's state and the steps the agent allows (M8).
 pub(super) fn start_direct_turn(
     cells: &SessionCellTable,
     session_id: &str,
     turn: TurnId,
+    agent_steers: bool,
 ) -> Result<(), Box<DirectTurnRefusal>> {
     let refusal = match cells.transition(
         session_id,
@@ -213,17 +216,26 @@ pub(super) fn start_direct_turn(
         Ok(_effects) => return Ok(()),
         Err(refusal) => refusal,
     };
-    let busy = DirectTurnRefusal {
-        observation: super::ProviderPromptDispatchObservation::Refused(
-            crate::ProviderDispatchRefusal::Busy,
-        ),
-        error: ExternalProviderRuntimeError::LocalBusy,
+    let busy = || {
+        let answer = busy_answer(cells, session_id, agent_steers);
+        DirectTurnRefusal {
+            observation: super::ProviderPromptDispatchObservation::Refused(
+                crate::ProviderDispatchRefusal::Busy {
+                    answer: answer.clone(),
+                },
+            ),
+            error: ExternalProviderRuntimeError::LocalBusy { answer },
+        }
     };
     Err(Box::new(match refusal {
         TransitionError::Domain(SessionCellRefusal::Lifecycle(
-            SessionLifecycleRefusal::NotLoaded,
+            refusal @ SessionLifecycleRefusal::NotLoaded,
         )) => DirectTurnRefusal {
-            observation: super::ProviderPromptDispatchObservation::NotSubmitted,
+            observation: super::ProviderPromptDispatchObservation::Refused(
+                crate::ProviderDispatchRefusal::NotLoaded {
+                    answer: refusal_answer(&cells.read(session_id, |cell| cell.lifecycle), refusal),
+                },
+            ),
             error: ExternalProviderRuntimeError::LocalNotFound,
         },
         TransitionError::Domain(
@@ -244,7 +256,7 @@ pub(super) fn start_direct_turn(
             | SessionCellRefusal::Setting(_),
         )
         | TransitionError::NotAllowed { .. }
-        | TransitionError::Stale => busy,
+        | TransitionError::Stale => busy(),
     }))
 }
 
@@ -358,6 +370,38 @@ pub(crate) fn settings_held(cells: &SessionCellTable, session_id: &str) -> bool 
     )
 }
 
+/// A busy refusal's answer, read from the session's cell: its lifecycle
+/// state, or its turn and the steps the agent allows (D1 M8).
+pub(crate) fn busy_answer(
+    cells: &SessionCellTable,
+    session_id: &str,
+    agent_steers: bool,
+) -> String {
+    cells.read(session_id, |cell| {
+        session_busy_answer(&cell.lifecycle, cell.turn, agent_steers)
+    })
+}
+
+/// The answer for a prompt to a session that isn't loaded or is still
+/// loading on this connection (D1 M8); none while the cell says otherwise.
+pub(super) fn not_live_answer(cells: &SessionCellTable, session_id: &str) -> Option<String> {
+    let state = cells.read(session_id, |cell| cell.lifecycle);
+    match state {
+        SessionLifecycle::NotLoaded { .. } | SessionLifecycle::Loading { .. } => {
+            Some(state_answer(&state))
+        }
+        SessionLifecycle::Live { .. } | SessionLifecycle::Closing { .. } => None,
+    }
+}
+
+/// A held setting's answer, read from the session's cell (D1 M8).
+pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
+    settings_hold_answer(cells.read(
+        session_id,
+        crate::session_cell_machine::SessionCell::any_setting_outcome_unknown,
+    ))
+}
+
 /// The kind's last change has an unknown outcome.
 pub(crate) fn setting_outcome_unknown(
     cells: &SessionCellTable,
@@ -450,8 +494,16 @@ pub(super) fn is_closing(cells: &SessionCellTable, session_id: &str) -> bool {
     })
 }
 
+/// A lifecycle move the session's state didn't answer with an effect: busy,
+/// answered with the session's state and its valid next steps (M8).
+fn lifecycle_busy(cells: &SessionCellTable, session_id: &str) -> ExternalProviderRuntimeError {
+    ExternalProviderRuntimeError::LocalBusy {
+        answer: state_answer(&cells.read(session_id, |cell| cell.lifecycle)),
+    }
+}
+
 /// The runtime error for a refused lifecycle move. A busy session keeps
-/// today's LocalBusy; "nothing to close" answers with the state and the
+/// today's LocalBusy kind; every refusal answers with the state and the
 /// valid next steps (M8).
 fn lifecycle_refusal_error(
     cells: &SessionCellTable,
@@ -470,15 +522,17 @@ fn lifecycle_refusal_error(
         )) => ExternalProviderRuntimeError::Operation(
             "provider returned a duplicate conversation identity".to_owned(),
         ),
+        TransitionError::Domain(SessionCellRefusal::Lifecycle(
+            refusal @ (SessionLifecycleRefusal::SessionLoading
+            | SessionLifecycleRefusal::AlreadyLoaded
+            | SessionLifecycleRefusal::SessionClosing
+            | SessionLifecycleRefusal::NotLoaded
+            | SessionLifecycleRefusal::CloseInProgress),
+        )) => ExternalProviderRuntimeError::LocalBusy {
+            answer: refusal_answer(&state, refusal),
+        },
         TransitionError::Domain(
-            SessionCellRefusal::Lifecycle(
-                SessionLifecycleRefusal::SessionLoading
-                | SessionLifecycleRefusal::AlreadyLoaded
-                | SessionLifecycleRefusal::SessionClosing
-                | SessionLifecycleRefusal::NotLoaded
-                | SessionLifecycleRefusal::CloseInProgress,
-            )
-            | SessionCellRefusal::Line(_)
+            SessionCellRefusal::Line(_)
             | SessionCellRefusal::Entry(_)
             | SessionCellRefusal::Turn(_)
             | SessionCellRefusal::NotHead
@@ -487,7 +541,9 @@ fn lifecycle_refusal_error(
             | SessionCellRefusal::Setting(_),
         )
         | TransitionError::NotAllowed { .. }
-        | TransitionError::Stale => ExternalProviderRuntimeError::LocalBusy,
+        | TransitionError::Stale => ExternalProviderRuntimeError::LocalBusy {
+            answer: state_answer(&state),
+        },
     }
 }
 

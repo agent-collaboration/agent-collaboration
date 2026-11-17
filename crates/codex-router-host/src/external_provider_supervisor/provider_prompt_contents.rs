@@ -132,12 +132,9 @@ impl ExternalProviderSupervisor {
                     AdmittedPromptDispatch::Done(result) => *result,
                     // Only Send hands a running turn back; RefuseBusy
                     // settles it as the Busy refusal it is.
-                    AdmittedPromptDispatch::TurnRunning { live, .. } => {
-                        let refusal = dispatch_refusal_failure(
-                            acp_client_runtime::ProviderDispatchRefusal::Busy,
-                            operation_id.clone(),
-                            failure_target,
-                        );
+                    AdmittedPromptDispatch::TurnRunning { live, refusal } => {
+                        let refusal =
+                            dispatch_refusal_failure(refusal, operation_id.clone(), failure_target);
                         let settled = refusal.clone();
                         backend.spawn_operation(operation_id, live, async move {
                             ProviderOperationCompletion::Failure(settled)
@@ -267,7 +264,7 @@ impl ExternalProviderSupervisor {
                 Ok(admitted_submission(snapshot))
             }
             Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(
-                acp_client_runtime::ProviderDispatchRefusal::Busy,
+                refusal @ acp_client_runtime::ProviderDispatchRefusal::Busy { .. },
             ))) if matches!(request.busy, PromptBusyPolicy::Send(_)) => {
                 self.forget_turn_approver(&request.operation_id);
                 // Nothing was sent: the row waits again rather than stay Unknown.
@@ -278,7 +275,7 @@ impl ExternalProviderSupervisor {
                     self.spawn_prompt_operation(request.operation_id, live, complete(submitted));
                     return AdmittedPromptDispatch::Done(Box::new(Err(undo)));
                 }
-                return AdmittedPromptDispatch::TurnRunning { live };
+                return AdmittedPromptDispatch::TurnRunning { live, refusal };
             }
             Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(reason))) => Err(
                 dispatch_refusal_failure(reason, request.operation_id.clone(), target.clone()),
@@ -325,6 +322,8 @@ pub(super) enum AdmittedPromptDispatch {
     /// operation is still admitted and unsettled.
     TurnRunning {
         live: std::sync::Arc<super::LiveOperation>,
+        /// The agent's busy refusal, with its answer (D1 M8).
+        refusal: acp_client_runtime::ProviderDispatchRefusal,
     },
 }
 
@@ -389,6 +388,7 @@ pub(super) fn dispatch_refusal_failure(
     target: SessionRef,
 ) -> ConversationOperationFailure {
     use acp_client_runtime::{ProviderDispatchRefusal, ProviderError};
+    let session_answer;
     let (kind, message) = match reason {
         ProviderDispatchRefusal::Behavior(ProviderError::InvalidSelection) => (
             ConversationOperationFailureKind::InvalidRequest,
@@ -404,14 +404,30 @@ pub(super) fn dispatch_refusal_failure(
             ConversationOperationFailureKind::InvalidRequest,
             "provider metadata is malformed",
         ),
-        ProviderDispatchRefusal::Busy => (
-            ConversationOperationFailureKind::Busy,
-            "provider session is busy",
-        ),
-        ProviderDispatchRefusal::SettingsUnresolved => (
-            ConversationOperationFailureKind::SettingsUnresolved,
-            "provider settings are unresolved",
-        ),
+        // Session refusals carry their answer: the state and the valid next
+        // steps (D1 M8). The kinds are unchanged.
+        ProviderDispatchRefusal::Busy { answer } => {
+            session_answer = answer;
+            (
+                ConversationOperationFailureKind::Busy,
+                session_answer.as_str(),
+            )
+        }
+        ProviderDispatchRefusal::SettingsUnresolved { answer } => {
+            session_answer = answer;
+            (
+                ConversationOperationFailureKind::SettingsUnresolved,
+                session_answer.as_str(),
+            )
+        }
+        // Nothing was submitted, as before; the answer says why.
+        ProviderDispatchRefusal::NotLoaded { answer } => {
+            session_answer = answer;
+            (
+                ConversationOperationFailureKind::Unavailable,
+                session_answer.as_str(),
+            )
+        }
         ProviderDispatchRefusal::UnsupportedContent(_) => (
             ConversationOperationFailureKind::UnsupportedCapability,
             "provider content is unsupported",

@@ -205,19 +205,20 @@ pub(super) fn runtime_failure(
             operation_id,
             target,
         ),
-        ExternalProviderRuntimeError::LocalBusy => failure(
+        // The session's answer names its state and the valid next steps (D1 M8).
+        ExternalProviderRuntimeError::LocalBusy { answer } => failure(
             ConversationOperationFailureKind::Busy,
             ConversationOperationFailureStage::Validation,
             ProviderOperationEffect::None,
-            "provider conversation already has active work",
+            &answer,
             operation_id,
             target,
         ),
-        ExternalProviderRuntimeError::SettingsUnresolved => failure(
+        ExternalProviderRuntimeError::SettingsUnresolved { answer } => failure(
             ConversationOperationFailureKind::SettingsUnresolved,
             ConversationOperationFailureStage::Validation,
             ProviderOperationEffect::None,
-            "provider Session settings are unresolved; set a value or accept current settings before work",
+            &answer,
             operation_id,
             target,
         ),

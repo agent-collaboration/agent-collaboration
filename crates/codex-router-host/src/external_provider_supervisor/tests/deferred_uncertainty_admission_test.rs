@@ -311,7 +311,7 @@ async fn assert_fresh_send_refused(seeded_state: SeededUncertainty) {
     assert_eq!(
         String::from(failure.message.clone()),
         format!(
-            "provider binding has unresolved operations: {}",
+            "an earlier send's outcome is unknown; reconcile {} first",
             seeded.as_str()
         ),
         "{seeded_state:?}: the refusal names the uncertain operation"

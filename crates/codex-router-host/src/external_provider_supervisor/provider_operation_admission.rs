@@ -23,6 +23,55 @@ pub(super) enum DispatchMark {
     Deferred,
 }
 
+/// What blocks an admission, by state: each state has its own next step.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(super) struct AdmissionBlockers {
+    /// Earlier sends whose outcome is unknown: reconcile them first.
+    pub(super) unknown: Vec<OperationId>,
+    /// Sends still in flight on the same session (or binding-wide): wait
+    /// for them.
+    pub(super) in_flight: Vec<OperationId>,
+}
+
+impl AdmissionBlockers {
+    /// Every blocking operation.
+    pub(super) fn operations(&self) -> impl Iterator<Item = &OperationId> {
+        self.unknown.iter().chain(&self.in_flight)
+    }
+
+    /// The refusal's one line: each blocking state and its valid next step
+    /// (D1 M8); none when nothing blocks.
+    pub(super) fn answer(&self) -> Option<String> {
+        let ids = |operations: &[OperationId]| {
+            operations
+                .iter()
+                .map(OperationId::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let mut clauses = Vec::new();
+        if !self.unknown.is_empty() {
+            clauses.push(
+                crate::uncertainty_cell_machine::UncertaintyRefusal::EarlierOutcomeUnknown {
+                    operations: self
+                        .unknown
+                        .iter()
+                        .map(|id| id.as_str().to_owned())
+                        .collect(),
+                }
+                .human_answer(),
+            );
+        }
+        if !self.in_flight.is_empty() {
+            clauses.push(format!(
+                "an earlier send is still in flight; wait for {}",
+                ids(&self.in_flight)
+            ));
+        }
+        (!clauses.is_empty()).then(|| clauses.join("; "))
+    }
+}
+
 /// The refusal for an operation ID reused for a different request (R15).
 const REUSED_ID_MESSAGE: &str = "request ID already used for a different request";
 
@@ -84,9 +133,9 @@ impl ExternalProviderSupervisor {
         binding: &ProviderBindingIdentity,
         known_target: Option<&SessionRef>,
         mark: DispatchMark,
-    ) -> Result<Vec<OperationId>, ()> {
+    ) -> Result<AdmissionBlockers, ()> {
         let cell = self.inner.binding_uncertainty(binding).await?;
-        let mut blocking = match super::provider_operation_index::apply_uncertainty(
+        let unknown = match super::provider_operation_index::apply_uncertainty(
             &cell,
             crate::uncertainty_cell_machine::UncertaintyEvent::AdmissionCheck {
                 target: known_target.cloned(),
@@ -100,16 +149,16 @@ impl ExternalProviderSupervisor {
                 .filter_map(|operation| OperationId::try_from(operation).ok())
                 .collect(),
         };
-        if mark == DispatchMark::AtAdmission {
-            blocking.extend(
-                self.inner
-                    .live_operations
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .in_flight_on(&binding.endpoint, known_target),
-            );
-        }
-        Ok(blocking)
+        let in_flight = if mark == DispatchMark::AtAdmission {
+            self.inner
+                .live_operations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .in_flight_on(&binding.endpoint, known_target)
+        } else {
+            Vec::new()
+        };
+        Ok(AdmissionBlockers { unknown, in_flight })
     }
 
     /// Admits one operation (design note §15.3). A known ID answers from its
@@ -145,17 +194,12 @@ impl ExternalProviderSupervisor {
                 .admission_blockers(&binding, known_target, mark)
                 .await
                 .map_err(|()| unavailable_failure(operation_id.clone(), failure_target.clone()))?;
-            if !blocking.is_empty() {
-                let ids = blocking
-                    .iter()
-                    .map(OperationId::as_str)
-                    .collect::<Vec<_>>()
-                    .join(", ");
+            if let Some(answer) = blocking.answer() {
                 return Err(failure(
                     ConversationOperationFailureKind::Busy,
                     ConversationOperationFailureStage::Validation,
                     ProviderOperationEffect::None,
-                    &format!("provider binding has unresolved operations: {ids}"),
+                    &answer,
                     operation_id,
                     failure_target,
                 ));

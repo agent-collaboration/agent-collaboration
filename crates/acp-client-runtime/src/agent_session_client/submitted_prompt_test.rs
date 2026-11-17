@@ -246,9 +246,11 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
         crate::ProviderSettingKind::Mode,
         crate::session_setting_machine::UnresolvedCause::DefiniteFailure,
     );
+    // The refusal names the held setting's state and its steps (D1 M8).
     assert!(matches!(
         fixture.prompt(vec![text_block("rejected settings")]).await,
-        Err(ExternalProviderRuntimeError::SettingsUnresolved)
+        Err(ExternalProviderRuntimeError::SettingsUnresolved { answer })
+            if answer == "a setting change was refused; set a value explicitly or accept the current value"
     ));
     let audio =
         serde_json::from_value(json!({"type":"audio","mimeType":"audio/wav","data":"aGVsbG8="}))

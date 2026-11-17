@@ -1,6 +1,7 @@
-//! Which stored operations count as the same request (D1 R15).
+//! Which stored operations count as the same request (D1 R15), and what an
+//! admission blocked by earlier sends answers (D1 M8).
 
-use super::same_request;
+use super::{AdmissionBlockers, same_request};
 use collaboration_protocol::{
     ConversationBindingIdentity, OperationId, ProviderOperationEffect, ProviderOperationKind,
     ProviderOperationStage, ProviderReconciliationState, SessionId, SessionRef,
@@ -129,5 +130,52 @@ async fn a_refused_send_returns_its_row_to_admitted_and_never_reopens_a_settled_
             .expect("row")
             .stage,
         ProviderOperationStage::Terminal
+    );
+}
+
+/// Oracle: M8 and §14.1, written by hand: an unknown outcome's next step is
+/// reconcile; a send still in flight is waited for, not reconciled; nothing
+/// blocking answers nothing.
+#[test]
+fn a_blocked_admission_names_each_blocking_state_and_its_step() {
+    // Arrange
+    let unknown = OperationId::generate();
+    let in_flight = OperationId::generate();
+    let (u, f) = (unknown.as_str().to_owned(), in_flight.as_str().to_owned());
+    let only_unknown = AdmissionBlockers {
+        unknown: vec![unknown.clone()],
+        in_flight: Vec::new(),
+    };
+    let only_in_flight = AdmissionBlockers {
+        unknown: Vec::new(),
+        in_flight: vec![in_flight.clone()],
+    };
+    let both = AdmissionBlockers {
+        unknown: vec![unknown],
+        in_flight: vec![in_flight],
+    };
+
+    // Act
+    let answers = [
+        only_unknown.answer(),
+        only_in_flight.answer(),
+        both.answer(),
+        AdmissionBlockers::default().answer(),
+    ];
+
+    // Assert
+    assert_eq!(
+        answers,
+        [
+            Some(format!(
+                "an earlier send's outcome is unknown; reconcile {u} first"
+            )),
+            Some(format!("an earlier send is still in flight; wait for {f}")),
+            Some(format!(
+                "an earlier send's outcome is unknown; reconcile {u} first; \
+                 an earlier send is still in flight; wait for {f}"
+            )),
+            None,
+        ]
     );
 }

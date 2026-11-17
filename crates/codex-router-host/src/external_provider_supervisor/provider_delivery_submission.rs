@@ -7,7 +7,7 @@ use crate::external_provider_runtime::ProviderPromptDispatchObservation;
 
 const DELIVERY_DISPATCH_TIMEOUT: Duration = Duration::from_secs(10);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ProviderPromptDispatch {
     Submitted,
     NotSubmitted,

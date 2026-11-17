@@ -271,7 +271,7 @@ async fn queued_prompt_is_gated_after_in_flight_setting_becomes_uncertain() {
     ));
     assert!(matches!(
         prompt.await,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
+        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved { .. })
     ));
     client.shutdown().await;
 }
@@ -339,7 +339,7 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
         .await;
     assert!(matches!(
         blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
+        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved { .. })
     ));
     client.shutdown().await;
 }
@@ -405,7 +405,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
             .expect("implicit context refused without waiting for peer");
             assert!(matches!(
                 implicit,
-                Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
+                Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved { .. })
             ));
         }
         let blocked = client
@@ -424,7 +424,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
             .await;
         assert!(matches!(
             blocked,
-            Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
+            Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved { .. })
         ));
         client.shutdown().await;
     }

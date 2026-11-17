@@ -98,6 +98,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             keep_fast_off: Arc::clone(&keep_fast_off),
             session_cells: Arc::clone(&session_cells),
             run_generation: crate::SessionGeneration::UNTRACKED,
+            agent_steers: false,
         };
         let task_event_sink = Arc::clone(&event_sink);
         let retirement_event_sink = Arc::clone(&event_sink);
@@ -334,6 +335,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                     };
                     let base_capabilities = admission.as_ref().ok().map(|(_, report)| report.clone());
                     let mut task_runtime_handles = task_runtime_handles;
+                    task_runtime_handles.agent_steers = base_capabilities.as_ref().is_some_and(|report| report.supports_steering);
                     if admitted {
                         task_runtime_handles.connection_model_reasoning = super::provider_model_discovery::read_connection_models(
                             &connection, task_runtime_handles.behavior.as_ref(), initialize_deadline, &task_shutdown,
@@ -662,22 +664,28 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         }
                                         ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
                                             if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
+                                                let answer = super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering);
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy));
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy { answer: answer.clone() }));
                                                 }
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer }));
                                                 continue;
                                             }
                                             if super::settings_held(&session_cells, &provider_session_id) {
+                                                let answer = super::settings_hold_answer_for(&session_cells, &provider_session_id);
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved { answer: answer.clone() }));
                                                 }
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer }));
                                                 continue;
                                             }
                                             let Some(session) = sessions.get(&provider_session_id) else {
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                                                    let observation = match super::session_cell_bookkeeping::not_live_answer(&session_cells, &provider_session_id) {
+                                                        Some(answer) => ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::NotLoaded { answer }),
+                                                        None => ProviderPromptDispatchObservation::NotSubmitted,
+                                                    };
+                                                    let _result = dispatch.send(observation);
                                                 }
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
                                                 continue;
@@ -698,11 +706,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         }
                                         ProviderCommand::Steer { provider_session_id, input_id, prompt, reply } => {
                                             if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering) }));
                                                 continue;
                                             }
                                             if super::settings_held(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: super::settings_hold_answer_for(&session_cells, &provider_session_id) }));
                                                 continue;
                                             }
                                             let Some(session) = sessions.get(&provider_session_id) else {
@@ -734,7 +742,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         }
                                         ProviderCommand::SetSetting { provider_session_id, request, reply } => {
                                             if super::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering) }));
                                                 continue;
                                             }
                                             let Some(session) = sessions.get(&provider_session_id) else {

@@ -169,7 +169,10 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
         )
         .await
         .expect_err("overlapping prompt must not replace active authorization context");
-    assert!(matches!(second, ExternalProviderRuntimeError::LocalBusy));
+    assert!(matches!(
+        second,
+        ExternalProviderRuntimeError::LocalBusy { .. }
+    ));
     assert_eq!(
         runtime
             .active_approval_operation("fixture-session")

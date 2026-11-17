@@ -92,6 +92,12 @@ fn joined(steps: &[CallerStep]) -> String {
     }
 }
 
+/// The session's state and its valid next steps, for a refusal whose
+/// reason the state alone says.
+pub(crate) fn state_answer(state: &SessionLifecycle) -> String {
+    format!("{}; {}", state_phrase(state), joined(&next_steps(state)))
+}
+
 /// The one-line answer for a refusal: the reason where the state alone
 /// doesn't say it, the state, then the valid next steps.
 pub(crate) fn refusal_answer(state: &SessionLifecycle, refusal: SessionLifecycleRefusal) -> String {
@@ -110,7 +116,7 @@ pub(crate) fn refusal_answer(state: &SessionLifecycle, refusal: SessionLifecycle
         SessionLifecycleRefusal::SessionLoading
         | SessionLifecycleRefusal::AlreadyLoaded
         | SessionLifecycleRefusal::SessionClosing
-        | SessionLifecycleRefusal::NotLoaded => format!("{}; {next}", state_phrase(state)),
+        | SessionLifecycleRefusal::NotLoaded => state_answer(state),
     }
 }
 

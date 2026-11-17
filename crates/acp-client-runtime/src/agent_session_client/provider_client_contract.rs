@@ -165,10 +165,14 @@ pub enum ExternalProviderRuntimeError {
     InitializeTimeout,
     #[error("provider selected unsupported ACP protocol version {actual:?}")]
     UnsupportedProtocol { actual: AcpProtocolVersion },
-    #[error("provider conversation is busy")]
-    LocalBusy,
-    #[error("provider session settings need resolution before work can start")]
-    SettingsUnresolved,
+    /// The session is busy; `answer` names its state and the valid next
+    /// steps (D1 M8).
+    #[error("{answer}")]
+    LocalBusy { answer: String },
+    /// A setting holds the session; `answer` names its state and the valid
+    /// next steps (D1 M8).
+    #[error("{answer}")]
+    SettingsUnresolved { answer: String },
     #[error("confirmed model changed before applying the dependent setting")]
     SettingsContextChanged,
     #[error(

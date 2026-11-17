@@ -82,11 +82,21 @@ pub enum ProviderTurnInput {
     Compact,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Why a prompt wasn't dispatched. Each session refusal carries its one-line
+/// answer: the state and the valid next steps (D1 M8).
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderDispatchRefusal {
     Behavior(ProviderError),
-    Busy,
-    SettingsUnresolved,
+    Busy {
+        answer: String,
+    },
+    SettingsUnresolved {
+        answer: String,
+    },
+    /// The session isn't live on this connection: not loaded, or loading.
+    NotLoaded {
+        answer: String,
+    },
     UnsupportedContent(&'static str),
 }
 
