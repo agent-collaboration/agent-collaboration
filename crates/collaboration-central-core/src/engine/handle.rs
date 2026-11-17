@@ -83,6 +83,14 @@ impl<R: EngineHost> Engine<'_, R> {
             pauses: self.pauses(),
         };
         for _ in 0..2 {
+            // R4: a failing subject retries on its next try, and a retired one is
+            // never worked, whether or not its row decodes, so the attempt record
+            // decides before the row is loaded.
+            if source.policy() == SourcePolicy::Due
+                && let Some(outcome) = self.due_attempt_wait::<M, Adapter>(adapter, &key).await
+            {
+                return outcome;
+            }
             let prior = match adapter.load(&key).await {
                 Ok(Some(prior)) => prior,
                 Ok(None) => {
@@ -239,21 +247,45 @@ impl<R: EngineHost> Engine<'_, R> {
                     .await
                     .into(),
                 ),
-                Ok(record) => match record.state {
-                    central_engine_model::AttemptState::Retired { .. } => {
-                        Some(HandleOutcome::Superseded)
-                    }
-                    central_engine_model::AttemptState::Failing { next_try_at } => match self.now()
-                    {
-                        Ok(now) if next_try_at <= now => None,
-                        Ok(_) => Some(HandleOutcome::Superseded),
-                        Err(failure) => Some(HandleOutcome::StoreDown(failure)),
-                    },
-                },
+                Ok(record) => self.wait_for_next_try(&record.state),
             },
             Ok(None) => None,
             Err(StoreFailure::AnswerLost) => Some(HandleOutcome::Uncertain),
             Err(failure) => Some(HandleOutcome::StoreDown(failure)),
+        }
+    }
+
+    /// The pre-load half of the due gate. A damaged control row needs the
+    /// loaded row's version to be replaced, so it passes here and is replaced
+    /// by `due_attempt_gate` after the load.
+    async fn due_attempt_wait<M: Machine, Adapter: StoreAdapter<M>>(
+        &self,
+        adapter: &Adapter,
+        key: &InstanceKey,
+    ) -> Option<HandleOutcome<M::State, M::Error>> {
+        match super::attempt_store::load_attempt(self.host(), &adapter.subject(key)).await {
+            Ok(Some(stored)) => match &stored.record {
+                Ok(record) => self.wait_for_next_try(&record.state),
+                Err(_) => None,
+            },
+            Ok(None) => None,
+            Err(StoreFailure::AnswerLost) => Some(HandleOutcome::Uncertain),
+            Err(failure) => Some(HandleOutcome::StoreDown(failure)),
+        }
+    }
+
+    /// Retired is never worked; Failing waits until its next try.
+    fn wait_for_next_try<State, Error>(
+        &self,
+        state: &central_engine_model::AttemptState,
+    ) -> Option<HandleOutcome<State, Error>> {
+        match state {
+            central_engine_model::AttemptState::Retired { .. } => Some(HandleOutcome::Superseded),
+            central_engine_model::AttemptState::Failing { next_try_at } => match self.now() {
+                Ok(now) if *next_try_at <= now => None,
+                Ok(_) => Some(HandleOutcome::Superseded),
+                Err(failure) => Some(HandleOutcome::StoreDown(failure)),
+            },
         }
     }
 }
