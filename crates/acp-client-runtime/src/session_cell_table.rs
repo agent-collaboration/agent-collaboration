@@ -165,3 +165,41 @@ impl SessionCellTable {
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
+
+/// The sink reads the connection's runs from its cells (D1 step 6): a
+/// claim is checked, and the publication enqueued, under the session cell's
+/// lock.
+impl crate::SessionRuns for SessionCellTable {
+    fn publish_if(
+        &self,
+        session_id: &str,
+        claim: crate::RunClaim,
+        enqueue: &mut dyn FnMut() -> Result<(), crate::session_event_sink::EventSinkClosed>,
+    ) -> Result<
+        crate::session_event_sink::GenerationPublication,
+        crate::session_event_sink::EventSinkClosed,
+    > {
+        self.read(session_id, |cell| {
+            if crate::session_run_claims::run_admits(&cell.lifecycle, claim) {
+                enqueue().map(|()| crate::session_event_sink::GenerationPublication::Published)
+            } else {
+                Ok(crate::session_event_sink::GenerationPublication::Ended)
+            }
+        })
+    }
+
+    fn current_generation(&self, session_id: &str) -> crate::SessionGeneration {
+        self.read(session_id, |cell| match cell.lifecycle {
+            crate::session_lifecycle_machine::SessionLifecycle::NotLoaded { last } => last,
+            crate::session_lifecycle_machine::SessionLifecycle::Loading { generation, .. }
+            | crate::session_lifecycle_machine::SessionLifecycle::Live { generation }
+            | crate::session_lifecycle_machine::SessionLifecycle::Closing { generation, .. } => {
+                generation
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "session_cell_table_test.rs"]
+mod tests;
