@@ -1,7 +1,6 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
 use crate::{
-    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{self, insert_message},
+    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls, central_mail_store,
     workspace_decode_error::corrupt,
     workspace_row_codec::{json, string},
 };
@@ -143,6 +142,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             body,
             delivery,
             reply_to,
+            sent_at,
         } = &request.operation
         {
             if !self.known_session(to).await? {
@@ -160,7 +160,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     now,
                 )?;
                 Ok((
-                    vec![insert_message(&message)?],
+                    vec![crate::central_mail_rows::insert_message_due(
+                        &message,
+                        Some(crate::message_deadline::cancel_due_at(*sent_at, now)),
+                    )?],
                     mail::CentralMailAnswer::Queued {
                         message_id: message.message_id,
                     },

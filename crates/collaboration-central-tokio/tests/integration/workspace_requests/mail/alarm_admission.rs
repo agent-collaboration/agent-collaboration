@@ -112,6 +112,7 @@ async fn send(f: &Fixture, serial: u32) -> TestResult<MailResult> {
             body: "unrelated fresh mail".to_owned().try_into()?,
             delivery: workspace_model::central_mail::MessageDelivery::Auto,
             reply_to: None,
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
         },
     )
     .await

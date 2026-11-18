@@ -29,6 +29,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
                     body: "Direct stays queued".to_owned().try_into().unwrap(),
                     delivery: workspace_model::central_mail::MessageDelivery::Auto,
                     reply_to: None,
+                    sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                 },
             },
         )

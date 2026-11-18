@@ -326,6 +326,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
                 body: format!("direct {index}").try_into().unwrap(),
                 delivery: workspace_model::central_mail::MessageDelivery::Auto,
                 reply_to: None,
+                sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
             },
         )
         .await;
@@ -343,6 +344,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
             body: "second recipient".to_owned().try_into().unwrap(),
             delivery: workspace_model::central_mail::MessageDelivery::Auto,
             reply_to: None,
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
         },
     )
     .await;

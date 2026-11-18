@@ -35,6 +35,10 @@ pub enum CentralMailOperation {
         /// required (null when it answers none).
         #[serde(deserialize_with = "present_option")]
         reply_to: Option<MessageId>,
+        /// When the agent sent it, on the sender Mac's clock (the outbox row's
+        /// creation stamp). Central counts the one 15-minute delivery window
+        /// from it (owner, 2026-11-17), clamped to its own acceptance time.
+        sent_at: Timestamp,
     },
     SetWake {
         target: SessionAddress,

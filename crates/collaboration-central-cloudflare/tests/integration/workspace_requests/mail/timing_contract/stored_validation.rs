@@ -57,6 +57,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
                         body: body(),
                         delivery: workspace_model::central_mail::MessageDelivery::Auto,
                         reply_to: None,
+                        sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                     },
                 },
             )
@@ -290,6 +291,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
                         body: body(),
                         delivery: workspace_model::central_mail::MessageDelivery::Auto,
                         reply_to: None,
+                        sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                     },
                 },
             )
