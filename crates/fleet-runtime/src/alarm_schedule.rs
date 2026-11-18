@@ -1,6 +1,6 @@
 //! Chooses the next alarm mark from publication receipts and completed drives.
 use fleet_contracts::{AlarmNotPublished, EventCompletion};
-use fleet_runtime_ports::{Clock, SyncTime};
+use fleet_runtime_ports::SyncTime;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AlarmPublicationStatus {
@@ -21,14 +21,13 @@ impl<Deadline> AlarmDeadline<Deadline> {
 }
 
 /// One active driver's retry state. A publication supersedes a pending retry.
-pub struct AlarmSchedule<'clock, Deadline> {
-    clock: &'clock dyn Clock,
+pub struct AlarmSchedule<Deadline> {
     retry: Option<AlarmDeadline<Deadline>>,
 }
 
-impl<'clock, Deadline: Copy> AlarmSchedule<'clock, Deadline> {
-    pub(super) fn new(clock: &'clock dyn Clock) -> Self {
-        Self { clock, retry: None }
+impl<Deadline: Copy> AlarmSchedule<Deadline> {
+    pub(super) fn new() -> Self {
+        Self { retry: None }
     }
 
     pub fn deadline(
@@ -52,12 +51,13 @@ impl<'clock, Deadline: Copy> AlarmSchedule<'clock, Deadline> {
     pub fn settle_drive(
         &mut self,
         result: &Result<EventCompletion, AlarmNotPublished>,
+        retry_utc_now: impl FnOnce() -> SyncTime,
         wall_deadline: impl FnOnce(SyncTime) -> Deadline,
     ) {
         self.retry = match result {
             Ok(_) => None,
             Err(_) => Some(AlarmDeadline::from_mark(
-                retry_mark(self.clock.now()),
+                retry_mark(retry_utc_now()),
                 wall_deadline,
             )),
         };

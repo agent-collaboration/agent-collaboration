@@ -77,7 +77,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     pub fn statement_host(&self) -> &Host {
         self.fleet_runtime.statement_host()
     }
-    pub fn alarm_schedule<Deadline: Copy>(&self) -> fleet_runtime::AlarmSchedule<'_, Deadline> {
+    pub fn alarm_schedule<Deadline: Copy>(&self) -> fleet_runtime::AlarmSchedule<Deadline> {
         self.fleet_runtime.alarm_schedule()
     }
     /// The due-batch start and backlog bit the next publication will use.

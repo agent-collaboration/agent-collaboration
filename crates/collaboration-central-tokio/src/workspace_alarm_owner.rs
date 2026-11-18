@@ -42,6 +42,10 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
     let mut publication = runtime.statement_host().subscribe_publication_status();
     let mut schedule = runtime.alarm_schedule();
     let wall_deadline = |at| clock.wall_deadline(router_wall_time(at));
+    // Preserve the UTC read after a failed drive. Both clock methods collapse
+    // into one reading when router-clock leaves runtime-primitives at the retrofit.
+    let retry_utc_now =
+        || fleet_runtime_ports::SyncTime::from_unix_millis(clock.utc_now().timestamp_millis());
     loop {
         let status = *publication.borrow_and_update();
         let deadline = schedule.deadline(status, wall_deadline);
@@ -85,7 +89,7 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                         runtime.mark_alarm_failed(format!("{error:?}"));
                     }
                 }
-                schedule.settle_drive(&result, wall_deadline);
+                schedule.settle_drive(&result, retry_utc_now, wall_deadline);
             }
         }
     }

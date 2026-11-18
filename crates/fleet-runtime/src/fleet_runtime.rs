@@ -139,8 +139,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
         hook.complete_event().await
     }
 
-    pub fn alarm_schedule<Deadline: Copy>(&self) -> AlarmSchedule<'_, Deadline> {
-        AlarmSchedule::new(self.clock.as_ref())
+    pub fn alarm_schedule<Deadline: Copy>(&self) -> AlarmSchedule<Deadline> {
+        AlarmSchedule::new()
     }
 
     #[cfg(feature = "test-support")]
