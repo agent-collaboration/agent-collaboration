@@ -2,7 +2,8 @@
 //! socket, the outbox flush reducer and the calls waiting on them. Every
 //! deadline comes from the one injected clock.
 use super::link_transport::{
-    LinkClosed, LinkInbound, LinkSocket, LinkTransport, MachineTokenSource, TokenAvailability,
+    LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource,
+    TokenAvailability, TransportFuture,
 };
 use super::{DriverCommand, FlushJitter};
 use crate::ProviderOperationStore;
@@ -54,6 +55,9 @@ pub(super) struct LinkDriver {
     pub(super) client: LinkClient,
     pub(super) flush: OutboxFlushState,
     socket: Option<(ConnectionAttempt, Box<dyn LinkSocket>)>,
+    /// A connect in progress. It is polled in the run loop, so the driver keeps
+    /// serving calls, and the client's Welcome deadline abandons it.
+    connecting: Option<PendingConnect>,
     immediate: BTreeMap<CorrelationId, ImmediateCall>,
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
@@ -90,6 +94,7 @@ impl LinkDriver {
             client,
             flush: OutboxFlushState::default(),
             socket: None,
+            connecting: None,
             immediate: BTreeMap::new(),
             batch: None,
             flush_wake: None,
@@ -128,6 +133,7 @@ impl LinkDriver {
                     Some(command) => self.handle_command(command).await,
                     None => break,
                 },
+                connected = pending_connect(&mut self.connecting) => self.connect_finished(connected).await,
                 inbound = next_inbound(&mut self.socket) => self.handle_inbound(inbound).await,
                 () = sleep_until(clock.as_ref(), deadline) => {}
             }
@@ -179,6 +185,8 @@ impl LinkDriver {
                 }
             }
             ClientAction::Reconnect { failed } => {
+                // The Welcome deadline passed: abandon a connect still in progress.
+                self.connecting = None;
                 if let Some((_, mut socket)) = self.socket.take() {
                     socket.close().await;
                 }
@@ -210,12 +218,25 @@ impl LinkDriver {
                 return;
             }
         };
-        match self.transport.connect(&token).await.ok() {
-            Some(socket) => {
+        let transport = self.transport.clone();
+        let dialing = token.clone();
+        self.connecting = Some(PendingConnect {
+            attempt,
+            token,
+            connect: Box::pin(async move { transport.connect(&dialing).await }),
+        });
+    }
+
+    async fn connect_finished(
+        &mut self,
+        (attempt, token, socket): (ConnectionAttempt, MachineTokenText, ConnectResult),
+    ) {
+        match socket {
+            Ok(socket) => {
                 self.socket = Some((attempt, socket));
                 self.connected_token = Some(token);
             }
-            None => {
+            Err(_) => {
                 if let Ok(failed) = self.client.closed(&attempt) {
                     self.settle_failed(failed).await;
                 }
@@ -624,6 +645,29 @@ fn request_correlation(frame: &LinkFrame) -> Option<CorrelationId> {
         }
         LinkFrame::Ping | LinkFrame::Pong | LinkFrame::Data(_) => None,
     }
+}
+
+type ConnectResult = Result<Box<dyn LinkSocket>, LinkTransportError>;
+
+/// A connect started for one attempt, with the token it dials.
+struct PendingConnect {
+    attempt: ConnectionAttempt,
+    token: MachineTokenText,
+    connect: TransportFuture<'static, ConnectResult>,
+}
+
+/// Resolves when the pending connect finishes; never while none is pending.
+async fn pending_connect(
+    connecting: &mut Option<PendingConnect>,
+) -> (ConnectionAttempt, MachineTokenText, ConnectResult) {
+    let Some(pending) = connecting.as_mut() else {
+        return std::future::pending().await;
+    };
+    let socket = pending.connect.as_mut().await;
+    let Some(PendingConnect { attempt, token, .. }) = connecting.take() else {
+        return std::future::pending().await;
+    };
+    (attempt, token, socket)
 }
 
 async fn next_inbound(
