@@ -148,8 +148,7 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
             before
         );
     }
-    let last =
-        router_clock::RuntimeClock::utc_now(fixture.clock.as_ref()) + chrono::Duration::days(7);
+    let last = router_clock::RuntimeClock::utc_now(&fixture.clock) + chrono::Duration::days(7);
     let result = fixture
         .host
         .request_central(
@@ -196,8 +195,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
-        + chrono::Duration::seconds(300);
+    let due = router_clock::RuntimeClock::utc_now(&fixture.clock) + chrono::Duration::seconds(300);
     let result = fixture
         .host
         .request_central(
@@ -233,7 +231,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
     // Embedded setup allowance: the fixture's setup claimed the due batch at T0.
-    fixture.clock.set_utc(due - chrono::Duration::seconds(270));
+    fixture.set_utc(due - chrono::Duration::seconds(270)).await;
     // Isolation: that wake fails alone as CorruptRow (due_at); the alarm re-arms
     // on the next mark.
     runtime.after_event().await.unwrap();

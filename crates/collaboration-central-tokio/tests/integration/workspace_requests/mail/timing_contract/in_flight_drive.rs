@@ -42,7 +42,7 @@ pub(super) async fn exercise_dispatch_settles_an_in_flight_drive(f: &Fixture) {
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
     let overdue_at = first + chrono::Duration::seconds(20);
-    advance_to(f, overdue_at);
+    advance_to(f, overdue_at).await;
     held.until_held().await;
 
     // Act: dispatch the second wake while the overdue drive is held.
@@ -74,4 +74,59 @@ pub(super) async fn exercise_dispatch_settles_an_in_flight_drive(f: &Fixture) {
     };
     assert_eq!(fired(0), vec![overdue_at]);
     assert_eq!(fired(1), vec![second]);
+}
+
+/// Every fixture clock move, not only a dispatch, settles a drive started at
+/// an earlier clock position before it moves the clock.
+pub(super) async fn exercise_a_clock_move_settles_an_in_flight_drive(f: &Fixture) {
+    // Arrange: one wake, and the drive the jump past it starts held.
+    let target = session(&f.caller);
+    let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
+        .unwrap();
+    let set = request(
+        f,
+        &f.caller,
+        47010,
+        Op::SetWake {
+            target: target.clone(),
+            due_at: due,
+            text: body(),
+        },
+    )
+    .await;
+    let Result::Done(Answer::WakeSet { wake_id, .. }) = set else {
+        panic!("wake: {set:?}")
+    };
+    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let mut held = r
+        .pause_points()
+        .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
+    let overdue_at = due + chrono::Duration::seconds(20);
+    advance_to(f, overdue_at).await;
+    held.until_held().await;
+
+    // Act: move the clock again while that drive is held.
+    let later = overdue_at + chrono::Duration::seconds(10);
+    let mut moved = std::pin::pin!(f.advance(std::time::Duration::from_secs(10)));
+    tokio::select! {
+        () = &mut moved => panic!("the clock moved while a drive was held"),
+        () = clock_reaches(f, later) => {
+            panic!("the clock moved while a drive was in flight")
+        }
+        () = r.until_settle_waiting() => {}
+    }
+    assert_eq!(now(f), overdue_at);
+    held.release();
+    moved.await;
+
+    // Assert: the held drive fired the wake at its own clock position.
+    assert_eq!(now(f), later);
+    let queue = r.queued_for_session(&target).await.unwrap();
+    let fired: Vec<_> = queue
+        .messages
+        .iter()
+        .filter(|message| matches!(&message.body, MessageBody::Wake { wake_id: id, .. } if id == &wake_id))
+        .map(|message| message.created_at)
+        .collect();
+    assert_eq!(fired, vec![overdue_at]);
 }

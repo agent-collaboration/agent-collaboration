@@ -169,12 +169,13 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
     else {
         panic!("post");
     };
-    f.clock.set_utc(
+    f.set_utc(
         chrono::DateTime::from_timestamp_millis(
-            runtime_primitives::Clock::now(&*f.clock).unix_millis() - 100_000,
+            runtime_primitives::Clock::now(&f.clock).unix_millis() - 100_000,
         )
         .unwrap(),
-    );
+    )
+    .await;
     f.reopen().await;
     for request in [423, 424] {
         let later = f

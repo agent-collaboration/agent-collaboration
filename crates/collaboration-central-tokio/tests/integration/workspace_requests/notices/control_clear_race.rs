@@ -65,7 +65,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, DRAINS);
-    f.clock.set_utc(at);
+    f.set_utc(at).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }

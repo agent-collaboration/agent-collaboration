@@ -73,7 +73,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
-    fixture.clock.advance(Duration::from_secs(300)).unwrap();
+    fixture.advance(Duration::from_secs(300)).await;
     timer_commit.until_held().await;
     let rows = runtime
         .statement_host()

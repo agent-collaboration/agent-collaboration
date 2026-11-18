@@ -32,8 +32,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
-        + chrono::Duration::seconds(300);
+    let due = router_clock::RuntimeClock::utc_now(&fixture.clock) + chrono::Duration::seconds(300);
     let request = request(&fixture, due);
     let first = fixture
         .host
@@ -74,7 +73,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
     assert_eq!(alarm_before, Some(due.timestamp_millis()));
     // Embedded setup allowance: the fixture's setup claimed the due batch at T0, so
     // the held clock moves to T0 + 30 s before this event's due batch.
-    fixture.clock.set_utc(due - chrono::Duration::seconds(270));
+    fixture.set_utc(due - chrono::Duration::seconds(270)).await;
     // Isolation: the global preflight is gone, so the replay returns its stored
     // WakeSet answer; the beyond-ceiling wake counts as due now, so the alarm is
     // the next mark (here the same instant as the original due).
@@ -105,8 +104,7 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
-        + chrono::Duration::seconds(300);
+    let due = router_clock::RuntimeClock::utc_now(&fixture.clock) + chrono::Duration::seconds(300);
     let request = request(&fixture, due);
     let first = fixture
         .host

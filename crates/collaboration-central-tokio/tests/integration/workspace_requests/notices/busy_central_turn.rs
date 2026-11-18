@@ -81,7 +81,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     let mut held = runtime
         .pause_points()
         .hold_central(PausePoint::BeforeTimerCommit);
-    f.clock.set_utc(due);
+    f.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -89,7 +89,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     held.until_held().await;
 
     // 31 s later a probe request on another instance claims a new due batch.
-    f.clock.set_utc(due + chrono::Duration::seconds(31));
+    f.set_utc(due + chrono::Duration::seconds(31)).await;
     let request = runtime.request_probe(
         &f.caller,
         ProbeRequest {
@@ -129,7 +129,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     assert_eq!(count(&runtime, NOTICES).await, windows);
     committed.release();
     batch.await.unwrap().unwrap();
-    f.clock.set_utc(due + chrono::Duration::seconds(65));
+    f.set_utc(due + chrono::Duration::seconds(65)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(count(&runtime, NOTICES).await, windows, "no duplicate");
     assert_eq!(count(&runtime, WINDOWS).await, integer(0));

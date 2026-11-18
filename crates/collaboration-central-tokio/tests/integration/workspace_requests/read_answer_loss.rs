@@ -50,7 +50,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
         .with_engine_publication(
-            f.clock.clone(),
+            f.clock.shared_for_runtime(),
             collaboration_central_core::engine_alarm_decider(due_batches.clone()),
         ),
     );
@@ -68,8 +68,8 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             store: store.clone(),
             lose: Arc::new(AtomicBool::new(true)),
         },
-        f.clock.clone(),
-        Arc::new(ClockIds::new(ArcClock(f.clock.clone()))),
+        f.clock.shared_for_runtime(),
+        Arc::new(ClockIds::new(ArcClock(f.clock.shared_for_runtime()))),
         due_batches,
     );
     let request = m::WorkspaceRequest {

@@ -116,11 +116,51 @@ pub(super) fn created(reply: m::WorkspaceReply) -> m::ItemRef {
     }
 }
 
+/// The fixture's one manual clock, for reading. It cannot move: every move
+/// goes through `Fixture`, which first settles the host's in-flight alarm
+/// drives so a drive started at an earlier clock position finishes there.
+pub(super) struct FixtureClock(Arc<HeldClock>);
+impl FixtureClock {
+    /// The same manual clock, for a runtime a case builds itself; it has no
+    /// host alarm driver, so there is nothing to settle before a move.
+    pub fn shared_for_runtime(&self) -> Arc<HeldClock> {
+        self.0.clone()
+    }
+    pub async fn not_due_check_now(&self, deadline: router_clock::ClockInstant) {
+        self.0.not_due_check_now(deadline).await;
+    }
+}
+impl runtime_primitives::Clock for FixtureClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        self.0.now()
+    }
+}
+impl router_clock::RuntimeClock for FixtureClock {
+    fn utc_now(&self) -> chrono::DateTime<chrono::Utc> {
+        self.0.utc_now()
+    }
+    fn monotonic_now(&self) -> router_clock::ClockInstant {
+        self.0.monotonic_now()
+    }
+    fn sleep_until(
+        &self,
+        deadline: router_clock::ClockInstant,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        self.0.sleep_until(deadline)
+    }
+    fn has_not_due_check_now(&self, deadline: router_clock::ClockInstant) -> bool {
+        self.0.has_not_due_check_now(deadline)
+    }
+    fn wall_deadline(&self, deadline: runtime_primitives::SyncTime) -> router_clock::ClockInstant {
+        self.0.wall_deadline(deadline)
+    }
+}
+
 pub(super) struct Fixture {
     pub host: TokioWorkspaceHost,
     pub caller: WorkspaceCaller,
     pub workspace: m::WorkspaceId,
-    pub clock: Arc<HeldClock>,
+    pub clock: FixtureClock,
     pub root: tempfile::TempDir,
 }
 impl Fixture {
@@ -142,9 +182,29 @@ impl Fixture {
             host,
             caller,
             workspace,
-            clock,
+            clock: FixtureClock(clock),
             root,
         }
+    }
+    /// Moves the clock forward once every in-flight alarm drive has settled.
+    pub async fn advance(&self, step: std::time::Duration) {
+        self.host.until_alarm_drives_settled().await;
+        self.clock.0.advance(step).unwrap();
+    }
+    /// Moves the clock to `at` once every in-flight alarm drive has settled.
+    pub async fn advance_to(&self, at: runtime_primitives::SyncTime) {
+        self.host.until_alarm_drives_settled().await;
+        self.clock.0.advance_to(at).unwrap();
+    }
+    /// Sets the wall clock once every in-flight alarm drive has settled.
+    pub async fn set_utc(&self, utc: chrono::DateTime<chrono::Utc>) {
+        self.host.until_alarm_drives_settled().await;
+        self.clock.0.set_utc(utc);
+    }
+    /// The one deliberate overlap: sets the wall clock while an engine batch
+    /// is held on purpose, without waiting for it (mail/engine_failure_overlap).
+    pub fn set_utc_while_a_batch_is_held(&self, utc: chrono::DateTime<chrono::Utc>) {
+        self.clock.0.set_utc(utc);
     }
     pub async fn call(&self, request: u32, operation: m::WorkspaceOperation) -> m::WorkspaceReply {
         call(
@@ -218,7 +278,7 @@ impl Fixture {
     }
     pub async fn reopen(&mut self) {
         self.host.close().await;
-        self.host = TokioWorkspaceHost::open(self.root.path(), self.clock.clone())
+        self.host = TokioWorkspaceHost::open(self.root.path(), self.clock.0.clone())
             .await
             .unwrap();
     }

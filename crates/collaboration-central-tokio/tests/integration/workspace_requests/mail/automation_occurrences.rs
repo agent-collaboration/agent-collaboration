@@ -22,7 +22,7 @@ fn at(start: Time, minutes: i64, seconds: i64) -> Time {
 /// skipped by the 30 s spacing.
 async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) -> EventCompletion {
     driver_settled(fixture, runtime).await;
-    fixture.clock.set_utc(time);
+    fixture.set_utc(time).await;
     let completion = runtime.after_event().await.unwrap();
     assert_eq!(
         runtime.due_batch_snapshot().last_start_unix_millis,
@@ -91,7 +91,7 @@ async fn a_second_due_for_an_already_fired_occurrence_is_superseded_without_a_me
     let mut first = points.hold_engine(PausePoint::AfterEngineLoad, &automation);
     let mut second = points.hold_engine(PausePoint::AfterEngineLoad, &automation);
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 5, 0));
+    fixture.set_utc(at(start, 5, 0)).await;
     let first_batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -99,7 +99,7 @@ async fn a_second_due_for_an_already_fired_occurrence_is_superseded_without_a_me
     first.until_held().await;
     // A second event 30 s later starts its own due batch while the first still
     // holds the 10:05 occurrence it loaded; it selects the same occurrence.
-    fixture.clock.set_utc(at(start, 5, 30));
+    fixture.set_utc(at(start, 5, 30)).await;
     let second_batch = tokio::spawn({
         let runtime = runtime.clone();
         let caller = fixture.caller.clone();
@@ -169,7 +169,7 @@ async fn a_second_due_for_an_already_fired_occurrence_is_superseded_without_a_me
     drop(runtime);
     fixture.reopen().await;
     let runtime = super::super::engine_v2_support::runtime(&fixture).await;
-    fixture.clock.set_utc(at(start, 5, 35));
+    fixture.set_utc(at(start, 5, 35)).await;
     let replay = runtime.after_event().await.unwrap();
     assert_eq!(replay.work.automations_fired, 0);
     assert_eq!(automation_messages(&runtime, &automation).await, 2);
@@ -192,7 +192,7 @@ async fn an_at_automation_selected_early_fires_once_and_finishes() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
-    fixture.clock.set_utc(at(start, 1, 0));
+    fixture.set_utc(at(start, 1, 0)).await;
     let automation = set_automation_at(&fixture, 15100, at(start, 5, 0), "at").await;
 
     let early = due_batch_at(&fixture, &runtime, at(start, 4, 15)).await;

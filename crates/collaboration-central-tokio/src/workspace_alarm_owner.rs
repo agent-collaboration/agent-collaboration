@@ -73,7 +73,11 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                 #[cfg(feature = "test-support")]
                 runtime.mark_alarm_started();
                 let result = tokio::select! {
-                    () = stop.cancelled() => return,
+                    () = stop.cancelled() => {
+                        #[cfg(feature = "test-support")]
+                        runtime.mark_alarm_drive_cancelled();
+                        return;
+                    }
                     result = runtime.after_event() => result,
                 };
                 match result {

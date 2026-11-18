@@ -45,7 +45,7 @@ pub(super) async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
 /// Starts one due batch at `time` through the event path.
 pub(super) async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
     driver_settled(fixture, runtime).await;
-    fixture.clock.set_utc(time);
+    fixture.set_utc(time).await;
     runtime.after_event().await.unwrap();
     driver_settled(fixture, runtime).await;
 }
@@ -55,7 +55,7 @@ pub(super) async fn driver_fires_at(fixture: &Fixture, runtime: &Runtime, time: 
     assert_eq!(alarm_ms(runtime), ms(time), "the published alarm");
     driver_settled(fixture, runtime).await;
     let completed = runtime.alarm_completion_count();
-    fixture.clock.advance_to(sync(time)).unwrap();
+    fixture.advance_to(sync(time)).await;
     runtime.until_alarm_completed(completed + 1).await;
 }
 

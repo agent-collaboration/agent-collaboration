@@ -11,9 +11,9 @@ use workspace_model::central_mail::{
 fn now(f: &Fixture) -> m::Timestamp {
     f.clock.utc_now()
 }
-fn advance_to(f: &Fixture, at: m::Timestamp) {
+async fn advance_to(f: &Fixture, at: m::Timestamp) {
     let delta = at - now(f);
-    f.clock.advance(delta.to_std().unwrap()).unwrap();
+    f.advance(delta.to_std().unwrap()).await;
 }
 /// Advances to `at` and waits for the host's driver to complete that alarm.
 /// A drive still running from an earlier clock position (an alarm the clock
@@ -33,7 +33,7 @@ async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     );
     let published = r.statement_host().alarm();
     let count = r.alarm_completion_count();
-    advance_to(f, at);
+    advance_to(f, at).await;
     let not_due = async {
         match published {
             Some(alarm) if alarm.unix_millis() > at.timestamp_millis() => {
@@ -113,7 +113,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     );
     let mark = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
-    advance_to(f, mark);
+    advance_to(f, mark).await;
     for (index, due) in [
         mark + chrono::Duration::seconds(60),
         mark + chrono::Duration::nanoseconds(1),
@@ -204,7 +204,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         request(f, &f.caller, 40021, Op::CancelWake { wake_id }).await,
         Result::Done(_)
     ));
-    advance_to(f, mark + chrono::Duration::seconds(143));
+    advance_to(f, mark + chrono::Duration::seconds(143)).await;
     let interval = request(
         f,
         &f.caller,
@@ -302,7 +302,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     ));
     let mut direct_ids = Vec::new();
     for index in 0..3 {
-        advance_to(f, first + chrono::Duration::seconds(index * 10 + 1));
+        advance_to(f, first + chrono::Duration::seconds(index * 10 + 1)).await;
         let sent = request(
             f,
             &f.caller,
@@ -342,7 +342,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     let immediate = r.queued_for_session(&target).await.unwrap();
     assert_eq!(immediate.messages.len(), 4);
     let direct_mark = first + chrono::Duration::minutes(1);
-    advance_to(f, direct_mark);
+    advance_to(f, direct_mark).await;
     let queue = r.queued_for_session(&target).await.unwrap();
     let mut expected_ids = vec![before_direct.messages[0].message_id.clone()];
     expected_ids.extend(direct_ids.clone());
@@ -456,11 +456,12 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     review_corrections::exercise_non_utc_and_terminal_rows(f).await;
     review_corrections::exercise_late_drain(f).await;
     in_flight_drive::exercise_dispatch_settles_an_in_flight_drive(f).await;
+    in_flight_drive::exercise_a_clock_move_settles_an_in_flight_drive(f).await;
     review_corrections::exercise_cadence_change_after_clock_rollback(f).await;
 }
 
 async fn exercise_expiry(f: &mut Fixture) {
-    advance_to(f, now(f) + chrono::Duration::seconds(1));
+    advance_to(f, now(f) + chrono::Duration::seconds(1)).await;
     let admission = now(f);
     let result = request(
         f,

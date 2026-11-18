@@ -25,7 +25,7 @@ async fn a_held_due_loses_its_compare_and_set_to_a_stop_request_and_ends_superse
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &item.to_string());
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -226,7 +226,7 @@ async fn rejected_due_with_optional_stop(
     let mut before_write = runtime
         .pause_points()
         .hold_engine(PausePoint::BeforeEngineFailureWrite, &item.to_string());
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -302,7 +302,7 @@ async fn a_due_unique_violation_records_only_its_item_and_the_others_commit() {
             .unwrap(),
         EngineRequestOutcome::Answer { .. }
     ));
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
 
     runtime.after_event().await.unwrap();
 
@@ -353,7 +353,7 @@ async fn a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled() {
                 key: key(item),
                 kind: kind.clone(),
             });
-        fixture.clock.set_utc(due);
+        fixture.set_utc(due).await;
 
         runtime.after_event().await.unwrap();
 
@@ -363,7 +363,7 @@ async fn a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled() {
             vec![text(state), integer(i64::from(fired_first)), integer(0)],
             "{kind:?}: counted uncertain, no record"
         );
-        fixture.clock.set_utc(due + minutes(5));
+        fixture.set_utc(due + minutes(5)).await;
         runtime.after_event().await.unwrap();
         assert_eq!(
             probe_facts(&runtime, item, group).await,
@@ -395,7 +395,7 @@ async fn operational_database_codes_are_never_charged_to_the_item() {
                 key: key(item),
                 kind: EngineCommitFaultKind::DatabaseCode(code),
             });
-        fixture.clock.set_utc(due);
+        fixture.set_utc(due).await;
 
         runtime.after_event().await.unwrap();
 
@@ -410,7 +410,7 @@ async fn operational_database_codes_are_never_charged_to_the_item() {
             Some(floor.timestamp_millis()),
             "code {code}"
         );
-        fixture.clock.set_utc(floor);
+        fixture.set_utc(floor).await;
         runtime.after_event().await.unwrap();
         assert_eq!(
             probe_facts(&runtime, item, group).await,
@@ -465,7 +465,7 @@ async fn no_unit_starts_after_central_store_down_and_started_units_settle() {
             key: key(faulted),
             kind: EngineCommitFaultKind::Unavailable,
         });
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -530,7 +530,7 @@ async fn one_held_unit_never_delays_the_other_nineteen_or_a_probe_request() {
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &items[0].to_string());
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }

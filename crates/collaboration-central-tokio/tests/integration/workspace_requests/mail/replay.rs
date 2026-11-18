@@ -38,7 +38,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
     let last_grid =
         chrono::DateTime::from_timestamp(ceiling.timestamp().div_euclid(300) * 300, 0).unwrap();
     let start = ceiling - chrono::Duration::days(7) - chrono::Duration::seconds(30);
-    fixture.clock.set_utc(start);
+    fixture.set_utc(start).await;
     let request = CentralMailRequest {
         request_id: id(1700),
         operation: Operation::SetAutomation {
@@ -66,7 +66,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
         .unwrap()
         .rows;
     let later = start + chrono::Duration::seconds(45);
-    fixture.clock.set_utc(later);
+    fixture.set_utc(later).await;
     assert_eq!(
         fixture
             .host

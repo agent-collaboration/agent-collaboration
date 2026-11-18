@@ -101,7 +101,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
         vec![text(window_id)],
     )
     .await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
 
     let outcome = runtime.after_event().await;
 
@@ -124,8 +124,8 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     for count in 1..=3 {
         if count > 1 {
             fixture
-                .clock
-                .set_utc(due + chrono::Duration::minutes(5 * (count - 1)));
+                .set_utc(due + chrono::Duration::minutes(5 * (count - 1)))
+                .await;
             runtime.after_event().await.unwrap();
         }
         let record = runtime.statement_host().read(Statement {
@@ -142,7 +142,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     for row in items.rows {
         execute(&fixture, "INSERT INTO notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)", row).await;
     }
-    fixture.clock.set_utc(due + chrono::Duration::minutes(15));
+    fixture.set_utc(due + chrono::Duration::minutes(15)).await;
     runtime.after_event().await.unwrap();
     let record = runtime.statement_host().read(Statement {
         sql: "SELECT (SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'),(SELECT COUNT(*) FROM messages WHERE message_kind='notice' AND recipient_actor=?)", args: vec![text(&recipient)],
@@ -202,7 +202,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
         vec![text(&fixture.workspace)],
     )
     .await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
 
     let outcome = runtime.after_event().await;
 
@@ -220,8 +220,8 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
     for count in 1..=3 {
         if count > 1 {
             fixture
-                .clock
-                .set_utc(due + chrono::Duration::minutes(5 * (count - 1)));
+                .set_utc(due + chrono::Duration::minutes(5 * (count - 1)))
+                .await;
             runtime.after_event().await.unwrap();
         }
         let record = runtime.statement_host().read(Statement {
@@ -248,7 +248,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
         ],
     )
     .await;
-    fixture.clock.set_utc(due + chrono::Duration::minutes(15));
+    fixture.set_utc(due + chrono::Duration::minutes(15)).await;
     runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement {
         sql: "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],

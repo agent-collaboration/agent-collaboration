@@ -85,7 +85,7 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
     .await;
 
     // Pass 1 at the first mark.
-    fixture.clock.set_utc(first_mark);
+    fixture.set_utc(first_mark).await;
     runtime.after_event().await.unwrap();
 
     assert_eq!(
@@ -138,7 +138,7 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
     let messages_after_first = all_messages(&runtime).await;
 
     // Pass 2 at the next mark: every record retires at count 2, nothing new is sent.
-    fixture.clock.set_utc(second_mark);
+    fixture.set_utc(second_mark).await;
     runtime.after_event().await.unwrap();
 
     for subject in &corrupt {
@@ -180,7 +180,7 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
     }
     let observed_before = observations.failures().len();
     for step in 1..=12 {
-        fixture.clock.set_utc(second_mark + minutes(5 * step));
+        fixture.set_utc(second_mark + minutes(5 * step)).await;
         runtime.after_event().await.unwrap();
     }
     for (subject, (row, stored)) in corrupt.iter().zip(before) {

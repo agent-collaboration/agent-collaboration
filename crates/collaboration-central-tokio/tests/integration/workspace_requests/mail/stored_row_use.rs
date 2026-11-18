@@ -116,7 +116,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
         let start = fixture.clock.utc_now();
         // As in the stored-validation helper: admit one second past the mark, so
         // the interval's first occurrence is the next mark rather than now.
-        fixture.clock.set_utc(start + chrono::Duration::seconds(1));
+        fixture.set_utc(start + chrono::Duration::seconds(1)).await;
         let base = 8400 + index * 10;
         let Result::Done(Answer::AutomationSet {
             automation_id,
@@ -216,7 +216,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 (anchor, "legacy_notice_windows", text("all"))
             }
         };
-        fixture.clock.set_utc(use_at);
+        fixture.set_utc(use_at).await;
 
         let work = runtime.after_event().await;
 

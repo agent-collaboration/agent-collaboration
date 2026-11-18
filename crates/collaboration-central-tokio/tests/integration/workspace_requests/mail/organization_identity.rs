@@ -88,7 +88,7 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
         vec![],
     )
     .await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     assert_eq!(
         runtime.after_event().await.unwrap().work,
         collaboration_central_core::AlarmResult::default()
@@ -195,7 +195,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
             .await
             .unwrap()
             .rows;
-        fixture.clock.set_utc(due);
+        fixture.set_utc(due).await;
         let expected = StoreFailure::Corrupt {
             reason: CorruptReason::BadValue {
                 column: expected_column.to_owned(),
@@ -208,9 +208,10 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         fixture.host.close().await;
         // Isolation (O4): opening the host no longer fails for every organization;
         // the invalid one is still refused with no business effects.
-        let reopened = TokioWorkspaceHost::open(fixture.root.path(), fixture.clock.clone())
-            .await
-            .unwrap();
+        let reopened =
+            TokioWorkspaceHost::open(fixture.root.path(), fixture.clock.shared_for_runtime())
+                .await
+                .unwrap();
         assert_eq!(
             reopened
                 .central(&fixture.caller.organization_id)

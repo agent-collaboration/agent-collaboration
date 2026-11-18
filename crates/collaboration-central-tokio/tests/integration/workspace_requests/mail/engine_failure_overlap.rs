@@ -25,7 +25,7 @@ async fn a_failure_from_an_overlapping_batch_never_counts_before_the_next_try() 
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineAttemptGate, &item.to_string());
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     let batch_a = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -33,7 +33,7 @@ async fn a_failure_from_an_overlapping_batch_never_counts_before_the_next_try() 
     held.until_held().await;
 
     // Batch B, past the floor, records the first failure.
-    fixture.clock.set_utc(due + chrono::Duration::seconds(31));
+    fixture.set_utc_while_a_batch_is_held(due + chrono::Duration::seconds(31));
     runtime.after_event().await.unwrap();
     assert_eq!(
         attempt(&runtime, item).await,

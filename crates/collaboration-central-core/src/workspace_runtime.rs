@@ -170,7 +170,15 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         self.started_alarms
             .send_modify(|count| *count = count.saturating_add(1));
     }
-    /// Resolves once every drive the driver started has completed or failed.
+    /// The host's alarm driver stopped a started drive (host close); the drive
+    /// will never complete or fail, so it no longer counts as in flight.
+    #[cfg(feature = "test-support")]
+    pub fn mark_alarm_drive_cancelled(&self) {
+        self.settled_alarms
+            .send_modify(|count| *count = count.saturating_add(1));
+    }
+    /// Resolves once every drive the driver started has completed, failed or
+    /// been cancelled by host close.
     /// A test that moves the clock first waits here, so a drive still running
     /// from an earlier clock position cannot finish after the move.
     #[cfg(feature = "test-support")]
