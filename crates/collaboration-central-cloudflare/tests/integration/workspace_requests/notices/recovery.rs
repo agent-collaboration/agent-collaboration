@@ -59,7 +59,7 @@ async fn drain_commit_crash_retries_through_cold_platform_alarm() {
 async fn applied_write_recovers_by_cold_alarm_without_another_request() {
     let f = Fixture::new().await;
     let area = f.area(7130).await;
-    let thread = f.thread(7131, area).await;
+    let thread = f.thread(7131, area.clone()).await;
     let (_, actor) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(&f.caller.organization_id).await;
     let pause = serde_json::json!({"workspace":f.workspace,"point":"afterStoreApplied"});
@@ -166,7 +166,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     });
     let _: bool = runtime.control("until-held", &pause).await.unwrap();
     f.workspace_batch(
-        "UPDATE changes SET change_id=? WHERE thread_id=? AND change_kind='posted'",
+        "UPDATE changes SET change_id=? WHERE change_id=(SELECT change_id FROM changes WHERE thread_id=? AND change_kind='posted' ORDER BY position DESC LIMIT 1)",
         vec![text(&later), text(&thread)],
     )
     .await;
@@ -213,18 +213,23 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
         Some(f.workspace.clone()),
         0,
         m::WorkspaceOperation::Inbox {
+            scope: m::InboxScope::Area {
+                area_id: area.clone(),
+            },
+            read_mode: m::InboxReadMode::Unread,
             after: None,
             limit: 100.try_into().unwrap(),
         },
     )
     .await;
-    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { entries, .. }) = inbox.result else {
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items: entries, .. }) = inbox.result
+    else {
         panic!("inbox refused")
     };
     assert!(
         entries
             .iter()
-            .any(|entry| entry.position == posted_position)
+            .any(|entry| entry.position() == posted_position)
     );
     f.host.close().await;
 }

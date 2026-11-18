@@ -1,5 +1,5 @@
-CREATE TABLE areas (area_id TEXT PRIMARY KEY, name TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE projects (project_id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(area_id), title TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE areas (area_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE projects (project_id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(area_id), title TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE initiatives (initiative_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 
 CREATE TABLE project_roles (project_role_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id), role TEXT NOT NULL, holder TEXT NOT NULL, granted_at TEXT NOT NULL, ended_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);

@@ -39,7 +39,7 @@ fn create_thread(request: &str) -> RequestPayload {
         "request": {
             "requestId": request,
             "workspaceId": uuid_v7(201),
-            "operation": {"kind": "createThread", "areaId": uuid_v7(203), "title": "a thread"},
+            "operation": {"kind": "createThread", "areaId": uuid_v7(203), "title": "a thread", "body": "opening", "addressees": []},
         },
     }))
     .unwrap()
@@ -51,7 +51,7 @@ fn list_areas() -> RequestPayload {
         "request": {
             "requestId": null,
             "workspaceId": uuid_v7(201),
-            "operation": {"kind": "list", "query": {"kind": "areas"}, "after": 0, "limit": 5},
+            "operation": {"kind": "list", "query": {"kind": "areas", "includeArchived": false}, "cursor": {"order": "oldestFirst", "position": null}, "limit": 5},
         },
     }))
     .unwrap()

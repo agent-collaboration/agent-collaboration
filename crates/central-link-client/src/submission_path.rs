@@ -36,9 +36,14 @@ const fn workspace_operation_path(operation: &WorkspaceOperation) -> SubmissionP
     match operation {
         WorkspaceOperation::ThreadPost { .. } => SubmissionPath::Outbox,
         WorkspaceOperation::CreateWorkspace { .. }
+        | WorkspaceOperation::UpdateWorkspace { .. }
+        | WorkspaceOperation::ArchiveWorkspace
         | WorkspaceOperation::CreateArea { .. }
         | WorkspaceOperation::ArchiveArea { .. }
+        | WorkspaceOperation::UpdateArea { .. }
         | WorkspaceOperation::CreateProject { .. }
+        | WorkspaceOperation::UpdateProject { .. }
+        | WorkspaceOperation::UpdateIssue { .. }
         | WorkspaceOperation::CreateInitiative { .. }
         | WorkspaceOperation::UpdateInitiative { .. }
         | WorkspaceOperation::CreateDeliverable { .. }

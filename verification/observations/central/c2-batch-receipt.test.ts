@@ -115,7 +115,7 @@ function fixtureRequests(): Pick<
       correlationId,
       requestId: correlationId,
       workspaceId: workspace,
-      operation: { kind: "createArea", name: area.name },
+      operation: { kind: "createArea", name: area.name, description: "Test description" },
     }).request;
   });
   const middle = {

@@ -74,6 +74,54 @@ workspace_identifiers!(
     AutomationId
 );
 
+/// A Router installation's identity: its peer UUIDv7, canonical lowercase. It
+/// is the machine identity on the wire and in callers; central's private
+/// machines.machine_id never leaves central, and the boundary resolves through
+/// the unique machines.installation_id. A v4 Router is re-keyed to a v7
+/// installation at enrollment (B3); its service id and session references are
+/// untouched.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct InstallationId(String);
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("InstallationId must be a canonical lowercase RFC UUIDv7")]
+pub struct InstallationIdError;
+impl TryFrom<String> for InstallationId {
+    type Error = InstallationIdError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let parsed = Uuid::parse_str(&value).map_err(|_| InstallationIdError)?;
+        if parsed.get_variant() != Variant::RFC4122
+            || parsed.get_version_num() != 7
+            || parsed.hyphenated().to_string() != value
+        {
+            return Err(InstallationIdError);
+        }
+        Ok(Self(value))
+    }
+}
+impl std::str::FromStr for InstallationId {
+    type Err = InstallationIdError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+impl From<InstallationId> for String {
+    fn from(value: InstallationId) -> Self {
+        value.0
+    }
+}
+impl std::fmt::Display for InstallationId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+impl InstallationId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 #[path = "identifier_test.rs"]
 mod tests;

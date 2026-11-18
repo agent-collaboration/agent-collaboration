@@ -29,6 +29,11 @@ pub enum CentralMailOperation {
     SendMessage {
         to: SessionAddress,
         body: PostText,
+        #[serde(default)]
+        delivery: MessageDelivery,
+        /// The message this one answers, carried to the recipient as-is.
+        #[serde(default)]
+        reply_to: Option<MessageId>,
     },
     SetWake {
         target: SessionAddress,
@@ -155,6 +160,14 @@ pub enum TimingRequirement {
 pub enum MessageBody {
     Direct {
         body: PostText,
+        /// Stored inside the message body JSON; bodies written before this field
+        /// existed decode as `Auto`.
+        #[serde(default)]
+        delivery: MessageDelivery,
+        /// The message this one answers; bodies stored before this field
+        /// existed decode as `None`.
+        #[serde(default)]
+        reply_to: Option<MessageId>,
     },
     Notice {
         items: Vec<NoticeItem>,
@@ -167,6 +180,17 @@ pub enum MessageBody {
         automation_id: AutomationId,
         text: PostText,
     },
+}
+
+/// How the recipient Router hands a direct message to its session: its own
+/// choice, queued for the next turn, or steered into the running turn.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageDelivery {
+    #[default]
+    Auto,
+    Queue,
+    Steer,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

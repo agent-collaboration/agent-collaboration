@@ -8,7 +8,7 @@ fn wire(operation: serde_json::Value, request_id: serde_json::Value) -> serde_js
 #[test]
 fn correlation_and_write_identity_are_distinct_and_reads_have_no_write_id() {
     let write = wire(
-        json!({"kind":"createArea","name":"Work"}),
+        json!({"kind":"createArea","name":"Work","description":"Where the work happens"}),
         json!("01890f2e-7b4c-7cc0-98c4-000000000004"),
     );
     let read = wire(
@@ -19,8 +19,10 @@ fn correlation_and_write_identity_are_distinct_and_reads_have_no_write_id() {
     assert_eq!(serde_json::to_value(parsed).unwrap(), write);
     // Use the model's actual read shape, without duplicating an operation definition.
     let operation = workspace_model::WorkspaceOperation::List {
-        query: workspace_model::ListQuery::Areas,
-        after: 0_u64.try_into().unwrap(),
+        query: workspace_model::ListQuery::Areas {
+            include_archived: false,
+        },
+        cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
         limit: workspace_model::PageLimit::try_from(10).unwrap(),
     };
     let mut read = read;
@@ -32,7 +34,7 @@ fn correlation_and_write_identity_are_distinct_and_reads_have_no_write_id() {
     assert!(serde_json::from_value::<LinkRequest>(read).is_err());
     assert!(
         serde_json::from_value::<LinkRequest>(wire(
-            json!({"kind":"createArea","name":"Work"}),
+            json!({"kind":"createArea","name":"Work","description":"Where the work happens"}),
             serde_json::Value::Null
         ))
         .is_err()
@@ -42,7 +44,7 @@ fn correlation_and_write_identity_are_distinct_and_reads_have_no_write_id() {
 #[test]
 fn untrusted_request_rejects_non_v7_unknown_fields_and_semantic_corruption() {
     let valid = wire(
-        json!({"kind":"createArea","name":"Work"}),
+        json!({"kind":"createArea","name":"Work","description":"Where the work happens"}),
         json!("01890f2e-7b4c-7cc0-98c4-000000000004"),
     );
     for (field, value) in [

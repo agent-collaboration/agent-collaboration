@@ -258,6 +258,7 @@ impl Fixture {
                 request,
                 m::WorkspaceOperation::CreateArea {
                     name: name(&format!("Area {request}")),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             )
             .await,
@@ -274,6 +275,7 @@ impl Fixture {
                     area_id,
                     title: name(&format!("Project {request}")),
                     lead: None,
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             )
             .await,
@@ -304,6 +306,8 @@ impl Fixture {
                 m::WorkspaceOperation::CreateThread {
                     area_id,
                     title: name(&format!("Thread {request}")),
+                    body: "First post".to_owned().try_into().unwrap(),
+                    addressees: vec![],
                 },
             )
             .await,

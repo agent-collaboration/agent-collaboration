@@ -197,6 +197,7 @@ fn writes(workspace: &WorkspaceId) -> Result<Vec<RequestPayload>> {
             workspace_id: Some(workspace.clone()),
             operation: WorkspaceOperation::CreateArea {
                 name: name.to_owned().try_into()?,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         }))
     };

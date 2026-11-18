@@ -66,6 +66,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
             2102,
             m::WorkspaceOperation::CreateArea {
                 name: name("Foreign area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -150,7 +151,7 @@ async fn r21_invalid_stored_status_and_closing_note_fail_show_and_list_decode() 
                 query: m::ListQuery::Backlog {
                     area_id: area.clone(),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 10.try_into().unwrap(),
             },
         ] {
@@ -210,7 +211,7 @@ async fn r21_stored_closing_note_uses_description_utf8_byte_bound() {
                 query: m::ListQuery::Backlog {
                     area_id: area.clone(),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 10.try_into().unwrap(),
             },
         ] {

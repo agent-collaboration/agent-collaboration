@@ -8,15 +8,20 @@ use workspace_model::{WorkspaceRequest, central_mail::CentralMailRequest};
 /// Wire `kind` tags the owner put in the outbox (2026-11-15).
 const OUTBOX_KINDS: [&str; 2] = ["threadPost", "sendMessage"];
 
-const WORKSPACE_KINDS: [&str; 38] = [
+const WORKSPACE_KINDS: [&str; 43] = [
     "createWorkspace",
+    "updateWorkspace",
+    "archiveWorkspace",
     "createArea",
     "archiveArea",
+    "updateArea",
     "createProject",
+    "updateProject",
     "createInitiative",
     "updateInitiative",
     "createDeliverable",
     "createIssue",
+    "updateIssue",
     "grantProjectRole",
     "releaseProjectRole",
     "grantDeliverableRole",
@@ -71,10 +76,16 @@ fn draw_uuid_v7(case: &TestCase) -> String {
 fn workspace_fields(kind: &str, id: &str, text: &str) -> Value {
     let session_holder = json!({"kind": "me"});
     match kind {
-        "createWorkspace" | "createArea" => json!({"name": text}),
+        "createWorkspace" => json!({"name": text}),
+        "createArea" => json!({"name": text, "description": text}),
         "archiveArea" => json!({"areaId": id}),
+        "updateWorkspace" => json!({"name": text, "description": text}),
+        "archiveWorkspace" => json!({}),
+        "updateArea" => json!({"areaId": id, "name": text, "description": text}),
+        "updateProject" => json!({"projectId": id, "title": text, "description": text}),
+        "updateIssue" => json!({"issueId": id, "title": text}),
         "removeLink" => json!({"linkId": id}),
-        "createProject" => json!({"areaId": id, "title": text, "lead": null}),
+        "createProject" => json!({"areaId": id, "title": text, "description": text, "lead": null}),
         "createInitiative" => json!({"name": text, "description": text}),
         "updateInitiative" => json!({"initiativeId": id, "name": text, "description": text}),
         "createDeliverable" => json!({"projectId": id, "title": text}),
@@ -85,10 +96,11 @@ fn workspace_fields(kind: &str, id: &str, text: &str) -> Value {
             json!({"deliverableId": id, "role": "implementer", "holder": session_holder})
         }
         "releaseDeliverableRole" => json!({"deliverableId": id, "role": "reviewer"}),
-        "createThread" => json!({"areaId": id, "title": text}),
+        "createThread" => json!({"areaId": id, "title": text, "body": text, "addressees": []}),
         "joinThread" => json!({"threadId": id, "role": "participant"}),
         "addThreadMember" => json!({"threadId": id, "actor": id, "role": "observer"}),
-        "leaveThread" | "resolveThread" => json!({"threadId": id}),
+        "leaveThread" => json!({"threadId": id}),
+        "resolveThread" => json!({"threadId": id, "closingPost": text}),
         "setNotifications" => json!({"threadId": id, "setting": "off"}),
         "threadPost" => json!({"threadId": id, "body": text, "addressees": []}),
         "addDependency" => json!({"blocking": id, "blocked": id}),
@@ -115,9 +127,18 @@ fn workspace_fields(kind: &str, id: &str, text: &str) -> Value {
         "workLogAdd" => json!({"projectId": id, "body": text, "tags": []}),
         "workLogRedact" => json!({"entryId": id}),
         "show" => json!({"item": {"kind": "area", "id": id}}),
-        "list" => json!({"query": {"kind": "areas"}, "after": 0, "limit": 10}),
-        "inbox" => json!({"after": null, "limit": 10}),
-        "markRead" => json!({"scope": {"kind": "inbox"}, "through": 0}),
+        "list" => json!({
+            "query": {"kind": "areas", "includeArchived": false},
+            "cursor": {"order": "oldestFirst", "position": null},
+            "limit": 10,
+        }),
+        "inbox" => json!({
+            "scope": {"kind": "area", "areaId": id},
+            "readMode": "unread",
+            "after": null,
+            "limit": 10,
+        }),
+        "markRead" => json!({"scope": {"kind": "inboxArea", "area_id": id}, "through": 0}),
         other => panic!("no sample for workspace kind {other}"),
     }
 }
@@ -126,7 +147,7 @@ fn mail_fields(kind: &str, id: &str, text: &str) -> Value {
     let session = json!({"machineId": id, "endpoint": "codex-local", "sessionId": text});
     match kind {
         "setNoticeCadence" => json!({"cadence": "m25"}),
-        "sendMessage" => json!({"to": session, "body": text}),
+        "sendMessage" => json!({"to": session, "body": text, "delivery": "steer", "replyTo": id}),
         "setWake" => json!({"target": session, "dueAt": "2026-11-17T10:05:00Z", "text": text}),
         "cancelWake" => json!({"wakeId": id}),
         "setAutomation" => {

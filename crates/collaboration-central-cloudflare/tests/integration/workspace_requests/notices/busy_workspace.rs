@@ -79,6 +79,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
                         workspace_id: Some(workspace),
                         operation: m::WorkspaceOperation::CreateArea {
                             name: name("Held write"),
+                            description: "Test description".to_owned().try_into().unwrap(),
                         },
                     },
                 )
@@ -104,6 +105,8 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
                 operation: CentralMailOperation::SendMessage {
                     to: session(&f.caller),
                     body: "unrelated".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
                 },
             },
         )

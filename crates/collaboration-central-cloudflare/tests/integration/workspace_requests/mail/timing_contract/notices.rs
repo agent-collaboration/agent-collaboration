@@ -79,6 +79,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             41011,
             m::WorkspaceOperation::CreateArea {
                 name: name("Second cadence area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -107,6 +108,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
                 m::WorkspaceOperation::CreateThread {
                     area_id: area,
                     title: name(&format!("Cadence thread {index}")),
+                    body: "First post".to_owned().try_into().unwrap(),
+                    addressees: vec![],
                 },
             )
             .await,
@@ -344,6 +347,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             },
             _ => m::WorkspaceOperation::ResolveThread {
                 thread_id: thread.clone(),
+                closing_post: None,
             },
         };
         let caller = if action == 2 {

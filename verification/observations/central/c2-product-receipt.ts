@@ -158,7 +158,11 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
       ),
     );
   const operation = z
-    .object({ kind: z.literal("createArea"), name: z.string().min(1) })
+    .object({
+      kind: z.literal("createArea"),
+      name: z.string().min(1),
+      description: z.string().trim().min(1),
+    })
     .strict()
     .parse(receipt.decidingRequest.request.payload.request.operation);
   assert.equal(

@@ -11,6 +11,7 @@ workspace-model.workspace = true
 central-storage.workspace = true
 
 [dev-dependencies]
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 proptest.workspace = true
 
 [lints]

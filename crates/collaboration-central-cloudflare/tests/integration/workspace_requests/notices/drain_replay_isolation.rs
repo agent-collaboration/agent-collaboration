@@ -23,7 +23,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
     });
     let _: bool = r.control("until-held", &pause).await.unwrap();
     f.workspace_batch(
-        "UPDATE changes SET change_kind='bad-kind' WHERE thread_id=? AND change_kind='posted'",
+        "UPDATE changes SET change_kind='bad-kind' WHERE change_id=(SELECT change_id FROM changes WHERE thread_id=? AND change_kind='posted' ORDER BY position DESC LIMIT 1)",
         vec![text(&thread)],
     )
     .await;

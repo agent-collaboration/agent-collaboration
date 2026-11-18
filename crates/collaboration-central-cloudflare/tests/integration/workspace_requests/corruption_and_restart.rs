@@ -72,9 +72,19 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         first.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    assert_eq!(first, f.call(402, operation.clone()).await);
+    assert_eq!(first, f.call(402, operation).await);
+    // The replaced lead keeps no lead-only authority on a fresh request.
     assert!(matches!(
-        f.call(403, operation).await.result,
+        f.call(
+            403,
+            m::WorkspaceOperation::GrantProjectRole {
+                project_id: project.clone(),
+                role: m::ProjectRole::Advisor,
+                holder: m::ActorRef::Me,
+            }
+        )
+        .await
+        .result,
         m::WorkspaceResult::Refused(m::RefusalReason::NotLead { .. })
     ));
     f.host.close().await;
@@ -152,7 +162,7 @@ async fn invalid_role_input_and_stored_role_rows_fail_closed() {
 async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows() {
     let mut f = Fixture::new().await;
     let area = f.area(420).await;
-    let thread = f.thread(421, area).await;
+    let thread = f.thread(421, area.clone()).await;
     let original = f
         .call(
             422,
@@ -190,13 +200,17 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
         .call(
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area {
+                    area_id: area.clone(),
+                },
+                read_mode: m::InboxReadMode::Unread,
                 after: Some(before),
                 limit: 10.try_into().unwrap(),
             },
         )
         .await;
     assert!(
-        matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,..}) if entries.len()==2 && entries[0].position<entries[1].position)
+        matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{items:entries,..}) if entries.len()==2 && entries[0].position()<entries[1].position())
     );
     let runtime = f.host.central(&f.caller.organization_id).await;
     for table in ["deliverables", "changes"] {

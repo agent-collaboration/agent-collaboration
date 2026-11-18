@@ -52,4 +52,27 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         }
         Ok(Ok(()))
     }
+    /// The workspaces the admitted caller's machine may use. Call after admission.
+    pub(crate) async fn allowed_workspaces(
+        &self,
+        caller: &WorkspaceCaller,
+    ) -> Result<Vec<WorkspaceId>, StoreFailure> {
+        let rows = self
+            .host
+            .read(Statement {
+                sql: "SELECT allowed_workspaces FROM machines WHERE installation_id=?",
+                args: vec![SqlValue::Text(
+                    caller.connection().installation_id().as_str().to_owned(),
+                )],
+            })
+            .await?;
+        let row = rows
+            .rows
+            .first()
+            .ok_or_else(|| corrupt("machines.installation_id"))?;
+        json(
+            string(&rows, row, "allowed_workspaces")?,
+            "allowed_workspaces",
+        )
+    }
 }

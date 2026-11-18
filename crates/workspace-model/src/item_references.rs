@@ -1,12 +1,13 @@
 use crate::{
-    AreaId, BacklogItemId, DeliverableId, InitiativeId, IssueId, LinkId, PostId, ProjectId,
-    ReferenceId, ThreadId, WorkLogEntryId,
+    AreaId, BacklogItemId, DeliverableId, DeliverableRoleId, InitiativeId, IssueId, LinkId, PostId,
+    ProjectId, ProjectRoleId, ReferenceId, ThreadId, ThreadMemberId, WorkLogEntryId, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ItemKind {
+    Workspace,
     Area,
     Project,
     Initiative,
@@ -18,11 +19,15 @@ pub enum ItemKind {
     BacklogItem,
     Reference,
     Link,
+    ThreadMember,
+    ProjectRole,
+    DeliverableRole,
 }
 impl ItemKind {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Workspace => "workspace",
             Self::Area => "area",
             Self::Project => "project",
             Self::Initiative => "initiative",
@@ -34,6 +39,9 @@ impl ItemKind {
             Self::BacklogItem => "backlogItem",
             Self::Reference => "reference",
             Self::Link => "link",
+            Self::ThreadMember => "threadMember",
+            Self::ProjectRole => "projectRole",
+            Self::DeliverableRole => "deliverableRole",
         }
     }
 }
@@ -46,6 +54,7 @@ impl ItemKind {
     deny_unknown_fields
 )]
 pub enum ItemRef {
+    Workspace(WorkspaceId),
     Area(AreaId),
     Project(ProjectId),
     Initiative(InitiativeId),
@@ -57,11 +66,15 @@ pub enum ItemRef {
     BacklogItem(BacklogItemId),
     Reference(ReferenceId),
     Link(LinkId),
+    ThreadMember(ThreadMemberId),
+    ProjectRole(ProjectRoleId),
+    DeliverableRole(DeliverableRoleId),
 }
 impl ItemRef {
     #[must_use]
     pub const fn kind(&self) -> ItemKind {
         match self {
+            Self::Workspace(_) => ItemKind::Workspace,
             Self::Area(_) => ItemKind::Area,
             Self::Project(_) => ItemKind::Project,
             Self::Initiative(_) => ItemKind::Initiative,
@@ -73,12 +86,16 @@ impl ItemRef {
             Self::BacklogItem(_) => ItemKind::BacklogItem,
             Self::Reference(_) => ItemKind::Reference,
             Self::Link(_) => ItemKind::Link,
+            Self::ThreadMember(_) => ItemKind::ThreadMember,
+            Self::ProjectRole(_) => ItemKind::ProjectRole,
+            Self::DeliverableRole(_) => ItemKind::DeliverableRole,
         }
     }
 
     #[must_use]
     pub fn kind_and_id(&self) -> (&'static str, &str) {
         match self {
+            Self::Workspace(id) => ("workspace", id.as_str()),
             Self::Area(id) => ("area", id.as_str()),
             Self::Project(id) => ("project", id.as_str()),
             Self::Initiative(id) => ("initiative", id.as_str()),
@@ -90,6 +107,9 @@ impl ItemRef {
             Self::BacklogItem(id) => ("backlogItem", id.as_str()),
             Self::Reference(id) => ("reference", id.as_str()),
             Self::Link(id) => ("link", id.as_str()),
+            Self::ThreadMember(id) => ("threadMember", id.as_str()),
+            Self::ProjectRole(id) => ("projectRole", id.as_str()),
+            Self::DeliverableRole(id) => ("deliverableRole", id.as_str()),
         }
     }
 }
@@ -131,17 +151,28 @@ pub struct Reference {
     pub details: Option<serde_json::Value>,
 }
 
-/// Relations have identity for paging, but cannot themselves be reference targets.
+/// Relations, the workspace itself, memberships and role assignments have identity
+/// for reads and paging, but cannot be reference targets.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "ItemRef", into = "ItemRef")]
 pub struct ReferenceTarget(ItemRef);
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("a reference target cannot be a reference or a link")]
+#[error(
+    "a reference target cannot be a reference, a link, the workspace, a membership or a role assignment"
+)]
 pub struct InvalidReferenceTarget;
 impl TryFrom<ItemRef> for ReferenceTarget {
     type Error = InvalidReferenceTarget;
     fn try_from(item: ItemRef) -> Result<Self, Self::Error> {
-        if matches!(item, ItemRef::Reference(_) | ItemRef::Link(_)) {
+        if matches!(
+            item,
+            ItemRef::Reference(_)
+                | ItemRef::Link(_)
+                | ItemRef::Workspace(_)
+                | ItemRef::ThreadMember(_)
+                | ItemRef::ProjectRole(_)
+                | ItemRef::DeliverableRole(_)
+        ) {
             return Err(InvalidReferenceTarget);
         }
         Ok(Self(item))

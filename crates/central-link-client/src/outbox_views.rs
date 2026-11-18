@@ -53,7 +53,7 @@ impl OutboxWriteContent {
                 _ => None,
             },
             RequestPayload::Mail(request) => match &request.operation {
-                CentralMailOperation::SendMessage { to, body } => Some(Self {
+                CentralMailOperation::SendMessage { to, body, .. } => Some(Self {
                     target: OutboxWriteTarget::Session { to: to.clone() },
                     body: body.clone(),
                 }),

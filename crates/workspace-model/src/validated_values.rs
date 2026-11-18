@@ -58,11 +58,12 @@ bounded_text!(SearchQuery, 1, 256, true, false);
 bounded_text!(IssueTitle, 1, 256, true, true);
 bounded_text!(Description, 0, 16 * 1024, false, false);
 
-/// A stored backlog item cannot deserialize without its required description.
+/// A description that must hold non-whitespace text: backlog items, areas and
+/// projects. Stored rows cannot deserialize without one.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct BacklogDescription(String);
-impl TryFrom<String> for BacklogDescription {
+pub struct RequiredDescription(String);
+impl TryFrom<String> for RequiredDescription {
     type Error = ValueValidationError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.trim().is_empty() || value.len() > 16 * 1024 {
@@ -74,12 +75,12 @@ impl TryFrom<String> for BacklogDescription {
         Ok(Self(value))
     }
 }
-impl From<BacklogDescription> for String {
-    fn from(value: BacklogDescription) -> Self {
+impl From<RequiredDescription> for String {
+    fn from(value: RequiredDescription) -> Self {
         value.0
     }
 }
-impl BacklogDescription {
+impl RequiredDescription {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0

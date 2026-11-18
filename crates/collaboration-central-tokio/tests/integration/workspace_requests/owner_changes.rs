@@ -124,7 +124,7 @@ async fn r21_close_persists_note_reference_and_change_and_refuses_closed_edits()
             0,
             m::WorkspaceOperation::List {
                 query: m::ListQuery::Backlog { area_id: area },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 100.try_into().unwrap(),
             },
         )
@@ -142,7 +142,7 @@ async fn r21_close_persists_note_reference_and_change_and_refuses_closed_edits()
                 query: m::ListQuery::ReferencesFrom {
                     item: m::ItemRef::BacklogItem(first.clone()),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 100.try_into().unwrap(),
             },
         )

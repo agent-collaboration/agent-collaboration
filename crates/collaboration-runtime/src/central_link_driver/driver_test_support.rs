@@ -49,7 +49,7 @@ pub(crate) fn thread_post(request: &str) -> RequestPayload {
 pub(crate) fn list_areas() -> RequestPayload {
     serde_json::from_value(json!({"kind": "workspace", "request": {
         "requestId": null, "workspaceId": uuid_v7(9000),
-        "operation": {"kind": "list", "query": {"kind": "areas"}, "after": 0, "limit": 5}}}))
+        "operation": {"kind": "list", "query": {"kind": "areas", "includeArchived": false}, "cursor": {"order": "oldestFirst", "position": null}, "limit": 5}}}))
     .unwrap()
 }
 

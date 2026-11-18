@@ -177,6 +177,7 @@ fn area(request_id: &str, name: &str, workspace: &WorkspaceId) -> Result<Workspa
         workspace_id: Some(workspace.clone()),
         operation: WorkspaceOperation::CreateArea {
             name: name.to_owned().try_into()?,
+            description: "Test description".to_owned().try_into().unwrap(),
         },
     })
 }

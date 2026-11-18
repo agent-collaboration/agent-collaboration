@@ -56,6 +56,8 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 operation: CentralMailOperation::SendMessage {
                     to: support::session(&fixture.caller),
                     body: "clock dispatch".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
                 },
             },
         )
@@ -96,6 +98,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 workspace_id: Some(fixture.workspace.clone()),
                 operation: m::WorkspaceOperation::CreateArea {
                     name: support::name("Direct clock"),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             },
         )
@@ -175,6 +178,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 workspace_id: Some(fixture.workspace.clone()),
                 operation: m::WorkspaceOperation::CreateArea {
                     name: support::name("Reopened clock"),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             },
         )

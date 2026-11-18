@@ -134,7 +134,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
     let write_id = "019f0000-0000-7000-8000-00000000d302";
     let payload = RequestPayload::Workspace(serde_json::from_value(json!({
         "requestId":write_id,"workspaceId":workspace.workspace_id,
-        "operation":{"kind":"createArea","name":"Exactly one area"}
+        "operation":{"kind":"createArea","name":"Exactly one area","description":"Test description"}
     }))?);
     runtime.lose_reply_after_apply(write_id.parse()?);
 

@@ -14,8 +14,8 @@ fn text_validation_ports_utf8_and_layout_policy() {
     }
     assert!(PostText::try_from("before\u{007f}after".to_owned()).is_ok());
     assert!(ChangePosition::try_from(9_007_199_254_740_992).is_err());
-    assert!(serde_json::from_str::<crate::BacklogDescription>("\"\"").is_err());
-    assert!(serde_json::from_str::<crate::BacklogDescription>("\"   \"").is_err());
+    assert!(serde_json::from_str::<crate::RequiredDescription>("\"\"").is_err());
+    assert!(serde_json::from_str::<crate::RequiredDescription>("\"   \"").is_err());
 }
 
 #[test]

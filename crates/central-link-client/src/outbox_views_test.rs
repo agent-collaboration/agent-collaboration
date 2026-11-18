@@ -22,7 +22,7 @@ fn a_thread_post_and_a_direct_message_are_outbox_writes_and_commands_are_not() {
     );
     let create_thread = payload(json!({"kind": "workspace", "request": {
         "requestId": ID, "workspaceId": WORKSPACE,
-        "operation": {"kind": "createThread", "areaId": THREAD, "title": "t"}}}));
+        "operation": {"kind": "createThread", "areaId": THREAD, "title": "t", "body": "opening", "addressees": []}}}));
 
     let post = OutboxWriteContent::of(&post).unwrap();
     let message = OutboxWriteContent::of(&message).unwrap();

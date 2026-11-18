@@ -91,6 +91,7 @@ mod workspace_actor_identity;
 mod workspace_admission;
 mod workspace_change_records;
 mod workspace_decode_error;
+mod workspace_directory_requests;
 mod workspace_directory_rows;
 mod workspace_item_reads;
 mod workspace_json_records;

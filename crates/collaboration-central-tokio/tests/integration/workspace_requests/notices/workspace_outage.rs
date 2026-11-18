@@ -64,6 +64,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
                 base,
                 m::WorkspaceOperation::CreateArea {
                     name: name(&format!("Area {suffix}")),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             )
             .await,
@@ -80,6 +81,8 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
                 m::WorkspaceOperation::CreateThread {
                     area_id: area,
                     title: name(&format!("Thread {suffix}")),
+                    body: "First post".to_owned().try_into().unwrap(),
+                    addressees: vec![],
                 },
             )
             .await,

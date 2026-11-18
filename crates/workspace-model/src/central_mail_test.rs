@@ -1,6 +1,6 @@
 use super::{
-    CentralMailOperation, CentralMailRequest, CentralMailResult, MessageBody, MessageSender,
-    MessageState,
+    CentralMailOperation, CentralMailRequest, CentralMailResult, MessageBody, MessageDelivery,
+    MessageSender, MessageState,
 };
 use serde_json::json;
 
@@ -99,4 +99,47 @@ fn notice_cadence_request_is_closed_and_round_trips_each_allowed_value() {
         let wire = json!({"requestId":"01890f3e-7b8c-7cc0-8000-000000000001","operation":{"kind":"setNoticeCadence","cadence":cadence}});
         assert!(serde_json::from_value::<CentralMailRequest>(wire).is_err());
     }
+}
+
+#[test]
+fn a_direct_body_stored_before_delivery_existed_decodes_as_auto() {
+    let stored = json!({ "kind": "direct", "body": "hello" });
+    let body: MessageBody = serde_json::from_value(stored).unwrap();
+    assert_eq!(
+        body,
+        MessageBody::Direct {
+            body: "hello".to_owned().try_into().unwrap(),
+            delivery: MessageDelivery::Auto,
+            reply_to: None,
+        }
+    );
+}
+
+#[test]
+fn a_direct_body_keeps_its_chosen_delivery() {
+    let stored = json!({ "kind": "direct", "body": "hello", "delivery": "steer", "replyTo": null });
+    let body: MessageBody = serde_json::from_value(stored.clone()).unwrap();
+    assert!(matches!(
+        body,
+        MessageBody::Direct {
+            delivery: MessageDelivery::Steer,
+            ..
+        }
+    ));
+    assert_eq!(serde_json::to_value(body).unwrap(), stored);
+}
+
+#[test]
+fn a_direct_body_keeps_the_message_it_answers() {
+    let stored = json!({
+        "kind": "direct",
+        "body": "answer",
+        "delivery": "auto",
+        "replyTo": "01890f3e-7b8c-7cc0-8000-000000000009"
+    });
+    let body: MessageBody = serde_json::from_value(stored.clone()).unwrap();
+    assert!(
+        matches!(&body, MessageBody::Direct { reply_to: Some(id), .. } if id.as_str() == "01890f3e-7b8c-7cc0-8000-000000000009")
+    );
+    assert_eq!(serde_json::to_value(body).unwrap(), stored);
 }

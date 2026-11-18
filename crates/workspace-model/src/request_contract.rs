@@ -81,16 +81,39 @@ pub enum WorkspaceOperation {
     CreateWorkspace {
         name: ResourceName,
     },
+    /// Targets the request's workspace. The canonical name stays unique per organization.
+    UpdateWorkspace {
+        name: ResourceName,
+        description: Description,
+    },
+    /// Targets the request's workspace.
+    ArchiveWorkspace,
+    /// The description is required and must not be blank.
     CreateArea {
         name: ResourceName,
+        description: Description,
     },
     ArchiveArea {
         area_id: AreaId,
     },
+    /// An omitted description stays as it is; a given one must not be blank.
+    UpdateArea {
+        area_id: AreaId,
+        name: ResourceName,
+        description: Option<Description>,
+    },
+    /// The description is required and must not be blank.
     CreateProject {
         area_id: AreaId,
         title: ResourceName,
+        description: Description,
         lead: Option<ActorRef>,
+    },
+    /// An omitted description stays as it is; a given one must not be blank.
+    UpdateProject {
+        project_id: ProjectId,
+        title: ResourceName,
+        description: Option<Description>,
     },
     CreateInitiative {
         name: ResourceName,
@@ -107,6 +130,10 @@ pub enum WorkspaceOperation {
     },
     CreateIssue {
         deliverable_id: DeliverableId,
+        title: IssueTitle,
+    },
+    UpdateIssue {
+        issue_id: IssueId,
         title: IssueTitle,
     },
     GrantProjectRole {
@@ -127,9 +154,12 @@ pub enum WorkspaceOperation {
         deliverable_id: DeliverableId,
         role: DeliverableRole,
     },
+    /// The thread, its creator's membership and its first post are one change set.
     CreateThread {
         area_id: AreaId,
         title: ResourceName,
+        body: PostText,
+        addressees: Vec<Addressee>,
     },
     JoinThread {
         thread_id: ThreadId,
@@ -152,8 +182,10 @@ pub enum WorkspaceOperation {
         body: PostText,
         addressees: Vec<Addressee>,
     },
+    /// An optional closing post commits atomically with the resolution.
     ResolveThread {
         thread_id: ThreadId,
+        closing_post: Option<PostText>,
     },
     AddDependency {
         blocking: DeliverableId,
@@ -222,10 +254,12 @@ pub enum WorkspaceOperation {
     },
     List {
         query: ListQuery,
-        after: ChangePosition,
+        cursor: crate::ListCursor,
         limit: crate::PageLimit,
     },
     Inbox {
+        scope: crate::InboxScope,
+        read_mode: crate::InboxReadMode,
         after: Option<ChangePosition>,
         limit: crate::PageLimit,
     },
@@ -255,6 +289,10 @@ pub enum WorkspaceAnswer {
     WorkspaceCreated {
         workspace: Workspace,
     },
+    /// The workspace after an update or archive.
+    WorkspaceUpdated {
+        workspace: Workspace,
+    },
     Created {
         item: ItemRef,
         position: ChangePosition,
@@ -275,20 +313,26 @@ pub enum WorkspaceAnswer {
     },
     Page {
         items: Vec<ItemView>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     References {
         items: Vec<crate::Reference>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     Links {
         items: Vec<ExternalLink>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     Inbox {
-        entries: Vec<crate::InboxEntry>,
+        scope: crate::InboxScope,
+        read_mode: crate::InboxReadMode,
+        order: crate::ListOrder,
+        items: Vec<crate::InboxItem>,
+        /// The workspace's latest change position when the page was read.
+        high_water: ChangePosition,
+        /// Projects in scope whose items could not be read for this page.
+        unavailable_projects: Vec<ProjectId>,
         next_after_position: Option<ChangePosition>,
-        read_through: ChangePosition,
     },
     Marked {
         scope: ReadScope,

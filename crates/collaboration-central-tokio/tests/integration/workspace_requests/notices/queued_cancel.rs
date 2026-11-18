@@ -27,6 +27,8 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
                 operation: CentralMailOperation::SendMessage {
                     to: session(&observer),
                     body: "Direct stays queued".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
                 },
             },
         )

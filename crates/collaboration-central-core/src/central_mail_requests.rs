@@ -138,14 +138,24 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     mail::CentralMailAnswer::NoticeCadenceSet { cadence: *cadence },
                 ))
             }
-        } else if let mail::CentralMailOperation::SendMessage { to, body } = &request.operation {
+        } else if let mail::CentralMailOperation::SendMessage {
+            to,
+            body,
+            delivery,
+            reply_to,
+        } = &request.operation
+        {
             if !self.known_session(to).await? {
                 Err(Refusal::UnknownSession { target: to.clone() })
             } else {
                 let message = self.prepare_message_record(
                     mail::MessageSender::Actor(actor.clone()),
                     to.clone(),
-                    mail::MessageBody::Direct { body: body.clone() },
+                    mail::MessageBody::Direct {
+                        body: body.clone(),
+                        delivery: *delivery,
+                        reply_to: reply_to.clone(),
+                    },
                     None,
                     now,
                 )?;

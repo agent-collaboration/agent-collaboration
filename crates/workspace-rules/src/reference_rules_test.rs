@@ -1,6 +1,6 @@
 use super::{LocatedItem, ReferenceReads, change_reference};
 use crate::fixtures::{context, id};
-use crate::{PositionedItem, references_to};
+use crate::{ListReads, PositionedItem, list_answer};
 use central_storage::SqlValue;
 
 #[test]
@@ -88,18 +88,26 @@ fn r22_a_c_missing_foreign_and_complete_reverse_lookup() {
         .map(|(index, item)| PositionedItem {
             position: workspace_model::ChangePosition::try_from(u64::try_from(index).unwrap() + 1)
                 .unwrap(),
-            item,
+            item: workspace_model::ItemView::Reference(item),
         })
         .collect::<Vec<_>>();
-    assert_eq!(
-        references_to(
-            &ItemRef::Project(id(5)),
-            &rows,
-            workspace_model::ChangePosition::ZERO,
-            100
-        )
-        .len(),
-        2
+    let answer = list_answer(
+        &workspace_model::ListQuery::ReferencesTo {
+            item: ItemRef::Project(id(5)),
+        },
+        workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
+        workspace_model::PageLimit::try_from(100).unwrap(),
+        &ListReads {
+            reader: &id(2),
+            items: &rows,
+            threads: &[],
+            memberships: &[],
+            deliverables: &[],
+        },
+    )
+    .unwrap();
+    assert!(
+        matches!(answer, workspace_model::WorkspaceAnswer::Page { items, .. } if items.len() == 2)
     );
 }
 #[test]

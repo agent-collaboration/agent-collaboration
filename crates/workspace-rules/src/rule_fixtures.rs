@@ -32,6 +32,7 @@ pub fn area() -> Area {
         area_id: id(4),
         workspace_id: id(1),
         name: name("Area"),
+        description: "What the area holds".to_owned().try_into().unwrap(),
         state: AreaState::Open,
     }
 }
@@ -40,6 +41,7 @@ pub fn project() -> Project {
         project_id: id(5),
         area_id: id(4),
         title: name("Project X"),
+        description: "What the project delivers".to_owned().try_into().unwrap(),
         status: WorkStatus::Open,
         lead: id(2),
     }
@@ -76,5 +78,13 @@ pub fn member(actor: ActorIdentityId, role: MemberRole) -> ThreadMember {
         role,
         notifications: NotificationSetting::On,
         state: MembershipState::Joined,
+    }
+}
+pub fn first_post(post: u32, change: u32) -> workspace_model::ThreadPostDraft {
+    workspace_model::ThreadPostDraft {
+        post_id: id(post),
+        change_id: id(change),
+        body: workspace_model::PostText::try_from("First".to_owned()).unwrap(),
+        addressees: vec![],
     }
 }

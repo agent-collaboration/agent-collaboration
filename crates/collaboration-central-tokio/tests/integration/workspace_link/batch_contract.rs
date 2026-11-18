@@ -93,7 +93,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
         caller.clone(),
         RequestPayload::Workspace(serde_json::from_value(json!({
             "requestId":"019f0000-0000-7000-8000-00000000d402","workspaceId":workspace.workspace_id,
-            "operation":{"kind":"createArea","name":"Batch area A"}
+            "operation":{"kind":"createArea","name":"Batch area A","description":"Test description"}
         }))?),
     )?)?;
     // The timestamp is on the five-minute grid and is earlier than NOW_SECONDS.
@@ -106,7 +106,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
         caller,
         RequestPayload::Workspace(serde_json::from_value(json!({
             "requestId":"019f0000-0000-7000-8000-00000000d404","workspaceId":workspace.workspace_id,
-            "operation":{"kind":"createArea","name":"Batch area B"}
+            "operation":{"kind":"createArea","name":"Batch area B","description":"Test description"}
         }))?),
     )?)?;
     let requests = vec![first, middle, last];

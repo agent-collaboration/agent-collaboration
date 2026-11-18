@@ -154,6 +154,7 @@ impl EngineOrg {
         let m::ItemRef::Area(area_id) = self
             .write(m::WorkspaceOperation::CreateArea {
                 name: format!("Area {}", self.bump()).try_into().unwrap(),
+                description: "Test description".to_owned().try_into().unwrap(),
             })
             .await
         else {
@@ -163,6 +164,8 @@ impl EngineOrg {
             .write(m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: "Engine thread".to_owned().try_into().unwrap(),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             })
             .await
         else {

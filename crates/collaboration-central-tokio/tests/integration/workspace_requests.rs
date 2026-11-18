@@ -13,7 +13,10 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     let caller = f.caller.clone();
     let workspace = f.workspace.clone();
 
-    let operation = m::WorkspaceOperation::CreateArea { name: name("Area") };
+    let operation = m::WorkspaceOperation::CreateArea {
+        name: name("Area"),
+        description: "Test description".to_owned().try_into().unwrap(),
+    };
     let first = call(
         host,
         &caller,
@@ -39,6 +42,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
                 area_id: area_id.clone(),
                 title: name("Project"),
                 lead: None,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -54,6 +58,8 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
             m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: name("Thread"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
         )
         .await,
@@ -67,6 +73,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
         14,
         m::WorkspaceOperation::ResolveThread {
             thread_id: thread_id.clone(),
+            closing_post: None,
         },
     )
     .await;
@@ -81,7 +88,8 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
             Some(workspace.clone()),
             14,
             m::WorkspaceOperation::ResolveThread {
-                thread_id: thread_id.clone()
+                thread_id: thread_id.clone(),
+                closing_post: None,
             }
         )
         .await,
@@ -93,7 +101,10 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
             &caller,
             Some(workspace.clone()),
             15,
-            m::WorkspaceOperation::ResolveThread { thread_id }
+            m::WorkspaceOperation::ResolveThread {
+                thread_id,
+                closing_post: None,
+            }
         )
         .await
         .result,
@@ -184,7 +195,8 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
             Some(f.workspace.clone()),
             11,
             m::WorkspaceOperation::CreateArea {
-                name: name("Denied")
+                name: name("Denied"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -208,7 +220,10 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
             &caller,
             Some(workspace.clone()),
             20,
-            m::WorkspaceOperation::CreateArea { name: name("Area") },
+            m::WorkspaceOperation::CreateArea {
+                name: name("Area"),
+                description: "Test description".to_owned().try_into().unwrap(),
+            },
         )
         .await,
     ) else {
@@ -224,6 +239,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
                 area_id,
                 title: name("Project"),
                 lead: None,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -343,7 +359,10 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             &caller,
             Some(workspace.clone()),
             30,
-            m::WorkspaceOperation::CreateArea { name: name("Area") },
+            m::WorkspaceOperation::CreateArea {
+                name: name("Area"),
+                description: "Test description".to_owned().try_into().unwrap(),
+            },
         )
         .await,
     ) else {
@@ -358,6 +377,8 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: name("Thread"),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             },
         )
         .await,
@@ -368,6 +389,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     runtime.lose_reply_after_apply(id(32));
     let operation = m::WorkspaceOperation::ResolveThread {
         thread_id: thread_id.clone(),
+        closing_post: None,
     };
     assert_eq!(
         call(
@@ -410,7 +432,8 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             Some(workspace.clone()),
             32,
             m::WorkspaceOperation::CreateArea {
-                name: name("different")
+                name: name("different"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -442,7 +465,8 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             Some(workspace),
             32,
             m::WorkspaceOperation::CreateArea {
-                name: name("new after idle expiry")
+                name: name("new after idle expiry"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -464,6 +488,7 @@ mod roles_dependencies;
 mod turns_and_ledger;
 mod workspace_boundaries;
 
+mod contract_additions;
 mod relation_positions;
 
 mod admission_negatives;
@@ -471,6 +496,10 @@ mod admission_negatives;
 mod change_ownership;
 
 mod status_and_advisor;
+
+mod lead_taking;
+
+mod descriptions;
 
 mod review_read_boundaries;
 

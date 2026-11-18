@@ -91,6 +91,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
         workspace_id: Some(f.workspace.clone()),
         operation: m::WorkspaceOperation::ResolveThread {
             thread_id: thread.clone(),
+            closing_post: None,
         },
     };
     let first = tokio::spawn({
@@ -148,7 +149,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
 async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
     let f = Fixture::new().await;
     let area = f.area(340).await;
-    let thread = f.thread(341, area).await;
+    let thread = f.thread(341, area.clone()).await;
     let m::ItemRef::Link(link) = created(
         f.call(
             342,
@@ -206,21 +207,28 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
         .call(
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area {
+                    area_id: area.clone(),
+                },
+                read_mode: m::InboxReadMode::Unread,
                 after: None,
                 limit: 100.try_into().unwrap(),
             },
         )
         .await;
-    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { entries, .. }) = inbox.result else {
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items: entries, .. }) = inbox.result
+    else {
         panic!("inbox");
     };
-    let last = entries.last().unwrap().position;
+    let last = entries.last().unwrap().position();
     for (request, through) in [(344, last), (345, m::ChangePosition::ZERO)] {
         let mark = f
             .call(
                 request,
                 m::WorkspaceOperation::MarkRead {
-                    scope: m::ReadScope::Inbox,
+                    scope: m::ReadScope::InboxArea {
+                        area_id: area.clone(),
+                    },
                     through,
                 },
             )
@@ -228,7 +236,9 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
         assert_eq!(
             mark.result,
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Marked {
-                scope: m::ReadScope::Inbox,
+                scope: m::ReadScope::InboxArea {
+                    area_id: area.clone(),
+                },
                 through: last
             })
         );
@@ -237,13 +247,17 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
         .call(
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area {
+                    area_id: area.clone(),
+                },
+                read_mode: m::InboxReadMode::Unread,
                 after: None,
                 limit: 100.try_into().unwrap(),
             },
         )
         .await;
     assert!(
-        matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,read_through,..}) if entries.is_empty()&&read_through==last)
+        matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{items,..}) if items.is_empty())
     );
     f.host.close().await;
 }
@@ -253,6 +267,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     let mut f = Fixture::new().await;
     let area = m::WorkspaceOperation::CreateArea {
         name: name("Same content"),
+        description: "Test description".to_owned().try_into().unwrap(),
     };
     let original = f.call(360, area.clone()).await;
     let central = m::WorkspaceOperation::CreateWorkspace {

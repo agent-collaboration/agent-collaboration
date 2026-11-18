@@ -68,6 +68,7 @@ async fn lost_read_before_effect_is_unavailable_and_not_cached() {
     let _: bool = runtime.control("lose-read", &()).await.unwrap();
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("After read loss"),
+        description: "Test description".to_owned().try_into().unwrap(),
     };
     assert_eq!(
         f.call(891, operation.clone()).await.result,

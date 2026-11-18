@@ -40,6 +40,7 @@ fn payload() -> RequestPayload {
         workspace_id: Some("01890f2e-7b4c-7cc0-98c4-000000000003".parse().unwrap()),
         operation: WorkspaceOperation::CreateArea {
             name: "Work".to_owned().try_into().unwrap(),
+            description: "Where the work happens".to_owned().try_into().unwrap(),
         },
     })
 }
@@ -256,8 +257,10 @@ fn wrong_machine_welcome_is_refused_and_read_disconnect_has_no_durable_retry_id(
         request_id: None,
         workspace_id: Some("01890f2e-7b4c-7cc0-98c4-000000000003".parse().unwrap()),
         operation: WorkspaceOperation::List {
-            query: workspace_model::ListQuery::Areas,
-            after: 0_u64.try_into().unwrap(),
+            query: workspace_model::ListQuery::Areas {
+                include_archived: false,
+            },
+            cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
             limit: 10_u16.try_into().unwrap(),
         },
     });
@@ -323,4 +326,24 @@ fn transport_failure_receipts_distinguish_unsent_from_ambiguous_write() {
         CallFailure::OutcomeUnknown { .. }
     ));
     assert!(client.closed(&attempt).unwrap().is_empty());
+}
+
+#[test]
+fn a_reconnect_whose_welcome_names_another_installation_is_invalid() {
+    let (mut client, clock) = fixture();
+    let attempt = connect(&mut client);
+    client.closed(&attempt).unwrap();
+    clock.advance(Duration::from_secs(600)).unwrap();
+    let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
+        panic!("reconnect action required")
+    };
+    let other = LinkFrame::Data(DataFrame::Welcome {
+        machine_id: "01890f2e-7b4c-7cc0-98c4-0000000000bb".parse().unwrap(),
+        central_time: clock.utc_now(),
+    });
+
+    let refused = client.receive(&attempt, other);
+
+    assert_eq!(refused, Err(ClientError::InvalidWelcome));
+    assert_eq!(client.status(), LinkStatus::Connecting);
 }

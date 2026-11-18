@@ -99,7 +99,11 @@ function assertBatchFrames(receipt: C2BatchReceipt): void {
     const member = workspaceMember.parse(receipt.batchRequest.requests[memberIndex]);
     const reply = single.decidingReply.parse(receipt.batchReplies[memberIndex]);
     const operation = z
-      .object({ kind: z.literal("createArea"), name: z.string().min(1) })
+      .object({
+        kind: z.literal("createArea"),
+        name: z.string().min(1),
+        description: z.string().trim().min(1),
+      })
       .strict()
       .parse(member.payload.request.operation);
     assert.equal(

@@ -218,7 +218,8 @@ async fn public_route_requires_upgrade_and_header_token_and_matching_organizatio
             .bearer_auth("bad-token"),
         client
             .get(fixture.url(signed::ORGANIZATION))
-            .bearer_auth(fixture.token_for_installation("019f0000-0000-4000-8000-00000000ce01")?),
+            // A well-formed installation with no machine row is refused.
+            .bearer_auth(fixture.token_for_installation("019f0000-0000-7000-8000-00000000ce0f")?),
         client
             .get(fixture.url(OTHER_ORG))
             .bearer_auth(&fixture.token),

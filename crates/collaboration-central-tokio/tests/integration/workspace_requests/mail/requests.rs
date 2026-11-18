@@ -29,6 +29,8 @@ fn send(to: m::SessionAddress, body: &str) -> Operation {
     Operation::SendMessage {
         to,
         body: body.to_owned().try_into().unwrap(),
+        delivery: workspace_model::central_mail::MessageDelivery::Auto,
+        reply_to: None,
     }
 }
 
@@ -99,7 +101,9 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
     assert_eq!(
         serde_json::from_str::<workspace_model::central_mail::MessageBody>(body).unwrap(),
         workspace_model::central_mail::MessageBody::Direct {
-            body: "one".to_owned().try_into().unwrap()
+            body: "one".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         }
     );
 
@@ -230,6 +234,48 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
 }
 
 #[tokio::test]
+async fn a_chosen_delivery_and_reply_to_are_stored_in_the_message_body_for_the_recipient_router() {
+    let fixture = Fixture::new().await;
+    let target = session(&fixture.caller);
+    let answer = request(
+        &fixture,
+        &fixture.caller,
+        1050,
+        Operation::SendMessage {
+            to: target,
+            body: "steer this".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Steer,
+            reply_to: Some(id(1049)),
+        },
+    )
+    .await;
+    let Result::Done(Answer::Queued { message_id }) = &answer else {
+        panic!("message not queued: {answer:?}")
+    };
+    let runtime = fixture
+        .host
+        .central(fixture.caller.organization_id())
+        .await
+        .unwrap();
+    let rows = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT json_extract(body,'$.delivery'),json_extract(body,'$.replyTo') FROM messages WHERE message_id=?",
+            args: vec![text(message_id)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            text("steer"),
+            text(id::<workspace_model::MessageId>(1049))
+        ]]
+    );
+    fixture.host.close().await;
+}
+
+#[tokio::test]
 async fn unknown_installation_fails_the_real_message_foreign_key_without_a_row() {
     use central_storage::{
         AlarmUpdate, BatchOutcome, ConstraintKind, GuardedStatement, RowExpectation, StatementBatch,
@@ -252,7 +298,7 @@ async fn unknown_installation_fails_the_real_message_foreign_key_without_a_row()
         statements: vec![GuardedStatement {
             statement: Statement {
                 sql: "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,created_at,updated_at) VALUES (?,?,?,?,'direct',?,'queued',?,?)",
-                args: vec![text(id::<workspace_ids::MessageId>(1021)),text(serde_json::to_string(&workspace_model::central_mail::MessageSender::Central).unwrap()),text(&target.machine_id),text(serde_json::to_string(&target).unwrap()),text(serde_json::to_string(&workspace_model::central_mail::MessageBody::Direct { body:"unknown installation".to_owned().try_into().unwrap() }).unwrap()),text(&at),text(&at)],
+                args: vec![text(id::<workspace_ids::MessageId>(1021)),text(serde_json::to_string(&workspace_model::central_mail::MessageSender::Central).unwrap()),text(&target.machine_id),text(serde_json::to_string(&target).unwrap()),text(serde_json::to_string(&workspace_model::central_mail::MessageBody::Direct { body:"unknown installation".to_owned().try_into().unwrap(), delivery: workspace_model::central_mail::MessageDelivery::Auto, reply_to: None }).unwrap()),text(&at),text(&at)],
             }, expect: RowExpectation::Exactly(1),
         }], alarm: AlarmUpdate::Unchanged,
     }).await.unwrap();

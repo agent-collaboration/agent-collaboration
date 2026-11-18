@@ -353,7 +353,8 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
     assert_eq!(
         applied.rows,
         vec![vec![
-            SqlValue::Integer(1.try_into().unwrap()),
+            // The thread's first post and this one.
+            SqlValue::Integer(2.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap())
         ]]
     );

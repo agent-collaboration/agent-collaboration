@@ -290,6 +290,8 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
             Op::SendMessage {
                 to: target.clone(),
                 body: format!("direct {index}").try_into().unwrap(),
+                delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                reply_to: None,
             },
         )
         .await;
@@ -305,6 +307,8 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         Op::SendMessage {
             to: second_target.clone(),
             body: "second recipient".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         },
     )
     .await;
@@ -349,7 +353,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     assert_eq!(
         second_queue.messages[0].body,
         MessageBody::Direct {
-            body: "second recipient".to_owned().try_into().unwrap()
+            body: "second recipient".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         }
     );
     let direct: Vec<_> = queue
@@ -373,7 +379,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         assert_eq!(
             message.body,
             MessageBody::Direct {
-                body: format!("direct {index}").try_into().unwrap()
+                body: format!("direct {index}").try_into().unwrap(),
+                delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                reply_to: None,
             }
         );
     }

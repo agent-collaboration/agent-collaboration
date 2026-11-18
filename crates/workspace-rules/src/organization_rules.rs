@@ -2,7 +2,8 @@ use crate::statement_plans::{
     RulePlan, WriteContext, change_metadata, exact, not_found, plan, text,
 };
 use workspace_model::{
-    Area, Deliverable, Initiative, ItemRef, OrganizationCommand, Project, RefusalReason, RuleAnswer,
+    Area, Deliverable, Initiative, Issue, ItemRef, OrganizationCommand, Project, RefusalReason,
+    RuleAnswer,
 };
 
 /// Each variant needs only its named parent/current row; central scopes it first.
@@ -12,6 +13,7 @@ pub struct OrganizationReads<'a> {
     pub project: Option<&'a Project>,
     pub deliverable: Option<&'a Deliverable>,
     pub initiative: Option<&'a Initiative>,
+    pub issue: Option<&'a Issue>,
 }
 pub fn organize_work(
     context: &WriteContext,
@@ -20,11 +22,21 @@ pub fn organize_work(
 ) -> Result<RulePlan, RefusalReason> {
     let now = || text(context.now.to_rfc3339());
     let (item, statements, created) = match command {
-        OrganizationCommand::CreateArea { area_id, name } => (
+        OrganizationCommand::CreateArea {
+            area_id,
+            name,
+            description,
+        } => (
             ItemRef::Area(area_id.clone()),
             vec![exact(
-                "INSERT INTO areas (area_id,name,state,created_at,updated_at) VALUES (?,?,'open',?,?)",
-                vec![text(area_id), text(name.as_str()), now(), now()],
+                "INSERT INTO areas (area_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'open',?,?)",
+                vec![
+                    text(area_id),
+                    text(name.as_str()),
+                    text(description.as_str()),
+                    now(),
+                    now(),
+                ],
             )],
             true,
         ),
@@ -39,10 +51,74 @@ pub fn organize_work(
                 false,
             )
         }
+        OrganizationCommand::UpdateArea {
+            area_id,
+            name,
+            description,
+        } => {
+            require_area(context, area_id, reads.area)?;
+            let statement = match description {
+                Some(description) => exact(
+                    "UPDATE areas SET name=?,description=?,updated_at=? WHERE area_id=?",
+                    vec![
+                        text(name.as_str()),
+                        text(description.as_str()),
+                        now(),
+                        text(area_id),
+                    ],
+                ),
+                None => exact(
+                    "UPDATE areas SET name=?,updated_at=? WHERE area_id=?",
+                    vec![text(name.as_str()), now(), text(area_id)],
+                ),
+            };
+            (ItemRef::Area(area_id.clone()), vec![statement], false)
+        }
+        OrganizationCommand::UpdateProject {
+            project_id,
+            title,
+            description,
+        } => {
+            reads
+                .project
+                .filter(|row| row.project_id == *project_id)
+                .ok_or_else(|| not_found(ItemRef::Project(project_id.clone())))?;
+            let statement = match description {
+                Some(description) => exact(
+                    "UPDATE projects SET title=?,description=?,updated_at=? WHERE project_id=?",
+                    vec![
+                        text(title.as_str()),
+                        text(description.as_str()),
+                        now(),
+                        text(project_id),
+                    ],
+                ),
+                None => exact(
+                    "UPDATE projects SET title=?,updated_at=? WHERE project_id=?",
+                    vec![text(title.as_str()), now(), text(project_id)],
+                ),
+            };
+            (ItemRef::Project(project_id.clone()), vec![statement], false)
+        }
+        OrganizationCommand::UpdateIssue { issue_id, title } => {
+            reads
+                .issue
+                .filter(|row| row.issue_id == *issue_id)
+                .ok_or_else(|| not_found(ItemRef::Issue(issue_id.clone())))?;
+            (
+                ItemRef::Issue(issue_id.clone()),
+                vec![exact(
+                    "UPDATE issues SET title=?,updated_at=? WHERE issue_id=?",
+                    vec![text(title.as_str()), now(), text(issue_id)],
+                )],
+                false,
+            )
+        }
         OrganizationCommand::CreateProject {
             project_id,
             area_id,
             title,
+            description,
             lead,
             role_id,
         } => {
@@ -51,11 +127,12 @@ pub fn organize_work(
                 ItemRef::Project(project_id.clone()),
                 vec![
                     exact(
-                        "INSERT INTO projects (project_id,area_id,title,status,created_at,updated_at) VALUES (?,?,?,'backlog',?,?)",
+                        "INSERT INTO projects (project_id,area_id,title,description,status,created_at,updated_at) VALUES (?,?,?,?,'backlog',?,?)",
                         vec![
                             text(project_id),
                             text(area_id),
                             text(title.as_str()),
+                            text(description.as_str()),
                             now(),
                             now(),
                         ],
@@ -179,8 +256,15 @@ pub fn organize_work(
     let project = match command {
         OrganizationCommand::CreateProject { project_id, .. }
         | OrganizationCommand::CreateDeliverable { project_id, .. } => Some(project_id),
-        OrganizationCommand::CreateIssue { .. } => reads.deliverable.map(|row| &row.project_id),
-        _ => None,
+        OrganizationCommand::UpdateProject { project_id, .. } => Some(project_id),
+        OrganizationCommand::CreateIssue { .. } | OrganizationCommand::UpdateIssue { .. } => {
+            reads.deliverable.map(|row| &row.project_id)
+        }
+        OrganizationCommand::CreateArea { .. }
+        | OrganizationCommand::ArchiveArea { .. }
+        | OrganizationCommand::UpdateArea { .. }
+        | OrganizationCommand::CreateInitiative { .. }
+        | OrganizationCommand::UpdateInitiative { .. } => None,
     };
     Ok(change_metadata(
         plan(
