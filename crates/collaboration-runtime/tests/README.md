@@ -19,6 +19,7 @@ cargo nextest run --profile ci -p collaboration-runtime
 
 - `turmoil_link`: the production central link driver (RouterLinkCalls, the
   Mac outbox store and the minute flush) over a Turmoil-simulated network and
-  clock, against a central stub that keeps a request log. Proves every write
+  clock from `collaboration-link-test-support`, against a central stub that
+  keeps a request log. Proves every write
   the Router accepted reaches central exactly once through partitions, lost
   answers and a Router restart.

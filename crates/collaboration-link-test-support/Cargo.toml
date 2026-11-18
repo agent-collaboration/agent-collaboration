@@ -1,0 +1,27 @@
+[package]
+autotests = false
+name = "collaboration-link-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+central-link-client = { path = "../central-link-client" }
+central-link-protocol.workspace = true
+chrono.workspace = true
+collaboration-central-tokio = { path = "../collaboration-central-tokio" }
+collaboration-runtime = { path = "../collaboration-runtime", features = ["test-support"] }
+futures-util.workspace = true
+hyper.workspace = true
+hyper-util = { workspace = true, features = ["service"] }
+router-clock.workspace = true
+runtime-primitives.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tokio-util.workspace = true
+turmoil.workspace = true
+workspace-model.workspace = true

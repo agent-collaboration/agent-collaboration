@@ -21,28 +21,28 @@ use workspace_model::{
 
 use super::simulated_clock::SimulatedClock;
 
-pub(super) const CENTRAL_HOST: &str = "central";
-pub(super) const LINK_PORT: u16 = 7400;
+pub const CENTRAL_HOST: &str = "central";
+pub const LINK_PORT: u16 = 7400;
 
 /// What central applied: each request id's created post and how many times
 /// the write itself was applied (a replay does not apply it again).
 #[derive(Default)]
-pub(super) struct CentralLog {
-    pub(super) applied: BTreeMap<String, AppliedWrite>,
-    pub(super) replays: usize,
+pub struct CentralLog {
+    pub applied: BTreeMap<String, AppliedWrite>,
+    pub replays: usize,
     /// Each batch central received: when (simulated) and which writes.
-    pub(super) timeline: Vec<(std::time::Duration, Vec<String>)>,
+    pub timeline: Vec<(std::time::Duration, Vec<String>)>,
 }
 
-pub(super) struct AppliedWrite {
-    pub(super) post: String,
-    pub(super) times_applied: usize,
+pub struct AppliedWrite {
+    pub post: String,
+    pub times_applied: usize,
 }
 
-pub(super) type SharedCentralLog = Rc<RefCell<CentralLog>>;
+pub type SharedCentralLog = Rc<RefCell<CentralLog>>;
 
 /// Host software for "central".
-pub(super) async fn serve_central(machine: MachineId, log: SharedCentralLog) -> turmoil::Result {
+pub async fn serve_central(machine: MachineId, log: SharedCentralLog) -> turmoil::Result {
     let listener = TcpListener::bind((IpAddr::from(Ipv4Addr::UNSPECIFIED), LINK_PORT)).await?;
     let mut links = JoinSet::new();
     loop {

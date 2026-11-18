@@ -19,24 +19,24 @@ use tokio::sync::Mutex;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use workspace_model::{Caller, MachineId, SessionAddress, WorkspaceOperation, WorkspaceRequest};
 
-pub(super) const ROUTER_HOST: &str = "router";
-pub(super) const INSTALLATION: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
+pub const ROUTER_HOST: &str = "router";
+pub const INSTALLATION: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
 
 /// When the router posts, restarts, and how long it waits for the answers.
 #[derive(Clone, Debug)]
-pub(super) struct RouterPlan {
-    pub(super) posts_at: Vec<Duration>,
-    pub(super) restart_at: Option<Duration>,
-    pub(super) answers_by: Duration,
+pub struct RouterPlan {
+    pub posts_at: Vec<Duration>,
+    pub restart_at: Option<Duration>,
+    pub answers_by: Duration,
 }
 
 /// Each posted request id and the last status the router read for it.
 #[derive(Default)]
-pub(super) struct RouterReport {
-    pub(super) statuses: BTreeMap<String, RequestStatus>,
+pub struct RouterReport {
+    pub statuses: BTreeMap<String, RequestStatus>,
 }
 
-pub(super) type SharedRouterReport = Rc<RefCell<RouterReport>>;
+pub type SharedRouterReport = Rc<RefCell<RouterReport>>;
 
 struct ReadyToken;
 impl MachineTokenSource for ReadyToken {
@@ -68,7 +68,7 @@ fn installation() -> MachineId {
     INSTALLATION.parse().unwrap()
 }
 
-pub(super) fn caller() -> Caller {
+pub fn caller() -> Caller {
     #[expect(clippy::unwrap_used, reason = "fixed valid session fields")]
     Caller::Session(SessionAddress {
         machine_id: installation(),
@@ -78,7 +78,7 @@ pub(super) fn caller() -> Caller {
 }
 
 /// The `index`th post's request id, a UUIDv7.
-pub(super) fn post_id(index: usize) -> String {
+pub fn post_id(index: usize) -> String {
     format!("01890f2e-7b4c-7cc0-98c5-{index:012x}")
 }
 
@@ -109,10 +109,7 @@ fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<dyn OutboxStorage>>
             installation: installation(),
             clock,
             store,
-            transport: Arc::new(TurmoilLinkTransport {
-                central: CENTRAL_HOST,
-                port: LINK_PORT,
-            }),
+            transport: Arc::new(TurmoilLinkTransport::new(CENTRAL_HOST, LINK_PORT, "/link")),
             tokens: Arc::new(ReadyToken),
             jitter: Arc::new(OnTheMark),
             outcomes: Arc::new(IgnoredOutcomes),
@@ -132,7 +129,7 @@ impl RunningLink {
 }
 
 /// Host software for "router".
-pub(super) async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil::Result {
+pub async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil::Result {
     let clock: Arc<dyn RuntimeClock> = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
     // In memory, so a store call never leaves the simulated host (Lead A's
     // call): sqlx-sqlite's worker thread turned real I/O latency into

@@ -139,6 +139,34 @@ fn frames_before_welcome_are_protocol_errors() {
 }
 
 #[test]
+fn ack_is_a_connected_id_keyed_frame_without_a_pending_call() {
+    use workspace_model::central_mail::{DeliveryAnswer, MessageRefusal};
+
+    let (mut client, _) = fixture();
+    let message_id: workspace_model::MessageId =
+        "01890f2e-7b4c-7cc0-98c4-000000000009".parse().unwrap();
+    let answer = DeliveryAnswer::Refused {
+        reason: MessageRefusal::RecipientRefused,
+    };
+    assert_eq!(
+        client.acknowledge_delivery(message_id.clone(), answer),
+        Err(ClientError::CentralUnavailable)
+    );
+    let attempt = connect(&mut client);
+    let deadline = client.next_deadline();
+    let frame = client
+        .acknowledge_delivery(message_id.clone(), answer)
+        .unwrap();
+    let text = encode_text(&frame, FrameDirection::ToCentral).unwrap();
+    assert_eq!(
+        decode_text(&text, FrameDirection::ToCentral).unwrap(),
+        LinkFrame::Data(DataFrame::Ack { message_id, answer })
+    );
+    assert_eq!(client.next_deadline(), deadline);
+    assert!(client.closed(&attempt).unwrap().is_empty());
+}
+
+#[test]
 fn close_then_refuse_keeps_the_most_recent_attempt_refused() {
     let (mut client, clock) = fixture();
     let attempt = connect(&mut client);

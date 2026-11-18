@@ -9,7 +9,10 @@ use central_link_protocol::{
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
-use workspace_model::{Caller, MachineId, central_mail::MessageRecord};
+use workspace_model::{
+    Caller, MachineId, MessageId,
+    central_mail::{DeliveryAnswer, MessageRecord},
+};
 
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 const CALL_DEADLINE: Duration = Duration::from_secs(30);
@@ -203,6 +206,18 @@ impl LinkClient {
         Ok(LinkFrame::Data(DataFrame::Request {
             request: Box::new(request),
         }))
+    }
+
+    /// A delivery Ack carries no correlation id and expects no reply.
+    pub fn acknowledge_delivery(
+        &self,
+        message_id: MessageId,
+        answer: DeliveryAnswer,
+    ) -> Result<LinkFrame, ClientError> {
+        if !matches!(self.state, ConnectionState::Connected { .. }) {
+            return Err(ClientError::CentralUnavailable);
+        }
+        Ok(LinkFrame::Data(DataFrame::Ack { message_id, answer }))
     }
 
     /// Only DefinitelyNotSent guarantees no request bytes were sent.
