@@ -407,12 +407,15 @@ impl ExternalProviderRuntime {
             .client
             .load_session_with_setup(provider_session_id.clone(), cwd, setup)
             .await?;
-        self.session_setup
-            .record_restored_mode(&provider_session_id, &restored.permission_mode);
         #[cfg(test)]
         self.pause_before_activation().await;
         self.publish_active_session(&provider_session_id, Some(restored.generation))
-            .await
+            .await?;
+        // Kept only once the run's activation was accepted: a run closed
+        // meanwhile never overwrites what show reports (review F3).
+        self.session_setup
+            .record_restored_mode(&provider_session_id, &restored.permission_mode);
+        Ok(())
     }
 
     pub async fn resume_session(
@@ -440,8 +443,6 @@ impl ExternalProviderRuntime {
             .client
             .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
             .await?;
-        self.session_setup
-            .record_restored_mode(&provider_session_id, &restored.permission_mode);
         let generation = restored.generation;
         #[cfg(test)]
         self.pause_before_activation().await;
@@ -455,7 +456,11 @@ impl ExternalProviderRuntime {
             }
         }
         self.publish_active_session(&provider_session_id, Some(generation))
-            .await
+            .await?;
+        // Kept only once the run's activation was accepted (review F3).
+        self.session_setup
+            .record_restored_mode(&provider_session_id, &restored.permission_mode);
+        Ok(())
     }
 
     /// Publishes the session active in `generation`. A generation closed

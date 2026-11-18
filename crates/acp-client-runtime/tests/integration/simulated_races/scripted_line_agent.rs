@@ -4,7 +4,10 @@
 //! empty load, no replay), gives each session/new its own ID and an effort
 //! setting, answers each prompt at once with end_turn, can hold its answers
 //! to setting changes until the test releases them, and refuses anything
-//! else as method not found.
+//! else as method not found. A scenario can also hold its answers to
+//! session/load, have a load come back in a given mode (a select option
+//! "mode": default, plan, auto), read every mode change it was sent, and
+//! send its own session/request_permission for a session.
 
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -19,6 +22,12 @@ pub(super) struct ScriptedLineAgent {
     sessions: Arc<AtomicUsize>,
     hold_settings: Arc<AtomicBool>,
     settings_released: Arc<tokio::sync::Notify>,
+    hold_loads: Arc<AtomicBool>,
+    loads_released: Arc<tokio::sync::Notify>,
+    restored_mode: Arc<Mutex<Option<String>>>,
+    mode_sets: Arc<Mutex<Vec<String>>>,
+    writer: Arc<Mutex<Option<AgentWriter>>>,
+    responses: Arc<Mutex<Vec<Value>>>,
 }
 
 type AgentWriter = Arc<tokio::sync::Mutex<WriteHalf<tokio::io::DuplexStream>>>;
@@ -64,15 +73,87 @@ impl ScriptedLineAgent {
         self.settings_released.notify_waiters();
     }
 
+    /// Answers to session/load wait until `release_load_answers`.
+    pub(super) fn hold_load_answers(&self) {
+        self.hold_loads.store(true, Ordering::SeqCst);
+    }
+
+    /// Sends every held load answer, and answers later ones at once.
+    pub(super) fn release_load_answers(&self) {
+        self.hold_loads.store(false, Ordering::SeqCst);
+        self.loads_released.notify_waiters();
+    }
+
+    /// Every session/load comes back with the session in `mode`.
+    pub(super) fn restore_in_mode(&self, mode: &str) {
+        *self
+            .restored_mode
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(mode.to_owned());
+    }
+
+    /// Every mode value the agent was asked to switch to, in order.
+    pub(super) fn mode_sets(&self) -> Vec<String> {
+        self.mode_sets
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Sends session/request_permission for `session_id` and answers the
+    /// client's response: its result, or its error.
+    pub(super) async fn request_permission(&self, session_id: &str) -> Value {
+        let request_id = "agent-permission";
+        let request = json!({"jsonrpc": "2.0", "id": request_id, "method": "session/request_permission", "params": {
+            "sessionId": session_id,
+            "toolCall": {"toolCallId": "scripted-tool", "title": "Scripted action", "kind": "edit"},
+            "options": [
+                {"optionId": "allow", "name": "Allow", "kind": "allow_once"},
+                {"optionId": "reject", "name": "Reject", "kind": "reject_once"},
+            ],
+        }});
+        let writer = self
+            .writer
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .expect("the agent is serving");
+        assert!(
+            write_line(&writer, &request).await,
+            "the client end is open"
+        );
+        loop {
+            let changed = self.changed.notified();
+            if let Some(response) = self
+                .responses
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .find(|response| response.get("id") == Some(&json!(request_id)))
+                .cloned()
+            {
+                return response;
+            }
+            changed.await;
+        }
+    }
+
     async fn serve(&self, connection: tokio::io::DuplexStream) {
         let (reader, writer) = tokio::io::split(connection);
         let writer: AgentWriter = Arc::new(tokio::sync::Mutex::new(writer));
+        *self.writer.lock().unwrap_or_else(PoisonError::into_inner) = Some(Arc::clone(&writer));
         let mut lines = BufReader::new(reader).lines();
         while let Ok(Some(line)) = lines.next_line().await {
             let Ok(frame) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
             let Some(method) = frame.get("method").and_then(Value::as_str) else {
+                // A response to a request the agent sent.
+                self.responses
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(frame);
+                self.changed.notify_waiters();
                 continue;
             };
             self.methods
@@ -101,6 +182,23 @@ impl ScriptedLineAgent {
                         "configOptions": effort_options("medium"),
                     }})
                 }
+                "session/set_config_option"
+                    if frame.pointer("/params/configId").and_then(Value::as_str)
+                        == Some("mode") =>
+                {
+                    let value = frame
+                        .pointer("/params/value")
+                        .and_then(Value::as_str)
+                        .unwrap_or("default")
+                        .to_owned();
+                    self.mode_sets
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .push(value.clone());
+                    json!({"jsonrpc": "2.0", "id": id, "result": {
+                        "configOptions": mode_and_effort_options(&value),
+                    }})
+                }
                 "session/set_config_option" => {
                     let value = frame
                         .pointer("/params/value")
@@ -124,9 +222,30 @@ impl ScriptedLineAgent {
                 "session/prompt" => json!({"jsonrpc": "2.0", "id": id, "result": {
                     "stopReason": "end_turn",
                 }}),
-                "session/close" | "session/load" => {
-                    json!({"jsonrpc": "2.0", "id": id, "result": {}})
+                "session/load" => {
+                    let restored = self
+                        .restored_mode
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .clone();
+                    let reply = match restored {
+                        Some(mode) => json!({"jsonrpc": "2.0", "id": id, "result": {
+                            "configOptions": mode_and_effort_options(&mode),
+                        }}),
+                        None => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
+                    };
+                    if self.hold_loads.load(Ordering::SeqCst) {
+                        let held = self.clone();
+                        let writer = Arc::clone(&writer);
+                        tokio::spawn(async move {
+                            held.loads_released_now().await;
+                            let _sent = write_line(&writer, &reply).await;
+                        });
+                        continue;
+                    }
+                    reply
                 }
+                "session/close" => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
                 _ => json!({"jsonrpc": "2.0", "id": id, "error": {
                     "code": -32601, "message": "method not found",
                 }}),
@@ -134,6 +253,17 @@ impl ScriptedLineAgent {
             if !write_line(&writer, &reply).await {
                 return;
             }
+        }
+    }
+
+    /// Resolves once load answers are no longer held.
+    async fn loads_released_now(&self) {
+        loop {
+            let released = self.loads_released.notified();
+            if !self.hold_loads.load(Ordering::SeqCst) {
+                return;
+            }
+            released.await;
         }
     }
 
@@ -156,6 +286,23 @@ fn effort_options(value: &str) -> Value {
         "currentValue": value,
         "options": [{"value": "medium", "name": "Medium"}, {"value": "high", "name": "High"}],
     }])
+}
+
+/// A mode select option currently `mode`, and the effort setting.
+fn mode_and_effort_options(mode: &str) -> Value {
+    let mut options = effort_options("medium");
+    if let Some(options) = options.as_array_mut() {
+        options.push(json!({
+            "id": "mode", "name": "Mode", "category": "mode", "type": "select",
+            "currentValue": mode,
+            "options": [
+                {"value": "default", "name": "Default"},
+                {"value": "plan", "name": "Plan"},
+                {"value": "auto", "name": "Auto"},
+            ],
+        }));
+    }
+    options
 }
 
 /// Writes one JSON-RPC line; false once the client end has closed.

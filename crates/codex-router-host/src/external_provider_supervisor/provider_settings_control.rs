@@ -113,16 +113,53 @@ pub(super) async fn apply(
         ProviderSettingName::Effort => provider_session_machines::ProviderSettingKind::Effort,
         ProviderSettingName::Fast => provider_session_machines::ProviderSettingKind::Fast,
     };
-    // An explicit mode change holds its session's turn until its record is
-    // written, so the record ends at the last change the agent applied (V6b).
     let records_mode = kind == provider_session_machines::ProviderSettingKind::Mode
         && intent == session_event_model::SettingApplicationIntent::ExplicitChange;
+    let applying = apply_and_record(
+        supervisor.clone(),
+        runtime,
+        request.clone(),
+        kind,
+        intent,
+        expected_model,
+        records_mode,
+    );
+    let observed = if records_mode {
+        // An explicit mode change owns its turn, its apply and its record to
+        // the end, even when its caller stops waiting (review F3).
+        tokio::spawn(applying).await.map_err(|_| {
+            SettingControlFailure::Provider(Box::new(failure(
+                ProviderSettingsFailureKind::Unavailable,
+                &request.target,
+                "the mode change ended before it settled",
+            )))
+        })??
+    } else {
+        applying.await?
+    };
+    Ok(result(request.target, record, observed))
+}
+
+/// Applies the change and, for an explicit mode change, records it, all
+/// inside the session's mode turn: the turn is taken before the command
+/// reaches the actor and held until the record is written, so the record
+/// ends at the last change the agent applied (V6b).
+async fn apply_and_record(
+    supervisor: ExternalProviderSupervisor,
+    runtime: std::sync::Arc<crate::ExternalProviderRuntime>,
+    request: ProviderSettingsSetRequest,
+    kind: provider_session_machines::ProviderSettingKind,
+    intent: session_event_model::SettingApplicationIntent,
+    expected_model: Option<String>,
+    records_mode: bool,
+) -> Result<acp_client_runtime::EffectiveProviderSettings, SettingControlFailure> {
+    let session_id = String::from(request.target.session_id.clone());
     let _mode_turn = if records_mode {
         Some(
-            supervisor
-                .inner
-                .explicit_mode_order
-                .enter(&request.target)
+            runtime
+                .session_setup()
+                .mode_order()
+                .enter(&session_id)
                 .await,
         )
     } else {
@@ -130,7 +167,7 @@ pub(super) async fn apply(
     };
     let observed = runtime
         .set_setting(
-            String::from(request.target.session_id.clone()),
+            session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
                 kind,
                 value: request.value.clone(),
@@ -148,9 +185,7 @@ pub(super) async fn apply(
             }
             other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
         })?;
-    if let Some(catalog) =
-        runtime.settings_catalog(&String::from(request.target.session_id.clone()))
-    {
+    if let Some(catalog) = runtime.settings_catalog(&session_id) {
         supervisor
             .inner
             .record_settings_catalog(request.target.clone(), catalog)
@@ -158,10 +193,10 @@ pub(super) async fn apply(
     }
     if records_mode {
         #[cfg(any(test, feature = "test-support"))]
-        hold_before_mode_record(supervisor, &request.target, &request.value).await;
-        record_explicit_mode(supervisor, &runtime, &request.target, &request.value).await?;
+        hold_before_mode_record(&supervisor, &request.target, &request.value).await;
+        record_explicit_mode(&supervisor, &runtime, &request.target, &request.value).await?;
     }
-    Ok(result(request.target, record, observed))
+    Ok(observed)
 }
 
 /// A test holds this change here, applied and not yet recorded (V6b).

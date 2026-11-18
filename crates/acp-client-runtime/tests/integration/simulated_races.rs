@@ -11,6 +11,7 @@
 mod actor_exit_handoff;
 mod held_session_mailbox;
 mod scripted_line_agent;
+mod superseded_restore;
 
 use acp_client_runtime::sim_points::ClientSimPoint;
 use acp_client_runtime::{

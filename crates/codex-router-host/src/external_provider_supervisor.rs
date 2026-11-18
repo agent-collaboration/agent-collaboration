@@ -17,7 +17,6 @@ mod provider_operation_finish;
 mod provider_prompt_contents;
 pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
 pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
-mod explicit_mode_order;
 mod provider_conversation_backend;
 mod provider_full_access_guard;
 mod provider_session_inspection;
@@ -106,9 +105,6 @@ struct SupervisorInner {
     message_fifo: std::sync::OnceLock<
         std::sync::Weak<crate::provider_acp_message_fifo::ProviderAcpMessageFifo>,
     >,
-    /// One explicit mode change at a time per session, from before its command
-    /// reaches the actor until its record is written (Lead V6b).
-    explicit_mode_order: explicit_mode_order::SessionModeOrder,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Pauses the next queued API dispatch right after it claims its entry.
@@ -380,7 +376,6 @@ impl ExternalProviderSupervisor {
                 live_operations: StdMutex::new(LiveOperations::default()),
                 uncertainty: UncertaintyCells::default(),
                 message_fifo: std::sync::OnceLock::new(),
-                explicit_mode_order: explicit_mode_order::SessionModeOrder::default(),
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,

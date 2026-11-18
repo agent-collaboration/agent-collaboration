@@ -488,9 +488,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, in_folder, reply } => {
                                             // A close since this restore was admitted made its attempt
                                             // stale: the late completion registers nothing, and a fresh
-                                            // restore stays possible.
+                                            // restore stays possible. Request routing belongs to whatever
+                                            // displaced it (the close, or a newer load that tracked the
+                                            // ID), so the stale branch leaves it alone (review F2).
                                             if !crate::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
-                                                known_sessions.forget(&provider_session_id).await;
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
                                                 continue;
                                             }
@@ -691,6 +692,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 admission_tx: admission_tx.clone(),
                                                 generation,
                                                 attempt,
+                                                session_cells: Arc::clone(&session_cells),
                                                 reply,
                                             };
                                             admission_tasks.spawn(async move {

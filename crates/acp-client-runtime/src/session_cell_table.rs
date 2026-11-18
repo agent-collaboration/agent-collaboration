@@ -106,6 +106,26 @@ impl SessionCellTable {
         })
     }
 
+    /// Test support: applies `event` only if the session's cell isn't locked
+    /// right now, without waiting; None when it is (or the session is new).
+    #[cfg(test)]
+    pub(crate) fn try_transition_for_test(
+        &self,
+        session_id: &str,
+        event: SessionCellEvent,
+    ) -> Option<Result<Vec<SessionCellEffect>, TransitionError<SessionCellRefusal>>> {
+        let cell = lock(&self.cells).get(session_id).map(Arc::clone)?;
+        let Ok(mut cell) = cell.try_lock() else {
+            return None;
+        };
+        Some(
+            SessionCellMachine::transition(&cell, event).map(|(next, effects)| {
+                *cell = next;
+                effects
+            }),
+        )
+    }
+
     /// Reads the session's cell; a session this connection hasn't run reads
     /// as a fresh cell.
     pub(crate) fn read<R>(&self, session_id: &str, read: impl FnOnce(&SessionCell) -> R) -> R {

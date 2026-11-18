@@ -61,6 +61,14 @@ pub(super) fn resume(
                 let completion_inner = Arc::clone(&backend.inner);
                 backend.spawn_operation(operation_id.clone(), live, async move {
                     let cwd = PathBuf::from(String::from(working_directory.clone()));
+                    // One mode operation at a time per session: the record read and the mode
+                    // the restore puts back wait for any explicit change still recording,
+                    // and a change waits for the restore (review F3).
+                    let _mode_turn = runtime
+                        .session_setup()
+                        .mode_order()
+                        .enter(&provider_session_id)
+                        .await;
                     // The setup its create had, rebuilt from its record (D1 R18; Decision 3).
                     let setup = match crate::provider_session_setup::recorded_restore_setup(
                         &completion_inner.store,

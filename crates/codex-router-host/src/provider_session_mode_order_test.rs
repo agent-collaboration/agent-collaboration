@@ -1,11 +1,8 @@
 use super::*;
 use futures_util::FutureExt as _;
 
-fn session(id: &str) -> SessionRef {
-    SessionRef {
-        endpoint: crate::external_provider_supervisor::tests::requester().endpoint,
-        session_id: collaboration_protocol::SessionId::try_from(id.to_owned()).expect("session ID"),
-    }
+fn session(id: &str) -> String {
+    id.to_owned()
 }
 
 /// Oracle: Lead V6b, "a later change waits; another session's change never
@@ -15,7 +12,7 @@ fn session(id: &str) -> SessionRef {
 #[test]
 fn a_session_takes_one_explicit_mode_change_at_a_time() {
     // Arrange
-    let order = SessionModeOrder::default();
+    let order = Arc::new(SessionModeOrder::default());
     let first = order
         .enter(&session("one"))
         .now_or_never()
@@ -46,7 +43,7 @@ fn a_session_takes_one_explicit_mode_change_at_a_time() {
 #[test]
 fn a_session_keeps_no_turn_once_no_change_holds_or_waits_on_it() {
     // Arrange
-    let order = SessionModeOrder::default();
+    let order = Arc::new(SessionModeOrder::default());
     let first = order
         .enter(&session("one"))
         .now_or_never()
@@ -76,7 +73,7 @@ fn a_session_keeps_no_turn_once_no_change_holds_or_waits_on_it() {
 #[test]
 fn a_waiting_change_cancelled_after_the_holder_ends_leaves_no_turn() {
     // Arrange
-    let order = SessionModeOrder::default();
+    let order = Arc::new(SessionModeOrder::default());
     let one = session("one");
     let first = order
         .enter(&one)

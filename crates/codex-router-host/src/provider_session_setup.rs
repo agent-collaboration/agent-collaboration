@@ -9,7 +9,7 @@ use crate::provider_work_roots::{ProviderWorkRoots, WorkRootsHook};
 use collaboration_runtime::ProviderSessionResumeInputs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 /// A session's requested mode and why the agent's mode differs, for show.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -33,6 +33,9 @@ impl RequestedModeRecord {
 pub(crate) struct BindingSessionSetup {
     work_roots: Mutex<ProviderWorkRoots>,
     requested_modes: Mutex<HashMap<String, RequestedModeRecord>>,
+    /// One mode operation at a time per session: explicit changes and
+    /// restores (Lead V6b; review F3).
+    mode_order: Arc<crate::provider_session_mode_order::SessionModeOrder>,
 }
 
 impl BindingSessionSetup {
@@ -93,6 +96,11 @@ impl BindingSessionSetup {
         if report.requested.is_some() {
             self.record_created_mode(provider_session_id, report);
         }
+    }
+
+    /// The binding's per-session turn for mode operations.
+    pub(crate) fn mode_order(&self) -> &Arc<crate::provider_session_mode_order::SessionModeOrder> {
+        &self.mode_order
     }
 
     pub(crate) fn requested_mode(&self, provider_session_id: &str) -> RequestedModeRecord {

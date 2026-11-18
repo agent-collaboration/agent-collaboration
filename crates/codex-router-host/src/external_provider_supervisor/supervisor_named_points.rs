@@ -55,10 +55,15 @@ impl ExternalProviderSupervisor {
         (entered_receiver, release_sender)
     }
 
-    /// The next explicit mode change that has to wait for its session's turn
-    /// (another change holds it, Lead V6b) fires the returned receiver as it
-    /// starts waiting.
-    pub fn notice_next_explicit_mode_wait(&self) -> tokio::sync::oneshot::Receiver<()> {
-        self.inner.explicit_mode_order.notice_next_wait()
+    /// The next mode operation on `target`'s binding that has to wait for its
+    /// session's turn (another holds it; Lead V6b, review F3) fires the
+    /// returned receiver as it starts waiting. None when the binding is
+    /// unknown.
+    pub fn notice_next_explicit_mode_wait(
+        &self,
+        target: &collaboration_protocol::SessionRef,
+    ) -> Option<tokio::sync::oneshot::Receiver<()>> {
+        self.runtime_for(&target.endpoint)
+            .map(|runtime| runtime.session_setup().mode_order().notice_next_wait())
     }
 }

@@ -317,6 +317,15 @@ impl ProviderAcpMessageFifo {
         target: &SessionRef,
         line: &Arc<SessionLine>,
     ) -> Result<(), QueueDoorRefusal> {
+        let provider_session_id = String::from(target.session_id.clone());
+        // One mode operation at a time per session: the record read and the mode
+        // the restore puts back wait for any explicit change still recording,
+        // and a change waits for the restore (review F3).
+        let _mode_turn = runtime
+            .session_setup()
+            .mode_order()
+            .enter(&provider_session_id)
+            .await;
         let (working_directory, setup) = match inspect_provider_session_loadability(
             runtime,
             &self.store,
@@ -368,9 +377,11 @@ impl ProviderAcpMessageFifo {
         let load_id = line.loads.fetch_add(1, Ordering::SeqCst);
         *lock(&line.load) = Some((load_id, load.clone()));
         // Drives the load whether or not a worker waits on it, then clears it.
+        // The session's mode turn is held until the load has finished.
         let driven_line = Arc::clone(line);
         tokio::spawn(async move {
             let result = load.await;
+            drop(_mode_turn);
             let mut current = lock(&driven_line.load);
             if current.as_ref().is_some_and(|(id, _)| *id == load_id) {
                 *current = None;

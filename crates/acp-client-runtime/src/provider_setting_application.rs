@@ -365,16 +365,30 @@ pub(crate) fn restored_permission_mode(
 /// and any prompt admitted. The result is judged on the mode in force after
 /// that. A set that fails leaves the session loaded without Router auto, its
 /// requested and actual modes showing the mismatch (fail closed).
-pub(crate) async fn reapply_recorded_mode(
+pub(crate) async fn reapply_recorded_mode<Claim>(
     session: &ActiveSession<'_, Agent>,
     requested: Option<&str>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
+    claim_write: impl FnOnce() -> Option<Claim>,
 ) -> RestoredPermissionMode {
     let kept = restored_permission_mode(requested, catalog, behavior);
     if !restored_mode_drifted(requested, catalog, behavior) {
         return kept;
     }
+    // The write belongs to this load attempt: a close that came first means
+    // nothing is sent, and the claim is held until the write is answered
+    // (review F1).
+    let Some(_write_claim) = claim_write() else {
+        return RestoredPermissionMode {
+            report: crate::PermissionModeReport {
+                requested: kept.report.requested,
+                actual: catalog.effective_settings().mode,
+                reason: kept.report.reason,
+            },
+            router_auto_active: false,
+        };
+    };
     let outcome = apply_initial_settings(
         session,
         &RequestedProviderSettings {

@@ -102,6 +102,14 @@ pub(crate) async fn ensure_provider_session_loaded(
         return unavailable("provider runtime is unavailable");
     };
     let provider_session_id = String::from(target.session_id.clone());
+    // One mode operation at a time per session: the record read and the mode
+    // the restore puts back wait for any explicit change still recording,
+    // and a change waits for the restore (review F3).
+    let _mode_turn = runtime
+        .session_setup()
+        .mode_order()
+        .enter(&provider_session_id)
+        .await;
     let (working_directory, setup) = match inspect_provider_session_loadability(
         runtime.as_ref(),
         store,

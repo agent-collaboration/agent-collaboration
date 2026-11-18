@@ -105,11 +105,13 @@ impl ExternalProviderRuntime {
         Ok(Box::pin(async move {
             let restored = started.finished().await?;
             runtime
+                .publish_active_session(&provider_session_id, Some(restored.generation))
+                .await?;
+            // Kept only once the run's activation was accepted (review F3).
+            runtime
                 .session_setup
                 .record_restored_mode(&provider_session_id, &restored.permission_mode);
-            runtime
-                .publish_active_session(&provider_session_id, Some(restored.generation))
-                .await
+            Ok(())
         }))
     }
 

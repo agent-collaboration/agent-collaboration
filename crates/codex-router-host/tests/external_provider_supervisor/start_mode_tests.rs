@@ -400,7 +400,10 @@ async fn explicit_mode_changes_are_recorded_in_the_order_the_agent_applied_them(
     let (a_held, release_a) = fixture
         .backend
         .pause_explicit_mode_record_of(&target, "plan");
-    let b_waits = fixture.backend.notice_next_explicit_mode_wait();
+    let b_waits = fixture
+        .backend
+        .notice_next_explicit_mode_wait(&target)
+        .ok_or("the binding is known")?;
 
     // A is applied and held before its record write.
     let change_a = fixture.set_mode(&target, "plan");
@@ -445,5 +448,169 @@ async fn explicit_mode_changes_are_recorded_in_the_order_the_agent_applied_them(
     ensure_eq!(recorded.as_deref(), Some("acceptEdits"));
     ensure_eq!(inspected.requested_mode.as_deref(), Some("acceptEdits"));
     ensure!(!reached_agent_while_a_held.contains(&"acceptEdits".to_owned()));
+    Ok(())
+}
+
+impl ModeFixture {
+    async fn close(&self, target: &SessionRef) -> TestResult<()> {
+        let operation_id = OperationId::generate();
+        operation(
+            self.backend
+                .close(ConversationCloseRequest {
+                    operation_id: operation_id.clone(),
+                    target: target.clone(),
+                    generation: Some(generation()?),
+                    requested_by: self.creator.clone().into(),
+                    approver: self.creator.clone().into(),
+                })
+                .await,
+        )?;
+        operation(wait(&self.backend, operation_id).await)?;
+        Ok(())
+    }
+
+    /// Loads `target` and answers the settlement's output.
+    async fn load(&self, target: &SessionRef) -> TestResult<ConversationOperationWaitOutput> {
+        let operation_id = OperationId::generate();
+        operation(
+            self.backend
+                .load(ConversationLoadRequest {
+                    operation_id: operation_id.clone(),
+                    target: target.clone(),
+                    generation: Some(generation()?),
+                    working_directory: working_directory()?,
+                    requested_by: self.creator.clone().into(),
+                    approver: self.creator.clone().into(),
+                    requested_policy: policy(),
+                })
+                .await,
+        )?;
+        Ok(operation(wait(&self.backend, operation_id).await)?.output)
+    }
+
+    /// The mode the agent reports the session in now.
+    async fn live_mode(&self, target: &SessionRef) -> TestResult<Option<String>> {
+        Ok(self
+            .backend
+            .inspect_session(ProviderSessionInspectRequest {
+                target: target.clone(),
+            })
+            .await
+            .map_err(|error| format!("{error:?}"))?
+            .settings_catalog
+            .and_then(|catalog| catalog.current_mode))
+    }
+}
+
+/// Oracle: review F3 and owner Decision 3 (wrong build: a restore reads the
+/// session's record without joining its mode turn). A change to plan is
+/// applied and held before its record write; the session is closed and
+/// loaded again. The load waits for the change, and the session ends in
+/// plan both in its record and at the agent.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_restore_waits_for_an_applied_mode_change_still_being_recorded() -> TestResult {
+    let fixture = ModeFixture::start("claude", &["advertise-restore", "advertise-close"]).await?;
+    let target = fixture.create_in("default").await?;
+    let (a_held, release_a) = fixture
+        .backend
+        .pause_explicit_mode_record_of(&target, "plan");
+    let load_waits = fixture
+        .backend
+        .notice_next_explicit_mode_wait(&target)
+        .ok_or("the binding is known")?;
+
+    let change_a = fixture.set_mode(&target, "plan");
+    tokio::pin!(change_a);
+    tokio::select! {
+        biased;
+        held = a_held => held.map_err(|_| "A's pause was dropped")?,
+        ended = &mut change_a => {
+            return Err(format!("A ended instead of holding before its write: {ended:?}").into());
+        }
+    }
+    fixture.close(&target).await?;
+    // The reload either waits for A's turn or, with no turn, runs to its end.
+    let reload = fixture.load(&target);
+    tokio::pin!(reload);
+    let reloaded_while_a_held = tokio::select! {
+        biased;
+        waiting = load_waits => {
+            waiting.map_err(|_| "the load's wait notice was dropped")?;
+            None
+        }
+        ended = &mut reload => Some(ended?),
+    };
+    let _released = release_a.send(());
+    let ended_a = change_a.await;
+    let reloaded = match reloaded_while_a_held {
+        Some(output) => output,
+        None => reload.await?,
+    };
+    let recorded = fixture.recorded_mode(&target).await?;
+    let live = fixture.live_mode(&target).await?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    if let Err(error) = ended_a {
+        return Err(format!("the agent applied A: {error}").into());
+    }
+    ensure!(matches!(
+        reloaded,
+        ConversationOperationWaitOutput::Available { .. }
+    ));
+    ensure_eq!(recorded.as_deref(), Some("plan"));
+    ensure_eq!(live.as_deref(), Some("plan"));
+    Ok(())
+}
+
+/// Oracle: review F3, "the admitted change keeps ownership through its
+/// settlement (it survives a caller drop)" (wrong build: the change runs in
+/// its caller's future). A change to plan is applied and held before its
+/// record write, and its caller stops waiting. Released, its record is still
+/// written: a later change, held at the same point once applied, finds the
+/// record at plan.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_applied_mode_change_is_recorded_after_its_caller_stops_waiting() -> TestResult {
+    let fixture = ModeFixture::start("claude", &[]).await?;
+    let target = fixture.create_in("default").await?;
+    let (a_held, release_a) = fixture
+        .backend
+        .pause_explicit_mode_record_of(&target, "plan");
+
+    {
+        let change_a = fixture.set_mode(&target, "plan");
+        tokio::pin!(change_a);
+        tokio::select! {
+            biased;
+            held = a_held => held.map_err(|_| "A's pause was dropped")?,
+            ended = &mut change_a => {
+                return Err(format!("A ended instead of holding before its write: {ended:?}").into());
+            }
+        }
+        // A's caller stops waiting here.
+    }
+    let (b_held, release_b) = fixture
+        .backend
+        .pause_explicit_mode_record_of(&target, "acceptEdits");
+    let _released_a = release_a.send(());
+    let change_b = fixture.set_mode(&target, "acceptEdits");
+    tokio::pin!(change_b);
+    tokio::select! {
+        biased;
+        held = b_held => held.map_err(|_| "B's pause was dropped")?,
+        ended = &mut change_b => {
+            return Err(format!("B ended instead of holding before its write: {ended:?}").into());
+        }
+    }
+    let recorded_once_a_settled = fixture.recorded_mode(&target).await?;
+    let _released_b = release_b.send(());
+    let ended_b = change_b.await;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    if let Err(error) = ended_b {
+        return Err(format!("the agent applied B: {error}").into());
+    }
+    ensure_eq!(recorded_once_a_settled.as_deref(), Some("plan"));
     Ok(())
 }

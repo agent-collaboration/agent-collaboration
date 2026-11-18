@@ -356,3 +356,57 @@ fn the_fast_hold_outlives_its_run_and_ignores_an_ended_runs_write() {
     );
     assert!(!after_current_run_ends_it, "the current run can end it");
 }
+
+/// Oracle: review F1, "close revokes admission before an unsent write":
+/// once a close has ended a load attempt, that attempt can't claim a mode
+/// write, and an unclaimed write holds no later load.
+#[test]
+fn a_closed_load_attempt_claims_no_mode_write() {
+    // Arrange
+    let cells = std::sync::Arc::new(SessionCellTable::default());
+    admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(1)).expect("the load is admitted");
+    admit_close(&cells, SESSION, close_attempt(2)).expect("the close is admitted");
+    let _closed = settle_close(&cells, SESSION, close_attempt(2), true);
+
+    // Act
+    let claim = claim_restore_mode_write(&cells, SESSION, load_attempt(1));
+    let next = admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(3));
+
+    // Assert
+    assert!(
+        claim.is_none(),
+        "an ended load attempt claimed a mode write"
+    );
+    assert!(
+        next.is_ok(),
+        "an unclaimed write held the next load: {next:?}"
+    );
+}
+
+/// Oracle: review F1, "settle an already admitted write before allowing the
+/// next run to race it": a write the loading attempt claimed survives the
+/// close (it may be on its way to the agent), and no new load is admitted
+/// until it settles.
+#[test]
+fn a_claimed_restore_mode_write_holds_the_next_load_until_it_settles() {
+    // Arrange
+    let cells = std::sync::Arc::new(SessionCellTable::default());
+    admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(1)).expect("the load is admitted");
+    let claim = claim_restore_mode_write(&cells, SESSION, load_attempt(1))
+        .expect("the loading attempt claims its write");
+    admit_close(&cells, SESSION, close_attempt(2)).expect("the close is admitted");
+    let closed = settle_close(&cells, SESSION, close_attempt(2), true);
+
+    // Act
+    let while_unsettled = admit_load(&cells, SESSION, RestoreVia::Resume, load_attempt(3));
+    drop(claim);
+    let once_settled = admit_load(&cells, SESSION, RestoreVia::Resume, load_attempt(4));
+
+    // Assert
+    assert!(closed.is_some(), "the close published Closed");
+    assert!(
+        while_unsettled.is_err(),
+        "a new load raced the earlier restore's unsettled mode write"
+    );
+    assert!(once_settled.is_ok(), "{once_settled:?}");
+}

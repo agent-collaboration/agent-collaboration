@@ -56,6 +56,10 @@ pub struct SessionCell {
     /// the Lead's 3b-5 ruling: a prompt waits behind an in-flight change in
     /// the actor and is refused only while a kind is Unresolved).
     pub settings: HashMap<ProviderSettingKind, SessionSetting>,
+    /// A restore's mode write, claimed while its load attempt still owned
+    /// the session (review F1): a close after the claim can't recall a write
+    /// already on its way to the agent, so a later load waits until it settles.
+    pub restore_mode_write: Option<LoadAttempt>,
 }
 
 impl SessionCell {
@@ -74,6 +78,7 @@ impl SessionCell {
             turn: SessionTurn::Idle,
             keep_fast_off: false,
             settings: HashMap::new(),
+            restore_mode_write: None,
         }
     }
 
@@ -237,6 +242,15 @@ pub enum SessionCellEvent {
     /// is left alone, and an unknown outcome refuses the whole accept.
     AcceptSettings,
     KeepFastOff(bool),
+    /// A restore is about to write the session's recorded mode to the agent;
+    /// accepted only while its load attempt still owns the session (review F1).
+    RestoreModeWriteClaimed {
+        attempt: LoadAttempt,
+    },
+    /// That write got its answer, or was never sent.
+    RestoreModeWriteSettled {
+        attempt: LoadAttempt,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -271,6 +285,8 @@ pub enum SessionCellRefusal {
     /// The session isn't Live in the line's run, so nothing commits.
     NotLive,
     Setting(SessionSettingRefusal),
+    /// An earlier restore's mode write hasn't settled, so no new load yet.
+    RestoreModeWriteUnsettled,
 }
 
 impl RefusalTag for SessionCellRefusal {
@@ -284,6 +300,7 @@ impl RefusalTag for SessionCellRefusal {
             Self::UnknownEntry => "unknown_entry",
             Self::NotLive => "not_live",
             Self::Setting(refusal) => refusal.refusal_tag(),
+            Self::RestoreModeWriteUnsettled => "restore_mode_write_unsettled",
         }
     }
 }
@@ -328,6 +345,8 @@ impl EventTag for SessionCellEvent {
             Self::Setting { .. } => "setting",
             Self::AcceptSettings => "accept_settings",
             Self::KeepFastOff(_) => "keep_fast_off",
+            Self::RestoreModeWriteClaimed { .. } => "restore_mode_write_claimed",
+            Self::RestoreModeWriteSettled { .. } => "restore_mode_write_settled",
         }
     }
 }
@@ -550,6 +569,11 @@ impl StateMachine for SessionCellMachine {
         match event {
             V::CreateAdmitted => lifecycle_move(cell, SessionLifecycleEvent::CreateAdmitted),
             V::LoadRequested { via, attempt } => {
+                if cell.restore_mode_write.is_some() {
+                    return Err(TransitionError::Domain(
+                        SessionCellRefusal::RestoreModeWriteUnsettled,
+                    ));
+                }
                 lifecycle_move(cell, SessionLifecycleEvent::LoadRequested { via, attempt })
             }
             V::Loaded { attempt } => {
@@ -807,6 +831,26 @@ impl StateMachine for SessionCellMachine {
             V::KeepFastOff(keep) => {
                 let mut next = cell.clone();
                 next.keep_fast_off = keep;
+                Ok((next, Vec::new()))
+            }
+            V::RestoreModeWriteClaimed { attempt } => {
+                let owns = matches!(
+                    cell.lifecycle,
+                    SessionLifecycle::Loading { attempt: loading, .. } if loading == attempt
+                );
+                if !owns || cell.restore_mode_write.is_some() {
+                    return Err(TransitionError::Stale);
+                }
+                let mut next = cell.clone();
+                next.restore_mode_write = Some(attempt);
+                Ok((next, Vec::new()))
+            }
+            V::RestoreModeWriteSettled { attempt } => {
+                if cell.restore_mode_write != Some(attempt) {
+                    return Err(TransitionError::Stale);
+                }
+                let mut next = cell.clone();
+                next.restore_mode_write = None;
                 Ok((next, Vec::new()))
             }
         }

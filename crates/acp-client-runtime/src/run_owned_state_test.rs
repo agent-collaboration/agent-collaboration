@@ -107,3 +107,52 @@ fn a_connection_wide_change_reaches_every_entry() {
     // Assert
     assert_eq!(state.read(SESSION), Some(7));
 }
+
+/// Oracle: review F5 and §17.1 ("a write from a non-current run changes
+/// nothing"; wrong build: the writer checks its run under the cell lock but
+/// writes the map after releasing it): while a writer changes the map, its
+/// run can't end, so the end that moves the cell can never fall between the
+/// writer's check and its write; once the write is done the run ends and its
+/// entry goes.
+#[test]
+fn a_runs_end_never_falls_between_a_writers_check_and_its_write() {
+    // Arrange
+    let cells = Arc::new(SessionCellTable::default());
+    let state = RunOwnedMap::new(Arc::clone(&cells));
+    let first = admit_create(&cells, SESSION).expect("created");
+    let mut ended_during_write = false;
+
+    // Act: the run's end tries to land while the write is in progress.
+    let wrote = state.write_with(SESSION, first, |entry| {
+        ended_during_write = matches!(
+            cells.try_transition_for_test(
+                SESSION,
+                SessionCellEvent::ActorExited { generation: first },
+            ),
+            Some(Ok(_))
+        );
+        *entry = Some("late");
+    });
+    if !ended_during_write {
+        cells
+            .transition(
+                SESSION,
+                SessionCellEvent::ActorExited { generation: first },
+                EntryEffectRoute::Sink,
+            )
+            .expect("the run ends once the write is done");
+    }
+    state.end_run(SESSION, first);
+
+    // Assert
+    assert!(
+        !ended_during_write,
+        "the run ended between the writer's check and its write"
+    );
+    assert_eq!(wrote, RunWrite::Written);
+    assert_eq!(
+        state.read_in(SESSION, first),
+        None,
+        "the ended run's entry stayed"
+    );
+}

@@ -247,7 +247,8 @@ pub(crate) fn start_direct_turn(
             | SessionCellRefusal::NotHead
             | SessionCellRefusal::UnknownEntry
             | SessionCellRefusal::NotLive
-            | SessionCellRefusal::Setting(_),
+            | SessionCellRefusal::Setting(_)
+            | SessionCellRefusal::RestoreModeWriteUnsettled,
         )
         | TransitionError::NotAllowed { .. }
         | TransitionError::Stale => busy(),
@@ -563,12 +564,57 @@ fn lifecycle_refusal_error(
             | SessionCellRefusal::NotHead
             | SessionCellRefusal::UnknownEntry
             | SessionCellRefusal::NotLive
-            | SessionCellRefusal::Setting(_),
+            | SessionCellRefusal::Setting(_)
+            | SessionCellRefusal::RestoreModeWriteUnsettled,
         )
         | TransitionError::NotAllowed { .. }
         | TransitionError::Stale => ExternalProviderRuntimeError::LocalBusy {
             answer: state_answer(&state),
         },
+    }
+}
+
+/// A restore's claim on writing the session's recorded mode to the agent
+/// (review F1): granted only while its load attempt still owns the session,
+/// so a close that came first means nothing is sent. Dropping the claim, once
+/// the write is answered or abandoned, settles it, and a later load waits for
+/// that.
+pub(crate) struct RestoreModeWriteClaim {
+    cells: std::sync::Arc<SessionCellTable>,
+    session_id: String,
+    attempt: LoadAttempt,
+}
+
+/// Claims the restore's mode write for `attempt`, or None when that load
+/// attempt no longer owns the session.
+pub(crate) fn claim_restore_mode_write(
+    cells: &std::sync::Arc<SessionCellTable>,
+    session_id: &str,
+    attempt: LoadAttempt,
+) -> Option<RestoreModeWriteClaim> {
+    cells
+        .transition(
+            session_id,
+            SessionCellEvent::RestoreModeWriteClaimed { attempt },
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        )
+        .ok()
+        .map(|_effects| RestoreModeWriteClaim {
+            cells: std::sync::Arc::clone(cells),
+            session_id: session_id.to_owned(),
+            attempt,
+        })
+}
+
+impl Drop for RestoreModeWriteClaim {
+    fn drop(&mut self) {
+        let _settled = self.cells.transition(
+            &self.session_id,
+            SessionCellEvent::RestoreModeWriteSettled {
+                attempt: self.attempt,
+            },
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        );
     }
 }
 

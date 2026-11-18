@@ -40,6 +40,9 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
     pub(super) generation: provider_session_machines::SessionGeneration,
     pub(super) attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
+    /// The connection's session cells: the restore's mode write is claimed
+    /// on them for its load attempt (review F1).
+    pub(super) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     pub(super) reply: tokio::sync::oneshot::Sender<
         Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError>,
     >,
@@ -61,6 +64,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         admission_tx,
         generation,
         attempt,
+        session_cells,
         reply,
     } = inputs;
     let replay_started = if mode == RestoreHistoryMode::Replay {
@@ -122,6 +126,13 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                 requested_mode.as_deref(),
                 &mut settings_catalog,
                 behavior.as_ref(),
+                || {
+                    crate::session_cell_bookkeeping::claim_restore_mode_write(
+                        &session_cells,
+                        &provider_session_id,
+                        attempt,
+                    )
+                },
             )
             .await;
             Ok(RestoredProviderSession {
