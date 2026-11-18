@@ -65,3 +65,47 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
     assert_eq!(structured(&resuming)["cursor"], cursor);
     api.stop().await;
 }
+
+#[tokio::test]
+async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_no_mutation() {
+    // Arrange: a plain mutation belongs to its caller's future; its store is held.
+    let directory = private_directory();
+    let automation = automation_store(directory.path()).await;
+    let config = api_config(
+        (test_identity().with_automation_store(Arc::clone(&automation))).build(),
+        directory.path(),
+    );
+    let tcp = ServedApi::tcp(&config).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
+    let held = automation.lock().await;
+
+    // Act: each listener's client sends a wake, then goes away while it waits on the store.
+    let mut abandoned = Vec::new();
+    for (index, api) in [&tcp, &unix].into_iter().enumerate() {
+        // One wake per target, so each listener's wake names its own session.
+        let mut input = wake_send_arguments();
+        input["message"]["target"]["sessionId"] = json!(format!("abandoned-{index}"));
+        api.abandon_tool_call("wake_send", input.clone()).await;
+        api.await_active_calls(0, Duration::from_secs(5)).await;
+        abandoned.push((input, api));
+    }
+    drop(held);
+
+    // Assert: neither abandoned call left a wake behind.
+    let listed = tcp.call_tool("wake_list", json!({"limit": 10})).await;
+    assert_eq!(structured(&listed)["records"], json!([]), "{listed:?}");
+    // A valid retry is a sensitivity control: neither an invalid input nor a
+    // disabled mutation path may make the no-effect check pass.
+    for (input, api) in abandoned {
+        let reply = api.call_tool("wake_send", input).await;
+        assert_eq!(reply.is_error, Some(false), "{reply:?}");
+    }
+    let listed = tcp.call_tool("wake_list", json!({"limit": 10})).await;
+    assert_eq!(
+        structured(&listed)["records"].as_array().map(Vec::len),
+        Some(2),
+        "{listed:?}"
+    );
+    tcp.stop().await;
+    unix.stop().await;
+}

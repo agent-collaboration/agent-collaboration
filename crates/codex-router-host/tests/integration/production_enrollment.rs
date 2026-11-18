@@ -2,18 +2,26 @@
 #![deny(clippy::too_many_lines)]
 use codex_router_host::{
     AppServerLaunchPlan, ChildCommandSpec, ChildOutput, HostConfig, HostConfigInputs,
-    HostCoordinationPaths, HostDeadlines, HostRuntime, ManagedChildLaunchPlans,
-    ManagedUpdateInputs,
+    HostCoordinationPaths, HostDeadlines, HostRuntime, HostedReadiness, ManagedChildLaunchPlans,
+    ManagedUpdateInputs, OperatorFrame, OperatorRequest,
 };
 use codex_router_test_support::router_health::PersistentRouterHealthFixture;
+use collaboration_client::CollaborationClient;
+use message_board::public_replies::RequestResult;
 use std::{
     error::Error,
     net::SocketAddr,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
+
+use crate::operator_client;
 
 #[path = "production_enrollment_duplicate_test.rs"]
 mod duplicate_identity;
@@ -26,6 +34,75 @@ const ROOT_ENV: &str = "CODEX_PRODUCTION_ENROLLMENT_TEST_ROOT";
 const ROUTER_ENV: &str = "CODEX_PRODUCTION_ENROLLMENT_TEST_ROUTER";
 const CREDENTIAL_SENTINEL: &str = "Bearer enrollment-credential-must-stay-private";
 const ACCESS_SENTINEL: &str = "enrollment-access-secret-must-stay-private";
+
+#[tokio::test]
+async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable() -> TestResult {
+    // Arrange: a valid enrollment sits in the collaboration directory, aimed at a
+    // test-owned endpoint that counts connections; the Router root holds none.
+    let root = fixture_root()?;
+    let directory = root.path().join("collaboration");
+    let peer = collaboration_runtime::load_installation_peer(&directory)?;
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
+    let endpoint = format!("ws://{}/session", listener.local_addr()?);
+    let connections = Arc::new(AtomicUsize::new(0));
+    let counter = {
+        let connections = connections.clone();
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                connections.fetch_add(1, Ordering::SeqCst);
+                drop(stream);
+            }
+        })
+    };
+    write_private_enrollment_at(&directory, &endpoint, &peer.to_string())?;
+    let router = PersistentRouterHealthFixture::start().await?;
+    let mut host = OwnedHost::spawn(root.path(), router.address())?;
+
+    // Act: wait for Ready, then ask for a workspace.
+    let scenario = async {
+        host.await_ready().await?;
+        let client = CollaborationClient::connect(&directory, "unenrolled-test", "1").await?;
+        Ok::<_, Box<dyn Error>>(client.workspace_create(workspace_request()?).await?)
+    }
+    .await;
+    let stopped = host.stop().await;
+    let router_stopped = router.finish().await;
+    let children_gone = assert_owned_children_gone(root.path()).await;
+    counter.abort();
+
+    // Assert: creation stays unreachable and the Host never dialled the
+    // collaboration directory's enrollment.
+    require(
+        scenario?.result == RequestResult::PendingUnreachable,
+        "unenrolled workspace creation changed its existing outcome",
+    )?;
+    require(
+        connections.load(Ordering::SeqCst) == 0,
+        "Host read enrollment from the wrong root",
+    )?;
+    require(
+        collaboration_runtime::load_installation_peer(&directory)? == peer,
+        "startup changed the persisted installation peer",
+    )?;
+    require(stopped?.success(), "Host did not stop cleanly")?;
+    router_stopped?;
+    children_gone
+}
+
+fn workspace_request() -> TestResult<message_board::WorkspaceCreateRequest> {
+    use message_board::*;
+    Ok(WorkspaceCreateRequest {
+        request_id: RequestId::generate(),
+        protocol_version: ProtocolVersion::CURRENT,
+        workspace_id: WorkspaceId::generate(),
+        name: "Enrollment workspace".to_owned().try_into()?,
+        description: String::new().try_into()?,
+        actor: Identity::Human {
+            human_id: "enrollment-test-owner".to_owned().try_into()?,
+        },
+        acting_for: None,
+    })
+}
 
 #[tokio::test]
 async fn production_host_refuses_malformed_enrollment_without_publishing() -> TestResult {
@@ -67,13 +144,26 @@ async fn production_host_preserves_the_installation_peer_mismatch_refusal() -> T
 }
 
 fn write_private_enrollment(root: &Path) -> TestResult<PathBuf> {
+    write_private_enrollment_at(
+        &root.join("router"),
+        "ws://127.0.0.1:1/session",
+        &uuid::Uuid::now_v7().to_string(),
+    )
+}
+
+/// Persists a synthetic enrollment, with its secrets, under `enrollment_root`.
+fn write_private_enrollment_at(
+    enrollment_root: &Path,
+    endpoint: &str,
+    peer: &str,
+) -> TestResult<PathBuf> {
     use codex_router_core::redaction::SecretString;
     use codex_router_secret_store::{
         SecretStore,
         fleet_secret_key::{FleetSecretKey, FleetSecretKind},
     };
-    let router_root = root.join("router");
-    let store = codex_router_host::open_fleet_enrollment_store(&router_root)?;
+    let router_root = enrollment_root;
+    let store = codex_router_host::open_fleet_enrollment_store(router_root)?;
     let installation = "550e8400-e29b-41d4-a716-446655440000";
     let generation = uuid::Uuid::now_v7().to_string();
     let access = FleetSecretKey::new(
@@ -91,19 +181,19 @@ fn write_private_enrollment(root: &Path) -> TestResult<PathBuf> {
     store.write_secret(&access, &SecretString::new(ACCESS_SENTINEL))?;
     store.write_secret(&credential, &SecretString::new(CREDENTIAL_SENTINEL))?;
     let document = codex_router_host::FleetEnrollmentDocument {
-        endpoint: "ws://127.0.0.1:1/session".to_owned(),
+        endpoint: endpoint.to_owned(),
         access: codex_router_host::FleetAccessReference {
             client_id: "fixture-access".to_owned(),
             client_secret_key: access.as_str().to_owned(),
         }
         .into(),
         credential_key: credential.as_str().to_owned(),
-        peer: uuid::Uuid::now_v7().to_string().parse()?,
+        peer: peer.parse()?,
         receiver: "0192a1b2-c3d4-7000-8000-000000000002".parse()?,
         relay: "0192a1b2-c3d4-7000-8000-000000000003".parse()?,
         expires_at: None,
     };
-    codex_router_host::persist_fleet_enrollment(&router_root, &document, &store)?;
+    codex_router_host::persist_fleet_enrollment(router_root, &document, &store)?;
     Ok(router_root.join("fleet/enrollment.json"))
 }
 
@@ -169,6 +259,7 @@ fn require(condition: bool, message: &str) -> TestResult {
 struct OwnedHost {
     child: tokio::process::Child,
     output: PathBuf,
+    operator: PathBuf,
 }
 impl OwnedHost {
     fn spawn(root: &Path, router: SocketAddr) -> TestResult<Self> {
@@ -190,7 +281,28 @@ impl OwnedHost {
         Ok(Self {
             child,
             output: root.join("host-output.log"),
+            operator: root.join("router/operator.sock"),
         })
+    }
+
+    async fn await_ready(&self) -> TestResult {
+        let frames = operator_client::send_operator_request(
+            &self.operator,
+            OperatorRequest::AwaitHostStart,
+            BOUND,
+        )
+        .await?;
+        let snapshot = frames
+            .iter()
+            .find_map(|frame| match frame {
+                OperatorFrame::Terminal(response) => Some(response.snapshot()),
+                OperatorFrame::Progress(_) => None,
+            })
+            .ok_or("Host startup did not publish a terminal snapshot")?;
+        require(
+            snapshot.hosted_readiness() == HostedReadiness::Ready,
+            "Host did not reach Ready",
+        )
     }
 
     async fn stop(&mut self) -> TestResult<ExitStatus> {

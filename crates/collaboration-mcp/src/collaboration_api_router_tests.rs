@@ -268,3 +268,154 @@ async fn the_api_serves_on_ipv6_loopback() {
     );
     api.stop().await;
 }
+
+#[tokio::test]
+async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
+    // Arrange: one wake, written through TCP.
+    let directory = private_directory();
+    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let tcp = ServedApi::tcp(&config).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
+    let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
+    assert_eq!(wake.is_error, Some(false), "{wake:?}");
+    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
+    let show = json!({"wakeupId": wakeup_id});
+
+    // Act
+    let over_tcp = tcp.call_tool("wake_show", show.clone()).await;
+    let over_unix = unix.call_tool("wake_show", show).await;
+    let tcp_tools = tcp
+        .client()
+        .await
+        .list_all_tools()
+        .await
+        .expect("TCP tools");
+    let unix_tools = unix
+        .client()
+        .await
+        .list_all_tools()
+        .await
+        .expect("Unix tools");
+
+    // Assert: the cursor stamps its own read time, so it is the one field that differs.
+    let without_cursor = |result| {
+        let mut value = structured(result);
+        value
+            .as_object_mut()
+            .expect("wake snapshot")
+            .remove("latestEventCursor")
+            .expect("wake snapshot carries its event cursor");
+        value
+    };
+    assert_eq!(without_cursor(&over_tcp), without_cursor(&over_unix));
+    assert_eq!(
+        structured(&over_tcp)["definition"]["wakeupId"],
+        wakeup_id,
+        "both listeners read the wake the TCP call wrote"
+    );
+    assert_eq!(tcp_tools, unix_tools, "both listeners offer the same tools");
+    tcp.stop().await;
+    unix.stop().await;
+}
+
+#[tokio::test]
+async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
+    // Arrange: no stores behind the tools; each call only has to decode.
+    let directory = private_directory();
+    let config = api_config(test_identity().build(), directory.path());
+    let api = ServedApi::tcp(&config).await;
+    let (_, listed) = api
+        .post(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
+        .await;
+    let tools = listed["result"]["tools"]
+        .as_array()
+        .expect("advertised tools")
+        .clone();
+
+    for (index, tool) in tools.iter().enumerate() {
+        let name = tool["name"].as_str().expect("tool name");
+        let schema = &tool["inputSchema"];
+        let arguments = schema_required_object(schema, &schema["$defs"]);
+
+        // Act
+        let (_, response) = api
+            .post(&json!({
+                "jsonrpc":"2.0","id":index + 2,"method":"tools/call",
+                "params":{"name":name,"arguments":arguments}
+            }))
+            .await;
+
+        // Assert
+        let encoded = response.to_string();
+        assert!(
+            !encoded.contains("missing field") && !encoded.contains("requires "),
+            "{name} rejected the schema-required input as incomplete: {encoded}"
+        );
+        if name == "wake_send" {
+            assert!(
+                !encoded.contains("explicit nullable generationGuard"),
+                "wake_send must accept an omitted optional generationGuard: {encoded}"
+            );
+        }
+    }
+    api.stop().await;
+}
+
+fn schema_required_object(schema: &Value, definitions: &Value) -> Value {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        let name = reference.strip_prefix("#/$defs/").unwrap_or_default();
+        return schema_required_object(&definitions[name], definitions);
+    }
+    if let Some(constant) = schema.get("const") {
+        return constant.clone();
+    }
+    if let Some(variants) = schema.get("enum").and_then(Value::as_array) {
+        return variants.first().cloned().unwrap_or(Value::Null);
+    }
+    for keyword in ["oneOf", "anyOf"] {
+        if let Some(variants) = schema.get(keyword).and_then(Value::as_array) {
+            return variants
+                .first()
+                .map(|variant| schema_required_object(variant, definitions))
+                .unwrap_or(Value::Null);
+        }
+    }
+    match schema.get("type").and_then(Value::as_str) {
+        Some("object") => {
+            let required = schema["required"].as_array().cloned().unwrap_or_default();
+            let mut object = serde_json::Map::new();
+            for field in required.iter().filter_map(Value::as_str) {
+                object.insert(
+                    field.to_owned(),
+                    schema_required_object(&schema["properties"][field], definitions),
+                );
+            }
+            Value::Object(object)
+        }
+        Some("array") => Value::Array(Vec::new()),
+        Some("integer" | "number") => schema.get("minimum").cloned().unwrap_or(json!(1)),
+        Some("boolean") => Value::Bool(false),
+        Some("string") => {
+            if schema.get("format").and_then(Value::as_str) == Some("date-time") {
+                json!("2026-09-24T00:00:00Z")
+            } else if schema
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|pattern| pattern.contains("7[0-9a-f]{3}"))
+            {
+                json!("019f0000-0000-7000-8000-000000000001")
+            } else if schema
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|pattern| pattern.contains("[a-z]"))
+            {
+                json!("fixture")
+            } else if schema.get("minLength").and_then(Value::as_u64).unwrap_or(0) > 0 {
+                json!("x")
+            } else {
+                json!("")
+            }
+        }
+        _ => Value::Null,
+    }
+}
