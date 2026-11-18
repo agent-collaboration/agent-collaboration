@@ -298,6 +298,23 @@ impl ModeFixture {
             .map_err(|failure| format!("{failure:?}"))
     }
 
+    /// Every mode value the agent was asked to switch to, in order.
+    fn mode_values_seen(&self) -> TestResult<Vec<String>> {
+        let receipt: Value = serde_json::from_slice(&std::fs::read(&self.receipt)?)?;
+        Ok(receipt
+            .get("modeRequests")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|request| {
+                request
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .collect())
+    }
+
     /// The mode the session's durable record names, read through a second
     /// connection to the supervisor's store.
     async fn recorded_mode(&self, target: &SessionRef) -> TestResult<Option<String>> {
@@ -365,5 +382,68 @@ async fn a_refused_explicit_mode_change_leaves_the_recorded_mode() -> TestResult
         return Err("the create recorded a mode".into());
     }
     ensure_eq!(recorded_after, recorded_before);
+    Ok(())
+}
+
+/// Oracle: the Lead's V6b ruling: explicit mode changes on one session are
+/// recorded in the order the agent applied them. Change A (plan) is applied
+/// and held before its record write. Change B (acceptEdits) is submitted and
+/// waits for the session's turn without reaching the agent. A is released,
+/// then B runs. The record and show end at B (wrong build: without the turn,
+/// B applies and records while A is held, and A's late write leaves the
+/// record at A).
+#[cfg(unix)]
+#[tokio::test]
+async fn explicit_mode_changes_are_recorded_in_the_order_the_agent_applied_them() -> TestResult {
+    let fixture = ModeFixture::start("claude", &[]).await?;
+    let target = fixture.create_in("default").await?;
+    let (a_held, release_a) = fixture
+        .backend
+        .pause_explicit_mode_record_of(&target, "plan");
+    let b_waits = fixture.backend.notice_next_explicit_mode_wait();
+
+    // A is applied and held before its record write.
+    let change_a = fixture.set_mode(&target, "plan");
+    tokio::pin!(change_a);
+    tokio::select! {
+        biased;
+        held = a_held => held.map_err(|_| "A's pause was dropped")?,
+        ended = &mut change_a => {
+            return Err(format!("A ended instead of holding before its write: {ended:?}").into());
+        }
+    }
+    // B either waits for the session's turn or, with no turn, runs to its end.
+    let change_b = fixture.set_mode(&target, "acceptEdits");
+    tokio::pin!(change_b);
+    let b_ended_while_a_held = tokio::select! {
+        biased;
+        waiting = b_waits => {
+            waiting.map_err(|_| "B's wait notice was dropped")?;
+            None
+        }
+        ended = &mut change_b => Some(ended),
+    };
+    let reached_agent_while_a_held = fixture.mode_values_seen()?;
+    let _released = release_a.send(());
+    let ended_a = change_a.await;
+    let ended_b = match b_ended_while_a_held {
+        Some(ended) => ended,
+        None => change_b.await,
+    };
+    let recorded = fixture.recorded_mode(&target).await?;
+    let inspected = fixture
+        .backend
+        .inspect_session(ProviderSessionInspectRequest {
+            target: target.clone(),
+        })
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    ensure!(ended_a.is_ok());
+    ensure!(ended_b.is_ok());
+    ensure_eq!(recorded.as_deref(), Some("acceptEdits"));
+    ensure_eq!(inspected.requested_mode.as_deref(), Some("acceptEdits"));
+    ensure!(!reached_agent_while_a_held.contains(&"acceptEdits".to_owned()));
     Ok(())
 }

@@ -113,6 +113,21 @@ pub(super) async fn apply(
         ProviderSettingName::Effort => provider_session_machines::ProviderSettingKind::Effort,
         ProviderSettingName::Fast => provider_session_machines::ProviderSettingKind::Fast,
     };
+    // An explicit mode change holds its session's turn until its record is
+    // written, so the record ends at the last change the agent applied (V6b).
+    let records_mode = kind == provider_session_machines::ProviderSettingKind::Mode
+        && intent == session_event_model::SettingApplicationIntent::ExplicitChange;
+    let _mode_turn = if records_mode {
+        Some(
+            supervisor
+                .inner
+                .explicit_mode_order
+                .enter(&request.target)
+                .await,
+        )
+    } else {
+        None
+    };
     let observed = runtime
         .set_setting(
             String::from(request.target.session_id.clone()),
@@ -141,12 +156,41 @@ pub(super) async fn apply(
             .record_settings_catalog(request.target.clone(), catalog)
             .await;
     }
-    if kind == provider_session_machines::ProviderSettingKind::Mode
-        && intent == session_event_model::SettingApplicationIntent::ExplicitChange
-    {
+    if records_mode {
+        #[cfg(any(test, feature = "test-support"))]
+        hold_before_mode_record(supervisor, &request.target, &request.value).await;
         record_explicit_mode(supervisor, &runtime, &request.target, &request.value).await?;
     }
     Ok(result(request.target, record, observed))
+}
+
+/// A test holds this change here, applied and not yet recorded (V6b).
+#[cfg(any(test, feature = "test-support"))]
+async fn hold_before_mode_record(
+    supervisor: &ExternalProviderSupervisor,
+    target: &SessionRef,
+    value: &str,
+) {
+    let pause = {
+        let mut pause = supervisor
+            .inner
+            .explicit_mode_record_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match pause.take() {
+            Some((held, held_value, pause)) if &held == target && held_value == value => {
+                Some(pause)
+            }
+            other => {
+                *pause = other;
+                None
+            }
+        }
+    };
+    if let Some(pause) = pause {
+        let _entered = pause.entered.send(());
+        let _released = pause.release.await;
+    }
 }
 
 /// Keeps the session's record current after an explicit mode change the
