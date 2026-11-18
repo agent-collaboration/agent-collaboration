@@ -238,7 +238,12 @@ enum PendingSessionAdmission<P: InteractionPort> {
 
 struct ProviderSessionRegistration<P: InteractionPort> {
     provider_session_id: String,
-    commands: tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>,
+    commands: tokio::sync::mpsc::UnboundedSender<
+        ProviderSessionCommand<
+            P,
+            provider_connection_task::admitted_setting_reply::AdmittedSettingReply,
+        >,
+    >,
     response: NewSessionResponse,
     settings_catalog: crate::ProviderSettingsCatalog,
     permission_mode: crate::PermissionModeReport,

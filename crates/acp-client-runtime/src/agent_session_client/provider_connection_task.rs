@@ -1,4 +1,6 @@
 //! Own the ACP connection task, provider process, and Session admission loop.
+pub(super) mod admitted_setting_reply;
+
 #[cfg(any(test, feature = "test-observation"))]
 use super::{AtomicU64, ExternalProviderApprovalRefusalWarning};
 
@@ -376,7 +378,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                     if admitted {
                         let mut sessions = HashMap::<
                             String,
-                            tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>,
+                            tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P, admitted_setting_reply::AdmittedSettingReply>>,
                         >::new();
                         let mut session_tasks = tokio::task::JoinSet::new();
                         let mut admission_tasks = tokio::task::JoinSet::new();
@@ -549,6 +551,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         && let Some(session) = sessions.get(&provider_session_id)
                                                     {
                                                         let (reply, _answer) = tokio::sync::oneshot::channel();
+                                                        let reply = admitted_setting_reply::AdmittedSettingReply::for_run(reply, &session_cells, &provider_session_id, generation, provider_session_machines::ProviderSettingKind::Fast);
                                                         let _queued = session.send(ProviderSessionCommand::SetSetting {
                                                             request: crate::ProviderSettingRequest {
                                                                 kind: provider_session_machines::ProviderSettingKind::Fast,
@@ -814,6 +817,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
                                                 continue;
                                             };
+                                            // The loop admits the change to the run it hands it to,
+                                            // so the loop claims its Lost (Lead V4).
+                                            let kind = request.kind;
+                                            let reply = admitted_setting_reply::AdmittedSettingReply::admit(reply, &session_cells, &provider_session_id, kind);
                                             let _result = session.send(ProviderSessionCommand::SetSetting { request, reply });
                                         }
                                     }

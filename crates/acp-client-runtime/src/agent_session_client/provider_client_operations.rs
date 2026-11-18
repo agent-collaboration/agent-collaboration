@@ -147,11 +147,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let uncertain_session_id = provider_session_id.clone();
         let uncertain_value = request.value.clone();
         let kind = request.kind;
-        // The run this change is sent to: a lost reply speaks only for it.
-        let run = crate::SessionRuns::current_generation(
-            self.session_cells.as_ref(),
-            &provider_session_id,
-        );
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::SetSetting {
@@ -164,15 +159,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         match result.await {
             Ok(result) => result,
             Err(_) => {
-                // The reply never came back: the change's outcome is unknown,
-                // for the run it was sent to and no later one (Lead V4).
-                crate::session_cell_bookkeeping::apply_setting_in_run(
-                    &self.session_cells,
-                    &uncertain_session_id,
-                    run,
-                    kind,
-                    provider_session_machines::session_setting_machine::SessionSettingEvent::Lost,
-                );
+                // The reply never came back: the change's outcome is unknown.
+                // The run that admitted it recorded its Lost (Lead V4).
                 Err(ExternalProviderRuntimeError::SettingOutcomeUnknown {
                     provider_session_id: uncertain_session_id,
                     setting: kind,

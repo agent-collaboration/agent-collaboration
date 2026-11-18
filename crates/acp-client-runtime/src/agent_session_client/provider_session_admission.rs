@@ -57,7 +57,15 @@ fn untried_settings(
 
 pub(super) fn register_provider_session<P: InteractionPort>(
     registration: ProviderSessionRegistration<P>,
-    sessions: &mut HashMap<String, tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>>,
+    sessions: &mut HashMap<
+        String,
+        tokio::sync::mpsc::UnboundedSender<
+            ProviderSessionCommand<
+                P,
+                super::provider_connection_task::admitted_setting_reply::AdmittedSettingReply,
+            >,
+        >,
+    >,
 ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
     if sessions.contains_key(&registration.provider_session_id) {
         return Err(ExternalProviderRuntimeError::Operation(
@@ -83,7 +91,15 @@ pub(super) struct StaticSessionActivation {
 
 pub(super) fn register_static_provider_session<P: InteractionPort>(
     admission: StaticSessionActivation,
-    sessions: &mut HashMap<String, tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P>>>,
+    sessions: &mut HashMap<
+        String,
+        tokio::sync::mpsc::UnboundedSender<
+            ProviderSessionCommand<
+                P,
+                super::provider_connection_task::admitted_setting_reply::AdmittedSettingReply,
+            >,
+        >,
+    >,
     session_tasks: &mut tokio::task::JoinSet<()>,
     shutdown: CancellationToken,
     frame_observation: Arc<ProviderFrameObservation>,

@@ -51,6 +51,13 @@ pub(crate) type SteeringReply<P> = tokio::sync::oneshot::Sender<
     >,
 >;
 
+/// The reply a setting change carries into its run's mailbox. The actor can
+/// only answer it; the connection loop that admitted the change owns what an
+/// unanswered reply means (Lead V4, admission exactness).
+pub(crate) trait SettingReply: Send + 'static {
+    fn send(self, result: Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>);
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderSessionActivity {
     NotLoaded,
@@ -58,7 +65,7 @@ pub enum ProviderSessionActivity {
     Running,
 }
 
-pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
+pub(crate) enum ProviderSessionCommand<P: InteractionPort, R: SettingReply> {
     Prompt {
         input_id: InputId,
         operation_id: Option<P::OperationId>,
@@ -89,9 +96,7 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
     },
     SetSetting {
         request: crate::ProviderSettingRequest,
-        reply: tokio::sync::oneshot::Sender<
-            Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>,
-        >,
+        reply: R,
     },
 }
 
@@ -100,9 +105,9 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
 /// run ends: its cell goes from Live to NotLoaded, the messages waiting in
 /// its line end not sent, "the agent stopped", and the hub reads Unloaded
 /// (D1 state machines, design note §11.2, inventory S2).
-pub(crate) async fn run_provider_session<P: InteractionPort>(
+pub(crate) async fn run_provider_session<P: InteractionPort, R: SettingReply>(
     session: ActiveSession<'_, Agent>,
-    commands: tokio::sync::mpsc::UnboundedReceiver<ProviderSessionCommand<P>>,
+    commands: tokio::sync::mpsc::UnboundedReceiver<ProviderSessionCommand<P, R>>,
     shutdown: CancellationToken,
     frame_observation: Arc<ProviderFrameObservation>,
     runtime_handles: ProviderSessionRuntimeHandles,
@@ -141,9 +146,9 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
     });
 }
 
-async fn run_session_loop<P: InteractionPort>(
+async fn run_session_loop<P: InteractionPort, R: SettingReply>(
     mut session: ActiveSession<'_, Agent>,
-    mut commands: tokio::sync::mpsc::UnboundedReceiver<ProviderSessionCommand<P>>,
+    mut commands: tokio::sync::mpsc::UnboundedReceiver<ProviderSessionCommand<P, R>>,
     shutdown: CancellationToken,
     frame_observation: Arc<ProviderFrameObservation>,
     runtime_handles: ProviderSessionRuntimeHandles,
@@ -459,7 +464,7 @@ async fn run_session_loop<P: InteractionPort>(
                                         }
                                         Some(ProviderSessionCommand::WaitIdle { reply }) => idle_waiters.push(reply),
                                         Some(ProviderSessionCommand::SetSetting { reply, .. }) => {
-                                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: crate::session_cell_bookkeeping::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers) }));
+                                            reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: crate::session_cell_bookkeeping::busy_answer(&runtime_handles.session_cells, provider_session_id.0.as_ref(), runtime_handles.agent_steers) }));
                                         }
                                         None => return,
                                     }
@@ -531,7 +536,7 @@ async fn run_session_loop<P: InteractionPort>(
                             runtime_handles.sink_closed.cancel();
                             shutdown.cancel();
                         }
-                        let _result = reply.send(result);
+                        reply.send(result);
                     }
                 }
             }
