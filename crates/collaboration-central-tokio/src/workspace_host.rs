@@ -5,15 +5,21 @@ mod workspace_alarm_owner;
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{ClockIds, OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings, WorkspaceCaller, WorkspaceRuntime, identity_contract::{
+use collaboration_central_core::{
+    ClockIds, OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings,
+    WorkspaceCaller, WorkspaceRuntime,
+    identity_contract::{
         AuthorizationRevision, AuthorizationRevisionAcknowledgement,
         OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,
         ReadOrganizationStatementDigest,
-    }, organization_authority::OrganizationProvisioningFailure, person_request::PersonRequestInput};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+    },
+    organization_authority::OrganizationProvisioningFailure,
+    person_request::PersonRequestInput,
+};
 use fleet_identity_protocol::OrganizationId;
-use router_clock::RuntimeClock;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{Clock, IdSource, SyncTime};
+use router_clock::RuntimeClock;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -186,7 +192,9 @@ impl TokioWorkspaceHost {
                 Ok(check) => runtime.with_sign_in_verification(check),
                 // The default checker explicitly refuses every offered statement with
                 // InvalidConfiguration, at the core observation boundary.
-                Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
+                Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => {
+                    runtime
+                }
                 Err(_) => return Err(StoreFailure::Unavailable),
             },
             None => runtime,

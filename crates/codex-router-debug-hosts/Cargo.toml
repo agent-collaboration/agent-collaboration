@@ -16,8 +16,6 @@ signin-test-support = [
     "dep:collaboration-central-tokio",
     "dep:router-clock",
     "dep:runtime-primitives",
-    "dep:fleet-runtime-ports",
-    "dep:fleet-contracts",
     "dep:chrono",
     "dep:fleet-identity-protocol",
 ]
@@ -81,8 +79,6 @@ collaboration-central-core = { path = "../collaboration-central-core", version =
 collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.150", features = ["test-support"], optional = true }
 router-clock = { workspace = true, features = ["test-support"], optional = true }
 runtime-primitives = { workspace = true, optional = true }
-fleet-runtime-ports = { workspace = true, optional = true }
-fleet-contracts = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.150", optional = true }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }

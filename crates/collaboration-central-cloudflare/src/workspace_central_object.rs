@@ -9,8 +9,8 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{ClockIds, WorkspaceCaller, WorkspaceRuntime};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use futures_util::lock::Mutex;
 use serde::{Deserialize, Serialize};
 use sqlx_durable_object::DoConnection;
@@ -279,11 +279,15 @@ impl CentralObject {
             self.due_batches.clone(),
         );
         let runtime = match crate::organization_signin_link::trust_settings(&self.env) {
-            Ok(Some(settings)) => match CloudflareSignInTrust::new(settings).for_organization(organization, clock) {
-                Ok(check) => runtime.with_sign_in_verification(check),
-                Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
-                Err(_) => return Err(StoreFailure::Unavailable),
-            },
+            Ok(Some(settings)) => {
+                match CloudflareSignInTrust::new(settings).for_organization(organization, clock) {
+                    Ok(check) => runtime.with_sign_in_verification(check),
+                    Err(
+                        fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration,
+                    ) => runtime,
+                    Err(_) => return Err(StoreFailure::Unavailable),
+                }
+            }
             // Invalid/missing trust never permits sign-in. The default checker
             // returns the closed InvalidConfiguration refusal for core to observe.
             Ok(None) | Err(_) => runtime,

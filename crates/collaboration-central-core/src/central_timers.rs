@@ -1,7 +1,7 @@
 //! Organization gating and startup re-publication; the engine owns due work.
 use crate::{WorkspaceRuntime, workspace_decode_error::corrupt};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn alarm_organization_is_provisioned(&self) -> Result<bool, StoreFailure> {

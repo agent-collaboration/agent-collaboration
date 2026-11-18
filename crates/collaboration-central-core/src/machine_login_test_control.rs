@@ -1,11 +1,11 @@
 //! Closed test-support dispatch to the real private revocation decision.
+use crate::WorkspaceRuntime;
 use crate::identity_contract::{EndedMachineClient, PersonId};
 use crate::organization_authority::machine_login::{self, EnrollmentQuery};
 use crate::person_request::AdminOperationId;
-use crate::{WorkspaceRuntime};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::StoreFailure;
 use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

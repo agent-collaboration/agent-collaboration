@@ -7,9 +7,9 @@ use super::{
     failures::FailureOutcome,
     store_adapter::SubjectVersion,
 };
-use fleet_runtime_ports::CentralStore as _;
 use central_engine_model::{AttemptState, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_runtime_ports::CentralStore as _;
 
 /// The control record a run saw at its gate. Its success clears only that
 /// record, so a failure written after the gate survives (R3/R4).

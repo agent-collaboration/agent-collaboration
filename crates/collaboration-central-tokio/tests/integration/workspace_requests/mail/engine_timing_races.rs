@@ -6,11 +6,13 @@ use super::super::support::*;
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublication, CorruptReason, StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, engine_probe::ProbeEvent};
-use fleet_runtime_ports::{WorkspaceStores};
+use collaboration_central_core::{
+    AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, engine_probe::ProbeEvent,
+};
 use collaboration_central_tokio::ObjectStorage;
-use router_clock::RuntimeClock;
+use fleet_runtime_ports::WorkspaceStores;
 use fleet_runtime_ports::{Clock, SyncTime};
+use router_clock::RuntimeClock;
 use std::sync::{Arc, Mutex, PoisonError};
 
 fn set(time: Time) -> AlarmPublication {
@@ -163,7 +165,7 @@ impl WorkspaceStores for WorkspaceStore {
     }
 }
 #[derive(Clone)]
-struct SharedClock(Arc<dyn router_clock::RuntimeClock>);
+struct SharedClock(Arc<dyn Clock>);
 impl Clock for SharedClock {
     fn now(&self) -> SyncTime {
         self.0.now()

@@ -301,7 +301,13 @@ async fn settle(engine: &EngineOrg) {
                 .await;
             }
             Some(alarm) => {
-                let deadline = engine.f.clock.wall_deadline(alarm);
+                let deadline =
+                    engine
+                        .f
+                        .clock
+                        .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(
+                            alarm.unix_millis(),
+                        ));
                 within_progress_budget("re-checking the future alarm", || {
                     if runtime.alarm_failures().len() > failures {
                         failed();

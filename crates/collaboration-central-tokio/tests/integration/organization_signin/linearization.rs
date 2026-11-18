@@ -208,7 +208,7 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
     f.clock
         .not_due_check_now(
             f.clock
-                .wall_deadline(fleet_runtime_ports::SyncTime::from_unix_millis(
+                .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(
                     due.timestamp_millis(),
                 )),
         )

@@ -1,8 +1,8 @@
-use fleet_contracts::FleetOrganizationStatementRefusal as Refusal;
 use crate::organization_authority::fleet_statement_test_support::{
     FOREIGN_ORGANIZATION, ORGANIZATION, claims, header, organization, signed_statement, verifier,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::FleetOrganizationStatementRefusal as Refusal;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::sync::atomic::Ordering;

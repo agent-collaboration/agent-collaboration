@@ -17,7 +17,6 @@ use super::{
     },
     port::{Engine, EngineHost},
 };
-use fleet_runtime_ports::CentralStore as _;
 use crate::{
     workspace_decode_error::corrupt,
     workspace_row_codec::{column, string},
@@ -28,6 +27,7 @@ use central_engine_model::{
 use central_storage::{
     AlarmPublication, AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
+use fleet_runtime_ports::CentralStore as _;
 use futures_util::{StreamExt, stream};
 use std::sync::atomic::{AtomicBool, Ordering};
 

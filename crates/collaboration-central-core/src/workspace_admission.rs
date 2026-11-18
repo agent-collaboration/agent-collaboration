@@ -1,8 +1,8 @@
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::{json, string};
 use crate::{WorkspaceCaller, WorkspaceRuntime};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{MachineId, RefusalReason, WorkspaceId};
 
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {

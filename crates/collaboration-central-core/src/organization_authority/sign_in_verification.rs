@@ -1,9 +1,13 @@
 //! An organization's injected checks against the sign-in service's keys: its
 //! organization stamp, and a person's DPoP-bound admin request.
-use super::{FleetOrganizationStatementVerifier, StoredStatementFacts, VerifiedFleetOrganizationStatement};
-use fleet_contracts::{FleetOrganizationStatementRefusal};
-use crate::person_request::{PersonRequestInput, PersonRequestRefusal, PersonRequestVerifier, VerifiedPersonRequest};
-use fleet_runtime_ports::{Es256Verification};
+use super::{
+    FleetOrganizationStatementVerifier, StoredStatementFacts, VerifiedFleetOrganizationStatement,
+};
+use crate::person_request::{
+    PersonRequestInput, PersonRequestRefusal, PersonRequestVerifier, VerifiedPersonRequest,
+};
+use fleet_contracts::FleetOrganizationStatementRefusal;
+use fleet_runtime_ports::Es256Verification;
 use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource};
 use futures_util::future::BoxFuture;
 

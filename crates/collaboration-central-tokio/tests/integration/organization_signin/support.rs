@@ -10,7 +10,7 @@ use collaboration_central_tokio::{
 };
 use fleet_identity_protocol::OrganizationId;
 use router_clock::GatedClock;
-use fleet_runtime_ports::SyncTime;
+use runtime_primitives::SyncTime;
 use serde_json::{Value, json};
 use std::sync::Arc;
 pub(super) const A: &str = signed::ORGANIZATION;

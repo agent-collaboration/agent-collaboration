@@ -126,7 +126,7 @@ impl Fixture {
     pub async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let clock = Arc::new(
-            router_clock::GatedClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
+            router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
                 1_794_571_200_000,
             ))
             .unwrap(),
@@ -152,7 +152,12 @@ impl Fixture {
     }
     /// Moves the clock to `at` under the same gate.
     pub async fn advance_to(&self, at: fleet_runtime_ports::SyncTime) {
-        self.clock.advance_to(at).await.unwrap();
+        self.clock
+            .advance_to(runtime_primitives::SyncTime::from_unix_millis(
+                at.unix_millis(),
+            ))
+            .await
+            .unwrap();
     }
     /// Sets the wall clock under the same gate.
     pub async fn set_utc(&self, utc: chrono::DateTime<chrono::Utc>) {
@@ -163,7 +168,7 @@ impl Fixture {
         self.clock.set_utc_while_a_batch_is_held(utc);
     }
     /// The same clock, read-only, for a runtime a case builds itself.
-    pub fn shared_for_runtime(&self) -> Arc<dyn router_clock::RuntimeClock> {
+    pub fn shared_for_runtime(&self) -> Arc<router_clock::GatedClock> {
         self.clock.clone()
     }
     pub async fn call(&self, request: u32, operation: m::WorkspaceOperation) -> m::WorkspaceReply {

@@ -1,11 +1,15 @@
 //! Strict authorization-floor decoding and snapshot guards for modern central.
-use crate::{person_request::{
+use crate::{
+    person_request::{
         FloorRevision, OrganizationFloor, OrganizationFloorState, PersonFloor, PersonFloorState,
-    }, workspace_decode_error::corrupt, workspace_row_codec::{column, string}};
-use fleet_runtime_ports::{CentralStore};
+    },
+    workspace_decode_error::corrupt,
+    workspace_row_codec::{column, string},
+};
 use central_storage::{
     GuardedStatement, ReadOutcome, SafeInteger, SqlValue, Statement, StoreFailure,
 };
+use fleet_runtime_ports::CentralStore;
 
 pub(crate) fn integer(value: i64, field: &str) -> Result<SqlValue, StoreFailure> {
     SafeInteger::new(value)

@@ -1,10 +1,18 @@
 //! Verified setup decisions share one org-owned directory, ledger and audit batch.
-use crate::{AdminRefusal, OrganizationAdminResult, WorkspaceRuntime, organization_admin_contract::{RetainedOrganizationAdminAnswer, WorkspaceView}, organization_change_rows::{
+use crate::{
+    AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
+    organization_admin_contract::{RetainedOrganizationAdminAnswer, WorkspaceView},
+    organization_change_rows::{
         self, ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
         OrganizationChangeRecord,
-    }, person_request::{CreateWorkspaceRequest, VerifiedPersonRequest}, workspace_decode_error::corrupt, workspace_directory_rows::{self, DirectoryWorkspace}, workspace_row_codec::{json, string}};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+    },
+    person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
+    workspace_decode_error::corrupt,
+    workspace_directory_rows::{self, DirectoryWorkspace},
+    workspace_row_codec::{json, string},
+};
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
     WorkspaceId, WorkspaceState,

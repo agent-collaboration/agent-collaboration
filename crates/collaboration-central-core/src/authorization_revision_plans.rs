@@ -1,10 +1,15 @@
 //! Static authorization-floor batches prepared while the caller holds the org turn.
-use crate::{authorization_floor_rows::{
+use crate::{
+    authorization_floor_rows::{
         integer, organization_guard, organization_state, person_guard, person_state,
         read_organization_floor, read_person_floor,
-    }, guarded_statements::{exact, text}, identity_contract::AuthorizationRevision, person_request::floor_delivery::{FloorDelivery, FloorMutation, decide_floor_delivery}};
-use fleet_runtime_ports::{CentralStore};
+    },
+    guarded_statements::{exact, text},
+    identity_contract::AuthorizationRevision,
+    person_request::floor_delivery::{FloorDelivery, FloorMutation, decide_floor_delivery},
+};
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::CentralStore;
 use workspace_model::Timestamp;
 
 pub(crate) struct AuthorizationRevisionPlan {

@@ -40,7 +40,9 @@ async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
         match published {
             Some(alarm) if alarm.unix_millis() > at.timestamp_millis() => {
                 f.clock
-                    .not_due_check_now(f.clock.wall_deadline(alarm))
+                    .not_due_check_now(f.clock.wall_deadline(
+                        runtime_primitives::SyncTime::from_unix_millis(alarm.unix_millis()),
+                    ))
                     .await;
             }
             _ => std::future::pending().await,

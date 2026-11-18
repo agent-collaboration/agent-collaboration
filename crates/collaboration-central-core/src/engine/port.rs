@@ -2,10 +2,10 @@
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
 use super::{DueBatchState, legacy_units::LegacyUnitOutcome};
-use fleet_contracts::{CentralObservation};
-use fleet_runtime_ports::{CentralStore};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_contracts::CentralObservation;
+use fleet_runtime_ports::CentralStore;
 use std::future::Future;
 
 pub(crate) trait EngineHost: Send + Sync {

@@ -4,8 +4,8 @@ use super::super::{Statement, support::*};
 use super::engine_probe_support::*;
 use central_storage::{SqlValue, StoreFailure};
 use collaboration_central_core::{AlarmNotPublished, EngineReadFault};
-use router_clock::RuntimeClock;
 use fleet_runtime_ports::SyncTime;
+use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };
@@ -28,7 +28,7 @@ pub(super) async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
             .not_due_check_now(
                 fixture
                     .clock
-                    .wall_deadline(SyncTime::from_unix_millis(alarm)),
+                    .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(alarm)),
             )
             .await;
     }
@@ -381,7 +381,9 @@ async fn a_failed_final_publication_fails_the_event_and_the_driver_retries_at_th
     let retry = SyncTime::from_unix_millis(at(start, 10, 0).timestamp_millis());
     fixture
         .clock
-        .not_due_check_now(fixture.clock.wall_deadline(retry))
+        .not_due_check_now(fixture.clock.wall_deadline(
+            runtime_primitives::SyncTime::from_unix_millis(retry.unix_millis()),
+        ))
         .await;
     let callbacks = runtime.alarm_completion_count();
     fixture.advance_to(retry).await;

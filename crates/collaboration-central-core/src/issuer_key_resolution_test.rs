@@ -1,9 +1,9 @@
 //! Refresh policy uses an event-driven source double and a controlled clock.
 use crate::{IssuerKeyCache, IssuerKeyId, resolve_issuer_key};
-use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal};
-use fleet_runtime_ports::{IssuerKeySource, KeyFetchFailure, RawJwks};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal};
 use fleet_runtime_ports::{Clock, SyncTime};
+use fleet_runtime_ports::{IssuerKeySource, KeyFetchFailure, RawJwks};
 use std::{
     collections::VecDeque,
     sync::{

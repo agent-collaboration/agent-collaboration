@@ -8,8 +8,8 @@ use crate::identity_contract::{
     MachineTokenRefusal, PersonId,
 };
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
-use message_board::{MachineLabel, WorkspaceId};
 use fleet_runtime_ports::IdSource;
+use message_board::{MachineLabel, WorkspaceId};
 use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
 

@@ -1,8 +1,8 @@
 //! Exact signed bytes are checked against keys from the configured issuer source.
 use crate::{IssuerKeyCache, IssuerKeyId, resolve_issuer_key};
-use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, SignatureValidity};
 use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerSignatureRefusal};
 use fleet_runtime_ports::Clock;
+use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, SignatureValidity};
 use std::sync::Arc;
 
 pub struct IssuerSignatureVerifier<Platform, Source> {

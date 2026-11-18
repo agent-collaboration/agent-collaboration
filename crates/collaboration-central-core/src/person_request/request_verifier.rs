@@ -9,16 +9,15 @@ use super::{
     },
     refusal::PersonRequestRefusal,
 };
-use crate::{IssuerSignatureVerifier};
+use crate::IssuerSignatureVerifier;
+use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::Clock;
 use fleet_runtime_ports::{
     Ed25519Verification, Es256Verification, IssuerKeySource, ProofJwk, SignatureValidity,
 };
-use fleet_identity_protocol::OrganizationId;
-use fleet_runtime_ports::Clock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
-
 
 /// The deployment's trust: who signs person tokens, the audience they name for
 /// central's admin surface, and central's configured external origin.

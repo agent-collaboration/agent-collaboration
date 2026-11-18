@@ -4,11 +4,13 @@
 //! object needs it after a process start, and its expiry is rechecked on the
 //! injected clock on every use. A stamp that fails the check refuses every
 //! command except a provisioning call that can replace it.
-use crate::organization_authority::{SignInVerification, StoredStampRead, StoredStatementFacts, VerifiedFleetOrganizationStatement};
-use fleet_contracts::{FleetOrganizationStatementRefusal};
+use crate::organization_authority::{
+    SignInVerification, StoredStampRead, StoredStatementFacts, VerifiedFleetOrganizationStatement,
+};
+use fleet_contracts::FleetOrganizationStatementRefusal;
 use fleet_identity_protocol::UnixSeconds;
-use futures_util::future::BoxFuture;
 use fleet_runtime_ports::SyncTime;
+use futures_util::future::BoxFuture;
 use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

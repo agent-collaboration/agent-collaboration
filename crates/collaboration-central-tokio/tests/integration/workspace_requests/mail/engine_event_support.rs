@@ -4,8 +4,8 @@
 use super::super::{Statement, support::*};
 use super::engine_probe_support::*;
 use central_storage::SqlValue;
-use router_clock::RuntimeClock;
 use fleet_runtime_ports::SyncTime;
+use router_clock::RuntimeClock;
 use workspace_model as m;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
@@ -36,7 +36,7 @@ pub(super) async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
             .not_due_check_now(
                 fixture
                     .clock
-                    .wall_deadline(SyncTime::from_unix_millis(alarm)),
+                    .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(alarm)),
             )
             .await;
     }

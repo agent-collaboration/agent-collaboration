@@ -411,7 +411,14 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         .expect("W1 drain keeps an alarm");
     // Let the real native driver settle on the published deadline, then advance
     // the one clock: the driver itself runs the due batch that drains W1.
-    f.clock.not_due_check_now(f.clock.wall_deadline(next)).await;
+    f.clock
+        .not_due_check_now(
+            f.clock
+                .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(
+                    next.unix_millis(),
+                )),
+        )
+        .await;
     let before_driver = runtime.alarm_completion_count();
     f.advance_to(next).await;
     let driver_drained = tokio::select! {

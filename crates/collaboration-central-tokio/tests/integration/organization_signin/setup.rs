@@ -156,7 +156,7 @@ async fn expired_digest_returns_verified_facts_but_create_stays_refused() -> Res
     let later = expires + 1;
     fixture
         .clock
-        .advance_to(fleet_runtime_ports::SyncTime::from_unix_millis(later * 1000))
+        .advance_to(runtime_primitives::SyncTime::from_unix_millis(later * 1000))
         .await?;
     let before = fixture.snapshot().await?;
     let before_admission = admission_rows(&fixture).await?;

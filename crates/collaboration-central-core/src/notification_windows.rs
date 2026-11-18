@@ -1,8 +1,14 @@
 //! Recipient windows collate source-owned activity across workspace boundaries.
 use crate::engine::legacy_units::LegacyUnitOutcome;
-use crate::{WorkspaceRuntime, central_mail_store::{self, timestamp}, guarded_statements::{any, exact, text}, workspace_decode_error::corrupt, workspace_row_codec::{column, json, string}};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use crate::{
+    WorkspaceRuntime,
+    central_mail_store::{self, timestamp},
+    guarded_statements::{any, exact, text},
+    workspace_decode_error::corrupt,
+    workspace_row_codec::{column, json, string},
+};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::{NotificationWindowId, NotificationWindowItemId};
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, ChangeId, NoticeCadence, ThreadId, Timestamp, WorkspaceId};

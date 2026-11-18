@@ -1,8 +1,8 @@
 //! Issuer key decoding and five-minute retention, separate from legacy Access.
-use fleet_contracts::IssuerKeyRefusal;
-use fleet_runtime_ports::RawJwks;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
+use fleet_contracts::IssuerKeyRefusal;
+use fleet_runtime_ports::RawJwks;
 use message_board::IdentityValidationError;
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Mutex};

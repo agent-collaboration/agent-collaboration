@@ -1,11 +1,18 @@
 //! P8's four admin operations on the existing organization-admin owner: the
 //! reads answer from storage; retry and discard retain their answer under the
 //! operation ID, so a replay returns it as CreateWorkspace's does.
-use crate::{AdminRefusal, OrganizationAdminResult, WorkspaceRuntime, engine::admin::{AttemptRefusal, DiscardOutcome}, organization_admin_contract::{
+use crate::{
+    AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
+    engine::admin::{AttemptRefusal, DiscardOutcome},
+    organization_admin_contract::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
-    }, person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest}, workspace_decode_error::corrupt, workspace_row_codec::{json, string}};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+    },
+    person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest},
+    workspace_decode_error::corrupt,
+    workspace_row_codec::{json, string},
+};
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{ActorIdentityId, Identity, PersonId, RequestId, Timestamp};
 
 /// What the admin batch carries for one engine operation.

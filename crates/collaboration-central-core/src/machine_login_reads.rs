@@ -1,10 +1,19 @@
 //! Read only the machine-login facts named by an organization-serialized query.
-use crate::{guarded_statements::text, identity_contract::{EndedMachineClient, EnrollmentRevocationReason}, machine_login_row_values::{identifier, nonnegative_integer}, machine_login_rows::{enrollment, machine, only_row}, organization_authority::machine_login::{
+use crate::{
+    guarded_statements::text,
+    identity_contract::{EndedMachineClient, EnrollmentRevocationReason},
+    machine_login_row_values::{identifier, nonnegative_integer},
+    machine_login_rows::{enrollment, machine, only_row},
+    organization_authority::machine_login::{
         EnrollmentFacts, EnrollmentQuery, StoredEnrollment, StoredEnrollmentState,
-    }, organization_change_rows::{OrganizationChangeOrigin, read_machine_supersession}, workspace_decode_error::corrupt, workspace_row_codec::string};
-use fleet_runtime_ports::{CentralStore};
+    },
+    organization_change_rows::{OrganizationChangeOrigin, read_machine_supersession},
+    workspace_decode_error::corrupt,
+    workspace_row_codec::string,
+};
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::CentralStore;
 
 const BY_REQUEST: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.request_id=?";
 const BY_ENROLLMENT: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.approval_id=?";

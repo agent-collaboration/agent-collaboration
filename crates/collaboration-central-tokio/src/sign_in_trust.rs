@@ -1,14 +1,18 @@
 //! Native sign-in trust: real HTTP key publication and core-owned cache policy.
 
 use crate::sign_in_crypto::{NativeEd25519, NativeEs256};
-use collaboration_central_core::{IssuerKeyCache, IssuerSignatureVerifier, SignInTrustSettings, organization_authority::{
-        FleetOrganizationStatementTrust,
-        FleetOrganizationStatementVerifier, SignInVerification, SignInVerifiers,
-    }, person_request::{PersonRequestPolicy, PersonRequestVerifier}};
+use collaboration_central_core::{
+    IssuerKeyCache, IssuerSignatureVerifier, SignInTrustSettings,
+    organization_authority::{
+        FleetOrganizationStatementTrust, FleetOrganizationStatementVerifier, SignInVerification,
+        SignInVerifiers,
+    },
+    person_request::{PersonRequestPolicy, PersonRequestVerifier},
+};
 use fleet_contracts::FleetOrganizationStatementRefusal;
-use fleet_runtime_ports::{IssuerKeySource, KeyFetchFailure, RawJwks};
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::Clock;
+use fleet_runtime_ports::{IssuerKeySource, KeyFetchFailure, RawJwks};
 use std::sync::Arc;
 
 /// The host retains one trust configuration and key cache across its org runtimes.

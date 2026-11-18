@@ -1,12 +1,18 @@
 //! Prepare fresh-proof reservation; the caller appends its effect to the same batch.
-use crate::{authorization_floor_rows::{
+use crate::{
+    authorization_floor_rows::{
         integer, organization_guard, person_guard, read_organization_floor, read_person_floor,
-    }, guarded_statements::{exact, text}, person_request::{
+    },
+    guarded_statements::{exact, text},
+    person_request::{
         AdmissionRefusal, VerifiedPersonRequest,
         request_admission::{admission_before_person, decide_admission, request_time_refusal},
-    }, workspace_decode_error::corrupt, workspace_row_codec::string};
-use fleet_runtime_ports::{CentralStore};
+    },
+    workspace_decode_error::corrupt,
+    workspace_row_codec::string,
+};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore;
 use workspace_model::Timestamp;
 
 pub(crate) struct PersonAdmissionPlan {

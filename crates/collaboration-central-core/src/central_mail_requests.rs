@@ -1,7 +1,12 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
-use crate::{WorkspaceCaller, WorkspaceRuntime, central_mail_store::{self, insert_message}, workspace_decode_error::corrupt, workspace_row_codec::{json, string}};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use crate::{
+    WorkspaceCaller, WorkspaceRuntime,
+    central_mail_store::{self, insert_message},
+    workspace_decode_error::corrupt,
+    workspace_row_codec::{json, string},
+};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 use workspace_model::central_mail as mail;
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {

@@ -1,7 +1,13 @@
 //! Position-ordered activity joins one central recipient window across workspaces.
-use crate::{WorkspaceRuntime, guarded_statements::{any, text}, notification_windows::{NotificationWindow, window_statements}, workspace_decode_error::corrupt, workspace_row_codec::WorkspaceRows};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use crate::{
+    WorkspaceRuntime,
+    guarded_statements::{any, text},
+    notification_windows::{NotificationWindow, window_statements},
+    workspace_decode_error::corrupt,
+    workspace_row_codec::WorkspaceRows,
+};
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use std::collections::BTreeSet;
 use workspace_model as m;
 

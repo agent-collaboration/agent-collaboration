@@ -1,7 +1,12 @@
 //! Shared modern directory rows; each caller retains its own decision and replay contract.
-use crate::{guarded_statements::{exact, text}, person_request::MAXIMUM_DESCRIPTION_BYTES, workspace_decode_error::corrupt, workspace_row_codec::string};
-use fleet_runtime_ports::{CentralStore};
+use crate::{
+    guarded_statements::{exact, text},
+    person_request::MAXIMUM_DESCRIPTION_BYTES,
+    workspace_decode_error::corrupt,
+    workspace_row_codec::string,
+};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore;
 use workspace_model::{Description, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
 
 pub(crate) struct DirectoryWorkspace {

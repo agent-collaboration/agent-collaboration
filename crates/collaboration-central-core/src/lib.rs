@@ -56,7 +56,6 @@ mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
 
-
 mod central_mail_requests;
 mod central_mail_rows;
 mod central_mail_store;
@@ -83,9 +82,7 @@ mod issuer_key_resolution;
 mod issuer_signature_verifier;
 pub mod organization_authority;
 pub mod person_request;
-pub use issuer_key_cache::{
-    IssuerKeyCache, IssuerKeyId, IssuerKeySet, IssuerVerificationKey,
-};
+pub use issuer_key_cache::{IssuerKeyCache, IssuerKeyId, IssuerKeySet, IssuerVerificationKey};
 pub use issuer_key_resolution::resolve_issuer_key;
 pub use issuer_signature_verifier::IssuerSignatureVerifier;
 mod sign_in_trust_settings;

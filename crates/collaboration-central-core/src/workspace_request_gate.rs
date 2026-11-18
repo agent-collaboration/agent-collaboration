@@ -2,8 +2,8 @@
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::WorkspaceRows;
 use crate::{WorkspaceCaller, WorkspaceRuntime};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 
 fn reply(result: m::WorkspaceResult) -> m::WorkspaceReply {

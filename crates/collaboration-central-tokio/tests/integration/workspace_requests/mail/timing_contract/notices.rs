@@ -217,7 +217,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     tokio::select! {
         () = f
             .clock
-            .not_due_check_now(f.clock.wall_deadline(r.statement_host().alarm().unwrap())) => {}
+            .not_due_check_now(f.clock.wall_deadline(runtime_primitives::SyncTime::from_unix_millis(r.statement_host().alarm().unwrap().unix_millis()))) => {}
         () = r.until_alarm_failed(failures + 1) => panic!(
             "the alarm driver failed instead of checking its alarm: {:?}",
             r.alarm_failures()

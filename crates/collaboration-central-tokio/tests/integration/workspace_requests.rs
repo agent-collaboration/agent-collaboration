@@ -11,7 +11,7 @@ use support::*;
 async fn central_replay_and_real_workspace_project_thread_rules() {
     let root = tempfile::tempdir().unwrap();
     let clock = Arc::new(
-        router_clock::GatedClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
+        router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1_794_571_200_000,
         ))
         .unwrap(),
@@ -128,7 +128,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
 async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
     let root = tempfile::tempdir().unwrap();
     let clock = Arc::new(
-        router_clock::GatedClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
+        router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1_794_571_200_000,
         ))
         .unwrap(),
@@ -191,7 +191,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
 async fn real_issue_status_and_computed_views_guard_project_closure() {
     let root = tempfile::tempdir().unwrap();
     let clock = Arc::new(
-        router_clock::GatedClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
+        router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1_794_571_200_000,
         ))
         .unwrap(),
@@ -331,7 +331,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
 async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_are_new() {
     let root = tempfile::tempdir().unwrap();
     let clock = Arc::new(
-        router_clock::GatedClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
+        router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1_794_571_200_000,
         ))
         .unwrap(),

@@ -5,7 +5,7 @@ use collaboration_central_core::signin_test_observation::SignInObservation;
 use collaboration_central_tokio::TokioWorkspaceHost;
 use fleet_identity_protocol::OrganizationId;
 use router_clock::ManualClock;
-use fleet_runtime_ports::{Clock, SyncTime};
+use runtime_primitives::{Clock, SyncTime};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc};
 

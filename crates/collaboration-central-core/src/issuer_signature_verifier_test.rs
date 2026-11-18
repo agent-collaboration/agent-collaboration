@@ -1,9 +1,12 @@
-use super::{IssuerSignatureVerifier};
-use fleet_contracts::{IssuerSignatureRefusal};
-use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, KeyFetchFailure, RawJwks, SignatureValidity, VerifyFailure};
-use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal};
+use super::IssuerSignatureVerifier;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::IssuerSignatureRefusal;
+use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal};
 use fleet_runtime_ports::{Clock, SyncTime};
+use fleet_runtime_ports::{
+    Ed25519Verification, IssuerKeySource, KeyFetchFailure, RawJwks, SignatureValidity,
+    VerifyFailure,
+};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
