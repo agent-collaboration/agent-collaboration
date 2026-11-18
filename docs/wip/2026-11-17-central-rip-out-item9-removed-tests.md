@@ -5,7 +5,7 @@ Owner decision (2026-11-17): "Yes remove old and make sure you craft new tests t
 Every test below ran on the old central through `board-central-test-support`, the in-process old central (`TokioServer`, `/v1/session`, old enrollment). It reached that central directly, through `BoardFixture`'s old-central parts, or through one of three collaboration-service fixtures: the subscription delivery owner setup, the project admission subscription fixture, or the mail push delivery fixture. Each test maps to item 9.
 
 - **file removed**: the whole test file ran on that support and went with it.
-- **stopped compiling**: the compiler chose these. A test is listed when it cannot compile once that support is gone. Two independent runs produced the same set.
+- **stopped compiling**: the compiler chose these. A test is listed when it cannot compile once that support is gone, or when it relaunches a child test that went that way (the two project mail crash parents). Two independent runs produced the same set.
 
 ## Counts
 
@@ -16,8 +16,8 @@ Every test below ran on the old central through `board-central-test-support`, th
 | codex-router-host | 0 | 70 | 70 |
 | collaboration-client | 0 | 11 | 11 |
 | collaboration-mcp | 0 | 6 | 6 |
-| collaboration-service | 254 | 306 | 560 |
-| **total** | **257** | **459** | **716** |
+| collaboration-service | 254 | 308 | 562 |
+| **total** | **257** | **461** | **718** |
 
 Helpers, fixtures and imports that only these tests used went with them. There were 574 items that stopped compiling, then 644 items that rustc reported dead in every target that compiles their file. That includes `#[cfg(test)]` hooks in production files: `*_for_test` methods, `startup_test_*` fields, the subscription owner's test-only observation payloads and its `Barrier` command. None is serialized. A search of `verification/`, `docs/` and the schema exporter for each name, snake_case and camelCase, found no non-Rust reader.
 
@@ -343,6 +343,8 @@ Helpers, fixtures and imports that only these tests used went with them. There w
 | `src/project_mail_cancel_admission_tests.rs` | `another_canonical_cancel_leaves_no_proposed_child_custody_or_epoch_after_reopen` | stopped compiling |
 | `src/project_mail_cancel_admission_tests.rs` | `unconfigured_project_cancel_returns_unavailable_without_custody_or_epoch` | stopped compiling |
 | `src/project_mail_crash_tests.rs` | `project_outbox_crash_child_entry` | stopped compiling |
+| `src/project_mail_crash_tests.rs` | `sigkill_between_cancel_custody_and_epoch_writes_preserves_neither_after_reopen` | stopped compiling |
+| `src/project_mail_crash_tests.rs` | `sigkill_between_sdk_and_epoch_writes_preserves_neither_after_owning_reopen` | stopped compiling |
 | `src/remote_direct_send_tests.rs` | `configured_application_send_queues_offline_replays_and_rejects_conflicting_content_without_a_push` | stopped compiling |
 | `src/remote_direct_send_tests.rs` | `unconfigured_remote_application_send_has_no_custody_answer_or_epoch` | stopped compiling |
 | `src/remote_mail_assembly_tests.rs` | `local_send_completes_while_the_attached_remote_session_is_unwelcomed_and_closed` | stopped compiling |

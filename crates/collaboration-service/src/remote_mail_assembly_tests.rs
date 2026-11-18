@@ -1,5 +1,4 @@
 //! Real runtime construction and Local intake need no welcomed remote carrier.
-use std::time::Duration;
 
 #[path = "remote_direct_send_tests.rs"]
 mod direct_send;
