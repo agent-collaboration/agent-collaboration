@@ -106,6 +106,7 @@ fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<dyn OutboxStorage>>
     let stop = CancellationToken::new();
     let calls = RouterLinkCalls::start(
         CentralLinkParts {
+            inbox: None,
             installation: installation(),
             clock,
             store,

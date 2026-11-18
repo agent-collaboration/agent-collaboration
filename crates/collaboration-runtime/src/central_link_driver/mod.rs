@@ -4,6 +4,8 @@
 mod driver_task;
 #[cfg(test)]
 mod driver_test_support;
+#[cfg(test)]
+mod installation_address;
 mod installation_link;
 mod link_transport;
 #[cfg(test)]
@@ -25,7 +27,7 @@ pub use link_transport::{
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
 
-use crate::OutboxStorage;
+use crate::{CentralInbox, OutboxStorage};
 use crate::outbox_store::OutboxStoreError;
 use central_link_client::{
     FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, LinkStatus, OutgoingWrite,
@@ -105,6 +107,7 @@ pub struct CentralLinkParts {
     pub tokens: Arc<dyn MachineTokenSource>,
     pub jitter: Arc<dyn FlushJitter>,
     pub outcomes: Arc<dyn FlushOutcomeSink>,
+    pub inbox: Option<CentralInbox>,
 }
 
 /// The tools' handle on the running link. Cheap to clone.
@@ -125,16 +128,8 @@ impl RouterLinkCalls {
     /// Starts the link driver on `tasks`; it stops when `stop` is cancelled.
     pub fn start(parts: CentralLinkParts, tasks: &TaskTracker, stop: CancellationToken) -> Self {
         let (commands, receiver) = mpsc::channel(256);
-        let client = LinkClient::new(parts.installation, parts.clock.clone());
-        let driver = driver_task::LinkDriver::new(
-            parts.clock,
-            parts.store,
-            parts.transport,
-            parts.tokens,
-            parts.jitter,
-            parts.outcomes,
-            client,
-        );
+        let client = LinkClient::new(parts.installation.clone(), parts.clock.clone());
+        let driver = driver_task::LinkDriver::new(parts, client);
         tasks.spawn(driver.run(receiver, stop));
         Self { commands }
     }

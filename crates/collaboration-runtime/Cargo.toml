@@ -60,6 +60,7 @@ thiserror.workspace = true
 [dev-dependencies]
 collaboration-link-test-support = { path = "../collaboration-link-test-support" }
 rand.workspace = true
+turmoil.workspace = true
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.114", features = ["test-support"] }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }

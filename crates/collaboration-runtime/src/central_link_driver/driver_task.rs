@@ -5,9 +5,9 @@ use super::link_transport::{
     LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource,
     TokenAvailability, TransportFuture,
 };
-use super::{DriverCommand, FlushJitter};
-use crate::OutboxStorage;
+use super::{CentralLinkParts, DriverCommand, FlushJitter};
 use crate::outbox_store::{NewOutboxItem, OutboxInsert, OutboxStoreError};
+use crate::{CentralInbox, OutboxStorage};
 use central_link_client::{
     CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEvent,
     FlushOutcome, FlushOutcomeSink, LinkAdmissionRefusal, LinkClient, MemberOutcome,
@@ -52,6 +52,7 @@ pub(super) struct LinkDriver {
     pub(super) tokens: Arc<dyn MachineTokenSource>,
     pub(super) jitter: Arc<dyn FlushJitter>,
     pub(super) sink: Arc<dyn FlushOutcomeSink>,
+    pub(super) inbox: Option<CentralInbox>,
     pub(super) client: LinkClient,
     pub(super) flush: OutboxFlushState,
     socket: Option<(ConnectionAttempt, Box<dyn LinkSocket>)>,
@@ -75,22 +76,15 @@ pub(super) struct LinkDriver {
 }
 
 impl LinkDriver {
-    pub(super) fn new(
-        clock: Arc<dyn RuntimeClock>,
-        store: Arc<Mutex<dyn OutboxStorage>>,
-        transport: Arc<dyn LinkTransport>,
-        tokens: Arc<dyn MachineTokenSource>,
-        jitter: Arc<dyn FlushJitter>,
-        sink: Arc<dyn FlushOutcomeSink>,
-        client: LinkClient,
-    ) -> Self {
+    pub(super) fn new(parts: CentralLinkParts, client: LinkClient) -> Self {
         Self {
-            clock,
-            store,
-            transport,
-            tokens,
-            jitter,
-            sink,
+            clock: parts.clock,
+            store: parts.store,
+            transport: parts.transport,
+            tokens: parts.tokens,
+            jitter: parts.jitter,
+            sink: parts.outcomes,
+            inbox: parts.inbox,
             client,
             flush: OutboxFlushState::default(),
             socket: None,
@@ -114,6 +108,7 @@ impl LinkDriver {
     ) {
         // Start-up: sent rows from before a stop go back to waiting.
         self.reconcile_sent().await;
+        self.recover_inbox(self.clock.now()).await;
         loop {
             self.drive_time().await;
             let deadline = [
@@ -279,12 +274,12 @@ impl LinkDriver {
                 result,
             } => self.reply_arrived(&correlation_id, result).await,
             // Pong resets the client's heartbeat; a late reply was settled.
-            // Inbox delivery and message outcomes arrive in 2c steps C and D.
             ClientEvent::TokenRenewal {
                 correlation_id,
                 result,
             } => self.renewal_answered(&correlation_id, &result),
-            ClientEvent::Pong | ClientEvent::LateReply { .. } | ClientEvent::Deliver { .. } => {}
+            ClientEvent::Deliver { message } => self.receive_delivery(message).await,
+            ClientEvent::Pong | ClientEvent::LateReply { .. } => {}
         }
     }
 

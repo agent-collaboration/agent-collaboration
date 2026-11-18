@@ -308,6 +308,7 @@ impl Harness {
         let tasks = TaskTracker::new();
         let calls = RouterLinkCalls::start(
             CentralLinkParts {
+                inbox: None,
                 installation: INSTALLATION.parse().unwrap(),
                 clock: clock.clone(),
                 store: store.clone(),

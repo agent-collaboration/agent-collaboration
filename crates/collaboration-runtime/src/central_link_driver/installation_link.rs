@@ -73,6 +73,7 @@ pub fn start_installation_link(
         transport,
         tokens,
         outcomes: Arc::new(LoggedFlushOutcomes),
+        inbox: None,
     };
     Some(RouterLinkCalls::start(parts, tasks, stop))
 }
