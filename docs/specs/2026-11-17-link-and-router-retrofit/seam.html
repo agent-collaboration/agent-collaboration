@@ -18,7 +18,7 @@ flowchart TB
   tool["Router tool (MCP, CLI): CLI+MCP Lead"]
   seam["SEAM: LinkCalls::submit(caller, payload) -> Submission"]
   imm["Immediate: send now over the link,<br/>wait for central's answer"]
-  ob["Outbox: store in provider_operations.sqlite,<br/>flush on the next 1-minute mark (±3 s)"]
+  ob["Outbox: store in machine_local.sqlite,<br/>flush on the next 1-minute mark (±3 s)"]
   link["Link client + central link server: Lead A"]
   tool --> seam
   seam -- "every other operation" --> imm --> link
@@ -99,7 +99,7 @@ pub enum SubmitRefusal {
 
 <h2 id="split">5 · Who builds what</h2>
 <ul>
-<li><strong>Lead A, below the seam:</strong> <code>LinkCalls</code>; the outbox table and flush loop; <code>machine_local.sqlite</code>/<code>provider_operations.sqlite</code>; the link client wiring; the central link server; the inbox, Welcome resend and de-duplication; the batch frame (at most 64 writes per flush).</li>
+<li><strong>Lead A, below the seam:</strong> <code>LinkCalls</code>; the outbox table and flush loop; <code>machine_local.sqlite</code> (the outbox and the inbox; <code>provider_operations.sqlite</code> holds provider operations only, owner record:210); the link client wiring; the central link server; the inbox, Welcome resend and de-duplication; the batch frame (at most 64 writes per flush).</li>
 <li><strong>CLI+MCP Lead, above the seam:</strong> every tool and command mapped to a <code>RequestPayload</code> or deleted; the agent-facing wording; the status tool.</li>
 <li><strong>Stand-ins while both build:</strong> Lead A ships a <code>FakeLinkCalls</code> (dev-only) that honours this contract, including <code>InOutbox</code> and later <code>Answered</code>. The tools build against it until the real link lands.</li>
 <li><strong>A seam change</strong> needs both Leads' agreement, posted on the shared thread.</li>

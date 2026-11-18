@@ -9,7 +9,7 @@ use super::{
 use central_link_client::{FlushOutcomeSink, FlushOutcomes, LinkCalls, RequestStatus, Submission};
 use central_link_protocol::{RequestPayload, TokenRenewalResult};
 use collaboration_runtime::{
-    CentralLinkParts, FlushJitter, MachineTokenSource, ProviderOperationStore, RouterLinkCalls,
+    CentralLinkParts, FlushJitter, MachineLocalStore, MachineTokenSource, RouterLinkCalls,
     TokenAvailability, TransportFuture,
 };
 use router_clock::RuntimeClock;
@@ -100,10 +100,7 @@ struct RunningLink {
     stop: CancellationToken,
 }
 
-fn start_link(
-    clock: Arc<dyn RuntimeClock>,
-    store: Arc<Mutex<ProviderOperationStore>>,
-) -> RunningLink {
+fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<MachineLocalStore>>) -> RunningLink {
     let tasks = TaskTracker::new();
     let stop = CancellationToken::new();
     let calls = RouterLinkCalls::start(
@@ -140,7 +137,7 @@ pub(super) async fn run_router(
     report: SharedRouterReport,
 ) -> turmoil::Result {
     let clock: Arc<dyn RuntimeClock> = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
-    let store = Arc::new(Mutex::new(ProviderOperationStore::open(&store_path).await?));
+    let store = Arc::new(Mutex::new(MachineLocalStore::open(&store_path).await?));
     let mut link = start_link(clock.clone(), store.clone());
     let mut restarted = false;
     let started = clock.monotonic_now();

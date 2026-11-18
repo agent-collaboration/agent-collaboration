@@ -1,5 +1,5 @@
 use super::*;
-use central_link_client::{LinkAdmissionRefusal, PendingWriteState};
+use central_link_client::{LinkAdmissionRefusal, OutboxCancellation, PendingWriteState};
 use central_link_protocol::ReplyPayload;
 use hegel::{TestCase, generators as gs};
 use serde_json::json;
@@ -61,8 +61,8 @@ fn at(millis: i64) -> SyncTime {
     SyncTime::from_unix_millis(millis)
 }
 
-async fn open(root: &tempfile::TempDir) -> ProviderOperationStore {
-    ProviderOperationStore::open(&root.path().join("provider-operations.sqlite"))
+async fn open(root: &tempfile::TempDir) -> MachineLocalStore {
+    MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
         .await
         .unwrap()
 }
@@ -209,6 +209,95 @@ async fn an_answer_or_refusal_drops_the_text_from_the_row_and_every_view() {
     );
     assert_eq!(conflicting, OutboxInsert::ConflictingContent);
     assert_eq!(moved_conflict, OutboxInsert::ConflictingContent);
+}
+
+#[tokio::test]
+async fn cancelled_and_given_up_rows_read_as_cancelled_hold_no_text_and_are_pruned() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = open(&root).await;
+    let mut ids = Vec::new();
+    for (seed, state) in [(21_u16, "cancelled"), (22, "gaveUp")] {
+        let write = item(seed, "never sent", MARK);
+        MacOutbox::new(&mut store)
+            .insert(&write, at(MARK - 1_000))
+            .await
+            .unwrap();
+        let body_free = json!({"requestId": write.request.as_str(), "target": {
+            "kind": "thread", "workspaceId": uuid_v7(60_001), "threadId": uuid_v7(60_002)},
+            "contentDigest": "0".repeat(64)});
+        sqlx::query(
+            "UPDATE outbox_items SET item_state = ?, payload_json = ? WHERE request_id = ?",
+        )
+        .bind(state)
+        .bind(body_free.to_string())
+        .bind(write.request.as_str())
+        .execute(&mut store.connection)
+        .await
+        .unwrap();
+        ids.push((write.request.clone(), write.caller.clone()));
+    }
+    let with_text = item(23, "still here", MARK);
+    MacOutbox::new(&mut store)
+        .insert(&with_text, at(MARK - 1_000))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE outbox_items SET item_state = 'cancelled' WHERE request_id = ?")
+        .bind(with_text.request.as_str())
+        .execute(&mut store.connection)
+        .await
+        .unwrap();
+
+    let mut statuses = Vec::new();
+    for (request, caller) in &ids {
+        statuses.push(
+            MacOutbox::new(&mut store)
+                .request_status(caller, request)
+                .await
+                .unwrap(),
+        );
+    }
+    let cancelled_with_text = MacOutbox::new(&mut store)
+        .request_status(&with_text.caller, &with_text.request)
+        .await;
+    sqlx::query("DELETE FROM outbox_items WHERE request_id = ?")
+        .bind(with_text.request.as_str())
+        .execute(&mut store.connection)
+        .await
+        .unwrap();
+    let pending = MacOutbox::new(&mut store)
+        .pending_for(&ids[0].1)
+        .await
+        .unwrap();
+    let pruned = MacOutbox::new(&mut store)
+        .delete_ended_before_retention(at(MARK + RETENTION_MS + 1_000))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        statuses,
+        vec![
+            RequestStatus::Cancelled {
+                reason: OutboxCancellation::NotSentWithin15Min
+            },
+            RequestStatus::Cancelled {
+                reason: OutboxCancellation::GaveUpAfter24h
+            },
+        ]
+    );
+    assert!(matches!(
+        cancelled_with_text,
+        Err(OutboxStoreError::CorruptItem {
+            field: "payload_json",
+            ..
+        })
+    ));
+    assert!(
+        pending
+            .iter()
+            .all(|write| matches!(write.state, PendingWriteState::Cancelled { .. }))
+    );
+    assert_eq!(pending.len(), 2);
+    assert_eq!(pruned, 2);
 }
 
 #[tokio::test]
@@ -458,7 +547,7 @@ const RETENTION_MS: i64 = 60 * 24 * 60 * 60 * 1000;
 struct OutboxStoreModel {
     runtime: tokio::runtime::Runtime,
     _root: tempfile::TempDir,
-    store: ProviderOperationStore,
+    store: MachineLocalStore,
     model: BTreeMap<RequestId, ModelWrite>,
     next_seed: u16,
     now: i64,
@@ -572,9 +661,7 @@ impl OutboxStoreModel {
         );
         let deleted = self
             .runtime
-            .block_on(
-                MacOutbox::new(&mut self.store).delete_answered_before_retention(at(self.now)),
-            )
+            .block_on(MacOutbox::new(&mut self.store).delete_ended_before_retention(at(self.now)))
             .unwrap();
         let cutoff = self.now - RETENTION_MS;
         let before = self.model.len();

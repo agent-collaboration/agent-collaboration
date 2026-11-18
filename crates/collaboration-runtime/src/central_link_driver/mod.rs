@@ -13,14 +13,15 @@ pub use central_link_client::{
     LinkStatus as CentralLinkStatus, RefusalReason as CentralLinkRefusal,
 };
 pub use installation_link::{
-    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, start_installation_link,
+    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, open_installation_link,
+    start_installation_link,
 };
 pub use link_transport::{
     AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
 
-use crate::ProviderOperationStore;
+use crate::MachineLocalStore;
 use crate::outbox_store::OutboxStoreError;
 use central_link_client::{
     FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, LinkStatus, OutgoingWrite,
@@ -95,7 +96,7 @@ pub(crate) enum DriverCommand {
 pub struct CentralLinkParts {
     pub installation: MachineId,
     pub clock: Arc<dyn RuntimeClock>,
-    pub store: Arc<Mutex<ProviderOperationStore>>,
+    pub store: Arc<Mutex<MachineLocalStore>>,
     pub transport: Arc<dyn LinkTransport>,
     pub tokens: Arc<dyn MachineTokenSource>,
     pub jitter: Arc<dyn FlushJitter>,

@@ -1,11 +1,11 @@
-//! The Mac outbox in provider-operations.sqlite (owner 2026-11-15). Every
+//! The Mac outbox in machine_local.sqlite (owner 2026-11-15, record:210). Every
 //! time comes from the caller's injected clock; stored values are decoded
 //! through Rust types and an invalid row is refused, never coerced.
-use crate::ProviderOperationStore;
-use crate::provider_operation_store::OneStatementWrite;
+use crate::MachineLocalStore;
+use crate::machine_local_store::MachineLocalWrite;
 use central_link_client::{
-    LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutboxWriteTarget, OutgoingOutcome,
-    OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
+    LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent, OutboxWriteTarget,
+    OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
@@ -43,6 +43,11 @@ enum OutboxItemState {
     Sent,
     Answered,
     Refused,
+    /// A direct message not sent within 15 minutes (owner, record:358); its
+    /// text is gone.
+    Cancelled,
+    /// Any other write still unsent after 24 hours; its text is gone.
+    GaveUp,
 }
 
 impl OutboxItemState {
@@ -53,6 +58,8 @@ impl OutboxItemState {
             Self::Sent => "sent",
             Self::Answered => "answered",
             Self::Refused => "refused",
+            Self::Cancelled => "cancelled",
+            Self::GaveUp => "gaveUp",
         }
     }
 
@@ -63,6 +70,8 @@ impl OutboxItemState {
             "sent" => Some(Self::Sent),
             "answered" => Some(Self::Answered),
             "refused" => Some(Self::Refused),
+            "cancelled" => Some(Self::Cancelled),
+            "gaveUp" => Some(Self::GaveUp),
             _ => None,
         }
     }
@@ -116,14 +125,14 @@ struct OutgoingRow {
 /// Answered writes are kept this long after their answer, then deleted.
 const ANSWERED_RETENTION_MILLIS: i64 = 60 * 24 * 60 * 60 * 1000;
 
-/// The outbox table, borrowed from the provider-operations store whose
+/// The outbox table, borrowed from the machine-local store whose
 /// connection and signalled transactions it uses.
 pub struct MacOutbox<'store> {
-    store: &'store mut ProviderOperationStore,
+    store: &'store mut MachineLocalStore,
 }
 
 impl<'store> MacOutbox<'store> {
-    pub fn new(store: &'store mut ProviderOperationStore) -> Self {
+    pub fn new(store: &'store mut MachineLocalStore) -> Self {
         Self { store }
     }
 
@@ -265,6 +274,11 @@ impl<'store> MacOutbox<'store> {
                     RequestStatus::Answered(reply),
                     StoredPayload::Answered(answered),
                 ) => (answered.target, PendingWriteState::Answered(reply)),
+                (
+                    OutboxItemState::Cancelled | OutboxItemState::GaveUp,
+                    RequestStatus::Cancelled { reason },
+                    StoredPayload::Answered(cancelled),
+                ) => (cancelled.target, PendingWriteState::Cancelled { reason }),
                 _ => return Err(corrupt_row(&row.request_id, "item_state")),
             };
             pending.push(PendingWrite {
@@ -319,7 +333,10 @@ impl<'store> MacOutbox<'store> {
             let outcome = match stored.status {
                 RequestStatus::Answered(reply) => OutgoingOutcome::Answered(reply),
                 RequestStatus::Refused(reason) => OutgoingOutcome::Refused(reason),
-                RequestStatus::NotFound | RequestStatus::InOutbox { .. } | RequestStatus::Sent => {
+                RequestStatus::NotFound
+                | RequestStatus::InOutbox { .. }
+                | RequestStatus::Sent
+                | RequestStatus::Cancelled { .. } => {
                     return Err(corrupt_row(&request_id, "item_state"));
                 }
             };
@@ -333,18 +350,23 @@ impl<'store> MacOutbox<'store> {
         Ok(outgoing)
     }
 
-    /// Deletes answered writes 60 days after their answer, on the injected clock.
-    pub async fn delete_answered_before_retention(
+    /// Deletes ended writes (answered, refused, cancelled or given up) 60 days
+    /// after they ended, on the injected clock.
+    pub async fn delete_ended_before_retention(
         &mut self,
         now: SyncTime,
     ) -> Result<u64, OutboxStoreError> {
         let cutoff = now.unix_millis().saturating_sub(ANSWERED_RETENTION_MILLIS);
         let answered = OutboxItemState::Answered.as_str();
         let refused = OutboxItemState::Refused.as_str();
+        let cancelled = OutboxItemState::Cancelled.as_str();
+        let gave_up = OutboxItemState::GaveUp.as_str();
         Ok(sqlx::query!(
-            "DELETE FROM outbox_items WHERE item_state IN (?, ?) AND updated_at <= ?",
+            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?) AND updated_at <= ?",
             answered,
             refused,
+            cancelled,
+            gave_up,
             cutoff
         )
         .execute_as_transaction(self.store)
@@ -599,7 +621,10 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
             }
             StoredPayload::Unanswered(payload)
         }
-        OutboxItemState::Answered | OutboxItemState::Refused => {
+        OutboxItemState::Answered
+        | OutboxItemState::Refused
+        | OutboxItemState::Cancelled
+        | OutboxItemState::GaveUp => {
             let answered: AnsweredWrite =
                 serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
             if answered.request_id.as_str() != row.request_id {
@@ -622,8 +647,18 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
             serde_json::from_str::<LinkAdmissionRefusal>(outcome)
                 .map_err(|_| corrupt("outcome_json"))?,
         ),
+        (OutboxItemState::Cancelled, None) => RequestStatus::Cancelled {
+            reason: OutboxCancellation::NotSentWithin15Min,
+        },
+        (OutboxItemState::GaveUp, None) => RequestStatus::Cancelled {
+            reason: OutboxCancellation::GaveUpAfter24h,
+        },
         (
-            OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost | OutboxItemState::Sent,
+            OutboxItemState::InOutbox
+            | OutboxItemState::SentAnswerLost
+            | OutboxItemState::Sent
+            | OutboxItemState::Cancelled
+            | OutboxItemState::GaveUp,
             Some(_),
         )
         | (OutboxItemState::Answered | OutboxItemState::Refused, None) => {

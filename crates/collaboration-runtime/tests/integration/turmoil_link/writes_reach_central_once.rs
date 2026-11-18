@@ -50,7 +50,7 @@ struct Outcome {
 )]
 fn run(seed: u64, plan: RouterPlan, partitions: &[Partition]) -> Outcome {
     let root = tempfile::tempdir().unwrap();
-    let store_path = root.path().join("provider-operations.sqlite");
+    let store_path = root.path().join("machine_local.sqlite");
     let central_log: SharedCentralLog = Rc::new(RefCell::new(CentralLog::default()));
     let report: SharedRouterReport = Rc::new(RefCell::new(RouterReport::default()));
     let mut sim = turmoil::Builder::new()

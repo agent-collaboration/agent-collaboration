@@ -239,6 +239,9 @@ impl OverlayModel {
                         "the answer names the post central created first"
                     );
                 }
+                PendingWriteState::Cancelled { reason } => {
+                    panic!("nothing cancels in this model, yet {id} is cancelled: {reason:?}");
+                }
             }
         }
         assert_eq!(seen, self.submitted, "every write is in the caller's view");

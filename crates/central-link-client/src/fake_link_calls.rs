@@ -244,11 +244,12 @@ fn resubmitted_outbox_write(
             flush_at,
         }),
         RequestStatus::Answered(ref reply) => Submission::Answered(reply.clone()),
-        RequestStatus::Sent | RequestStatus::Refused(_) | RequestStatus::NotFound => {
-            Submission::Uncertain {
-                request: request_id,
-            }
-        }
+        RequestStatus::Sent
+        | RequestStatus::Refused(_)
+        | RequestStatus::Cancelled { .. }
+        | RequestStatus::NotFound => Submission::Uncertain {
+            request: request_id,
+        },
     }
 }
 

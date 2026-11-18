@@ -773,16 +773,15 @@ impl CollaborationRuntime {
         let shutdown = CancellationToken::new();
         // The central link for this installation (stand-in until B3: not enrolled).
         let central_link_tasks = tokio_util::task::TaskTracker::new();
-        let central_link = provider_store.clone().and_then(|store| {
-            collaboration_runtime::start_installation_link(
-                &installation_peer,
-                worker_clock.clone(),
-                store,
-                None,
-                &central_link_tasks,
-                shutdown.clone(),
-            )
-        });
+        let central_link = collaboration_runtime::open_installation_link(
+            &inputs.directory,
+            &installation_peer,
+            worker_clock.clone(),
+            None,
+            &central_link_tasks,
+            shutdown.clone(),
+        )
+        .await;
         if let Some(service) = &subscription_delivery
             && let Err(error) = service.start().await
         {

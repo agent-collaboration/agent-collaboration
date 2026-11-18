@@ -6,7 +6,7 @@ use super::link_transport::{
     TokenAvailability, TransportFuture,
 };
 use super::{DriverCommand, FlushJitter};
-use crate::ProviderOperationStore;
+use crate::MachineLocalStore;
 use crate::outbox_store::{MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError};
 use central_link_client::{
     CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEffect, FlushEvent,
@@ -47,7 +47,7 @@ type PendingReply = oneshot::Sender<Result<Vec<PendingWrite>, OutboxStoreError>>
 
 pub(super) struct LinkDriver {
     pub(super) clock: Arc<dyn RuntimeClock>,
-    pub(super) store: Arc<Mutex<ProviderOperationStore>>,
+    pub(super) store: Arc<Mutex<MachineLocalStore>>,
     pub(super) transport: Arc<dyn LinkTransport>,
     pub(super) tokens: Arc<dyn MachineTokenSource>,
     pub(super) jitter: Arc<dyn FlushJitter>,
@@ -77,7 +77,7 @@ pub(super) struct LinkDriver {
 impl LinkDriver {
     pub(super) fn new(
         clock: Arc<dyn RuntimeClock>,
-        store: Arc<Mutex<ProviderOperationStore>>,
+        store: Arc<Mutex<MachineLocalStore>>,
         transport: Arc<dyn LinkTransport>,
         tokens: Arc<dyn MachineTokenSource>,
         jitter: Arc<dyn FlushJitter>,
@@ -173,6 +173,15 @@ impl LinkDriver {
             self.flush_wake = None;
             let now = self.clock.now();
             self.apply_flush(FlushEvent::Tick { now }).await;
+            // Each flush tick also prunes writes that ended 60 days ago: bodies
+            // went at the end, so a kept row is only a receipt.
+            let mut store = self.store.lock().await;
+            if let Err(error) = MacOutbox::new(&mut store)
+                .delete_ended_before_retention(now)
+                .await
+            {
+                tracing::warn!(%error, "outbox retention prune failed; it runs again next flush");
+            }
         }
     }
 
@@ -447,7 +456,9 @@ impl LinkDriver {
                 RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict) => {
                     Submission::Refused(SubmitRefusal::RequestIdConflict)
                 }
-                RequestStatus::Refused(_) => Submission::Uncertain { request },
+                RequestStatus::Refused(_) | RequestStatus::Cancelled { .. } => {
+                    Submission::Uncertain { request }
+                }
             },
             Ok(OutboxInsert::ConflictingContent) => {
                 Submission::Refused(SubmitRefusal::RequestIdConflict)
@@ -690,7 +701,7 @@ async fn sleep_until(clock: &dyn RuntimeClock, deadline: Option<ClockInstant>) {
 }
 
 async fn pending_for(
-    store: &Mutex<ProviderOperationStore>,
+    store: &Mutex<MachineLocalStore>,
     caller: &Caller,
 ) -> Result<Vec<PendingWrite>, OutboxStoreError> {
     let mut store = store.lock().await;

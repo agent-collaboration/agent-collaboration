@@ -35,6 +35,8 @@ pub use codex_conversation_operation_recorder::{
     UnavailableConversationOperationRecorder,
 };
 mod central_link_driver;
+mod machine_local_store;
+pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
 mod outbox_store;
 pub use central_link_driver::{
     AUTHORITY_LAPSED_CLOSE,
@@ -58,6 +60,7 @@ pub use central_link_driver::{
     TransportFuture,
     UnconfiguredLinkTransport,
     WebSocketLinkTransport,
+    open_installation_link,
     start_installation_link,
 };
 mod provider_session_event_hub;

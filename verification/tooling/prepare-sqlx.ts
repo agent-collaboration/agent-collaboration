@@ -31,6 +31,7 @@ export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
     packageName: "collaboration-runtime",
     migrationSources: [
       "crates/collaboration-runtime/migrations",
+      "crates/collaboration-runtime/machine_local_migrations",
       "crates/automation-storage/migrations",
     ],
     databaseFilename: "provider-operation-schema.sqlite",

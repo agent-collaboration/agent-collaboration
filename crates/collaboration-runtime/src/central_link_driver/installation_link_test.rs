@@ -12,7 +12,7 @@ use central_link_client::{
 async fn an_unconfigured_link_reports_not_enrolled_and_keeps_outbox_writes_waiting() {
     let root = tempfile::tempdir().unwrap();
     let store = Arc::new(Mutex::new(
-        ProviderOperationStore::open(&root.path().join("provider-operations.sqlite"))
+        MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
             .await
             .unwrap(),
     ));

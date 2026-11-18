@@ -61,6 +61,21 @@ pub enum RequestStatus {
     Answered(ReplyPayload),
     /// Central never admitted the frame.
     Refused(LinkAdmissionRefusal),
+    /// The Router stopped trying to send it (owner, record:358).
+    Cancelled {
+        reason: OutboxCancellation,
+    },
+}
+
+/// Why the Router stopped trying to send an outbox write (owner, record:358).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OutboxCancellation {
+    /// A direct message not sent within 15 minutes: "15 minutes you can't send
+    /// in central or machine then tell the sender and cancel send".
+    NotSentWithin15Min,
+    /// Any other outbox write still unsent after 24 hours.
+    GaveUpAfter24h,
 }
 
 /// Why central never admitted a frame: the link's own admission, not a domain

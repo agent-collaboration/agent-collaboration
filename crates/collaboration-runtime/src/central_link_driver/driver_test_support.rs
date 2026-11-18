@@ -220,7 +220,7 @@ pub(crate) struct Harness {
     pub(crate) connections: mpsc::UnboundedReceiver<CentralEnd>,
     pub(crate) outcomes: Arc<RecordedOutcomes>,
     pub(crate) tokens: Arc<ScriptedTokens>,
-    pub(crate) store: Arc<Mutex<ProviderOperationStore>>,
+    pub(crate) store: Arc<Mutex<MachineLocalStore>>,
     pub(crate) stop: CancellationToken,
     pub(crate) tasks: TaskTracker,
     _root: tempfile::TempDir,
@@ -229,7 +229,7 @@ pub(crate) struct Harness {
 impl Harness {
     pub(crate) async fn start(root: tempfile::TempDir, clock: Arc<ManualClock>) -> Self {
         let store = Arc::new(Mutex::new(
-            ProviderOperationStore::open(&root.path().join("provider-operations.sqlite"))
+            MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
                 .await
                 .unwrap(),
         ));
@@ -239,7 +239,7 @@ impl Harness {
     pub(crate) fn start_on(
         root: tempfile::TempDir,
         clock: Arc<ManualClock>,
-        store: Arc<Mutex<ProviderOperationStore>>,
+        store: Arc<Mutex<MachineLocalStore>>,
     ) -> Self {
         let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
         Self::launch(root, clock, store, ready)
@@ -252,7 +252,7 @@ impl Harness {
         availability: TokenAvailability,
     ) -> Self {
         let store = Arc::new(Mutex::new(
-            ProviderOperationStore::open(&root.path().join("provider-operations.sqlite"))
+            MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
                 .await
                 .unwrap(),
         ));
@@ -262,7 +262,7 @@ impl Harness {
     fn launch(
         root: tempfile::TempDir,
         clock: Arc<ManualClock>,
-        store: Arc<Mutex<ProviderOperationStore>>,
+        store: Arc<Mutex<MachineLocalStore>>,
         availability: TokenAvailability,
     ) -> Self {
         let (sender, connections) = mpsc::unbounded_channel();

@@ -8,7 +8,7 @@ use super::{
     CentralLinkParts, InstallationFlushJitter, LinkSocket, LinkTransport, LinkTransportError,
     MachineTokenSource, RouterLinkCalls, TokenAvailability, TransportFuture,
 };
-use crate::ProviderOperationStore;
+use crate::MachineLocalStore;
 use central_link_client::{FlushOutcomeSink, FlushOutcomes};
 use central_link_protocol::{MachineTokenText, TokenRenewalResult};
 use router_clock::RuntimeClock;
@@ -23,12 +23,34 @@ pub struct ConfiguredCentralLink {
     pub transport: Arc<dyn LinkTransport>,
 }
 
+/// Opens the Router's machine_local.sqlite in `state_directory` and starts
+/// the link on it. None when the store does not open (the link is then not
+/// started; the rest of the Router runs) or the peer is not a machine id.
+pub async fn open_installation_link(
+    state_directory: &std::path::Path,
+    installation: &fleet_sync_protocol::PeerId,
+    clock: Arc<dyn RuntimeClock>,
+    configured: Option<ConfiguredCentralLink>,
+    tasks: &TaskTracker,
+    stop: CancellationToken,
+) -> Option<RouterLinkCalls> {
+    let path = state_directory.join(crate::MACHINE_LOCAL_DATABASE);
+    let store = match MachineLocalStore::open(&path).await {
+        Ok(store) => Arc::new(Mutex::new(store)),
+        Err(error) => {
+            tracing::warn!(%error, "central link not started: machine-local storage unavailable");
+            return None;
+        }
+    };
+    start_installation_link(installation, clock, store, configured, tasks, stop)
+}
+
 /// Starts the link driver for `installation`. None when the peer is not a
 /// machine id; startup refuses a corrupt peer file before this point.
 pub fn start_installation_link(
     installation: &fleet_sync_protocol::PeerId,
     clock: Arc<dyn RuntimeClock>,
-    store: Arc<Mutex<ProviderOperationStore>>,
+    store: Arc<Mutex<MachineLocalStore>>,
     configured: Option<ConfiguredCentralLink>,
     tasks: &TaskTracker,
     stop: CancellationToken,

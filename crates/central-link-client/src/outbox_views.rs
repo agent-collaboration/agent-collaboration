@@ -76,6 +76,10 @@ pub enum PendingWriteState {
     SentAnswerLost { body: PostText },
     /// Central answered; the read layer drops it once it sees the created id.
     Answered(ReplyPayload),
+    /// The Router stopped trying to send it; its text is gone.
+    Cancelled {
+        reason: crate::link_calls::OutboxCancellation,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

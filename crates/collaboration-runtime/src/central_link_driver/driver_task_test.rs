@@ -127,7 +127,7 @@ async fn a_restart_resends_writes_that_were_sent_without_an_answer() {
     let root = tempfile::tempdir().unwrap();
     let clock = clock_at(MARK - 20_000);
     let store = Arc::new(Mutex::new(
-        ProviderOperationStore::open(&root.path().join("provider-operations.sqlite"))
+        MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
             .await
             .unwrap(),
     ));
@@ -222,5 +222,65 @@ async fn a_machine_revoked_answer_returns_the_write_unsent_and_the_next_mark_res
         requests.requests()[0].payload().write_request_id(),
         first.payload().write_request_id()
     );
+    harness.stop().await;
+}
+
+#[tokio::test]
+async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
+    let root = tempfile::tempdir().unwrap();
+    let store = Arc::new(Mutex::new(
+        MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+            .await
+            .unwrap(),
+    ));
+    let sixty_days_ms: i64 = 60 * 24 * 60 * 60 * 1000;
+    let old = uuid_v7(5);
+    {
+        let mut locked = store.lock().await;
+        let mut outbox = MacOutbox::new(&mut locked);
+        let item = NewOutboxItem {
+            request: old.parse().unwrap(),
+            caller: caller(),
+            payload: thread_post(&old),
+            flush_at: SyncTime::from_unix_millis(MARK - sixty_days_ms),
+        };
+        let ended_at = SyncTime::from_unix_millis(MARK - sixty_days_ms - 1_000);
+        outbox.insert(&item, ended_at).await.unwrap();
+        outbox
+            .mark_sent(std::slice::from_ref(&item.request), ended_at)
+            .await
+            .unwrap();
+        outbox
+            .record_outcome(
+                &item.request,
+                &central_link_client::MemberOutcome::Answered(reply()),
+                ended_at,
+            )
+            .await
+            .unwrap();
+    }
+    let mut harness = Harness::start_on(root, clock_at(MARK - 20_000), store.clone());
+    let mut central = harness.connected().await;
+    let fresh = uuid_v7(6);
+    harness.calls.submit(caller(), thread_post(&fresh)).await;
+    let before = harness
+        .calls
+        .request_status(caller(), old.parse().unwrap())
+        .await;
+
+    harness
+        .clock
+        .advance(Duration::from_millis(20_000))
+        .unwrap();
+    let LinkFrame::Data(DataFrame::Batch { .. }) = central.frame().await else {
+        panic!("the flush tick sends its batch");
+    };
+    let after = harness
+        .calls
+        .request_status(caller(), old.parse().unwrap())
+        .await;
+
+    assert!(matches!(before, RequestStatus::Answered(_)));
+    assert_eq!(after, RequestStatus::NotFound, "pruned at the tick");
     harness.stop().await;
 }

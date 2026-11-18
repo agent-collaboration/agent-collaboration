@@ -11,7 +11,7 @@ async fn the_host_starts_its_central_link_and_reports_not_enrolled_before_b3() {
     let link = fixture
         .runtime
         .central_link()
-        .expect("the provider-operations store opened, so the link started");
+        .expect("machine_local.sqlite opened, so the link started");
     let status = link.link_status().await;
     fixture.runtime.shutdown().await.expect("runtime cleanup");
     let after_shutdown = link.link_status().await;
