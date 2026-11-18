@@ -84,6 +84,7 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
         7230,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Second workspace"),
+            description: None,
         },
     )
     .await;

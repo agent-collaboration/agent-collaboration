@@ -69,6 +69,8 @@ pub enum RefusalReason {
     NotCreator { creator: ActorIdentityId },
     #[error("thread {thread_id} is resolved")]
     ThreadResolved { thread_id: ThreadId },
+    #[error("thread {thread_id} is already open")]
+    ThreadOpen { thread_id: ThreadId },
     #[error("actor is not a participant in {thread_id}")]
     NotParticipant { thread_id: ThreadId },
     #[error("actor is not a current member of {thread_id}")]

@@ -133,6 +133,7 @@ pub(super) async fn create_workspace(
         10,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Workspace"),
+            description: None,
         },
     )
     .await;

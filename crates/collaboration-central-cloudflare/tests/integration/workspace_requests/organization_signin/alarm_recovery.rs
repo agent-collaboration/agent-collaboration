@@ -44,6 +44,7 @@ async fn prepare(f: &Fixture) -> TestResult<(m::Timestamp, Value)> {
                 workspace_id: None,
                 operation: m::WorkspaceOperation::CreateWorkspace {
                     name: "Digest recovery".to_owned().try_into()?,
+                    description: None,
                 },
             },
         )

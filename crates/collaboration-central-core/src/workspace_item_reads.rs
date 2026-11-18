@@ -242,6 +242,7 @@ pub(crate) fn actor_ids(result: &m::WorkspaceResult) -> Vec<m::ActorIdentityId> 
             | m::ChangeEvent::Removed
             | m::ChangeEvent::Posted
             | m::ChangeEvent::Resolved
+            | m::ChangeEvent::Reopened
             | m::ChangeEvent::Redacted
             | m::ChangeEvent::StateChanged => {}
         }

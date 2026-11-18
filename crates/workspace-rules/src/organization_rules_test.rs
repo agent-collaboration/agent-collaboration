@@ -232,19 +232,21 @@ fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_pro
         (
             OrganizationCommand::UpdateArea {
                 area_id: id(4),
-                name: name("Renamed"),
-                description: None,
+                change: workspace_model::PartialUpdate::Title {
+                    title: name("Renamed"),
+                },
             },
-            "UPDATE areas SET name=?",
+            "UPDATE areas SET name=COALESCE(?,name)",
             None,
         ),
         (
             OrganizationCommand::UpdateProject {
                 project_id: id(5),
-                title: name("Renamed"),
-                description: None,
+                change: workspace_model::PartialUpdate::Title {
+                    title: name("Renamed"),
+                },
             },
-            "UPDATE projects SET title=?",
+            "UPDATE projects SET title=COALESCE(?,title)",
             Some(id::<workspace_model::ProjectId>(5)),
         ),
         (
@@ -300,8 +302,9 @@ fn an_area_update_refuses_another_workspaces_area() {
         &context(),
         &OrganizationCommand::UpdateArea {
             area_id: id(4),
-            name: name("Renamed"),
-            description: None,
+            change: workspace_model::PartialUpdate::Title {
+                title: name("Renamed"),
+            },
         },
         OrganizationReads {
             area: Some(&foreign),
@@ -335,8 +338,7 @@ fn update_rules_write_admitted_names_verbatim_and_deterministically(case: hegel:
                     name.as_str().to_owned(),
                     OrganizationCommand::UpdateArea {
                         area_id: id(4),
-                        name,
-                        description: None,
+                        change: workspace_model::PartialUpdate::Title { title: name },
                     },
                 )
             }),
@@ -347,8 +349,7 @@ fn update_rules_write_admitted_names_verbatim_and_deterministically(case: hegel:
                     title.as_str().to_owned(),
                     OrganizationCommand::UpdateProject {
                         project_id: id(5),
-                        title,
-                        description: None,
+                        change: workspace_model::PartialUpdate::Title { title },
                     },
                 )
             }),

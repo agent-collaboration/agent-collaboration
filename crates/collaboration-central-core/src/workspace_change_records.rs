@@ -39,6 +39,7 @@ impl StoredChange {
             "removed" => ChangeEvent::Removed,
             "posted" => ChangeEvent::Posted,
             "resolved" => ChangeEvent::Resolved,
+            "reopened" => ChangeEvent::Reopened,
             "redacted" => ChangeEvent::Redacted,
             "stateChanged" => ChangeEvent::StateChanged,
             "joined" => ChangeEvent::Joined { member: member()? },

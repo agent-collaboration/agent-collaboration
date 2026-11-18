@@ -222,7 +222,7 @@ async fn renames_change_only_the_named_area_project_and_issue() {
             2024,
             m::WorkspaceOperation::UpdateArea {
                 area_id: area.clone(),
-                name: name("Renamed area"),
+                name: Some(name("Renamed area")),
                 description: None,
             },
         ),
@@ -230,7 +230,7 @@ async fn renames_change_only_the_named_area_project_and_issue() {
             2025,
             m::WorkspaceOperation::UpdateProject {
                 project_id: project.clone(),
-                title: name("Renamed project"),
+                title: Some(name("Renamed project")),
                 description: None,
             },
         ),
@@ -313,6 +313,7 @@ async fn the_workspace_directory_renames_archives_replays_and_lists_only_allowed
         2031,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Second"),
+            description: None,
         },
     )
     .await;

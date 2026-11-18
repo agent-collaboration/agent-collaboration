@@ -3,7 +3,7 @@ use crate::{
     DeliverableRoleId, DependencyId, Description, EndpointId, InitiativeId, IssueId, IssueTitle,
     ItemRef, MachineId, PersonId, PostId, PostText, ProjectId, ProjectRoleId, ReadMarkId,
     RequiredDescription, ResourceName, SessionId, ThreadId, ThreadMemberId, TrailTag, TrailText,
-    WorkLogEntryId, WorkspaceId,
+    WorkLogEntryId, WorkspaceDescription, WorkspaceId,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ macro_rules! records {
     )+};
 }
 records! {
-    Workspace { workspace_id: WorkspaceId, name: ResourceName, description: Description, state: WorkspaceState },
+    Workspace { workspace_id: WorkspaceId, name: ResourceName, description: WorkspaceDescription, state: WorkspaceState },
     Area { area_id: AreaId, workspace_id: WorkspaceId, name: ResourceName, description: RequiredDescription, state: AreaState },
     Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, description: RequiredDescription, status: WorkStatus, lead: ActorIdentityId },
     Initiative { initiative_id: InitiativeId, name: ResourceName, description: Description, status: WorkStatus },
@@ -184,6 +184,7 @@ pub enum ChangeEvent {
     Removed,
     Posted,
     Resolved,
+    Reopened,
     Redacted,
     StateChanged,
     Joined {

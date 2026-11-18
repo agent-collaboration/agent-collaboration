@@ -55,7 +55,13 @@ const reply = z
   .strict();
 const done = z.object({ kind: z.literal("done"), answer: z.json() }).strict();
 const area = z
-  .object({ areaId: uuid, workspaceId: uuid, name: z.string().min(1), state: z.literal("open") })
+  .object({
+    areaId: uuid,
+    workspaceId: uuid,
+    name: z.string().min(1),
+    description: z.string().refine((text) => text.trim().length > 0),
+    state: z.literal("open"),
+  })
   .strict();
 const sqlValue = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("null") }).strict(),
@@ -104,7 +110,11 @@ export function assertC2BaselineWorkspace(
   receipt: Pick<C2ProductReceipt, "baselineRequest" | "baselineReply">,
 ): string {
   const baselineOperation = z
-    .object({ kind: z.literal("createWorkspace"), name: z.string().min(1) })
+    .object({
+      kind: z.literal("createWorkspace"),
+      name: z.string().min(1),
+      description: z.string().nullable(),
+    })
     .strict()
     .parse(receipt.baselineRequest.request.payload.request.operation);
   assert.equal(
@@ -123,6 +133,7 @@ export function assertC2BaselineWorkspace(
         .object({
           workspaceId: uuid,
           name: z.string(),
+          description: z.string(),
           state: z.literal("active"),
         })
         .strict(),
@@ -161,7 +172,7 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
     .object({
       kind: z.literal("createArea"),
       name: z.string().min(1),
-      description: z.string().trim().min(1),
+      description: z.string().refine((text) => text.trim().length > 0),
     })
     .strict()
     .parse(receipt.decidingRequest.request.payload.request.operation);
@@ -184,6 +195,7 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
     workspace,
     areaId: created.item.id,
     name: operation.name,
+    description: operation.description,
   });
   const correlations = [receipt.baselineRequest, receipt.decidingRequest, receipt.readRequest].map(
     (frame) => frame.request.correlationId,
@@ -201,6 +213,7 @@ export function assertC2AreaRead(input: {
   readonly workspace: string;
   readonly areaId: string;
   readonly name: string;
+  readonly description: string;
 }): void {
   const shown = z
     .object({ kind: z.literal("show"), item: areaRef })
@@ -221,6 +234,11 @@ export function assertC2AreaRead(input: {
     .parse(correlateC2WorkspaceReply(input.request.request.correlationId, input.reply));
   assert.equal(readAnswer.item.item.areaId, input.areaId);
   assert.equal(readAnswer.item.item.name, input.name);
+  assert.equal(
+    readAnswer.item.item.description,
+    input.description,
+    "read returns the stored description",
+  );
   assert.equal(readAnswer.item.item.workspaceId, input.workspace);
   assert.equal(input.request.request.payload.request.workspaceId, input.workspace);
 }

@@ -25,8 +25,7 @@ pub enum OrganizationCommand {
     },
     UpdateArea {
         area_id: AreaId,
-        name: ResourceName,
-        description: Option<RequiredDescription>,
+        change: PartialUpdate,
     },
     CreateProject {
         project_id: ProjectId,
@@ -38,8 +37,7 @@ pub enum OrganizationCommand {
     },
     UpdateProject {
         project_id: ProjectId,
-        title: ResourceName,
-        description: Option<RequiredDescription>,
+        change: PartialUpdate,
     },
     CreateInitiative {
         initiative_id: InitiativeId,
@@ -140,6 +138,60 @@ pub enum ThreadCommand {
         thread_id: ThreadId,
         closing_post: Option<ThreadPostDraft>,
     },
+    ReopenThread {
+        thread_id: ThreadId,
+    },
+}
+
+/// A partial update of an item's title (or name) and description that changes
+/// at least one of them; the other keeps its stored value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum PartialUpdate {
+    Title {
+        title: ResourceName,
+    },
+    Description {
+        description: RequiredDescription,
+    },
+    Both {
+        title: ResourceName,
+        description: RequiredDescription,
+    },
+}
+impl PartialUpdate {
+    /// `None` when neither field is present.
+    #[must_use]
+    pub fn new(
+        title: Option<ResourceName>,
+        description: Option<RequiredDescription>,
+    ) -> Option<Self> {
+        match (title, description) {
+            (Some(title), Some(description)) => Some(Self::Both { title, description }),
+            (Some(title), None) => Some(Self::Title { title }),
+            (None, Some(description)) => Some(Self::Description { description }),
+            (None, None) => None,
+        }
+    }
+    #[must_use]
+    pub fn title(&self) -> Option<&ResourceName> {
+        match self {
+            Self::Title { title } | Self::Both { title, .. } => Some(title),
+            Self::Description { .. } => None,
+        }
+    }
+    #[must_use]
+    pub fn description(&self) -> Option<&RequiredDescription> {
+        match self {
+            Self::Description { description } | Self::Both { description, .. } => Some(description),
+            Self::Title { .. } => None,
+        }
+    }
 }
 
 /// A post written as part of another thread step, with its minted id.

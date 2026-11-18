@@ -61,6 +61,7 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
         workspace_id: None,
         operation: m::WorkspaceOperation::CreateWorkspace {
             name: "publication retry".to_owned().try_into().unwrap(),
+            description: None,
         },
     };
 

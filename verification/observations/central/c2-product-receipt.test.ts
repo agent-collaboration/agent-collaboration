@@ -92,13 +92,18 @@ function validReceipt(): C2ProductReceipt {
     welcome: { kind: "welcome", machineId: installation, centralTime: "2027-01-15T08:00:00Z" },
     baselineRequest: frame({
       correlationId: baselineId,
-      operation: { kind: "createWorkspace", name: "Baseline workspace" },
+      operation: { kind: "createWorkspace", name: "Baseline workspace", description: null },
       requestId: baselineId,
       workspaceId: null,
     }),
     baselineReply: reply(baselineId, {
       kind: "workspaceCreated",
-      workspace: { workspaceId: workspace, name: "Baseline workspace", state: "active" },
+      workspace: {
+        workspaceId: workspace,
+        name: "Baseline workspace",
+        description: "",
+        state: "active",
+      },
     }),
     decidingRequest: frame({
       correlationId: decidingId,
@@ -115,7 +120,16 @@ function validReceipt(): C2ProductReceipt {
     }),
     readReply: reply(readId, {
       kind: "item",
-      item: { kind: "area", item: { areaId, workspaceId: workspace, name, state: "open" } },
+      item: {
+        kind: "area",
+        item: {
+          areaId,
+          workspaceId: workspace,
+          name,
+          description: "Test description",
+          state: "open",
+        },
+      },
     }),
     beforeEvents,
     heartbeatEvents: [beforeEvents, beforeEvents, beforeEvents],
@@ -138,6 +152,62 @@ test("C2 actual-frame receipt binds CreateArea, read, owning row and same-socket
   assert.equal(assertC2ProductReceipt(validReceipt()).area.name, name);
 });
 
+test("C2 baseline accepts a CreateWorkspace description as null or text, and the reply's description", (): void => {
+  const described = validReceipt();
+  described.baselineRequest.request.payload.request.operation = {
+    kind: "createWorkspace",
+    name: "Baseline workspace",
+    description: "Team space",
+  };
+  described.baselineReply.result.reply.result = {
+    kind: "done",
+    answer: {
+      kind: "workspaceCreated",
+      workspace: {
+        workspaceId: workspace,
+        name: "Baseline workspace",
+        description: "Team space",
+        state: "active",
+      },
+    },
+  };
+  assert.equal(assertC2ProductReceipt(described).area.name, name);
+  assert.equal(assertC2ProductReceipt(validReceipt()).area.name, name);
+  const missing = validReceipt();
+  missing.baselineReply.result.reply.result = {
+    kind: "done",
+    answer: {
+      kind: "workspaceCreated",
+      workspace: { workspaceId: workspace, name: "Baseline workspace", state: "active" },
+    },
+  };
+  assert.throws(() => assertC2ProductReceipt(missing));
+});
+
+test("C2 area read requires the stored description and matches it to CreateArea", (): void => {
+  const withoutDescription = validReceipt();
+  withoutDescription.readReply.result.reply.result = {
+    kind: "done",
+    answer: {
+      kind: "item",
+      item: { kind: "area", item: { areaId, workspaceId: workspace, name, state: "open" } },
+    },
+  };
+  assert.throws(() => assertC2ProductReceipt(withoutDescription));
+  const otherDescription = validReceipt();
+  otherDescription.readReply.result.reply.result = {
+    kind: "done",
+    answer: {
+      kind: "item",
+      item: {
+        kind: "area",
+        item: { areaId, workspaceId: workspace, name, description: "Other text", state: "open" },
+      },
+    },
+  };
+  assert.throws(() => assertC2ProductReceipt(otherDescription), /stored description/);
+});
+
 test("C2 receipt rejects wrong correlation, fake store success and missing actual read", (): void => {
   const wrongCorrelation = validReceipt();
   wrongCorrelation.decidingReply.correlationId = readId;
@@ -158,7 +228,12 @@ test("C2 receipt rejects wrong correlation, fake store success and missing actua
     kind: "done",
     answer: {
       kind: "workspaceCreated",
-      workspace: { workspaceId: areaId, name: "Baseline workspace", state: "active" },
+      workspace: {
+        workspaceId: areaId,
+        name: "Baseline workspace",
+        description: "",
+        state: "active",
+      },
     },
   };
   assert.throws(() => assertC2ProductReceipt(wrongWorkspace), /actual baseline workspace/);

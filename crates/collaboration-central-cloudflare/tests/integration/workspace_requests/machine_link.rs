@@ -199,6 +199,7 @@ async fn baseline(
             workspace_id: None,
             operation: WorkspaceOperation::CreateWorkspace {
                 name: WORKSPACE_NAME.to_owned().try_into()?,
+                description: None,
             },
         })
         .await?;
@@ -325,6 +326,7 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
                 workspace_id: None,
                 operation: WorkspaceOperation::CreateWorkspace {
                     name: "Must not create".to_owned().try_into()?,
+                    description: None,
                 },
             },
         )

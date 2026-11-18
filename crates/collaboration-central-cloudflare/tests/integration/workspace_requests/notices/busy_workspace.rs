@@ -31,6 +31,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
         9600,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Busy second workspace"),
+            description: None,
         },
     )
     .await;

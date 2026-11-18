@@ -5,7 +5,7 @@ use crate::{
     InitiativeId, IssueId, IssueTitle, ItemRef, ItemView, LinkId, ListQuery, MemberRole,
     NotificationSetting, PostText, ProjectId, ProjectRole, ReadScope, ReferenceId, ReferenceSource,
     ReferenceTarget, RefusalReason, RequestId, ResourceName, SessionAddress, ThreadId, TrailTag,
-    TrailText, WorkLogEntryId, WorkStatus, Workspace,
+    TrailText, WorkLogEntryId, WorkStatus, Workspace, WorkspaceDescription,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,13 +78,15 @@ pub enum ActorRef {
     deny_unknown_fields
 )]
 pub enum WorkspaceOperation {
+    /// An absent description is stored empty.
     CreateWorkspace {
         name: ResourceName,
+        description: Option<WorkspaceDescription>,
     },
     /// Targets the request's workspace. The canonical name stays unique per organization.
     UpdateWorkspace {
         name: ResourceName,
-        description: Description,
+        description: WorkspaceDescription,
     },
     /// Targets the request's workspace.
     ArchiveWorkspace,
@@ -96,10 +98,11 @@ pub enum WorkspaceOperation {
     ArchiveArea {
         area_id: AreaId,
     },
-    /// An omitted description stays as it is; a given one must not be blank.
+    /// A partial update: at least one field is present, an absent one keeps its
+    /// stored value, and a present description must not be blank.
     UpdateArea {
         area_id: AreaId,
-        name: ResourceName,
+        name: Option<ResourceName>,
         description: Option<Description>,
     },
     /// The description is required and must not be blank.
@@ -109,10 +112,11 @@ pub enum WorkspaceOperation {
         description: Description,
         lead: Option<ActorRef>,
     },
-    /// An omitted description stays as it is; a given one must not be blank.
+    /// A partial update: at least one field is present, an absent one keeps its
+    /// stored value, and a present description must not be blank.
     UpdateProject {
         project_id: ProjectId,
-        title: ResourceName,
+        title: Option<ResourceName>,
         description: Option<Description>,
     },
     CreateInitiative {
@@ -186,6 +190,11 @@ pub enum WorkspaceOperation {
     ResolveThread {
         thread_id: ThreadId,
         closing_post: Option<PostText>,
+    },
+    /// Reopens a resolved thread; only its creator may. Memberships, subscriptions
+    /// and notification settings are untouched.
+    ReopenThread {
+        thread_id: ThreadId,
     },
     AddDependency {
         blocking: DeliverableId,

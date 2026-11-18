@@ -58,6 +58,7 @@ impl EngineOrg {
                 None,
                 m::WorkspaceOperation::CreateWorkspace {
                     name: "Engine admin".to_owned().try_into().unwrap(),
+                    description: None,
                 },
             )
             .await;

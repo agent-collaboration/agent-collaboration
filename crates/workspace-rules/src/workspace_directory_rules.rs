@@ -5,14 +5,14 @@ use crate::read_rules::PositionedItem;
 use crate::statement_plans::{exact, text};
 use central_storage::GuardedStatement;
 use workspace_model::{
-    Description, ItemView, ListCursor, ListQuery, PageLimit, RefusalReason, ResourceName,
-    Timestamp, Workspace, WorkspaceAnswer, WorkspaceId, WorkspaceState,
+    ItemView, ListCursor, ListQuery, PageLimit, RefusalReason, ResourceName, Timestamp, Workspace,
+    WorkspaceAnswer, WorkspaceDescription, WorkspaceId, WorkspaceState,
 };
 
 pub enum DirectoryChange {
     Update {
         name: ResourceName,
-        description: Description,
+        description: WorkspaceDescription,
     },
     Archive,
 }

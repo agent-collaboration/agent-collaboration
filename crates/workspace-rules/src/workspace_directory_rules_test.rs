@@ -1,5 +1,5 @@
 use super::{DirectoryChange, change_workspace, workspace_list_answer};
-use crate::fixtures::{description, id, name};
+use crate::fixtures::{id, name};
 use hegel::{TestCase, generators as gs};
 use workspace_model::{
     ItemRef, ItemView, ListCursor, ListOrder, ListQuery, PageLimit, RefusalReason, SearchQuery,
@@ -10,9 +10,12 @@ fn workspace(value: u32, title: &str, state: WorkspaceState) -> Workspace {
     Workspace {
         workspace_id: id(value),
         name: name(title),
-        description: description(""),
+        description: workspace_description(""),
         state,
     }
+}
+fn workspace_description(text: &str) -> workspace_model::WorkspaceDescription {
+    text.to_owned().try_into().unwrap()
 }
 fn now() -> workspace_model::Timestamp {
     "2026-11-17T12:00:00Z".parse().unwrap()
@@ -29,7 +32,7 @@ fn a_rename_keeps_its_own_canonical_name_and_refuses_another_workspaces() {
     let current = workspace(1, "Alpha", WorkspaceState::Active);
     let update = DirectoryChange::Update {
         name: name("ALPHA"),
-        description: description("Team space"),
+        description: workspace_description("Team space"),
     };
 
     let own = change_workspace(now(), &current, &update, Some(&id(1)));
@@ -66,7 +69,7 @@ fn archive_leaves_an_archived_workspace_and_an_archived_one_is_refused() {
 #[test]
 fn a_machine_lists_only_its_allowed_workspaces_and_search_matches_name_or_description() {
     let mut described = workspace(3, "Gamma", WorkspaceState::Active);
-    described.description = description("Payments ROUTER work");
+    described.description = workspace_description("Payments ROUTER work");
     let all = [
         workspace(1, "Alpha", WorkspaceState::Active),
         workspace(2, "Beta", WorkspaceState::Archived),

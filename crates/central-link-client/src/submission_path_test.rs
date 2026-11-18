@@ -8,7 +8,7 @@ use workspace_model::{WorkspaceRequest, central_mail::CentralMailRequest};
 /// Wire `kind` tags the owner put in the outbox (2026-11-15).
 const OUTBOX_KINDS: [&str; 2] = ["threadPost", "sendMessage"];
 
-const WORKSPACE_KINDS: [&str; 43] = [
+const WORKSPACE_KINDS: [&str; 44] = [
     "createWorkspace",
     "updateWorkspace",
     "archiveWorkspace",
@@ -33,6 +33,7 @@ const WORKSPACE_KINDS: [&str; 43] = [
     "setNotifications",
     "threadPost",
     "resolveThread",
+    "reopenThread",
     "addDependency",
     "removeDependency",
     "setIssueStatus",
@@ -101,6 +102,7 @@ fn workspace_fields(kind: &str, id: &str, text: &str) -> Value {
         "addThreadMember" => json!({"threadId": id, "actor": id, "role": "observer"}),
         "leaveThread" => json!({"threadId": id}),
         "resolveThread" => json!({"threadId": id, "closingPost": text}),
+        "reopenThread" => json!({"threadId": id}),
         "setNotifications" => json!({"threadId": id, "setting": "off"}),
         "threadPost" => json!({"threadId": id, "body": text, "addressees": []}),
         "addDependency" => json!({"blocking": id, "blocked": id}),

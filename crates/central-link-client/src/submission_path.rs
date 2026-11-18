@@ -58,6 +58,7 @@ const fn workspace_operation_path(operation: &WorkspaceOperation) -> SubmissionP
         | WorkspaceOperation::LeaveThread { .. }
         | WorkspaceOperation::SetNotifications { .. }
         | WorkspaceOperation::ResolveThread { .. }
+        | WorkspaceOperation::ReopenThread { .. }
         | WorkspaceOperation::AddDependency { .. }
         | WorkspaceOperation::RemoveDependency { .. }
         | WorkspaceOperation::SetIssueStatus { .. }

@@ -2,17 +2,16 @@
 use crate::{
     ObjectHost,
     guarded_statements::{exact, text},
-    person_request::MAXIMUM_DESCRIPTION_BYTES,
     workspace_decode_error::corrupt,
     workspace_row_codec::string,
 };
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
-use workspace_model::{Description, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
+use workspace_model::{ResourceName, Timestamp, WorkspaceDescription, WorkspaceId, WorkspaceState};
 
 pub(crate) struct DirectoryWorkspace {
     pub workspace_id: WorkspaceId,
     pub name: ResourceName,
-    pub description: Description,
+    pub description: WorkspaceDescription,
     pub state: WorkspaceState,
 }
 
@@ -39,11 +38,7 @@ fn decode_row(
     if name.as_str() != stored_name {
         return Err(corrupt("workspaces.name"));
     }
-    let stored_description = string(rows, row, "description")?;
-    if stored_description.len() > MAXIMUM_DESCRIPTION_BYTES {
-        return Err(corrupt("workspaces.description"));
-    }
-    let description = Description::try_from(stored_description.to_owned())
+    let description = WorkspaceDescription::try_from(string(rows, row, "description")?.to_owned())
         .map_err(|_| corrupt("workspaces.description"))?;
     let state = match string(rows, row, "state")? {
         "active" => WorkspaceState::Active,
@@ -118,7 +113,7 @@ pub(crate) async fn read_by_name(
 pub(crate) fn insert(
     workspace_id: &WorkspaceId,
     name: &ResourceName,
-    description: &Description,
+    description: &WorkspaceDescription,
     now: Timestamp,
 ) -> Result<GuardedStatement, StoreFailure> {
     Ok(exact(

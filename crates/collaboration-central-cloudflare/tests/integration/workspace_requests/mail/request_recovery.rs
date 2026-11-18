@@ -73,6 +73,7 @@ fn create(serial: u32) -> m::WorkspaceRequest {
         workspace_id: None,
         operation: m::WorkspaceOperation::CreateWorkspace {
             name: name("Recovery created workspace"),
+            description: None,
         },
     }
 }

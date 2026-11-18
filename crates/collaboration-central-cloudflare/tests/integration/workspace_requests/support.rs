@@ -187,6 +187,7 @@ pub(super) async fn create_workspace(host: &WorkerdHost, caller: &FixtureCaller)
         10,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Workspace"),
+            description: None,
         },
     )
     .await;
