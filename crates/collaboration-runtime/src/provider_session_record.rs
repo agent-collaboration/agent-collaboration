@@ -250,6 +250,37 @@ impl ProviderOperationStore {
         Ok(())
     }
 
+    /// Records the mode a session now runs after an explicit change the agent
+    /// applied: the record's requested mode is the session's current mode,
+    /// which a restore puts back (V6; owner Decision 3). A session the store
+    /// holds no record of is NotFound.
+    pub async fn record_session_mode(
+        &mut self,
+        target: &SessionRef,
+        requested_mode: &str,
+        updated_at_ms: i64,
+    ) -> Result<(), ProviderOperationStoreError> {
+        let target_service_id = String::from(target.endpoint.service_id.clone());
+        let target_endpoint_id = String::from(target.endpoint.endpoint_id.clone());
+        let target_session_id = String::from(target.session_id.clone());
+        let updated = sqlx::query!(
+            "UPDATE provider_session_records
+             SET requested_mode=?, updated_at_ms=MAX(updated_at_ms,?)
+             WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=?",
+            requested_mode,
+            updated_at_ms,
+            target_service_id,
+            target_endpoint_id,
+            target_session_id,
+        )
+        .execute_as_transaction(self)
+        .await?;
+        if updated.rows_affected() != 1 {
+            return Err(ProviderOperationStoreError::NotFound);
+        }
+        Ok(())
+    }
+
     pub async fn session_record(
         &mut self,
         target: &SessionRef,

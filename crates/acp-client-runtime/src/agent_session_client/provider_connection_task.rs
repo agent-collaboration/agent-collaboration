@@ -485,7 +485,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
                                         }
-                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, in_folder, requested_mode, reply } => {
+                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, in_folder, reply } => {
                                             // A close since this restore was admitted made its attempt
                                             // stale: the late completion registers nothing, and a fresh
                                             // restore stays possible.
@@ -502,7 +502,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 base_capabilities.with_session_response(&restored.session.response())
                                             });
                                             let catalog = result.as_ref().as_ref().ok().map(|restored| {
-                                                restored.settings_catalog.clone()
+                                                (restored.settings_catalog.clone(), restored.restored_mode.clone())
                                             });
                                             let (activation, ready) = tokio::sync::oneshot::channel();
                                             let mut result = (*result).and_then(|restored| {
@@ -529,7 +529,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             } else if let Some(report) = report {
                                                 let report = report.with_auth_status(task_auth_status.read().await.clone());
                                                 let _written = task_session_capabilities.write(&provider_session_id, generation, report);
-                                                if let Some(catalog) = catalog {
+                                                if let Some((catalog, restored_mode)) = catalog {
                                                     if task_event_sink.publish_in(
                                                         &provider_session_id,
                                                         generation,
@@ -542,7 +542,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         result = Err(ExternalProviderRuntimeError::SinkClosed);
                                                     }
                                                     let _written = task_session_settings.write(&provider_session_id, generation, catalog.clone());
-                                                    permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, requested_mode.as_deref(), &catalog, task_runtime_handles.behavior.as_ref());
+                                                    permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, restored_mode);
                                                     // The session's fast hold outlives its runs (note §12.3): a
                                                     // restored run whose agent reads fast on has it turned off
                                                     // again, ahead of anything else in its mailbox.

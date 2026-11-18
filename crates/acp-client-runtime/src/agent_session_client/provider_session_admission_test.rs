@@ -322,7 +322,8 @@ impl Fixture {
 /// folders and the allowance its create had: a load and a resume of a session
 /// created in auto send its scratch folder as an additional directory, and
 /// leave an active in-folder grant when the agent restored it in auto; each
-/// reports the requested mode auto.
+/// reports the requested mode auto. The agent already runs the recorded mode,
+/// so no mode change is sent (Lead V6: skipped when actual equals recorded).
 #[tokio::test]
 async fn a_restored_auto_session_gets_its_folders_and_an_active_grant() {
     // Arrange
@@ -356,7 +357,14 @@ async fn a_restored_auto_session_gets_its_folders_and_an_active_grant() {
     fixture.client.shutdown().await;
 
     // Assert
-    let restores = fixture.receipt()["restores"].clone();
+    let receipt = fixture.receipt();
+    for session in ["loaded-session", "resumed-session"] {
+        assert!(
+            mode_requests_for(&receipt, session).is_empty(),
+            "a restore already in its recorded mode sends no mode change"
+        );
+    }
+    let restores = receipt["restores"].clone();
     assert_eq!(restores[0]["method"], "session/load");
     assert_eq!(restores[1]["method"], "session/resume");
     for restore in [&restores[0], &restores[1]] {
@@ -374,12 +382,25 @@ async fn a_restored_auto_session_gets_its_folders_and_an_active_grant() {
     }
 }
 
-/// Oracle: D1 R4, "the allowance follows the mode the agent confirmed": a
-/// session created in auto that the agent restores in another mode keeps its
-/// folders but its grant is off until its mode is auto again.
+/// The mode values the agent was asked to switch `session` to, in order.
+fn mode_requests_for(receipt: &Value, session: &str) -> Vec<String> {
+    receipt["modeRequests"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|request| request["sessionId"] == session)
+        .filter_map(|request| request["value"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// Oracle: owner Decision 3 (a session's mode survives a restart) and the
+/// Lead's V6 ruling, replacing D1 R4's "grant off until its mode is auto
+/// again" for restores: a session recorded in auto that the agent restores in
+/// another mode is set back to auto before it registers, and its grant is
+/// judged on the mode then in force, active.
 #[tokio::test]
-async fn a_restored_session_no_longer_in_auto_has_its_grant_off() {
-    // Arrange
+async fn a_session_the_agent_restores_out_of_auto_is_set_back_to_auto() {
+    // Arrange: the agent restores every session in its start mode, default.
     let fixture = Fixture::start(&["advertise-restore"]).await;
 
     // Act
@@ -398,7 +419,83 @@ async fn a_restored_session_no_longer_in_auto_has_its_grant_off() {
     fixture.client.shutdown().await;
 
     // Assert
-    assert_eq!(grant, Some(false));
+    assert_eq!(
+        mode_requests_for(&fixture.receipt(), "resumed-session"),
+        vec!["auto".to_owned()],
+        "the restore sets the recorded mode back"
+    );
+    assert_eq!(grant, Some(true));
+    assert_eq!(resumed.permission_mode.requested.as_deref(), Some("auto"));
+    assert_eq!(resumed.permission_mode.actual.as_deref(), Some("auto"));
+}
+
+/// Oracle: the Lead's V6 finding and ruling (owner Decision 3): a session
+/// created in a named mode, default, that the agent restores in auto (as
+/// Claude applies the user's defaultMode on load) ends in default, set back
+/// before it registers, and never holds the Router's in-folder allowance.
+#[tokio::test]
+async fn a_session_recorded_in_default_that_restores_in_auto_ends_in_default() {
+    // Arrange
+    let fixture = Fixture::start(&["advertise-restore", "restored-in-auto"]).await;
+
+    // Act
+    let loaded = fixture
+        .client
+        .load_session_with_setup(
+            "loaded-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("default")),
+        )
+        .await
+        .expect("load");
+    let grant = fixture
+        .client
+        .in_folder_router_auto_for_test("loaded-session");
+    fixture.client.shutdown().await;
+
+    // Assert
+    assert_eq!(
+        mode_requests_for(&fixture.receipt(), "loaded-session"),
+        vec!["default".to_owned()],
+        "the restore sets the recorded mode back"
+    );
+    assert_eq!(grant, Some(false), "a named mode never holds Router auto");
+    assert_eq!(loaded.permission_mode.requested.as_deref(), Some("default"));
+    assert_eq!(loaded.permission_mode.actual.as_deref(), Some("default"));
+}
+
+/// Oracle: the Lead's V6 ruling, "if setting the mode fails, the session
+/// still loads, but the grant stays off and show reports the mismatch (fail
+/// closed)": a session recorded in auto that the agent restores in default
+/// and refuses to switch loads with its grant off, its requested mode auto
+/// and its actual mode default.
+#[tokio::test]
+async fn a_restore_whose_mode_set_fails_loads_without_a_grant_and_shows_the_mismatch() {
+    // Arrange
+    let fixture = Fixture::start(&["advertise-restore", "reject-mode"]).await;
+
+    // Act
+    let resumed = fixture
+        .client
+        .resume_session_with_setup(
+            "resumed-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("auto")),
+        )
+        .await
+        .expect("the session still loads");
+    let grant = fixture
+        .client
+        .in_folder_router_auto_for_test("resumed-session");
+    fixture.client.shutdown().await;
+
+    // Assert
+    assert_eq!(
+        mode_requests_for(&fixture.receipt(), "resumed-session"),
+        vec!["auto".to_owned()],
+        "the restore tried to set the recorded mode back"
+    );
+    assert_eq!(grant, Some(false), "a refused set leaves no allowance");
     assert_eq!(resumed.permission_mode.requested.as_deref(), Some("auto"));
     assert_eq!(resumed.permission_mode.actual.as_deref(), Some("default"));
 }

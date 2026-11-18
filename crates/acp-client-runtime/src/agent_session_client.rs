@@ -221,8 +221,6 @@ enum PendingSessionAdmission<P: InteractionPort> {
         result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
         /// The session's in-folder roots, granted once the restore registers.
         in_folder: Option<crate::in_folder_allowance::InFolderGrant>,
-        /// The mode the session's create asked for.
-        requested_mode: Option<String>,
         reply: tokio::sync::oneshot::Sender<
             Result<RestoredSessionAdmission, ExternalProviderRuntimeError>,
         >,
@@ -274,6 +272,9 @@ struct RestoredProviderSession {
     session: ActiveSession<'static, Agent>,
     item_projection: Option<crate::provider_item_projection::ProviderItemProjection>,
     settings_catalog: crate::ProviderSettingsCatalog,
+    /// The mode the session runs after the restore put back its recorded
+    /// mode, judged against that record (V6; owner Decision 3).
+    restored_mode: crate::provider_setting_application::RestoredPermissionMode,
 }
 
 /// Owns the provider process and ACP connection independently of caller tasks.

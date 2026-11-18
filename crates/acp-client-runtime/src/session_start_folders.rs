@@ -47,7 +47,8 @@ pub(crate) fn session_start_folders(
 
 /// Writes a registered restore's one grant decision under its run (D1 R18;
 /// owner Decision 3; Lead V2): its in-folder roots, active only when the
-/// mode the agent restored it in is Router auto as its create asked, or no
+/// mode in force after the restore put back the session's recorded mode is
+/// Router auto as that record names (V6), or no
 /// grant at all when the session has no roots (no scratch folder recorded,
 /// or a folder that can't be resolved), so it asks for everything. Answers
 /// the session's mode report.
@@ -56,15 +57,8 @@ pub(crate) fn grant_restored_session(
     provider_session_id: &str,
     generation: provider_session_machines::SessionGeneration,
     in_folder: Option<InFolderGrant>,
-    requested_mode: Option<&str>,
-    catalog: &crate::ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
+    restored: crate::provider_setting_application::RestoredPermissionMode,
 ) -> crate::PermissionModeReport {
-    let restored = crate::provider_setting_application::restored_permission_mode(
-        requested_mode,
-        catalog,
-        behavior,
-    );
     let _decided = match in_folder {
         Some(grant) => grants.write(
             provider_session_id,

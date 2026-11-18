@@ -299,16 +299,16 @@ fn judge_agent_mode(
 
 /// A restored session's mode report and Router-auto answer (D1 R18; owner
 /// Decision 3).
+#[derive(Clone, Debug)]
 pub(crate) struct RestoredPermissionMode {
     pub(crate) report: crate::PermissionModeReport,
     pub(crate) router_auto_active: bool,
 }
 
-/// Judges the mode the agent restored a session in against the mode its
-/// create asked for, as a start judges the mode the agent confirmed. Nothing
-/// is sent: a restore keeps whatever mode the agent kept, so a session whose
-/// mode was changed away from auto since its create runs without the Router's
-/// allowance until its mode is auto again.
+/// Judges the mode the agent reports for a restored session against the mode
+/// its record names, as a start judges the mode the agent confirmed. Nothing
+/// is sent here; `reapply_recorded_mode` sets the mode back first when the
+/// agent restored it in another one.
 pub(crate) fn restored_permission_mode(
     requested: Option<&str>,
     catalog: &ProviderSettingsCatalog,
@@ -355,6 +355,78 @@ pub(crate) fn restored_permission_mode(
         }
     }
     restored
+}
+
+/// Puts a restored session back in the mode its record names, the session's
+/// current mode (V6; owner Decision 3: a session's mode survives a restart).
+/// An agent can restore a session in another mode (Claude applies the user's
+/// defaultMode on load), so when the mode it reports differs from the planned
+/// one the Router sets it as a create does, before the session is registered
+/// and any prompt admitted. The result is judged on the mode in force after
+/// that. A set that fails leaves the session loaded without Router auto, its
+/// requested and actual modes showing the mismatch (fail closed).
+pub(crate) async fn reapply_recorded_mode(
+    session: &ActiveSession<'_, Agent>,
+    requested: Option<&str>,
+    catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+) -> RestoredPermissionMode {
+    let kept = restored_permission_mode(requested, catalog, behavior);
+    if !restored_mode_drifted(requested, catalog, behavior) {
+        return kept;
+    }
+    let outcome = apply_initial_settings(
+        session,
+        &RequestedProviderSettings {
+            mode: requested.map(str::to_owned),
+            ..RequestedProviderSettings::default()
+        },
+        catalog,
+        behavior,
+    )
+    .await;
+    if outcome.failure.is_some() {
+        return RestoredPermissionMode {
+            report: crate::PermissionModeReport {
+                requested: kept.report.requested,
+                actual: catalog.effective_settings().mode,
+                reason: kept.report.reason,
+            },
+            router_auto_active: false,
+        };
+    }
+    RestoredPermissionMode {
+        report: outcome.permission_mode,
+        router_auto_active: outcome.router_auto_active,
+    }
+}
+
+/// Whether the agent restored the session in a mode other than the one its
+/// record plans: neither the planned mode nor its accepted fallback.
+fn restored_mode_drifted(
+    requested: Option<&str>,
+    catalog: &ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+) -> bool {
+    let requested_mode = crate::RequestedPermissionMode::from_request(requested);
+    if requested_mode == crate::RequestedPermissionMode::Unspecified {
+        return false;
+    }
+    let Ok(crate::PermissionModePlan::Set {
+        mode,
+        accepted_fallback,
+        ..
+    }) = crate::plan_permission_mode(
+        requested_mode,
+        &catalog.advertised_values(ProviderSettingKind::Mode),
+        behavior.auto_permission_mode(),
+    )
+    else {
+        return false;
+    };
+    let actual = catalog.effective_settings().mode;
+    actual.as_deref() != Some(mode.as_str())
+        && (accepted_fallback.is_none() || actual != accepted_fallback)
 }
 
 async fn apply_one_setting(

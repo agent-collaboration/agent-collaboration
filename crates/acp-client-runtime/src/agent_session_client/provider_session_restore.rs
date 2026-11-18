@@ -92,11 +92,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                                 Arc::clone(&behavior),
                                 &mut settings_catalog,
                             )?;
-                            Ok(RestoredProviderSession {
-                                session,
-                                item_projection: Some(projection),
-                                settings_catalog,
-                            })
+                            Ok((session, Some(projection), settings_catalog))
                         }),
                 }
             }
@@ -111,11 +107,31 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                         result.map(|restored| {
                             let session = restored.into_session();
                             let settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
-                            RestoredProviderSession { session, item_projection: None, settings_catalog }
+                            (session, None, settings_catalog)
                         }).map_err(acp_operation_error),
                 }
             }
         },
+    };
+    // The agent may restore the session in another mode: put back the mode
+    // its record names before the session is registered (V6).
+    let result = match result {
+        Ok((session, item_projection, mut settings_catalog)) => {
+            let restored_mode = crate::provider_setting_application::reapply_recorded_mode(
+                &session,
+                requested_mode.as_deref(),
+                &mut settings_catalog,
+                behavior.as_ref(),
+            )
+            .await;
+            Ok(RestoredProviderSession {
+                session,
+                item_projection,
+                settings_catalog,
+                restored_mode,
+            })
+        }
+        Err(error) => Err(error),
     };
     publish_pending_session_admission(
         &admission_tx,
@@ -126,7 +142,6 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
             provider_session_id,
             result: Box::new(result),
             in_folder: folders.in_folder,
-            requested_mode,
             reply,
         },
     )

@@ -258,3 +258,112 @@ async fn confirmed_fallback_then_later_failure_keeps_the_mode_report() -> TestRe
     ensure_eq!(held, ConversationOperationFailureKind::SettingsUnresolved);
     Ok(())
 }
+
+impl ModeFixture {
+    /// Creates a session asking for `mode` and answers its target, whether
+    /// the agent applied the mode or not.
+    async fn create_in(&self, mode: &str) -> TestResult<SessionRef> {
+        let operation_id = OperationId::generate();
+        operation(
+            self.backend
+                .create(self.create_request(
+                    operation_id.clone(),
+                    Some(ProviderRequestedSettings {
+                        mode: Some(mode.into()),
+                        ..ProviderRequestedSettings::default()
+                    }),
+                )?)
+                .await,
+        )?;
+        match operation(wait(&self.backend, operation_id).await)?.output {
+            ConversationOperationWaitOutput::Available {
+                settlement:
+                    ConversationOperationSettlement::Created { target, .. }
+                    | ConversationOperationSettlement::CreatedWithoutSettings { target, .. },
+            } => Ok(target),
+            other => Err(format!("expected a created session: {other:?}").into()),
+        }
+    }
+
+    async fn set_mode(&self, target: &SessionRef, mode: &str) -> Result<(), String> {
+        self.backend
+            .settings_set(ProviderSettingsSetRequest {
+                target: target.clone(),
+                actor: self.creator.clone().into(),
+                setting: ProviderSettingName::Mode,
+                value: mode.into(),
+            })
+            .await
+            .map(|_| ())
+            .map_err(|failure| format!("{failure:?}"))
+    }
+
+    /// The mode the session's durable record names, read through a second
+    /// connection to the supervisor's store.
+    async fn recorded_mode(&self, target: &SessionRef) -> TestResult<Option<String>> {
+        let mut store =
+            ProviderOperationStore::open(&self._root.path().join("provider-operations.sqlite"))
+                .await?;
+        Ok(store
+            .session_record(target)
+            .await?
+            .ok_or("the session has a record")?
+            .resume
+            .requested_mode)
+    }
+}
+
+/// Oracle: the Lead's V6 ruling, "an explicit mode change during the session
+/// updates the recorded mode, so a restore never reverts a deliberate
+/// change": a session created in default whose mode is then changed to auto
+/// records auto, the mode a restore puts back, and show reports it.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_applied_explicit_mode_change_becomes_the_recorded_mode() -> TestResult {
+    let fixture = ModeFixture::start("claude", &[]).await?;
+    let target = fixture.create_in("default").await?;
+    let recorded_at_create = fixture.recorded_mode(&target).await?;
+
+    let changed = fixture.set_mode(&target, "auto").await;
+    let recorded_after_change = fixture.recorded_mode(&target).await?;
+    let inspected = fixture
+        .backend
+        .inspect_session(ProviderSessionInspectRequest {
+            target: target.clone(),
+        })
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    if let Err(error) = changed {
+        return Err(format!("the agent applied the change: {error:?}").into());
+    }
+    ensure_eq!(recorded_at_create.as_deref(), Some("default"));
+    ensure_eq!(recorded_after_change.as_deref(), Some("auto"));
+    ensure_eq!(inspected.requested_mode.as_deref(), Some("auto"));
+    Ok(())
+}
+
+/// Oracle: the Lead's V6 ruling, "refused or unknown leaves it": an explicit
+/// mode change the agent refuses leaves the session's recorded mode as it
+/// was.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_refused_explicit_mode_change_leaves_the_recorded_mode() -> TestResult {
+    let fixture = ModeFixture::start("claude", &["reject-mode"]).await?;
+    let target = fixture.create_in("default").await?;
+    let recorded_before = fixture.recorded_mode(&target).await?;
+
+    let changed = fixture.set_mode(&target, "plan").await;
+    let recorded_after = fixture.recorded_mode(&target).await?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    if changed.is_ok() {
+        return Err("the agent refused the change, but set_mode succeeded".into());
+    }
+    if recorded_before.is_none() {
+        return Err("the create recorded a mode".into());
+    }
+    ensure_eq!(recorded_after, recorded_before);
+    Ok(())
+}

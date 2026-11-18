@@ -141,7 +141,50 @@ pub(super) async fn apply(
             .record_settings_catalog(request.target.clone(), catalog)
             .await;
     }
+    if kind == provider_session_machines::ProviderSettingKind::Mode
+        && intent == session_event_model::SettingApplicationIntent::ExplicitChange
+    {
+        record_explicit_mode(supervisor, &runtime, &request.target, &request.value).await?;
+    }
     Ok(result(request.target, record, observed))
+}
+
+/// Keeps the session's record current after an explicit mode change the
+/// agent applied: a restore puts back the mode the session runs now, never
+/// the one its create asked for (V6; owner Decision 3; Lead ruling). A
+/// refused or unknown change never reaches here, so it leaves the record.
+async fn record_explicit_mode(
+    supervisor: &ExternalProviderSupervisor,
+    runtime: &crate::ExternalProviderRuntime,
+    target: &SessionRef,
+    value: &str,
+) -> Result<(), SettingControlFailure> {
+    let requested = acp_client_runtime::RequestedPermissionMode::from_request(Some(value));
+    let Some(requested_mode) = requested.requested_name() else {
+        return Ok(());
+    };
+    supervisor
+        .inner
+        .store
+        .lock()
+        .await
+        .record_session_mode(target, requested_mode, super::now_ms())
+        .await
+        .map_err(|_| {
+            failure(
+                ProviderSettingsFailureKind::Unavailable,
+                target,
+                "the mode was applied, but the provider Session inventory is unavailable",
+            )
+        })?;
+    runtime.session_setup().record_requested_mode(
+        &String::from(target.session_id.clone()),
+        crate::provider_session_setup::RequestedModeRecord {
+            requested_mode: Some(requested_mode.to_owned()),
+            mode_reason: None,
+        },
+    );
+    Ok(())
 }
 
 #[expect(
