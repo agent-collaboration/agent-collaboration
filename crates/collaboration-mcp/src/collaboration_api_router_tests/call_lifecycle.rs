@@ -81,6 +81,7 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
     );
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
+    let before = store_snapshot(&automation, &clock, directory.path()).await;
     let held = automation.lock().await;
 
     // Act: each listener's client sends a wake, then goes away while it waits on the store.
@@ -125,6 +126,13 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
         };
         assert!(page.records.is_empty(), "an abandoned call left an event");
     }
+    // The whole store, not just the submitted ids: no receipt under any id, and
+    // no event appended, even one removed again.
+    assert_eq!(
+        store_snapshot(&automation, &clock, directory.path()).await,
+        before,
+        "an abandoned call changed the receipt inventory or the event high-water mark"
+    );
     // A valid retry is a sensitivity control: neither an invalid input nor a
     // disabled mutation path may make the no-effect check pass.
     for (input, api) in abandoned {
@@ -136,6 +144,15 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
         structured(&listed)["records"].as_array().map(Vec::len),
         Some(2),
         "{listed:?}"
+    );
+    // The snapshot sees the retries' receipts and events, so its equality above can fail.
+    assert_eq!(
+        store_snapshot(&automation, &clock, directory.path()).await,
+        StoreSnapshot {
+            receipts: before.receipts + 2,
+            event_high_water: before.event_high_water + 2,
+        },
+        "the retries did not each add one receipt and one event"
     );
     // The same event read sees the retries' events, so its empty answer above can fail.
     let events = automation
@@ -154,4 +171,48 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
     assert_eq!(page.records.len(), 2, "one created event per retried wake");
     tcp.stop().await;
     unix.stop().await;
+}
+
+/// The automation store's whole receipt inventory and its event high-water mark.
+#[derive(Debug, PartialEq, Eq)]
+struct StoreSnapshot {
+    receipts: i64,
+    event_high_water: i64,
+}
+
+async fn store_snapshot(
+    automation: &Arc<Mutex<automation_storage::AutomationStore>>,
+    clock: &Arc<router_clock::ManualClock>,
+    directory: &std::path::Path,
+) -> StoreSnapshot {
+    use sqlx::{ConnectOptions as _, Connection as _};
+    let events = automation
+        .lock()
+        .await
+        .read_event_history(&automation_storage::EventHistoryQuery {
+            after: None,
+            now_ms: router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis(),
+            limit: 100,
+        })
+        .await
+        .expect("automation events");
+    let automation_storage::EventHistoryRead::Page(page) = events else {
+        panic!("the event history expired on a still clock");
+    };
+    // No store method lists every receipt, so a read-only connection counts them.
+    let mut reader = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(directory.join("automation.sqlite"))
+        .read_only(true)
+        .connect()
+        .await
+        .expect("read-only automation connection");
+    let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operation_receipts")
+        .fetch_one(&mut reader)
+        .await
+        .expect("receipt inventory");
+    reader.close().await.expect("close the reader");
+    StoreSnapshot {
+        receipts,
+        event_high_water: page.next.sequence,
+    }
 }

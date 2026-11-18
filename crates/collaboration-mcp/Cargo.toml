@@ -34,6 +34,7 @@ tokio-util.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+sqlx = { workspace = true, features = ["sqlite"] }
 acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.114", features = ["test-support"] }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
 router-clock = { workspace = true, features = ["test-support"] }
