@@ -7,7 +7,7 @@ use workspace_model::{
 };
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct StoredChange {
+pub struct StoredChange {
     pub change_id: ChangeId,
     pub position: ChangePosition,
     pub item: ItemRef,

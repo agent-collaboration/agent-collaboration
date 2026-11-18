@@ -6,8 +6,10 @@ mod central_observation;
 mod event_completion;
 mod issuer_refusals;
 mod statement_refusal;
+mod workspace_caller;
 
 pub use central_observation::CentralObservation;
 pub use event_completion::{AlarmNotPublished, AlarmResult, EventCompletion, EventCompletionHook};
 pub use issuer_refusals::{IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerSignatureRefusal};
 pub use statement_refusal::FleetOrganizationStatementRefusal;
+pub use workspace_caller::WorkspaceCaller;

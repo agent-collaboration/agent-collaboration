@@ -1,6 +1,5 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
 use crate::engine::legacy_units::LegacyUnitOutcome;
-use crate::workspace_row_codec::WorkspaceRows;
 use crate::{
     WorkspaceRuntime,
     central_mail_store::{alarm_update, applied, timestamp},
@@ -13,6 +12,7 @@ use fleet_runtime::stored_values::column;
 use fleet_runtime::stored_values::string;
 use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_access::WorkspaceRows;
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn preset_workspace_drain(

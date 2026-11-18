@@ -2,7 +2,7 @@
 use super::support::Fixture;
 use central_storage::{SqlValue, Statement, StoreFailure};
 use collaboration_central_conformance::ConformanceResult as TestResult;
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_test_support::signin_fixtures as signed;
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};

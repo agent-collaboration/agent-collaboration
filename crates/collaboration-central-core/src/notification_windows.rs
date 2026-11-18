@@ -142,7 +142,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 return Err(corrupt("notification_window_items.change_id").into());
             }
             for row in &rows.rows {
-                let stored: crate::workspace_change_records::StoredChange =
+                let stored: fleet_workspace_access::StoredChange =
                     json(string(&rows, row, "payload")?, "changes")?;
                 if !changes
                     .iter()
@@ -226,7 +226,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
 }
 pub(crate) fn notice_item(
-    stored: &crate::workspace_change_records::StoredChange,
+    stored: &fleet_workspace_access::StoredChange,
     workspace: &WorkspaceId,
 ) -> Result<mail::NoticeItem, StoreFailure> {
     let change = stored.change()?;

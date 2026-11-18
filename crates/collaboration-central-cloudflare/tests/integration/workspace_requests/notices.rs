@@ -1,6 +1,6 @@
 //! Native notice decisions and durable drain coordination.
 use super::{SqlValue, Statement, support::*};
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
 use std::sync::atomic::Ordering;
 use workspace_model as m;
 

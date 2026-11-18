@@ -6,8 +6,7 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{
-    OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings, WorkspaceCaller,
-    WorkspaceRuntime,
+    OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings, WorkspaceRuntime,
     identity_contract::{
         AuthorizationRevision, AuthorizationRevisionAcknowledgement,
         OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,
@@ -16,6 +15,7 @@ use collaboration_central_core::{
     organization_authority::OrganizationProvisioningFailure,
     person_request::PersonRequestInput,
 };
+use fleet_contracts::WorkspaceCaller;
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};

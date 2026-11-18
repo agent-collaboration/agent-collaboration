@@ -1,19 +1,9 @@
 //! One org's request owner. Stores execute statements; only this core makes decisions.
-use fleet_identity_protocol::OrganizationId;
 use fleet_runtime::FleetRuntime;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use std::sync::Arc;
-use workspace_model::Caller;
 #[cfg(feature = "test-support")]
 use workspace_model::WorkspaceId;
-
-/// Transport-stamped context. No workspace allowance is accepted from the caller.
-#[derive(Clone)]
-pub struct WorkspaceCaller {
-    pub organization_id: OrganizationId,
-    pub caller: Caller,
-    pub credential_hash: String,
-}
 
 #[cfg(feature = "test-support")]
 pub use crate::engine::port::LegacyUnitInvocations;
@@ -78,6 +68,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
     pub fn statement_host(&self) -> &Host {
         self.fleet_runtime.statement_host()
+    }
+    pub(crate) fn workspace_access(
+        &self,
+    ) -> fleet_workspace_access::WorkspaceAccess<'_, Host, Stores> {
+        fleet_workspace_access::WorkspaceAccess::new(&self.fleet_runtime)
     }
     pub fn alarm_schedule<Deadline: Copy>(&self) -> fleet_runtime::AlarmSchedule<Deadline> {
         self.fleet_runtime.alarm_schedule()

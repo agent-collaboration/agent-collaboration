@@ -3,7 +3,7 @@ use super::support::{Fixture, signed};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch};
 use central_storage::{SqlValue, Statement, StoreFailure};
 use collaboration_central_conformance::ConformanceResult as TestResult;
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use std::sync::Arc;

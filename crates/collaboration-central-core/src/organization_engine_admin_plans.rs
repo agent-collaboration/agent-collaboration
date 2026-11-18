@@ -141,7 +141,10 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             person_id: PersonId::try_from(person.person_id.clone())
                 .map_err(|_| corrupt("person_id"))?,
         };
-        let actor = self.prepare_identity(&identity, now).await?;
+        let actor = self
+            .workspace_access()
+            .prepare_identity(&identity, now)
+            .await?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
             .statement_host()

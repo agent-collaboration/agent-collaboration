@@ -1,9 +1,10 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
 use crate::{
-    WorkspaceCaller, WorkspaceRuntime,
+    WorkspaceRuntime,
     central_mail_store::{self, insert_message},
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime::stored_values::json;
 use fleet_runtime::stored_values::string;
 use fleet_runtime::workspace_decode_error::corrupt;
@@ -34,7 +35,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
         use mail::{CentralMailRefusal as Refusal, CentralMailResult as Result};
-        if let Err(reason) = self.admit_workspace(caller, None).await? {
+        if let Err(reason) = self
+            .workspace_access()
+            .admit_workspace(caller, None)
+            .await?
+        {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
         let identity = match &caller.caller {
@@ -57,7 +62,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             ))
             .await?;
         if let Some(row) = rows.rows.first() {
-            let actor = self.resolve_identity(&identity).await?;
+            let actor = self.workspace_access().resolve_identity(&identity).await?;
             if string(&rows, row, "caller")? != actor.as_str()
                 || string(&rows, row, "content_digest")? != digest
             {
@@ -99,7 +104,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         if let Some(reason) = crate::central_mail_time::refusal(&request.operation, now) {
             return Ok(Result::Refused(reason));
         }
-        let actor = self.resolve_identity(&identity).await?;
+        let actor = self.workspace_access().resolve_identity(&identity).await?;
         let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
             &request.operation
         {

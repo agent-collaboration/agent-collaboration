@@ -166,7 +166,7 @@ pub(super) async fn control(
                 request: collaboration_central_core::engine_probe::ProbeRequest,
             }
             let call: ProbeCall = request.json().await?;
-            let caller = collaboration_central_core::WorkspaceCaller {
+            let caller = fleet_contracts::WorkspaceCaller {
                 organization_id: organization.clone(),
                 caller: call.caller,
                 credential_hash: call.credential_hash,
@@ -185,7 +185,7 @@ pub(super) async fn control(
                 request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
             }
             let call: OwedCall = request.json().await?;
-            let caller = collaboration_central_core::WorkspaceCaller {
+            let caller = fleet_contracts::WorkspaceCaller {
                 organization_id: organization.clone(),
                 caller: call.caller,
                 credential_hash: call.credential_hash,

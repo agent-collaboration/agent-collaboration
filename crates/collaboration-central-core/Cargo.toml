@@ -30,6 +30,7 @@ http.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-contracts.workspace = true
 fleet-runtime.workspace = true
+fleet-workspace-access.workspace = true
 futures-util.workspace = true
 sqlx-core.workspace = true
 message-board = { version = "0.1.93", path = "../message-board" }

@@ -150,7 +150,7 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
 #[tokio::test]
 async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_alarm_calls() -> Result
 {
-    use collaboration_central_core::WorkspaceCaller;
+    use fleet_contracts::WorkspaceCaller;
     use router_clock::RuntimeClock;
     use workspace_model::central_mail::{
         CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,

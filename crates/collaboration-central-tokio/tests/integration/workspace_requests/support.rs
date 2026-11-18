@@ -3,8 +3,8 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-use collaboration_central_core::WorkspaceCaller;
 use collaboration_central_tokio::TokioWorkspaceHost;
+use fleet_contracts::WorkspaceCaller;
 use std::sync::Arc;
 use workspace_model as m;
 

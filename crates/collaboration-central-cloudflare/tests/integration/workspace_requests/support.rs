@@ -4,7 +4,7 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::{Clock, SyncTime};
 use std::sync::{
     Arc,

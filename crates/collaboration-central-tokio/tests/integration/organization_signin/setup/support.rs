@@ -65,8 +65,8 @@ pub(super) async fn machine_rows(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>>
     }
     Ok(rows)
 }
-pub(super) fn caller() -> Result<collaboration_central_core::WorkspaceCaller> {
-    Ok(collaboration_central_core::WorkspaceCaller {
+pub(super) fn caller() -> Result<fleet_contracts::WorkspaceCaller> {
+    Ok(fleet_contracts::WorkspaceCaller {
         organization_id: org(A)?,
         caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
             machine_id: MACHINE.to_owned().try_into()?,

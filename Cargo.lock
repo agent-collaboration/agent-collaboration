@@ -1813,6 +1813,7 @@ dependencies = [
  "fleet-identity-protocol",
  "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-workspace-access",
  "futures-util",
  "hegeltest",
  "http",
@@ -3145,6 +3146,20 @@ dependencies = [
  "tokio",
  "turso",
  "turso_parser",
+]
+
+[[package]]
+name = "fleet-workspace-access"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-contracts",
+ "fleet-runtime",
+ "fleet-runtime-ports",
+ "serde",
+ "serde_json",
+ "serde_json_canonicalizer",
+ "workspace-model",
 ]
 
 [[package]]

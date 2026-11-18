@@ -46,7 +46,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         actor: &ActorIdentityId,
     ) -> Result<Option<SessionAddress>, StoreFailure> {
-        let actors = self.actor_views(std::slice::from_ref(actor)).await?;
+        let actors = self
+            .workspace_access()
+            .actor_views(std::slice::from_ref(actor))
+            .await?;
         match actors.first().map(|actor| &actor.identity) {
             Some(workspace_model::Identity::AgentSession { session }) => Ok(Some(session.clone())),
             Some(

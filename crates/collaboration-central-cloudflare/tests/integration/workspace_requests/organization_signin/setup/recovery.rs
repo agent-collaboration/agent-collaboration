@@ -110,7 +110,7 @@ async fn person_create_records_checked_origin_without_machine_rights() {
     );
     // B4b approval/generation columns and legacy originInstallation/originMachine
     // do not exist in this modern schema; no synthetic observations are invented.
-    let caller = collaboration_central_core::WorkspaceCaller {
+    let caller = fleet_contracts::WorkspaceCaller {
         organization_id: f.org.clone(),
         caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
             machine_id: machine.to_owned().try_into().unwrap(),
@@ -158,7 +158,7 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
     let machine = "019f0000-0000-7000-8000-00000000d761";
     f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'generic machine','enrolled','[]','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text(machine.into()),SqlValue::Text("019f0000-0000-7000-8000-00000000d762".into())]).await;
     f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'generic-machine-hash','2035-01-01T00:00:00Z','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text("019f0000-0000-7000-8000-00000000d763".into()),SqlValue::Text(machine.into())]).await;
-    let caller = collaboration_central_core::WorkspaceCaller {
+    let caller = fleet_contracts::WorkspaceCaller {
         organization_id: f.org.clone(),
         caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
             machine_id: machine.to_owned().try_into().unwrap(),

@@ -25,18 +25,13 @@ mod workspace_runtime;
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
 #[cfg(feature = "test-support")]
 pub use workspace_runtime::LegacyUnitInvocations;
-pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime};
+pub use workspace_runtime::WorkspaceRuntime;
 mod organization_workspace_plans;
-mod workspace_actor_identity;
-mod workspace_admission;
-mod workspace_change_records;
 mod workspace_directory_rows;
 mod workspace_item_reads;
-mod workspace_json_records;
 pub mod workspace_migrations;
 mod workspace_read_queries;
 mod workspace_request_gate;
-mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
 

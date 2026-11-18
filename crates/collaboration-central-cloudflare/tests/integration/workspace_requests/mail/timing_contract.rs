@@ -1,6 +1,6 @@
 //! R34 through admitted requests, owning storage and the host's actual alarm driver.
 use super::super::{Statement, support::*};
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
 use std::sync::atomic::Ordering;
 use workspace_model as m;
 use workspace_model::central_mail::{

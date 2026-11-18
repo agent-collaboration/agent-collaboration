@@ -1,6 +1,6 @@
 //! Supply each pure rule with the admitted rows its command needs.
-use crate::workspace_row_codec::WorkspaceRows;
 use crate::workspace_rule_dispatch::ResolvedOperation;
+use fleet_workspace_access::WorkspaceRows;
 use workspace_model as m;
 use workspace_rules as rules;
 

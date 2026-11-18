@@ -13,6 +13,7 @@ members = [
     "crates/fleet-runtime",
     "crates/fleet-store-sqlx",
     "crates/fleet-runtime-test-support",
+    "crates/fleet-workspace-access",
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-fleet-sync",
@@ -88,6 +89,7 @@ fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156"
 fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }
 fleet-runtime = { path = "crates/fleet-runtime", version = "0.1.156" }
 fleet-store-sqlx = { path = "crates/fleet-store-sqlx", version = "0.1.156" }
+fleet-workspace-access = { path = "crates/fleet-workspace-access", version = "0.1.156" }
 router-clock = { path = "crates/router-clock", version = "0.1.136" }
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }

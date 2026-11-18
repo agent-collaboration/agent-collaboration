@@ -1,21 +1,22 @@
-use crate::{WorkspaceCaller, WorkspaceRuntime};
+use crate::WorkspaceAccess;
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime::stored_values::json;
 use fleet_runtime::stored_values::string;
 use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{MachineId, RefusalReason, WorkspaceId};
 
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn admit_workspace(
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stores> {
+    pub async fn admit_workspace(
         &self,
         caller: &WorkspaceCaller,
         workspace: Option<&WorkspaceId>,
     ) -> Result<Result<(), RefusalReason>, StoreFailure> {
-        if caller.organization_id != *self.fleet_runtime.organization() {
+        if caller.organization_id != *self.runtime.organization() {
             return Ok(Err(RefusalReason::MachineRevoked));
         }
-        let rows=self.statement_host().read(Statement {sql:"SELECT m.machine_id,m.state,m.allowed_workspaces,c.expires_at,w.state AS workspace_state FROM machines m JOIN machine_credentials c ON c.machine_id=m.machine_id LEFT JOIN workspaces w ON w.workspace_id=? WHERE m.machine_id=? AND c.token_hash=?",args:vec![workspace.map_or(SqlValue::Null,|id|SqlValue::Text(id.to_string())),SqlValue::Text(caller.caller.machine_id().to_string()),SqlValue::Text(caller.credential_hash.clone())]}).await?;
+        let rows=self.runtime.statement_host().read(Statement {sql:"SELECT m.machine_id,m.state,m.allowed_workspaces,c.expires_at,w.state AS workspace_state FROM machines m JOIN machine_credentials c ON c.machine_id=m.machine_id LEFT JOIN workspaces w ON w.workspace_id=? WHERE m.machine_id=? AND c.token_hash=?",args:vec![workspace.map_or(SqlValue::Null,|id|SqlValue::Text(id.to_string())),SqlValue::Text(caller.caller.machine_id().to_string()),SqlValue::Text(caller.credential_hash.clone())]}).await?;
         let Some(row) = rows.rows.first() else {
             return Ok(Err(RefusalReason::MachineRevoked));
         };
@@ -30,7 +31,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let expires: workspace_model::Timestamp = string(&rows, row, "expires_at")?
             .parse()
             .map_err(|_| corrupt("expires_at"))?;
-        if expires <= self.fleet_runtime.now()? {
+        if expires <= self.runtime.now()? {
             return Ok(Err(RefusalReason::MachineRevoked));
         }
         let allowed: Vec<WorkspaceId> = json(

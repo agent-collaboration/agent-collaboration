@@ -1,5 +1,4 @@
 //! Position-ordered activity joins one central recipient window across workspaces.
-use crate::workspace_row_codec::WorkspaceRows;
 use crate::{
     WorkspaceRuntime,
     guarded_statements::{any, text},
@@ -8,6 +7,7 @@ use crate::{
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_access::WorkspaceRows;
 use std::collections::BTreeSet;
 use workspace_model as m;
 
@@ -117,7 +117,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
 }
 fn targeted_recipients(
-    change: &crate::workspace_change_records::StoredChange,
+    change: &fleet_workspace_access::StoredChange,
     rows: &WorkspaceRows,
 ) -> Result<BTreeSet<m::ActorIdentityId>, StoreFailure> {
     let mut recipients = BTreeSet::new();

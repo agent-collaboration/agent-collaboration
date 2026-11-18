@@ -2,8 +2,9 @@
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{DrainResult, WorkspaceCaller};
+use collaboration_central_core::DrainResult;
 use fleet_contracts::AlarmResult;
+use fleet_contracts::WorkspaceCaller;
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};

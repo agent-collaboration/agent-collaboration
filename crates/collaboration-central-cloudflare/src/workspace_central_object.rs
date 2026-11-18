@@ -8,7 +8,8 @@ use crate::{
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{WorkspaceCaller, WorkspaceRuntime};
+use collaboration_central_core::WorkspaceRuntime;
+use fleet_contracts::WorkspaceCaller;
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};

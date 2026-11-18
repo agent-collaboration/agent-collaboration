@@ -1,5 +1,5 @@
 use super::*;
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime::PausePoint;
 async fn held_pair(
     f: &Fixture,

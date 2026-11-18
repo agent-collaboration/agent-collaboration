@@ -1,0 +1,21 @@
+[package]
+name = "fleet-workspace-access"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Workspace admission, actor identity and persisted row decoding"
+
+[lints]
+workspace = true
+
+[dependencies]
+central-storage.workspace = true
+fleet-contracts.workspace = true
+fleet-runtime.workspace = true
+fleet-runtime-ports.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
+workspace-model.workspace = true

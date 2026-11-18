@@ -1,9 +1,10 @@
 //! Replay precedes mutable rule decisions; the durable answer shares the effect batch.
-use crate::workspace_row_codec::WorkspaceRows;
-use crate::{WorkspaceCaller, WorkspaceRuntime};
+use crate::WorkspaceRuntime;
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_access::WorkspaceRows;
 use workspace_model as m;
 
 fn reply(result: m::WorkspaceResult) -> m::WorkspaceReply {
@@ -55,6 +56,7 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         )));
     }
     if let Err(refusal) = runtime
+        .workspace_access()
         .admit_workspace(caller, request.workspace_id.as_ref())
         .await?
     {
@@ -77,7 +79,10 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         let now = runtime.fleet_runtime.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
-        let actor_plan = runtime.prepare_identity(&identity, now).await?;
+        let actor_plan = runtime
+            .workspace_access()
+            .prepare_identity(&identity, now)
+            .await?;
         let actor = actor_plan.actor;
         let logged = runtime
             .statement_host()
@@ -141,7 +146,10 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     }
     let actor = {
         let _turn = runtime.fleet_runtime.take_central_turn().await;
-        runtime.resolve_identity(&identity).await?
+        runtime
+            .workspace_access()
+            .resolve_identity(&identity)
+            .await?
     };
     let now = runtime.fleet_runtime.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
@@ -318,6 +326,7 @@ async fn enrich<Host: CentralStore, Stores: WorkspaceStores>(
     durable_answer: bool,
 ) -> Result<m::WorkspaceReply, StoreFailure> {
     let actors = match runtime
+        .workspace_access()
         .actor_views(&crate::workspace_item_reads::actor_ids(&result))
         .await
     {

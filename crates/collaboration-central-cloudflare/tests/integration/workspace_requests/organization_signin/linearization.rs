@@ -129,7 +129,7 @@ async fn provisioning_first_stamp_arms_pending_wake_and_actual_alarm_fires_once(
     };
     f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'Pending wake host','enrolled','[]',?,?)",vec![SqlValue::Text(target.machine_id.to_string()),SqlValue::Text("019f0000-0000-7000-8000-00000000d224".to_owned()),SqlValue::Text(due.to_rfc3339()),SqlValue::Text(due.to_rfc3339())]).await;
     f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'pending-wake-credential','2040-01-01T00:00:00Z',?,?)",vec![SqlValue::Text("019f0000-0000-7000-8000-00000000d225".to_owned()),SqlValue::Text(target.machine_id.to_string()),SqlValue::Text(due.to_rfc3339()),SqlValue::Text(due.to_rfc3339())]).await;
-    let caller = collaboration_central_core::WorkspaceCaller {
+    let caller = fleet_contracts::WorkspaceCaller {
         organization_id: f.org.clone(),
         caller: workspace_model::Caller::Session(target.clone()),
         credential_hash: "pending-wake-credential".to_owned(),

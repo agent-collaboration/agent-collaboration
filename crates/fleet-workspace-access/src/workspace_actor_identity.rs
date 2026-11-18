@@ -1,4 +1,4 @@
-use crate::WorkspaceRuntime;
+use crate::WorkspaceAccess;
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
@@ -40,20 +40,21 @@ fn identity_insert(actor: &ActorIdentityId, kind: &str, encoded: &str, now: &str
 }
 
 /// A new caller identity joins the same atomic batch as its retained outcome.
-pub(crate) struct ActorIdentityPlan {
+pub struct ActorIdentityPlan {
     pub actor: ActorIdentityId,
     pub statements: Vec<GuardedStatement>,
 }
 
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stores> {
     /// Caller holds the org turn and supplies its sole applying time sample.
-    pub(crate) async fn prepare_identity(
+    pub async fn prepare_identity(
         &self,
         identity: &Identity,
         now: workspace_model::Timestamp,
     ) -> Result<ActorIdentityPlan, StoreFailure> {
         let (kind, encoded) = identity_fields(identity)?;
         let rows = self
+            .runtime
             .statement_host()
             .read(identity_lookup(kind, &encoded))
             .await?;
@@ -69,7 +70,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 statements: vec![],
             });
         }
-        let actor: ActorIdentityId = self.fleet_runtime.mint()?;
+        let actor: ActorIdentityId = self.runtime.mint()?;
         let statement = identity_insert(&actor, kind, &encoded, &now.to_rfc3339());
         Ok(ActorIdentityPlan {
             actor,
@@ -80,20 +81,20 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         })
     }
 
-    pub(crate) async fn resolve_identity(
+    pub async fn resolve_identity(
         &self,
         identity: &Identity,
     ) -> Result<ActorIdentityId, StoreFailure> {
         let (kind, encoded) = identity_fields(identity)?;
         let lookup = || identity_lookup(kind, &encoded);
-        let existing = self.statement_host().read(lookup()).await?;
+        let existing = self.runtime.statement_host().read(lookup()).await?;
         if let Some(row) = existing.rows.first() {
             return string(&existing, row, "actor_identity_id")?
                 .parse()
                 .map_err(|_| corrupt("actor_identity_id"));
         }
-        let minted: ActorIdentityId = self.fleet_runtime.mint()?;
-        let now = self.fleet_runtime.now()?.to_rfc3339();
+        let minted: ActorIdentityId = self.runtime.mint()?;
+        let now = self.runtime.now()?.to_rfc3339();
         let batch = StatementBatch {
             statements: vec![GuardedStatement {
                 statement: identity_insert(&minted, kind, &encoded, &now),
@@ -101,7 +102,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }],
             alarm: AlarmUpdate::Unchanged,
         };
-        match self.statement_host().run_batch(batch).await? {
+        match self.runtime.statement_host().run_batch(batch).await? {
             BatchOutcome::Applied { .. } => {}
             // A rejected statement keeps main's store-outage answer on this path.
             BatchOutcome::StatementRejected { .. } => return Err(StoreFailure::Unavailable),
@@ -109,7 +110,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 return Err(corrupt("actor insertion"));
             }
         }
-        let stored = self.statement_host().read(lookup()).await?;
+        let stored = self.runtime.statement_host().read(lookup()).await?;
         let row = stored
             .rows
             .first()
@@ -118,7 +119,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             .parse()
             .map_err(|_| corrupt("actor_identity_id"))
     }
-    pub(crate) async fn resolve_actor_ref(
+    pub async fn resolve_actor_ref(
         &self,
         reference: &ActorRef,
         caller: &ActorIdentityId,
@@ -133,7 +134,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 })
             }),
             ActorRef::Session(session) => {
-                let _turn = self.fleet_runtime.take_central_turn().await;
+                let _turn = self.runtime.take_central_turn().await;
                 self.resolve_identity(&Identity::AgentSession {
                     session: session.clone(),
                 })
@@ -142,7 +143,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }
         }
     }
-    pub(crate) async fn actor_views(
+    pub async fn actor_views(
         &self,
         ids: &[ActorIdentityId],
     ) -> Result<Vec<ActorView>, StoreFailure> {
@@ -150,7 +151,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             return Ok(vec![]);
         }
         let encoded = serde_json::to_string(ids).map_err(|_| corrupt("actor ids"))?;
-        let rows=self.statement_host().read(Statement {sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id IN (SELECT value FROM json_each(?))",args:vec![text(encoded)]}).await?;
+        let rows=self.runtime.statement_host().read(Statement {sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id IN (SELECT value FROM json_each(?))",args:vec![text(encoded)]}).await?;
         let mut actors = Vec::new();
         for row in &rows.rows {
             actors.push(ActorView::from(decode_actor(&rows, row)?));
@@ -185,9 +186,9 @@ fn decode_actor(
         identity,
     })
 }
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
-        let rows=self.statement_host().read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stores> {
+    pub async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
+        let rows=self.runtime.statement_host().read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
         match rows.rows.first() {
             Some(row) => {
                 decode_actor(&rows, row)?;

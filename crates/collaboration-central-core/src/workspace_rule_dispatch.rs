@@ -36,7 +36,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 lead,
             } => {
                 let holder = match lead {
-                    Some(reference) => match self.resolve_actor_ref(reference, actor).await? {
+                    Some(reference) => match self
+                        .workspace_access()
+                        .resolve_actor_ref(reference, actor)
+                        .await?
+                    {
                         Ok(holder) => holder,
                         Err(refusal) => return Ok(Err(refusal)),
                     },
@@ -86,7 +90,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 role,
                 holder,
             } => {
-                let holder = match self.resolve_actor_ref(holder, actor).await? {
+                let holder = match self
+                    .workspace_access()
+                    .resolve_actor_ref(holder, actor)
+                    .await?
+                {
                     Ok(holder) => holder,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
@@ -108,7 +116,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 role,
                 holder,
             } => {
-                let holder = match self.resolve_actor_ref(holder, actor).await? {
+                let holder = match self
+                    .workspace_access()
+                    .resolve_actor_ref(holder, actor)
+                    .await?
+                {
                     Ok(holder) => holder,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
@@ -146,7 +158,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 actor: target,
                 role,
             } => {
-                if !self.named_actor(target).await? {
+                if !self.workspace_access().named_actor(target).await? {
                     return Ok(Err(m::RefusalReason::UnknownActor {
                         actor_identity_id: target.clone(),
                     }));
@@ -176,7 +188,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             } => {
                 for addressee in addressees {
                     if let m::Addressee::Actor { actor_identity_id } = addressee
-                        && !self.named_actor(actor_identity_id).await?
+                        && !self
+                            .workspace_access()
+                            .named_actor(actor_identity_id)
+                            .await?
                     {
                         return Ok(Err(m::RefusalReason::UnknownActor {
                             actor_identity_id: actor_identity_id.clone(),
