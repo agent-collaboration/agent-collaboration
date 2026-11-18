@@ -165,7 +165,7 @@ impl WorkspaceStoreCalls for WorkspaceStore {
     }
 }
 #[derive(Clone)]
-struct SharedClock(Arc<HeldClock>);
+struct SharedClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for SharedClock {
     fn now(&self) -> SyncTime {
         self.0.now()
@@ -211,7 +211,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
-        .with_engine_publication(fixture.clock.shared_for_runtime(), gated),
+        .with_engine_publication(fixture.shared_for_runtime(), gated),
     );
     let workspace = Arc::new(ObjectStorage::new(
         fixture
@@ -225,10 +225,8 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         fixture.caller.organization_id.clone(),
         central.clone(),
         WorkspaceStore(workspace.clone()),
-        fixture.clock.shared_for_runtime(),
-        Arc::new(ClockIds::new(SharedClock(
-            fixture.clock.shared_for_runtime(),
-        ))),
+        fixture.shared_for_runtime(),
+        Arc::new(ClockIds::new(SharedClock(fixture.shared_for_runtime()))),
         due_batches.clone(),
     ));
     fixture.set_utc(at(start, 4, 0, 0)).await;

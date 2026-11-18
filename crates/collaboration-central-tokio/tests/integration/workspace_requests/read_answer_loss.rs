@@ -5,7 +5,7 @@ use collaboration_central_tokio::ObjectStorage;
 use runtime_primitives::{Clock, SyncTime};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone)]
-struct ArcClock(Arc<HeldClock>);
+struct ArcClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for ArcClock {
     fn now(&self) -> SyncTime {
         self.0.now()
@@ -50,7 +50,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
         .with_engine_publication(
-            f.clock.shared_for_runtime(),
+            f.shared_for_runtime(),
             collaboration_central_core::engine_alarm_decider(due_batches.clone()),
         ),
     );
@@ -68,8 +68,8 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             store: store.clone(),
             lose: Arc::new(AtomicBool::new(true)),
         },
-        f.clock.shared_for_runtime(),
-        Arc::new(ClockIds::new(ArcClock(f.clock.shared_for_runtime()))),
+        f.shared_for_runtime(),
+        Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
         due_batches,
     );
     let request = m::WorkspaceRequest {

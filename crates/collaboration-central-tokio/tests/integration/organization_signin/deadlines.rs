@@ -67,7 +67,9 @@ async fn held_read(f: &Fixture, adjust: fn(&mut Value), release_after_ms: u64) -
     let client = f.client();
     let request = tokio::spawn(async move { post(&client, signed::RECORDS, body, headers).await });
     held.until_held().await;
-    f.clock.advance(Duration::from_millis(release_after_ms))?;
+    f.clock
+        .advance(Duration::from_millis(release_after_ms))
+        .await?;
     held.release();
     request.await?
 }

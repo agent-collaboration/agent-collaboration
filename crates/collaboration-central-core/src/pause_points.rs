@@ -35,6 +35,9 @@ pub enum PausePoint {
     /// Keyed by the notice unit's kind: after its run succeeded, before it
     /// clears the control record it observed at its gate.
     BeforeControlClear,
+    /// Keyed "driver": the host's alarm driver woke for a due alarm, before it
+    /// takes its drive guard from a gated test clock.
+    BeforeDriveGuard,
     BeforeSignInSample,
     AfterSignInSample,
 }

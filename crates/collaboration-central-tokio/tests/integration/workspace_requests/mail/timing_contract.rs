@@ -16,24 +16,20 @@ async fn advance_to(f: &Fixture, at: m::Timestamp) {
     f.advance(delta.to_std().unwrap()).await;
 }
 /// Advances to `at` and waits for the host's driver to complete that alarm.
-/// A drive still running from an earlier clock position (an alarm the clock
-/// jumped past) settles first, so it cannot finish after the move and pass for
-/// this alarm. Instead of waiting forever it fails loudly when the driver
-/// reports a failed drive (its retry is the next mark, which this manual clock
-/// never reaches) or re-checks its published alarm and finds it not due at `at`.
+/// The move holds the clock's gate: it waits for every held drive, so a drive
+/// from an earlier clock position cannot finish after the move and pass for
+/// this alarm, and the alarm and counts it reads cannot change under it.
+/// Instead of waiting forever it fails loudly when the driver reports a failed
+/// drive (its retry is the next mark, which this manual clock never reaches)
+/// or re-checks its published alarm and finds it not due at `at`.
 async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
-    let failures = r.alarm_failures().len();
-    r.until_alarm_drives_settled().await;
-    assert_eq!(
-        r.alarm_failures().len(),
-        failures,
-        "an in-flight drive failed before the dispatch to {at}: {:?}",
-        r.alarm_failures()
-    );
+    let held = f.clock.hold_move().await;
     let published = r.statement_host().alarm();
     let count = r.alarm_completion_count();
-    advance_to(f, at).await;
+    let failures = r.alarm_failures().len();
+    held.advance((at - now(f)).to_std().unwrap()).unwrap();
+    drop(held);
     let not_due = async {
         match published {
             Some(alarm) if alarm.unix_millis() > at.timestamp_millis() => {

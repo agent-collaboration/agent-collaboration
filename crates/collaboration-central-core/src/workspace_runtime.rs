@@ -39,15 +39,6 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
-    /// Test-support count of alarm drives the host's driver started.
-    #[cfg(feature = "test-support")]
-    started_alarms: tokio::sync::watch::Sender<u64>,
-    /// Test-support count of started drives that completed or failed.
-    #[cfg(feature = "test-support")]
-    settled_alarms: tokio::sync::watch::Sender<u64>,
-    /// Test-support count of callers waiting for in-flight drives to settle.
-    #[cfg(feature = "test-support")]
-    settle_waiting: tokio::sync::watch::Sender<usize>,
     #[cfg(feature = "test-support")]
     pub(crate) completed_alarms: tokio::sync::watch::Sender<u64>,
     /// Test-support record of every alarm drive that failed, in order.
@@ -82,12 +73,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             due_batches,
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
-            #[cfg(feature = "test-support")]
-            started_alarms: tokio::sync::watch::channel(0).0,
-            #[cfg(feature = "test-support")]
-            settled_alarms: tokio::sync::watch::channel(0).0,
-            #[cfg(feature = "test-support")]
-            settle_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             completed_alarms: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
@@ -164,39 +149,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         );
     }
-    /// The host's alarm driver reports that it is starting a drive.
-    #[cfg(feature = "test-support")]
-    pub fn mark_alarm_started(&self) {
-        self.started_alarms
-            .send_modify(|count| *count = count.saturating_add(1));
-    }
-    /// The host's alarm driver stopped a started drive (host close); the drive
-    /// will never complete or fail, so it no longer counts as in flight.
-    #[cfg(feature = "test-support")]
-    pub fn mark_alarm_drive_cancelled(&self) {
-        self.settled_alarms
-            .send_modify(|count| *count = count.saturating_add(1));
-    }
-    /// Resolves once every drive the driver started has completed, failed or
-    /// been cancelled by host close.
-    /// A test that moves the clock first waits here, so a drive still running
-    /// from an earlier clock position cannot finish after the move.
-    #[cfg(feature = "test-support")]
-    pub async fn until_alarm_drives_settled(&self) {
-        let started = *self.started_alarms.borrow();
-        let mut settled = self.settled_alarms.subscribe();
-        if *settled.borrow_and_update() >= started {
-            return;
-        }
-        let _waiter = CentralWaiter::enter(self.settle_waiting.clone());
-        let _ = settled.wait_for(|settled| *settled >= started).await;
-    }
-    /// Resolves once a caller is waiting in `until_alarm_drives_settled`.
-    #[cfg(feature = "test-support")]
-    pub async fn until_settle_waiting(&self) {
-        let mut waiting = self.settle_waiting.subscribe();
-        let _ = waiting.wait_for(|waiting| *waiting > 0).await;
-    }
     #[cfg(feature = "test-support")]
     pub fn alarm_completion_count(&self) -> u64 {
         *self.completed_alarms.borrow()
@@ -204,8 +156,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     #[cfg(feature = "test-support")]
     pub fn mark_alarm_completed(&self) {
         self.completed_alarms
-            .send_modify(|count| *count = count.saturating_add(1));
-        self.settled_alarms
             .send_modify(|count| *count = count.saturating_add(1));
     }
     #[cfg(feature = "test-support")]
@@ -218,8 +168,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn mark_alarm_failed(&self, failure: String) {
         self.failed_alarms
             .send_modify(|failures| failures.push(failure));
-        self.settled_alarms
-            .send_modify(|count| *count = count.saturating_add(1));
     }
     #[cfg(feature = "test-support")]
     pub fn alarm_failures(&self) -> Vec<String> {

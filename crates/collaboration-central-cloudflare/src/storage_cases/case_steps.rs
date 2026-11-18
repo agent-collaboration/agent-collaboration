@@ -132,6 +132,7 @@ pub(crate) enum CasePausePoint {
     BeforeEngineFailureWrite,
     AfterEngineAbsentLookup,
     BeforeControlClear,
+    BeforeDriveGuard,
     BeforeSignInSample,
     AfterSignInSample,
 }
@@ -152,6 +153,7 @@ impl From<CasePausePoint> for PausePoint {
             CasePausePoint::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
             CasePausePoint::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
             CasePausePoint::BeforeControlClear => Self::BeforeControlClear,
+            CasePausePoint::BeforeDriveGuard => Self::BeforeDriveGuard,
             CasePausePoint::BeforeSignInSample => Self::BeforeSignInSample,
             CasePausePoint::AfterSignInSample => Self::AfterSignInSample,
         }
@@ -173,6 +175,7 @@ impl From<PausePoint> for CasePausePoint {
             PausePoint::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
             PausePoint::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
             PausePoint::BeforeControlClear => Self::BeforeControlClear,
+            PausePoint::BeforeDriveGuard => Self::BeforeDriveGuard,
             PausePoint::BeforeSignInSample => Self::BeforeSignInSample,
             PausePoint::AfterSignInSample => Self::AfterSignInSample,
         }

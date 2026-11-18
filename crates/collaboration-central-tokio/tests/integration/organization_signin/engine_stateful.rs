@@ -577,10 +577,8 @@ impl EngineModel {
     #[rule]
     fn advance_seconds(&mut self, tc: TestCase) {
         let seconds = tc.draw(gs::integers::<u64>().min_value(1).max_value(120));
-        self.engine()
-            .f
-            .clock
-            .advance(std::time::Duration::from_secs(seconds))
+        let clock = self.engine().f.clock.clone();
+        self.block(clock.advance(std::time::Duration::from_secs(seconds)))
             .unwrap();
         self.settle();
     }
@@ -588,10 +586,8 @@ impl EngineModel {
     #[rule(weight = 2.0)]
     fn advance_minutes(&mut self, tc: TestCase) {
         let minutes = tc.draw(gs::integers::<u64>().min_value(5).max_value(120));
-        self.engine()
-            .f
-            .clock
-            .advance(std::time::Duration::from_secs(minutes * 60))
+        let clock = self.engine().f.clock.clone();
+        self.block(clock.advance(std::time::Duration::from_secs(minutes * 60)))
             .unwrap();
         self.settle();
     }

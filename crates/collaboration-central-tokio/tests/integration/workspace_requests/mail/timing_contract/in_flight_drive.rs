@@ -52,7 +52,7 @@ pub(super) async fn exercise_dispatch_settles_an_in_flight_drive(f: &Fixture) {
         () = clock_reaches(f, second) => {
             panic!("the dispatch moved the clock while a drive was in flight")
         }
-        () = r.until_settle_waiting() => {}
+        () = f.clock.until_move_waiting() => {}
     }
     assert_eq!(now(f), overdue_at);
     held.release();
@@ -113,7 +113,7 @@ pub(super) async fn exercise_a_clock_move_settles_an_in_flight_drive(f: &Fixture
         () = clock_reaches(f, later) => {
             panic!("the clock moved while a drive was in flight")
         }
-        () = r.until_settle_waiting() => {}
+        () = f.clock.until_move_waiting() => {}
     }
     assert_eq!(now(f), overdue_at);
     held.release();

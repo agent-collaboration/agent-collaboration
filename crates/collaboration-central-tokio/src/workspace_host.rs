@@ -251,17 +251,6 @@ impl TokioWorkspaceHost {
         self.orgs.lock().await.keys().cloned().collect()
     }
 
-    /// Waits until every opened organization's alarm driver has settled the
-    /// drives it started, so a test can move the clock without a drive from
-    /// the earlier position finishing after the move.
-    #[cfg(feature = "test-support")]
-    pub async fn until_alarm_drives_settled(&self) {
-        let runtimes: Vec<_> = self.orgs.lock().await.values().cloned().collect();
-        for runtime in runtimes {
-            runtime.until_alarm_drives_settled().await;
-        }
-    }
-
     pub async fn close(&self) {
         let alarms = std::mem::take(&mut *self.alarms.lock().await);
         for alarm in alarms {

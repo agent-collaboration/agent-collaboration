@@ -10,6 +10,10 @@ pub use system_runtime_clock::SystemRuntimeClock;
 mod manual_clock;
 #[cfg(any(test, feature = "test-support"))]
 pub use manual_clock::{ClockAdvanceError, ManualClock};
+#[cfg(any(test, feature = "test-support"))]
+mod gated_clock;
+#[cfg(any(test, feature = "test-support"))]
+pub use gated_clock::{DriveGuard, GatedClock, HeldMove};
 
 /// Elapsed time within one injected clock's lifetime; never a persisted timestamp.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
@@ -58,6 +62,14 @@ pub trait RuntimeClock: Clock {
     #[cfg(any(test, feature = "test-support"))]
     fn has_not_due_check_now(&self, _deadline: ClockInstant) -> bool {
         false
+    }
+
+    /// A drive holds this from before it samples its time until its final
+    /// publication, so a test clock's move cannot overlap it. Only a gated
+    /// test clock hands one out.
+    #[cfg(any(test, feature = "test-support"))]
+    fn drive_guard(&self) -> Pin<Box<dyn Future<Output = Option<DriveGuard>> + Send + '_>> {
+        Box::pin(std::future::ready(None))
     }
 
     /// Preserve a durable deadline's remaining delay when arming an elapsed timer.

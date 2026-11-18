@@ -70,14 +70,21 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                     AlarmWait::UntilPublication => std::future::pending().await,
                 }
             } => {
+                // A gated test clock's moves exclude this drive from before it
+                // samples its time until its final publication.
                 #[cfg(feature = "test-support")]
-                runtime.mark_alarm_started();
+                let _drive = tokio::select! {
+                    () = stop.cancelled() => return,
+                    guard = async {
+                        runtime
+                            .pause_points()
+                            .reached_engine(collaboration_central_core::PausePoint::BeforeDriveGuard, "driver")
+                            .await;
+                        clock.drive_guard().await
+                    } => guard,
+                };
                 let result = tokio::select! {
-                    () = stop.cancelled() => {
-                        #[cfg(feature = "test-support")]
-                        runtime.mark_alarm_drive_cancelled();
-                        return;
-                    }
+                    () = stop.cancelled() => return,
                     result = runtime.after_event() => result,
                 };
                 match result {

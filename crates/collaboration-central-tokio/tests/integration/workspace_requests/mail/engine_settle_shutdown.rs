@@ -1,12 +1,12 @@
-//! Host close cancels a drive the alarm driver started; a test waiting for
-//! in-flight drives to settle must not wait on it forever.
+//! Host close cancels a drive the alarm driver started; the drive's guard on
+//! the gated clock goes with it, so a waiting clock move never waits forever.
 use super::super::support::*;
 use super::engine_probe_support::*;
 use collaboration_central_core::PausePoint;
 use router_clock::RuntimeClock;
 
 #[tokio::test]
-async fn a_drive_cancelled_by_host_close_no_longer_counts_as_in_flight() {
+async fn a_drive_cancelled_by_host_close_releases_its_clock_guard() {
     // Arrange: due work, and the driver's drive for it held mid-batch.
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
@@ -29,23 +29,23 @@ async fn a_drive_cancelled_by_host_close_no_longer_counts_as_in_flight() {
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
     fixture.set_utc(due).await;
     held.until_held().await;
-    let waiter = tokio::spawn({
-        let runtime = runtime.clone();
-        async move { runtime.until_alarm_drives_settled().await }
-    });
-    runtime.until_settle_waiting().await;
-
-    // Act: close the host while the runtime is still held here.
-    fixture.host.close().await;
-
-    // Assert: the cancelled drive is settled at once, and the waiter wakes.
+    let mut moved = std::pin::pin!(fixture.advance(std::time::Duration::from_secs(10)));
     tokio::select! {
         biased;
-        () = runtime.until_alarm_drives_settled() => {}
+        () = &mut moved => panic!("the clock moved while a drive was held"),
+        () = fixture.clock.until_move_waiting() => {}
+    }
+
+    // Act: close the host while the runtime and the pause are still held here.
+    fixture.host.close().await;
+
+    // Assert: the cancelled drive's guard is gone, so the move completes at once.
+    tokio::select! {
+        biased;
+        () = &mut moved => {}
         () = std::future::ready(()) => {
-            panic!("a drive cancelled by host close still counts as in flight")
+            panic!("a drive cancelled by host close still holds its clock guard")
         }
     }
-    waiter.await.unwrap();
     drop(held);
 }
