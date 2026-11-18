@@ -25,7 +25,7 @@ pub fn encode_json(value: &impl serde::Serialize) -> Result<String, ValueValidat
 }
 pub use workspace_ids::{
     ActorIdentityId, AreaId, BacklogItemId, ChangeId, DeliverableId, DeliverableRoleId,
-    DependencyId, InitiativeId, IssueId, LinkId, MachineId, PersonId, PostId, ProjectId,
+    DependencyId, InitiativeId, IssueId, LinkId, MachineId, MessageId, PersonId, PostId, ProjectId,
     ProjectRoleId, ReadMarkId, ReferenceId, RequestId, ThreadId, ThreadMemberId, WorkLogEntryId,
     WorkLogTagId, WorkspaceId,
 };

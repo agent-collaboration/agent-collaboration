@@ -294,12 +294,15 @@ impl LinkDriver {
                 result,
             } => self.reply_arrived(&correlation_id, result).await,
             // Pong resets the client's heartbeat; a late reply was settled.
-            // Delivery belongs to 2c.
+            // Inbox delivery and message outcomes arrive in 2c steps C and D.
             ClientEvent::TokenRenewal {
                 correlation_id,
                 result,
             } => self.renewal_answered(&correlation_id, &result),
-            ClientEvent::Pong | ClientEvent::LateReply { .. } | ClientEvent::Deliver { .. } => {}
+            ClientEvent::Pong
+            | ClientEvent::LateReply { .. }
+            | ClientEvent::Deliver { .. }
+            | ClientEvent::MessageOutcome { .. } => {}
         }
     }
 

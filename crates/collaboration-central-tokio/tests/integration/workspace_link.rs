@@ -242,6 +242,10 @@ async fn acknowledgements_are_explicitly_unsupported_and_shutdown_drains_open_li
     socket
         .send(Message::Text(serde_json::to_string(&DataFrame::Ack {
             message_id: "019f0000-0000-7000-8000-00000000ce30".parse()?,
+            send_id: "019f0000-0000-7000-8000-00000000ce31"
+                .to_owned()
+                .try_into()?,
+            answer: central_link_protocol::DeliveryAnswer::Accepted,
         })?))
         .await?;
     assert!(matches!(
