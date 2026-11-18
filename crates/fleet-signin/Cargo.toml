@@ -1,0 +1,28 @@
+[package]
+name = "fleet-signin"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Fleet organization trust and sign-in verification"
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = "0.22.1"
+central-storage.workspace = true
+chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
+fleet-contracts.workspace = true
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
+fleet-runtime-ports.workspace = true
+message-board = { path = "../message-board", version = "0.1.93" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ring = "=0.17.14"
+tokio.workspace = true
