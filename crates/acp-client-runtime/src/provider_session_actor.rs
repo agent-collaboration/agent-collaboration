@@ -278,7 +278,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                         crate::provider_transport_diagnostics::record_prompt_enqueued();
                         item_projection.discard_turn_local_cursors();
                         let turn_id = uuid::Uuid::now_v7().to_string();
-                        runtime_handles.tool_registry.turn_started(session.session_id().0.as_ref(), &turn_id);
+                        runtime_handles.tool_registry.turn_started(session.session_id().0.as_ref(), &turn_id, runtime_handles.run_generation);
                         if runtime_handles.event_sink.publish(
                             session.session_id().0.as_ref(),
                             SessionEvent::TurnStarted { turn_id: turn_id.clone(), input_id },
@@ -484,7 +484,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                         let result = steer_provider_turn::<P>(session.connection(), session.session_id(), prompt, None, None).await;
                         if matches!(result, Ok(ProviderSteeringOutcome::StartedNewTurn)) {
                             let turn_id = uuid::Uuid::now_v7().to_string();
-                            runtime_handles.tool_registry.turn_started(session.session_id().0.as_ref(), &turn_id);
+                            runtime_handles.tool_registry.turn_started(session.session_id().0.as_ref(), &turn_id, runtime_handles.run_generation);
                             if runtime_handles.event_sink.publish(
                                 session.session_id().0.as_ref(),
                                 SessionEvent::TurnStarted { turn_id: turn_id.clone(), input_id },

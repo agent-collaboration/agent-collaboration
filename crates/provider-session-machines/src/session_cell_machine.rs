@@ -812,6 +812,21 @@ impl StateMachine for SessionCellMachine {
                         SessionSettingRefusal::OutcomeUnknown,
                     )));
                 }
+                // Accepting the agent's mode never unblocks a mode a restore
+                // couldn't put back.
+                if cell.settings.values().any(|setting| {
+                    matches!(
+                        setting,
+                        SessionSetting::Unresolved {
+                            cause: UnresolvedCause::ModeNotRestored { .. },
+                            ..
+                        }
+                    )
+                }) {
+                    return Err(TransitionError::Domain(SessionCellRefusal::Setting(
+                        SessionSettingRefusal::ModeMustBeSet,
+                    )));
+                }
                 let mut next = cell.clone();
                 let mut effects = Vec::new();
                 for (kind, setting) in &cell.settings {

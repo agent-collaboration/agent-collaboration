@@ -154,11 +154,22 @@ pub fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
     steps
 }
 
+/// Work refused because a restore couldn't put back the session's recorded
+/// mode `recorded` and the agent runs `observed`, which allows more (Lead's
+/// mode-mismatch rule under owner Decision 3).
+pub fn mode_not_restored_answer(recorded: &SettingValueId, observed: &SettingValueId) -> String {
+    format!(
+        "the session's recorded mode `{}` couldn't be put back and the agent is in `{}`, which allows more; set the mode, or close the session",
+        recorded.0, observed.0
+    )
+}
+
 /// Work refused because a setting holds the session, held for `cause`.
 pub fn settings_hold_answer(cause: UnresolvedCause) -> String {
-    let state = match cause {
+    let state = match &cause {
         UnresolvedCause::DefiniteFailure => "a setting change was refused",
         UnresolvedCause::OutcomeUnknown => "a setting change's outcome is unknown",
+        UnresolvedCause::ModeNotRestored { .. } => "the session's recorded mode wasn't put back",
     };
     let held = SessionSetting::Unresolved {
         cause,

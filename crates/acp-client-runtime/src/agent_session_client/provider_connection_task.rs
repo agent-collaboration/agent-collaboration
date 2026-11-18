@@ -543,6 +543,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         result = Err(ExternalProviderRuntimeError::SinkClosed);
                                                     }
                                                     let _written = task_session_settings.write(&provider_session_id, generation, catalog.clone());
+                                                    // A restore that left the session in a more permissive mode than its
+                                                    // record holds prompts until the mode is set (the Lead's
+                                                    // mode-mismatch rule), before the reply admits any.
+                                                    if let Some(mismatch) = &restored_mode.mode_not_restored {
+                                                        crate::session_cell_bookkeeping::hold_mode_not_restored(&session_cells, &provider_session_id, mismatch);
+                                                    }
                                                     permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, restored_mode);
                                                     // The session's fast hold outlives its runs (note §12.3): a
                                                     // restored run whose agent reads fast on has it turned off

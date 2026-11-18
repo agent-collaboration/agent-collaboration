@@ -169,7 +169,9 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
                 return Ok(Handled::Yes);
             }
         };
-        let Some(session_id) = self.tool_registry.resolve_session(&cursor.tool_call_id) else {
+        let Some(crate::provider_connection_activity::ToolCallOwner { session_id, .. }) =
+            self.tool_registry.resolve_session(&cursor.tool_call_id)
+        else {
             tracing::warn!("unresolved Cursor question request");
             responder.respond(json!({"outcome":{"outcome":"cancelled"}}))?;
             return Ok(Handled::Yes);

@@ -374,8 +374,46 @@ pub(crate) fn busy_answer(
     })
 }
 
-/// A held setting's answer, read from the session's cell (D1 M8).
+/// Holds the session's prompts because its restore couldn't put back the
+/// record's named mode and left the agent in one that allows more (the
+/// Lead's mode-mismatch rule under owner Decision 3).
+pub(crate) fn hold_mode_not_restored(
+    cells: &SessionCellTable,
+    session_id: &str,
+    mismatch: &crate::provider_setting_application::ModeNotRestored,
+) {
+    use provider_session_machines::session_setting_machine::{SessionSettingEvent, SettingValueId};
+    apply_setting(
+        cells,
+        session_id,
+        provider_session_machines::ProviderSettingKind::Mode,
+        SessionSettingEvent::ModeNotRestored {
+            recorded: SettingValueId(mismatch.recorded.clone()),
+            observed: SettingValueId(mismatch.actual.clone()),
+        },
+    );
+}
+
+/// A held setting's answer, read from the session's cell (D1 M8); a mode a
+/// restore couldn't put back names both modes and the next step.
 pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
+    let mode_not_restored = cells.read(session_id, |cell| {
+        match cell.settings.get(&provider_session_machines::ProviderSettingKind::Mode) {
+            Some(provider_session_machines::session_setting_machine::SessionSetting::Unresolved {
+                cause:
+                    provider_session_machines::session_setting_machine::UnresolvedCause::ModeNotRestored {
+                        recorded,
+                    },
+                observed,
+            }) => Some((recorded.clone(), observed.clone())),
+            _ => None,
+        }
+    });
+    if let Some((recorded, observed)) = mode_not_restored {
+        return provider_session_machines::session_refusal_answers::mode_not_restored_answer(
+            &recorded, &observed,
+        );
+    }
     let outcome_unknown = cells.read(
         session_id,
         provider_session_machines::session_cell_machine::SessionCell::any_setting_outcome_unknown,
@@ -483,6 +521,12 @@ pub(crate) fn hold_setting_at_create(
             provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown => {
                 SessionSettingEvent::OutcomeUnknown { application }
             }
+            provider_session_machines::session_setting_machine::UnresolvedCause::ModeNotRestored {
+                recorded,
+            } => SessionSettingEvent::ModeNotRestored {
+                recorded,
+                observed: SettingValueId(String::new()),
+            },
         },
     );
 }

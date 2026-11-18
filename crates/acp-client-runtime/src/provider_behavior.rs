@@ -39,6 +39,13 @@ pub trait ProviderBehavior: Send + Sync {
     /// What `auto` means for this agent: its own mode realizing it, its ask-first
     /// fallback, and how actions outside its grant are treated (R3, R7).
     fn auto_permission_mode(&self) -> crate::AutoPermissionMode;
+    /// How much one of this agent's modes allows, low to high, for judging
+    /// whether a restored session runs a more permissive mode than its record
+    /// names (the Lead's mode-mismatch rule). `None` for a mode the agent
+    /// doesn't rank, which counts as more permissive.
+    fn permission_rank(&self, _mode: &str) -> Option<u8> {
+        None
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError>;
     fn prepare(&self, submission: ProviderSubmission) -> Result<Vec<PromptContent>, ProviderError>;
     fn compact(&self) -> Result<PreparedCompact, ProviderError>;

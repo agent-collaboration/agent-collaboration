@@ -145,7 +145,11 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
                 return Ok(Handled::Yes);
             }
         };
-        let Some(session_id) = self.tool_registry.resolve_session(&plan.tool_call_id) else {
+        let Some(crate::provider_connection_activity::ToolCallOwner {
+            session_id,
+            generation: announced_in,
+        }) = self.tool_registry.resolve_session(&plan.tool_call_id)
+        else {
             tracing::warn!("unresolved Cursor create_plan request");
             responder.respond(json!({"outcome":"cancelled"}))?;
             return Ok(Handled::Yes);
@@ -178,7 +182,9 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
             SessionEvent::ItemStarted { item }
         };
         // In the run the plan arrived in (D1 R14).
-        let generation = self.event_sink.current_generation(&session_id);
+        // In the run that announced the tool call (review F4).
+        let generation =
+            announced_in.unwrap_or_else(|| self.event_sink.current_generation(&session_id));
         if self
             .event_sink
             .publish_in(&session_id, generation, event)

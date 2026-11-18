@@ -192,7 +192,7 @@ fn hold_steps_are_the_moves_the_reducer_allows(case: hegel::TestCase) {
             case.draw(gs::integers::<u8>().max_value(3)),
         )))
     };
-    let state = match case.draw(gs::integers::<u8>().max_value(3)) {
+    let state = match case.draw(gs::integers::<u8>().max_value(4)) {
         0 => SessionSetting::Current {
             value: value(&case),
         },
@@ -205,8 +205,14 @@ fn hold_steps_are_the_moves_the_reducer_allows(case: hegel::TestCase) {
             cause: UnresolvedCause::DefiniteFailure,
             observed: value(&case),
         },
-        _ => SessionSetting::Unresolved {
+        3 => SessionSetting::Unresolved {
             cause: UnresolvedCause::OutcomeUnknown,
+            observed: value(&case),
+        },
+        _ => SessionSetting::Unresolved {
+            cause: UnresolvedCause::ModeNotRestored {
+                recorded: value(&case),
+            },
             observed: value(&case),
         },
     };

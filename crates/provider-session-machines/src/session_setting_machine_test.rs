@@ -26,6 +26,12 @@ fn every_state() -> Vec<SessionSetting> {
             cause: UnresolvedCause::OutcomeUnknown,
             observed: value("a"),
         },
+        SessionSetting::Unresolved {
+            cause: UnresolvedCause::ModeNotRestored {
+                recorded: value("default"),
+            },
+            observed: value("auto"),
+        },
     ]
 }
 
@@ -55,6 +61,10 @@ fn every_event() -> Vec<SessionSettingEvent> {
         SessionSettingEvent::Lost,
         SessionSettingEvent::Observed { value: value("x") },
         SessionSettingEvent::Accept,
+        SessionSettingEvent::ModeNotRestored {
+            recorded: value("default"),
+            observed: value("auto"),
+        },
     ]
 }
 
@@ -280,4 +290,82 @@ fn a_lost_reply_holds_the_kind_as_an_unknown_outcome() {
             ..
         }
     )));
+}
+
+/// Oracle: the Lead's mode-mismatch rule under owner Decision 3: a mode a
+/// restore couldn't put back holds prompts; accepting the agent's mode is
+/// refused ("set the mode or close the session"), and only setting the mode,
+/// once applied, makes it current.
+#[test]
+fn a_mode_not_restored_is_cleared_only_by_setting_the_mode() {
+    // Arrange
+    let held = SessionSettingMachine::transition(
+        &SessionSetting::Current { value: value("") },
+        SessionSettingEvent::ModeNotRestored {
+            recorded: value("default"),
+            observed: value("auto"),
+        },
+    )
+    .expect("a restore records the mismatch")
+    .0;
+
+    // Act
+    let accepted = SessionSettingMachine::transition(&held, SessionSettingEvent::Accept);
+    let changing = SessionSettingMachine::transition(
+        &held,
+        SessionSettingEvent::SetRequested {
+            to: value("default"),
+            application: application(7),
+        },
+    )
+    .expect("setting the mode is allowed")
+    .0;
+    let applied = SessionSettingMachine::transition(
+        &changing,
+        SessionSettingEvent::Applied {
+            application: application(7),
+            value: value("default"),
+        },
+    )
+    .expect("the agent applies it")
+    .0;
+
+    // Assert
+    assert!(
+        prompt_hold(&held).is_some(),
+        "the mismatch must hold prompts"
+    );
+    assert_eq!(
+        accepted,
+        Err(TransitionError::Domain(
+            SessionSettingRefusal::ModeMustBeSet
+        )),
+        "accepting the agent's mode unblocked a mode the restore couldn't put back"
+    );
+    assert_eq!(
+        applied,
+        SessionSetting::Current {
+            value: value("default")
+        }
+    );
+}
+
+/// Oracle: §12.6 (R2-6), unchanged by the mode-mismatch rule: a refused
+/// change (DefiniteFailure) is still cleared by accepting the current value.
+#[test]
+fn a_refused_change_is_still_cleared_by_accept() {
+    // Arrange
+    let refused = SessionSetting::Unresolved {
+        cause: UnresolvedCause::DefiniteFailure,
+        observed: value("a"),
+    };
+
+    // Act
+    let accepted = SessionSettingMachine::transition(&refused, SessionSettingEvent::Accept);
+
+    // Assert
+    assert_eq!(
+        accepted.map(|(state, _effects)| state),
+        Ok(SessionSetting::Current { value: value("a") })
+    );
 }

@@ -303,6 +303,17 @@ fn judge_agent_mode(
 pub(crate) struct RestoredPermissionMode {
     pub(crate) report: crate::PermissionModeReport,
     pub(crate) router_auto_active: bool,
+    /// The record's named mode wasn't put back and the agent's mode allows
+    /// more: the session loads but holds prompts until its mode is set
+    /// (the Lead's mode-mismatch rule under owner Decision 3).
+    pub(crate) mode_not_restored: Option<ModeNotRestored>,
+}
+
+/// A restore that left a session in a more permissive mode than its record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ModeNotRestored {
+    pub(crate) recorded: String,
+    pub(crate) actual: String,
 }
 
 /// Judges the mode the agent reports for a restored session against the mode
@@ -323,6 +334,7 @@ pub(crate) fn restored_permission_mode(
             reason: None,
         },
         router_auto_active: false,
+        mode_not_restored: None,
     };
     if requested_mode == crate::RequestedPermissionMode::Unspecified {
         return restored;
@@ -365,7 +377,7 @@ pub(crate) fn restored_permission_mode(
 /// and any prompt admitted. The result is judged on the mode in force after
 /// that. A set that fails leaves the session loaded without Router auto, its
 /// requested and actual modes showing the mismatch (fail closed).
-pub(crate) async fn reapply_recorded_mode<Claim>(
+async fn put_back_recorded_mode<Claim>(
     session: &ActiveSession<'_, Agent>,
     requested: Option<&str>,
     catalog: &mut ProviderSettingsCatalog,
@@ -387,6 +399,7 @@ pub(crate) async fn reapply_recorded_mode<Claim>(
                 reason: kept.report.reason,
             },
             router_auto_active: false,
+            mode_not_restored: None,
         };
     };
     let outcome = apply_initial_settings(
@@ -407,12 +420,66 @@ pub(crate) async fn reapply_recorded_mode<Claim>(
                 reason: kept.report.reason,
             },
             router_auto_active: false,
+            mode_not_restored: None,
         };
     }
     RestoredPermissionMode {
         report: outcome.permission_mode,
         router_auto_active: outcome.router_auto_active,
+        mode_not_restored: None,
     }
+}
+
+/// Marks a restore whose record names a mode the agent isn't in afterwards,
+/// when the agent's mode allows more (or isn't ranked): the session holds
+/// prompts until its mode is set. Router auto and a record with no mode keep
+/// their own rules (the Lead's mode-mismatch rule).
+fn with_mode_hold(
+    mut restored: RestoredPermissionMode,
+    requested: Option<&str>,
+    catalog: &ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+) -> RestoredPermissionMode {
+    let crate::RequestedPermissionMode::AgentMode(recorded) =
+        crate::RequestedPermissionMode::from_request(requested)
+    else {
+        return restored;
+    };
+    let actual = catalog.effective_settings().mode;
+    if actual.as_deref() == Some(recorded.as_str()) {
+        return restored;
+    }
+    let allows_more = match (
+        actual
+            .as_deref()
+            .and_then(|mode| behavior.permission_rank(mode)),
+        behavior.permission_rank(&recorded),
+    ) {
+        (Some(actual_rank), Some(recorded_rank)) => actual_rank > recorded_rank,
+        // An unranked or unreported mode counts as allowing more.
+        _ => true,
+    };
+    if allows_more {
+        restored.mode_not_restored = Some(ModeNotRestored {
+            recorded,
+            actual: actual.unwrap_or_default(),
+        });
+    }
+    restored
+}
+
+/// Puts back the recorded mode (`put_back_recorded_mode`), then marks the
+/// restore when the agent is left in a more permissive mode (V6; the Lead's
+/// mode-mismatch rule).
+pub(crate) async fn reapply_recorded_mode<Claim>(
+    session: &ActiveSession<'_, Agent>,
+    requested: Option<&str>,
+    catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+    claim_write: impl FnOnce() -> Option<Claim>,
+) -> RestoredPermissionMode {
+    let restored = put_back_recorded_mode(session, requested, catalog, behavior, claim_write).await;
+    with_mode_hold(restored, requested, catalog, behavior)
 }
 
 /// Whether the agent restored the session in a mode other than the one its

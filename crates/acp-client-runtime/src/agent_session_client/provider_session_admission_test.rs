@@ -89,6 +89,10 @@ struct Fixture {
 
 impl Fixture {
     async fn start(behaviours: &[&str]) -> Self {
+        Self::start_in_profile("claude", behaviours).await
+    }
+
+    async fn start_in_profile(profile: &str, behaviours: &[&str]) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let base = std::fs::canonicalize(root.path()).expect("canonical root");
         let project = base.join("project");
@@ -99,7 +103,7 @@ impl Fixture {
         let mut arguments = vec![
             PERMISSION_MODE_AGENT.to_owned(),
             receipt.display().to_string(),
-            "claude".to_owned(),
+            profile.to_owned(),
             "grants-directories".to_owned(),
         ];
         arguments.extend(behaviours.iter().map(|behaviour| (*behaviour).to_owned()));
@@ -669,4 +673,65 @@ async fn a_restored_session_keeps_fast_off() {
         "fast is turned off at create and again after the restore: {receipt}"
     );
     assert_eq!(fast, Some(crate::FastObserved::Off));
+}
+
+/// Oracle: the Lead's mode-mismatch rule under owner Decision 3: a session
+/// recorded in a named mode the agent no longer offers (acceptEdits), that the
+/// agent restores in a mode allowing more (auto), loads but admits no prompt:
+/// the refusal names both modes and the next step; accepting the agent's mode
+/// is refused; an explicit mode change unblocks it.
+#[tokio::test]
+async fn a_restore_left_in_a_more_permissive_mode_admits_no_prompt_until_its_mode_is_set() {
+    // Arrange
+    let fixture = Fixture::start_in_profile(
+        "claude-without-auto-or-accept-edits",
+        &["advertise-restore", "restored-in-auto"],
+    )
+    .await;
+    fixture
+        .client
+        .resume_session_with_setup(
+            "resumed-session".to_owned(),
+            fixture.project.clone(),
+            fixture.restore_setup(Some("acceptEdits")),
+        )
+        .await
+        .expect("the session still loads");
+
+    // Act
+    let held_prompt = fixture.prompt_in_folder_edit("resumed-session").await;
+    let accepted = fixture
+        .client
+        .accept_session_settings("resumed-session".to_owned());
+    let set = fixture
+        .client
+        .set_setting(
+            "resumed-session".to_owned(),
+            crate::ProviderSettingRequest {
+                kind: provider_session_machines::ProviderSettingKind::Mode,
+                value: "default".to_owned(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+        )
+        .await;
+    let unblocked_prompt = fixture.prompt_in_folder_edit("resumed-session").await;
+    fixture.client.shutdown().await;
+
+    // Assert
+    let Err(ExternalProviderRuntimeError::SettingsUnresolved { answer }) = held_prompt else {
+        panic!("a prompt ran in a mode allowing more than the record: {held_prompt:?}");
+    };
+    assert!(
+        answer.contains("`acceptEdits`")
+            && answer.contains("`auto`")
+            && answer.contains("set the mode"),
+        "{answer}"
+    );
+    assert!(
+        accepted.is_err(),
+        "accepting the agent's mode unblocked the session: {accepted:?}"
+    );
+    assert!(set.is_ok(), "{set:?}");
+    assert!(unblocked_prompt.is_ok(), "{unblocked_prompt:?}");
 }

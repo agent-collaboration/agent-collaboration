@@ -6,25 +6,88 @@ use std::{
 };
 
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
+use provider_session_machines::SessionGeneration;
 
 #[derive(Default)]
 pub(crate) struct ProviderConnectionActivity(Mutex<RegistryState>);
 
+/// The turn a session is running now, and the run it belongs to.
+#[derive(Clone)]
+struct RunningTurn {
+    turn_id: String,
+    generation: SessionGeneration,
+}
+
+/// Who announced a tool call: the session, its run and turn when one was
+/// running, and whether that turn has ended. An ended owner stays as a
+/// tombstone through the session's next run (review F4), so a late callback
+/// for it is dropped rather than resolved to whatever turn runs now.
+#[derive(Clone)]
+struct ToolOwner {
+    session_id: String,
+    run: Option<RunningTurn>,
+    ended: bool,
+}
+
+/// The session a tool-scoped callback belongs to, and the run it was
+/// announced in when known.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ToolCallOwner {
+    pub(crate) session_id: String,
+    pub(crate) generation: Option<SessionGeneration>,
+}
+
 #[derive(Default)]
 struct RegistryState {
-    running_sessions: HashMap<String, String>,
-    tool_sessions: HashMap<String, HashSet<String>>,
+    running_sessions: HashMap<String, RunningTurn>,
+    tool_owners: HashMap<String, Vec<ToolOwner>>,
+}
+
+impl RegistryState {
+    /// The session's turn ended: its tool calls become tombstones.
+    fn end_session_turn(&mut self, session_id: &str) {
+        self.running_sessions.remove(session_id);
+        for owners in self.tool_owners.values_mut() {
+            for owner in owners
+                .iter_mut()
+                .filter(|owner| owner.session_id == session_id)
+            {
+                owner.ended = true;
+            }
+        }
+    }
 }
 
 impl ProviderConnectionActivity {
-    pub(crate) fn turn_started(&self, session_id: &str, turn_id: &str) {
+    pub(crate) fn turn_started(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        generation: SessionGeneration,
+    ) {
         let mut state = self
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state
-            .running_sessions
-            .insert(session_id.to_owned(), turn_id.to_owned());
+        state.running_sessions.insert(
+            session_id.to_owned(),
+            RunningTurn {
+                turn_id: turn_id.to_owned(),
+                generation,
+            },
+        );
+        // Tombstones last through the session's next run, then go.
+        state.tool_owners.retain(|_, owners| {
+            owners.retain(|owner| {
+                !(owner.session_id == session_id
+                    && owner.ended
+                    && owner
+                        .run
+                        .as_ref()
+                        .is_none_or(|run| run.generation.number() + 1 < generation.number()))
+            });
+            !owners.is_empty()
+        });
     }
 
     pub(crate) fn observe_tool_call(&self, session_id: &str, tool_call_id: &str) {
@@ -32,38 +95,65 @@ impl ProviderConnectionActivity {
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state
-            .tool_sessions
+        let run = state.running_sessions.get(session_id).cloned();
+        let owners = state
+            .tool_owners
             .entry(tool_call_id.to_owned())
-            .or_default()
-            .insert(session_id.to_owned());
+            .or_default();
+        let already = owners.iter().any(|owner| {
+            !owner.ended
+                && owner.session_id == session_id
+                && owner.run.as_ref().map(|run| &run.turn_id)
+                    == run.as_ref().map(|run| &run.turn_id)
+        });
+        if !already {
+            owners.push(ToolOwner {
+                session_id: session_id.to_owned(),
+                run,
+                ended: false,
+            });
+        }
     }
 
-    pub(crate) fn resolve_session(&self, tool_call_id: &str) -> Option<String> {
+    /// The owner of a tool-scoped callback. An announced tool call resolves
+    /// to its one live owner; one whose turn has ended resolves to nothing,
+    /// so the callback is dropped. A tool call never announced falls back to
+    /// the one running turn (Cursor omits sessionId; the tested contract).
+    pub(crate) fn resolve_session(&self, tool_call_id: &str) -> Option<ToolCallOwner> {
         let state = self
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(owners) = state.tool_sessions.get(tool_call_id) {
-            return (owners.len() == 1)
-                .then(|| owners.iter().next().cloned())
-                .flatten();
+        if let Some(owners) = state.tool_owners.get(tool_call_id) {
+            let live: Vec<&ToolOwner> = owners.iter().filter(|owner| !owner.ended).collect();
+            let sessions: HashSet<&str> =
+                live.iter().map(|owner| owner.session_id.as_str()).collect();
+            if sessions.len() != 1 {
+                return None;
+            }
+            return live.last().map(|owner| ToolCallOwner {
+                session_id: owner.session_id.clone(),
+                generation: owner.run.as_ref().map(|run| run.generation),
+            });
         }
-        (state.running_sessions.len() == 1)
-            .then(|| state.running_sessions.keys().next().cloned())
-            .flatten()
+        if state.running_sessions.len() != 1 {
+            return None;
+        }
+        state
+            .running_sessions
+            .iter()
+            .next()
+            .map(|(session_id, run)| ToolCallOwner {
+                session_id: session_id.clone(),
+                generation: Some(run.generation),
+            })
     }
 
     pub(crate) fn turn_ended(&self, session_id: &str) {
-        let mut state = self
-            .0
+        self.0
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.running_sessions.remove(session_id);
-        state.tool_sessions.retain(|_, owners| {
-            owners.remove(session_id);
-            !owners.is_empty()
-        });
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .end_session_turn(session_id);
     }
 
     pub(crate) fn claim_turn_end(&self, session_id: &str, turn_id: &str) -> bool {
@@ -71,14 +161,15 @@ impl ProviderConnectionActivity {
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if state.running_sessions.get(session_id).map(String::as_str) != Some(turn_id) {
+        if state
+            .running_sessions
+            .get(session_id)
+            .map(|run| run.turn_id.as_str())
+            != Some(turn_id)
+        {
             return false;
         }
-        state.running_sessions.remove(session_id);
-        state.tool_sessions.retain(|_, owners| {
-            owners.remove(session_id);
-            !owners.is_empty()
-        });
+        state.end_session_turn(session_id);
         true
     }
 
@@ -87,8 +178,12 @@ impl ProviderConnectionActivity {
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.tool_sessions.clear();
-        state.running_sessions.drain().collect()
+        state.tool_owners.clear();
+        state
+            .running_sessions
+            .drain()
+            .map(|(session_id, run)| (session_id, run.turn_id))
+            .collect()
     }
 }
 
@@ -139,57 +234,5 @@ impl HandleDispatchFrom<Agent> for ToolCallOwnershipHandler {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::ProviderConnectionActivity;
-
-    /// Cursor omits sessionId. A unique observed tool call wins over the
-    /// single-running-Turn fallback; concurrent unknowns remain unresolved.
-    #[test]
-    fn resolves_only_unique_tool_ownership_or_one_running_turn() {
-        let registry = ProviderConnectionActivity::default();
-        registry.turn_started("first", "turn-first");
-        assert_eq!(
-            registry.resolve_session("unknown").as_deref(),
-            Some("first")
-        );
-        registry.turn_started("second", "turn-second");
-        assert_eq!(registry.resolve_session("unknown"), None);
-        registry.observe_tool_call("first", "first-tool");
-        registry.observe_tool_call("second", "second-tool");
-        assert_eq!(
-            registry.resolve_session("first-tool").as_deref(),
-            Some("first")
-        );
-        assert_eq!(
-            registry.resolve_session("second-tool").as_deref(),
-            Some("second")
-        );
-        registry.observe_tool_call("second", "first-tool");
-        assert_eq!(registry.resolve_session("first-tool"), None);
-        registry.turn_ended("second");
-        assert_eq!(
-            registry.resolve_session("first-tool").as_deref(),
-            Some("first")
-        );
-        assert_eq!(
-            registry.resolve_session("second-tool").as_deref(),
-            Some("first")
-        );
-        registry.turn_ended("first");
-        assert_eq!(registry.resolve_session("first-tool"), None);
-    }
-
-    #[test]
-    fn connection_retirement_claims_only_unsettled_turns() {
-        let registry = ProviderConnectionActivity::default();
-        registry.turn_started("settled", "turn-one");
-        registry.turn_started("lost", "turn-two");
-        assert!(registry.claim_turn_end("settled", "turn-one"));
-        assert!(!registry.claim_turn_end("settled", "turn-one"));
-        assert_eq!(
-            registry.drain_running_turns(),
-            vec![("lost".to_owned(), "turn-two".to_owned())]
-        );
-        assert!(registry.drain_running_turns().is_empty());
-    }
-}
+#[path = "provider_connection_activity_test.rs"]
+mod tests;

@@ -16,10 +16,16 @@ pub struct SettingValueId(pub String);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SettingApplication(pub uuid::Uuid);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UnresolvedCause {
     DefiniteFailure,
     OutcomeUnknown,
+    /// A restore couldn't put back the session's recorded named mode, and
+    /// the agent's mode allows more (Lead's mode-mismatch rule under owner
+    /// Decision 3): only setting the mode, or closing, unblocks it.
+    ModeNotRestored {
+        recorded: SettingValueId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,6 +74,12 @@ pub enum SessionSettingEvent {
         value: SettingValueId,
     },
     Accept,
+    /// A restore couldn't put back `recorded`, and the agent runs `observed`,
+    /// which allows more.
+    ModeNotRestored {
+        recorded: SettingValueId,
+        observed: SettingValueId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,6 +98,9 @@ pub enum SessionSettingRefusal {
     ChangeInProgress,
     OutcomeUnknown,
     NothingToAccept,
+    /// The recorded mode wasn't put back: accepting the agent's mode isn't
+    /// allowed.
+    ModeMustBeSet,
 }
 
 impl RefusalTag for SessionSettingRefusal {
@@ -94,6 +109,7 @@ impl RefusalTag for SessionSettingRefusal {
             Self::ChangeInProgress => "change_in_progress",
             Self::OutcomeUnknown => "outcome_unknown",
             Self::NothingToAccept => "nothing_to_accept",
+            Self::ModeMustBeSet => "mode_must_be_set",
         }
     }
 }
@@ -104,6 +120,7 @@ impl SessionSettingRefusal {
             Self::ChangeInProgress => "a setting change is in progress; wait for it",
             Self::OutcomeUnknown => "a setting change's outcome is unknown; set a value explicitly",
             Self::NothingToAccept => "the setting is current; nothing to accept",
+            Self::ModeMustBeSet => "set the mode or close the session",
         }
     }
 }
@@ -122,6 +139,10 @@ pub fn prompt_hold(state: &SessionSetting) -> Option<&'static str> {
             cause: UnresolvedCause::OutcomeUnknown,
             ..
         } => Some("a setting change's outcome is unknown; set a value explicitly"),
+        SessionSetting::Unresolved {
+            cause: UnresolvedCause::ModeNotRestored { .. },
+            ..
+        } => Some("the session's mode wasn't put back; set the mode or close the session"),
     }
 }
 
@@ -138,6 +159,10 @@ impl StateTag for SessionSetting {
                 cause: UnresolvedCause::OutcomeUnknown,
                 ..
             } => "unresolved_unknown",
+            Self::Unresolved {
+                cause: UnresolvedCause::ModeNotRestored { .. },
+                ..
+            } => "unresolved_mode_not_restored",
         }
     }
 
@@ -159,6 +184,7 @@ impl EventTag for SessionSettingEvent {
             Self::OutcomeUnknown { .. } => "outcome_unknown",
             Self::Observed { .. } => "observed",
             Self::Accept => "accept",
+            Self::ModeNotRestored { .. } => "mode_not_restored",
         }
     }
 }
@@ -176,6 +202,7 @@ const TRANSITIONS: &[Transition] = &[
     edge("current", "set_requested", "changing"),
     edge("unresolved_refused", "set_requested", "changing"),
     edge("unresolved_unknown", "set_requested", "changing"),
+    edge("unresolved_mode_not_restored", "set_requested", "changing"),
     edge("changing", "applied", "current"),
     edge("changing", "failed", "unresolved_refused"),
     edge("changing", "refused", "current"),
@@ -183,12 +210,43 @@ const TRANSITIONS: &[Transition] = &[
     edge("changing", "lost", "unresolved_unknown"),
     edge("unresolved_refused", "lost", "unresolved_unknown"),
     edge("unresolved_unknown", "lost", "unresolved_unknown"),
+    edge("unresolved_mode_not_restored", "lost", "unresolved_unknown"),
     edge("changing", "outcome_unknown", "unresolved_unknown"),
     edge("current", "observed", "current"),
     edge("changing", "observed", "changing"),
     edge("unresolved_refused", "observed", "unresolved_refused"),
     edge("unresolved_unknown", "observed", "unresolved_unknown"),
+    edge(
+        "unresolved_mode_not_restored",
+        "observed",
+        "unresolved_mode_not_restored",
+    ),
     edge("unresolved_refused", "accept", "current"),
+    edge(
+        "current",
+        "mode_not_restored",
+        "unresolved_mode_not_restored",
+    ),
+    edge(
+        "changing",
+        "mode_not_restored",
+        "unresolved_mode_not_restored",
+    ),
+    edge(
+        "unresolved_refused",
+        "mode_not_restored",
+        "unresolved_mode_not_restored",
+    ),
+    edge(
+        "unresolved_unknown",
+        "mode_not_restored",
+        "unresolved_mode_not_restored",
+    ),
+    edge(
+        "unresolved_mode_not_restored",
+        "mode_not_restored",
+        "unresolved_mode_not_restored",
+    ),
 ];
 
 pub struct SessionSettingMachine;
@@ -301,7 +359,7 @@ impl StateMachine for SessionSettingMachine {
             )),
             (S::Unresolved { cause, .. }, V::Observed { value }) => Ok((
                 S::Unresolved {
-                    cause: *cause,
+                    cause: cause.clone(),
                     observed: value,
                 },
                 vec![E::PublishSettings],
@@ -325,6 +383,20 @@ impl StateMachine for SessionSettingMachine {
                 },
                 V::Accept,
             ) => refused(R::OutcomeUnknown),
+            (
+                S::Unresolved {
+                    cause: UnresolvedCause::ModeNotRestored { .. },
+                    ..
+                },
+                V::Accept,
+            ) => refused(R::ModeMustBeSet),
+            (_, V::ModeNotRestored { recorded, observed }) => Ok((
+                S::Unresolved {
+                    cause: UnresolvedCause::ModeNotRestored { recorded },
+                    observed,
+                },
+                vec![E::PublishSettings],
+            )),
             (S::Changing { .. }, V::Accept) => refused(R::ChangeInProgress),
             (S::Current { .. }, V::Accept) => refused(R::NothingToAccept),
         }
