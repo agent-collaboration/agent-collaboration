@@ -3,7 +3,9 @@ use fleet_identity_protocol::OrganizationId;
 use fleet_runtime::FleetRuntime;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use std::sync::Arc;
-use workspace_model::{Caller, WorkspaceId};
+use workspace_model::Caller;
+#[cfg(feature = "test-support")]
+use workspace_model::WorkspaceId;
 
 /// Transport-stamped context. No workspace allowance is accepted from the caller.
 #[derive(Clone)]
