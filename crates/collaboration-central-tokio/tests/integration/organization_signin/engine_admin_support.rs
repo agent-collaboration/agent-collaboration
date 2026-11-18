@@ -154,6 +154,7 @@ impl EngineOrg {
         let m::ItemRef::Area(area_id) = self
             .write(m::WorkspaceOperation::CreateArea {
                 name: format!("Area {}", self.bump()).try_into().unwrap(),
+                description: "Test description".to_owned().try_into().unwrap(),
             })
             .await
         else {

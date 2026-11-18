@@ -88,24 +88,32 @@ pub enum WorkspaceOperation {
     },
     /// Targets the request's workspace.
     ArchiveWorkspace,
+    /// The description is required and must not be blank.
     CreateArea {
         name: ResourceName,
+        description: Description,
     },
     ArchiveArea {
         area_id: AreaId,
     },
+    /// An omitted description stays as it is; a given one must not be blank.
     UpdateArea {
         area_id: AreaId,
         name: ResourceName,
+        description: Option<Description>,
     },
+    /// The description is required and must not be blank.
     CreateProject {
         area_id: AreaId,
         title: ResourceName,
+        description: Description,
         lead: Option<ActorRef>,
     },
+    /// An omitted description stays as it is; a given one must not be blank.
     UpdateProject {
         project_id: ProjectId,
         title: ResourceName,
+        description: Option<Description>,
     },
     CreateInitiative {
         name: ResourceName,

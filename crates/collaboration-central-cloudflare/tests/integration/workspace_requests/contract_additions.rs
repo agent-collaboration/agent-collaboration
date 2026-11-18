@@ -223,6 +223,7 @@ async fn renames_change_only_the_named_area_project_and_issue() {
             m::WorkspaceOperation::UpdateArea {
                 area_id: area.clone(),
                 name: name("Renamed area"),
+                description: None,
             },
         ),
         (
@@ -230,6 +231,7 @@ async fn renames_change_only_the_named_area_project_and_issue() {
             m::WorkspaceOperation::UpdateProject {
                 project_id: project.clone(),
                 title: name("Renamed project"),
+                description: None,
             },
         ),
         (

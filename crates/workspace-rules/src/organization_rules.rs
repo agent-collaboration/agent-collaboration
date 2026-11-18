@@ -22,11 +22,21 @@ pub fn organize_work(
 ) -> Result<RulePlan, RefusalReason> {
     let now = || text(context.now.to_rfc3339());
     let (item, statements, created) = match command {
-        OrganizationCommand::CreateArea { area_id, name } => (
+        OrganizationCommand::CreateArea {
+            area_id,
+            name,
+            description,
+        } => (
             ItemRef::Area(area_id.clone()),
             vec![exact(
-                "INSERT INTO areas (area_id,name,state,created_at,updated_at) VALUES (?,?,'open',?,?)",
-                vec![text(area_id), text(name.as_str()), now(), now()],
+                "INSERT INTO areas (area_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'open',?,?)",
+                vec![
+                    text(area_id),
+                    text(name.as_str()),
+                    text(description.as_str()),
+                    now(),
+                    now(),
+                ],
             )],
             true,
         ),
@@ -41,30 +51,54 @@ pub fn organize_work(
                 false,
             )
         }
-        OrganizationCommand::UpdateArea { area_id, name } => {
+        OrganizationCommand::UpdateArea {
+            area_id,
+            name,
+            description,
+        } => {
             require_area(context, area_id, reads.area)?;
-            (
-                ItemRef::Area(area_id.clone()),
-                vec![exact(
+            let statement = match description {
+                Some(description) => exact(
+                    "UPDATE areas SET name=?,description=?,updated_at=? WHERE area_id=?",
+                    vec![
+                        text(name.as_str()),
+                        text(description.as_str()),
+                        now(),
+                        text(area_id),
+                    ],
+                ),
+                None => exact(
                     "UPDATE areas SET name=?,updated_at=? WHERE area_id=?",
                     vec![text(name.as_str()), now(), text(area_id)],
-                )],
-                false,
-            )
+                ),
+            };
+            (ItemRef::Area(area_id.clone()), vec![statement], false)
         }
-        OrganizationCommand::UpdateProject { project_id, title } => {
+        OrganizationCommand::UpdateProject {
+            project_id,
+            title,
+            description,
+        } => {
             reads
                 .project
                 .filter(|row| row.project_id == *project_id)
                 .ok_or_else(|| not_found(ItemRef::Project(project_id.clone())))?;
-            (
-                ItemRef::Project(project_id.clone()),
-                vec![exact(
+            let statement = match description {
+                Some(description) => exact(
+                    "UPDATE projects SET title=?,description=?,updated_at=? WHERE project_id=?",
+                    vec![
+                        text(title.as_str()),
+                        text(description.as_str()),
+                        now(),
+                        text(project_id),
+                    ],
+                ),
+                None => exact(
                     "UPDATE projects SET title=?,updated_at=? WHERE project_id=?",
                     vec![text(title.as_str()), now(), text(project_id)],
-                )],
-                false,
-            )
+                ),
+            };
+            (ItemRef::Project(project_id.clone()), vec![statement], false)
         }
         OrganizationCommand::UpdateIssue { issue_id, title } => {
             reads
@@ -84,6 +118,7 @@ pub fn organize_work(
             project_id,
             area_id,
             title,
+            description,
             lead,
             role_id,
         } => {
@@ -92,11 +127,12 @@ pub fn organize_work(
                 ItemRef::Project(project_id.clone()),
                 vec![
                     exact(
-                        "INSERT INTO projects (project_id,area_id,title,status,created_at,updated_at) VALUES (?,?,?,'backlog',?,?)",
+                        "INSERT INTO projects (project_id,area_id,title,description,status,created_at,updated_at) VALUES (?,?,?,?,'backlog',?,?)",
                         vec![
                             text(project_id),
                             text(area_id),
                             text(title.as_str()),
+                            text(description.as_str()),
                             now(),
                             now(),
                         ],

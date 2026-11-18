@@ -102,7 +102,7 @@ function validReceipt(): C2ProductReceipt {
     }),
     decidingRequest: frame({
       correlationId: decidingId,
-      operation: { kind: "createArea", name },
+      operation: { kind: "createArea", name, description: "Test description" },
       requestId: baselineId,
       workspaceId: workspace,
     }),

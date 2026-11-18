@@ -123,6 +123,7 @@ async fn person_create_records_checked_origin_without_machine_rights() {
         workspace_id: Some(operation.clone().try_into().unwrap()),
         operation: workspace_model::WorkspaceOperation::CreateArea {
             name: "Allowed control".to_owned().try_into().unwrap(),
+            description: "Test description".to_owned().try_into().unwrap(),
         },
     };
     let denied = f.host.request(&caller, request.clone()).await.unwrap();

@@ -64,6 +64,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
                 base,
                 m::WorkspaceOperation::CreateArea {
                     name: name(&format!("Area {suffix}")),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             )
             .await,

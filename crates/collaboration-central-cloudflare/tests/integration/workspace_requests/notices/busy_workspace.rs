@@ -79,6 +79,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
                         workspace_id: Some(workspace),
                         operation: m::WorkspaceOperation::CreateArea {
                             name: name("Held write"),
+                            description: "Test description".to_owned().try_into().unwrap(),
                         },
                     },
                 )

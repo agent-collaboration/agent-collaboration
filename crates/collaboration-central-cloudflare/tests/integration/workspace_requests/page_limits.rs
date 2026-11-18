@@ -49,7 +49,7 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
     let SqlValue::Text(actor) = &actors.rows[0][0] else {
         panic!("actor");
     };
-    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO areas(area_id,name,state,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),'A','open','2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![],RowExpectation::Any).await;
+    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO areas(area_id,name,description,state,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),'A','Test description','open','2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![],RowExpectation::Any).await;
     f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO changes(change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',200000+n),n+1,'created','area',printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),NULL,NULL,?,NULL,NULL,'2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![text(actor)],RowExpectation::Any).await;
     let query = m::ListQuery::Areas {
         include_archived: false,

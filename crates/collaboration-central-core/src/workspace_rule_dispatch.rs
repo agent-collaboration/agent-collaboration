@@ -9,6 +9,21 @@ pub(crate) struct ResolvedOperation {
     pub tag_ids: Vec<m::WorkLogTagId>,
     pub read_mark_id: m::ReadMarkId,
 }
+/// Areas and projects require a description; a blank one is invalid input.
+fn required_description(
+    description: &m::Description,
+) -> Result<m::RequiredDescription, m::RefusalReason> {
+    m::RequiredDescription::try_from(description.as_str().to_owned()).map_err(|_| {
+        m::RefusalReason::InvalidInput {
+            field: "description".to_owned(),
+        }
+    })
+}
+fn optional_description(
+    description: Option<&m::Description>,
+) -> Result<Option<m::RequiredDescription>, m::RefusalReason> {
+    description.map(required_description).transpose()
+}
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_command(
         &self,
@@ -18,10 +33,15 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         use m::WorkspaceOperation as Op;
         let mut tags = Vec::new();
         let command = match op {
-            Op::CreateArea { name } => {
+            Op::CreateArea { name, description } => {
+                let description = match required_description(description) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateArea {
                     area_id: self.mint()?,
                     name: name.clone(),
+                    description,
                 })
             }
             Op::ArchiveArea { area_id } => {
@@ -29,16 +49,34 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     area_id: area_id.clone(),
                 })
             }
-            Op::UpdateArea { area_id, name } => {
+            Op::UpdateArea {
+                area_id,
+                name,
+                description,
+            } => {
+                let description = match optional_description(description.as_ref()) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateArea {
                     area_id: area_id.clone(),
                     name: name.clone(),
+                    description,
                 })
             }
-            Op::UpdateProject { project_id, title } => {
+            Op::UpdateProject {
+                project_id,
+                title,
+                description,
+            } => {
+                let description = match optional_description(description.as_ref()) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateProject {
                     project_id: project_id.clone(),
                     title: title.clone(),
+                    description,
                 })
             }
             Op::UpdateIssue { issue_id, title } => {
@@ -50,8 +88,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Op::CreateProject {
                 area_id,
                 title,
+                description,
                 lead,
             } => {
+                let description = match required_description(description) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
                 let holder = match lead {
                     Some(reference) => match self.resolve_actor_ref(reference, actor).await? {
                         Ok(holder) => holder,
@@ -63,6 +106,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     project_id: self.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
+                    description,
                     lead: holder,
                     role_id: self.mint()?,
                 })

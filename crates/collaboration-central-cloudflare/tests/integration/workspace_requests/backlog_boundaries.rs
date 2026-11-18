@@ -66,6 +66,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
             2102,
             m::WorkspaceOperation::CreateArea {
                 name: name("Foreign area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,

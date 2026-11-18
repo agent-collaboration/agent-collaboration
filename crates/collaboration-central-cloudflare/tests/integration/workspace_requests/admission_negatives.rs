@@ -10,6 +10,7 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
     let runtime = f.host.central(&f.caller.organization_id).await;
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("Must not be written"),
+        description: "Test description".to_owned().try_into().unwrap(),
     };
     let mut wrong = f.caller.clone();
     wrong.token = signed::tamper_signature(&wrong.token).unwrap();

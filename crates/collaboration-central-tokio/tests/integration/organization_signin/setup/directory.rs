@@ -268,6 +268,7 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
             workspace_id: Some(operation.to_owned().try_into()?),
             operation: m::WorkspaceOperation::CreateArea {
                 name: "Ordinary machine area".to_owned().try_into()?,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         })
     };

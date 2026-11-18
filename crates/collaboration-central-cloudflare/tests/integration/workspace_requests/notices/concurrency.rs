@@ -134,6 +134,7 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
                         workspace_id: Some(workspace),
                         operation: m::WorkspaceOperation::CreateArea {
                             name: name("Pending first workspace"),
+                            description: "Test description".to_owned().try_into().unwrap(),
                         },
                     },
                 )
@@ -166,6 +167,7 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
             7300 + second,
             m::WorkspaceOperation::CreateArea {
                 name: name(&format!("Activity {second}")),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await;

@@ -9,6 +9,7 @@ fn r1_a_b_r3_a_placement_and_project_lead_are_one_plan() {
         project_id: id(5),
         area_id: id(4),
         title: name("Project"),
+        description: "What the project delivers".to_owned().try_into().unwrap(),
         lead: id(2),
         role_id: id(30),
     };
@@ -232,6 +233,7 @@ fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_pro
             OrganizationCommand::UpdateArea {
                 area_id: id(4),
                 name: name("Renamed"),
+                description: None,
             },
             "UPDATE areas SET name=?",
             None,
@@ -240,6 +242,7 @@ fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_pro
             OrganizationCommand::UpdateProject {
                 project_id: id(5),
                 title: name("Renamed"),
+                description: None,
             },
             "UPDATE projects SET title=?",
             Some(id::<workspace_model::ProjectId>(5)),
@@ -298,6 +301,7 @@ fn an_area_update_refuses_another_workspaces_area() {
         &OrganizationCommand::UpdateArea {
             area_id: id(4),
             name: name("Renamed"),
+            description: None,
         },
         OrganizationReads {
             area: Some(&foreign),
@@ -332,6 +336,7 @@ fn update_rules_write_admitted_names_verbatim_and_deterministically(case: hegel:
                     OrganizationCommand::UpdateArea {
                         area_id: id(4),
                         name,
+                        description: None,
                     },
                 )
             }),
@@ -343,6 +348,7 @@ fn update_rules_write_admitted_names_verbatim_and_deterministically(case: hegel:
                     OrganizationCommand::UpdateProject {
                         project_id: id(5),
                         title,
+                        description: None,
                     },
                 )
             }),

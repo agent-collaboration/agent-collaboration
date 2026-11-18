@@ -318,6 +318,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
                         workspace_id: Some(workspace),
                         operation: m::WorkspaceOperation::CreateArea {
                             name: name("Pending first workspace"),
+                            description: "Test description".to_owned().try_into().unwrap(),
                         },
                     },
                 )
@@ -370,6 +371,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
             7300 + second,
             m::WorkspaceOperation::CreateArea {
                 name: name(&format!("Second workspace activity {second}")),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await;

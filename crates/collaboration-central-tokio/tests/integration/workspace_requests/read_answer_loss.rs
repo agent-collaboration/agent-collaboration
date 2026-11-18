@@ -83,6 +83,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         workspace_id: Some(f.workspace.clone()),
         operation: m::WorkspaceOperation::CreateArea {
             name: name("After read loss"),
+            description: "Test description".to_owned().try_into().unwrap(),
         },
     };
     assert_eq!(

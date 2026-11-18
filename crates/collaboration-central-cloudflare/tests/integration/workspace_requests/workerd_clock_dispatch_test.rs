@@ -98,6 +98,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 workspace_id: Some(fixture.workspace.clone()),
                 operation: m::WorkspaceOperation::CreateArea {
                     name: support::name("Direct clock"),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             },
         )
@@ -177,6 +178,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 workspace_id: Some(fixture.workspace.clone()),
                 operation: m::WorkspaceOperation::CreateArea {
                     name: support::name("Reopened clock"),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             },
         )

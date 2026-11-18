@@ -2,8 +2,8 @@ use crate::{
     ActorIdentityId, Addressee, AreaId, BacklogItemId, ChangeId, ChangePosition, DeliverableId,
     DeliverableRole, DeliverableRoleId, DependencyId, Description, ExternalLink, InitiativeId,
     IssueId, IssueTitle, ItemRef, LinkId, MemberRole, NotificationSetting, PostId, PostText,
-    ProjectId, ProjectRole, ProjectRoleId, ReadScope, Reference, ReferenceId, ResourceName,
-    ThreadId, ThreadMemberId, TrailTag, TrailText, WorkLogEntryId, WorkStatus,
+    ProjectId, ProjectRole, ProjectRoleId, ReadScope, Reference, ReferenceId, RequiredDescription,
+    ResourceName, ThreadId, ThreadMemberId, TrailTag, TrailText, WorkLogEntryId, WorkStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +18,7 @@ pub enum OrganizationCommand {
     CreateArea {
         area_id: AreaId,
         name: ResourceName,
+        description: RequiredDescription,
     },
     ArchiveArea {
         area_id: AreaId,
@@ -25,17 +26,20 @@ pub enum OrganizationCommand {
     UpdateArea {
         area_id: AreaId,
         name: ResourceName,
+        description: Option<RequiredDescription>,
     },
     CreateProject {
         project_id: ProjectId,
         area_id: AreaId,
         title: ResourceName,
+        description: RequiredDescription,
         lead: ActorIdentityId,
         role_id: ProjectRoleId,
     },
     UpdateProject {
         project_id: ProjectId,
         title: ResourceName,
+        description: Option<RequiredDescription>,
     },
     CreateInitiative {
         initiative_id: InitiativeId,

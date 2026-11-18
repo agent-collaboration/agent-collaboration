@@ -89,7 +89,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
     // Act: the real request is held after its reads; the owning revocation commits first.
     send(&mut socket, &frame("019f0000-0000-7000-8000-00000000cf03", &caller, json!({
         "requestId":"019f0000-0000-7000-8000-00000000cf04", "workspaceId":workspace.workspace_id,
-        "operation":{"kind":"createArea","name":"Must not commit"}
+        "operation":{"kind":"createArea","name":"Must not commit","description":"Test description"}
     }))?).await?;
     tokio::select! {
         () = held.until_held() => {},

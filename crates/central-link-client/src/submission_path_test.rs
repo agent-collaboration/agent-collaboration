@@ -76,15 +76,16 @@ fn draw_uuid_v7(case: &TestCase) -> String {
 fn workspace_fields(kind: &str, id: &str, text: &str) -> Value {
     let session_holder = json!({"kind": "me"});
     match kind {
-        "createWorkspace" | "createArea" => json!({"name": text}),
+        "createWorkspace" => json!({"name": text}),
+        "createArea" => json!({"name": text, "description": text}),
         "archiveArea" => json!({"areaId": id}),
         "updateWorkspace" => json!({"name": text, "description": text}),
         "archiveWorkspace" => json!({}),
-        "updateArea" => json!({"areaId": id, "name": text}),
-        "updateProject" => json!({"projectId": id, "title": text}),
+        "updateArea" => json!({"areaId": id, "name": text, "description": text}),
+        "updateProject" => json!({"projectId": id, "title": text, "description": text}),
         "updateIssue" => json!({"issueId": id, "title": text}),
         "removeLink" => json!({"linkId": id}),
-        "createProject" => json!({"areaId": id, "title": text, "lead": null}),
+        "createProject" => json!({"areaId": id, "title": text, "description": text, "lead": null}),
         "createInitiative" => json!({"name": text, "description": text}),
         "updateInitiative" => json!({"initiativeId": id, "name": text, "description": text}),
         "createDeliverable" => json!({"projectId": id, "title": text}),

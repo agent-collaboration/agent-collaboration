@@ -53,6 +53,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             802,
             m::WorkspaceOperation::CreateArea {
                 name: name("Second area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -85,6 +86,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
                 area_id: id(999),
                 title: name("Missing"),
                 lead: None,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
             m::ItemRef::Area(id(999)),
         ),
@@ -149,6 +151,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             809,
             m::WorkspaceOperation::CreateArea {
                 name: name("Third area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,

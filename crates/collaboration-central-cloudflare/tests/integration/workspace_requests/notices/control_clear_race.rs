@@ -89,6 +89,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
         9902,
         m::WorkspaceOperation::CreateArea {
             name: name("Late write"),
+            description: "Test description".to_owned().try_into().unwrap(),
         },
     )
     .await;

@@ -79,6 +79,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             41011,
             m::WorkspaceOperation::CreateArea {
                 name: name("Second cadence area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,

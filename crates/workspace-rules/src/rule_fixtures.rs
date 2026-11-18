@@ -32,6 +32,7 @@ pub fn area() -> Area {
         area_id: id(4),
         workspace_id: id(1),
         name: name("Area"),
+        description: "What the area holds".to_owned().try_into().unwrap(),
         state: AreaState::Open,
     }
 }
@@ -40,6 +41,7 @@ pub fn project() -> Project {
         project_id: id(5),
         area_id: id(4),
         title: name("Project X"),
+        description: "What the project delivers".to_owned().try_into().unwrap(),
         status: WorkStatus::Open,
         lead: id(2),
     }

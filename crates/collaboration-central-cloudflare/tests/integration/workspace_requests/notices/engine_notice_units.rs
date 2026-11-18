@@ -129,6 +129,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
             8411,
             m::WorkspaceOperation::CreateArea {
                 name: name("Gated one"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -148,6 +149,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
             8412,
             m::WorkspaceOperation::CreateArea {
                 name: name("Gated two"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -202,6 +204,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
             8421,
             m::WorkspaceOperation::CreateArea {
                 name: name("Committed"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await;
@@ -241,6 +244,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
             8422,
             m::WorkspaceOperation::CreateArea {
                 name: name("Drained"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await;

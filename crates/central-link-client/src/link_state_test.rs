@@ -40,6 +40,7 @@ fn payload() -> RequestPayload {
         workspace_id: Some("01890f2e-7b4c-7cc0-98c4-000000000003".parse().unwrap()),
         operation: WorkspaceOperation::CreateArea {
             name: "Work".to_owned().try_into().unwrap(),
+            description: "Where the work happens".to_owned().try_into().unwrap(),
         },
     })
 }

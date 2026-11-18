@@ -267,6 +267,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     let mut f = Fixture::new().await;
     let area = m::WorkspaceOperation::CreateArea {
         name: name("Same content"),
+        description: "Test description".to_owned().try_into().unwrap(),
     };
     let original = f.call(360, area.clone()).await;
     let central = m::WorkspaceOperation::CreateWorkspace {

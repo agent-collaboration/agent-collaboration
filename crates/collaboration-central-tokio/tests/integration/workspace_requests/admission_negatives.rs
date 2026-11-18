@@ -9,6 +9,7 @@ async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_dir
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("Must not be written"),
+        description: "Test description".to_owned().try_into().unwrap(),
     };
     let now = router_clock::RuntimeClock::utc_now(f.clock.as_ref()).timestamp();
     let valid_token = signed::machine_token(

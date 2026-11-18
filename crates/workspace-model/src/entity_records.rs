@@ -1,8 +1,8 @@
 use crate::{
-    ActorIdentityId, AreaId, BacklogDescription, BacklogItemId, ChangeId, ChangePosition,
-    DeliverableId, DeliverableRoleId, DependencyId, Description, EndpointId, InitiativeId, IssueId,
-    IssueTitle, ItemRef, MachineId, PersonId, PostId, PostText, ProjectId, ProjectRoleId,
-    ReadMarkId, ResourceName, SessionId, ThreadId, ThreadMemberId, TrailTag, TrailText,
+    ActorIdentityId, AreaId, BacklogItemId, ChangeId, ChangePosition, DeliverableId,
+    DeliverableRoleId, DependencyId, Description, EndpointId, InitiativeId, IssueId, IssueTitle,
+    ItemRef, MachineId, PersonId, PostId, PostText, ProjectId, ProjectRoleId, ReadMarkId,
+    RequiredDescription, ResourceName, SessionId, ThreadId, ThreadMemberId, TrailTag, TrailText,
     WorkLogEntryId, WorkspaceId,
 };
 use chrono::{DateTime, Utc};
@@ -74,8 +74,8 @@ macro_rules! records {
 }
 records! {
     Workspace { workspace_id: WorkspaceId, name: ResourceName, description: Description, state: WorkspaceState },
-    Area { area_id: AreaId, workspace_id: WorkspaceId, name: ResourceName, state: AreaState },
-    Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, status: WorkStatus, lead: ActorIdentityId },
+    Area { area_id: AreaId, workspace_id: WorkspaceId, name: ResourceName, description: RequiredDescription, state: AreaState },
+    Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, description: RequiredDescription, status: WorkStatus, lead: ActorIdentityId },
     Initiative { initiative_id: InitiativeId, name: ResourceName, description: Description, status: WorkStatus },
     ActorIdentity { actor_identity_id: ActorIdentityId, identity: Identity },
     SessionAddress { machine_id: MachineId, endpoint: EndpointId, session_id: SessionId },
@@ -88,7 +88,7 @@ records! {
     ThreadMember { thread_member_id: ThreadMemberId, thread_id: ThreadId, actor_identity_id: ActorIdentityId, role: MemberRole, notifications: NotificationSetting, state: MembershipState },
     Post { post_id: PostId, thread_id: ThreadId, author: ActorIdentityId, body: PostText, addressees: Vec<Addressee> },
     WorkLogEntry { entry_id: WorkLogEntryId, project_id: ProjectId, author: ActorIdentityId, body: WorkLogBody, tags: Vec<TrailTag> },
-    BacklogItem { item_id: BacklogItemId, area_id: AreaId, title: ResourceName, description: BacklogDescription, creator: ActorIdentityId, status: BacklogStatus, closing_note: Option<String> },
+    BacklogItem { item_id: BacklogItemId, area_id: AreaId, title: ResourceName, description: RequiredDescription, creator: ActorIdentityId, status: BacklogStatus, closing_note: Option<String> },
     Change { change_id: ChangeId, position: ChangePosition, item: ItemRef, actor: ActorIdentityId, event: ChangeEvent },
     ReadMark { read_mark_id: ReadMarkId, actor_identity_id: ActorIdentityId, scope: ReadScope, through_position: ChangePosition }
 }

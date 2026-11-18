@@ -2,11 +2,11 @@ WITH request AS (SELECT ?1 AS workspace,?3 AS reserved,?4 AS actor,json_extract(
 candidates(kind,id) AS (SELECT * FROM (
 SELECT json_extract(?2,'$.item.kind'),json_extract(?2,'$.item.id') FROM request WHERE op='show'
 UNION ALL
-SELECT 'area',area_id FROM areas,request WHERE op='list' AND ((q='areas' AND (json_extract(?2,'$.query.includeArchived')=1 OR state='open')) OR (q='searchItems' AND json_extract(?2,'$.query.itemKind') IN ('all','area') AND (json_extract(?2,'$.query.includeArchived')=1 OR state='open') AND name LIKE text_pattern ESCAPE '\'))
+SELECT 'area',area_id FROM areas,request WHERE op='list' AND ((q='areas' AND (json_extract(?2,'$.query.includeArchived')=1 OR state='open')) OR (q='searchItems' AND json_extract(?2,'$.query.itemKind') IN ('all','area') AND (json_extract(?2,'$.query.includeArchived')=1 OR state='open') AND (name LIKE text_pattern ESCAPE '\' OR description LIKE text_pattern ESCAPE '\')))
 UNION ALL
 SELECT 'initiative',initiative_id FROM initiatives,request WHERE op='list' AND (q='initiatives' OR (q='searchItems' AND json_extract(?2,'$.query.itemKind') IN ('all','initiative') AND (name LIKE text_pattern ESCAPE '\' OR description LIKE text_pattern ESCAPE '\')))
 UNION ALL
-SELECT 'project',project_id FROM projects,request WHERE op='list' AND ((q='projects' AND area_id=json_extract(?2,'$.query.areaId')) OR (q='searchItems' AND json_extract(?2,'$.query.itemKind') IN ('all','project') AND title LIKE text_pattern ESCAPE '\'))
+SELECT 'project',project_id FROM projects,request WHERE op='list' AND ((q='projects' AND area_id=json_extract(?2,'$.query.areaId')) OR (q='searchItems' AND json_extract(?2,'$.query.itemKind') IN ('all','project') AND (title LIKE text_pattern ESCAPE '\' OR description LIKE text_pattern ESCAPE '\')))
 )
 UNION ALL
 SELECT * FROM (
@@ -45,9 +45,9 @@ inbox_changes AS (SELECT c.* FROM changes c,request,inbox_mark WHERE op='inbox' 
 view_items(kind,id) AS (SELECT kind,id FROM selected_items UNION SELECT item_kind,item_id FROM inbox_changes UNION SELECT 'area',inbox_area FROM request WHERE op='inbox' AND inbox_kind='area' UNION SELECT 'project',inbox_project FROM request WHERE op='inbox' AND inbox_kind='project' UNION SELECT 'area',p.area_id FROM projects p,request WHERE op='inbox' AND inbox_kind='project' AND p.project_id=inbox_project),
 selected_threads(thread_id) AS (SELECT id FROM view_items WHERE kind='thread' UNION SELECT p.thread_id FROM posts p JOIN view_items v ON v.kind='post' AND v.id=p.post_id UNION SELECT thread_id FROM inbox_changes WHERE thread_id IS NOT NULL UNION SELECT m.thread_id FROM thread_members m JOIN view_items v ON v.kind='threadMember' AND v.id=m.thread_member_id)
 SELECT * FROM (
-SELECT 'area' AS row_kind,json_object('areaId',a.area_id,'workspaceId',?1,'name',a.name,'state',a.state) AS payload FROM areas a WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='area' AND v.id=a.area_id)
+SELECT 'area' AS row_kind,json_object('areaId',a.area_id,'workspaceId',?1,'name',a.name,'description',a.description,'state',a.state) AS payload FROM areas a WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='area' AND v.id=a.area_id)
 UNION ALL
-SELECT 'project' AS row_kind,json_object('projectId',p.project_id,'areaId',p.area_id,'title',p.title,'status',p.status,'lead',(SELECT holder FROM project_roles r WHERE r.project_id=p.project_id AND r.role='lead' AND r.ended_at IS NULL)) AS payload FROM projects p WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='project' AND v.id=p.project_id)
+SELECT 'project' AS row_kind,json_object('projectId',p.project_id,'areaId',p.area_id,'title',p.title,'description',p.description,'status',p.status,'lead',(SELECT holder FROM project_roles r WHERE r.project_id=p.project_id AND r.role='lead' AND r.ended_at IS NULL)) AS payload FROM projects p WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='project' AND v.id=p.project_id)
 UNION ALL
 SELECT 'initiative' AS row_kind,json_object('initiativeId',n.initiative_id,'name',n.name,'description',n.description,'status',n.status) AS payload FROM initiatives n WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='initiative' AND v.id=n.initiative_id)
 UNION ALL

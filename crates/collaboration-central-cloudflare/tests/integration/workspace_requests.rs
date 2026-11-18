@@ -18,7 +18,10 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
     let caller = caller();
     seed(&host, &caller).await;
     let workspace = create_workspace(&host, &caller).await;
-    let operation = m::WorkspaceOperation::CreateArea { name: name("Area") };
+    let operation = m::WorkspaceOperation::CreateArea {
+        name: name("Area"),
+        description: "Test description".to_owned().try_into().unwrap(),
+    };
     let first = call(
         &host,
         &caller,
@@ -44,6 +47,7 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
                 area_id: area_id.clone(),
                 title: name("Project"),
                 lead: None,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -163,7 +167,8 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
             Some(workspace.clone()),
             11,
             m::WorkspaceOperation::CreateArea {
-                name: name("Denied")
+                name: name("Denied"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -178,7 +183,8 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
             Some(workspace),
             11,
             m::WorkspaceOperation::CreateArea {
-                name: name("Denied")
+                name: name("Denied"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -202,7 +208,10 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
             &caller,
             Some(workspace.clone()),
             20,
-            m::WorkspaceOperation::CreateArea { name: name("Area") },
+            m::WorkspaceOperation::CreateArea {
+                name: name("Area"),
+                description: "Test description".to_owned().try_into().unwrap(),
+            },
         )
         .await,
     ) else {
@@ -218,6 +227,7 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
                 area_id,
                 title: name("Project"),
                 lead: None,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -336,7 +346,10 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             &caller,
             Some(workspace.clone()),
             30,
-            m::WorkspaceOperation::CreateArea { name: name("Area") },
+            m::WorkspaceOperation::CreateArea {
+                name: name("Area"),
+                description: "Test description".to_owned().try_into().unwrap(),
+            },
         )
         .await,
     ) else {
@@ -406,7 +419,8 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             Some(workspace.clone()),
             32,
             m::WorkspaceOperation::CreateArea {
-                name: name("different")
+                name: name("different"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -436,7 +450,8 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
             Some(workspace),
             32,
             m::WorkspaceOperation::CreateArea {
-                name: name("new after idle expiry")
+                name: name("new after idle expiry"),
+                description: "Test description".to_owned().try_into().unwrap(),
             }
         )
         .await
@@ -469,6 +484,8 @@ mod change_ownership;
 mod status_and_advisor;
 
 mod lead_taking;
+
+mod descriptions;
 
 mod review_read_boundaries;
 
