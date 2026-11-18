@@ -12,13 +12,23 @@ use std::sync::{Arc, Mutex, PoisonError};
 /// a change holds or waits on it.
 #[derive(Debug, Default)]
 pub(super) struct SessionModeOrder {
-    turns: Mutex<HashMap<SessionRef, Arc<tokio::sync::Mutex<()>>>>,
+    turns: Mutex<HashMap<SessionRef, SessionTurn>>,
     /// Told when the next change has to wait for its session's turn.
     #[cfg(any(test, feature = "test-support"))]
     wait_notice: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
-/// One change's turn on its session, released when dropped.
+/// One session's turn and how many changes hold or wait on it. Counted, not
+/// read from the lock's reference count: a cancelled waiter's copies are
+/// dropped in no order this module controls.
+#[derive(Debug, Default)]
+struct SessionTurn {
+    lock: Arc<tokio::sync::Mutex<()>>,
+    changes: usize,
+}
+
+/// One change's claim on its session's turn, holding it or still waiting;
+/// dropping it, either way, ends the claim.
 pub(super) struct SessionModeTurn<'order> {
     order: &'order SessionModeOrder,
     target: SessionRef,
@@ -28,26 +38,28 @@ pub(super) struct SessionModeTurn<'order> {
 impl SessionModeOrder {
     /// Waits for `target`'s turn: changes enter in the order they asked.
     pub(super) async fn enter(&self, target: &SessionRef) -> SessionModeTurn<'_> {
-        let turn = Arc::clone(
-            self.turns
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .entry(target.clone())
-                .or_default(),
-        );
-        let held = match Arc::clone(&turn).try_lock_owned() {
+        let lock = {
+            let mut turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+            let turn = turns.entry(target.clone()).or_default();
+            turn.changes += 1;
+            Arc::clone(&turn.lock)
+        };
+        // Claimed from here: a change cancelled while it waits drops this
+        // claim and ends it, as a change that held the turn does.
+        let mut claim = SessionModeTurn {
+            order: self,
+            target: target.clone(),
+            held: None,
+        };
+        claim.held = Some(match Arc::clone(&lock).try_lock_owned() {
             Ok(held) => held,
             Err(_) => {
                 #[cfg(any(test, feature = "test-support"))]
                 self.notice_wait();
-                turn.lock_owned().await
+                lock.lock_owned().await
             }
-        };
-        SessionModeTurn {
-            order: self,
-            target: target.clone(),
-            held: Some(held),
-        }
+        });
+        claim
     }
 
     /// The next change that has to wait for its session's turn fires the
@@ -91,12 +103,12 @@ impl Drop for SessionModeTurn<'_> {
             .turns
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        // Only the map still holds it: no change holds or waits on this turn.
-        if turns
-            .get(&self.target)
-            .is_some_and(|turn| Arc::strong_count(turn) == 1)
-        {
-            turns.remove(&self.target);
+        if let Some(turn) = turns.get_mut(&self.target) {
+            turn.changes = turn.changes.saturating_sub(1);
+            // No change holds or waits on this turn any more.
+            if turn.changes == 0 {
+                turns.remove(&self.target);
+            }
         }
     }
 }

@@ -69,3 +69,32 @@ fn a_session_keeps_no_turn_once_no_change_holds_or_waits_on_it() {
         "the ended session's turn stays"
     );
 }
+
+/// Oracle: the Lead's V6b lifetime ruling, "a waiter cancelled mid-await
+/// runs the same cleanup": A holds the turn and B waits on it; A ends, and the
+/// turn stays for B; B's request is then cancelled; no turn remains.
+#[test]
+fn a_waiting_change_cancelled_after_the_holder_ends_leaves_no_turn() {
+    // Arrange
+    let order = SessionModeOrder::default();
+    let one = session("one");
+    let first = order
+        .enter(&one)
+        .now_or_never()
+        .expect("the first change enters");
+    let mut waiting = Box::pin(order.enter(&one));
+    assert!((&mut waiting).now_or_never().is_none(), "B waits for A");
+
+    // Act
+    drop(first);
+    let kept_while_one_waits = order.sessions_with_turns();
+    drop(waiting);
+
+    // Assert
+    assert_eq!(kept_while_one_waits, 1, "the turn stays while B waits");
+    assert_eq!(
+        order.sessions_with_turns(),
+        0,
+        "a cancelled waiting change left its session's turn behind"
+    );
+}
