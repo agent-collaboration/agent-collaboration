@@ -344,6 +344,7 @@ async fn corrupt_queued_direct_message_does_not_block_timers() {
                     body: "unrelated direct".to_owned().try_into().unwrap(),
                     delivery: workspace_model::central_mail::MessageDelivery::Auto,
                     reply_to: None,
+                    sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                 },
             },
         )

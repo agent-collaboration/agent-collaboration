@@ -35,6 +35,10 @@ pub enum CentralMailOperation {
         /// required (null when it answers none).
         #[serde(deserialize_with = "present_option")]
         reply_to: Option<MessageId>,
+        /// When the agent sent it, on the sender Mac's clock (the outbox row's
+        /// creation stamp). Central counts the one 15-minute delivery window
+        /// from it (owner, 2026-11-17), clamped to its own acceptance time.
+        sent_at: Timestamp,
     },
     SetWake {
         target: SessionAddress,
@@ -178,6 +182,63 @@ pub enum MessageBody {
         automation_id: AutomationId,
         text: PostText,
     },
+    /// Central telling a sender how its direct message ended, when that was not
+    /// the normal delivery. It never has a cancel mark of its own and never
+    /// produces an outcome about itself.
+    DeliveryOutcome {
+        message_id: MessageId,
+        /// The sender Router's outbox request that created the message.
+        request_id: RequestId,
+        outcome: MessageOutcome,
+    },
+}
+
+/// How a direct message ended, when the sender is told. A normal delivery
+/// sends nothing: the sender's receipt already covers it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum MessageOutcome {
+    /// Accepted by the recipient after central had cancelled it (a late Ack).
+    DeliveredAfterAll,
+    /// The recipient's Router refused it for good.
+    Refused { reason: MessageRefusal },
+    /// Not delivered within 15 minutes of when the agent sent it (owner,
+    /// record:218: "15 minutes you can't send in central or machine then tell
+    /// the sender and cancel send").
+    Cancelled { reason: MessageCancellation },
+}
+
+/// Why the recipient refused a message.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageRefusal {
+    RecipientRefused,
+}
+
+/// The recipient Router's answer to a delivered message: into its inbox, or
+/// refused for good. A valid message always goes into the inbox (owner,
+/// record:297), so there is no "send it again later".
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum DeliveryAnswer {
+    Accepted,
+    Refused { reason: MessageRefusal },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageCancellation {
+    NotDeliveredWithin15Minutes,
 }
 
 /// How the recipient Router hands a direct message to its session: its own
@@ -210,6 +271,7 @@ pub enum MessageKind {
     Notice,
     Wake,
     Automation,
+    DeliveryOutcome,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

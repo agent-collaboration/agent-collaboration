@@ -3,6 +3,7 @@
 
 mod clock_ids;
 mod engine;
+pub mod message_deadline;
 /// Test support: the engine's alarm-input aggregate, one row of
 /// `(on_grid_due, legacy_due)` in UTC milliseconds or NULL.
 #[cfg(feature = "test-support")]
@@ -521,6 +522,7 @@ mod central_mail_store;
 mod central_timer_plans;
 mod central_timer_rows;
 mod central_timers;
+mod direct_message_rows;
 mod guarded_statements;
 pub use engine::AlarmResult;
 mod notification_windows;

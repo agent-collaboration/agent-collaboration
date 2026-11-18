@@ -292,6 +292,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
                 body: format!("direct {index}").try_into().unwrap(),
                 delivery: workspace_model::central_mail::MessageDelivery::Auto,
                 reply_to: None,
+                sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
             },
         )
         .await;
@@ -309,6 +310,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
             body: "second recipient".to_owned().try_into().unwrap(),
             delivery: workspace_model::central_mail::MessageDelivery::Auto,
             reply_to: None,
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
         },
     )
     .await;
@@ -319,12 +321,30 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         panic!("second target send")
     };
     let r = f.host.central(&f.caller.organization_id).await;
-    assert!(
+    let earliest_cancel = r
+        .statement_host()
+        .read(super::super::Statement {
+            sql: "SELECT MIN(cancel_due_at) FROM messages WHERE state='queued'",
+            args: vec![],
+        })
+        .await
+        .unwrap()
+        .rows[0][0]
+        .clone();
+    let central_storage::SqlValue::Text(earliest_cancel) = earliest_cancel else {
+        panic!("each direct message stores its cancel mark")
+    };
+    assert_eq!(
         r.control::<Option<i64>>("raw-alarm-time", &())
             .await
-            .unwrap()
-            .is_none(),
-        "direct messages never schedule an alarm"
+            .unwrap(),
+        Some(
+            earliest_cancel
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .unwrap()
+                .timestamp_millis()
+        ),
+        "delivery never arms the alarm; only the earliest cancel mark does"
     );
     let immediate = r.queued_for_session(&target).await.unwrap();
     assert_eq!(immediate.messages.len(), 4);
@@ -393,12 +413,17 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         queue
     );
     assert_eq!(r.queued_for_session(&target).await.unwrap(), queue);
-    assert!(
+    assert_eq!(
         r.control::<Option<i64>>("raw-alarm-time", &())
             .await
-            .unwrap()
-            .is_none(),
-        "Queued rows must not spin the alarm"
+            .unwrap(),
+        Some(
+            earliest_cancel
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .unwrap()
+                .timestamp_millis()
+        ),
+        "queued rows must not spin the alarm: it stays at the earliest cancel mark"
     );
     let idle_callbacks: u64 = r.control("raw-alarm-count", &()).await.unwrap();
     assert!(r.dispatch_due_alarm().await.unwrap().is_none());

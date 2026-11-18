@@ -3,9 +3,11 @@
 //! through Rust types and an invalid row is refused, never coerced.
 use crate::MachineLocalStore;
 use crate::machine_local_store::MachineLocalWrite;
+use crate::outbox_deadline::DepartureAtDeadline;
 use central_link_client::{
-    LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent, OutboxWriteTarget,
-    OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
+    EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
+    OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
+    RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
@@ -43,10 +45,13 @@ enum OutboxItemState {
     Sent,
     Answered,
     Refused,
-    /// A direct message not sent within 15 minutes (owner, record:358); its
-    /// text is gone.
+    /// Ended at its deadline (outbox_deadline) with its text gone: a direct
+    /// message that never left the Mac within 15 minutes.
     Cancelled,
-    /// Any other write still unsent after 24 hours; its text is gone.
+    /// A direct message that left the Mac but was not confirmed within 15
+    /// minutes; it may have been delivered.
+    Unconfirmed,
+    /// Any other write still unanswered 24 hours after it was stored.
     GaveUp,
 }
 
@@ -59,6 +64,7 @@ impl OutboxItemState {
             Self::Answered => "answered",
             Self::Refused => "refused",
             Self::Cancelled => "cancelled",
+            Self::Unconfirmed => "unconfirmed",
             Self::GaveUp => "gaveUp",
         }
     }
@@ -71,8 +77,18 @@ impl OutboxItemState {
             "answered" => Some(Self::Answered),
             "refused" => Some(Self::Refused),
             "cancelled" => Some(Self::Cancelled),
+            "unconfirmed" => Some(Self::Unconfirmed),
             "gaveUp" => Some(Self::GaveUp),
             _ => None,
+        }
+    }
+
+    /// The stored state for a write that ended at its deadline.
+    const fn ended(reason: OutboxCancellation) -> Self {
+        match reason {
+            OutboxCancellation::NotDeliveredWithin15Minutes => Self::Cancelled,
+            OutboxCancellation::NotConfirmedWithin15Minutes => Self::Unconfirmed,
+            OutboxCancellation::GaveUpAfter24Hours => Self::GaveUp,
         }
     }
 }
@@ -182,16 +198,22 @@ impl<'store> MacOutbox<'store> {
                 OutboxInsert::ConflictingContent
             });
         }
+        // The creation stamp is the agent's send time (design 2026-11-17).
+        let expires_at_ms = crate::outbox_deadline::expires_at_ms(
+            &outbox_content(request_id, &item.payload)?.target,
+            now_ms,
+        );
         sqlx::query!(
             "INSERT INTO outbox_items
-               (request_id, caller_json, payload_json, item_state, flush_at_ms, outcome_json,
-                created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+               (request_id, caller_json, payload_json, item_state, flush_at_ms, expires_at_ms,
+                outcome_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)",
             request_id,
             caller_json,
             payload_json,
             state,
             flush_at_ms,
+            expires_at_ms,
             now_ms,
             now_ms
         )
@@ -275,7 +297,9 @@ impl<'store> MacOutbox<'store> {
                     StoredPayload::Answered(answered),
                 ) => (answered.target, PendingWriteState::Answered(reply)),
                 (
-                    OutboxItemState::Cancelled | OutboxItemState::GaveUp,
+                    OutboxItemState::Cancelled
+                    | OutboxItemState::Unconfirmed
+                    | OutboxItemState::GaveUp,
                     RequestStatus::Cancelled { reason },
                     StoredPayload::Answered(cancelled),
                 ) => (cancelled.target, PendingWriteState::Cancelled { reason }),
@@ -360,12 +384,14 @@ impl<'store> MacOutbox<'store> {
         let answered = OutboxItemState::Answered.as_str();
         let refused = OutboxItemState::Refused.as_str();
         let cancelled = OutboxItemState::Cancelled.as_str();
+        let unconfirmed = OutboxItemState::Unconfirmed.as_str();
         let gave_up = OutboxItemState::GaveUp.as_str();
         Ok(sqlx::query!(
-            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?) AND updated_at <= ?",
+            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?, ?) AND updated_at <= ?",
             answered,
             refused,
             cancelled,
+            unconfirmed,
             gave_up,
             cutoff
         )
@@ -428,20 +454,21 @@ impl<'store> MacOutbox<'store> {
             let row = sqlx::query_as!(
                 OutboxRow,
                 r#"UPDATE outbox_items SET item_state = ?, updated_at = ?
-                   WHERE request_id = ? AND item_state IN (?, ?)
+                   WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?
                    RETURNING request_id AS "request_id!", caller_json, payload_json,
                              item_state, flush_at_ms, outcome_json"#,
                 to,
                 now_ms,
                 request_id,
                 unsent,
-                answer_lost
+                answer_lost,
+                now_ms
             )
             .fetch_optional(&mut *transaction)
             .await?
             .ok_or_else(|| OutboxStoreError::UnexpectedState {
                 request: request.clone(),
-                expected: "in the outbox",
+                expected: "in the outbox before its deadline",
             })?;
             let stored = decode_row(&row)?;
             let StoredPayload::Unanswered(payload) = stored.payload else {
@@ -458,15 +485,17 @@ impl<'store> MacOutbox<'store> {
     }
 
     /// Claims the next batch: up to `limit` writes waiting for `mark` or
-    /// earlier, oldest first by (created_at, request_id), moved to sent in one
-    /// transaction and returned for the batch frame. The table is the only
-    /// list of what waits (Lead A, 2026-11-18): nothing is held in memory.
+    /// earlier and still before their deadline, oldest first by (created_at,
+    /// request_id), moved to sent in one transaction and returned for the
+    /// batch frame. The same transaction first ends every waiting write past
+    /// its deadline, so an overdue write is never claimed (step 9). The table
+    /// is the only list of what waits (Lead A, 2026-11-18).
     pub async fn claim_next_batch(
         &mut self,
         mark: SyncTime,
         limit: u16,
         now: SyncTime,
-    ) -> Result<Vec<StoredOutboxWrite>, OutboxStoreError> {
+    ) -> Result<ClaimedBatch, OutboxStoreError> {
         let unsent = OutboxItemState::InOutbox.as_str();
         let answer_lost = OutboxItemState::SentAnswerLost.as_str();
         let to = OutboxItemState::Sent.as_str();
@@ -474,13 +503,15 @@ impl<'store> MacOutbox<'store> {
         let now_ms = now.unix_millis();
         let limit = i64::from(limit);
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let ended = end_overdue_waiting(&mut transaction, now_ms).await?;
         let due = sqlx::query_scalar!(
             r#"SELECT request_id AS "request_id!" FROM outbox_items
-               WHERE item_state IN (?, ?) AND flush_at_ms <= ?
+               WHERE item_state IN (?, ?) AND flush_at_ms <= ? AND expires_at_ms > ?
                ORDER BY created_at, request_id LIMIT ?"#,
             unsent,
             answer_lost,
             mark_ms,
+            now_ms,
             limit
         )
         .fetch_all(&mut *transaction)
@@ -512,7 +543,7 @@ impl<'store> MacOutbox<'store> {
             });
         }
         transaction.commit().await?;
-        Ok(writes)
+        Ok(ClaimedBatch { writes, ended })
     }
 
     /// The earliest receipt mark among waiting writes, for arming the flush.
@@ -622,18 +653,44 @@ impl<'store> MacOutbox<'store> {
     }
 
     /// Sent writes left unanswered go back to the outbox with their receipt
-    /// mark, marked as possibly already in central.
+    /// mark, marked as possibly already in central. One past its deadline
+    /// ends instead, in the same transaction: it is never replayed (step 9).
     pub async fn return_unanswered(
         &mut self,
         requests: &[RequestId],
         now: SyncTime,
-    ) -> Result<(), OutboxStoreError> {
+    ) -> Result<Vec<EndedWrite>, OutboxStoreError> {
         let from = OutboxItemState::Sent.as_str();
         let to = OutboxItemState::SentAnswerLost.as_str();
         let now_ms = now.unix_millis();
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let mut ended = Vec::new();
         for request in requests {
             let request_id = request.as_str();
+            let row = sqlx::query_as!(
+                OutboxRow,
+                r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
+                          flush_at_ms, outcome_json
+                   FROM outbox_items
+                   WHERE request_id = ? AND item_state = ? AND expires_at_ms <= ?"#,
+                request_id,
+                from,
+                now_ms
+            )
+            .fetch_optional(&mut *transaction)
+            .await?;
+            if let Some(row) = row {
+                ended.push(
+                    end_row(
+                        &mut transaction,
+                        &row,
+                        DepartureAtDeadline::MayHaveArrived,
+                        now_ms,
+                    )
+                    .await?,
+                );
+                continue;
+            }
             let changed = sqlx::query!(
                 "UPDATE outbox_items SET item_state = ?, updated_at = ?
                  WHERE request_id = ? AND item_state = ?",
@@ -648,12 +705,109 @@ impl<'store> MacOutbox<'store> {
             expect_one(changed, request, "sent")?;
         }
         transaction.commit().await?;
-        Ok(())
+        Ok(ended)
+    }
+
+    /// Ends every waiting write past its deadline, for the flush tick: a
+    /// Router that cannot send still tells its agents.
+    pub async fn end_overdue(
+        &mut self,
+        now: SyncTime,
+    ) -> Result<Vec<EndedWrite>, OutboxStoreError> {
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let ended = end_overdue_waiting(&mut transaction, now.unix_millis()).await?;
+        transaction.commit().await?;
+        Ok(ended)
     }
 }
 
-/// What `payload_json` holds after central answered: the target and the content
-/// digest central's request log uses, no text.
+/// A claimed batch and the writes the same transaction ended unsent.
+#[derive(Debug)]
+pub struct ClaimedBatch {
+    pub writes: Vec<StoredOutboxWrite>,
+    pub ended: Vec<EndedWrite>,
+}
+
+/// Ends every waiting write (never sent, or sent with a lost answer) whose
+/// deadline is at or before `now_ms`, inside the caller's transaction.
+async fn end_overdue_waiting(
+    transaction: &mut sqlx::SqliteConnection,
+    now_ms: i64,
+) -> Result<Vec<EndedWrite>, OutboxStoreError> {
+    let unsent = OutboxItemState::InOutbox.as_str();
+    let answer_lost = OutboxItemState::SentAnswerLost.as_str();
+    let rows = sqlx::query_as!(
+        OutboxRow,
+        r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
+                  flush_at_ms, outcome_json
+           FROM outbox_items WHERE item_state IN (?, ?) AND expires_at_ms <= ?
+           ORDER BY created_at, request_id"#,
+        unsent,
+        answer_lost,
+        now_ms
+    )
+    .fetch_all(&mut *transaction)
+    .await?;
+    let mut ended = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let departure = match OutboxItemState::parse(&row.item_state) {
+            Some(OutboxItemState::InOutbox) => DepartureAtDeadline::NeverLeft,
+            Some(OutboxItemState::SentAnswerLost) => DepartureAtDeadline::MayHaveArrived,
+            _ => return Err(corrupt_row(&row.request_id, "item_state")),
+        };
+        ended.push(end_row(transaction, row, departure, now_ms).await?);
+    }
+    Ok(ended)
+}
+
+/// Moves one overdue row to its end state and drops its text: the stored
+/// payload becomes the text-free record of target and digest, so a resubmit
+/// of the same write is still recognised.
+async fn end_row(
+    transaction: &mut sqlx::SqliteConnection,
+    row: &OutboxRow,
+    departure: DepartureAtDeadline,
+    now_ms: i64,
+) -> Result<EndedWrite, OutboxStoreError> {
+    let request_id = row.request_id.as_str();
+    let stored = decode_row(row)?;
+    let StoredPayload::Unanswered(payload) = stored.payload else {
+        return Err(corrupt_row(request_id, "payload_json"));
+    };
+    let target = outbox_content(request_id, &payload)?.target;
+    let reason = crate::outbox_deadline::end_reason(&target, departure);
+    let request = parse_request_id(request_id)?;
+    let record = serde_json::to_string(&AnsweredWrite {
+        request_id: request.clone(),
+        target: target.clone(),
+        content_digest: payload_content_digest(&payload)?,
+    })?;
+    let to = OutboxItemState::ended(reason).as_str();
+    let from = row.item_state.as_str();
+    let changed = sqlx::query!(
+        "UPDATE outbox_items SET item_state = ?, payload_json = ?, updated_at = ?
+         WHERE request_id = ? AND item_state = ?",
+        to,
+        record,
+        now_ms,
+        request_id,
+        from
+    )
+    .execute(&mut *transaction)
+    .await?
+    .rows_affected();
+    expect_one(changed, &request, "waiting or sent")?;
+    Ok(EndedWrite {
+        caller: stored.caller,
+        request_id: request,
+        target,
+        reason,
+    })
+}
+
+/// What `payload_json` holds once a write ends (answered, refused or past its
+/// deadline): the target and the content digest central's request log uses,
+/// no text.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AnsweredWrite {
@@ -697,6 +851,7 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
         OutboxItemState::Answered
         | OutboxItemState::Refused
         | OutboxItemState::Cancelled
+        | OutboxItemState::Unconfirmed
         | OutboxItemState::GaveUp => {
             let answered: AnsweredWrite =
                 serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
@@ -721,16 +876,20 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
                 .map_err(|_| corrupt("outcome_json"))?,
         ),
         (OutboxItemState::Cancelled, None) => RequestStatus::Cancelled {
-            reason: OutboxCancellation::NotSentWithin15Min,
+            reason: OutboxCancellation::NotDeliveredWithin15Minutes,
+        },
+        (OutboxItemState::Unconfirmed, None) => RequestStatus::Cancelled {
+            reason: OutboxCancellation::NotConfirmedWithin15Minutes,
         },
         (OutboxItemState::GaveUp, None) => RequestStatus::Cancelled {
-            reason: OutboxCancellation::GaveUpAfter24h,
+            reason: OutboxCancellation::GaveUpAfter24Hours,
         },
         (
             OutboxItemState::InOutbox
             | OutboxItemState::SentAnswerLost
             | OutboxItemState::Sent
             | OutboxItemState::Cancelled
+            | OutboxItemState::Unconfirmed
             | OutboxItemState::GaveUp,
             Some(_),
         )

@@ -2,6 +2,7 @@
 mod automation_occurrences;
 mod automations;
 mod corruption;
+mod direct_message_cancel;
 mod requests;
 mod stored_row_use;
 mod wakes;

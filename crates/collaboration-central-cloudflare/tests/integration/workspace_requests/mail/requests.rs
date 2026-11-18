@@ -30,6 +30,7 @@ fn send(to: m::SessionAddress, body: &str) -> Operation {
         body: body.to_owned().try_into().unwrap(),
         delivery: workspace_model::central_mail::MessageDelivery::Auto,
         reply_to: None,
+        sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
     }
 }
 
@@ -234,6 +235,7 @@ async fn a_chosen_delivery_and_reply_to_are_stored_in_the_message_body_for_the_r
             body: "steer this".to_owned().try_into().unwrap(),
             delivery: workspace_model::central_mail::MessageDelivery::Steer,
             reply_to: Some(id(1049)),
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
         },
     )
     .await;

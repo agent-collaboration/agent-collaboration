@@ -239,6 +239,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
                         body: "Direct message".to_owned().try_into().unwrap(),
                         delivery: workspace_model::central_mail::MessageDelivery::Auto,
                         reply_to: None,
+                        sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                     },
                 },
             )

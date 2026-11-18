@@ -7,8 +7,8 @@
 //! failed write of an answer or a return is reconciled, never lost.
 use super::{BatchInFlight, LinkDriver};
 use central_link_client::{
-    FlushEffect, FlushEvent, FlushOutcome, FlushOutcomes, MAX_BATCH_WRITES, MemberOutcome,
-    transition,
+    EndedWrite, FlushEffect, FlushEvent, FlushOutcome, FlushOutcomes, MAX_BATCH_WRITES,
+    MemberOutcome, transition,
 };
 use central_link_protocol::{DataFrame, LinkFrame, LinkRequestBatch};
 use runtime_primitives::SyncTime;
@@ -66,16 +66,37 @@ impl LinkDriver {
         if orphaned.is_empty() {
             return;
         }
-        if let Err(error) = store.return_unanswered(&orphaned, now).await {
-            tracing::warn!(%error, "outbox: returning sent writes failed; reconciling next tick");
+        match store.return_unanswered(&orphaned, now).await {
+            Ok(ended) => {
+                drop(store);
+                self.tell_ended(ended);
+            }
+            Err(error) => {
+                tracing::warn!(%error, "outbox: returning sent writes failed; reconciling next tick");
+            }
         }
     }
 
-    /// A flush wake fired: reconcile when idle, let the schedule decide, then
-    /// prune writes that ended 60 days ago (a kept row is only a receipt).
+    /// Writes that passed their deadline go to the sink, so their agents hear.
+    fn tell_ended(&self, ended: Vec<EndedWrite>) {
+        if !ended.is_empty() {
+            self.sink.ended(ended);
+        }
+    }
+
+    /// A flush wake fired: reconcile when idle, end writes past their deadline,
+    /// let the schedule decide, then prune writes that ended 60 days ago (a
+    /// kept row is only a receipt).
     pub(super) async fn flush_tick(&mut self, now: SyncTime) {
         if self.batch.is_none() {
             self.reconcile_sent().await;
+        }
+        let overdue = self.store.lock().await.end_overdue(now).await;
+        match overdue {
+            Ok(ended) => self.tell_ended(ended),
+            Err(error) => {
+                tracing::warn!(%error, "outbox: ending overdue writes failed; it runs again next flush");
+            }
         }
         let earliest_due = self.earliest_due().await;
         self.apply_flush(FlushEvent::Tick { now, earliest_due })
@@ -131,8 +152,13 @@ impl LinkDriver {
             store.claim_next_batch(mark, limit, now).await
         };
         let writes = match claimed {
-            Ok(writes) if !writes.is_empty() => writes,
-            Ok(_) => return self.end_batch().await,
+            Ok(claimed) => {
+                self.tell_ended(claimed.ended);
+                if claimed.writes.is_empty() {
+                    return self.end_batch().await;
+                }
+                claimed.writes
+            }
             Err(error) => {
                 // Not a link event: the claim rolled back; the next mark retries.
                 tracing::warn!(%error, "outbox: claiming the batch failed; retrying next mark");
@@ -234,9 +260,17 @@ impl LinkDriver {
             .collect();
         if !unanswered.is_empty() {
             let now = self.clock.now();
-            let mut store = self.store.lock().await;
-            if let Err(error) = store.return_unanswered(&unanswered, now).await {
-                tracing::warn!(%error, "outbox: returning unanswered writes failed; reconciling next tick");
+            let returned = self
+                .store
+                .lock()
+                .await
+                .return_unanswered(&unanswered, now)
+                .await;
+            match returned {
+                Ok(ended) => self.tell_ended(ended),
+                Err(error) => {
+                    tracing::warn!(%error, "outbox: returning unanswered writes failed; reconciling next tick");
+                }
             }
         }
         self.finish_batch(false);
@@ -261,3 +295,7 @@ impl LinkDriver {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "driver_deadline_test.rs"]
+mod deadline_tests;

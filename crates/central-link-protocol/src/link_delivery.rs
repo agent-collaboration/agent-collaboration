@@ -46,37 +46,7 @@ pub enum DeliveryAnswer {
     RefusedForGood,
 }
 
-/// How a direct message ended, told to the sender's Router.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum MessageOutcome {
-    /// The recipient's Router accepted it into its inbox.
-    Delivered,
-    /// The recipient's Router refused it for good.
-    Refused { reason: MessageRefusal },
-    /// Not delivered within 15 minutes of central accepting it (owner,
-    /// record:218: "15 minutes you can't send in central or machine then tell
-    /// the sender and cancel send").
-    Cancelled { reason: MessageCancellation },
-}
-
-/// Why the recipient refused a message.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MessageRefusal {
-    RecipientRefused,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MessageCancellation {
-    NotDeliveredWithin15Min,
-}
+pub use workspace_model::central_mail::{MessageCancellation, MessageOutcome, MessageRefusal};
 
 #[cfg(test)]
 #[path = "link_delivery_test.rs"]

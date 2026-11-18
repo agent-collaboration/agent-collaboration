@@ -82,6 +82,7 @@ impl EngineReadFault {
             && match self.kind.as_str() {
                 "wake_timer" => statement.sql.contains("FROM wakes s"),
                 "automation_timer" => statement.sql.contains("FROM automations s"),
+                "direct_message" => statement.sql.contains("FROM messages s"),
                 "engine_probe" => statement.sql.contains("s.machine_kind='engine_probe'"),
                 _ => false,
             }

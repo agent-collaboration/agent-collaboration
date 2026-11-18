@@ -104,12 +104,18 @@ impl OutboxStorage for FaultyOutbox {
         mark: SyncTime,
         limit: u16,
         now: SyncTime,
-    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>> {
+    ) -> OutboxFuture<'_, crate::ClaimedBatch> {
         faulty!(
             self,
             "claim_next_batch",
             self.inner.claim_next_batch(mark, limit, now)
         )
+    }
+    fn end_overdue(
+        &mut self,
+        now: SyncTime,
+    ) -> OutboxFuture<'_, Vec<central_link_client::EndedWrite>> {
+        faulty!(self, "end_overdue", self.inner.end_overdue(now))
     }
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         faulty!(
@@ -152,7 +158,7 @@ impl OutboxStorage for FaultyOutbox {
         &'call mut self,
         requests: &'call [RequestId],
         now: SyncTime,
-    ) -> OutboxFuture<'call, ()> {
+    ) -> OutboxFuture<'call, Vec<central_link_client::EndedWrite>> {
         faulty!(
             self,
             "return_unanswered",

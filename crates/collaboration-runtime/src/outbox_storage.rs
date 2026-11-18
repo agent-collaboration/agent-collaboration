@@ -6,9 +6,9 @@
 //! contract suite holds both to the same behaviour.
 use crate::MachineLocalStore;
 use crate::outbox_store::{
-    MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
+    ClaimedBatch, MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
 };
-use central_link_client::{MemberOutcome, OutgoingWrite, PendingWrite, RequestStatus};
+use central_link_client::{EndedWrite, MemberOutcome, OutgoingWrite, PendingWrite, RequestStatus};
 use runtime_primitives::SyncTime;
 use std::{future::Future, pin::Pin};
 use workspace_model::{Caller, RequestId};
@@ -41,14 +41,17 @@ pub trait OutboxStorage: Send {
     fn waiting(&mut self) -> OutboxFuture<'_, Vec<(SyncTime, RequestId)>>;
     /// The earliest receipt mark among waiting writes.
     fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>>;
-    /// Up to `limit` writes due by `mark`, oldest first by (created_at,
-    /// request_id), moved to sent in one transaction.
+    /// Up to `limit` writes due by `mark` and before their deadline, oldest
+    /// first by (created_at, request_id), moved to sent in one transaction
+    /// that first ends every overdue waiting write (outbox_deadline).
     fn claim_next_batch(
         &mut self,
         mark: SyncTime,
         limit: u16,
         now: SyncTime,
-    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>>;
+    ) -> OutboxFuture<'_, ClaimedBatch>;
+    /// Ends every waiting write past its deadline.
+    fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>>;
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>>;
     fn mark_sent<'call>(
         &'call mut self,
@@ -66,11 +69,12 @@ pub trait OutboxStorage: Send {
         request: &'call RequestId,
         now: SyncTime,
     ) -> OutboxFuture<'call, ()>;
+    /// Sent writes back to waiting; one past its deadline ends instead.
     fn return_unanswered<'call>(
         &'call mut self,
         requests: &'call [RequestId],
         now: SyncTime,
-    ) -> OutboxFuture<'call, ()>;
+    ) -> OutboxFuture<'call, Vec<EndedWrite>>;
 }
 
 /// The production outbox: machine_local.sqlite, through MacOutbox. A separate
@@ -145,12 +149,15 @@ impl OutboxStorage for MachineLocalOutbox {
         mark: SyncTime,
         limit: u16,
         now: SyncTime,
-    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>> {
+    ) -> OutboxFuture<'_, ClaimedBatch> {
         Box::pin(async move {
             MacOutbox::new(&mut self.store)
                 .claim_next_batch(mark, limit, now)
                 .await
         })
+    }
+    fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>> {
+        Box::pin(async move { MacOutbox::new(&mut self.store).end_overdue(now).await })
     }
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         Box::pin(async move { MacOutbox::new(&mut self.store).sent_without_answer().await })
@@ -193,7 +200,7 @@ impl OutboxStorage for MachineLocalOutbox {
         &'call mut self,
         requests: &'call [RequestId],
         now: SyncTime,
-    ) -> OutboxFuture<'call, ()> {
+    ) -> OutboxFuture<'call, Vec<EndedWrite>> {
         Box::pin(async move {
             MacOutbox::new(&mut self.store)
                 .return_unanswered(requests, now)

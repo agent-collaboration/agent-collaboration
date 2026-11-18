@@ -14,11 +14,7 @@ fn text(value: impl ToString) -> SqlValue {
 }
 
 fn identity_fields(identity: &Identity) -> Result<(&'static str, String), StoreFailure> {
-    let kind = match identity {
-        Identity::AgentSession { .. } => "agentSession",
-        Identity::RouterComponent { .. } => "routerComponent",
-        Identity::Person { .. } => "person",
-    };
+    let kind = identity.stored_kind();
     let encoded = serde_json_canonicalizer::to_string(identity).map_err(|_| corrupt("identity"))?;
     Ok((kind, encoded))
 }

@@ -46,6 +46,17 @@ pub(crate) fn thread_post(request: &str) -> RequestPayload {
     .unwrap()
 }
 
+pub(crate) fn direct_message(request: &str) -> RequestPayload {
+    serde_json::from_value(
+        json!({"kind": "mail", "request": {"requestId": request, "operation": {
+        "kind": "sendMessage",
+        "to": {"machineId": INSTALLATION, "endpoint": "codex-local", "sessionId": "recipient"},
+        "body": "are you there", "delivery": "auto", "replyTo": null,
+        "sentAt": "2030-01-01T00:00:00Z"}}}),
+    )
+    .unwrap()
+}
+
 pub(crate) fn list_areas() -> RequestPayload {
     serde_json::from_value(json!({"kind": "workspace", "request": {
         "requestId": null, "workspaceId": uuid_v7(9000),
@@ -217,10 +228,16 @@ impl FlushJitter for NoJitter {
 }
 
 #[derive(Default)]
-pub(crate) struct RecordedOutcomes(pub(crate) StdMutex<Vec<FlushOutcomes>>);
+pub(crate) struct RecordedOutcomes(
+    pub(crate) StdMutex<Vec<FlushOutcomes>>,
+    pub(crate) StdMutex<Vec<central_link_client::EndedWrite>>,
+);
 impl FlushOutcomeSink for RecordedOutcomes {
     fn deliver(&self, outcomes: FlushOutcomes) {
         self.0.lock().unwrap().push(outcomes);
+    }
+    fn ended(&self, ended: Vec<central_link_client::EndedWrite>) {
+        self.1.lock().unwrap().extend(ended);
     }
 }
 

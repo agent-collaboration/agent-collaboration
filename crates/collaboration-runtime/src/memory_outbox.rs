@@ -2,14 +2,16 @@
 //! behaviour without a database thread, so every store call completes inside
 //! the simulated host. The shared contract suite (outbox_storage_contract)
 //! holds it to MachineLocalStore's behaviour.
+use crate::outbox_deadline::{DepartureAtDeadline, end_reason, expires_at_ms};
 use crate::outbox_storage::{OutboxFuture, OutboxStorage};
 use crate::outbox_store::{
-    ANSWERED_RETENTION_MILLIS, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
-    payload_content_digest,
+    ANSWERED_RETENTION_MILLIS, ClaimedBatch, NewOutboxItem, OutboxInsert, OutboxStoreError,
+    StoredOutboxWrite, payload_content_digest,
 };
 use central_link_client::{
-    LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutboxWriteTarget, OutgoingOutcome,
-    OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
+    EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
+    OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
+    RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
@@ -23,7 +25,8 @@ enum RowState {
     Sent,
     Answered(ReplyPayload),
     Refused(LinkAdmissionRefusal),
-    // Cancelled and given-up rows arrive with the cancel timer (owner pending).
+    /// Past its deadline (outbox_deadline), its text gone.
+    Ended(OutboxCancellation),
 }
 
 #[derive(Clone, Debug)]
@@ -34,6 +37,7 @@ struct Row {
     target: OutboxWriteTarget,
     content_digest: String,
     flush_at: SyncTime,
+    expires_at: i64,
     state: RowState,
     created_at: i64,
     updated_at: i64,
@@ -48,6 +52,7 @@ impl Row {
             RowState::Sent => RequestStatus::Sent,
             RowState::Answered(reply) => RequestStatus::Answered(reply.clone()),
             RowState::Refused(reason) => RequestStatus::Refused(*reason),
+            RowState::Ended(reason) => RequestStatus::Cancelled { reason: *reason },
         }
     }
 }
@@ -126,6 +131,7 @@ impl OutboxStorage for MemoryOutbox {
                 });
             }
             let target = content(&item.request, &item.payload)?.target;
+            let expires_at = expires_at_ms(&target, now.unix_millis());
             self.rows.insert(
                 item.request.clone(),
                 Row {
@@ -134,6 +140,7 @@ impl OutboxStorage for MemoryOutbox {
                     target,
                     content_digest: digest,
                     flush_at: item.flush_at,
+                    expires_at,
                     state: RowState::InOutbox,
                     created_at: now.unix_millis(),
                     updated_at: now.unix_millis(),
@@ -187,6 +194,7 @@ impl OutboxStorage for MemoryOutbox {
                             PendingWriteState::SentAnswerLost { body: body()? }
                         }
                         RowState::Answered(reply) => PendingWriteState::Answered(reply.clone()),
+                        RowState::Ended(reason) => PendingWriteState::Cancelled { reason: *reason },
                         RowState::Refused(_) => {
                             return Err(OutboxStoreError::CorruptItem {
                                 request_id: id.as_str().to_owned(),
@@ -229,7 +237,10 @@ impl OutboxStorage for MemoryOutbox {
                     let outcome = match &row.state {
                         RowState::Answered(reply) => OutgoingOutcome::Answered(reply.clone()),
                         RowState::Refused(reason) => OutgoingOutcome::Refused(*reason),
-                        RowState::InOutbox | RowState::SentAnswerLost | RowState::Sent => {
+                        RowState::InOutbox
+                        | RowState::SentAnswerLost
+                        | RowState::Sent
+                        | RowState::Ended(_) => {
                             return None;
                         }
                     };
@@ -249,7 +260,10 @@ impl OutboxStorage for MemoryOutbox {
             let cutoff = now.unix_millis().saturating_sub(ANSWERED_RETENTION_MILLIS);
             let before = self.rows.len();
             self.rows.retain(|_, row| {
-                let ended = matches!(row.state, RowState::Answered(_) | RowState::Refused(_));
+                let ended = matches!(
+                    row.state,
+                    RowState::Answered(_) | RowState::Refused(_) | RowState::Ended(_)
+                );
                 !(ended && row.updated_at <= cutoff)
             });
             Ok(u64::try_from(before - self.rows.len()).unwrap_or(u64::MAX))
@@ -285,19 +299,27 @@ impl OutboxStorage for MemoryOutbox {
         mark: SyncTime,
         limit: u16,
         now: SyncTime,
-    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>> {
+    ) -> OutboxFuture<'_, ClaimedBatch> {
         Box::pin(async move {
+            let ended = self.end_overdue_waiting(now)?;
             let mut due: Vec<(i64, RequestId)> = self
                 .rows
                 .iter()
-                .filter(|(_, row)| unsent(&row.state) && row.flush_at <= mark)
+                .filter(|(_, row)| {
+                    unsent(&row.state) && row.flush_at <= mark && row.expires_at > now.unix_millis()
+                })
                 .map(|(id, row)| (row.created_at, id.clone()))
                 .collect();
             due.sort();
             due.truncate(usize::from(limit));
             let requests: Vec<RequestId> = due.into_iter().map(|(_, id)| id).collect();
-            self.mark_sent(&requests, now).await
+            let writes = self.mark_sent(&requests, now).await?;
+            Ok(ClaimedBatch { writes, ended })
         })
+    }
+
+    fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>> {
+        Box::pin(async move { self.end_overdue_waiting(now) })
     }
 
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
@@ -317,8 +339,14 @@ impl OutboxStorage for MemoryOutbox {
         now: SyncTime,
     ) -> OutboxFuture<'call, Vec<StoredOutboxWrite>> {
         Box::pin(async move {
+            let sendable = |row: &Row| unsent(&row.state) && row.expires_at > now.unix_millis();
             for request in requests {
-                self.expect_state(request, unsent, "in the outbox")?;
+                if !self.rows.get(request).is_some_and(sendable) {
+                    return Err(OutboxStoreError::UnexpectedState {
+                        request: request.clone(),
+                        expected: "in the outbox before its deadline",
+                    });
+                }
             }
             let mut writes = Vec::with_capacity(requests.len());
             for request in requests {
@@ -378,18 +406,74 @@ impl OutboxStorage for MemoryOutbox {
         &'call mut self,
         requests: &'call [RequestId],
         now: SyncTime,
-    ) -> OutboxFuture<'call, ()> {
+    ) -> OutboxFuture<'call, Vec<EndedWrite>> {
         Box::pin(async move {
             for request in requests {
                 self.expect_state(request, sent, "sent")?;
             }
+            let mut ended = Vec::new();
             for request in requests {
                 let row = self.expect_state(request, sent, "sent")?;
-                row.state = RowState::SentAnswerLost;
-                row.updated_at = now.unix_millis();
+                if row.expires_at <= now.unix_millis() {
+                    ended.push(end_row(
+                        request,
+                        row,
+                        DepartureAtDeadline::MayHaveArrived,
+                        now,
+                    ));
+                } else {
+                    row.state = RowState::SentAnswerLost;
+                    row.updated_at = now.unix_millis();
+                }
             }
-            Ok(())
+            Ok(ended)
         })
+    }
+}
+
+impl MemoryOutbox {
+    /// Every waiting row past its deadline ends, oldest first, as SQLite does.
+    fn end_overdue_waiting(&mut self, now: SyncTime) -> Result<Vec<EndedWrite>, OutboxStoreError> {
+        let mut overdue: Vec<(i64, RequestId)> = self
+            .rows
+            .iter()
+            .filter(|(_, row)| unsent(&row.state) && row.expires_at <= now.unix_millis())
+            .map(|(id, row)| (row.created_at, id.clone()))
+            .collect();
+        overdue.sort();
+        let mut ended = Vec::with_capacity(overdue.len());
+        for (_, request) in overdue {
+            let row = self.expect_state(&request, unsent, "waiting")?;
+            let departure = match row.state {
+                RowState::InOutbox => DepartureAtDeadline::NeverLeft,
+                RowState::SentAnswerLost
+                | RowState::Sent
+                | RowState::Answered(_)
+                | RowState::Refused(_)
+                | RowState::Ended(_) => DepartureAtDeadline::MayHaveArrived,
+            };
+            ended.push(end_row(&request, row, departure, now));
+        }
+        Ok(ended)
+    }
+}
+
+/// Ends one overdue row and drops its text, keeping target and digest.
+fn end_row(
+    request: &RequestId,
+    row: &mut Row,
+    departure: DepartureAtDeadline,
+    now: SyncTime,
+) -> EndedWrite {
+    let reason = end_reason(&row.target, departure);
+    row.state = RowState::Ended(reason);
+    row.payload = None;
+    row.updated_at = now.unix_millis();
+    EndedWrite {
+        caller: row.caller.clone(),
+        request_id: request.clone(),
+        target: row.target.clone(),
+        reason,
     }
 }
 

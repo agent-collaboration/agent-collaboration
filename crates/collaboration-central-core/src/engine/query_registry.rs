@@ -30,6 +30,19 @@ macro_rules! machine_rows {
         "' AND a.subject_key=s.", $key, " WHERE s.state NOT IN (",$terminal,") AND (",$predicate,") AND NOT(COALESCE(a.state,'')='retired' AND a.last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable'))"
     ) };
 }
+macro_rules! direct_message_rows {
+    () => {
+        machine_rows!(
+            "messages",
+            "message_id",
+            "s.cancel_due_at",
+            "direct_message",
+            "'queued'",
+            "'delivered','cancelled','failed'",
+            "s.state='queued' AND s.cancel_due_at IS NOT NULL"
+        )
+    };
+}
 macro_rules! grid_inputs {
     () => {
         concat!(
@@ -49,6 +62,9 @@ macro_rules! grid_inputs {
                     "automation_timer"
                 )
             ),
+            ",9223372036855)",
+            ",COALESCE(",
+            controlled_machine!("direct_message", direct_message_rows!()),
             ",9223372036855)"
         )
     };
@@ -145,6 +161,13 @@ pub(crate) const AUTOMATION_LIST: &str = concat!(
         "s.next_due_at",
         "automation_timer"
     ),
+    ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
+);
+
+/// Direct messages still queued at their cancel mark (design 2026-11-17).
+pub(crate) const DIRECT_MESSAGE_LIST: &str = concat!(
+    "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
+    direct_message_rows!(),
     ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
 );
 

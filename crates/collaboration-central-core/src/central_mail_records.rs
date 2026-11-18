@@ -46,17 +46,13 @@ pub(crate) fn decode_messages(
                 return Err(corrupt("messages.target_machine_id"));
             }
             let body: mail::MessageBody = json(string(rows, row, "body")?, "messages.body")?;
-            let expected_kind = match &body {
-                mail::MessageBody::Direct { .. } => "direct",
-                mail::MessageBody::Notice { items } => {
-                    if items.is_empty() && string(rows, row, "state")? != "cancelled" {
-                        return Err(corrupt("messages.body"));
-                    }
-                    "notice"
-                }
-                mail::MessageBody::Wake { .. } => "wake",
-                mail::MessageBody::Automation { .. } => "automation",
-            };
+            if let mail::MessageBody::Notice { items } = &body
+                && items.is_empty()
+                && string(rows, row, "state")? != "cancelled"
+            {
+                return Err(corrupt("messages.body"));
+            }
+            let expected_kind = crate::central_mail_rows::stored_kind(&body);
             if string(rows, row, "message_kind")? != expected_kind {
                 return Err(corrupt("messages.message_kind"));
             }

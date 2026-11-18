@@ -28,6 +28,7 @@ use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreF
 const ENGINE_KINDS: &[(&str, EngineKindName)] = &[
     ("wake_timer", EngineKindName::WakeTimer),
     ("automation_timer", EngineKindName::AutomationTimer),
+    ("direct_message", EngineKindName::DirectMessage),
     ("legacy_notice_windows", EngineKindName::LegacyNoticeWindows),
     (
         "legacy_workspace_drains",
@@ -347,7 +348,10 @@ impl<R: EngineHost> Engine<'_, R> {
                 )
                 .await
             }
-            EngineKindName::LegacyNoticeWindows
+            // A retired cancel can be retried; discarding it has no defined
+            // end for the message yet.
+            EngineKindName::DirectMessage
+            | EngineKindName::LegacyNoticeWindows
             | EngineKindName::LegacyWorkspaceDrains
             | EngineKindName::EngineSource => {
                 Ok(DiscardOutcome::Refused(AttemptRefusal::DiscardUnsupported))
