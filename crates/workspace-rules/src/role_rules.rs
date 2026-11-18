@@ -17,8 +17,17 @@ pub fn change_role(
     command: &RoleCommand,
     reads: RoleReads<'_>,
 ) -> Result<RulePlan, RefusalReason> {
-    // Ported equality check from message-board::work_rules::require_role_grant.
-    if reads.project.lead != context.actor {
+    // Owner decision: anyone, agent session or person, may take the lead role
+    // or hand it to another caller, with no precondition. Every other role
+    // change stays with the project's lead.
+    let anyone_may_take_lead = matches!(
+        command,
+        RoleCommand::GrantProject {
+            role: ProjectRole::Lead,
+            ..
+        }
+    );
+    if !anyone_may_take_lead && reads.project.lead != context.actor {
         return Err(RefusalReason::NotLead {
             project: named_project(reads.project),
             lead: reads.project.lead.clone(),

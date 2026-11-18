@@ -72,9 +72,19 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         first.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    assert_eq!(first, f.call(402, operation.clone()).await);
+    assert_eq!(first, f.call(402, operation).await);
+    // The replaced lead keeps no lead-only authority on a fresh request.
     assert!(matches!(
-        f.call(403, operation).await.result,
+        f.call(
+            403,
+            m::WorkspaceOperation::GrantProjectRole {
+                project_id: project.clone(),
+                role: m::ProjectRole::Advisor,
+                holder: m::ActorRef::Me,
+            }
+        )
+        .await
+        .result,
         m::WorkspaceResult::Refused(m::RefusalReason::NotLead { .. })
     ));
     f.host.close().await;
