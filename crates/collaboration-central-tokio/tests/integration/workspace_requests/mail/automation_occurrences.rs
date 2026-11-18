@@ -87,6 +87,12 @@ async fn a_second_due_for_an_already_fired_occurrence_is_superseded_without_a_me
         automation_row(&runtime, &automation).await[0][1],
         stamp(at(start, 5, 0))
     );
+    // The native alarm driver is also due at 10:05 (the automation's next
+    // occurrence); park it before its drive guard so only the two direct
+    // batches take the load pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let points = runtime.pause_points();
     let mut first = points.hold_engine(PausePoint::AfterEngineLoad, &automation);
     let mut second = points.hold_engine(PausePoint::AfterEngineLoad, &automation);

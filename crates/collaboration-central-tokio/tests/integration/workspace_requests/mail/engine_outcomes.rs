@@ -22,6 +22,11 @@ async fn a_held_due_loses_its_compare_and_set_to_a_stop_request_and_ends_superse
     let due = fixture.clock.utc_now() + minutes(5);
     let (item, group) = (probe_id(9000), probe_id(9001));
     seed_probe(&runtime, item, group, Some(due), "held").await;
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &item.to_string());
@@ -223,6 +228,11 @@ async fn rejected_due_with_optional_stop(
         vec![],
     )
     .await;
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut before_write = runtime
         .pause_points()
         .hold_engine(PausePoint::BeforeEngineFailureWrite, &item.to_string());
@@ -454,6 +464,11 @@ async fn no_unit_starts_after_central_store_down_and_started_units_settle() {
     for (offset, item) in later.iter().enumerate() {
         seed_probe(&runtime, *item, group, Some(due), &format!("later{offset}")).await;
     }
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let points = runtime.pause_points();
     let mut holds: Vec<_> = in_flight
         .iter()
@@ -527,6 +542,11 @@ async fn one_held_unit_never_delays_the_other_nineteen_or_a_probe_request() {
     }
     let other = probe_id(9230);
     seed_probe(&runtime, other, group, None, "request").await;
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &items[0].to_string());

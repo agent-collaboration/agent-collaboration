@@ -24,10 +24,16 @@ async fn advance_to(f: &Fixture, at: m::Timestamp) {
 /// or re-checks its published alarm and finds it not due at `at`.
 async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let failures = r.alarm_failures().len();
     let held = f.clock.hold_move().await;
+    assert_eq!(
+        r.alarm_failures().len(),
+        failures,
+        "a drive held across the dispatch to {at} failed: {:?}",
+        r.alarm_failures()
+    );
     let published = r.statement_host().alarm();
     let count = r.alarm_completion_count();
-    let failures = r.alarm_failures().len();
     held.advance((at - now(f)).to_std().unwrap()).unwrap();
     drop(held);
     let not_due = async {

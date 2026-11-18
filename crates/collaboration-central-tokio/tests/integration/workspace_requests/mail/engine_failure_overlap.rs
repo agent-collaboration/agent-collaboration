@@ -22,6 +22,11 @@ async fn a_failure_from_an_overlapping_batch_never_counts_before_the_next_try() 
     )
     .await;
     // Batch A stops after its attempt check saw no record.
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineAttemptGate, &item.to_string());

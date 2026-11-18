@@ -8,7 +8,6 @@ use collaboration_central_tokio::TokioWorkspaceHost;
 use std::sync::Arc;
 use workspace_model as m;
 
-pub(super) use router_clock::ManualClock as HeldClock;
 pub(super) fn id<T: std::str::FromStr>(value: u32) -> T
 where
     T::Err: std::fmt::Debug,

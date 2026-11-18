@@ -78,6 +78,11 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
 
     // Due batch A starts at the window's due instant and is held inside its
     // window unit, before the commit, while it holds the central turn.
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
         .pause_points()
         .hold_central(PausePoint::BeforeTimerCommit);
