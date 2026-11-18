@@ -1,7 +1,7 @@
 //! Actual launcher machine decisions followed by its private observation IPC.
 use super::{TestResult, child_process::LauncherChild, provision, push_floors_and_read};
-use collaboration_central_conformance::signin_fixtures as signed;
 use collaboration_central_core::signin_test_observation::SignInObservation;
+use fleet_runtime_test_support::signin_fixtures as signed;
 use serde_json::{Value, json};
 
 const DEVICE: &str = "/internal/device-login-decisions";

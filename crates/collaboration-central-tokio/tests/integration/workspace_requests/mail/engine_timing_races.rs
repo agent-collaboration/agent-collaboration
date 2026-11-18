@@ -6,10 +6,10 @@ use super::super::support::*;
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublication, CorruptReason, StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{
-    AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, engine_probe::ProbeEvent,
-};
+use collaboration_central_core::{WorkspaceRuntime, engine_probe::ProbeEvent};
 use collaboration_central_tokio::ObjectStorage;
+use fleet_contracts::AlarmNotPublished;
+use fleet_runtime::{ClockIds, PausePoint};
 use fleet_runtime_ports::WorkspaceStores;
 use fleet_runtime_ports::{Clock, SyncTime};
 use router_clock::RuntimeClock;
@@ -187,9 +187,9 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         window_due_at(&runtime, at(start, 5, 0, 0)).await;
     }
     fixture.host.close().await;
-    let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let due_batches = Arc::new(fleet_runtime::DueBatchState::default());
     let gate: Arc<Mutex<Option<DecisionGate>>> = Arc::default();
-    let decide = collaboration_central_core::engine_alarm_decider(due_batches.clone());
+    let decide = fleet_runtime::engine_alarm_decider(due_batches.clone());
     let gated: central_storage::EngineAlarmDecider = Arc::new({
         let gate = gate.clone();
         move |times, now, write| {
@@ -221,14 +221,21 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
             .join(format!("{}.sqlite", fixture.workspace)),
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
-    let runtime = Arc::new(WorkspaceRuntime::new(
-        fixture.caller.organization_id.clone(),
-        central.clone(),
-        WorkspaceStore(workspace.clone()),
-        fixture.shared_for_runtime(),
-        Arc::new(ClockIds::new(SharedClock(fixture.shared_for_runtime()))),
-        due_batches.clone(),
-    ));
+    let runtime = Arc::new(
+        WorkspaceRuntime::from_runtime(
+            fleet_runtime::FleetRuntime::open(
+                fixture.caller.organization_id.clone(),
+                central.clone(),
+                WorkspaceStore(workspace.clone()),
+                fixture.shared_for_runtime(),
+                Arc::new(ClockIds::new(SharedClock(fixture.shared_for_runtime()))),
+                due_batches.clone(),
+                Arc::new(|_| {}),
+            ),
+            Ok(None),
+        )
+        .unwrap(),
+    );
     fixture.set_utc(at(start, 4, 0, 0)).await;
     assert_eq!(
         runtime.after_event().await.unwrap().publication,

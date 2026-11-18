@@ -1,7 +1,8 @@
-use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::{json, string};
 use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{MachineId, RefusalReason, WorkspaceId};
 
@@ -11,10 +12,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         caller: &WorkspaceCaller,
         workspace: Option<&WorkspaceId>,
     ) -> Result<Result<(), RefusalReason>, StoreFailure> {
-        if caller.organization_id != self.organization {
+        if caller.organization_id != *self.fleet_runtime.organization() {
             return Ok(Err(RefusalReason::MachineRevoked));
         }
-        let rows=self.host.read(Statement {sql:"SELECT m.machine_id,m.state,m.allowed_workspaces,c.expires_at,w.state AS workspace_state FROM machines m JOIN machine_credentials c ON c.machine_id=m.machine_id LEFT JOIN workspaces w ON w.workspace_id=? WHERE m.machine_id=? AND c.token_hash=?",args:vec![workspace.map_or(SqlValue::Null,|id|SqlValue::Text(id.to_string())),SqlValue::Text(caller.caller.machine_id().to_string()),SqlValue::Text(caller.credential_hash.clone())]}).await?;
+        let rows=self.statement_host().read(Statement {sql:"SELECT m.machine_id,m.state,m.allowed_workspaces,c.expires_at,w.state AS workspace_state FROM machines m JOIN machine_credentials c ON c.machine_id=m.machine_id LEFT JOIN workspaces w ON w.workspace_id=? WHERE m.machine_id=? AND c.token_hash=?",args:vec![workspace.map_or(SqlValue::Null,|id|SqlValue::Text(id.to_string())),SqlValue::Text(caller.caller.machine_id().to_string()),SqlValue::Text(caller.credential_hash.clone())]}).await?;
         let Some(row) = rows.rows.first() else {
             return Ok(Err(RefusalReason::MachineRevoked));
         };
@@ -29,7 +30,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let expires: workspace_model::Timestamp = string(&rows, row, "expires_at")?
             .parse()
             .map_err(|_| corrupt("expires_at"))?;
-        if expires <= self.now()? {
+        if expires <= self.fleet_runtime.now()? {
             return Ok(Err(RefusalReason::MachineRevoked));
         }
         let allowed: Vec<WorkspaceId> = json(
@@ -40,7 +41,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             if !allowed.contains(workspace) {
                 return Ok(Err(RefusalReason::WorkspaceNotAllowed));
             }
-            match crate::workspace_row_codec::column(&rows, row, "workspace_state")? {
+            match fleet_runtime::stored_values::column(&rows, row, "workspace_state")? {
                 SqlValue::Text(value) if value == "active" => {}
                 SqlValue::Text(value) if value == "archived" => {
                     return Ok(Err(RefusalReason::WorkspaceNotAllowed));

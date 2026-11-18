@@ -78,7 +78,7 @@ pub(crate) trait EffectHandler {
 pub(crate) struct ObjectHostEffects<'a, Host: CentralStore> {
     pub host: &'a Host,
     #[cfg(feature = "test-support")]
-    pub pauses: &'a crate::PausePoints,
+    pub pauses: &'a fleet_runtime::PausePoints,
 }
 
 impl<Host: CentralStore> EffectHandler for ObjectHostEffects<'_, Host> {
@@ -127,7 +127,7 @@ impl<Host: CentralStore> EffectHandler for ObjectHostEffects<'_, Host> {
         })?;
         #[cfg(feature = "test-support")]
         self.pauses
-            .reached_central(crate::PausePoint::BeforeTimerCommit)
+            .reached_central(fleet_runtime::PausePoint::BeforeTimerCommit)
             .await;
         classify_receipt_batch(
             self.host
@@ -137,7 +137,7 @@ impl<Host: CentralStore> EffectHandler for ObjectHostEffects<'_, Host> {
         )?;
         #[cfg(feature = "test-support")]
         self.pauses
-            .reached_central(crate::PausePoint::AfterTimerCommit)
+            .reached_central(fleet_runtime::PausePoint::AfterTimerCommit)
             .await;
         Ok(())
     }

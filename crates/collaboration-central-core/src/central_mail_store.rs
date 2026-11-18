@@ -1,8 +1,9 @@
 //! Central-owned statement construction and validated mail rows.
+use crate::WorkspaceRuntime;
 pub(crate) use crate::central_mail_rows::{applied, encode, insert_message, timestamp};
 use crate::guarded_statements::text;
-use crate::{WorkspaceRuntime, workspace_decode_error::corrupt};
 use central_storage::{AlarmUpdate, Statement, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, SessionAddress, Timestamp};
@@ -19,7 +20,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         now: Timestamp,
     ) -> Result<mail::MessageRecord, StoreFailure> {
         Ok(mail::MessageRecord {
-            message_id: self.mint()?,
+            message_id: self.fleet_runtime.mint()?,
             sender,
             target,
             body,
@@ -38,7 +39,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 session: target.clone(),
             })
             .map_err(|_| corrupt("session identity"))?;
-        let rows=self.host.read(Statement{sql:"SELECT a.actor_identity_id FROM actor_identities a JOIN machines m ON m.machine_id=? WHERE a.identity_kind='agentSession' AND a.identity=? AND m.state='enrolled'",args:vec![text(&target.machine_id),text(identity)]}).await?;
+        let rows=self.statement_host().read(Statement{sql:"SELECT a.actor_identity_id FROM actor_identities a JOIN machines m ON m.machine_id=? WHERE a.identity_kind='agentSession' AND a.identity=? AND m.state='enrolled'",args:vec![text(&target.machine_id),text(identity)]}).await?;
         Ok(!rows.rows.is_empty())
     }
     pub(crate) async fn route_notice_actor(

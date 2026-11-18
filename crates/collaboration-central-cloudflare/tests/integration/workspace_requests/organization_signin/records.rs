@@ -1,6 +1,6 @@
 //! Audit cursor assertions use three real provisioning and renewal effects.
 use super::support::{Fixture, ORG, PROVISION, RECORDS};
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 
 #[tokio::test]

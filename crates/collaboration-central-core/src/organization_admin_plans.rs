@@ -14,9 +14,13 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     ) -> Result<OrganizationAdminAnswer, StoreFailure> {
         // An unstamped org reveals nothing about a presented person proof.
         {
-            let _turn = self.take_central_turn().await;
+            let _turn = self.fleet_runtime.take_central_turn().await;
             self.prepare_signin_authority().await?;
-            if self.signin_authority.standing(self.clock.now()) != StampStanding::Valid {
+            if self
+                .signin_authority
+                .standing(self.fleet_runtime.clock().now())
+                != StampStanding::Valid
+            {
                 return Err(StoreFailure::Unavailable);
             }
         }
@@ -34,16 +38,17 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
             Err(_) => return Ok(OrganizationAdminAnswer::Unauthenticated),
         };
-        if verified.organization_id != self.organization {
+        if verified.organization_id != *self.fleet_runtime.organization() {
             return Ok(OrganizationAdminAnswer::Unauthenticated);
         }
         #[cfg(feature = "test-support")]
-        self.pauses
-            .reached_central(crate::PausePoint::BeforeSignInSample)
+        self.fleet_runtime
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::BeforeSignInSample)
             .await;
-        let _turn = self.take_central_turn().await;
+        let _turn = self.fleet_runtime.take_central_turn().await;
         self.prepare_signin_authority().await?;
-        let now = self.now()?;
+        let now = self.fleet_runtime.now()?;
         if self
             .signin_authority
             .standing(fleet_runtime_ports::SyncTime::from_unix_millis(
@@ -53,7 +58,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         {
             return Err(StoreFailure::Unavailable);
         }
-        let plan = match prepare_person_admission(self.host.as_ref(), &verified, now).await? {
+        let plan = match prepare_person_admission(self.statement_host(), &verified, now).await? {
             Ok(plan) => plan,
             Err(reason) => {
                 return Ok(OrganizationAdminAnswer::Answered(
@@ -84,9 +89,9 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                     .as_str()
                     .to_owned()
                     .try_into()
-                    .map_err(|_| crate::workspace_decode_error::corrupt("workspace_id"))?;
+                    .map_err(|_| fleet_runtime::workspace_decode_error::corrupt("workspace_id"))?;
                 let found =
-                    crate::workspace_directory_rows::read_by_id(self.host.as_ref(), &workspace)
+                    crate::workspace_directory_rows::read_by_id(self.statement_host(), &workspace)
                         .await?
                         .map(crate::organization_workspace_plans::workspace_view)
                         .transpose()?;
@@ -94,7 +99,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
             AdminOperation::ReadChangeRecords(request) => OrganizationAdminResult::Records {
                 records: crate::organization_change_rows::read_page(
-                    self.host.as_ref(),
+                    self.statement_host(),
                     request.after,
                     request.limit.get(),
                 )
@@ -128,11 +133,12 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
         };
         #[cfg(feature = "test-support")]
-        self.pauses
-            .reached_central(crate::PausePoint::AfterSignInSample)
+        self.fleet_runtime
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::AfterSignInSample)
             .await;
         match self
-            .host
+            .statement_host()
             .run_batch(StatementBatch { statements, alarm })
             .await?
         {

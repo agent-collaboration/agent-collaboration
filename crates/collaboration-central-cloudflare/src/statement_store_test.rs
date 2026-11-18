@@ -123,13 +123,13 @@ fn only_allowlisted_statement_rejections_are_charged_to_an_item() {
 
 #[test]
 fn engine_publication_uses_both_pending_columns_and_the_supplied_clock() {
-    let state = std::sync::Arc::new(collaboration_central_core::DueBatchState::default());
+    let state = std::sync::Arc::new(fleet_runtime::DueBatchState::default());
     assert!(
         state
             .try_claim(300_000, chrono::Duration::seconds(30))
             .unwrap()
     );
-    let decide = collaboration_central_core::engine_alarm_decider(state);
+    let decide = fleet_runtime::engine_alarm_decider(state);
     let row = ReadOutcome {
         columns: vec!["grid".into(), "legacy".into()],
         rows: vec![vec![integer(300_000), integer(305_000)]],

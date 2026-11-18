@@ -5,10 +5,11 @@
 //! or a constraint error rolls the whole batch back. The store knows no business table.
 
 use central_storage::{
-    AlarmPublication, AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome,
-    SafeInteger, SqlValue, Statement, StatementBatch, StoreFailure,
+    AlarmPublication, AlarmPublicationFailure, AlarmUpdate, BatchOutcome, ConstraintKind,
+    CorruptReason, EngineAlarmDecider, EngineAlarmTimes, ReadOutcome, SafeInteger, SqlValue,
+    Statement, StatementBatch, StoreFailure,
 };
-use fleet_runtime_ports::SyncTime;
+use fleet_runtime_ports::{Clock, SyncTime};
 use sqlx::error::ErrorKind;
 use sqlx::migrate::{MigrateError, Migrator};
 use sqlx::sqlite::{
@@ -28,6 +29,50 @@ pub enum AlarmChange {
         earliest_on_grid_due: Option<i64>,
         earliest_legacy_due: Option<i64>,
     },
+}
+
+impl AlarmChange {
+    pub fn publish(
+        self,
+        engine: Option<(&dyn Clock, &EngineAlarmDecider)>,
+        mut write: impl FnMut(Option<SyncTime>),
+    ) -> AlarmPublication {
+        match self {
+            Self::Unchanged => AlarmPublication::Unchanged,
+            Self::Set(at) => {
+                write(Some(at));
+                AlarmPublication::Set {
+                    unix_millis: at.unix_millis(),
+                }
+            }
+            Self::Clear => {
+                write(None);
+                AlarmPublication::Cleared
+            }
+            Self::Engine {
+                earliest_on_grid_due,
+                earliest_legacy_due,
+            } => {
+                let Some((clock, decide)) = engine else {
+                    return AlarmPublication::Failed {
+                        reason: AlarmPublicationFailure::ClockUnavailable,
+                    };
+                };
+                match decide(
+                    EngineAlarmTimes {
+                        earliest_on_grid_due_unix_millis: earliest_on_grid_due,
+                        earliest_legacy_due_unix_millis: earliest_legacy_due,
+                    },
+                    clock.now().unix_millis(),
+                    &mut |time| write(time.map(SyncTime::from_unix_millis)),
+                ) {
+                    Ok(None) => AlarmPublication::Cleared,
+                    Ok(Some(unix_millis)) => AlarmPublication::Set { unix_millis },
+                    Err(reason) => AlarmPublication::Failed { reason },
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -53,6 +98,21 @@ impl SqliteObjectStore {
             .create_if_missing(true)
             .foreign_keys(true)
             .journal_mode(SqliteJournalMode::Wal);
+        Self::connect_and_migrate(options, migrator).await
+    }
+
+    pub async fn open_in_memory(migrator: &Migrator) -> Result<Self, StoreOpenFailure> {
+        let options = SqliteConnectOptions::new()
+            .filename(":memory:")
+            .in_memory(true)
+            .foreign_keys(true);
+        Self::connect_and_migrate(options, migrator).await
+    }
+
+    async fn connect_and_migrate(
+        options: SqliteConnectOptions,
+        migrator: &Migrator,
+    ) -> Result<Self, StoreOpenFailure> {
         // One connection: the object is the only writer, and batches never interleave.
         let pool = SqlitePoolOptions::new()
             .max_connections(1)

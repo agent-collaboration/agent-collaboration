@@ -1,7 +1,7 @@
 //! Owned launcher process, typed private IPC and the real Unix HTTP client.
 use super::TestResult;
-use collaboration_central_conformance::signin_fixtures as signed;
 use collaboration_central_core::signin_test_observation::SignInObservation;
+use fleet_runtime_test_support::signin_fixtures as signed;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{

@@ -1,6 +1,7 @@
 //! Native notice decisions and durable drain coordination.
 use super::{SqlValue, Statement, support::*};
-use collaboration_central_core::{PausePoint, WorkspaceCaller};
+use collaboration_central_core::WorkspaceCaller;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 use workspace_model as m;
 

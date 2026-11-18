@@ -1,7 +1,7 @@
 //! Person tokens and independent intent vectors, using real P-256 proofs.
 use super::{ADMIN_AUDIENCE, ISSUER, PUBLIC_ORIGIN, sign};
-use crate::ConformanceResult;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use collaboration_central_conformance::ConformanceResult;
 use ring::signature::KeyPair;
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicU32, Ordering};

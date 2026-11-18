@@ -2,7 +2,7 @@
 //! moves the clock, so that drive cannot finish after the move and pass for the
 //! dispatched alarm.
 use super::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 
 /// Resolves once the manual clock has reached `at`; yields, never sleeps.
 async fn clock_reaches(f: &Fixture, at: m::Timestamp) {

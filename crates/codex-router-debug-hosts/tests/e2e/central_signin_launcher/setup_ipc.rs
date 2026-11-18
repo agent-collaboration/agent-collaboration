@@ -5,8 +5,8 @@ use super::{
     observation_assertions::{assert_empty, assert_record},
     provision, push_floors_and_read,
 };
-use collaboration_central_conformance::signin_fixtures as signed;
 use collaboration_central_core::signin_test_observation::SignInObservation;
+use fleet_runtime_test_support::signin_fixtures as signed;
 use serde_json::{Value, json};
 
 const OPERATION: &str = "019f0000-0000-7000-8000-00000000e601";

@@ -5,7 +5,7 @@ use super::super::{Statement, support::*};
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 const INSTANCES: u32 = 1_000;

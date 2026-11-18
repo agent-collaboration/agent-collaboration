@@ -1,7 +1,7 @@
 //! Pre-sample holds preserve the six native statement-expiry assertions.
 use super::support::{DIGEST, Fixture, ORG, PROVISION};
 use central_storage::ReadOutcome;
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 
 async fn snapshot(f: &Fixture) -> (ReadOutcome, ReadOutcome) {

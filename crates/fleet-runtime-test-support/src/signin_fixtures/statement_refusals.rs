@@ -1,5 +1,5 @@
 //! Historical closed refusal vectors, signed with real fixture keys.
-use crate::ConformanceResult as Result;
+use collaboration_central_conformance::ConformanceResult as Result;
 use serde_json::{Value, json};
 /// Deliberately no Debug: failing assertions must not print signed material.
 pub struct StatementRefusalCase {

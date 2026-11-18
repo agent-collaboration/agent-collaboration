@@ -4,12 +4,13 @@ use crate::{
     identity_contract::{FenceRevision, OrganizationFenceState, PersonFenceState},
     organization_change_rows::{ChangeRequestId, OrganizationChangeKind},
     person_request::AdminOperationId,
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use central_storage::{ReadOutcome, SafeInteger, Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

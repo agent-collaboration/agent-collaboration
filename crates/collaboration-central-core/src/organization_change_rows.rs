@@ -1,11 +1,10 @@
 //! Sign-in change records share the stamp/effect atomic batch.
-use crate::{
-    workspace_decode_error::corrupt as bad_value,
-    workspace_row_codec::{column, string},
-};
 use central_storage::{
     GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement, StoreFailure,
 };
+use fleet_runtime::stored_values::column;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt as bad_value;
 use fleet_runtime_ports::CentralStore;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

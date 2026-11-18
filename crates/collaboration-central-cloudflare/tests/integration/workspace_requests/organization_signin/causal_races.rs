@@ -1,6 +1,6 @@
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::json;
 #[tokio::test]
 async fn held_first_provisions_retain_the_known_second_winner_and_identical_calls_add_one_record() {

@@ -1,7 +1,7 @@
 //! Real Worker read admission at the signed applying-time boundaries.
 use super::support::{Fixture, ORG, RECORDS, REVISIONS, org_revision, person_revision};
 use central_storage::{ReadOutcome, SqlValue};
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 
 const BOUND_MS: i64 = (NOW_SECONDS + 30) * 1000;

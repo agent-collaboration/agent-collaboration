@@ -1,7 +1,7 @@
 use super::attempt_records::EngineSubject;
-use crate::workspace_decode_error::corrupt;
 use central_engine_model::{InstanceKey, ItemFailureClass, Machine};
 use central_storage::{CorruptReason, GuardedStatement, ReadOutcome, SqlValue, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use std::future::Future;
 
 /// Raw comparison values survive a decode failure, so recording it still checks

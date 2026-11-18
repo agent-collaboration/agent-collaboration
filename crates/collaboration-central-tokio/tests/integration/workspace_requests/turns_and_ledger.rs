@@ -1,5 +1,5 @@
 use super::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 #[tokio::test]
 async fn project_close_keeps_its_turn_until_apply_and_new_child_reads_the_closed_parent() {
     let f = Fixture::new().await;

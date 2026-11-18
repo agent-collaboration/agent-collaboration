@@ -2,7 +2,7 @@
 //! Signed Create joins reads and revisions on the approved private setup surface.
 use super::support::*;
 use central_storage::{ReadOutcome, SqlValue};
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 
 async fn private_reply(

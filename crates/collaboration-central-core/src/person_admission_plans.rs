@@ -8,10 +8,10 @@ use crate::{
         AdmissionRefusal, VerifiedPersonRequest,
         request_admission::{admission_before_person, decide_admission, request_time_refusal},
     },
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore;
 use workspace_model::Timestamp;
 

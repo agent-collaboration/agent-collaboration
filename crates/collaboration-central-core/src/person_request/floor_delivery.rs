@@ -50,7 +50,7 @@ pub(crate) fn decide_floor_delivery(
     };
     let retained = |revision: super::FloorRevision| {
         FenceRevision::try_from(revision.get()).map_err(|_| {
-            crate::workspace_decode_error::corrupt("authorization_floors.minimum_revision")
+            fleet_runtime::workspace_decode_error::corrupt("authorization_floors.minimum_revision")
         })
     };
     match incoming {

@@ -81,14 +81,14 @@ impl WorkspaceTurns {
     }
 
     /// How many requests wait for this workspace's turn (test seam).
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn waiting(&self, workspace: &WorkspaceId) -> usize {
         *self.slot(workspace).waiting.borrow()
     }
 
     /// Resolves once at least `count` requests wait for this workspace's turn (test seam).
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn until_waiting(&self, workspace: &WorkspaceId, count: usize) {
         let mut waiting = self.slot(workspace).waiting.subscribe();
         // The sender lives in the slot, which the map keeps; the wait cannot be orphaned.

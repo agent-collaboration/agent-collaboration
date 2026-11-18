@@ -5,10 +5,11 @@ use crate::{
     organization_authority::machine_login::{
         EnrollmentGeneration, MachineRow, MachineState, StoredEnrollment, StoredEnrollmentState,
     },
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
 };
 use central_storage::{ReadOutcome, SqlValue, StoreFailure};
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 
 fn label(value: &str, field: &str) -> Result<message_board::MachineLabel, StoreFailure> {
     let parsed =

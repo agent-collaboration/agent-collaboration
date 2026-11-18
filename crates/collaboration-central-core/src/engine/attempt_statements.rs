@@ -2,10 +2,10 @@ use super::attempt_records::{AttemptGuard, EngineSubject, failure_detail};
 use crate::{
     central_mail_rows::timestamp,
     guarded_statements::{any, exact, text},
-    workspace_decode_error::corrupt,
 };
 use central_engine_model::{AttemptState, FailureRecord};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 
 const READ_ATTEMPT: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM central_work_attempts WHERE machine_kind=? AND subject_key=?";
 

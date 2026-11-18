@@ -1,7 +1,8 @@
 use super::*;
 use central_storage::{StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{ClockIds, WorkspaceRuntime};
+use collaboration_central_core::WorkspaceRuntime;
 use collaboration_central_tokio::ObjectStorage;
+use fleet_runtime::ClockIds;
 use fleet_runtime_ports::WorkspaceStores;
 use fleet_runtime_ports::{Clock, SyncTime};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,7 +42,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     let f = Fixture::new().await;
     f.area(890).await;
     f.host.close().await;
-    let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let due_batches = Arc::new(fleet_runtime::DueBatchState::default());
     let central = Arc::new(
         ObjectStorage::new(
             f.root
@@ -52,7 +53,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         )
         .with_engine_publication(
             f.shared_for_runtime(),
-            collaboration_central_core::engine_alarm_decider(due_batches.clone()),
+            fleet_runtime::engine_alarm_decider(due_batches.clone()),
         ),
     );
     let store = Arc::new(ObjectStorage::new(
@@ -62,17 +63,22 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             .join(format!("{}.sqlite", f.workspace)),
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
-    let runtime = WorkspaceRuntime::new(
-        f.caller.organization_id.clone(),
-        central.clone(),
-        LoseFirstRead {
-            store: store.clone(),
-            lose: Arc::new(AtomicBool::new(true)),
-        },
-        f.shared_for_runtime(),
-        Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
-        due_batches,
-    );
+    let runtime = WorkspaceRuntime::from_runtime(
+        fleet_runtime::FleetRuntime::open(
+            f.caller.organization_id.clone(),
+            central.clone(),
+            LoseFirstRead {
+                store: store.clone(),
+                lose: Arc::new(AtomicBool::new(true)),
+            },
+            f.shared_for_runtime(),
+            Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
+            due_batches,
+            Arc::new(|_| {}),
+        ),
+        Ok(None),
+    )
+    .unwrap();
     let request = m::WorkspaceRequest {
         request_id: Some(id(891)),
         workspace_id: Some(f.workspace.clone()),

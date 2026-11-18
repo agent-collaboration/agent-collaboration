@@ -1,6 +1,6 @@
-use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::WorkspaceRows;
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use workspace_model::{ActorIdentityId, ChangePosition, ItemRef, WorkspaceOperation};
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())

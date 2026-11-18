@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_conformance::signin_fixtures::{self as stamp, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as stamp, NOW_SECONDS};
 use serde_json::json;
 #[tokio::test]
 async fn expiry_crossed_before_sample_refuses_and_post_sample_time_remains_linearized() {

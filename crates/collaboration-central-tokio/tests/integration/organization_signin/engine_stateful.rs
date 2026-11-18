@@ -19,12 +19,10 @@ use super::engine_admin_support::*;
 use super::engine_stateful_attempts::{AttemptOutcome, ExpectedRecord};
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind,
-    engine_probe::{
-        EngineReceipt, EngineRequestOutcome, InstanceKey, ProbeEvent, ProbeRequest, SeedProbe,
-    },
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, InstanceKey, ProbeEvent, ProbeRequest, SeedProbe,
 };
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 use hegel::{TestCase, generators as gs};
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{CentralMailAnswer, CentralMailOperation, CentralMailResult};

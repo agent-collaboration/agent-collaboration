@@ -8,8 +8,8 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-use collaboration_central_conformance::signin_fixtures::{self as signed, Person};
 use collaboration_central_core::WorkspaceCaller;
+use fleet_runtime_test_support::signin_fixtures::{self as signed, Person};
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use std::sync::Arc;

@@ -2,7 +2,7 @@
 //! sink; signed material and person credentials never reach captured logs.
 use super::support::*;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use serde_json::{Value, json};
 use std::{
     io::Write,

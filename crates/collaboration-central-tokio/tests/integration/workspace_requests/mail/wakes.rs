@@ -190,7 +190,7 @@ async fn native_driver_fires_after_manual_clock_advance() {
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
     let mut held = runtime
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
+        .hold_central(fleet_runtime::PausePoint::AfterTimerCommit);
     let id = wake_id(request(&fixture, 1120, wake(session(&fixture.caller), due)).await);
     fixture
         .clock
@@ -262,7 +262,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     assert!(reopened.statement_host().alarm().is_some());
     let mut held = reopened
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
+        .hold_central(fleet_runtime::PausePoint::AfterTimerCommit);
     fixture
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))

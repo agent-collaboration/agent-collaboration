@@ -2,7 +2,7 @@
 //! cases do not close the held workspace effect or operation replay assertions.
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use serde_json::{Value, json};
 use std::time::Duration;
 

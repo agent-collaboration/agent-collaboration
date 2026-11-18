@@ -4,8 +4,8 @@
 use central_storage::{
     AlarmUpdate, RowExpectation, SafeInteger, SqlValue, Statement, StatementBatch,
 };
-use collaboration_central_core::PausePoint;
 use collaboration_central_core::storage_conformance as conformance;
+use fleet_runtime::PausePoint;
 use serde::{Deserialize, Serialize};
 use sqlx_core::migrate::Migrator;
 

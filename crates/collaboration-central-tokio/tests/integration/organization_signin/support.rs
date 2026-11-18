@@ -2,7 +2,7 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-pub(super) use collaboration_central_conformance::signin_fixtures as signed;
+pub(super) use fleet_runtime_test_support::signin_fixtures as signed;
 pub(super) type Result<TValue = ()> = collaboration_central_conformance::ConformanceResult<TValue>;
 use collaboration_central_core::{SignInTrustSettings, WorkspaceRuntime};
 use collaboration_central_tokio::{

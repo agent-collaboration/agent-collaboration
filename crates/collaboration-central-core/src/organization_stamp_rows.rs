@@ -1,8 +1,9 @@
 //! The org-scoped central's single verified provisioning stamp.
 use crate::organization_authority::{StoredOrganizationStamp, StoredStampRead};
-use crate::{workspace_decode_error::corrupt, workspace_row_codec::string};
 use central_storage::{GuardedStatement, RowExpectation, SqlValue, Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore;
 
 pub(crate) async fn read(host: &impl CentralStore) -> Result<StoredStampRead, StoreFailure> {

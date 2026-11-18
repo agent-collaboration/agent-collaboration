@@ -50,9 +50,8 @@ impl MachineFixture {
     }
 }
 use central_storage::SqlValue;
-pub(super) use collaboration_central_conformance::{
-    ConformanceResult as Result, signin_fixtures as signed,
-};
+pub(super) use collaboration_central_conformance::ConformanceResult as Result;
+pub(super) use fleet_runtime_test_support::signin_fixtures as signed;
 pub(super) use serde_json::{Value, json};
 pub(super) const ORG: &str = signed::ORGANIZATION;
 pub(super) const OTHER_ORG: &str = "019f0000-0000-7000-8000-00000000bc02";
@@ -162,7 +161,7 @@ impl MachineFixture {
         let runtime = self.inner.runtime(ORG).await?;
         let mut held = runtime
             .pause_points()
-            .hold_central(collaboration_central_core::PausePoint::AfterSignInSample);
+            .hold_central(fleet_runtime::PausePoint::AfterSignInSample);
         let client = self.inner.client();
         let body = serde_json::to_string(first)?;
         let first =
@@ -195,7 +194,7 @@ impl MachineFixture {
         let runtime = self.inner.runtime(ORG).await?;
         let mut held = runtime
             .pause_points()
-            .hold_central(collaboration_central_core::PausePoint::BeforeSignInSample);
+            .hold_central(fleet_runtime::PausePoint::BeforeSignInSample);
         let client = self.inner.client();
         let body = serde_json::to_string(body)?;
         let pending = tokio::spawn(async move {

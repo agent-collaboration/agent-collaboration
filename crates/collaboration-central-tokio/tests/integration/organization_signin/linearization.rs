@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use serde_json::json;
 use std::time::Duration;
 

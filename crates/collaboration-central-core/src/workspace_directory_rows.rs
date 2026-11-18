@@ -2,10 +2,10 @@
 use crate::{
     guarded_statements::{exact, text},
     person_request::MAXIMUM_DESCRIPTION_BYTES,
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore;
 use workspace_model::{Description, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
 

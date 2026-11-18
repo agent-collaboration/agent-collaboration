@@ -1,8 +1,8 @@
 //! Replay precedes mutable rule decisions; the durable answer shares the effect batch.
-use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::WorkspaceRows;
 use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 
@@ -73,42 +73,49 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             .request_id
             .as_ref()
             .ok_or_else(|| corrupt("request_id"))?;
-        let _turn = runtime.take_central_turn().await;
-        let now = runtime.now()?;
+        let _turn = runtime.fleet_runtime.take_central_turn().await;
+        let now = runtime.fleet_runtime.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
-        let digest = crate::workspace_request_log::digest(&request.operation)?;
+        let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
         let actor_plan = runtime.prepare_identity(&identity, now).await?;
         let actor = actor_plan.actor;
         let logged = runtime
-            .host
-            .read(crate::workspace_request_log::lookup(request_id, &cutoff))
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                request_id, &cutoff,
+            ))
             .await?;
-        if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+        if let Some(answer) =
+            fleet_runtime::workspace_request_log::replay(&logged, &actor, &digest)?
+        {
             return Ok(reply(answer));
         }
         let mut statements = actor_plan.statements;
-        let answer = if crate::workspace_directory_rows::read_by_name(runtime.host.as_ref(), name)
-            .await?
-            .is_some()
-        {
-            m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse { name: name.clone() })
-        } else {
-            let workspace = m::Workspace {
-                workspace_id: runtime.mint()?,
-                name: name.clone(),
-                state: m::WorkspaceState::Active,
+        let answer =
+            if crate::workspace_directory_rows::read_by_name(runtime.statement_host(), name)
+                .await?
+                .is_some()
+            {
+                m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse {
+                    name: name.clone(),
+                })
+            } else {
+                let workspace = m::Workspace {
+                    workspace_id: runtime.fleet_runtime.mint()?,
+                    name: name.clone(),
+                    state: m::WorkspaceState::Active,
+                };
+                let description = m::Description::try_from(String::new())
+                    .map_err(|_| corrupt("workspaces.description"))?;
+                statements.push(crate::workspace_directory_rows::insert(
+                    &workspace.workspace_id,
+                    name,
+                    &description,
+                    now,
+                )?);
+                m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace })
             };
-            let description = m::Description::try_from(String::new())
-                .map_err(|_| corrupt("workspaces.description"))?;
-            statements.push(crate::workspace_directory_rows::insert(
-                &workspace.workspace_id,
-                name,
-                &description,
-                now,
-            )?);
-            m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace })
-        };
-        statements.extend(crate::workspace_request_log::retain(
+        statements.extend(fleet_runtime::workspace_request_log::retain(
             request_id,
             &actor,
             &digest,
@@ -117,7 +124,7 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             &cutoff,
         )?);
         let outcome = runtime
-            .host
+            .statement_host()
             .run_batch(StatementBatch {
                 statements,
                 alarm: AlarmUpdate::Unchanged,
@@ -133,18 +140,24 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         return Ok(reply(answer));
     }
     let actor = {
-        let _turn = runtime.take_central_turn().await;
+        let _turn = runtime.fleet_runtime.take_central_turn().await;
         runtime.resolve_identity(&identity).await?
     };
-    let now = runtime.now()?;
+    let now = runtime.fleet_runtime.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
-    let digest = crate::workspace_request_log::digest(&request.operation)?;
+    let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
     let workspace = request
         .workspace_id
         .as_ref()
         .ok_or_else(|| corrupt("workspace_id"))?;
     let _turn = if request.operation.is_write() {
-        Some(runtime.turns.take(workspace).await)
+        Some(
+            runtime
+                .fleet_runtime
+                .workspace_turns()
+                .take(workspace)
+                .await,
+        )
     } else {
         None
     };
@@ -154,12 +167,15 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             .as_ref()
             .ok_or_else(|| corrupt("request_id"))?;
         let logged = runtime
+            .fleet_runtime
             .read_workspace(
                 workspace,
-                crate::workspace_request_log::lookup(request_id, &cutoff),
+                fleet_runtime::workspace_request_log::lookup(request_id, &cutoff),
             )
             .await?;
-        if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+        if let Some(answer) =
+            fleet_runtime::workspace_request_log::replay(&logged, &actor, &digest)?
+        {
             if let Err(error) = runtime.drain_after_request(workspace).await {
                 return drain_failure(error);
             }
@@ -169,11 +185,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     let context = workspace_rules::WriteContext {
         workspace_id: workspace.clone(),
         actor: actor.clone(),
-        change_id: runtime.mint()?,
+        change_id: runtime.fleet_runtime.mint()?,
         now,
     };
     let rows = WorkspaceRows::decode(
         runtime
+            .fleet_runtime
             .read_workspace(
                 workspace,
                 crate::workspace_read_queries::read_statement(
@@ -194,8 +211,9 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     }
     #[cfg(feature = "test-support")]
     runtime
-        .pauses
-        .reached(workspace, crate::PausePoint::AfterReads)
+        .fleet_runtime
+        .pause_points()
+        .reached(workspace, fleet_runtime::PausePoint::AfterReads)
         .await;
     let resolved = runtime.resolve_command(&request.operation, &actor).await?;
     let decision = match &resolved {
@@ -253,7 +271,7 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     }
     batch
         .statements
-        .extend(crate::workspace_request_log::retain(
+        .extend(fleet_runtime::workspace_request_log::retain(
             request_id,
             &actor,
             &digest,
@@ -261,13 +279,19 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             &now.to_rfc3339(),
             &cutoff,
         )?);
-    if let Some(result) = store_result(runtime.batch_workspace(workspace, batch).await)? {
+    if let Some(result) = store_result(
+        runtime
+            .fleet_runtime
+            .batch_workspace(workspace, batch)
+            .await,
+    )? {
         return Ok(reply(result));
     }
     #[cfg(feature = "test-support")]
     runtime
-        .pauses
-        .reached(workspace, crate::PausePoint::AfterStoreApplied)
+        .fleet_runtime
+        .pause_points()
+        .reached(workspace, fleet_runtime::PausePoint::AfterStoreApplied)
         .await;
     #[cfg(feature = "test-support")]
     if runtime.take_lost_reply(request_id) {

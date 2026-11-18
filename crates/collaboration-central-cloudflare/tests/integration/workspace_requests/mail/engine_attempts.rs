@@ -6,7 +6,7 @@ use super::super::engine_evidence::{
 use super::super::{Statement, support::*};
 use super::engine_probe_support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::{EngineCommitFault, EngineCommitFaultKind};
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as Result,

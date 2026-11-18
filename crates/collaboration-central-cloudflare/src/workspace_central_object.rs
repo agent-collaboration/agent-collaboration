@@ -8,8 +8,9 @@ use crate::{
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{ClockIds, WorkspaceCaller, WorkspaceRuntime};
+use collaboration_central_core::{WorkspaceCaller, WorkspaceRuntime};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use futures_util::lock::Mutex;
 use serde::{Deserialize, Serialize};
@@ -23,12 +24,7 @@ use worker::{
 
 struct CentralStatements {
     #[cfg(feature = "test-support")]
-    engine_commit_fault:
-        Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
-    #[cfg(feature = "test-support")]
-    engine_read_fault: Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
-    #[cfg(feature = "test-support")]
-    alarm_batch_failure: Arc<std::sync::Mutex<Option<StoreFailure>>>,
+    test_faults: Arc<fleet_runtime::TestFaults>,
     connection: SendWrapper<DoConnection>,
     state: Arc<SendWrapper<State>>,
     clock: WorkspaceClock,
@@ -42,34 +38,13 @@ impl CentralStore for CentralStatements {
     {
         SendFuture::new(async move {
             #[cfg(feature = "test-support")]
-            let fault = {
-                let mut armed = self
-                    .engine_commit_fault
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if armed.as_ref().is_some_and(|fault| fault.matches(&batch)) {
-                    armed.take()
-                } else {
-                    None
-                }
-            };
+            let fault = self.test_faults.take_commit(&batch);
             #[cfg(feature = "test-support")]
             if let Some(result) = fault.as_ref().and_then(|fault| fault.before()) {
                 return result;
             }
             #[cfg(feature = "test-support")]
-            if batch.statements.is_empty()
-                && matches!(
-                    batch.alarm,
-                    central_storage::AlarmUpdate::SetFromQuery(_)
-                        | central_storage::AlarmUpdate::SetEngineFromQuery { .. }
-                )
-                && let Some(failure) = self
-                    .alarm_batch_failure
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .take()
-            {
+            if let Some(failure) = self.test_faults.take_alarm_batch_failure(&batch) {
                 return Err(failure);
             }
             let result = statement_store::run_batch(
@@ -86,7 +61,7 @@ impl CentralStore for CentralStatements {
             if fault.is_some_and(|fault| {
                 matches!(
                     fault.kind,
-                    collaboration_central_core::EngineCommitFaultKind::AppliedAnswerLost
+                    fleet_runtime::EngineCommitFaultKind::AppliedAnswerLost
                 )
             }) && matches!(result, Ok(BatchOutcome::Applied { .. }))
             {
@@ -102,22 +77,8 @@ impl CentralStore for CentralStatements {
     {
         SendFuture::new(async move {
             #[cfg(feature = "test-support")]
-            {
-                let mut fault = self
-                    .engine_read_fault
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if fault
-                    .as_ref()
-                    .is_some_and(|fault| fault.matches(&statement))
-                {
-                    fault.take();
-                    return Err(StoreFailure::Corrupt {
-                        reason: central_storage::CorruptReason::BadValue {
-                            column: "engine.due_list".into(),
-                        },
-                    });
-                }
+            if let Some(failure) = self.test_faults.take_read_failure(&statement) {
+                return Err(failure);
             }
             statement_store::read(&self.connection, statement.into()).await
         })
@@ -206,7 +167,7 @@ pub struct CentralObject {
     connection: DoConnection,
     runtime: Mutex<Option<Arc<OrgRuntime>>>,
     clock: WorkspaceClock,
-    due_batches: Arc<collaboration_central_core::DueBatchState>,
+    due_batches: Arc<fleet_runtime::DueBatchState>,
     #[cfg(feature = "test-support")]
     controls: workspace_cases::Controls,
     #[cfg(feature = "test-support")]
@@ -229,17 +190,11 @@ impl CentralObject {
     fn statement_host(&self) -> Arc<CentralStatements> {
         Arc::new(CentralStatements {
             #[cfg(feature = "test-support")]
-            engine_commit_fault: self.controls.engine_commit_fault.clone(),
-            #[cfg(feature = "test-support")]
-            engine_read_fault: self.controls.engine_read_fault.clone(),
-            #[cfg(feature = "test-support")]
-            alarm_batch_failure: self.controls.alarm_batch_failure.clone(),
+            test_faults: self.controls.test_faults.clone(),
             connection: SendWrapper::new(DoConnection::new(self.state.storage())),
             state: self.state.clone(),
             clock: self.clock.clone(),
-            decide_alarm: collaboration_central_core::engine_alarm_decider(
-                self.due_batches.clone(),
-            ),
+            decide_alarm: fleet_runtime::engine_alarm_decider(self.due_batches.clone()),
         })
     }
     async fn migrate(&self) -> std::result::Result<(), StoreFailure> {
@@ -266,7 +221,7 @@ impl CentralObject {
         self.migrate().await?;
         let host = self.statement_host();
         let clock: Arc<dyn fleet_runtime_ports::Clock> = Arc::new(self.clock.clone());
-        let runtime = WorkspaceRuntime::new(
+        let runtime = FleetRuntime::open(
             organization.clone(),
             host,
             WorkspaceTransport {
@@ -277,24 +232,16 @@ impl CentralObject {
             clock.clone(),
             Arc::new(ClockIds::new(self.clock.clone())),
             self.due_batches.clone(),
+            Arc::new(crate::signin_observation::observe_signin),
         );
-        let runtime = match crate::organization_signin_link::trust_settings(&self.env) {
-            Ok(Some(settings)) => {
-                match CloudflareSignInTrust::new(settings).for_organization(organization, clock) {
-                    Ok(check) => runtime.with_sign_in_verification(check),
-                    Err(
-                        fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration,
-                    ) => runtime,
-                    Err(_) => return Err(StoreFailure::Unavailable),
-                }
-            }
-            // Invalid/missing trust never permits sign-in. The default checker
-            // returns the closed InvalidConfiguration refusal for core to observe.
-            Ok(None) | Err(_) => runtime,
-        };
-        let runtime = Arc::new(
-            runtime.with_sign_in_observer(Arc::new(crate::signin_observation::observe_signin)),
-        );
+        let verification = crate::organization_signin_link::trust_settings(&self.env)
+            .ok()
+            .flatten()
+            .map(|settings| {
+                CloudflareSignInTrust::new(settings).for_organization(organization, clock)
+            })
+            .transpose();
+        let runtime = Arc::new(WorkspaceRuntime::from_runtime(runtime, verification)?);
         runtime.recompute_alarm().await?;
         *initialized = Some(runtime.clone());
         Ok(runtime)
@@ -333,7 +280,7 @@ impl DurableObject for CentralObject {
             env,
             runtime: Mutex::new(None),
             clock: WorkspaceClock::default(),
-            due_batches: Arc::new(collaboration_central_core::DueBatchState::default()),
+            due_batches: Arc::new(fleet_runtime::DueBatchState::default()),
             #[cfg(feature = "test-support")]
             controls: workspace_cases::Controls::default(),
             #[cfg(feature = "test-support")]

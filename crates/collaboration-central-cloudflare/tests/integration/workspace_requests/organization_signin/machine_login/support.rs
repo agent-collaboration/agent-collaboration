@@ -52,9 +52,8 @@ impl MachineFixture {
     }
 }
 use central_storage::SqlValue;
-pub(super) use collaboration_central_conformance::{
-    ConformanceResult as Result, signin_fixtures as signed,
-};
+pub(super) use collaboration_central_conformance::ConformanceResult as Result;
+pub(super) use fleet_runtime_test_support::signin_fixtures as signed;
 pub(super) use serde_json::{Value, json};
 pub(super) const ORG: &str = signed::ORGANIZATION;
 pub(super) const OTHER_ORG: &str = "019f0000-0000-7000-8000-00000000bc02";

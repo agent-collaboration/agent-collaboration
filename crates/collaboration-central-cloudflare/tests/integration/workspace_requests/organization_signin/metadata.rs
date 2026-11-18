@@ -2,7 +2,7 @@
 //! Signed values are compared opaquely so a failing assertion cannot print them.
 use super::support::*;
 use central_storage::{ReadOutcome, SqlValue};
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 use std::time::Duration;
 

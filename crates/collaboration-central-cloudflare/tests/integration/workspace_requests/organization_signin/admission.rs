@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_conformance::signin_fixtures::{self as proof, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as proof, NOW_SECONDS};
 use serde_json::json;
 fn records_body() -> serde_json::Value {
     json!({"organizationId":ORG,"after":null,"limit":100})

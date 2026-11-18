@@ -4,8 +4,8 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
 };
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 use std::time::Duration;
 

@@ -2,7 +2,7 @@
 //! the gated clock goes with it, so a waiting clock move never waits forever.
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 #[tokio::test]

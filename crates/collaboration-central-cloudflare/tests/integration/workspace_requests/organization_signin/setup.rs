@@ -1,7 +1,7 @@
 //! Signed workspace setup and facts-only expired stamp reads through the private Worker gateway.
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::{Value, json};
 use std::time::Duration;
 

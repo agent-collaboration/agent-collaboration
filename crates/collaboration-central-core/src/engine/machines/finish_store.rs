@@ -9,10 +9,10 @@ use crate::{
         store_adapter::{LoadFailure, StoreAdapter, Versioned, load_store_failure, raw_version},
     },
     guarded_statements::{exact, text},
-    workspace_row_codec::string,
 };
 use central_engine_model::{InstanceKey, ItemFailureClass};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_runtime::stored_values::string;
 use fleet_runtime_ports::CentralStore as _;
 
 pub(crate) struct WakeFinishStore<'a, R: EngineHost>(pub &'a R);

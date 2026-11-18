@@ -2,10 +2,11 @@
 use crate::{
     WorkspaceCaller, WorkspaceRuntime,
     central_mail_store::{self, insert_message},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 use workspace_model::central_mail as mail;
@@ -44,13 +45,13 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 person_id: person_id.clone(),
             },
         };
-        let digest = crate::workspace_request_log::digest(&request.operation)?;
-        let _turn = self.take_central_turn().await;
-        let now = self.now()?;
+        let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
+        let _turn = self.fleet_runtime.take_central_turn().await;
+        let now = self.fleet_runtime.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let rows = self
-            .host
-            .read(crate::workspace_request_log::lookup(
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
                 &request.request_id,
                 &cutoff,
             ))
@@ -74,7 +75,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
                 central_mail_store::applied(
-                    self.host
+                    self.statement_host()
                         .run_batch(StatementBatch {
                             statements: vec![],
                             alarm: central_mail_store::alarm_update(),
@@ -165,7 +166,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             Err(reason) => (vec![], Result::Refused(reason)),
         };
 
-        statements.extend(crate::workspace_request_log::retain(
+        statements.extend(fleet_runtime::workspace_request_log::retain(
             &request.request_id,
             &actor,
             &digest,
@@ -174,7 +175,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             &cutoff,
         )?);
         match self
-            .host
+            .statement_host()
             .run_batch(StatementBatch {
                 statements,
                 alarm: central_mail_store::alarm_update(),

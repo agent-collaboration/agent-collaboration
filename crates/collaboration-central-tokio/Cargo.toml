@@ -16,6 +16,8 @@ test-support = ["collaboration-central-core/test-support", "router-clock/test-su
 central-storage.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-contracts.workspace = true
+fleet-runtime.workspace = true
+fleet-store-sqlx.workspace = true
 router-clock.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
@@ -42,7 +44,8 @@ collaboration-central-core = { version = "0.1.96", path = "../collaboration-cent
 uuid.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 chrono.workspace = true
-collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", features = ["signin-test-support"] }
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
+fleet-runtime-test-support = { path = "../fleet-runtime-test-support" }
 serde.workspace = true
 serde_json.workspace = true
 tempfile = "3.27.0"

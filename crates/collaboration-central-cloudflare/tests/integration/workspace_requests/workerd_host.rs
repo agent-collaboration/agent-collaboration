@@ -2,7 +2,8 @@
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{AlarmResult, DrainResult, WorkspaceCaller};
+use collaboration_central_core::{DrainResult, WorkspaceCaller};
+use fleet_contracts::AlarmResult;
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -414,10 +415,7 @@ pub(super) struct RemoteRuntime {
     lost_answers: Mutex<Vec<RequestId>>,
 }
 impl RemoteRuntime {
-    pub async fn inject_engine_commit_fault(
-        &self,
-        fault: collaboration_central_core::EngineCommitFault,
-    ) {
+    pub async fn inject_engine_commit_fault(&self, fault: fleet_runtime::EngineCommitFault) {
         let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
     }
     pub async fn legacy_unit_invocations(
@@ -426,7 +424,7 @@ impl RemoteRuntime {
         self.control("legacy-unit-invocations", &()).await.unwrap()
     }
     /// Every unit the object's due batches started, in start order (R2/R3).
-    pub async fn due_unit_starts(&self) -> Vec<collaboration_central_core::DueUnitStart> {
+    pub async fn due_unit_starts(&self) -> Vec<fleet_runtime::DueUnitStart> {
         self.control("due-unit-starts", &()).await.unwrap()
     }
     pub async fn engine_commit_fault_pending(&self) -> bool {
@@ -434,10 +432,7 @@ impl RemoteRuntime {
             .await
             .unwrap()
     }
-    pub async fn inject_engine_read_fault(
-        &self,
-        fault: collaboration_central_core::EngineReadFault,
-    ) {
+    pub async fn inject_engine_read_fault(&self, fault: fleet_runtime::EngineReadFault) {
         let _: bool = self.control("engine-read-fault", &fault).await.unwrap();
     }
     /// Arms one keyed engine hold (`point` in camelCase, e.g. "afterEngineLoad").

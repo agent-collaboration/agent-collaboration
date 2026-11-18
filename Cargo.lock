@@ -1408,6 +1408,7 @@ dependencies = [
  "collaboration-protocol",
  "collaboration-runtime",
  "fleet-identity-protocol",
+ "fleet-runtime-test-support",
  "fleet-sync-protocol",
  "futures-util",
  "interaction-storage",
@@ -1761,7 +1762,9 @@ dependencies = [
  "collaboration-central-core",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-runtime-test-support",
  "futures-channel",
  "futures-util",
  "http",
@@ -1795,14 +1798,6 @@ dependencies = [
 [[package]]
 name = "collaboration-central-conformance"
 version = "0.1.156"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "ring",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
-]
 
 [[package]]
 name = "collaboration-central-core"
@@ -1816,6 +1811,7 @@ dependencies = [
  "chrono",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime",
  "fleet-runtime-ports",
  "futures-util",
  "hegeltest",
@@ -1852,7 +1848,10 @@ dependencies = [
  "collaboration-central-core",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-runtime-test-support",
+ "fleet-store-sqlx",
  "hegeltest",
  "reqwest 0.12.28",
  "ring",
@@ -2888,6 +2887,7 @@ dependencies = [
  "central-storage",
  "fleet-identity-protocol",
  "fleet-runtime-ports",
+ "serde",
  "thiserror 2.0.18",
  "workspace-model",
 ]
@@ -2905,6 +2905,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-runtime"
+version = "0.1.156"
+dependencies = [
+ "central-engine-model",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-identity-protocol",
+ "fleet-runtime-ports",
+ "serde",
+ "serde_json",
+ "serde_json_canonicalizer",
+ "sha2 0.10.9",
+ "tokio",
+ "uuid",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
 name = "fleet-runtime-ports"
 version = "0.1.156"
 dependencies = [
@@ -2913,6 +2933,36 @@ dependencies = [
  "serde",
  "uuid",
  "workspace-ids",
+]
+
+[[package]]
+name = "fleet-runtime-test-support"
+version = "0.1.156"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "central-storage",
+ "collaboration-central-conformance",
+ "fleet-identity-protocol",
+ "fleet-runtime",
+ "fleet-runtime-ports",
+ "fleet-store-sqlx",
+ "ring",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tokio",
+ "workspace-ids",
+]
+
+[[package]]
+name = "fleet-store-sqlx"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-runtime-ports",
+ "sqlx",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

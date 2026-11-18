@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_conformance::signin_fixtures::{self as stamp, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as stamp, NOW_SECONDS};
 use serde_json::json;
 #[tokio::test]
 async fn private_provision_digest_repeat_and_predecessor_renewal_are_atomic() {

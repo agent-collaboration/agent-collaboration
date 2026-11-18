@@ -4,10 +4,11 @@ use super::super::engine_evidence::{
 };
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, PausePoint,
-    engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState,
 };
+use fleet_runtime::PausePoint;
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 use router_clock::RuntimeClock;
 
 fn minutes(count: i64) -> chrono::Duration {

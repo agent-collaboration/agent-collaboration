@@ -2,7 +2,8 @@
 mod machine_observation;
 
 use super::super::workerd_host::Process;
-use collaboration_central_conformance::{ConformanceResult, signin_fixtures as signed};
+use collaboration_central_conformance::ConformanceResult;
+use fleet_runtime_test_support::signin_fixtures as signed;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{

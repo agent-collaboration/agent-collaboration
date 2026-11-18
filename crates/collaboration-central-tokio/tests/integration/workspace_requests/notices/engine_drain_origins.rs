@@ -8,9 +8,8 @@ use super::super::engine_v2_support::{
     wake_messages,
 };
 use super::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, engine_probe::InstanceKey,
-};
+use collaboration_central_core::engine_probe::InstanceKey;
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 
 const DRAINS: &str = "legacy_workspace_drains";
 

@@ -6,9 +6,8 @@ use super::super::engine_evidence::{
 };
 use super::super::engine_v2_support::{next_mark, raw, rows, runtime, stamp, whole_record};
 use super::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, engine_probe::InstanceKey,
-};
+use collaboration_central_core::engine_probe::InstanceKey;
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 
 const DRAINS: &str = "legacy_workspace_drains";
 

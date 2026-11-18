@@ -7,9 +7,9 @@ use crate::{
         EnrollmentChange, EnrollmentFacts, IDLE_EXPIRY_SECONDS, MachineRow, MachineState,
         StoredEnrollment, StoredEnrollmentState,
     },
-    workspace_decode_error::corrupt,
 };
 use central_storage::{GuardedStatement, SafeInteger, SqlValue, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use serde::Serialize;
 use std::collections::BTreeMap;
 

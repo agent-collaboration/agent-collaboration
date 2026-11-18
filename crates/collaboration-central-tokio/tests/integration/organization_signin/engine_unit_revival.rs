@@ -9,7 +9,7 @@ use crate::workspace_requests::engine_evidence::{
     assert_every_written_attempt_id_is_uuid_v7, install_attempt_id_witness,
 };
 use central_storage::SqlValue;
-use collaboration_central_core::EngineReadFault;
+use fleet_runtime::EngineReadFault;
 use serde_json::json;
 use workspace_model as m;
 

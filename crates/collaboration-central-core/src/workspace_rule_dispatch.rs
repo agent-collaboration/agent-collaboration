@@ -1,7 +1,7 @@
 //! Translate admitted semantic inputs into the existing pure rule's declared rows.
 use crate::WorkspaceRuntime;
-use crate::workspace_decode_error::corrupt;
 use central_storage::StoreFailure;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 
@@ -21,7 +21,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let command = match op {
             Op::CreateArea { name } => {
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateArea {
-                    area_id: self.mint()?,
+                    area_id: self.fleet_runtime.mint()?,
                     name: name.clone(),
                 })
             }
@@ -43,16 +43,16 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     None => actor.clone(),
                 };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateProject {
-                    project_id: self.mint()?,
+                    project_id: self.fleet_runtime.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
                     lead: holder,
-                    role_id: self.mint()?,
+                    role_id: self.fleet_runtime.mint()?,
                 })
             }
             Op::CreateInitiative { name, description } => {
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateInitiative {
-                    initiative_id: self.mint()?,
+                    initiative_id: self.fleet_runtime.mint()?,
                     name: name.clone(),
                     description: description.clone(),
                 })
@@ -68,7 +68,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }),
             Op::CreateDeliverable { project_id, title } => {
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateDeliverable {
-                    deliverable_id: self.mint()?,
+                    deliverable_id: self.fleet_runtime.mint()?,
                     project_id: project_id.clone(),
                     title: title.clone(),
                 })
@@ -77,7 +77,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 deliverable_id,
                 title,
             } => m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateIssue {
-                issue_id: self.mint()?,
+                issue_id: self.fleet_runtime.mint()?,
                 deliverable_id: deliverable_id.clone(),
                 title: title.clone(),
             }),
@@ -91,7 +91,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Role(m::RoleCommand::GrantProject {
-                    assignment_id: self.mint()?,
+                    assignment_id: self.fleet_runtime.mint()?,
                     project_id: project_id.clone(),
                     role: *role,
                     holder,
@@ -113,7 +113,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Role(m::RoleCommand::GrantDeliverable {
-                    assignment_id: self.mint()?,
+                    assignment_id: self.fleet_runtime.mint()?,
                     deliverable_id: deliverable_id.clone(),
                     role: *role,
                     holder,
@@ -128,8 +128,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }),
             Op::CreateThread { area_id, title } => {
                 m::WorkspaceCommand::Thread(m::ThreadCommand::CreateThread {
-                    thread_id: self.mint()?,
-                    member_id: self.mint()?,
+                    thread_id: self.fleet_runtime.mint()?,
+                    member_id: self.fleet_runtime.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
                 })
@@ -137,7 +137,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             Op::JoinThread { thread_id, role } => {
                 m::WorkspaceCommand::Thread(m::ThreadCommand::JoinThread {
                     thread_id: thread_id.clone(),
-                    member_id: self.mint()?,
+                    member_id: self.fleet_runtime.mint()?,
                     role: *role,
                 })
             }
@@ -153,7 +153,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::AddThreadMember {
                     thread_id: thread_id.clone(),
-                    member_id: self.mint()?,
+                    member_id: self.fleet_runtime.mint()?,
                     actor: target.clone(),
                     role: *role,
                 })
@@ -184,7 +184,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     }
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ThreadPost {
-                    post_id: self.mint()?,
+                    post_id: self.fleet_runtime.mint()?,
                     thread_id: thread_id.clone(),
                     body: body.clone(),
                     addressees: addressees.clone(),
@@ -197,7 +197,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }
             Op::AddDependency { blocking, blocked } => {
                 m::WorkspaceCommand::Dependency(m::DependencyCommand::Add {
-                    dependency_id: self.mint()?,
+                    dependency_id: self.fleet_runtime.mint()?,
                     blocking: blocking.clone(),
                     blocked: blocked.clone(),
                 })
@@ -231,7 +231,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 title,
                 description,
             } => m::WorkspaceCommand::Backlog(m::BacklogCommand::Add {
-                item_id: self.mint()?,
+                item_id: self.fleet_runtime.mint()?,
                 area_id: area_id.clone(),
                 title: title.clone(),
                 description: description.clone(),
@@ -266,9 +266,9 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                             }
                         };
                         Some(m::BacklogClosingReference {
-                            change_id: self.mint()?,
+                            change_id: self.fleet_runtime.mint()?,
                             reference: m::Reference {
-                                reference_id: self.mint()?,
+                                reference_id: self.fleet_runtime.mint()?,
                                 source: m::ReferenceSource::BacklogItem(item_id.clone()),
                                 target,
                                 details: None,
@@ -289,7 +289,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 details,
             } => m::WorkspaceCommand::Reference(m::ReferenceCommand::AddReference {
                 reference: m::Reference {
-                    reference_id: self.mint()?,
+                    reference_id: self.fleet_runtime.mint()?,
                     source: source.clone(),
                     target: target.clone(),
                     details: details.clone(),
@@ -307,7 +307,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 details,
             } => m::WorkspaceCommand::Reference(m::ReferenceCommand::AddLink {
                 link: m::ExternalLink {
-                    link_id: self.mint()?,
+                    link_id: self.fleet_runtime.mint()?,
                     source: source.clone(),
                     url: url.clone(),
                     title: title.clone(),
@@ -325,10 +325,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 tags: labels,
             } => {
                 for _ in labels {
-                    tags.push(self.mint()?);
+                    tags.push(self.fleet_runtime.mint()?);
                 }
                 m::WorkspaceCommand::WorkLog(m::WorkLogCommand::Add {
-                    entry_id: self.mint()?,
+                    entry_id: self.fleet_runtime.mint()?,
                     project_id: project_id.clone(),
                     body: body.clone(),
                     tags: labels.clone(),
@@ -350,7 +350,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         Ok(Ok(ResolvedOperation {
             command,
             tag_ids: tags,
-            read_mark_id: self.mint()?,
+            read_mark_id: self.fleet_runtime.mint()?,
         }))
     }
 }

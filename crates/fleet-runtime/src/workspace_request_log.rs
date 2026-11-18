@@ -1,16 +1,16 @@
+use crate::stored_values::{json, string};
 use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::{json, string};
 use central_storage::{
     GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement, StoreFailure,
 };
 use workspace_model::{ActorIdentityId, RequestId, WorkspaceResult};
 
-pub(crate) fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {
+pub fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {
     use sha2::{Digest, Sha256};
     let encoded = serde_json_canonicalizer::to_vec(operation).map_err(|_| corrupt("operation"))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
 }
-pub(crate) fn lookup(request: &RequestId, cutoff: &str) -> Statement {
+pub fn lookup(request: &RequestId, cutoff: &str) -> Statement {
     Statement {
         sql: "SELECT caller,content_digest,answer FROM request_log WHERE request_id=? AND created_at>?",
         args: vec![
@@ -19,7 +19,7 @@ pub(crate) fn lookup(request: &RequestId, cutoff: &str) -> Statement {
         ],
     }
 }
-pub(crate) fn replay(
+pub fn replay(
     rows: &ReadOutcome,
     caller: &ActorIdentityId,
     digest: &str,
@@ -45,7 +45,7 @@ pub(crate) fn replay(
     }
     Ok(Some(answer))
 }
-pub(crate) fn retain(
+pub fn retain(
     request: &RequestId,
     caller: &ActorIdentityId,
     digest: &str,

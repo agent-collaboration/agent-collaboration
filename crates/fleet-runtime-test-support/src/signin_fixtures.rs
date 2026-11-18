@@ -1,7 +1,7 @@
 //! Real sign-in signatures and loopback key publication for both host suites.
 //! Every business time is supplied by the scenario's injected clock.
-use crate::ConformanceResult;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use collaboration_central_conformance::ConformanceResult;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde_json::{Value, json};
 mod person_requests;

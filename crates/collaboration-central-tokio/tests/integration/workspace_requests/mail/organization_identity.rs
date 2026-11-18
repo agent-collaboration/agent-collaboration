@@ -91,7 +91,7 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
     fixture.set_utc(due).await;
     assert_eq!(
         runtime.after_event().await.unwrap().work,
-        collaboration_central_core::AlarmResult::default()
+        fleet_contracts::AlarmResult::default()
     );
     assert_eq!(runtime.statement_host().alarm(), None);
     assert_untouched(runtime.statement_host(), &wake_id).await;

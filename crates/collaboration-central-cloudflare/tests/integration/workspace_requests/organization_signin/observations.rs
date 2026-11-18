@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
+use fleet_runtime_test_support::signin_fixtures::{self as signed, NOW_SECONDS};
 use serde_json::json;
 #[tokio::test]
 async fn refused_statement_emits_one_closed_observation_and_no_statement_material() {

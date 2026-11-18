@@ -1,8 +1,8 @@
 //! Pure mail-row encoding shared by central request paths and the engine; it
 //! names no runtime, so the engine can use it without a module cycle.
 use crate::guarded_statements::{any, text};
-use crate::workspace_decode_error::corrupt;
 use central_storage::{BatchOutcome, GuardedStatement, SqlValue, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use serde::Serialize;
 use workspace_model::Timestamp;
 use workspace_model::central_mail as mail;

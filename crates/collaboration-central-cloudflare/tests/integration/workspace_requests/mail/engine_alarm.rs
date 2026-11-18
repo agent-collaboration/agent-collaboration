@@ -3,10 +3,8 @@
 use super::super::{Statement, support::*};
 use super::engine_probe_support::*;
 use central_storage::{SqlValue, StoreFailure};
-use collaboration_central_core::{
-    EngineReadFault,
-    engine_probe::{EngineRequestOutcome, ProbeEvent},
-};
+use collaboration_central_core::engine_probe::{EngineRequestOutcome, ProbeEvent};
+use fleet_runtime::EngineReadFault;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };

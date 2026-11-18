@@ -4,11 +4,11 @@ use crate::{
     WorkspaceRuntime,
     central_mail_store::{encode, timestamp},
     guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, Statement, StoreFailure};
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::Timestamp;
@@ -37,7 +37,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         target: target.clone(),
                     }));
                 }
-                let id: WakeId = self.mint()?;
+                let id: WakeId = self.fleet_runtime.mint()?;
                 (
                     vec![exact(
                         "INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
@@ -58,7 +58,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }
             Op::CancelWake { wake_id } => {
                 let rows = self
-                    .host
+                    .statement_host()
                     .read(Statement {
                         sql: "SELECT state FROM wakes WHERE wake_id=?",
                         args: vec![text(wake_id)],
@@ -143,7 +143,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         field: "anchorAt".to_owned(),
                     }));
                 };
-                let id: AutomationId = self.mint()?;
+                let id: AutomationId = self.fleet_runtime.mint()?;
                 (
                     vec![exact(
                         "INSERT INTO automations(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
@@ -167,7 +167,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 )
             }
             Op::DisableAutomation { automation_id } => {
-                let rows=self.host.read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automations WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
+                let rows=self.statement_host().read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automations WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
                 let rows = decode_automations(&rows)?;
                 let Some(row) = rows.first() else {
                     return Ok(Err(Refusal::AutomationNotFound {

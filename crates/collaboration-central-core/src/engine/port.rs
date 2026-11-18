@@ -1,10 +1,11 @@
 //! The engine's only view of the runtime that hosts it (P3, module direction):
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
-use super::{DueBatchState, legacy_units::LegacyUnitOutcome};
+use super::legacy_units::LegacyUnitOutcome;
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::CentralObservation;
+use fleet_runtime::{DueBatchState, TurnGuard};
 use fleet_runtime_ports::CentralStore;
 use std::future::Future;
 
@@ -32,9 +33,9 @@ pub(crate) trait EngineHost: Send + Sync {
     ) -> impl Future<Output = Result<usize, LegacyUnitOutcome>> + Send;
     /// The central turn the notice-window unit commits under, taken without
     /// waiting (P5 change 7): `None` when another event holds it.
-    fn try_central_turn(&self) -> Option<tokio::sync::MutexGuard<'_, ()>>;
+    fn try_central_turn(&self) -> Option<TurnGuard<'_>>;
     #[cfg(feature = "test-support")]
-    fn pauses(&self) -> &crate::PausePoints;
+    fn pauses(&self) -> &fleet_runtime::PausePoints;
     #[cfg(feature = "test-support")]
     fn count_legacy_invocation(&self, count: &dyn Fn(&mut LegacyUnitInvocations));
 }
@@ -63,7 +64,7 @@ impl<'a, R: EngineHost> Engine<'a, R> {
         self.0.observe(observation);
     }
     #[cfg(feature = "test-support")]
-    pub(crate) fn pauses(&self) -> &'a crate::PausePoints {
+    pub(crate) fn pauses(&self) -> &'a fleet_runtime::PausePoints {
         self.0.pauses()
     }
 }

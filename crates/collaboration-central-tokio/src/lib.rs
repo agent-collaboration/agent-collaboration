@@ -9,10 +9,9 @@ mod organization_signin_link;
 pub use organization_signin_link::{OrganizationSignInLink, OrganizationSignInLinkError};
 mod sign_in_crypto;
 mod sign_in_trust;
-pub use sign_in_trust::NativeSignInTrust;
-mod sqlite_object_store;
 #[cfg(feature = "test-support")]
 pub use object_storage::ObjectStorage;
 pub use object_storage::StoreMigrations;
+pub use sign_in_trust::NativeSignInTrust;
 mod workspace_host;
 pub use workspace_host::{TokioWorkspaceHost, TokioWorkspaceStores};

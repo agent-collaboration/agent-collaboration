@@ -1,0 +1,33 @@
+[package]
+name = "fleet-runtime-test-support"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Stock SQLite ports and manual clock for FleetRuntime tests"
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+base64 = "0.22.1"
+central-storage.workspace = true
+collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.156" }
+fleet-runtime = { workspace = true, features = ["test-support"] }
+fleet-runtime-ports.workspace = true
+fleet-store-sqlx.workspace = true
+ring = "=0.17.14"
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+workspace-ids.workspace = true
+
+[dev-dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

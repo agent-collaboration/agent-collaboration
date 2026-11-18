@@ -7,11 +7,12 @@ use crate::{
         OrganizationChangeRecord,
     },
     person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
     workspace_directory_rows::{self, DirectoryWorkspace},
-    workspace_row_codec::{json, string},
 };
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
@@ -103,8 +104,10 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         let actor = self.prepare_identity(&identity, now).await?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
-            .host
-            .read(crate::workspace_request_log::lookup(&operation, &cutoff))
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                &operation, &cutoff,
+            ))
             .await?;
         if logged.rows.len() > 1 {
             return Err(corrupt("request_log.request_id"));
@@ -147,7 +150,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             .try_into()
             .map_err(|_| corrupt("workspace.description"))?;
         let mut statements = actor.statements;
-        let result = if workspace_directory_rows::read_by_name(self.host.as_ref(), &name)
+        let result = if workspace_directory_rows::read_by_name(self.statement_host(), &name)
             .await?
             .is_some()
         {
@@ -167,7 +170,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             )?);
             statements.push(organization_change_rows::insert(
                 &OrganizationChangeRecord {
-                    id: self.ids.new_id(),
+                    id: self.fleet_runtime.ids().new_id(),
                     request_id: ChangeRequestId::try_from(
                         request.operation_id.as_str().to_owned(),
                     )?,
@@ -189,7 +192,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 })?,
             }
         };
-        statements.extend(crate::workspace_request_log::retain(
+        statements.extend(fleet_runtime::workspace_request_log::retain(
             &operation,
             &actor.actor,
             &person.intent_digest,

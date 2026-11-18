@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Real private-link calls and a causal pre-sample hold determine exactly which first stamp commits."

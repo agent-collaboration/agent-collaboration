@@ -7,10 +7,8 @@ use super::super::engine_evidence::{
 };
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{
-    PausePoint,
-    engine_probe::{EngineRequestOutcome, ProbeEvent},
-};
+use collaboration_central_core::engine_probe::{EngineRequestOutcome, ProbeEvent};
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 #[tokio::test]

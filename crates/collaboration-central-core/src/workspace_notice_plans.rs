@@ -1,12 +1,12 @@
 //! Position-ordered activity joins one central recipient window across workspaces.
+use crate::workspace_row_codec::WorkspaceRows;
 use crate::{
     WorkspaceRuntime,
     guarded_statements::{any, text},
     notification_windows::{NotificationWindow, window_statements},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::WorkspaceRows,
 };
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use std::collections::BTreeSet;
 use workspace_model as m;
@@ -28,7 +28,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     ) -> Result<(Vec<GuardedStatement>, DrainResult), StoreFailure> {
         crate::central_mail_records::decode_messages(
             &self
-                .host
+                .statement_host()
                 .read(crate::central_mail_records::notice_messages())
                 .await?,
         )?;
@@ -93,7 +93,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         .created_at
                         .ok_or_else(|| corrupt("changes.created_at"))?;
                     let window = NotificationWindow {
-                        id: self.mint()?,
+                        id: self.fleet_runtime.mint()?,
                         recipient: recipient.clone(),
                         first,
                         due: self.notice_due(&recipient, now).await?,
@@ -106,7 +106,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     workspace,
                     change.thread_id.as_ref(),
                     &change.change_id,
-                    self.mint()?,
+                    self.fleet_runtime.mint()?,
                     now,
                 ));
                 result.window_items_added += 1;

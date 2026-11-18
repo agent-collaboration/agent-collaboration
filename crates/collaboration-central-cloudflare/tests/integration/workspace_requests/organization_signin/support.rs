@@ -3,10 +3,10 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-use collaboration_central_conformance::signin_fixtures::{
+use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_test_support::signin_fixtures::{
     self as fixture, NOW_SECONDS, Person, SignInKeys,
 };
-use fleet_identity_protocol::OrganizationId;
 use router_clock::ManualClock;
 use serde_json::{Value, json};
 use std::sync::Arc;

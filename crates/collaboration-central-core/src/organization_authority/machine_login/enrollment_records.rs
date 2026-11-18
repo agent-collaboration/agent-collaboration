@@ -4,9 +4,9 @@ use crate::identity_contract::{
     EnrollmentRevocationReason, PersonId,
 };
 use crate::organization_authority::OrganizationChangeRecord;
-use crate::workspace_decode_error::corrupt;
 use central_storage::StoreFailure;
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
+use fleet_runtime::workspace_decode_error::corrupt;
 use message_board::{MachineLabel, WorkspaceId};
 use uuid::Uuid;
 

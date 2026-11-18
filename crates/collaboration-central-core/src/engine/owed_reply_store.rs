@@ -14,11 +14,12 @@ use super::{
 use crate::{
     central_mail_rows::timestamp,
     guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, string},
 };
 use central_engine_model::{EngineTime, InstanceKey};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
+use fleet_runtime::stored_values::column;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore as _;
 
 pub(crate) struct OwedReplyStore<'a, R: EngineHost>(pub &'a R);

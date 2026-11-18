@@ -67,7 +67,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     );
     let mut timer_commit = runtime
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
+        .hold_central(fleet_runtime::PausePoint::AfterTimerCommit);
     let completed = runtime.alarm_completion_count();
     fixture
         .clock

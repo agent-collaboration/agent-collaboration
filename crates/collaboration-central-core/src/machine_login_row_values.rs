@@ -1,11 +1,10 @@
 //! Scalar storage checks shared by the machine and approval row codecs.
-use crate::{
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, string},
-};
 use central_storage::{ReadOutcome, SafeInteger, SqlValue, StoreFailure};
 use chrono::{DateTime, SecondsFormat, Utc};
 use fleet_identity_protocol::UnixSeconds;
+use fleet_runtime::stored_values::column;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use uuid::Uuid;
 
 pub(crate) fn identifier<T: TryFrom<String>>(value: &str, field: &str) -> Result<T, StoreFailure> {

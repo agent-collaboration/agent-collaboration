@@ -8,11 +8,11 @@ use crate::{
         EnrollmentFacts, EnrollmentQuery, StoredEnrollment, StoredEnrollmentState,
     },
     organization_change_rows::{OrganizationChangeOrigin, read_machine_supersession},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore;
 
 const BY_REQUEST: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.request_id=?";

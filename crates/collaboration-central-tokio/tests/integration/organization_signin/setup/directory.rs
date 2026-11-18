@@ -335,7 +335,7 @@ async fn concurrent_same_name_creates_keep_the_first_workspace_and_retain_the_se
     let runtime = f.runtime(A).await?;
     let mut held = runtime
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterSignInSample);
+        .hold_central(fleet_runtime::PausePoint::AfterSignInSample);
     let first_headers = owner.headers(
         signed::CREATE,
         &intent(first_id, "Concurrent name", "winner"),

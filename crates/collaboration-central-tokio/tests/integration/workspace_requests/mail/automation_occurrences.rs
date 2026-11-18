@@ -8,7 +8,8 @@ use super::super::engine_evidence::{
 use super::super::engine_v2_support::*;
 use super::super::support::*;
 use super::engine_alarm::driver_settled;
-use collaboration_central_core::{EventCompletion, PausePoint};
+use fleet_contracts::EventCompletion;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,

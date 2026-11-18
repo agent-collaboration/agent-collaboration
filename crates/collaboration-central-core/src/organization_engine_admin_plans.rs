@@ -8,10 +8,11 @@ use crate::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
     },
     person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
 };
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{ActorIdentityId, Identity, PersonId, RequestId, Timestamp};
 
@@ -143,8 +144,10 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         let actor = self.prepare_identity(&identity, now).await?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
-            .host
-            .read(crate::workspace_request_log::lookup(&operation, &cutoff))
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                &operation, &cutoff,
+            ))
             .await?;
         if logged.rows.len() > 1 {
             return Err(corrupt("request_log.request_id"));
@@ -207,7 +210,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
             Err(reason) => refusal(reason),
         };
-        statements.extend(crate::workspace_request_log::retain(
+        statements.extend(fleet_runtime::workspace_request_log::retain(
             &operation,
             &actor,
             &person.intent_digest,
@@ -254,7 +257,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             } => (operation, actor, statements, cutoff),
         };
         let retain = |result: &OrganizationAdminResult| {
-            crate::workspace_request_log::retain(
+            fleet_runtime::workspace_request_log::retain(
                 &operation,
                 &actor,
                 &person.intent_digest,

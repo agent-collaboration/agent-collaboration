@@ -3,7 +3,7 @@ use super::{
     AlarmFailure, AlarmPolicy, CentralObject, ObjectAddress, OrganizationId, statement_store,
 };
 use crate::store_wire::{OwnedBatch, OwnedStatement, OwnedStoreCall};
-use collaboration_central_core::{HeldPause, PausePoint};
+use fleet_runtime::{HeldPause, PausePoint};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap};
 use worker::{Env, Request, Response, Result};
@@ -11,12 +11,7 @@ use worker::{Headers, Method, RequestInit, js_sys};
 
 #[derive(Default)]
 pub(crate) struct Controls {
-    pub(super) engine_commit_fault:
-        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
-    pub(super) engine_read_fault:
-        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
-    pub(super) alarm_batch_failure:
-        std::sync::Arc<std::sync::Mutex<Option<central_storage::StoreFailure>>>,
+    pub(super) test_faults: std::sync::Arc<fleet_runtime::TestFaults>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
@@ -146,30 +141,17 @@ pub(super) async fn control(
     match path.as_str() {
         "/test/legacy-unit-invocations" => Response::from_json(&runtime.legacy_unit_invocations()),
         "/test/due-unit-starts" => Response::from_json(&runtime.due_unit_starts()),
-        "/test/engine-commit-fault-pending" => Response::from_json(
-            &object
-                .controls
-                .engine_commit_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .is_some(),
-        ),
+        "/test/engine-commit-fault-pending" => {
+            Response::from_json(&object.controls.test_faults.commit_pending())
+        }
         "/test/engine-commit-fault" => {
             let fault = request.json().await?;
-            *object
-                .controls
-                .engine_commit_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            object.controls.test_faults.arm_commit(fault);
             Response::from_json(&true)
         }
         "/test/engine-read-fault" => {
             let fault = request.json().await?;
-            *object
-                .controls
-                .engine_read_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            object.controls.test_faults.arm_read(fault);
             Response::from_json(&true)
         }
         "/test/engine-probe-seed" => {
@@ -216,11 +198,7 @@ pub(super) async fn control(
         }
         "/test/fail-alarm-batch" => {
             let failure = request.json().await?;
-            *object
-                .controls
-                .alarm_batch_failure
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
+            object.controls.test_faults.arm_alarm_batch(failure);
             Response::from_json(&true)
         }
         "/test/drain" => {
@@ -315,9 +293,7 @@ pub(super) async fn control(
                     AlarmPolicy::Engine(
                         object.state.storage(),
                         object.clock.clone(),
-                        collaboration_central_core::engine_alarm_decider(
-                            object.due_batches.clone(),
-                        ),
+                        fleet_runtime::engine_alarm_decider(object.due_batches.clone()),
                     )
                 }
                 crate::store_wire::OwnedAlarmUpdate::Unchanged

@@ -1,12 +1,13 @@
 //! One object's storage on the Tokio host: its SQLite file, opened and migrated on
 //! first use, and the alarm time its last committed batch asked for.
 
-use crate::sqlite_object_store::{AlarmChange, SqliteObjectStore};
 use central_storage::{
-    AlarmPublication, AlarmPublicationFailure, BatchOutcome, EngineAlarmDecider, EngineAlarmTimes,
-    ReadOutcome, Statement, StatementBatch, StoreFailure,
+    AlarmPublication, AlarmPublicationFailure, BatchOutcome, EngineAlarmDecider, ReadOutcome,
+    Statement, StatementBatch, StoreFailure,
 };
+use fleet_runtime::AlarmPublicationStatus;
 use fleet_runtime_ports::{Clock, SyncTime};
+use fleet_store_sqlx::SqliteObjectStore;
 use sqlx::migrate::Migrator;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,36 +37,23 @@ struct EnginePublication {
     decide: EngineAlarmDecider,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum LastAlarmPublication {
-    Published { deadline: Option<SyncTime> },
-    Failed { at: SyncTime },
-}
-
 pub struct ObjectStorage {
     #[cfg(feature = "test-support")]
-    engine_commit_fault: std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>,
-    #[cfg(feature = "test-support")]
-    engine_read_fault: std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>,
+    test_faults: fleet_runtime::TestFaults,
     path: PathBuf,
     migrator: Arc<Migrator>,
     store: OnceCell<SqliteObjectStore>,
     // A database commit and its retained alarm are one ordered object write.
     batch_order: Mutex<()>,
-    #[cfg(feature = "test-support")]
-    alarm_batch_failure: std::sync::Mutex<Option<StoreFailure>>,
     /// Kept in memory after commit (Program Design, "the one alarm"; Tokio).
     alarm: watch::Sender<Option<SyncTime>>,
-    publication_status: watch::Sender<LastAlarmPublication>,
+    publication_status: watch::Sender<AlarmPublicationStatus>,
     #[cfg(feature = "test-support")]
-    publication_pause: Option<(
-        workspace_ids::WorkspaceId,
-        collaboration_central_core::PausePoints,
-    )>,
+    publication_pause: Option<(workspace_ids::WorkspaceId, fleet_runtime::PausePoints)>,
     #[cfg(feature = "test-support")]
     batch_waiting: watch::Sender<usize>,
     #[cfg(feature = "test-support")]
-    central_publication_pauses: collaboration_central_core::PausePoints,
+    central_publication_pauses: fleet_runtime::PausePoints,
     engine_publication: Option<EnginePublication>,
     #[cfg(feature = "test-support")]
     publication_failures: std::sync::Mutex<Vec<AlarmPublicationFailure>>,
@@ -76,17 +64,13 @@ impl ObjectStorage {
     pub fn new(path: PathBuf, migrator: Arc<Migrator>) -> Self {
         Self {
             #[cfg(feature = "test-support")]
-            engine_commit_fault: Default::default(),
-            #[cfg(feature = "test-support")]
-            engine_read_fault: Default::default(),
+            test_faults: Default::default(),
             path,
             migrator,
             store: OnceCell::new(),
             batch_order: Mutex::new(()),
-            #[cfg(feature = "test-support")]
-            alarm_batch_failure: Default::default(),
             alarm: watch::Sender::new(None),
-            publication_status: watch::Sender::new(LastAlarmPublication::Published {
+            publication_status: watch::Sender::new(AlarmPublicationStatus::Published {
                 deadline: None,
             }),
             #[cfg(feature = "test-support")]
@@ -133,14 +117,14 @@ impl ObjectStorage {
                 Ok(BatchOutcome::Applied {
                     publication: AlarmPublication::Set { .. } | AlarmPublication::Cleared,
                     ..
-                }) => Some(LastAlarmPublication::Published {
+                }) => Some(AlarmPublicationStatus::Published {
                     deadline: *self.alarm.borrow(),
                 }),
                 Ok(BatchOutcome::Applied {
                     publication: AlarmPublication::Failed { .. },
                     ..
                 })
-                | Err(_) => Some(LastAlarmPublication::Failed {
+                | Err(_) => Some(AlarmPublicationStatus::Failed {
                     at: engine.clock.now(),
                 }),
                 Ok(
@@ -162,17 +146,7 @@ impl ObjectStorage {
 
     async fn run_ordered_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         #[cfg(feature = "test-support")]
-        let commit_fault = {
-            let mut armed = self
-                .engine_commit_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if armed.as_ref().is_some_and(|fault| fault.matches(&batch)) {
-                armed.take()
-            } else {
-                None
-            }
-        };
+        let commit_fault = self.test_faults.take_commit(&batch);
         #[cfg(feature = "test-support")]
         if let Some(result) = commit_fault.as_ref().and_then(|fault| fault.before()) {
             return result;
@@ -187,25 +161,14 @@ impl ObjectStorage {
             });
         }
         #[cfg(feature = "test-support")]
-        if batch.statements.is_empty()
-            && matches!(
-                batch.alarm,
-                central_storage::AlarmUpdate::SetFromQuery(_)
-                    | central_storage::AlarmUpdate::SetEngineFromQuery { .. }
-            )
-            && let Some(failure) = self
-                .alarm_batch_failure
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .take()
-        {
+        if let Some(failure) = self.test_faults.take_alarm_batch_failure(&batch) {
             return Err(failure);
         }
         let (mut outcome, alarm) = self.opened().await?.run_batch(batch).await?;
         #[cfg(feature = "test-support")]
         if matches!(outcome, BatchOutcome::Applied { .. }) {
             self.central_publication_pauses
-                .reached_central(collaboration_central_core::PausePoint::AfterStoreApplied)
+                .reached_central(fleet_runtime::PausePoint::AfterStoreApplied)
                 .await;
         }
         #[cfg(feature = "test-support")]
@@ -213,29 +176,16 @@ impl ObjectStorage {
             && let Some((workspace, pauses)) = &self.publication_pause
         {
             pauses
-                .reached(
-                    workspace,
-                    collaboration_central_core::PausePoint::AfterStoreApplied,
-                )
+                .reached(workspace, fleet_runtime::PausePoint::AfterStoreApplied)
                 .await;
         }
-        let publication = match alarm {
-            AlarmChange::Unchanged => AlarmPublication::Unchanged,
-            AlarmChange::Set(at) => {
-                self.alarm.send_replace(Some(at));
-                AlarmPublication::Set {
-                    unix_millis: at.unix_millis(),
-                }
-            }
-            AlarmChange::Clear => {
-                self.alarm.send_replace(None);
-                AlarmPublication::Cleared
-            }
-            AlarmChange::Engine {
-                earliest_on_grid_due,
-                earliest_legacy_due,
-            } => self.publish_engine_alarm(earliest_on_grid_due, earliest_legacy_due),
-        };
+        let engine = self
+            .engine_publication
+            .as_ref()
+            .map(|engine| (engine.clock.as_ref(), &engine.decide));
+        let publication = alarm.publish(engine, |at| {
+            self.alarm.send_replace(at);
+        });
         if let BatchOutcome::Applied {
             publication: receipt,
             ..
@@ -254,39 +204,13 @@ impl ObjectStorage {
         if commit_fault.is_some_and(|fault| {
             matches!(
                 fault.kind,
-                collaboration_central_core::EngineCommitFaultKind::AppliedAnswerLost
+                fleet_runtime::EngineCommitFaultKind::AppliedAnswerLost
             )
         }) && matches!(outcome, BatchOutcome::Applied { .. })
         {
             return Err(StoreFailure::AnswerLost);
         }
         Ok(outcome)
-    }
-
-    fn publish_engine_alarm(&self, grid: Option<i64>, legacy: Option<i64>) -> AlarmPublication {
-        let decide = || -> Result<Option<i64>, AlarmPublicationFailure> {
-            let publication = self
-                .engine_publication
-                .as_ref()
-                .ok_or(AlarmPublicationFailure::ClockUnavailable)?;
-            let mut write = |time: Option<i64>| {
-                self.alarm
-                    .send_replace(time.map(SyncTime::from_unix_millis));
-            };
-            (publication.decide)(
-                EngineAlarmTimes {
-                    earliest_on_grid_due_unix_millis: grid,
-                    earliest_legacy_due_unix_millis: legacy,
-                },
-                publication.clock.now().unix_millis(),
-                &mut write,
-            )
-        };
-        match decide() {
-            Ok(None) => AlarmPublication::Cleared,
-            Ok(Some(unix_millis)) => AlarmPublication::Set { unix_millis },
-            Err(reason) => AlarmPublication::Failed { reason },
-        }
     }
 
     async fn lock_batch_order(&self) -> MutexGuard<'_, ()> {
@@ -313,22 +237,8 @@ impl ObjectStorage {
 
     pub async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
         #[cfg(feature = "test-support")]
-        {
-            let mut fault = self
-                .engine_read_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if fault
-                .as_ref()
-                .is_some_and(|fault| fault.matches(&statement))
-            {
-                fault.take();
-                return Err(StoreFailure::Corrupt {
-                    reason: central_storage::CorruptReason::BadValue {
-                        column: "engine.due_list".into(),
-                    },
-                });
-            }
+        if let Some(failure) = self.test_faults.take_read_failure(&statement) {
+            return Err(failure);
         }
         self.opened().await?.read(statement).await
     }
@@ -354,15 +264,15 @@ impl ObjectStorage {
             .transpose()
     }
 
-    pub(crate) fn subscribe_publication_status(&self) -> watch::Receiver<LastAlarmPublication> {
+    pub(crate) fn subscribe_publication_status(&self) -> watch::Receiver<AlarmPublicationStatus> {
         self.publication_status.subscribe()
     }
 
     #[cfg(feature = "test-support")]
     #[must_use]
-    pub fn hold_alarm_publication(&self) -> collaboration_central_core::HeldPause {
+    pub fn hold_alarm_publication(&self) -> fleet_runtime::HeldPause {
         self.central_publication_pauses
-            .hold_central(collaboration_central_core::PausePoint::AfterStoreApplied)
+            .hold_central(fleet_runtime::PausePoint::AfterStoreApplied)
     }
 
     #[cfg(feature = "test-support")]
@@ -371,7 +281,7 @@ impl ObjectStorage {
     pub fn with_publication_pause(
         mut self,
         workspace: workspace_ids::WorkspaceId,
-        pauses: collaboration_central_core::PausePoints,
+        pauses: fleet_runtime::PausePoints,
     ) -> Self {
         self.publication_pause = Some((workspace, pauses));
         self
@@ -394,32 +304,20 @@ impl ObjectStorage {
 
     #[cfg(feature = "test-support")]
     pub fn fail_next_alarm_batch(&self, failure: StoreFailure) {
-        *self
-            .alarm_batch_failure
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
+        self.test_faults.arm_alarm_batch(failure);
     }
     #[cfg(feature = "test-support")]
-    pub fn inject_engine_commit_fault(&self, fault: collaboration_central_core::EngineCommitFault) {
-        *self
-            .engine_commit_fault
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+    pub fn inject_engine_commit_fault(&self, fault: fleet_runtime::EngineCommitFault) {
+        self.test_faults.arm_commit(fault);
     }
     /// Whether an armed commit fault is still waiting for its batch.
     #[cfg(feature = "test-support")]
     pub fn engine_commit_fault_pending(&self) -> bool {
-        self.engine_commit_fault
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_some()
+        self.test_faults.commit_pending()
     }
     #[cfg(feature = "test-support")]
-    pub fn inject_engine_read_fault(&self, fault: collaboration_central_core::EngineReadFault) {
-        *self
-            .engine_read_fault
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+    pub fn inject_engine_read_fault(&self, fault: fleet_runtime::EngineReadFault) {
+        self.test_faults.arm_read(fault);
     }
 
     #[cfg(feature = "test-support")]
@@ -435,8 +333,8 @@ impl ObjectStorage {
     #[cfg(feature = "test-support")]
     pub fn failed_alarm_publication_at(&self) -> Option<SyncTime> {
         match *self.publication_status.borrow() {
-            LastAlarmPublication::Published { .. } => None,
-            LastAlarmPublication::Failed { at } => Some(at),
+            AlarmPublicationStatus::Published { .. } => None,
+            AlarmPublicationStatus::Failed { at } => Some(at),
         }
     }
 

@@ -6,7 +6,7 @@ mod observation_assertions;
 mod setup_ipc;
 
 use child_process::LauncherChild;
-use collaboration_central_conformance::signin_fixtures as signed;
+use fleet_runtime_test_support::signin_fixtures as signed;
 use observation_assertions::{
     assert_empty, assert_floors_and_used_request, assert_record, assert_stamp,
 };

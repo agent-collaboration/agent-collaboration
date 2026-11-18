@@ -21,6 +21,7 @@ test-support = ["collaboration-central-core/test-support", "dep:sqlx"]
 central-storage.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-contracts.workspace = true
+fleet-runtime.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
 fleet-identity-protocol = {path="../fleet-identity-protocol",version="0.1.149"}
@@ -51,7 +52,8 @@ web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "Su
 js-sys = "=0.3.106"
 
 [dev-dependencies]
-collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.150", features = ["signin-test-support"] }
+collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.150" }
+fleet-runtime-test-support = { path = "../fleet-runtime-test-support" }
 router-clock = {path="../router-clock",version="0.1.150",features=["test-support"]}
 tempfile = "3.27.0"
 reqwest = {workspace=true,features=["json"]}

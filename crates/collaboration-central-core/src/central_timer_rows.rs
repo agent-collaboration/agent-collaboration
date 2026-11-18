@@ -1,11 +1,10 @@
 //! Validated wake and automation rows, decoded without any runtime, so request
 //! plans and the engine machines share them with no module cycle.
-use crate::{
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
-};
 use agent_automation::TimingRule;
 use central_storage::{ReadOutcome, StoreFailure};
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::central_mail as mail;
 use workspace_model::{PostText, SessionAddress, Timestamp};
@@ -75,7 +74,7 @@ fn optional_time(
     row: &[central_storage::SqlValue],
     column: &str,
 ) -> Result<Option<Timestamp>, StoreFailure> {
-    match crate::workspace_row_codec::column(rows, row, column)? {
+    match fleet_runtime::stored_values::column(rows, row, column)? {
         central_storage::SqlValue::Null => Ok(None),
         central_storage::SqlValue::Text(value) => parse_time(value, column).map(Some),
         _ => Err(corrupt(column)),

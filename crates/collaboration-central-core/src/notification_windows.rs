@@ -4,10 +4,12 @@ use crate::{
     WorkspaceRuntime,
     central_mail_store::{self, timestamp},
     guarded_statements::{any, exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, json, string},
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime::stored_values::column;
+use fleet_runtime::stored_values::json;
+use fleet_runtime::stored_values::string;
+use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::{NotificationWindowId, NotificationWindowItemId};
 use workspace_model::central_mail as mail;
@@ -43,7 +45,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         recipient: &ActorIdentityId,
     ) -> Result<NoticeCadence, StoreFailure> {
         let rows = self
-            .host
+            .statement_host()
             .read(Statement {
                 sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
                 args: vec![text(recipient)],
@@ -69,7 +71,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     pub(crate) async fn notification_windows(
         &self,
     ) -> Result<Vec<NotificationWindow>, StoreFailure> {
-        let rows=self.host.read(Statement{sql:"SELECT window_id,recipient_actor,first_activity_at,due_at FROM notification_windows",args:vec![]}).await?;
+        let rows=self.statement_host().read(Statement{sql:"SELECT window_id,recipient_actor,first_activity_at,due_at FROM notification_windows",args:vec![]}).await?;
         let mut windows = Vec::new();
         for row in &rows.rows {
             let first = parse_time(
@@ -104,7 +106,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         window: &NotificationWindowId,
     ) -> Result<Vec<mail::NoticeItem>, LegacyUnitOutcome> {
-        let rows=self.host.read(Statement{sql:"SELECT window_item_id,workspace_id,thread_id,change_id FROM notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",args:vec![text(window)]}).await?;
+        let rows=self.statement_host().read(Statement{sql:"SELECT window_item_id,workspace_id,thread_id,change_id FROM notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",args:vec![text(window)]}).await?;
         let mut grouped: std::collections::BTreeMap<
             WorkspaceId,
             Vec<(ChangeId, Option<ThreadId>)>,
@@ -135,7 +137,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let mut items = Vec::new();
         for (workspace, changes) in grouped {
             let ids: Vec<_> = changes.iter().map(|(id, _)| id).collect();
-            let rows=self.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
+            let rows=self.fleet_runtime.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
             if rows.rows.len() != changes.len() {
                 return Err(corrupt("notification_window_items.change_id").into());
             }
@@ -198,7 +200,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         now: Timestamp,
     ) -> Result<Vec<GuardedStatement>, StoreFailure> {
         let rows = self
-            .host
+            .statement_host()
             .read(crate::central_mail_records::notice_messages())
             .await?;
         crate::central_mail_records::decode_messages(&rows)?;

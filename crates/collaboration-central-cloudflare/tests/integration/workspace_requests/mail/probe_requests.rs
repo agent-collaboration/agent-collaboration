@@ -201,7 +201,7 @@ fn uuid(number: u32) -> uuid::Uuid {
 
 #[tokio::test]
 async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effect() {
-    use collaboration_central_core::{EngineCommitFault, EngineCommitFaultKind};
+    use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
     let fixture = Fixture::new().await;
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
