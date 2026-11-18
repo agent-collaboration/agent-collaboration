@@ -90,7 +90,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
         (start.timestamp().div_euclid(900) + 1) * 900
     );
     assert_eq!(first.rows[0][2], SqlValue::Integer(1.try_into().unwrap()));
-    f.clock.advance(std::time::Duration::from_secs(60)).unwrap();
+    f.advance(std::time::Duration::from_secs(60)).await;
     created(f.call(7104, post(&thread, vec![])).await);
     let second = runtime.statement_host().read(read_window()).await.unwrap();
     assert_eq!(&second.rows[0][..2], &first.rows[0][..2]);
@@ -172,9 +172,7 @@ async fn concurrent_drains_hold_workspace_turn_and_do_not_duplicate_notice() {
     ));
     let drained = second.await.unwrap();
     assert_eq!(drained.notices_queued, 0);
-    f.clock
-        .advance(std::time::Duration::from_secs(900))
-        .unwrap();
+    f.advance(std::time::Duration::from_secs(900)).await;
     runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
@@ -353,7 +351,7 @@ async fn restart_driver_drains_applied_workspace_write_without_another_request()
     f.clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(5)))
         .await;
-    f.clock.advance(Duration::from_secs(5)).unwrap();
+    f.advance(Duration::from_secs(5)).await;
     drained.until_held().await;
     let rows = reopened.statement_host().read(Statement { sql: "SELECT drain_due_at,(SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&actor), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(

@@ -38,9 +38,7 @@ async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_dir
             .is_err()
     );
     // The original socket deadline remains binding after activity from another grant.
-    f.clock
-        .advance(std::time::Duration::from_secs(600))
-        .unwrap();
+    f.advance(std::time::Duration::from_secs(600)).await;
     let renewal = runtime.decide_machine_token(&serde_json::from_value(serde_json::json!({
         "organizationId":organization(),"enrollmentId":id::<m::WorkspaceId>(4),"clientId":id::<m::WorkspaceId>(4)
     })).unwrap()).await.unwrap();

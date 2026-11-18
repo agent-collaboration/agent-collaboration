@@ -63,7 +63,7 @@ async fn admin_create_after_ledger_expiry_retains_name_refusal_and_rolls_back_id
             "initial ledger must hold the original Applied answer bytes"
         );
         let directory = unchanged_directory(&f).await?;
-        f.clock.advance(Duration::from_millis(86_400_001))?;
+        f.clock.advance(Duration::from_millis(86_400_001)).await?;
         let now = signed::NOW_SECONDS * 1000 + 86_400_001;
         let now_text = chrono::DateTime::from_timestamp_millis(now)
             .ok_or("fixture UTC range")?

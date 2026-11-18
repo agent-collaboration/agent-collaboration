@@ -442,6 +442,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     ));
     clock
         .advance(std::time::Duration::from_millis(86_400_001))
+        .await
         .unwrap();
     caller = f.fresh_caller(&caller).await;
     let recreated = call(

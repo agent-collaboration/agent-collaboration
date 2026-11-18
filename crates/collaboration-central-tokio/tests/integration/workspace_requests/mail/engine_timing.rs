@@ -35,7 +35,7 @@ async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
 /// Starts one due batch at `time` through the event path.
 async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
     driver_settled(fixture, runtime).await;
-    fixture.clock.set_utc(time);
+    fixture.set_utc(time).await;
     runtime.after_event().await.unwrap();
     driver_settled(fixture, runtime).await;
 }
@@ -67,7 +67,7 @@ async fn a_probe_request_starts_the_due_batch_without_an_alarm_callback() {
     seed_probe(&runtime, request_item, request_group, None, "request").await;
     driver_settled(&fixture, &runtime).await;
     let callbacks = runtime.alarm_completion_count();
-    fixture.clock.set_utc(at(start, 4, 58, 0));
+    fixture.set_utc(at(start, 4, 58, 0)).await;
 
     let answer = runtime
         .request_probe(
@@ -132,7 +132,7 @@ async fn a_burst_of_forty_requests_runs_only_the_first_events_due_batch() {
     for (offset, item) in requests.iter().enumerate() {
         let offset = i64::try_from(offset).unwrap();
         driver_settled(&fixture, &runtime).await;
-        fixture.clock.set_utc(at(start, 4, 57, 150 * offset));
+        fixture.set_utc(at(start, 4, 57, 150 * offset)).await;
         let answer = runtime
             .request_probe(
                 &fixture.caller,
@@ -154,7 +154,7 @@ async fn a_burst_of_forty_requests_runs_only_the_first_events_due_batch() {
         }
     }
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 5, 3, 0));
+    fixture.set_utc(at(start, 5, 3, 0)).await;
 
     assert_eq!(
         probe_facts(&runtime, first_due, first_group).await,

@@ -9,7 +9,7 @@ use collaboration_central_tokio::{
     ObjectStorage, OrganizationSignInLink, TokioWorkspaceHost, TokioWorkspaceStores,
 };
 use fleet_identity_protocol::OrganizationId;
-use router_clock::ManualClock;
+use router_clock::GatedClock;
 use runtime_primitives::SyncTime;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -61,7 +61,7 @@ impl Reply {
 
 pub(super) struct Fixture {
     pub root: tempfile::TempDir,
-    pub clock: Arc<ManualClock>,
+    pub clock: Arc<GatedClock>,
     pub host: Arc<TokioWorkspaceHost>,
     pub keys: signed::SignInKeys,
     pub socket: std::path::PathBuf,
@@ -74,7 +74,7 @@ impl Fixture {
     }
     pub async fn new_with_issuer(issuer: &str) -> Result<Self> {
         let root = tempfile::Builder::new().prefix("signin-").tempdir()?;
-        let clock = Arc::new(ManualClock::starting_at(SyncTime::from_unix_millis(
+        let clock = Arc::new(GatedClock::starting_at(SyncTime::from_unix_millis(
             signed::NOW_SECONDS * 1000,
         ))?);
         let keys = signed::SignInKeys::start().await?;

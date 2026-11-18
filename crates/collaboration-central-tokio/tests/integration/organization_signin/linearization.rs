@@ -48,7 +48,7 @@ async fn pre_sample_holds_keep_first_replay_renewal_and_stored_expiry_assertions
         let body = serde_json::to_string(&provision_body(A, &incoming))?;
         let request = tokio::spawn(async move { post(&client, PROVISION, body, vec![]).await });
         held.until_held().await;
-        f.clock.advance(Duration::from_secs(release_after))?;
+        f.clock.advance(Duration::from_secs(release_after)).await?;
         held.release();
         assert_eq!(
             request.await??.status,
@@ -105,7 +105,7 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
         waits,
         "the second writer crossed the first writer's org turn"
     );
-    f.clock.advance(Duration::from_secs(2))?;
+    f.clock.advance(Duration::from_secs(2)).await?;
     held.release();
     assert_eq!(
         first.await??.status,
@@ -179,7 +179,7 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
                 )),
         )
         .await;
-    f.clock.advance((due - f.clock.utc_now()).to_std()?)?;
+    f.clock.advance((due - f.clock.utc_now()).to_std()?).await?;
     alarm.wait_for(|alarm| alarm.is_none()).await?;
     assert_eq!(
         f.rows(

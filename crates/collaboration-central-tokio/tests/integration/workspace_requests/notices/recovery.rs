@@ -160,7 +160,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             f.clock
                 .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(5)))
                 .await;
-            f.clock.advance(Duration::from_secs(5)).unwrap();
+            f.advance(Duration::from_secs(5)).await;
             drained.until_held().await;
             assert_eq!(
                 reopened
@@ -204,7 +204,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             panic!("window due")
         };
         let due: m::Timestamp = due.parse().unwrap();
-        f.clock.set_utc(due);
+        f.set_utc(due).await;
         reopened.after_event().await.unwrap();
         let batch = reopened
             .queued_for_session(&m::SessionAddress {
@@ -356,7 +356,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
     );
     let completed = runtime.alarm_completion_count();
     for second in 1..=60 {
-        f.clock.advance(Duration::from_secs(1)).unwrap();
+        f.advance(Duration::from_secs(1)).await;
         // The backstop alarm is raised to the 30 s floor (allowance above). P5
         // change 6: the driver's due batch skips W1, whose turn the held write
         // holds, and completes instead of queueing behind it.
@@ -416,7 +416,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
     // the one clock: the driver itself runs the due batch that drains W1.
     f.clock.not_due_check_now(f.clock.wall_deadline(next)).await;
     let before_driver = runtime.alarm_completion_count();
-    f.clock.advance_to(next).unwrap();
+    f.advance_to(next).await;
     let driver_drained = tokio::select! {
         () = drained.until_held() => true,
         () = runtime.until_alarm_completed(before_driver + 1) => false,
@@ -474,7 +474,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         .await
         .unwrap();
     let previous_time = f.clock.utc_now();
-    f.clock.set_utc(previous_time - chrono::Duration::hours(1));
+    f.set_utc(previous_time - chrono::Duration::hours(1)).await;
     drop(runtime);
     f.reopen().await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();

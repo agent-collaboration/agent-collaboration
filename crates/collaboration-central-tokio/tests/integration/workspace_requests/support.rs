@@ -8,7 +8,6 @@ use collaboration_central_tokio::TokioWorkspaceHost;
 use std::sync::Arc;
 use workspace_model as m;
 
-pub(super) use router_clock::ManualClock as HeldClock;
 pub(super) fn id<T: std::str::FromStr>(value: u32) -> T
 where
     T::Err: std::fmt::Debug,
@@ -172,7 +171,7 @@ pub(super) struct Fixture {
     pub host: TokioWorkspaceHost,
     pub caller: WorkspaceCaller,
     pub workspace: m::WorkspaceId,
-    pub clock: Arc<HeldClock>,
+    pub clock: Arc<router_clock::GatedClock>,
     pub root: tempfile::TempDir,
     pub keys: signed::SignInKeys,
 }
@@ -180,7 +179,7 @@ impl Fixture {
     pub async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let clock = Arc::new(
-            HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
                 1_794_571_200_000,
             ))
             .unwrap(),
@@ -243,7 +242,7 @@ impl Fixture {
         .await;
     }
     pub async fn relocate_authority(&mut self, at: m::Timestamp) {
-        self.clock.set_utc(at);
+        self.set_utc(at).await;
         let runtime = self
             .host
             .central(self.caller.organization_id())
@@ -291,6 +290,27 @@ impl Fixture {
             self.clock.now().unix_millis().div_euclid(1000),
         )
         .await
+    }
+    /// Moves the clock forward once every held alarm drive has finished; no
+    /// drive starts during the move (the clock's gate).
+    pub async fn advance(&self, step: std::time::Duration) {
+        self.clock.advance(step).await.unwrap();
+    }
+    /// Moves the clock to `at` under the same gate.
+    pub async fn advance_to(&self, at: runtime_primitives::SyncTime) {
+        self.clock.advance_to(at).await.unwrap();
+    }
+    /// Sets the wall clock under the same gate.
+    pub async fn set_utc(&self, utc: chrono::DateTime<chrono::Utc>) {
+        self.clock.set_utc(utc).await;
+    }
+    /// The one deliberate overlap (mail/engine_failure_overlap).
+    pub fn set_utc_while_a_batch_is_held(&self, utc: chrono::DateTime<chrono::Utc>) {
+        self.clock.set_utc_while_a_batch_is_held(utc);
+    }
+    /// The same clock, read-only, for a runtime a case builds itself.
+    pub fn shared_for_runtime(&self) -> Arc<dyn router_clock::RuntimeClock> {
+        self.clock.clone()
     }
     pub async fn call(&self, request: u32, operation: m::WorkspaceOperation) -> m::WorkspaceReply {
         use runtime_primitives::Clock;
@@ -427,4 +447,48 @@ pub(super) fn session(caller: &WorkspaceCaller) -> m::SessionAddress {
         panic!("fixture requires session caller");
     };
     session.clone()
+}
+
+/// Provisions one organization on the shared host, enrolls the fixture machine
+/// and admits a session caller with a signed machine token.
+pub async fn admitted_organization<C: runtime_primitives::Clock + ?Sized>(
+    host: &TokioWorkspaceHost,
+    organization: &fleet_identity_protocol::OrganizationId,
+    clock: &C,
+) -> collaboration_central_conformance::ConformanceResult<collaboration_central_core::WorkspaceCaller>
+{
+    let now = clock.now().unix_millis().div_euclid(1000);
+    let runtime = host.central(organization).await?;
+    runtime
+        .provision_organization(
+            &collaboration_central_core::identity_contract::ProvisionOrganization {
+                organization_id: organization.clone(),
+                organization_statement: signed::stamp(organization.as_str(), now - 3600)?
+                    .try_into()?,
+            },
+        )
+        .await?;
+    seed_machine_for(host, organization, &id(2), 3, 4, now).await;
+    let token = signed::machine_token(
+        organization.as_str(),
+        &id::<m::MachineId>(2).to_string(),
+        &id::<m::WorkspaceId>(4).to_string(),
+        now,
+        now + 600,
+    )?;
+    let connection = runtime
+        .admit_machine_connection(&token)
+        .await?
+        .map_err(|_| "fixture machine admission refused")?;
+    let caller = collaboration_central_core::WorkspaceCaller::new(
+        connection,
+        m::Caller::Session(m::SessionAddress {
+            machine_id: id(2),
+            endpoint: "codex-local".to_owned().try_into()?,
+            session_id: "test-session".to_owned().try_into()?,
+        }),
+    )
+    .map_err(|_| "fixture session caller refused")?;
+    create_workspace(host, &caller).await;
+    Ok(caller)
 }

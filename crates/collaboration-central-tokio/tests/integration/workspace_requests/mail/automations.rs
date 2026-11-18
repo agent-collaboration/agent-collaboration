@@ -57,7 +57,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         panic!("after refused")
     };
     // The first interval occurrence is the request's grid anchor itself.
-    fixture.clock.set_utc(start + chrono::Duration::seconds(30));
+    fixture.set_utc(start + chrono::Duration::seconds(30)).await;
     runtime.after_event().await.unwrap();
     let anchored = runtime
         .statement_host()
@@ -76,8 +76,8 @@ async fn interval_catches_up_once_and_after_finishes() {
     for step in 1..=3 {
         let minute = step * 5;
         fixture
-            .clock
-            .set_utc(start + chrono::Duration::minutes(minute));
+            .set_utc(start + chrono::Duration::minutes(minute))
+            .await;
         runtime.after_event().await.unwrap();
         assert_eq!(
             runtime.after_event().await.unwrap().work.automations_fired,
@@ -113,8 +113,8 @@ async fn interval_catches_up_once_and_after_finishes() {
         );
     }
     fixture
-        .clock
-        .set_utc(start + chrono::Duration::minutes(165));
+        .set_utc(start + chrono::Duration::minutes(165))
+        .await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         runtime.after_event().await.unwrap().work.automations_fired,
@@ -271,8 +271,8 @@ async fn interval_catches_up_once_and_after_finishes() {
         })
     );
     fixture
-        .clock
-        .set_utc(start + chrono::Duration::minutes(175));
+        .set_utc(start + chrono::Duration::minutes(175))
+        .await;
     assert_eq!(
         runtime.after_event().await.unwrap().work.automations_fired,
         0
@@ -332,7 +332,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
         panic!("cron refused")
     };
     assert_eq!(cron_due, start + chrono::Duration::minutes(5));
-    fixture.clock.set_utc(at);
+    fixture.set_utc(at).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         runtime.after_event().await.unwrap().work.automations_fired,

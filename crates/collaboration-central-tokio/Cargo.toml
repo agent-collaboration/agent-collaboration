@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-test-support = ["collaboration-central-core/test-support", "conformance", "collaboration-central-conformance/client", "dep:board-sync-protocol", "dep:reqwest-websocket"]
+test-support = ["collaboration-central-core/test-support", "router-clock/test-support", "conformance", "collaboration-central-conformance/client", "dep:board-sync-protocol", "dep:reqwest-websocket"]
 conformance = ["collaboration-central-core/conformance", "dep:collaboration-central-conformance", "dep:sqlx-core"]
 
 [dependencies]

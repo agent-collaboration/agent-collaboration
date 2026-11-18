@@ -35,7 +35,7 @@ pub(super) async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
 }
 pub(super) async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
     driver_settled(fixture, runtime).await;
-    fixture.clock.set_utc(time);
+    fixture.set_utc(time).await;
     runtime.after_event().await.unwrap();
     driver_settled(fixture, runtime).await;
 }
@@ -136,7 +136,7 @@ async fn a_pending_due_exactly_now_publishes_the_next_mark() {
     let start = fixture.clock.utc_now();
     let (item, group) = (probe_id(13020), probe_id(13021));
     seed_probe(&runtime, item, group, Some(at(start, 5, 0)), "now").await;
-    fixture.clock.set_utc(at(start, 5, 0));
+    fixture.set_utc(at(start, 5, 0)).await;
 
     runtime.recompute_alarm().await.unwrap();
 
@@ -161,7 +161,7 @@ async fn an_old_pending_due_publishes_the_next_mark() {
         "old",
     )
     .await;
-    fixture.clock.set_utc(at(start, 17, 0));
+    fixture.set_utc(at(start, 17, 0)).await;
 
     runtime.recompute_alarm().await.unwrap();
 
@@ -288,11 +288,11 @@ async fn a_request_wake_before_the_alarm_moves_it_in_its_own_transaction() {
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
-    fixture.clock.set_utc(at(start, 1, 0));
+    fixture.set_utc(at(start, 1, 0)).await;
     set_wake(&fixture, 13070, at(start, 30, 0)).await;
     assert_eq!(alarm_ms(&runtime), ms(at(start, 30, 0)));
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 1, 10));
+    fixture.set_utc(at(start, 1, 10)).await;
     // The event's own final publication fails, so only the request's
     // transaction can move the alarm.
     runtime
@@ -326,7 +326,7 @@ async fn a_corrupt_due_item_fails_alone_and_the_event_succeeds() {
         vec![text(corrupt)],
     )
     .await;
-    fixture.clock.set_utc(at(start, 5, 0));
+    fixture.set_utc(at(start, 5, 0)).await;
 
     let completion = runtime.after_event().await;
 
@@ -354,9 +354,8 @@ async fn a_failed_final_publication_fails_the_event_and_the_driver_retries_at_th
     assert_eq!(alarm_ms(&runtime), None, "seeding publishes nothing");
     let held_now = at(start, 5, 0) + chrono::Duration::milliseconds(500);
     fixture
-        .clock
         .advance_to(SyncTime::from_unix_millis(held_now.timestamp_millis()))
-        .unwrap();
+        .await;
     runtime
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
@@ -385,7 +384,7 @@ async fn a_failed_final_publication_fails_the_event_and_the_driver_retries_at_th
         .not_due_check_now(fixture.clock.wall_deadline(retry))
         .await;
     let callbacks = runtime.alarm_completion_count();
-    fixture.clock.advance_to(retry).unwrap();
+    fixture.advance_to(retry).await;
     runtime.until_alarm_completed(callbacks + 1).await;
     assert_eq!(alarm_ms(&runtime), ms(at(start, 20, 0)));
     fixture.host.close().await;
@@ -396,7 +395,7 @@ async fn a_failed_due_read_for_one_kind_still_handles_the_others() {
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
-    fixture.clock.set_utc(at(start, 0, 40));
+    fixture.set_utc(at(start, 0, 40)).await;
     let wake = set_wake(&fixture, 13100, at(start, 5, 0)).await;
     let (item, group) = (probe_id(13101), probe_id(13102));
     seed_probe(&runtime, item, group, Some(at(start, 5, 0)), "unread").await;
@@ -406,7 +405,7 @@ async fn a_failed_due_read_for_one_kind_still_handles_the_others() {
             kind: "engine_probe".into(),
         });
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 5, 0));
+    fixture.set_utc(at(start, 5, 0)).await;
 
     let completion = runtime.after_event().await.unwrap();
 

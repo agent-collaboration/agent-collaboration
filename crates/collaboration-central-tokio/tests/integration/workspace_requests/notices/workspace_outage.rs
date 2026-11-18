@@ -249,7 +249,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         .is_ok(),
         "W2 remains readable"
     );
-    f.clock.set_utc(due);
+    f.set_utc(due).await;
     let _alarm_result = r.after_event().await;
     let effects = || Statement {
         sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM messages WHERE message_kind='notice' AND recipient_actor=? AND source_workspace_id=?),(SELECT COUNT(*) FROM messages WHERE message_kind='notice' AND recipient_actor=? AND source_workspace_id=?)",
@@ -300,7 +300,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         r.statement_host().alarm().map(|time| time.unix_millis()),
         Some(later_due.timestamp_millis())
     );
-    f.clock.set_utc(later_due);
+    f.set_utc(later_due).await;
     f.workspace_execute(
         "ALTER TABLE outage_changes RENAME TO changes",
         vec![],

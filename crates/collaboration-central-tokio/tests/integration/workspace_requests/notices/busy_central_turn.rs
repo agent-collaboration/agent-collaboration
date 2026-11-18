@@ -77,15 +77,20 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     ));
 
     // One token minted at the due instant covers every request below.
-    f.clock.set_utc(due);
+    f.set_utc(due).await;
     f.refresh_caller().await;
 
     // Due batch A starts at the window's due instant and is held inside its
     // window unit, before the commit, while it holds the central turn.
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
         .pause_points()
         .hold_central(PausePoint::BeforeTimerCommit);
-    f.clock.set_utc(due);
+    f.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -93,7 +98,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     held.until_held().await;
 
     // 31 s later a probe request on another instance claims a new due batch.
-    f.clock.set_utc(due + chrono::Duration::seconds(31));
+    f.set_utc(due + chrono::Duration::seconds(31)).await;
     let request = runtime.request_probe(
         &f.caller,
         ProbeRequest {
@@ -133,7 +138,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     assert_eq!(count(&runtime, NOTICES).await, windows);
     committed.release();
     batch.await.unwrap().unwrap();
-    f.clock.set_utc(due + chrono::Duration::seconds(65));
+    f.set_utc(due + chrono::Duration::seconds(65)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(count(&runtime, NOTICES).await, windows, "no duplicate");
     assert_eq!(count(&runtime, WINDOWS).await, integer(0));

@@ -238,12 +238,11 @@ impl MachineFixture {
     pub fn now(&self) -> i64 {
         self.inner.clock_time()
     }
-    #[expect(
-        clippy::unused_async,
-        reason = "The mirrored native and Worker fixture API keeps the Worker clock transport awaited by every scenario."
-    )]
     pub async fn advance(&self, millis: u64) -> Result<()> {
-        self.inner.clock.advance(Duration::from_millis(millis))?;
+        self.inner
+            .clock
+            .advance(Duration::from_millis(millis))
+            .await?;
         Ok(())
     }
     pub async fn reopen(&mut self) -> Result<()> {
