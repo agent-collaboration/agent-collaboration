@@ -115,6 +115,15 @@ impl FlushOutcomeSink for LoggedFlushOutcomes {
             complete = outcomes.complete,
         );
     }
+    fn ended(&self, ended: Vec<central_link_client::EndedWrite>) {
+        for write in ended {
+            tracing::info!(
+                event = "centralLink.writeEnded",
+                request_id = write.request_id.as_str(),
+                reason = ?write.reason,
+            );
+        }
+    }
 }
 
 #[cfg(test)]

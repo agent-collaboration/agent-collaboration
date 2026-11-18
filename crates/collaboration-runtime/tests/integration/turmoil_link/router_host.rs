@@ -60,6 +60,7 @@ impl FlushJitter for OnTheMark {
 struct IgnoredOutcomes;
 impl FlushOutcomeSink for IgnoredOutcomes {
     fn deliver(&self, _outcomes: FlushOutcomes) {}
+    fn ended(&self, _ended: Vec<central_link_client::EndedWrite>) {}
 }
 
 fn installation() -> MachineId {

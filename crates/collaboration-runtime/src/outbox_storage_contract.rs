@@ -5,7 +5,8 @@
 use crate::outbox_storage::OutboxStorage;
 use crate::outbox_store::{NewOutboxItem, OutboxInsert, OutboxStoreError};
 use central_link_client::{
-    LinkAdmissionRefusal, MemberOutcome, OutgoingOutcome, PendingWriteState, RequestStatus,
+    LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutgoingOutcome, PendingWriteState,
+    RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
@@ -42,6 +43,23 @@ fn item(seed: u16, body: &str, flush_at: i64) -> NewOutboxItem {
         flush_at: at(flush_at),
     }
 }
+/// A direct message: 15 minutes from its creation stamp (outbox_deadline).
+fn message(seed: u16, body: &str, flush_at: i64) -> NewOutboxItem {
+    let request = uuid_v7(seed);
+    NewOutboxItem {
+        request: request.parse().unwrap(),
+        caller: caller(1),
+        payload: serde_json::from_value(json!({"kind": "mail", "request": {
+            "requestId": request, "operation": {"kind": "sendMessage",
+            "to": {"machineId": uuid_v7(50_001), "endpoint": "codex-local", "sessionId": "r1"},
+            "body": body, "delivery": "auto", "replyTo": null,
+            "sentAt": "2030-01-01T00:00:00Z"}}}))
+        .unwrap(),
+        flush_at: at(flush_at),
+    }
+}
+const FIFTEEN_MINUTES_MS: i64 = 15 * 60 * 1000;
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 fn reply() -> ReplyPayload {
     ReplyPayload::Workspace(WorkspaceReply {
         result: WorkspaceResult::Conflict,
@@ -294,7 +312,8 @@ pub(crate) async fn same_millisecond_writes_order_by_request_id(store: &mut dyn 
     let claimed = store
         .claim_next_batch(at(MARK), 64, at(MARK))
         .await
-        .unwrap();
+        .unwrap()
+        .writes;
 
     assert_eq!(
         pending
@@ -327,12 +346,17 @@ pub(crate) async fn claim_takes_due_writes_oldest_first_up_to_the_limit(
     }
     let earliest_before = store.earliest_waiting().await.unwrap();
 
-    let claimed = store.claim_next_batch(at(MARK), 2, at(MARK)).await.unwrap();
+    let claimed = store
+        .claim_next_batch(at(MARK), 2, at(MARK))
+        .await
+        .unwrap()
+        .writes;
     let earliest_after = store.earliest_waiting().await.unwrap();
     let rest = store
         .claim_next_batch(at(MARK), 64, at(MARK))
         .await
-        .unwrap();
+        .unwrap()
+        .writes;
 
     assert_eq!(earliest_before, Some(at(MARK)));
     assert_eq!(
@@ -364,6 +388,192 @@ pub(crate) async fn claim_takes_due_writes_oldest_first_up_to_the_limit(
     );
 }
 
+/// A waiting write is never claimed at or past its deadline; the same claim
+/// ends it, by target and by whether it had left the Mac, and drops its text.
+pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
+    store: &mut dyn OutboxStorage,
+) {
+    let stored_at = MARK - 1_000;
+    let deadline = stored_at + FIFTEEN_MINUTES_MS;
+    let unsent = message(70, "never left", MARK);
+    let lost = message(71, "answer lost", MARK);
+    let post = item(72, "a thread post", MARK);
+    for write in [&unsent, &lost, &post] {
+        store.insert(write, at(stored_at)).await.unwrap();
+    }
+    store.mark_sent(&ids(&[&lost]), at(MARK)).await.unwrap();
+    store
+        .return_unanswered(&ids(&[&lost]), at(MARK + 1_000))
+        .await
+        .unwrap();
+
+    let early = store
+        .claim_next_batch(at(MARK), 1, at(deadline - 1))
+        .await
+        .unwrap();
+    store
+        .return_unanswered(&ids(&[&unsent]), at(deadline - 1))
+        .await
+        .unwrap();
+    let claimed = store
+        .claim_next_batch(at(MARK), 64, at(deadline))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        early
+            .writes
+            .iter()
+            .map(|w| w.request.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&unsent]),
+        "one millisecond before its deadline a direct message is still sent"
+    );
+    assert!(early.ended.is_empty());
+    assert_eq!(
+        claimed
+            .writes
+            .iter()
+            .map(|w| w.request.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&post]),
+        "at its deadline a direct message is never claimed; the post has 24 hours"
+    );
+    let ended: Vec<_> = claimed
+        .ended
+        .iter()
+        .map(|write| (write.request_id.clone(), write.caller.clone(), write.reason))
+        .collect();
+    assert_eq!(
+        ended,
+        vec![
+            (
+                unsent.request.clone(),
+                unsent.caller.clone(),
+                OutboxCancellation::NotConfirmedWithin15Minutes
+            ),
+            (
+                lost.request.clone(),
+                lost.caller.clone(),
+                OutboxCancellation::NotConfirmedWithin15Minutes
+            ),
+        ],
+        "both had left the Mac, so either may have been delivered"
+    );
+    let never_left = message(73, "never left", MARK);
+    store.insert(&never_left, at(stored_at)).await.unwrap();
+    let ended_later = store.end_overdue(at(deadline)).await.unwrap();
+    assert_eq!(
+        ended_later
+            .iter()
+            .map(|write| (write.request_id.clone(), write.reason))
+            .collect::<Vec<_>>(),
+        vec![(
+            never_left.request.clone(),
+            OutboxCancellation::NotDeliveredWithin15Minutes
+        )]
+    );
+    assert_eq!(
+        store
+            .request_status(&never_left.caller, &never_left.request)
+            .await
+            .unwrap(),
+        RequestStatus::Cancelled {
+            reason: OutboxCancellation::NotDeliveredWithin15Minutes
+        }
+    );
+    let pending = store.pending_for(&never_left.caller).await.unwrap();
+    assert!(
+        pending
+            .iter()
+            .any(|write| write.request_id == never_left.request
+                && write.state
+                    == PendingWriteState::Cancelled {
+                        reason: OutboxCancellation::NotDeliveredWithin15Minutes
+                    }),
+        "the ended write reads as cancelled, with no text: {pending:?}"
+    );
+    assert!(matches!(
+        store.insert(&never_left, at(deadline + 1)).await.unwrap(),
+        OutboxInsert::AlreadyStored(RequestStatus::Cancelled { .. })
+    ));
+    let mut changed = never_left.clone();
+    changed.payload = message(73, "different words", MARK).payload;
+    assert_eq!(
+        store.insert(&changed, at(deadline + 1)).await.unwrap(),
+        OutboxInsert::ConflictingContent,
+        "the text is gone but its digest still tells a different write"
+    );
+    assert!(
+        store.waiting().await.unwrap().is_empty(),
+        "ended writes no longer wait and the post is sent"
+    );
+    assert!(matches!(
+        store
+            .mark_sent(&ids(&[&never_left]), at(deadline + 1))
+            .await,
+        Err(OutboxStoreError::UnexpectedState { .. })
+    ));
+}
+
+/// A sent write past its deadline ends instead of returning to waiting, so
+/// a replay after a long outage never commits a second time; a write before
+/// its deadline returns as before. A thread post has 24 hours.
+pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
+    store: &mut dyn OutboxStorage,
+) {
+    let stored_at = MARK - 1_000;
+    let post = item(80, "posted then lost", MARK);
+    let fresh = item(81, "lost, still fresh", MARK);
+    store.insert(&post, at(stored_at)).await.unwrap();
+    store
+        .insert(&fresh, at(stored_at + DAY_MS - 60_000))
+        .await
+        .unwrap();
+    store.mark_sent(&ids(&[&post]), at(MARK)).await.unwrap();
+    store
+        .mark_sent(&ids(&[&fresh]), at(stored_at + DAY_MS - 30_000))
+        .await
+        .unwrap();
+
+    let ended = store
+        .return_unanswered(&ids(&[&post, &fresh]), at(stored_at + DAY_MS))
+        .await
+        .unwrap();
+    let overdue_waiting = store.end_overdue(at(stored_at + DAY_MS)).await.unwrap();
+    let claimed = store
+        .claim_next_batch(at(stored_at + DAY_MS + 60_000), 64, at(stored_at + DAY_MS))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        ended
+            .iter()
+            .map(|write| (write.request_id.clone(), write.reason))
+            .collect::<Vec<_>>(),
+        vec![(post.request.clone(), OutboxCancellation::GaveUpAfter24Hours)]
+    );
+    assert!(overdue_waiting.is_empty(), "nothing else is overdue");
+    assert_eq!(
+        store
+            .request_status(&post.caller, &post.request)
+            .await
+            .unwrap(),
+        RequestStatus::Cancelled {
+            reason: OutboxCancellation::GaveUpAfter24Hours
+        }
+    );
+    assert_eq!(
+        claimed
+            .writes
+            .iter()
+            .map(|w| w.request.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&fresh]),
+        "the overdue post is never resent; the fresh one is"
+    );
+    assert!(store.sent_without_answer().await.unwrap() == ids(&[&fresh]));
+}
 /// Runs every contract case on fresh stores from `open`.
 macro_rules! outbox_storage_contract {
     ($open:expr) => {
@@ -405,6 +615,22 @@ macro_rules! outbox_storage_contract {
         async fn claim_takes_due_writes_oldest_first_up_to_the_limit() {
             let (_root, mut store) = $open.await;
             crate::outbox_storage_contract::claim_takes_due_writes_oldest_first_up_to_the_limit(
+                &mut store,
+            )
+            .await;
+        }
+        #[tokio::test]
+        async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason() {
+            let (_root, mut store) = $open.await;
+            crate::outbox_storage_contract::an_overdue_write_is_never_claimed_and_ends_with_its_reason(
+                &mut store,
+            )
+            .await;
+        }
+        #[tokio::test]
+        async fn a_sent_write_past_its_deadline_ends_instead_of_returning() {
+            let (_root, mut store) = $open.await;
+            crate::outbox_storage_contract::a_sent_write_past_its_deadline_ends_instead_of_returning(
                 &mut store,
             )
             .await;

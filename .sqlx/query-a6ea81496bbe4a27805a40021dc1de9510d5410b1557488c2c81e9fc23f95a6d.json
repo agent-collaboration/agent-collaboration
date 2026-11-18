@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT request_id AS \"request_id!\" FROM outbox_items\n               WHERE item_state IN (?, ?) AND flush_at_ms <= ?\n               ORDER BY created_at, request_id LIMIT ?",
+  "query": "SELECT request_id AS \"request_id!\" FROM outbox_items\n               WHERE item_state IN (?, ?) AND flush_at_ms <= ? AND expires_at_ms > ?\n               ORDER BY created_at, request_id LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -16,11 +16,11 @@
       }
     ],
     "parameters": {
-      "Right": 4
+      "Right": 5
     },
     "nullable": [
       false
     ]
   },
-  "hash": "c880016fd103a72055021d6ed8fcfc204209b3bb556db9d4b3db4d036dc8c1c7"
+  "hash": "a6ea81496bbe4a27805a40021dc1de9510d5410b1557488c2c81e9fc23f95a6d"
 }

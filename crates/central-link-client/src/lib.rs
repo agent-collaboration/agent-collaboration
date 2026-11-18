@@ -27,8 +27,8 @@ pub use outbox_flush::{
     MemberOutcome, OutboxFlushState, transition,
 };
 pub use outbox_views::{
-    FlushOutcome, FlushOutcomeSink, FlushOutcomes, OutboxWriteContent, OutboxWriteTarget,
-    OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
+    EndedWrite, FlushOutcome, FlushOutcomeSink, FlushOutcomes, OutboxWriteContent,
+    OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
 };
 pub use pending_calls::{CallFailure, FailedCall, SendFailure};
 pub use submission_path::{SubmissionPath, submission_path};

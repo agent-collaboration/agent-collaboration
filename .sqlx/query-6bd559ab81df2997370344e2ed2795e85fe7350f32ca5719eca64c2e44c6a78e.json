@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO outbox_items\n               (request_id, caller_json, payload_json, item_state, flush_at_ms, expires_at_ms,\n                outcome_json, created_at, updated_at)\n             VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "6bd559ab81df2997370344e2ed2795e85fe7350f32ca5719eca64c2e44c6a78e"
+}

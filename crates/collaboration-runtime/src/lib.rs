@@ -37,6 +37,7 @@ pub use codex_conversation_operation_recorder::{
 mod central_link_driver;
 mod machine_local_store;
 pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
+mod outbox_deadline;
 mod outbox_storage;
 #[cfg(test)]
 mod outbox_storage_contract;
@@ -74,7 +75,7 @@ pub use memory_outbox::MemoryOutbox;
 mod provider_session_event_hub;
 mod provider_session_record;
 pub use outbox_store::{
-    MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
+    ClaimedBatch, MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
 };
 pub use provider_operation_store::{
     PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,

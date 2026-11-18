@@ -71,11 +71,17 @@ pub enum RequestStatus {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OutboxCancellation {
-    /// A direct message not sent within 15 minutes: "15 minutes you can't send
-    /// in central or machine then tell the sender and cancel send".
-    NotSentWithin15Min,
-    /// Any other outbox write still unsent after 24 hours.
-    GaveUpAfter24h,
+    /// A direct message that never left the Mac within 15 minutes of when the
+    /// agent sent it: "15 minutes you can't send in central or machine then
+    /// tell the sender and cancel send".
+    NotDeliveredWithin15Minutes,
+    /// A direct message that left the Mac but whose answer never came within
+    /// 15 minutes: it may have been delivered. Central's DeliveryOutcome, matched
+    /// by the request id, later tells the truth (Lead A, 2026-11-18).
+    NotConfirmedWithin15Minutes,
+    /// Any other outbox write still unanswered 24 hours after it was stored,
+    /// inside central's 24-hour request log, so a replay never commits twice.
+    GaveUpAfter24Hours,
 }
 
 /// Why central never admitted a frame: the link's own admission, not a domain

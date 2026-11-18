@@ -123,10 +123,22 @@ pub struct FlushOutcomes {
     pub complete: bool,
 }
 
-/// Receives every flush's outcomes; the CLI+MCP side groups and words them per
-/// session.
+/// A write the Router stopped trying to send because it passed its deadline;
+/// its text is gone. The agent that wrote it is told.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EndedWrite {
+    pub caller: Caller,
+    pub request_id: RequestId,
+    pub target: OutboxWriteTarget,
+    pub reason: crate::link_calls::OutboxCancellation,
+}
+
+/// Receives every flush's outcomes and every write that ended unsent; the
+/// CLI+MCP side groups and words them per session.
 pub trait FlushOutcomeSink: Send + Sync {
     fn deliver(&self, outcomes: FlushOutcomes);
+    /// Writes that passed their deadline, told when the Router ends them.
+    fn ended(&self, ended: Vec<EndedWrite>);
 }
 
 #[cfg(test)]

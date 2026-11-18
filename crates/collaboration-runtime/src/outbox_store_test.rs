@@ -216,7 +216,7 @@ async fn cancelled_and_given_up_rows_read_as_cancelled_hold_no_text_and_are_prun
     let root = tempfile::tempdir().unwrap();
     let mut store = open(&root).await;
     let mut ids = Vec::new();
-    for (seed, state) in [(21_u16, "cancelled"), (22, "gaveUp")] {
+    for (seed, state) in [(21_u16, "cancelled"), (22, "gaveUp"), (24, "unconfirmed")] {
         let write = item(seed, "never sent", MARK);
         MacOutbox::new(&mut store)
             .insert(&write, at(MARK - 1_000))
@@ -277,10 +277,13 @@ async fn cancelled_and_given_up_rows_read_as_cancelled_hold_no_text_and_are_prun
         statuses,
         vec![
             RequestStatus::Cancelled {
-                reason: OutboxCancellation::NotSentWithin15Min
+                reason: OutboxCancellation::NotDeliveredWithin15Minutes
             },
             RequestStatus::Cancelled {
-                reason: OutboxCancellation::GaveUpAfter24h
+                reason: OutboxCancellation::GaveUpAfter24Hours
+            },
+            RequestStatus::Cancelled {
+                reason: OutboxCancellation::NotConfirmedWithin15Minutes
             },
         ]
     );
@@ -296,8 +299,8 @@ async fn cancelled_and_given_up_rows_read_as_cancelled_hold_no_text_and_are_prun
             .iter()
             .all(|write| matches!(write.state, PendingWriteState::Cancelled { .. }))
     );
-    assert_eq!(pending.len(), 2);
-    assert_eq!(pruned, 2);
+    assert_eq!(pending.len(), 3);
+    assert_eq!(pruned, 3);
 }
 
 #[tokio::test]
@@ -510,6 +513,8 @@ enum ModelState {
     SentAnswerLost,
     Accepted,
     Refused,
+    /// Past its deadline: a thread post gives up 24 hours after it was stored.
+    Ended(OutboxCancellation),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -517,6 +522,8 @@ struct ModelWrite {
     flush_at: SyncTime,
     state: ModelState,
     answered_at: Option<i64>,
+    expires_at: i64,
+    ended_at: Option<i64>,
 }
 
 impl ModelWrite {
@@ -528,6 +535,7 @@ impl ModelWrite {
             ModelState::Sent => RequestStatus::Sent,
             ModelState::Accepted => RequestStatus::Answered(accepted_reply()),
             ModelState::Refused => RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict),
+            ModelState::Ended(reason) => RequestStatus::Cancelled { reason },
         }
     }
 }
@@ -542,6 +550,7 @@ fn post_text(request_id: &RequestId) -> PostText {
 }
 
 const RETENTION_MS: i64 = 60 * 24 * 60 * 60 * 1000;
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// The real SQLite store against a model of each write's state.
 struct OutboxStoreModel {
@@ -582,13 +591,20 @@ impl OutboxStoreModel {
                 flush_at: write.flush_at,
                 state: ModelState::Unsent,
                 answered_at: None,
+                expires_at: self.now + DAY_MS,
+                ended_at: None,
             },
         );
     }
 
     #[rule(weight = 2)]
     fn send_waiting_writes(&mut self, tc: TestCase) {
-        let waiting = self.ids_in(&[ModelState::Unsent, ModelState::SentAnswerLost]);
+        let send_at = self.now + 1_000;
+        let waiting: Vec<RequestId> = self
+            .ids_in(&[ModelState::Unsent, ModelState::SentAnswerLost])
+            .into_iter()
+            .filter(|id| self.model[id].expires_at > send_at)
+            .collect();
         tc.assume(!waiting.is_empty());
         let count = tc.draw(
             gs::integers::<usize>()
@@ -625,10 +641,24 @@ impl OutboxStoreModel {
         let mut outbox = MacOutbox::new(&mut self.store);
         let next = match choice {
             0 => {
-                self.runtime
+                let ended = self
+                    .runtime
                     .block_on(outbox.return_unanswered(std::slice::from_ref(&id), at(now)))
                     .unwrap();
-                ModelState::SentAnswerLost
+                if self.model[&id].expires_at <= now {
+                    assert_eq!(
+                        ended
+                            .iter()
+                            .map(|w| w.request_id.clone())
+                            .collect::<Vec<_>>(),
+                        vec![id.clone()],
+                        "a sent write past its deadline ends, never returns"
+                    );
+                    ModelState::Ended(OutboxCancellation::GaveUpAfter24Hours)
+                } else {
+                    assert!(ended.is_empty());
+                    ModelState::SentAnswerLost
+                }
             }
             1 => {
                 let refusal = MemberOutcome::Refused(LinkAdmissionRefusal::RequestIdConflict);
@@ -649,7 +679,37 @@ impl OutboxStoreModel {
             if matches!(next, ModelState::Accepted | ModelState::Refused) {
                 write.answered_at = Some(now);
             }
+            if matches!(next, ModelState::Ended(_)) {
+                write.ended_at = Some(now);
+            }
         }
+    }
+
+    #[rule]
+    fn overdue_waiting_writes_end(&mut self, _: TestCase) {
+        let now = self.now;
+        let mut ended: Vec<RequestId> = self
+            .runtime
+            .block_on(MacOutbox::new(&mut self.store).end_overdue(at(now)))
+            .unwrap()
+            .into_iter()
+            .map(|write| {
+                assert_eq!(write.reason, OutboxCancellation::GaveUpAfter24Hours);
+                write.request_id
+            })
+            .collect();
+        ended.sort();
+        let mut expected = Vec::new();
+        for (id, write) in &mut self.model {
+            if matches!(write.state, ModelState::Unsent | ModelState::SentAnswerLost)
+                && write.expires_at <= now
+            {
+                write.state = ModelState::Ended(OutboxCancellation::GaveUpAfter24Hours);
+                write.ended_at = Some(now);
+                expected.push(id.clone());
+            }
+        }
+        assert_eq!(ended, expected);
     }
 
     #[rule]
@@ -665,8 +725,12 @@ impl OutboxStoreModel {
             .unwrap();
         let cutoff = self.now - RETENTION_MS;
         let before = self.model.len();
-        self.model
-            .retain(|_, write| write.answered_at.is_none_or(|answered| answered > cutoff));
+        self.model.retain(|_, write| {
+            write
+                .answered_at
+                .or(write.ended_at)
+                .is_none_or(|ended| ended > cutoff)
+        });
         assert_eq!(usize::try_from(deleted).unwrap(), before - self.model.len());
     }
 
@@ -708,6 +772,7 @@ impl OutboxStoreModel {
                     }
                     ModelState::Accepted => PendingWriteState::Answered(accepted_reply()),
                     ModelState::Refused => return None,
+                    ModelState::Ended(reason) => PendingWriteState::Cancelled { reason },
                 };
                 Some((id.clone(), state))
             })
@@ -743,7 +808,10 @@ impl OutboxStoreModel {
         // Owner, 2026-11-15: unsent text stays on the Mac only until central
         // answers. An answered or refused row keeps no text, in the row itself.
         for (id, write) in &self.model {
-            if !matches!(write.state, ModelState::Accepted | ModelState::Refused) {
+            if !matches!(
+                write.state,
+                ModelState::Accepted | ModelState::Refused | ModelState::Ended(_)
+            ) {
                 continue;
             }
             let stored: String = self
