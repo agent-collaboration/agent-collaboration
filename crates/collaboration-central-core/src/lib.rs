@@ -3,7 +3,6 @@
 
 mod clock_ids;
 mod engine;
-pub mod message_delivery;
 /// Test support: the engine's alarm-input aggregate, one row of
 /// `(on_grid_due, legacy_due)` in UTC milliseconds or NULL.
 #[cfg(feature = "test-support")]
