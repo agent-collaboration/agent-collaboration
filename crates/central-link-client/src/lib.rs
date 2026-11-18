@@ -23,8 +23,8 @@ pub use link_state::{
     ClientAction, ClientEvent, ConnectionAttempt, LinkClient, LinkStatus, RefusalReason,
 };
 pub use outbox_flush::{
-    FlushEffect, FlushEvent, FlushTransitionError, InFlightBatch, LinkAvailability,
-    MAX_BATCH_WRITES, MemberOutcome, OutboxFlushState, transition,
+    FlushEffect, FlushEvent, FlushTransitionError, LinkAvailability, MAX_BATCH_WRITES,
+    MemberOutcome, OutboxFlushState, transition,
 };
 pub use outbox_views::{
     FlushOutcome, FlushOutcomeSink, FlushOutcomes, OutboxWriteContent, OutboxWriteTarget,

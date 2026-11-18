@@ -8,6 +8,8 @@ mod installation_link;
 mod link_transport;
 #[cfg(test)]
 mod overlay_property_test;
+#[cfg(test)]
+mod store_faults;
 
 pub use central_link_client::{
     LinkStatus as CentralLinkStatus, RefusalReason as CentralLinkRefusal,

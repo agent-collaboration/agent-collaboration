@@ -1,30 +1,29 @@
-//! The outbox flush as a pure reducer: `transition(state, event) -> (state,
-//! effects)`. The Host owns the clock, the store and the socket: it runs each
-//! effect and feeds back what happened. On each 1-minute mark (±3 s, the Host
-//! picks the jitter) at most one batch of up to 64 due writes is sent; the rest
-//! waits for the next flush. Nothing is sent before its mark, nothing in flight
-//! or answered is sent again, and members a batch leaves unanswered return to
-//! the outbox to be resent under the same RequestId, which central replays.
+//! When the outbox flushes, as a pure reducer: `transition(state, event) ->
+//! (state, effects)`. The Mac outbox table is the only truth for what waits,
+//! is sent and is answered (Lead A, 2026-11-18: one owner per truth); this
+//! reducer holds no request ids. It decides only WHEN a batch may go: on a
+//! 1-minute mark (±3 s, the Host picks the jitter), at most one batch in
+//! flight, only on a connected link. On SendBatch the Host claims the next due
+//! rows from the store; a store error is not a link event, and the next mark
+//! retries from the store.
 use crate::flush_marks::{earliest_open_mark, mark_in_window, next_mark_after};
 use crate::link_calls::LinkAdmissionRefusal;
 use central_link_protocol::ReplyPayload;
 use runtime_primitives::SyncTime;
-use std::collections::{BTreeMap, BTreeSet};
 use workspace_model::{
-    RefusalReason, RequestId, WorkspaceResult,
+    RefusalReason, WorkspaceResult,
     central_mail::{CentralMailRefusal, CentralMailResult},
 };
 
-/// The link batch frame's cap (Lead, 2026-11-15).
+/// The link batch frame's cap (Lead A, 2026-11-15).
 pub const MAX_BATCH_WRITES: usize = 64;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutboxFlushState {
     link: LinkAvailability,
     last_flushed: Option<SyncTime>,
-    /// Writes in the outbox, ordered by the earliest mark they may send on.
-    waiting: BTreeSet<(SyncTime, RequestId)>,
-    in_flight: Option<InFlightBatch>,
+    /// The mark of the batch on the wire, if any.
+    in_flight: Option<SyncTime>,
     armed_wake: Option<SyncTime>,
 }
 
@@ -35,34 +34,28 @@ pub enum LinkAvailability {
     Connected,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct InFlightBatch {
-    mark: SyncTime,
-    /// Each unanswered member with the mark it was stored for.
-    members: BTreeMap<RequestId, SyncTime>,
-}
-
+/// `earliest_due` is the store's earliest receipt mark among waiting writes,
+/// read by the Host just before the event; None when nothing waits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FlushEvent {
-    /// The Host loaded or stored this write in the outbox.
+    /// The Host stored a write for this mark.
     Stored {
-        request: RequestId,
         flush_at: SyncTime,
     },
     /// The Host's wake fired, normally on a mark plus its jitter.
     Tick {
         now: SyncTime,
+        earliest_due: Option<SyncTime>,
     },
-    LinkConnected,
-    /// Every unanswered member of the batch in flight returns to the outbox.
+    LinkConnected {
+        earliest_due: Option<SyncTime>,
+    },
     LinkLost,
-    /// Central answered one member of the batch in flight.
-    MemberAnswered {
-        request: RequestId,
-        outcome: MemberOutcome,
+    /// The batch for this flush ended: answered, returned to the store, or
+    /// never sent because the claim found nothing or the store failed.
+    BatchEnded {
+        earliest_due: Option<SyncTime>,
     },
-    /// The batch's deadline passed on a live link: unanswered members return.
-    BatchExpired,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -101,31 +94,15 @@ impl MemberOutcome {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FlushEffect {
-    /// Mark these writes sent and send them as one batch frame.
-    SendBatch {
-        mark: SyncTime,
-        requests: Vec<RequestId>,
-    },
-    /// Persist central's answer for one write.
-    RecordOutcome {
-        request: RequestId,
-        outcome: MemberOutcome,
-    },
-    /// These writes were not answered; they are back in the outbox.
-    ReturnToOutbox { requests: Vec<RequestId> },
-    /// Central did not apply this write (link admission refused it); it is
-    /// back in the outbox, unsent, under the same RequestId.
-    ReturnUnapplied { request: RequestId },
+    /// Claim the next due writes (up to MAX_BATCH_WRITES) from the store and
+    /// send them as one batch frame.
+    SendBatch { mark: SyncTime },
     /// Wake at this mark plus the Host's ±3 s jitter and send a Tick.
     WakeAt { mark: SyncTime },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum FlushTransitionError {
-    #[error("request {request} is already in the outbox or in flight")]
-    AlreadyStored { request: RequestId },
-    #[error("request {request} is not a member of the batch in flight")]
-    NotInFlight { request: RequestId },
     #[error("no batch is in flight")]
     NoBatchInFlight,
 }
@@ -138,23 +115,8 @@ impl OutboxFlushState {
     }
 
     #[must_use]
-    pub fn is_held(&self, request: &RequestId) -> bool {
-        self.waiting.iter().any(|(_, held)| held == request) || self.in_flight_contains(request)
-    }
-
-    #[must_use]
-    pub fn in_flight_contains(&self, request: &RequestId) -> bool {
-        self.in_flight
-            .as_ref()
-            .is_some_and(|batch| batch.members.contains_key(request))
-    }
-
-    pub fn waiting(&self) -> impl Iterator<Item = &(SyncTime, RequestId)> {
-        self.waiting.iter()
-    }
-
-    pub fn in_flight_members(&self) -> impl Iterator<Item = &RequestId> {
-        self.in_flight.iter().flat_map(|batch| batch.members.keys())
+    pub const fn batch_in_flight(&self) -> bool {
+        self.in_flight.is_some()
     }
 
     #[must_use]
@@ -169,103 +131,73 @@ pub fn transition(
 ) -> Result<(OutboxFlushState, Vec<FlushEffect>), FlushTransitionError> {
     let mut effects = Vec::new();
     let mut tick_now = None;
-    match event {
-        FlushEvent::Stored { request, flush_at } => {
-            if state.is_held(&request) {
-                return Err(FlushTransitionError::AlreadyStored { request });
-            }
-            state.waiting.insert((flush_at, request));
+    let earliest_due = match event {
+        FlushEvent::Stored { flush_at } => {
+            // Something waits at least this early; keep an earlier armed wake.
+            Some(
+                state
+                    .armed_wake
+                    .map_or(flush_at, |armed| armed.min(flush_at)),
+            )
         }
-        FlushEvent::Tick { now } => {
+        FlushEvent::Tick { now, earliest_due } => {
             tick_now = Some(now);
             state.armed_wake = None;
-            if let Some(effect) = flush_on_mark(&mut state, now) {
-                effects.push(effect);
+            if let Some(mark) = flush_on_mark(&mut state, now, earliest_due) {
+                effects.push(FlushEffect::SendBatch { mark });
             }
+            earliest_due
         }
-        FlushEvent::LinkConnected => state.link = LinkAvailability::Connected,
+        FlushEvent::LinkConnected { earliest_due } => {
+            state.link = LinkAvailability::Connected;
+            earliest_due
+        }
         FlushEvent::LinkLost => {
             state.link = LinkAvailability::Disconnected;
+            state.in_flight = None;
             state.armed_wake = None;
-            if let Some(effect) = return_unanswered(&mut state) {
-                effects.push(effect);
-            }
+            None
         }
-        FlushEvent::MemberAnswered { request, outcome } => {
-            let batch = state
+        FlushEvent::BatchEnded { earliest_due } => {
+            state
                 .in_flight
-                .as_mut()
+                .take()
                 .ok_or(FlushTransitionError::NoBatchInFlight)?;
-            let Some(flush_at) = batch.members.remove(&request) else {
-                return Err(FlushTransitionError::NotInFlight { request });
-            };
-            if batch.members.is_empty() {
-                state.in_flight = None;
-            }
-            if outcome.is_final() {
-                effects.push(FlushEffect::RecordOutcome { request, outcome });
-            } else {
-                state.waiting.insert((flush_at, request.clone()));
-                effects.push(FlushEffect::ReturnUnapplied { request });
-            }
+            earliest_due
         }
-        FlushEvent::BatchExpired => {
-            let effect =
-                return_unanswered(&mut state).ok_or(FlushTransitionError::NoBatchInFlight)?;
-            effects.push(effect);
-        }
-    }
-    if let Some(mark) = rearm(&mut state, tick_now) {
+    };
+    if let Some(mark) = rearm(&mut state, earliest_due, tick_now) {
         effects.push(FlushEffect::WakeAt { mark });
     }
     Ok((state, effects))
 }
 
-fn flush_on_mark(state: &mut OutboxFlushState, now: SyncTime) -> Option<FlushEffect> {
+fn flush_on_mark(
+    state: &mut OutboxFlushState,
+    now: SyncTime,
+    earliest_due: Option<SyncTime>,
+) -> Option<SyncTime> {
     let mark = mark_in_window(now)?;
     let open = state.last_flushed.is_none_or(|flushed| flushed < mark);
     let ready = state.link == LinkAvailability::Connected && state.in_flight.is_none();
-    let has_due = state
-        .waiting
-        .first()
-        .is_some_and(|(flush_at, _)| *flush_at <= mark);
+    let has_due = earliest_due.is_some_and(|due| due <= mark);
     if !(open && ready && has_due) {
         return None;
     }
-    let mut members = BTreeMap::new();
-    while members.len() < MAX_BATCH_WRITES {
-        match state.waiting.first() {
-            Some((flush_at, _)) if *flush_at <= mark => {}
-            Some(_) | None => break,
-        }
-        if let Some((flush_at, request)) = state.waiting.pop_first() {
-            members.insert(request, flush_at);
-        }
-    }
-    let requests = members.keys().cloned().collect();
     state.last_flushed = Some(mark);
-    state.in_flight = Some(InFlightBatch { mark, members });
-    Some(FlushEffect::SendBatch { mark, requests })
-}
-
-fn return_unanswered(state: &mut OutboxFlushState) -> Option<FlushEffect> {
-    let batch = state.in_flight.take()?;
-    let requests = batch.members.keys().cloned().collect();
-    state.waiting.extend(
-        batch
-            .members
-            .into_iter()
-            .map(|(request, flush_at)| (flush_at, request)),
-    );
-    Some(FlushEffect::ReturnToOutbox { requests })
+    state.in_flight = Some(mark);
+    Some(mark)
 }
 
 /// The next mark worth waking for, if it differs from the armed one. Nothing
-/// is armed while the outbox is empty, the link is down, or a batch is in
-/// flight; the event that ends each of those re-arms.
-fn rearm(state: &mut OutboxFlushState, tick_now: Option<SyncTime>) -> Option<SyncTime> {
-    let earliest_due = state.waiting.first().map(|(flush_at, _)| *flush_at);
-    let target = match (state.link, &state.in_flight, earliest_due) {
+/// is armed while the link is down, a batch is in flight or nothing waits;
+/// the event that ends each of those re-arms.
+fn rearm(
+    state: &mut OutboxFlushState,
+    earliest_due: Option<SyncTime>,
+    tick_now: Option<SyncTime>,
+) -> Option<SyncTime> {
+    let target = match (state.link, state.in_flight, earliest_due) {
         (LinkAvailability::Connected, None, Some(earliest_due)) => {
             let after_last = state.last_flushed.map(next_mark_after);
             let still_open = tick_now.map(|now| earliest_open_mark(now, state.last_flushed));

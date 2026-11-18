@@ -230,7 +230,7 @@ pub(crate) struct Harness {
     pub(crate) connections: mpsc::UnboundedReceiver<CentralEnd>,
     pub(crate) outcomes: Arc<RecordedOutcomes>,
     pub(crate) tokens: Arc<ScriptedTokens>,
-    pub(crate) store: Arc<Mutex<MachineLocalOutbox>>,
+    pub(crate) store: Arc<Mutex<dyn OutboxStorage>>,
     pub(crate) stop: CancellationToken,
     pub(crate) tasks: TaskTracker,
     _root: tempfile::TempDir,
@@ -246,10 +246,19 @@ impl Harness {
         Self::start_on(root, clock, store)
     }
 
+    /// Starts on the given store (e.g. one that injects faults).
+    pub(crate) fn start_with_store(
+        root: tempfile::TempDir,
+        clock: Arc<ManualClock>,
+        store: Arc<Mutex<dyn OutboxStorage>>,
+    ) -> Self {
+        Self::start_on(root, clock, store)
+    }
+
     pub(crate) fn start_on(
         root: tempfile::TempDir,
         clock: Arc<ManualClock>,
-        store: Arc<Mutex<MachineLocalOutbox>>,
+        store: Arc<Mutex<dyn OutboxStorage>>,
     ) -> Self {
         let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
         Self::launch(root, clock, store, ready)
@@ -272,7 +281,7 @@ impl Harness {
     fn launch(
         root: tempfile::TempDir,
         clock: Arc<ManualClock>,
-        store: Arc<Mutex<MachineLocalOutbox>>,
+        store: Arc<Mutex<dyn OutboxStorage>>,
         availability: TokenAvailability,
     ) -> Self {
         let (sender, connections) = mpsc::unbounded_channel();
@@ -284,7 +293,7 @@ impl Harness {
             CentralLinkParts {
                 installation: INSTALLATION.parse().unwrap(),
                 clock: clock.clone(),
-                store: store.clone() as Arc<Mutex<dyn OutboxStorage>>,
+                store: store.clone(),
                 transport: Arc::new(ChannelTransport {
                     connections: sender,
                 }),

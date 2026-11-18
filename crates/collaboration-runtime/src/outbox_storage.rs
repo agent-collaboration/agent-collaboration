@@ -39,6 +39,16 @@ pub trait OutboxStorage: Send {
     ) -> OutboxFuture<'call, Vec<OutgoingWrite>>;
     fn delete_ended_before_retention(&mut self, now: SyncTime) -> OutboxFuture<'_, u64>;
     fn waiting(&mut self) -> OutboxFuture<'_, Vec<(SyncTime, RequestId)>>;
+    /// The earliest receipt mark among waiting writes.
+    fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>>;
+    /// Up to `limit` writes due by `mark`, oldest first by (created_at,
+    /// request_id), moved to sent in one transaction.
+    fn claim_next_batch(
+        &mut self,
+        mark: SyncTime,
+        limit: u16,
+        now: SyncTime,
+    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>>;
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>>;
     fn mark_sent<'call>(
         &'call mut self,
@@ -126,6 +136,21 @@ impl OutboxStorage for MachineLocalOutbox {
     }
     fn waiting(&mut self) -> OutboxFuture<'_, Vec<(SyncTime, RequestId)>> {
         Box::pin(async move { MacOutbox::new(&mut self.store).waiting().await })
+    }
+    fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        Box::pin(async move { MacOutbox::new(&mut self.store).earliest_waiting().await })
+    }
+    fn claim_next_batch(
+        &mut self,
+        mark: SyncTime,
+        limit: u16,
+        now: SyncTime,
+    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>> {
+        Box::pin(async move {
+            MacOutbox::new(&mut self.store)
+                .claim_next_batch(mark, limit, now)
+                .await
+        })
     }
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         Box::pin(async move { MacOutbox::new(&mut self.store).sent_without_answer().await })

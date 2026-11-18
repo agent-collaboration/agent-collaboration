@@ -282,6 +282,88 @@ pub(crate) async fn refusals_and_isolation(store: &mut dyn OutboxStorage) {
     assert!(store.outgoing_for(&caller(2), 10).await.unwrap().is_empty());
 }
 
+/// Writes stored at the same millisecond order by request id, as SQLite
+/// does, whatever order they arrived in (step-8 Verifier's probe).
+pub(crate) async fn same_millisecond_writes_order_by_request_id(store: &mut dyn OutboxStorage) {
+    let higher = item(41, "higher id first", MARK);
+    let lower = item(40, "lower id second", MARK);
+    store.insert(&higher, at(MARK - 1_000)).await.unwrap();
+    store.insert(&lower, at(MARK - 1_000)).await.unwrap();
+
+    let pending = store.pending_for(&higher.caller).await.unwrap();
+    let claimed = store
+        .claim_next_batch(at(MARK), 64, at(MARK))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        pending
+            .iter()
+            .map(|write| write.request_id.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&lower, &higher])
+    );
+    assert_eq!(
+        claimed
+            .iter()
+            .map(|write| write.request.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&lower, &higher])
+    );
+}
+
+/// A claim takes only writes due by its mark, oldest first, at most `limit`,
+/// and they are sent; the earliest waiting mark follows what is left.
+pub(crate) async fn claim_takes_due_writes_oldest_first_up_to_the_limit(
+    store: &mut dyn OutboxStorage,
+) {
+    let first = item(42, "first", MARK);
+    let second = item(43, "second", MARK);
+    let third = item(44, "third", MARK);
+    let later = item(45, "next mark", MARK + 60_000);
+    for (offset, write) in [&first, &second, &third, &later].into_iter().enumerate() {
+        let stored_at = MARK - 10_000 + i64::try_from(offset).unwrap();
+        store.insert(write, at(stored_at)).await.unwrap();
+    }
+    let earliest_before = store.earliest_waiting().await.unwrap();
+
+    let claimed = store.claim_next_batch(at(MARK), 2, at(MARK)).await.unwrap();
+    let earliest_after = store.earliest_waiting().await.unwrap();
+    let rest = store
+        .claim_next_batch(at(MARK), 64, at(MARK))
+        .await
+        .unwrap();
+
+    assert_eq!(earliest_before, Some(at(MARK)));
+    assert_eq!(
+        claimed
+            .iter()
+            .map(|write| write.request.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&first, &second])
+    );
+    assert_eq!(claimed[0].payload, first.payload);
+    assert_eq!(
+        store
+            .request_status(&first.caller, &first.request)
+            .await
+            .unwrap(),
+        RequestStatus::Sent
+    );
+    assert_eq!(earliest_after, Some(at(MARK)), "the third is still due");
+    assert_eq!(
+        rest.iter()
+            .map(|write| write.request.clone())
+            .collect::<Vec<_>>(),
+        ids(&[&third]),
+        "a write due on a later mark is not claimed early"
+    );
+    assert_eq!(
+        store.earliest_waiting().await.unwrap(),
+        Some(at(MARK + 60_000))
+    );
+}
+
 /// Runs every contract case on fresh stores from `open`.
 macro_rules! outbox_storage_contract {
     ($open:expr) => {
@@ -313,25 +395,20 @@ macro_rules! outbox_storage_contract {
             let (_root, mut store) = $open.await;
             crate::outbox_storage_contract::refusals_and_isolation(&mut store).await;
         }
+        #[tokio::test]
+        async fn same_millisecond_writes_order_by_request_id() {
+            let (_root, mut store) = $open.await;
+            crate::outbox_storage_contract::same_millisecond_writes_order_by_request_id(&mut store)
+                .await;
+        }
+        #[tokio::test]
+        async fn claim_takes_due_writes_oldest_first_up_to_the_limit() {
+            let (_root, mut store) = $open.await;
+            crate::outbox_storage_contract::claim_takes_due_writes_oldest_first_up_to_the_limit(
+                &mut store,
+            )
+            .await;
+        }
     };
 }
 pub(crate) use outbox_storage_contract;
-
-mod machine_local_store_contract {
-    async fn open() -> (tempfile::TempDir, crate::MachineLocalOutbox) {
-        let root = tempfile::tempdir().unwrap();
-        let store = crate::MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
-            .await
-            .unwrap();
-        (root, crate::MachineLocalOutbox::new(store))
-    }
-    super::outbox_storage_contract!(open());
-}
-
-#[cfg(feature = "test-support")]
-mod memory_outbox_contract {
-    fn open() -> std::future::Ready<((), crate::MemoryOutbox)> {
-        std::future::ready(((), crate::MemoryOutbox::new()))
-    }
-    super::outbox_storage_contract!(open());
-}

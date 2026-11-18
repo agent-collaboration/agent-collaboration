@@ -8,11 +8,14 @@
 //! - a sent write whose answer was lost at most twice (pending plus central)
 //!   until the next flush's replay answers it, then once.
 use super::driver_test_support::*;
+use super::store_faults::{FaultPlan, FaultyOutbox};
+use central_link_client::SubmitRefusal;
 use central_link_client::{LinkCalls, PendingWrite, PendingWriteState, Submission};
 use central_link_protocol::{DataFrame, FrameDirection, LinkFrame, ReplyPayload, decode_text};
 use hegel::{TestCase, generators as gs};
 use runtime_primitives::Clock;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::time::Duration;
 use workspace_model::{ChangePosition, ItemRef, WorkspaceAnswer, WorkspaceReply, WorkspaceResult};
 
@@ -33,7 +36,21 @@ struct OverlayModel {
     submitted: BTreeSet<String>,
     next_seed: u16,
     next_post: u16,
+    /// Store calls that fail once next (Lead A: store faults at any step).
+    faults: FaultPlan,
 }
+
+/// Store calls a fault may hit; the read views the invariant uses are left out.
+const FAULTABLE: [&str; 8] = [
+    "insert",
+    "earliest_waiting",
+    "sent_without_answer",
+    "claim_next_batch",
+    "record_outcome",
+    "return_unapplied",
+    "return_unanswered",
+    "delete_ended_before_retention",
+];
 
 fn created(post: &str, position: u64) -> ReplyPayload {
     ReplyPayload::Workspace(WorkspaceReply {
@@ -60,7 +77,45 @@ fn created_post(reply: &ReplyPayload) -> Option<String> {
 }
 
 impl OverlayModel {
-    /// Two command round trips: the first may be served before the driver
+    fn all_answered(&self) -> bool {
+        self.pending()
+            .iter()
+            .all(|write| matches!(write.state, PendingWriteState::Answered(_)))
+    }
+
+    /// Plays central with no losses: every member of a batch is applied once
+    /// and answered.
+    fn answer_everything(&mut self) {
+        let Some(members) = self.take_batch() else {
+            return;
+        };
+        for member in &members {
+            let id = member
+                .payload()
+                .write_request_id()
+                .map(|id| id.as_str().to_owned());
+            let Some(id) = id else { continue };
+            let next_post = &mut self.next_post;
+            let post = self
+                .central_log
+                .entry(id)
+                .or_insert_with(|| {
+                    *next_post += 1;
+                    uuid_v7(40_000 + *next_post)
+                })
+                .clone();
+            let position = u64::from(self.next_post);
+            if let Some(central) = &self.central {
+                central.send(LinkFrame::Data(DataFrame::Reply {
+                    correlation_id: member.correlation_id().clone(),
+                    result: Box::new(created(&post, position)),
+                }));
+            }
+        }
+        let _ = self.pending();
+    }
+
+    /// Two command round trips): the first may be served before the driver
     /// looks at the clock; by the second it has run its due timers.
     fn settle(&self) {
         for _ in 0..2 {
@@ -160,11 +215,14 @@ impl OverlayModel {
         let submission = self
             .runtime
             .block_on(self.harness.calls.submit(caller(), thread_post(&id)));
-        assert!(
-            matches!(submission, Submission::InOutbox(_)),
-            "{submission:?}"
-        );
-        self.submitted.insert(id);
+        match submission {
+            Submission::InOutbox(_) => {
+                self.submitted.insert(id);
+            }
+            // The insert failed and rolled back: the write was never accepted.
+            Submission::Refused(SubmitRefusal::OutboxUnavailable) => {}
+            other => panic!("unexpected submission {other:?}"),
+        }
         // A write stored inside a mark's window that passed while the link was
         // down can start a batch at once; central answers it in this step.
         self.settle();
@@ -217,8 +275,46 @@ impl OverlayModel {
         panic!("the link did not reconnect within its backoff");
     }
 
+    #[rule]
+    fn a_store_call_fails_once(&mut self, tc: TestCase) {
+        let operation = tc.draw(gs::sampled_from(FAULTABLE.to_vec()));
+        self.faults.fail_once(operation);
+    }
+
+    /// Link and store healthy: every accepted write ends answered, once.
+    #[rule]
+    fn the_link_and_store_heal_and_everything_drains(&mut self, tc: TestCase) {
+        self.faults.clear();
+        for _ in 0..12 {
+            if self.central.is_none() {
+                self.the_link_reconnects(tc.clone());
+            }
+            if self.all_answered() {
+                break;
+            }
+            let now = self.harness.clock.now().unix_millis();
+            let next_mark = (now.div_euclid(60_000) + 1) * 60_000;
+            self.advance(u64::try_from(next_mark - now).unwrap());
+            self.answer_everything();
+        }
+        assert!(
+            self.all_answered(),
+            "every accepted write is answered once link and store are healthy: {:?}",
+            self.pending()
+        );
+    }
+
     #[invariant(always_run)]
     fn each_own_write_shows_as_option_c_allows(&self, _: TestCase) {
+        if self.central.is_some() {
+            assert!(
+                matches!(
+                    self.runtime.block_on(self.harness.calls.link_status()),
+                    Some(central_link_client::LinkStatus::Connected { .. })
+                ),
+                "a store error never changes the link"
+            );
+        }
         let pending = self.pending();
         let mut seen = BTreeSet::new();
         for write in &pending {
@@ -254,10 +350,22 @@ fn each_write_shows_once_except_a_lost_answer_until_its_replay(tc: TestCase) {
         .enable_all()
         .build()
         .unwrap();
-    let mut harness = runtime.block_on(Harness::start(
-        tempfile::tempdir().unwrap(),
+    let root = tempfile::tempdir().unwrap();
+    let faults = FaultPlan::default();
+    let inner = runtime
+        .block_on(open_outbox(&root.path().join("machine_local.sqlite")))
+        .unwrap();
+    let store = FaultyOutbox {
+        inner: Box::new(inner),
+        plan: faults.clone(),
+    };
+    let entered = runtime.enter();
+    let mut harness = Harness::start_with_store(
+        root,
         clock_at(MARK - 20_000),
-    ));
+        Arc::new(tokio::sync::Mutex::new(store)),
+    );
+    drop(entered);
     let central = runtime.block_on(harness.connected());
     let model = OverlayModel {
         runtime,
@@ -267,6 +375,7 @@ fn each_write_shows_once_except_a_lost_answer_until_its_replay(tc: TestCase) {
         submitted: BTreeSet::new(),
         next_seed: 0,
         next_post: 0,
+        faults,
     };
     hegel::stateful::machine(model).run(tc);
 }

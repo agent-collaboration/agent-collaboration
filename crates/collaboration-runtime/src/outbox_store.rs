@@ -457,6 +457,79 @@ impl<'store> MacOutbox<'store> {
         Ok(writes)
     }
 
+    /// Claims the next batch: up to `limit` writes waiting for `mark` or
+    /// earlier, oldest first by (created_at, request_id), moved to sent in one
+    /// transaction and returned for the batch frame. The table is the only
+    /// list of what waits (Lead A, 2026-11-18): nothing is held in memory.
+    pub async fn claim_next_batch(
+        &mut self,
+        mark: SyncTime,
+        limit: u16,
+        now: SyncTime,
+    ) -> Result<Vec<StoredOutboxWrite>, OutboxStoreError> {
+        let unsent = OutboxItemState::InOutbox.as_str();
+        let answer_lost = OutboxItemState::SentAnswerLost.as_str();
+        let to = OutboxItemState::Sent.as_str();
+        let mark_ms = mark.unix_millis();
+        let now_ms = now.unix_millis();
+        let limit = i64::from(limit);
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let due = sqlx::query_scalar!(
+            r#"SELECT request_id AS "request_id!" FROM outbox_items
+               WHERE item_state IN (?, ?) AND flush_at_ms <= ?
+               ORDER BY created_at, request_id LIMIT ?"#,
+            unsent,
+            answer_lost,
+            mark_ms,
+            limit
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut writes = Vec::with_capacity(due.len());
+        for request_id in &due {
+            let row = sqlx::query_as!(
+                OutboxRow,
+                r#"UPDATE outbox_items SET item_state = ?, updated_at = ?
+                   WHERE request_id = ? AND item_state IN (?, ?)
+                   RETURNING request_id AS "request_id!", caller_json, payload_json,
+                             item_state, flush_at_ms, outcome_json"#,
+                to,
+                now_ms,
+                request_id,
+                unsent,
+                answer_lost
+            )
+            .fetch_one(&mut *transaction)
+            .await?;
+            let stored = decode_row(&row)?;
+            let StoredPayload::Unanswered(payload) = stored.payload else {
+                return Err(corrupt_row(request_id, "payload_json"));
+            };
+            writes.push(StoredOutboxWrite {
+                request: parse_request_id(request_id)?,
+                caller: stored.caller,
+                payload,
+            });
+        }
+        transaction.commit().await?;
+        Ok(writes)
+    }
+
+    /// The earliest receipt mark among waiting writes, for arming the flush.
+    pub async fn earliest_waiting(&mut self) -> Result<Option<SyncTime>, OutboxStoreError> {
+        let unsent = OutboxItemState::InOutbox.as_str();
+        let answer_lost = OutboxItemState::SentAnswerLost.as_str();
+        let earliest = sqlx::query_scalar!(
+            r#"SELECT MIN(flush_at_ms) AS "earliest: i64" FROM outbox_items
+               WHERE item_state IN (?, ?)"#,
+            unsent,
+            answer_lost
+        )
+        .fetch_one(&mut self.store.connection)
+        .await?;
+        Ok(earliest.map(SyncTime::from_unix_millis))
+    }
+
     /// Keeps central's answer for one sent write and, in the same transaction,
     /// drops its text: the stored payload becomes the body-free answered record
     /// (owner, 2026-11-15: unsent text stays on the Mac only until central

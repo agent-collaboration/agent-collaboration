@@ -35,7 +35,7 @@ struct Row {
     content_digest: String,
     flush_at: SyncTime,
     state: RowState,
-    created: u64,
+    created_at: i64,
     updated_at: i64,
 }
 
@@ -55,7 +55,6 @@ impl Row {
 #[derive(Default)]
 pub struct MemoryOutbox {
     rows: BTreeMap<RequestId, Row>,
-    next_created: u64,
 }
 
 impl MemoryOutbox {
@@ -127,7 +126,6 @@ impl OutboxStorage for MemoryOutbox {
                 });
             }
             let target = content(&item.request, &item.payload)?.target;
-            self.next_created += 1;
             self.rows.insert(
                 item.request.clone(),
                 Row {
@@ -137,7 +135,7 @@ impl OutboxStorage for MemoryOutbox {
                     content_digest: digest,
                     flush_at: item.flush_at,
                     state: RowState::InOutbox,
-                    created: self.next_created,
+                    created_at: now.unix_millis(),
                     updated_at: now.unix_millis(),
                 },
             );
@@ -169,7 +167,8 @@ impl OutboxStorage for MemoryOutbox {
                 .filter(|(_, row)| &row.caller == caller)
                 .filter(|(_, row)| !matches!(row.state, RowState::Refused(_)))
                 .collect();
-            rows.sort_by_key(|(id, row)| (row.created, (*id).clone()));
+            // (created_at, request_id), exactly as the SQLite store orders.
+            rows.sort_by_key(|(id, row)| (row.created_at, (*id).clone()));
             rows.into_iter()
                 .map(|(id, row)| {
                     let body = || -> Result<_, OutboxStoreError> {
@@ -270,6 +269,37 @@ impl OutboxStorage for MemoryOutbox {
         })
     }
 
+    fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        Box::pin(async move {
+            Ok(self
+                .rows
+                .values()
+                .filter(|row| unsent(&row.state))
+                .map(|row| row.flush_at)
+                .min())
+        })
+    }
+
+    fn claim_next_batch(
+        &mut self,
+        mark: SyncTime,
+        limit: u16,
+        now: SyncTime,
+    ) -> OutboxFuture<'_, Vec<StoredOutboxWrite>> {
+        Box::pin(async move {
+            let mut due: Vec<(i64, RequestId)> = self
+                .rows
+                .iter()
+                .filter(|(_, row)| unsent(&row.state) && row.flush_at <= mark)
+                .map(|(id, row)| (row.created_at, id.clone()))
+                .collect();
+            due.sort();
+            due.truncate(usize::from(limit));
+            let requests: Vec<RequestId> = due.into_iter().map(|(_, id)| id).collect();
+            self.mark_sent(&requests, now).await
+        })
+    }
+
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         Box::pin(async move {
             Ok(self
@@ -362,3 +392,7 @@ impl OutboxStorage for MemoryOutbox {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "memory_outbox_test.rs"]
+mod tests;

@@ -9,14 +9,14 @@ use super::{DriverCommand, FlushJitter};
 use crate::OutboxStorage;
 use crate::outbox_store::{NewOutboxItem, OutboxInsert, OutboxStoreError};
 use central_link_client::{
-    CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEffect, FlushEvent,
-    FlushOutcome, FlushOutcomeSink, FlushOutcomes, LinkAdmissionRefusal, LinkClient, MemberOutcome,
+    CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEvent,
+    FlushOutcome, FlushOutcomeSink, LinkAdmissionRefusal, LinkClient, MemberOutcome,
     OutboxFlushState, OutboxReceipt, PendingWrite, RefusalReason as LinkRefusal, RequestStatus,
-    Submission, SubmissionPath, SubmitRefusal, submission_path, transition,
+    Submission, SubmissionPath, SubmitRefusal, submission_path,
 };
 use central_link_protocol::{
-    CorrelationId, DataFrame, FrameDirection, LinkFrame, LinkRequest, LinkRequestBatch,
-    MachineTokenText, RequestPayload, decode_text, encode_text,
+    CorrelationId, DataFrame, FrameDirection, LinkFrame, LinkRequest, MachineTokenText,
+    RequestPayload, decode_text, encode_text,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use runtime_primitives::SyncTime;
@@ -112,7 +112,8 @@ impl LinkDriver {
         mut commands: mpsc::Receiver<DriverCommand>,
         stop: CancellationToken,
     ) {
-        self.restore_outbox().await;
+        // Start-up: sent rows from before a stop go back to waiting.
+        self.reconcile_sent().await;
         loop {
             self.drive_time().await;
             let deadline = [
@@ -143,39 +144,6 @@ impl LinkDriver {
         }
     }
 
-    /// Restart path: rows sent before a stop are back in the outbox, and every
-    /// waiting row is loaded into the reducer under its receipt mark.
-    async fn restore_outbox(&mut self) {
-        let now = self.clock.now();
-        let waiting = {
-            let mut store = self.store.lock().await;
-            let outbox = &mut *store;
-            // A failed read here must not pass silently: unloaded rows would
-            // wait in the outbox with nothing flushing them.
-            match outbox.sent_without_answer().await {
-                Ok(sent) => {
-                    if let Err(error) = outbox.return_unanswered(&sent, now).await {
-                        tracing::warn!(%error, "outbox restore: returning unanswered writes failed");
-                    }
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "outbox restore: reading sent writes failed");
-                }
-            }
-            match outbox.waiting().await {
-                Ok(waiting) => waiting,
-                Err(error) => {
-                    tracing::warn!(%error, "outbox restore: reading waiting writes failed; none loaded");
-                    Vec::new()
-                }
-            }
-        };
-        for (flush_at, request) in waiting {
-            self.apply_flush(FlushEvent::Stored { request, flush_at })
-                .await;
-        }
-    }
-
     async fn drive_time(&mut self) {
         while let Some(action) = self.client.poll_time() {
             self.handle_action(action).await;
@@ -187,13 +155,7 @@ impl LinkDriver {
         {
             self.flush_wake = None;
             let now = self.clock.now();
-            self.apply_flush(FlushEvent::Tick { now }).await;
-            // Each flush tick also prunes writes that ended 60 days ago: bodies
-            // went at the end, so a kept row is only a receipt.
-            let mut store = self.store.lock().await;
-            if let Err(error) = store.delete_ended_before_retention(now).await {
-                tracing::warn!(%error, "outbox retention prune failed; it runs again next flush");
-            }
+            self.flush_tick(now).await;
         }
     }
 
@@ -212,6 +174,7 @@ impl LinkDriver {
                     socket.close().await;
                 }
                 self.settle_failed(failed).await;
+                self.return_batch().await;
                 self.apply_flush(FlushEvent::LinkLost).await;
             }
             ClientAction::CallsExpired { failed } => self.settle_failed(failed).await,
@@ -273,6 +236,7 @@ impl LinkDriver {
         if let Ok(failed) = self.client.closed(&attempt) {
             self.settle_failed(failed).await;
         }
+        self.return_batch().await;
         self.apply_flush(FlushEvent::LinkLost).await;
     }
 
@@ -308,7 +272,7 @@ impl LinkDriver {
         match event {
             ClientEvent::Welcomed => {
                 self.lapsed_token = None;
-                self.apply_flush(FlushEvent::LinkConnected).await;
+                self.flush_link_connected().await;
             }
             ClientEvent::Reply {
                 correlation_id,
@@ -341,8 +305,7 @@ impl LinkDriver {
             .as_mut()
             .and_then(|batch| batch.members.remove(correlation));
         if let Some((request, _)) = member {
-            let outcome = MemberOutcome::Answered(result);
-            self.apply_flush(FlushEvent::MemberAnswered { request, outcome })
+            self.batch_member_answered(request, MemberOutcome::Answered(result))
                 .await;
         }
     }
@@ -371,8 +334,8 @@ impl LinkDriver {
                 batch_member_failed = true;
             }
         }
-        if batch_member_failed && self.batch.is_some() {
-            self.apply_flush(FlushEvent::BatchExpired).await;
+        if batch_member_failed {
+            self.return_batch().await;
         }
     }
 
@@ -444,11 +407,7 @@ impl LinkDriver {
         };
         match inserted {
             Ok(OutboxInsert::Stored) => {
-                self.apply_flush(FlushEvent::Stored {
-                    request: request.clone(),
-                    flush_at,
-                })
-                .await;
+                self.apply_flush(FlushEvent::Stored { flush_at }).await;
                 Submission::InOutbox(OutboxReceipt {
                     id: request,
                     flush_at,
@@ -497,149 +456,6 @@ impl LinkDriver {
             .insert(correlation, ImmediateCall { request, reply });
         if !self.send(&frame).await {
             self.socket_closed().await;
-        }
-    }
-
-    async fn apply_flush(&mut self, event: FlushEvent) {
-        let state = std::mem::take(&mut self.flush);
-        let (state, effects) = match transition(state.clone(), event) {
-            Ok(next) => next,
-            Err(_) => (state, Vec::new()),
-        };
-        self.flush = state;
-        for effect in effects {
-            Box::pin(self.run_effect(effect)).await;
-        }
-        if self.batch.is_none() && !self.deferred_pending.is_empty() {
-            for (caller, reply) in std::mem::take(&mut self.deferred_pending) {
-                let pending = pending_for(&self.store, &caller).await;
-                let _ = reply.send(pending);
-            }
-        }
-    }
-
-    async fn run_effect(&mut self, effect: FlushEffect) {
-        let now = self.clock.now();
-        match effect {
-            FlushEffect::SendBatch { mark, requests } => self.send_batch(mark, &requests).await,
-            FlushEffect::RecordOutcome { request, outcome } => {
-                let caller = {
-                    let mut store = self.store.lock().await;
-                    let _ = store.record_outcome(&request, &outcome, now).await;
-                    self.batch_caller(&request)
-                };
-                if let (Some(batch), Some(caller)) = (self.batch.as_mut(), caller) {
-                    batch.outcomes.push(FlushOutcome {
-                        caller,
-                        request_id: request,
-                        outcome,
-                    });
-                }
-                self.finish_batch_if_answered();
-            }
-            FlushEffect::ReturnUnapplied { request } => {
-                let mut store = self.store.lock().await;
-                let _ = store.return_unapplied(&request, now).await;
-                drop(store);
-                if let Some(batch) = self.batch.as_mut() {
-                    batch.returned = true;
-                }
-                self.finish_batch_if_answered();
-            }
-            FlushEffect::ReturnToOutbox { requests } => {
-                let mut store = self.store.lock().await;
-                let _ = store.return_unanswered(&requests, now).await;
-                drop(store);
-                self.finish_batch(false);
-            }
-            FlushEffect::WakeAt { mark } => {
-                let jitter = self.jitter.jitter_millis(mark).clamp(-3_000, 3_000);
-                let at = SyncTime::from_unix_millis(mark.unix_millis().saturating_add(jitter));
-                self.flush_wake = Some(self.clock.wall_deadline(at));
-            }
-        }
-    }
-
-    fn batch_caller(&self, request: &RequestId) -> Option<Caller> {
-        self.batch
-            .as_ref()
-            .and_then(|batch| batch.callers.get(request).cloned())
-    }
-
-    async fn send_batch(&mut self, mark: SyncTime, requests: &[RequestId]) {
-        let now = self.clock.now();
-        let writes = {
-            let mut store = self.store.lock().await;
-            store.mark_sent(requests, now).await
-        };
-        let Ok(writes) = writes else {
-            self.apply_flush(FlushEvent::LinkLost).await;
-            return;
-        };
-        let expected = writes.len();
-        let mut members = BTreeMap::new();
-        let mut frames = Vec::with_capacity(expected);
-        for write in writes {
-            if let Ok(LinkFrame::Data(DataFrame::Request { request })) = self
-                .client
-                .begin_request(write.caller.clone(), write.payload)
-            {
-                members.insert(
-                    request.correlation_id().clone(),
-                    (write.request, write.caller),
-                );
-                frames.push(*request);
-            }
-        }
-        if frames.len() != expected {
-            // The client refused a member (the link went down after the reducer
-            // chose this flush): nothing is sent and every member goes back.
-            self.batch = Some(BatchInFlight {
-                mark,
-                callers: members.values().cloned().collect(),
-                members,
-                outcomes: Vec::new(),
-                returned: false,
-            });
-            self.apply_flush(FlushEvent::LinkLost).await;
-            return;
-        }
-        let callers = members.values().cloned().collect();
-        self.batch = Some(BatchInFlight {
-            mark,
-            members,
-            callers,
-            outcomes: Vec::new(),
-            returned: false,
-        });
-        let sent = match LinkRequestBatch::new(frames) {
-            Ok(batch) => {
-                self.send(&LinkFrame::Data(DataFrame::Batch { requests: batch }))
-                    .await
-            }
-            Err(_) => false,
-        };
-        if !sent {
-            self.socket_closed().await;
-        }
-    }
-
-    /// Ends the batch once no member is in flight; it is complete unless a
-    /// member went back to the outbox.
-    fn finish_batch_if_answered(&mut self) {
-        if self.flush.in_flight_members().next().is_none() {
-            let complete = !self.batch.as_ref().is_some_and(|batch| batch.returned);
-            self.finish_batch(complete);
-        }
-    }
-
-    fn finish_batch(&mut self, complete: bool) {
-        if let Some(batch) = self.batch.take() {
-            self.sink.deliver(FlushOutcomes {
-                flush_at: batch.mark,
-                outcomes: batch.outcomes,
-                complete,
-            });
         }
     }
 
@@ -710,8 +526,14 @@ async fn pending_for(
     store.pending_for(caller).await
 }
 
+#[path = "driver_flush.rs"]
+mod driver_flush;
 #[path = "driver_tokens.rs"]
 mod driver_tokens;
+
+#[cfg(test)]
+#[path = "store_faults_test.rs"]
+mod store_faults_tests;
 
 #[cfg(test)]
 #[path = "driver_task_test.rs"]

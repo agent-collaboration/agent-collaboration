@@ -1,35 +1,31 @@
 use super::*;
 use crate::flush_marks::{FLUSH_INTERVAL_MILLIS, FLUSH_JITTER_MILLIS};
 use hegel::{TestCase, generators as gs};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 const START: i64 = 1_763_380_800_000 - 40_000;
-
-fn request_id(seed: u64) -> RequestId {
-    let mut random = [0_u8; 10];
-    random[..8].copy_from_slice(&seed.to_be_bytes());
-    uuid::Builder::from_unix_timestamp_millis(1_763_380_000_000 + seed, &random)
-        .into_uuid()
-        .to_string()
-        .parse()
-        .unwrap()
-}
 
 fn at(millis: i64) -> SyncTime {
     SyncTime::from_unix_millis(millis)
 }
 
-/// Drives the reducer like a Host and checks every effect against a model of
-/// which writes are stored, in flight and answered.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Row {
+    Waiting,
+    Sent,
+    Answered,
+}
+
+/// Plays the Host with a model store: the store, not the reducer, holds every
+/// write; the reducer only says when a batch may go.
 struct FlushModel {
     state: OutboxFlushState,
     now: i64,
     next_seed: u64,
-    flush_at: HashMap<RequestId, SyncTime>,
-    stored: BTreeSet<RequestId>,
-    awaiting_answer: BTreeSet<RequestId>,
-    answered: BTreeSet<RequestId>,
+    rows: BTreeMap<u64, (SyncTime, Row)>,
     armed_wake: Option<SyncTime>,
+    link_up: bool,
+    sends: usize,
 }
 
 impl FlushModel {
@@ -38,88 +34,90 @@ impl FlushModel {
             state: OutboxFlushState::default(),
             now: START,
             next_seed: 0,
-            flush_at: HashMap::new(),
-            stored: BTreeSet::new(),
-            awaiting_answer: BTreeSet::new(),
-            answered: BTreeSet::new(),
+            rows: BTreeMap::new(),
             armed_wake: None,
+            link_up: false,
+            sends: 0,
         }
+    }
+
+    fn earliest_due(&self) -> Option<SyncTime> {
+        self.rows
+            .values()
+            .filter(|(_, row)| *row == Row::Waiting)
+            .map(|(flush_at, _)| *flush_at)
+            .min()
     }
 
     fn apply(&mut self, event: FlushEvent) -> Vec<FlushEffect> {
         let (state, effects) = transition(self.state.clone(), event).expect("valid event");
         self.state = state;
         for effect in &effects {
-            self.check_effect(effect);
+            match effect {
+                FlushEffect::SendBatch { mark } => self.claim(*mark),
+                FlushEffect::WakeAt { mark } => {
+                    assert_eq!(mark.unix_millis().rem_euclid(FLUSH_INTERVAL_MILLIS), 0);
+                    self.armed_wake = Some(*mark);
+                }
+            }
         }
         effects
     }
 
-    fn check_effect(&mut self, effect: &FlushEffect) {
-        match effect {
-            FlushEffect::SendBatch { mark, requests } => {
-                assert!(!requests.is_empty() && requests.len() <= MAX_BATCH_WRITES);
-                assert!(
-                    self.now.abs_diff(mark.unix_millis()) <= FLUSH_JITTER_MILLIS.unsigned_abs(),
-                    "a batch goes only inside its mark's window"
-                );
-                for request in requests {
-                    assert!(self.flush_at[request] <= *mark, "sent before its mark");
-                    assert!(!self.answered.contains(request), "answered write resent");
-                    assert!(
-                        self.awaiting_answer.insert(request.clone()),
-                        "write sent twice while awaiting its answer"
-                    );
-                }
-            }
-            FlushEffect::RecordOutcome { request, .. } => {
-                assert!(self.awaiting_answer.remove(request));
-                assert!(self.answered.insert(request.clone()), "answered twice");
-            }
-            FlushEffect::ReturnToOutbox { requests } => {
-                for request in requests {
-                    assert!(self.awaiting_answer.remove(request));
-                }
-            }
-            FlushEffect::ReturnUnapplied { request } => {
-                assert!(self.awaiting_answer.remove(request));
-                assert!(
-                    !self.answered.contains(request),
-                    "an unapplied write was final"
-                );
-            }
-            FlushEffect::WakeAt { mark } => {
-                assert_eq!(mark.unix_millis().rem_euclid(FLUSH_INTERVAL_MILLIS), 0);
-                self.armed_wake = Some(*mark);
-            }
+    /// The Host's claim: up to 64 waiting rows due by `mark`.
+    fn claim(&mut self, mark: SyncTime) {
+        assert!(self.link_up, "a batch only goes on a connected link");
+        assert!(
+            self.now.abs_diff(mark.unix_millis()) <= FLUSH_JITTER_MILLIS.unsigned_abs(),
+            "a batch goes only inside its mark's window"
+        );
+        assert!(
+            !self.rows.values().any(|(_, row)| *row == Row::Sent),
+            "one batch in flight at a time"
+        );
+        let due: Vec<u64> = self
+            .rows
+            .iter()
+            .filter(|(_, (flush_at, row))| *row == Row::Waiting && *flush_at <= mark)
+            .map(|(seed, _)| *seed)
+            .take(MAX_BATCH_WRITES)
+            .collect();
+        for seed in due {
+            self.rows.get_mut(&seed).unwrap().1 = Row::Sent;
         }
-    }
-
-    /// Wake like the Host: on the armed mark plus jitter.
-    fn wake_as_host(&mut self, jitter: i64) -> Vec<FlushEffect> {
-        let mark = self.armed_wake.take().expect("a wake is armed");
-        self.now = self.now.max(mark.unix_millis() + jitter);
-        self.apply(FlushEvent::Tick { now: at(self.now) })
-    }
-
-    fn tick_on_next_mark(&mut self, jitter: i64) -> Vec<FlushEffect> {
-        let mark = next_mark_after(at(self.now)).unix_millis();
-        self.now = self.now.max(mark + jitter);
-        self.apply(FlushEvent::Tick { now: at(self.now) })
+        self.sends += 1;
     }
 
     fn store_next(&mut self) {
-        let request = request_id(self.next_seed);
-        self.next_seed += 1;
         let flush_at = self.state.receipt_mark(at(self.now));
         assert!(flush_at.unix_millis() + FLUSH_JITTER_MILLIS >= self.now);
-        self.flush_at.insert(request.clone(), flush_at);
-        self.stored.insert(request.clone());
-        self.apply(FlushEvent::Stored { request, flush_at });
+        self.rows.insert(self.next_seed, (flush_at, Row::Waiting));
+        self.next_seed += 1;
+        self.apply(FlushEvent::Stored { flush_at });
     }
 
-    fn in_flight(&self) -> Vec<RequestId> {
-        self.state.in_flight_members().cloned().collect()
+    fn end_batch(&mut self, answered: bool) {
+        for (_, row) in self.rows.values_mut() {
+            if *row == Row::Sent {
+                *row = if answered {
+                    Row::Answered
+                } else {
+                    Row::Waiting
+                };
+            }
+        }
+        let earliest_due = self.earliest_due();
+        self.apply(FlushEvent::BatchEnded { earliest_due });
+    }
+
+    fn wake_as_host(&mut self, jitter: i64) -> Vec<FlushEffect> {
+        let mark = self.armed_wake.take().expect("a wake is armed");
+        self.now = self.now.max(mark.unix_millis() + jitter);
+        let earliest_due = self.earliest_due();
+        self.apply(FlushEvent::Tick {
+            now: at(self.now),
+            earliest_due,
+        })
     }
 }
 
@@ -130,37 +128,18 @@ impl FlushModel {
         self.store_next();
     }
 
-    /// A Host reloading its store after the clock stepped back holds writes
-    /// whose marks are still ahead.
     #[rule]
-    fn reload_a_write_for_a_later_mark(&mut self, tc: TestCase) {
-        let marks_ahead = tc.draw(gs::integers::<i64>().min_value(1).max_value(3));
-        let request = request_id(self.next_seed);
-        self.next_seed += 1;
-        let open = self.state.receipt_mark(at(self.now)).unix_millis();
-        let flush_at = at(open + marks_ahead * FLUSH_INTERVAL_MILLIS);
-        self.flush_at.insert(request.clone(), flush_at);
-        self.stored.insert(request.clone());
-        self.apply(FlushEvent::Stored { request, flush_at });
+    fn link_connects(&mut self, _: TestCase) {
+        tc_link(self, true);
     }
 
     #[rule]
-    fn time_passes(&mut self, tc: TestCase) {
-        self.now += tc.draw(gs::integers::<i64>().min_value(0).max_value(75_000));
+    fn link_drops(&mut self, _: TestCase) {
+        tc_link(self, false);
     }
 
     #[rule(weight = 3)]
-    fn wake_on_a_mark(&mut self, tc: TestCase) {
-        let jitter = tc.draw(
-            gs::integers::<i64>()
-                .min_value(-FLUSH_JITTER_MILLIS)
-                .max_value(FLUSH_JITTER_MILLIS),
-        );
-        self.tick_on_next_mark(jitter);
-    }
-
-    #[rule(weight = 3)]
-    fn host_wakes_on_its_armed_mark(&mut self, tc: TestCase) {
+    fn time_reaches_the_armed_mark(&mut self, tc: TestCase) {
         tc.assume(self.armed_wake.is_some());
         let jitter = tc.draw(
             gs::integers::<i64>()
@@ -170,140 +149,94 @@ impl FlushModel {
         self.wake_as_host(jitter);
     }
 
-    #[rule]
-    fn wake_at_any_time(&mut self, _: TestCase) {
-        self.apply(FlushEvent::Tick { now: at(self.now) });
-    }
-
-    #[rule]
-    fn link_connects(&mut self, _: TestCase) {
-        self.apply(FlushEvent::LinkConnected);
-    }
-
-    #[rule]
-    fn link_drops(&mut self, _: TestCase) {
-        self.apply(FlushEvent::LinkLost);
-    }
-
-    #[rule(weight = 3)]
-    fn central_answers_a_member(&mut self, tc: TestCase) {
-        let members = self.in_flight();
-        tc.assume(!members.is_empty());
-        let request = tc.draw(gs::sampled_from(members));
-        // Final (a domain answer) or not applied (link admission refused it).
-        let outcome = if tc.draw(gs::booleans()) {
-            MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict)
-        } else {
-            MemberOutcome::Refused(crate::LinkAdmissionRefusal::MachineRevoked)
-        };
-        self.apply(FlushEvent::MemberAnswered { request, outcome });
-    }
-
-    #[rule]
-    fn batch_deadline_passes(&mut self, tc: TestCase) {
-        tc.assume(!self.in_flight().is_empty());
-        self.apply(FlushEvent::BatchExpired);
-    }
-
-    #[rule]
-    fn stray_answers_are_refused_without_changing_state(&mut self, _: TestCase) {
-        let before = self.state.clone();
-        let stray = request_id((1 << 40) + self.next_seed);
-
-        let result = transition(
-            self.state.clone(),
-            FlushEvent::MemberAnswered {
-                request: stray,
-                outcome: MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict),
-            },
-        );
-
-        assert!(matches!(
-            result,
-            Err(FlushTransitionError::NotInFlight { .. } | FlushTransitionError::NoBatchInFlight)
-        ));
-        assert_eq!(self.state, before);
+    #[rule(weight = 2)]
+    fn the_batch_ends(&mut self, tc: TestCase) {
+        tc.assume(self.state.batch_in_flight());
+        let answered = tc.draw(gs::booleans());
+        self.end_batch(answered);
     }
 
     #[invariant(always_run)]
-    fn nothing_is_lost(&self, _: TestCase) {
-        let waiting: BTreeSet<RequestId> = self.state.waiting().map(|(_, id)| id.clone()).collect();
-        let in_flight: BTreeSet<RequestId> = self.in_flight().into_iter().collect();
-        assert!(waiting.is_disjoint(&in_flight));
-        assert!(waiting.is_disjoint(&self.answered));
-        assert!(in_flight.is_disjoint(&self.answered));
-        let held: BTreeSet<RequestId> = waiting
-            .union(&in_flight)
-            .chain(self.answered.iter())
-            .cloned()
-            .collect();
+    fn the_schedule_never_loses_a_waiting_write(&self, _: TestCase) {
+        let waiting = self.earliest_due().is_some();
+        let sent = self.rows.values().any(|(_, row)| *row == Row::Sent);
         assert_eq!(
-            held, self.stored,
-            "every stored write is waiting, in flight or answered"
+            sent,
+            self.state.batch_in_flight(),
+            "in flight exactly while rows are sent"
         );
-        assert_eq!(in_flight, self.awaiting_answer);
-        for (flush_at, request) in self.state.waiting() {
-            assert_eq!(
-                self.flush_at[request], *flush_at,
-                "a write keeps its receipt mark"
+        if self.link_up && waiting && !self.state.batch_in_flight() {
+            assert!(
+                self.armed_wake.is_some(),
+                "a waiting write on a live link has a wake armed"
             );
         }
     }
 }
 
-#[hegel::test]
-fn the_flush_loses_nothing_sends_nothing_twice_and_nothing_early(tc: TestCase) {
-    hegel::stateful::machine(FlushModel::new()).run(tc);
+fn tc_link(model: &mut FlushModel, up: bool) {
+    model.link_up = up;
+    if up {
+        let earliest_due = model.earliest_due();
+        model.apply(FlushEvent::LinkConnected { earliest_due });
+    } else {
+        // The Host returns the batch on the wire to the store first.
+        for (_, row) in model.rows.values_mut() {
+            if *row == Row::Sent {
+                *row = Row::Waiting;
+            }
+        }
+        model.apply(FlushEvent::LinkLost);
+        model.armed_wake = None;
+    }
 }
 
 #[hegel::test]
-fn a_connected_link_drains_the_outbox_64_per_mark(tc: TestCase) {
-    let writes = tc.draw(gs::integers::<usize>().min_value(0).max_value(300));
+fn the_flush_schedule_sends_nothing_early_twice_or_on_a_down_link(tc: TestCase) {
+    hegel::stateful::machine(FlushModel::new()).run(tc);
+}
+
+#[test]
+fn a_connected_link_drains_the_store_64_per_mark() {
     let mut model = FlushModel::new();
-    model.apply(FlushEvent::LinkConnected);
-    for _ in 0..writes {
+    tc_link(&mut model, true);
+    for _ in 0..150 {
         model.store_next();
     }
 
     let mut marks = 0;
-    while model.answered.len() < writes {
-        let jitter = tc.draw(
-            gs::integers::<i64>()
-                .min_value(-FLUSH_JITTER_MILLIS)
-                .max_value(FLUSH_JITTER_MILLIS),
-        );
-        let effects = model.wake_as_host(jitter);
-        marks += 1;
-        assert!(
-            marks <= writes.div_ceil(MAX_BATCH_WRITES) + 1,
-            "outbox did not drain"
-        );
-        for effect in effects {
-            if let FlushEffect::SendBatch { requests, .. } = effect {
-                for request in requests {
-                    let outcome =
-                        MemberOutcome::Refused(crate::LinkAdmissionRefusal::RequestIdConflict);
-                    model.apply(FlushEvent::MemberAnswered { request, outcome });
-                }
-            }
+    while model.rows.values().any(|(_, row)| *row != Row::Answered) {
+        model.wake_as_host(0);
+        if model.state.batch_in_flight() {
+            model.end_batch(true);
         }
+        marks += 1;
+        assert!(marks <= 4, "150 writes drain in 3 marks");
     }
 
-    assert_eq!(model.answered, model.stored);
-    assert_eq!(model.state.waiting().count(), 0);
+    assert_eq!(model.sends, 3);
 }
 
 #[test]
-fn a_tick_outside_any_window_sends_nothing_and_rearms_for_the_open_mark() {
-    let mark = START + 40_000;
+fn a_write_past_its_mark_goes_on_the_next_open_mark_not_at_once() {
     let mut model = FlushModel::new();
-    model.apply(FlushEvent::LinkConnected);
     model.store_next();
-    model.now = mark - 10_000;
+    model.now = START + 40_000 + 20_000;
+    tc_link(&mut model, true);
+    let armed = model.armed_wake.expect("armed");
 
-    let effects = model.apply(FlushEvent::Tick { now: at(model.now) });
+    let effects = model.wake_as_host(0);
 
-    assert_eq!(effects, vec![FlushEffect::WakeAt { mark: at(mark) }]);
+    assert!(
+        effects
+            .iter()
+            .all(|effect| !matches!(effect, FlushEffect::SendBatch { .. }))
+    );
+    assert_eq!(
+        model.armed_wake,
+        Some(at(START + 40_000 + 60_000)),
+        "armed {armed:?} rearmed"
+    );
 }
 
 fn workspace_reply(result: WorkspaceResult) -> MemberOutcome {
@@ -348,42 +281,4 @@ fn only_domain_answers_are_final_and_link_admission_refusals_are_not_applied() {
     for (outcome, is_final) in cases {
         assert_eq!(outcome.is_final(), is_final, "{outcome:?}");
     }
-}
-
-#[test]
-fn a_machine_revoked_member_returns_unsent_with_its_mark_and_is_resent_next_mark() {
-    let mut model = FlushModel::new();
-    model.apply(FlushEvent::LinkConnected);
-    model.store_next();
-    model.store_next();
-    let first = model.wake_as_host(0);
-    let FlushEffect::SendBatch { requests, .. } = &first[0] else {
-        panic!("one batch: {first:?}");
-    };
-    let (revoked, decided) = (requests[0].clone(), requests[1].clone());
-
-    let returned = model.apply(FlushEvent::MemberAnswered {
-        request: revoked.clone(),
-        outcome: workspace_reply(WorkspaceResult::Refused(RefusalReason::MachineRevoked)),
-    });
-    let recorded = model.apply(FlushEvent::MemberAnswered {
-        request: decided.clone(),
-        outcome: workspace_reply(WorkspaceResult::Refused(RefusalReason::WorkspaceNotAllowed)),
-    });
-    let resent = model.wake_as_host(0);
-
-    assert_eq!(
-        returned,
-        vec![FlushEffect::ReturnUnapplied {
-            request: revoked.clone()
-        }]
-    );
-    assert!(matches!(
-        recorded.as_slice(),
-        [FlushEffect::RecordOutcome { request, .. }, ..] if *request == decided
-    ));
-    assert!(matches!(
-        resent.as_slice(),
-        [FlushEffect::SendBatch { requests, .. }, ..] if *requests == vec![revoked]
-    ));
 }

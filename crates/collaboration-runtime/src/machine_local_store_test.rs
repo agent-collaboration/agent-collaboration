@@ -31,3 +31,15 @@ async fn machine_local_sqlite_holds_the_outbox_and_provider_operations_does_not(
         "provider operations hold no link state"
     );
 }
+
+/// The shared OutboxStorage contract on machine_local.sqlite.
+mod outbox_storage_contract {
+    async fn open() -> (tempfile::TempDir, crate::MachineLocalOutbox) {
+        let root = tempfile::tempdir().unwrap();
+        let store = crate::MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+            .await
+            .unwrap();
+        (root, crate::MachineLocalOutbox::new(store))
+    }
+    crate::outbox_storage_contract::outbox_storage_contract!(open());
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT MIN(flush_at_ms) AS \"earliest: i64\" FROM outbox_items\n               WHERE item_state IN (?, ?)",
+  "describe": {
+    "columns": [
+      {
+        "name": "earliest: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f1d5d6ac05a159700e40c8f1b7a92faef51608a964d1bc316cc236a2c54b7d53"
+}
