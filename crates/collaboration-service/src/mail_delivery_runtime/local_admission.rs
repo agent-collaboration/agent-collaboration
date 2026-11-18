@@ -4,6 +4,8 @@ use super::{
     PushMessageSendResult, PushRecordDraft, RemoveMailRecord, RouterDeliveryTypes, StoreError,
     SyncTime, TursoScope, outgoing_mail_message,
 };
+#[cfg(test)]
+use super::{CarrierAcceptance, ItemId, RecipientOutcome};
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult};
 use fleet_sync_delivery::{
@@ -23,6 +25,32 @@ enum LocalAdmission {
 }
 
 impl MailDeliveryRuntime {
+    #[cfg(test)]
+    pub(crate) async fn local_outcome_for_test(
+        &self,
+        item: ItemId,
+    ) -> Result<Option<RecipientOutcome<CarrierAcceptance>>, StoreError> {
+        let config = self.config;
+        self.store
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
+                        .local_outcome(item)
+                        .await
+                        .map_err(StoreError::backend)
+                    })
+                }
+            })
+            .await
+    }
+
     pub(crate) async fn send_local(
         &self,
         draft: PushRecordDraft,

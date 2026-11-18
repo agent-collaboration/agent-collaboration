@@ -240,6 +240,12 @@ impl MailDeliveryRuntime {
             }
         }
     }
+
+    /// The remote-wake wait's reads and sleeps, for a test.
+    #[cfg(test)]
+    pub(crate) fn remote_wake_wait_observation(&self) -> collaboration_runtime::WorkerObservation {
+        self.remote_wake_wait.clone()
+    }
 }
 
 fn retained_wake_answer(

@@ -4,7 +4,7 @@ use crate::api_test_harness::{
     ServedApi, TEST_PROTOCOL_VERSION, TEST_SERVICE_ID, api_config, test_identity,
 };
 use collaboration_service::CollaborationApplication;
-use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -223,3 +223,48 @@ async fn a_listener_past_its_request_limit_answers_overloaded() {
 
 #[path = "collaboration_api_router_tests/call_lifecycle.rs"]
 mod call_lifecycle;
+
+#[tokio::test]
+async fn a_foreign_browser_origin_is_refused_before_dispatch() {
+    // Arrange: the default listener, with no proxy authority configured.
+    let directory = private_directory();
+    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let api = ServedApi::tcp(&config).await;
+
+    // Act
+    let response = reqwest::Client::new()
+        .post(api.url())
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json, text/event-stream")
+        .header(ORIGIN, "https://invalid.example")
+        .json(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
+        .send()
+        .await
+        .expect("origin response");
+
+    // Assert
+    assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
+    api.stop().await;
+}
+
+#[tokio::test]
+async fn the_api_serves_on_ipv6_loopback() {
+    // Arrange
+    let directory = private_directory();
+    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let api = ServedApi::tcp_at(&config, "[::1]:0").await;
+
+    // Act
+    let (status, listed) = api
+        .post(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
+        .await;
+
+    // Assert
+    assert!(status.is_success());
+    assert!(
+        listed["result"]["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty())
+    );
+    api.stop().await;
+}

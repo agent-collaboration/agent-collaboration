@@ -468,6 +468,10 @@ impl CollaborationRuntime {
                 None => worker,
             }
         });
+        #[cfg(test)]
+        let schedule_observation = schedule_worker
+            .as_ref()
+            .map(collaboration_runtime::ScheduleTimingWorker::observation);
         let retention_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::AutomationRetentionWorker::new(
                 store.clone(),
@@ -724,6 +728,8 @@ impl CollaborationRuntime {
         // Runtime listeners now own these dependencies. Constructor-local hub,
         // router, presence and broker references can retain provider storage
         // transitively and must be gone before exposure-startup cleanup runs.
+        #[cfg(test)]
+        let startup_test_broker = std::sync::Arc::downgrade(&approval_broker);
         drop(provider_session_hub);
         drop(message_routes.router);
         drop(subscription_presence);
@@ -806,6 +812,8 @@ impl CollaborationRuntime {
                 .ok_or_else(|| io::Error::other("debug mail clock requires mail storage"))?;
             tasks.spawn(control.run(mail, shutdown.clone()));
         }
+        #[cfg(test)]
+        let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]
         let runtime_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         if let Some(mail) = mail_delivery {
@@ -867,6 +875,12 @@ impl CollaborationRuntime {
             clock: worker_clock,
             fleet_link,
             interactions: interactions_reader,
+            #[cfg(test)]
+            startup_test_mail,
+            #[cfg(test)]
+            startup_test_broker,
+            #[cfg(test)]
+            startup_test_display_names: display_names.clone(),
             #[cfg(feature = "runtime-test-support")]
             runtime_test_mail,
             notification_publisher,
@@ -903,6 +917,8 @@ impl CollaborationRuntime {
             observer_task: None,
             observation_rechecks,
             journal_unavailable_rechecks,
+            #[cfg(test)]
+            schedule_observation,
             collaboration_api,
             tailscale_exposure: None,
         };

@@ -195,6 +195,11 @@ impl MailDeliveryRuntime {
     }
 
     #[cfg(test)]
+    pub(crate) async fn drive_due_for_test(&self) -> Result<(), StoreError> {
+        self.engine.drive_due().await.map(|_| ())
+    }
+
+    #[cfg(test)]
     pub(crate) fn without_registered_task_for_test(mut self) -> Self {
         // The real SDK rejects settlement after the admission transaction commits.
         self.engine = Arc::new(Engine::new(self.store.clone(), self.host.clone()));
@@ -235,6 +240,15 @@ impl MailDeliveryRuntime {
         )
         .map_err(StoreError::backend)?;
         Self::with_limits(peer, props, limits, session)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_limits(
+        peer: PeerId,
+        props: MailPushDeliveryProps,
+        limits: DeliveryLimits,
+    ) -> Result<Self, StoreError> {
+        Self::with_limits(peer, props, limits, None)
     }
 
     fn with_limits(

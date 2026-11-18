@@ -288,6 +288,18 @@ impl RunningMachineSession {
         expected_terminal_io(error)
     }
 
+    #[cfg(test)]
+    pub(in crate::collaboration_runtime) fn failed_for_test(error: io::Error) -> Self {
+        let (stop, _stopped) = watch::channel(false);
+        let mut task = JoinSet::new();
+        task.spawn(async move { Err(error) });
+        Self {
+            stop,
+            task,
+            projects: Weak::new(),
+        }
+    }
+
     pub(in crate::collaboration_runtime) fn is_observed_refusal(
         error: &io::Error,
         record: &board_sync_protocol::FleetLinkRecord,
