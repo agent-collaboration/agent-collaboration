@@ -77,7 +77,7 @@ async fn last_ledger_statement_failure_rolls_back_create_record_marker_and_actor
             .status,
         200
     );
-    f.clock.advance(Duration::from_secs(86_401))?;
+    f.clock.advance(Duration::from_secs(86_401)).await?;
     let mut other = signed::Person::member(A, f.clock_time())?;
     other.permissions = vec!["workspace:create".to_owned()];
     // This is the actual final Statement from request_log::retain. The expired

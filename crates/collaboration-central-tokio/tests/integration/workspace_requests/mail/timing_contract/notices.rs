@@ -26,7 +26,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         central_storage::BatchOutcome::Applied { .. }
     ));
     drop(runtime);
-    advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap());
+    advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap()).await;
     let mut recipients = Vec::new();
     for (index, (cadence, seconds)) in [
         (m::NoticeCadence::M15, 900_i64),
@@ -158,7 +158,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         advance_to(
             f,
             start + chrono::Duration::seconds(i64::try_from(index).unwrap() * 10),
-        );
+        )
+        .await;
         let item = created(
             call(
                 &f.host,
@@ -227,7 +228,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         "earlier failed drives: {:?}",
         r.alarm_failures()
     );
-    advance_to(f, safety_mark);
+    advance_to(f, safety_mark).await;
     assert_eq!(r.alarm_completion_count(), callbacks);
     drop(r);
     f.reopen().await;
@@ -270,7 +271,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         assert_eq!(batch.messages[0].created_at, due);
     }
     // Change M15 to M55 while a second complete cohort is pending, then reopen.
-    advance_to(f, now(f) + chrono::Duration::seconds(1));
+    advance_to(f, now(f) + chrono::Duration::seconds(1)).await;
     let mut second_posts = Vec::new();
     for (index, (workspace, thread)) in threads.iter().enumerate() {
         let post = created(

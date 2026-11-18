@@ -54,7 +54,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         execute(&f, sql, vec![text(&actor)]).await;
         // Embedded setup allowance: the fixture's setup claimed the due batch at T0.
         let start = f.clock.utc_now();
-        f.clock.set_utc(start + chrono::Duration::seconds(30));
+        f.set_utc(start + chrono::Duration::seconds(30)).await;
         // Isolation: the window unit fails as a whole with no window, queue or
         // cursor change; the alarm still re-arms and the failure is the unit's record.
         runtime.after_event().await.unwrap();
@@ -223,9 +223,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
         .await,
     );
     let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    f.clock
-        .advance(std::time::Duration::from_secs(900))
-        .unwrap();
+    f.advance(std::time::Duration::from_secs(900)).await;
     runtime.after_event().await.unwrap();
     let before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(before.rows[0][1], SqlValue::Integer(2.try_into().unwrap()));
@@ -326,7 +324,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         collaboration_central_core::MAX_ALARM_UNIX_MILLIS - 30_000,
     )
     .unwrap();
-    f.clock.set_utc(near_ceiling);
+    f.set_utc(near_ceiling).await;
     let mut held = runtime
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);

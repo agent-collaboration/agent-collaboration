@@ -78,7 +78,7 @@ async fn complete_stamp_metadata_and_record_identity_survive_renewal_and_setup_r
         "an identical setup rewrote retained rows"
     );
 
-    f.clock.advance(Duration::from_secs(10))?;
+    f.clock.advance(Duration::from_secs(10)).await?;
     let renewed_at = initial_at + 10_000;
     let renewal = signed::renewal(A, &first, signed::NOW_SECONDS, 10)?;
     assert_eq!(f.provision(A, &renewal).await?.status, 200);

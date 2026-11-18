@@ -163,16 +163,14 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
     );
 
     fixture
-        .clock
         .advance(std::time::Duration::from_millis(86_400_001))
-        .unwrap();
+        .await;
     let after_expiry = request(&fixture, &fixture.caller, 1000, operation).await;
     assert!(matches!(after_expiry, Result::Done(Answer::Queued { .. })));
     assert_ne!(after_expiry, answer);
     fixture
-        .clock
         .advance(std::time::Duration::from_millis(86_400_001))
-        .unwrap();
+        .await;
     assert!(matches!(
         request(
             &fixture,

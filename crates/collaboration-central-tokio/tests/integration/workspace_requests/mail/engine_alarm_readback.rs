@@ -31,7 +31,7 @@ async fn publish_without_a_batch_at(fixture: &Fixture, runtime: &Runtime, time: 
         "the last batch floor must already be past: {before:?}"
     );
     driver_settled(fixture, runtime).await;
-    fixture.clock.set_utc(time);
+    fixture.set_utc(time).await;
     runtime.recompute_alarm().await.unwrap();
     assert_eq!(
         runtime.due_batch_snapshot().last_start_unix_millis,
@@ -143,7 +143,7 @@ async fn an_only_unreadable_wake_publishes_the_next_mark_before_any_batch_fails_
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
-    fixture.clock.set_utc(at(start, 1, 30));
+    fixture.set_utc(at(start, 1, 30)).await;
     // The request's own due batch starts at 10:01:30.
     let wake = set_wake(&fixture, 14100, at(start, 15, 0), "unreadable").await;
     assert_eq!(
@@ -196,7 +196,7 @@ async fn a_failing_record_with_an_out_of_range_retry_publishes_the_next_mark_and
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
-    fixture.clock.set_utc(at(start, 1, 30));
+    fixture.set_utc(at(start, 1, 30)).await;
     let wake = set_wake(&fixture, 14200, at(start, 15, 0), "retry out of range").await;
     let planted = "01890f2e-7b4c-7cc0-98c4-000000014201";
     raw(

@@ -70,7 +70,7 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
     // A due batch claimed here has no representable 30 s floor, so the
     // decision fails only after the database committed.
     let edge = MAX_ALARM_UNIX_MILLIS - 10_000;
-    fixture.clock.set_utc(from_ms(edge));
+    fixture.set_utc(from_ms(edge)).await;
 
     let answer = runtime
         .request_probe(
@@ -138,7 +138,7 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
         "the fixture time has no later mark"
     );
     let completed = runtime.alarm_completion_count();
-    fixture.clock.set_utc(from_ms(NO_LATER_MARK_UNIX_MILLIS));
+    fixture.set_utc(from_ms(NO_LATER_MARK_UNIX_MILLIS)).await;
 
     let published = runtime.recompute_alarm().await;
 
@@ -159,11 +159,8 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
     for _ in 0..16 {
         tokio::task::yield_now().await;
     }
-    fixture
-        .clock
-        .advance(std::time::Duration::from_secs(3_600))
-        .unwrap();
-    fixture.clock.set_utc(from_ms(NO_LATER_MARK_UNIX_MILLIS));
+    fixture.advance(std::time::Duration::from_secs(3_600)).await;
+    fixture.set_utc(from_ms(NO_LATER_MARK_UNIX_MILLIS)).await;
     for _ in 0..64 {
         tokio::task::yield_now().await;
     }
@@ -218,7 +215,7 @@ async fn a_restart_mid_fan_out_redoes_no_done_item_and_fires_the_rest_once() {
     let mut after_load = runtime
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &loaded.to_string());
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -296,7 +293,7 @@ async fn a_dropped_alarm_is_republished_by_the_next_requests_own_event() {
         BatchOutcome::Applied { .. }
     ));
     assert_eq!(alarm_ms(&runtime), None, "the physical alarm is gone");
-    fixture.clock.set_utc(at(start, 1, 10, 0));
+    fixture.set_utc(at(start, 1, 10, 0)).await;
 
     let answer = runtime
         .request_probe(

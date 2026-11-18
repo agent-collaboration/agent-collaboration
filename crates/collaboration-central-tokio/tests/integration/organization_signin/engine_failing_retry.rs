@@ -16,7 +16,7 @@ async fn corrupt_wake_failing_once(engine: &EngineOrg) -> (String, Time) {
             vec![text(&wake)],
         )
         .await;
-    engine.set(due);
+    engine.set(due).await;
     engine.after_event().await;
     let next_try = next_mark(due);
     assert_failing(engine, &wake, next_try).await;
@@ -40,12 +40,12 @@ async fn a_corrupt_failing_wake_waits_for_its_next_try_before_its_second_failure
     let (wake, next_try) = corrupt_wake_failing_once(&engine).await;
 
     // A batch 20 s before the next try lists the wake through the look-ahead.
-    engine.set(next_try - chrono::Duration::seconds(20));
+    engine.set(next_try - chrono::Duration::seconds(20)).await;
     engine.after_event().await;
     assert_failing(&engine, &wake, next_try).await;
 
     // After the next try (and the 30 s floor) it fails again and retires.
-    engine.set(next_try + chrono::Duration::seconds(30));
+    engine.set(next_try + chrono::Duration::seconds(30)).await;
     engine.after_event().await;
     assert_eq!(
         engine.record("wake_timer", &wake).await[0][..3],
@@ -68,7 +68,7 @@ async fn a_restart_inside_the_look_ahead_does_not_retire_a_failing_wake_early() 
             vec![text(&wake)],
         )
         .await;
-    engine.set(engine.now() + minutes(13));
+    engine.set(engine.now() + minutes(13)).await;
     engine.after_event().await;
     let next_try = next_mark(engine.now());
     assert_failing(&engine, &wake, next_try).await;
