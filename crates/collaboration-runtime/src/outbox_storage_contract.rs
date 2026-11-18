@@ -551,7 +551,10 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
             .iter()
             .map(|write| (write.request_id.clone(), write.reason))
             .collect::<Vec<_>>(),
-        vec![(post.request.clone(), OutboxCancellation::GaveUpAfter24Hours)]
+        vec![(
+            post.request.clone(),
+            OutboxCancellation::NotConfirmedWithin24Hours
+        )]
     );
     assert!(overdue_waiting.is_empty(), "nothing else is overdue");
     assert_eq!(
@@ -560,7 +563,7 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
             .await
             .unwrap(),
         RequestStatus::Cancelled {
-            reason: OutboxCancellation::GaveUpAfter24Hours
+            reason: OutboxCancellation::NotConfirmedWithin24Hours
         }
     );
     assert_eq!(

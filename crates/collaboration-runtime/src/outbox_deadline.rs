@@ -22,7 +22,7 @@ pub(crate) fn expires_at_ms(target: &OutboxWriteTarget, created_at_ms: i64) -> i
 /// Whether an overdue write had already left the Mac, so central may hold it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DepartureAtDeadline {
-    /// Never sent, or sent and refused before central applied it.
+    /// Never sent, or only a first attempt that central did not apply.
     NeverLeft,
     /// Sent with no answer back (on the wire, or the answer was lost).
     MayHaveArrived,
@@ -40,7 +40,12 @@ pub(crate) fn end_reason(
         (OutboxWriteTarget::Session { .. }, DepartureAtDeadline::MayHaveArrived) => {
             OutboxCancellation::NotConfirmedWithin15Minutes
         }
-        (OutboxWriteTarget::Thread { .. }, _) => OutboxCancellation::GaveUpAfter24Hours,
+        (OutboxWriteTarget::Thread { .. }, DepartureAtDeadline::NeverLeft) => {
+            OutboxCancellation::NotSentWithin24Hours
+        }
+        (OutboxWriteTarget::Thread { .. }, DepartureAtDeadline::MayHaveArrived) => {
+            OutboxCancellation::NotConfirmedWithin24Hours
+        }
     }
 }
 

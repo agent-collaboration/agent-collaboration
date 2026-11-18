@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?, ?, ?) AND updated_at <= ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "5a6dec4d1f76792ae77b4a70b0733b57257c00fec2c1f3867f2d679544ce74b2"
+}

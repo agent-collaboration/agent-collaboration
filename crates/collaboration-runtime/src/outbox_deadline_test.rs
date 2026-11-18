@@ -35,10 +35,12 @@ fn an_overdue_write_ends_by_target_and_whether_it_left_the_mac() {
         end_reason(&session(), MayHaveArrived),
         OutboxCancellation::NotConfirmedWithin15Minutes
     );
-    for departure in [NeverLeft, MayHaveArrived] {
-        assert_eq!(
-            end_reason(&thread(), departure),
-            OutboxCancellation::GaveUpAfter24Hours
-        );
-    }
+    assert_eq!(
+        end_reason(&thread(), NeverLeft),
+        OutboxCancellation::NotSentWithin24Hours
+    );
+    assert_eq!(
+        end_reason(&thread(), MayHaveArrived),
+        OutboxCancellation::NotConfirmedWithin24Hours
+    );
 }

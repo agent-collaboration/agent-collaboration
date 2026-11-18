@@ -299,3 +299,7 @@ impl LinkDriver {
 #[cfg(test)]
 #[path = "driver_deadline_test.rs"]
 mod deadline_tests;
+
+#[cfg(test)]
+#[path = "custody_scenarios_test.rs"]
+mod custody_scenarios;

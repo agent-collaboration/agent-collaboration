@@ -79,9 +79,12 @@ pub enum OutboxCancellation {
     /// 15 minutes: it may have been delivered. Central's DeliveryOutcome, matched
     /// by the request id, later tells the truth (Lead A, 2026-11-18).
     NotConfirmedWithin15Minutes,
-    /// Any other outbox write still unanswered 24 hours after it was stored,
-    /// inside central's 24-hour request log, so a replay never commits twice.
-    GaveUpAfter24Hours,
+    /// Any other outbox write that never left the Mac within 24 hours of being
+    /// stored (central's request log lives 24 hours).
+    NotSentWithin24Hours,
+    /// Any other outbox write that left the Mac but was not confirmed within 24
+    /// hours: it may have been applied (Lead A, 2026-11-18).
+    NotConfirmedWithin24Hours,
 }
 
 /// Why central never admitted a frame: the link's own admission, not a domain

@@ -430,7 +430,14 @@ impl LinkDriver {
             Ok(OutboxInsert::ConflictingContent) => {
                 Submission::Refused(SubmitRefusal::RequestIdConflict)
             }
-            Err(_) => Submission::Refused(SubmitRefusal::OutboxUnavailable),
+            Err(error) => {
+                // The insert may have committed with its acknowledgement lost;
+                // the store is the truth, so arm its mark anyway. If nothing
+                // was stored, that tick finds nothing due.
+                tracing::warn!(%error, "outbox: storing a write failed");
+                self.apply_flush(FlushEvent::Stored { flush_at }).await;
+                Submission::Refused(SubmitRefusal::OutboxUnavailable)
+            }
         }
     }
 

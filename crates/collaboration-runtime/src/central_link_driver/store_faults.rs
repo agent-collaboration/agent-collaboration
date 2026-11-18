@@ -1,6 +1,8 @@
-//! A store that fails one named operation once (test only): the transaction
-//! is never started, so the database is unchanged, exactly like a rolled-back
-//! write that hit a busy database.
+//! A store that fails one named operation once (test only), in one of two
+//! ways: before the call (the transaction never starts, like a rolled-back
+//! write on a busy database) or after it committed (the change is kept but the
+//! caller sees an error, like a lost commit acknowledgement). Every fault that
+//! fires is recorded, so a test can require that each named fault fired.
 use crate::outbox_storage::{OutboxFuture, OutboxStorage};
 use crate::outbox_store::{NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite};
 use central_link_client::{MemberOutcome, OutgoingWrite, PendingWrite, RequestStatus};
@@ -8,30 +10,57 @@ use runtime_primitives::SyncTime;
 use std::sync::{Arc, Mutex as StdMutex};
 use workspace_model::{Caller, RequestId};
 
-/// Which operations fail next, once each.
+/// How a planned fault fails its operation.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum FaultKind {
+    /// Nothing is written; the caller sees an error.
+    BeforeCall,
+    /// The operation commits; the caller still sees an error.
+    AfterCommit,
+}
+
+#[derive(Default)]
+struct Faults {
+    planned: Vec<(&'static str, FaultKind)>,
+    fired: Vec<(&'static str, FaultKind)>,
+}
+
+/// Which operations fail next, once each, and which faults have fired.
 #[derive(Clone, Default)]
-pub(crate) struct FaultPlan(Arc<StdMutex<Vec<&'static str>>>);
+pub(crate) struct FaultPlan(Arc<StdMutex<Faults>>);
 
 impl FaultPlan {
     pub(crate) fn fail_once(&self, operation: &'static str) {
-        self.0.lock().unwrap().push(operation);
+        self.fail(operation, FaultKind::BeforeCall);
     }
-    fn take(&self, operation: &'static str) -> bool {
-        let mut plan = self.0.lock().unwrap();
-        match plan.iter().position(|planned| *planned == operation) {
-            Some(index) => {
-                plan.remove(index);
-                true
-            }
-            None => false,
-        }
+    pub(crate) fn fail(&self, operation: &'static str, kind: FaultKind) {
+        self.0.lock().unwrap().planned.push((operation, kind));
+    }
+    fn take(&self, operation: &'static str) -> Option<FaultKind> {
+        let mut faults = self.0.lock().unwrap();
+        let index = faults
+            .planned
+            .iter()
+            .position(|(planned, _)| *planned == operation)?;
+        let fault = faults.planned.remove(index);
+        faults.fired.push(fault);
+        Some(fault.1)
     }
     /// The store is healthy again: no planned fault fires.
     pub(crate) fn clear(&self) {
-        self.0.lock().unwrap().clear();
+        self.0.lock().unwrap().planned.clear();
     }
     pub(crate) fn pending(&self) -> Vec<&'static str> {
-        self.0.lock().unwrap().clone()
+        let faults = self.0.lock().unwrap();
+        faults
+            .planned
+            .iter()
+            .map(|(operation, _)| *operation)
+            .collect()
+    }
+    /// Every fault that fired so far, in order.
+    pub(crate) fn fired(&self) -> Vec<(&'static str, FaultKind)> {
+        self.0.lock().unwrap().fired.clone()
     }
 }
 
@@ -46,10 +75,16 @@ fn injected<T>() -> Result<T, OutboxStoreError> {
 
 macro_rules! faulty {
     ($self:ident, $name:literal, $call:expr) => {
-        if $self.plan.take($name) {
-            Box::pin(async { injected() })
-        } else {
-            $call
+        match $self.plan.take($name) {
+            None => $call,
+            Some(FaultKind::BeforeCall) => Box::pin(async { injected() }),
+            Some(FaultKind::AfterCommit) => {
+                let call = $call;
+                Box::pin(async move {
+                    let _committed = call.await;
+                    injected()
+                })
+            }
         }
     };
 }

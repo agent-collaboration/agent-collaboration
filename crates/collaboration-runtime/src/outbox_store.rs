@@ -4,10 +4,10 @@
 use crate::MachineLocalStore;
 use crate::machine_local_store::MachineLocalWrite;
 use crate::outbox_deadline::DepartureAtDeadline;
+use crate::outbox_item_state::OutboxItemState;
 use central_link_client::{
-    EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
-    OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
-    RequestStatus,
+    EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutboxWriteTarget,
+    OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
@@ -34,63 +34,6 @@ pub enum OutboxStoreError {
         request: RequestId,
         expected: &'static str,
     },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OutboxItemState {
-    InOutbox,
-    /// Went out in a batch whose answer was lost; back in the outbox to be
-    /// resent with the same id, and may already be in central.
-    SentAnswerLost,
-    Sent,
-    Answered,
-    Refused,
-    /// Ended at its deadline (outbox_deadline) with its text gone: a direct
-    /// message that never left the Mac within 15 minutes.
-    Cancelled,
-    /// A direct message that left the Mac but was not confirmed within 15
-    /// minutes; it may have been delivered.
-    Unconfirmed,
-    /// Any other write still unanswered 24 hours after it was stored.
-    GaveUp,
-}
-
-impl OutboxItemState {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::InOutbox => "inOutbox",
-            Self::SentAnswerLost => "sentAnswerLost",
-            Self::Sent => "sent",
-            Self::Answered => "answered",
-            Self::Refused => "refused",
-            Self::Cancelled => "cancelled",
-            Self::Unconfirmed => "unconfirmed",
-            Self::GaveUp => "gaveUp",
-        }
-    }
-
-    fn parse(value: &str) -> Option<Self> {
-        match value {
-            "inOutbox" => Some(Self::InOutbox),
-            "sentAnswerLost" => Some(Self::SentAnswerLost),
-            "sent" => Some(Self::Sent),
-            "answered" => Some(Self::Answered),
-            "refused" => Some(Self::Refused),
-            "cancelled" => Some(Self::Cancelled),
-            "unconfirmed" => Some(Self::Unconfirmed),
-            "gaveUp" => Some(Self::GaveUp),
-            _ => None,
-        }
-    }
-
-    /// The stored state for a write that ended at its deadline.
-    const fn ended(reason: OutboxCancellation) -> Self {
-        match reason {
-            OutboxCancellation::NotDeliveredWithin15Minutes => Self::Cancelled,
-            OutboxCancellation::NotConfirmedWithin15Minutes => Self::Unconfirmed,
-            OutboxCancellation::GaveUpAfter24Hours => Self::GaveUp,
-        }
-    }
 }
 
 /// A write entering the outbox, with the mark its receipt promises.
@@ -283,7 +226,9 @@ impl<'store> MacOutbox<'store> {
                     )
                 }
                 (
-                    OutboxItemState::SentAnswerLost | OutboxItemState::Sent,
+                    OutboxItemState::SentAnswerLost
+                    | OutboxItemState::Sent
+                    | OutboxItemState::Resent,
                     _,
                     StoredPayload::Unanswered(payload),
                 ) => {
@@ -299,7 +244,8 @@ impl<'store> MacOutbox<'store> {
                 (
                     OutboxItemState::Cancelled
                     | OutboxItemState::Unconfirmed
-                    | OutboxItemState::GaveUp,
+                    | OutboxItemState::GaveUpUnsent
+                    | OutboxItemState::GaveUpUnconfirmed,
                     RequestStatus::Cancelled { reason },
                     StoredPayload::Answered(cancelled),
                 ) => (cancelled.target, PendingWriteState::Cancelled { reason }),
@@ -385,14 +331,16 @@ impl<'store> MacOutbox<'store> {
         let refused = OutboxItemState::Refused.as_str();
         let cancelled = OutboxItemState::Cancelled.as_str();
         let unconfirmed = OutboxItemState::Unconfirmed.as_str();
-        let gave_up = OutboxItemState::GaveUp.as_str();
+        let gave_up_unsent = OutboxItemState::GaveUpUnsent.as_str();
+        let gave_up_unconfirmed = OutboxItemState::GaveUpUnconfirmed.as_str();
         Ok(sqlx::query!(
-            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?, ?) AND updated_at <= ?",
+            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?, ?, ?) AND updated_at <= ?",
             answered,
             refused,
             cancelled,
             unconfirmed,
-            gave_up,
+            gave_up_unsent,
+            gave_up_unconfirmed,
             cutoff
         )
         .execute_as_transaction(self.store)
@@ -426,11 +374,13 @@ impl<'store> MacOutbox<'store> {
     /// Writes sent whose answer never came, e.g. across a restart; the Host
     /// returns them to the outbox to resend under the same RequestId.
     pub async fn sent_without_answer(&mut self) -> Result<Vec<RequestId>, OutboxStoreError> {
-        let state = OutboxItemState::Sent.as_str();
+        let sent = OutboxItemState::Sent.as_str();
+        let resent = OutboxItemState::Resent.as_str();
         let rows = sqlx::query_scalar!(
             r#"SELECT request_id AS "request_id!" FROM outbox_items
-               WHERE item_state = ? ORDER BY request_id"#,
-            state
+               WHERE item_state IN (?, ?) ORDER BY request_id"#,
+            sent,
+            resent
         )
         .fetch_all(&mut self.store.connection)
         .await?;
@@ -443,33 +393,17 @@ impl<'store> MacOutbox<'store> {
         requests: &[RequestId],
         now: SyncTime,
     ) -> Result<Vec<StoredOutboxWrite>, OutboxStoreError> {
-        let unsent = OutboxItemState::InOutbox.as_str();
-        let answer_lost = OutboxItemState::SentAnswerLost.as_str();
-        let to = OutboxItemState::Sent.as_str();
         let now_ms = now.unix_millis();
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
         let mut writes = Vec::with_capacity(requests.len());
         for request in requests {
             let request_id = request.as_str();
-            let row = sqlx::query_as!(
-                OutboxRow,
-                r#"UPDATE outbox_items SET item_state = ?, updated_at = ?
-                   WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?
-                   RETURNING request_id AS "request_id!", caller_json, payload_json,
-                             item_state, flush_at_ms, outcome_json"#,
-                to,
-                now_ms,
-                request_id,
-                unsent,
-                answer_lost,
-                now_ms
-            )
-            .fetch_optional(&mut *transaction)
-            .await?
-            .ok_or_else(|| OutboxStoreError::UnexpectedState {
-                request: request.clone(),
-                expected: "in the outbox before its deadline",
-            })?;
+            let row = put_on_the_wire(&mut transaction, request_id, now_ms)
+                .await?
+                .ok_or_else(|| OutboxStoreError::UnexpectedState {
+                    request: request.clone(),
+                    expected: "in the outbox before its deadline",
+                })?;
             let stored = decode_row(&row)?;
             let StoredPayload::Unanswered(payload) = stored.payload else {
                 return Err(corrupt_row(request_id, "payload_json"));
@@ -498,7 +432,6 @@ impl<'store> MacOutbox<'store> {
     ) -> Result<ClaimedBatch, OutboxStoreError> {
         let unsent = OutboxItemState::InOutbox.as_str();
         let answer_lost = OutboxItemState::SentAnswerLost.as_str();
-        let to = OutboxItemState::Sent.as_str();
         let mark_ms = mark.unix_millis();
         let now_ms = now.unix_millis();
         let limit = i64::from(limit);
@@ -518,20 +451,9 @@ impl<'store> MacOutbox<'store> {
         .await?;
         let mut writes = Vec::with_capacity(due.len());
         for request_id in &due {
-            let row = sqlx::query_as!(
-                OutboxRow,
-                r#"UPDATE outbox_items SET item_state = ?, updated_at = ?
-                   WHERE request_id = ? AND item_state IN (?, ?)
-                   RETURNING request_id AS "request_id!", caller_json, payload_json,
-                             item_state, flush_at_ms, outcome_json"#,
-                to,
-                now_ms,
-                request_id,
-                unsent,
-                answer_lost
-            )
-            .fetch_one(&mut *transaction)
-            .await?;
+            let row = put_on_the_wire(&mut transaction, request_id, now_ms)
+                .await?
+                .ok_or_else(|| corrupt_row(request_id, "item_state"))?;
             let stored = decode_row(&row)?;
             let StoredPayload::Unanswered(payload) = stored.payload else {
                 return Err(corrupt_row(request_id, "payload_json"));
@@ -580,7 +502,8 @@ impl<'store> MacOutbox<'store> {
             }
         };
         let to = state.as_str();
-        let from = OutboxItemState::Sent.as_str();
+        let sent = OutboxItemState::Sent.as_str();
+        let resent = OutboxItemState::Resent.as_str();
         let now_ms = now.unix_millis();
         let request_id = request.as_str();
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
@@ -588,9 +511,10 @@ impl<'store> MacOutbox<'store> {
             OutboxRow,
             r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
                       flush_at_ms, outcome_json
-               FROM outbox_items WHERE request_id = ? AND item_state = ?"#,
+               FROM outbox_items WHERE request_id = ? AND item_state IN (?, ?)"#,
             request_id,
-            from
+            sent,
+            resent
         )
         .fetch_optional(&mut *transaction)
         .await?
@@ -607,6 +531,7 @@ impl<'store> MacOutbox<'store> {
             content_digest: payload_content_digest(&payload)?,
         };
         let payload_json = serde_json::to_string(&answered)?;
+        let from = row.item_state.as_str();
         let changed = sqlx::query!(
             "UPDATE outbox_items SET item_state = ?, outcome_json = ?, payload_json = ?,
                     updated_at = ?
@@ -626,25 +551,33 @@ impl<'store> MacOutbox<'store> {
         Ok(())
     }
 
-    /// A sent write central did not apply (link admission refused it) goes back
-    /// to the outbox unsent, with its receipt mark, to be resent after a
-    /// fresh-token reconnect.
+    /// A sent write central did not apply (link admission refused this attempt)
+    /// goes back to the outbox with its receipt mark, to be resent after a
+    /// fresh-token reconnect: a first attempt as unsent (it never reached
+    /// central), a replay as possibly in central (an earlier attempt may have
+    /// been applied).
     pub async fn return_unapplied(
         &mut self,
         request: &RequestId,
         now: SyncTime,
     ) -> Result<(), OutboxStoreError> {
-        let from = OutboxItemState::Sent.as_str();
-        let to = OutboxItemState::InOutbox.as_str();
+        let sent = OutboxItemState::Sent.as_str();
+        let resent = OutboxItemState::Resent.as_str();
+        let unsent = OutboxItemState::InOutbox.as_str();
+        let answer_lost = OutboxItemState::SentAnswerLost.as_str();
         let now_ms = now.unix_millis();
         let request_id = request.as_str();
         let changed = sqlx::query!(
-            "UPDATE outbox_items SET item_state = ?, updated_at = ?
-                 WHERE request_id = ? AND item_state = ?",
-            to,
+            "UPDATE outbox_items
+             SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?
+             WHERE request_id = ? AND item_state IN (?, ?)",
+            sent,
+            unsent,
+            answer_lost,
             now_ms,
             request_id,
-            from
+            sent,
+            resent
         )
         .execute_as_transaction(self.store)
         .await?
@@ -660,7 +593,8 @@ impl<'store> MacOutbox<'store> {
         requests: &[RequestId],
         now: SyncTime,
     ) -> Result<Vec<EndedWrite>, OutboxStoreError> {
-        let from = OutboxItemState::Sent.as_str();
+        let sent = OutboxItemState::Sent.as_str();
+        let resent = OutboxItemState::Resent.as_str();
         let to = OutboxItemState::SentAnswerLost.as_str();
         let now_ms = now.unix_millis();
         let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
@@ -672,9 +606,10 @@ impl<'store> MacOutbox<'store> {
                 r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
                           flush_at_ms, outcome_json
                    FROM outbox_items
-                   WHERE request_id = ? AND item_state = ? AND expires_at_ms <= ?"#,
+                   WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms <= ?"#,
                 request_id,
-                from,
+                sent,
+                resent,
                 now_ms
             )
             .fetch_optional(&mut *transaction)
@@ -693,11 +628,12 @@ impl<'store> MacOutbox<'store> {
             }
             let changed = sqlx::query!(
                 "UPDATE outbox_items SET item_state = ?, updated_at = ?
-                 WHERE request_id = ? AND item_state = ?",
+                 WHERE request_id = ? AND item_state IN (?, ?)",
                 to,
                 now_ms,
                 request_id,
-                from
+                sent,
+                resent
             )
             .execute(&mut *transaction)
             .await?
@@ -840,7 +776,10 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
     let caller = serde_json::from_str(&row.caller_json).map_err(|_| corrupt("caller_json"))?;
     let state = OutboxItemState::parse(&row.item_state).ok_or_else(|| corrupt("item_state"))?;
     let payload = match state {
-        OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost | OutboxItemState::Sent => {
+        OutboxItemState::InOutbox
+        | OutboxItemState::SentAnswerLost
+        | OutboxItemState::Sent
+        | OutboxItemState::Resent => {
             let payload: RequestPayload =
                 serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
             if payload.write_request_id().map(RequestId::as_str) != Some(row.request_id.as_str()) {
@@ -852,7 +791,8 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
         | OutboxItemState::Refused
         | OutboxItemState::Cancelled
         | OutboxItemState::Unconfirmed
-        | OutboxItemState::GaveUp => {
+        | OutboxItemState::GaveUpUnsent
+        | OutboxItemState::GaveUpUnconfirmed => {
             let answered: AnsweredWrite =
                 serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
             if answered.request_id.as_str() != row.request_id {
@@ -867,7 +807,7 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
                 flush_at: SyncTime::from_unix_millis(row.flush_at_ms),
             }
         }
-        (OutboxItemState::Sent, None) => RequestStatus::Sent,
+        (OutboxItemState::Sent | OutboxItemState::Resent, None) => RequestStatus::Sent,
         (OutboxItemState::Answered, Some(outcome)) => RequestStatus::Answered(
             serde_json::from_str::<ReplyPayload>(outcome).map_err(|_| corrupt("outcome_json"))?,
         ),
@@ -875,22 +815,24 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
             serde_json::from_str::<LinkAdmissionRefusal>(outcome)
                 .map_err(|_| corrupt("outcome_json"))?,
         ),
-        (OutboxItemState::Cancelled, None) => RequestStatus::Cancelled {
-            reason: OutboxCancellation::NotDeliveredWithin15Minutes,
-        },
-        (OutboxItemState::Unconfirmed, None) => RequestStatus::Cancelled {
-            reason: OutboxCancellation::NotConfirmedWithin15Minutes,
-        },
-        (OutboxItemState::GaveUp, None) => RequestStatus::Cancelled {
-            reason: OutboxCancellation::GaveUpAfter24Hours,
+        (
+            ended @ (OutboxItemState::Cancelled
+            | OutboxItemState::Unconfirmed
+            | OutboxItemState::GaveUpUnsent
+            | OutboxItemState::GaveUpUnconfirmed),
+            None,
+        ) => RequestStatus::Cancelled {
+            reason: ended.end_reason().ok_or_else(|| corrupt("item_state"))?,
         },
         (
             OutboxItemState::InOutbox
             | OutboxItemState::SentAnswerLost
             | OutboxItemState::Sent
+            | OutboxItemState::Resent
             | OutboxItemState::Cancelled
             | OutboxItemState::Unconfirmed
-            | OutboxItemState::GaveUp,
+            | OutboxItemState::GaveUpUnsent
+            | OutboxItemState::GaveUpUnconfirmed,
             Some(_),
         )
         | (OutboxItemState::Answered | OutboxItemState::Refused, None) => {
@@ -962,3 +904,36 @@ fn expect_one(
 #[cfg(test)]
 #[path = "outbox_store_test.rs"]
 mod tests;
+
+/// Moves one waiting row still before its deadline onto the wire: a first
+/// attempt (from InOutbox) becomes Sent, a replay (from SentAnswerLost)
+/// becomes Resent, so a later "not applied" answer knows whether an earlier
+/// attempt may be in central. None when the row is not sendable.
+async fn put_on_the_wire(
+    transaction: &mut sqlx::SqliteConnection,
+    request_id: &str,
+    now_ms: i64,
+) -> Result<Option<OutboxRow>, OutboxStoreError> {
+    let unsent = OutboxItemState::InOutbox.as_str();
+    let answer_lost = OutboxItemState::SentAnswerLost.as_str();
+    let sent = OutboxItemState::Sent.as_str();
+    let resent = OutboxItemState::Resent.as_str();
+    Ok(sqlx::query_as!(
+        OutboxRow,
+        r#"UPDATE outbox_items
+           SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?
+           WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?
+           RETURNING request_id AS "request_id!", caller_json, payload_json,
+                     item_state, flush_at_ms, outcome_json"#,
+        unsent,
+        sent,
+        resent,
+        now_ms,
+        request_id,
+        unsent,
+        answer_lost,
+        now_ms
+    )
+    .fetch_optional(&mut *transaction)
+    .await?)
+}

@@ -38,6 +38,7 @@ mod central_link_driver;
 mod machine_local_store;
 pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
 mod outbox_deadline;
+mod outbox_item_state;
 mod outbox_storage;
 #[cfg(test)]
 mod outbox_storage_contract;
