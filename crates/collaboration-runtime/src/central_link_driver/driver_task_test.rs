@@ -81,7 +81,10 @@ async fn a_lost_link_returns_the_batch_as_sent_answer_lost_and_resends_the_same_
     };
 
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].state, PendingWriteState::SentAnswerLost);
+    assert!(matches!(
+        pending[0].state,
+        PendingWriteState::SentAnswerLost { ref body } if body.as_str() == "hi"
+    ));
     let outcomes = harness.outcomes.0.lock().unwrap().clone();
     assert!(matches!(outcomes.as_slice(), [report] if !report.complete));
     let resent = &requests.requests()[0];
@@ -169,5 +172,55 @@ async fn a_restart_resends_writes_that_were_sent_without_an_answer() {
         Some(id)
     );
     let _ = &harness.store;
+    harness.stop().await;
+}
+
+#[tokio::test]
+async fn a_machine_revoked_answer_returns_the_write_unsent_and_the_next_mark_resends_it() {
+    let mut harness = Harness::start(tempfile::tempdir().unwrap(), clock_at(MARK - 20_000)).await;
+    let mut central = harness.connected().await;
+    let id = uuid_v7(4);
+    harness.calls.submit(caller(), thread_post(&id)).await;
+    harness
+        .clock
+        .advance(Duration::from_millis(20_000))
+        .unwrap();
+    let LinkFrame::Data(DataFrame::Batch { requests }) = central.frame().await else {
+        panic!("first batch");
+    };
+    let first = requests.requests()[0].clone();
+
+    // Link admission refused it: central did not apply the write.
+    central.send(LinkFrame::Data(DataFrame::Reply {
+        correlation_id: first.correlation_id().clone(),
+        result: Box::new(machine_revoked()),
+    }));
+    let pending = harness.calls.pending_for(caller()).await.unwrap();
+    let status = harness
+        .calls
+        .request_status(caller(), id.parse().unwrap())
+        .await;
+    assert!(matches!(
+        &pending[..],
+        [write] if matches!(&write.state, PendingWriteState::Unsent { body } if body.as_str() == "hi")
+    ));
+    assert!(matches!(status, RequestStatus::InOutbox { .. }));
+    let outcomes = harness.outcomes.0.lock().unwrap().clone();
+    assert!(
+        matches!(outcomes.as_slice(), [report] if !report.complete && report.outcomes.is_empty()),
+        "no outcome for a write central did not apply: {outcomes:?}"
+    );
+    harness
+        .clock
+        .advance(Duration::from_millis(60_000))
+        .unwrap();
+    let LinkFrame::Data(DataFrame::Batch { requests }) = central.frame().await else {
+        panic!("resent batch");
+    };
+
+    assert_eq!(
+        requests.requests()[0].payload().write_request_id(),
+        first.payload().write_request_id()
+    );
     harness.stop().await;
 }

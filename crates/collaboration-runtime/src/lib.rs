@@ -37,9 +37,28 @@ pub use codex_conversation_operation_recorder::{
 mod central_link_driver;
 mod outbox_store;
 pub use central_link_driver::{
-    CentralLinkParts, FlushJitter, InstallationFlushJitter, LinkSocket, LinkTransport,
-    LinkTransportError, MachineTokenSource, OutboxReadError, RouterLinkCalls, TokenAvailability,
-    TransportFuture, WebSocketLinkTransport,
+    AUTHORITY_LAPSED_CLOSE,
+    CentralLinkParts,
+    CentralLinkRefusal,
+    // The link's status vocabulary, for the Host and tools that report it.
+    CentralLinkStatus,
+    ConfiguredCentralLink,
+    FlushJitter,
+    InstallationFlushJitter,
+    LinkClosed,
+    LinkInbound,
+    LinkSocket,
+    LinkTransport,
+    LinkTransportError,
+    MachineTokenSource,
+    NotEnrolledTokens,
+    OutboxReadError,
+    RouterLinkCalls,
+    TokenAvailability,
+    TransportFuture,
+    UnconfiguredLinkTransport,
+    WebSocketLinkTransport,
+    start_installation_link,
 };
 mod provider_session_event_hub;
 mod provider_session_record;

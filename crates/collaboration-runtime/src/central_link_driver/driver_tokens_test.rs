@@ -156,3 +156,97 @@ async fn the_token_the_connection_already_carries_is_not_renewed_again() {
     call.abort();
     harness.stop().await;
 }
+
+#[tokio::test]
+async fn central_unavailable_is_transient_and_the_renewal_is_sent_again_until_it_succeeds() {
+    let mut harness = Harness::start(tempfile::tempdir().unwrap(), clock_at(MARK - 20_000)).await;
+    let mut central = harness.connected().await;
+    let unavailable = TokenRenewalResult::Refused {
+        reason: TokenRenewalRefusal::CentralUnavailable,
+    };
+    let renewed = TokenRenewalResult::Renewed {
+        effective_expires_at: chrono::DateTime::from_timestamp_millis(MARK + 3_600_000).unwrap(),
+    };
+    harness.tokens.set(TokenAvailability::Ready(fixture_token(
+        "second.machine.token",
+    )));
+
+    let mut sent = Vec::new();
+    for answer in [&unavailable, &renewed] {
+        let LinkFrame::Data(DataFrame::RenewMachineToken {
+            correlation_id,
+            token,
+        }) = central.frame().await
+        else {
+            panic!("a RenewMachineToken frame");
+        };
+        sent.push(token.expose().to_owned());
+        central.send(LinkFrame::Data(DataFrame::MachineTokenRenewal {
+            correlation_id,
+            result: answer.clone(),
+        }));
+        let status = settle(&harness).await;
+        assert!(
+            matches!(status, Some(LinkStatus::Connected { .. })),
+            "the link stays up and enrolled after {answer:?}"
+        );
+        // The retry delay, on the injected clock; the source never changed.
+        harness.clock.advance(Duration::from_secs(5)).unwrap();
+    }
+
+    assert_eq!(sent, ["second.machine.token", "second.machine.token"]);
+    assert_eq!(
+        *harness.tokens.renewals.lock().unwrap(),
+        [unavailable, renewed]
+    );
+    harness.stop().await;
+}
+
+#[tokio::test]
+async fn an_authority_lapsed_close_reconnects_only_with_a_fresh_token() {
+    let mut harness = Harness::start(tempfile::tempdir().unwrap(), clock_at(MARK - 20_000)).await;
+    let central = harness.connected().await;
+    let first_token = central.token.clone();
+
+    central.close_lapsed();
+    settle(&harness).await;
+    // A minute of reconnect backoff: the source still offers the lapsed token.
+    for _ in 0..6 {
+        harness.clock.advance(Duration::from_secs(10)).unwrap();
+        settle(&harness).await;
+    }
+    let reconnected_with_lapsed = harness.connections.try_recv().is_ok();
+    assert!(
+        !reconnected_with_lapsed,
+        "the lapsed token is not used to reconnect"
+    );
+    assert_eq!(settle(&harness).await, Some(LinkStatus::Connecting));
+
+    harness.tokens.set(TokenAvailability::Ready(fixture_token(
+        "fresh.machine.token",
+    )));
+    harness.clock.advance(Duration::from_secs(60)).unwrap();
+    let fresh = harness.connected().await;
+
+    assert_eq!(first_token.expose(), "fixture.machine.token");
+    assert_eq!(fresh.token.expose(), "fresh.machine.token");
+    assert!(matches!(
+        settle(&harness).await,
+        Some(LinkStatus::Connected { .. })
+    ));
+    harness.stop().await;
+}
+
+#[tokio::test]
+async fn any_other_close_reconnects_with_the_same_token() {
+    let mut harness = Harness::start(tempfile::tempdir().unwrap(), clock_at(MARK - 20_000)).await;
+    let central = harness.connected().await;
+
+    drop(central);
+    settle(&harness).await;
+    harness.clock.advance(Duration::from_secs(1)).unwrap();
+    let again = harness.connected().await;
+
+    assert_eq!(again.token.expose(), "fixture.machine.token");
+    harness.stop().await;
+}

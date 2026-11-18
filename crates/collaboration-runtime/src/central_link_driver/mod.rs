@@ -4,11 +4,20 @@
 mod driver_task;
 #[cfg(test)]
 mod driver_test_support;
+mod installation_link;
 mod link_transport;
+#[cfg(test)]
+mod overlay_property_test;
 
+pub use central_link_client::{
+    LinkStatus as CentralLinkStatus, RefusalReason as CentralLinkRefusal,
+};
+pub use installation_link::{
+    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, start_installation_link,
+};
 pub use link_transport::{
-    LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource, TokenAvailability,
-    TransportFuture, WebSocketLinkTransport,
+    AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
+    MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
 
 use crate::ProviderOperationStore;

@@ -5,10 +5,10 @@ use central_storage::{
 };
 use workspace_model::{ActorIdentityId, RequestId, WorkspaceResult};
 
+/// The request log's content digest; the one definition lives in workspace-model
+/// so the Router's outbox keeps the same digest for answered writes.
 pub(crate) fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {
-    use sha2::{Digest, Sha256};
-    let encoded = serde_json_canonicalizer::to_vec(operation).map_err(|_| corrupt("operation"))?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
+    workspace_model::operation_content_digest(operation).map_err(|_| corrupt("operation"))
 }
 pub(crate) fn lookup(request: &RequestId, cutoff: &str) -> Statement {
     Statement {

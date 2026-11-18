@@ -8,6 +8,8 @@ const BOUND: Duration = Duration::from_secs(20);
 
 #[path = "startup_contract_tests/broker_context_tests.rs"]
 mod broker_context_tests;
+#[path = "startup_contract_tests/central_link_test.rs"]
+mod central_link_test;
 #[path = "startup_contract_tests/duplicate_host_test.rs"]
 mod duplicate_host_test;
 #[path = "startup_contract_tests/follow_attachment_tests.rs"]

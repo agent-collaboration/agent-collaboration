@@ -4,13 +4,13 @@
 use crate::ProviderOperationStore;
 use crate::provider_operation_store::OneStatementWrite;
 use central_link_client::{
-    LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutgoingOutcome, OutgoingWrite,
-    PendingWrite, PendingWriteState, RequestStatus,
+    LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutboxWriteTarget, OutgoingOutcome,
+    OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use sqlite_storage_maintenance::TransactionStart;
-use workspace_model::{Caller, RequestId};
+use workspace_model::{Caller, RequestId, operation_content_digest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OutboxStoreError {
@@ -23,6 +23,8 @@ pub enum OutboxStoreError {
         request_id: String,
         field: &'static str,
     },
+    #[error("outbox write content could not be digested")]
+    Digest,
     #[error("the payload does not carry request id {request}")]
     RequestIdMismatch { request: RequestId },
     #[error("outbox item {request} is not {expected}")]
@@ -154,13 +156,22 @@ impl<'store> MacOutbox<'store> {
         .await?;
         if let Some(row) = existing {
             let stored = decode_row(&row)?;
-            return Ok(
-                if stored.caller == item.caller && stored.payload == item.payload {
-                    OutboxInsert::AlreadyStored(stored.status)
-                } else {
-                    OutboxInsert::ConflictingContent
-                },
-            );
+            let same_write = match &stored.payload {
+                StoredPayload::Unanswered(payload) => payload == &item.payload,
+                // The text is gone once answered. The same write (replay its answer)
+                // has the same target, workspace included, and the same content
+                // digest; any difference is a conflict. The outbox spans workspaces.
+                StoredPayload::Answered(answered) => {
+                    OutboxWriteContent::of(&item.payload)
+                        .is_some_and(|content| content.target == answered.target)
+                        && payload_content_digest(&item.payload)? == answered.content_digest
+                }
+            };
+            return Ok(if stored.caller == item.caller && same_write {
+                OutboxInsert::AlreadyStored(stored.status)
+            } else {
+                OutboxInsert::ConflictingContent
+            });
         }
         sqlx::query!(
             "INSERT INTO outbox_items
@@ -232,21 +243,33 @@ impl<'store> MacOutbox<'store> {
         let mut pending = Vec::with_capacity(rows.len());
         for row in &rows {
             let stored = decode_owned_row(row, caller)?;
-            let state = match (stored.state, stored.status) {
-                (OutboxItemState::InOutbox, _) => PendingWriteState::Unsent,
-                (OutboxItemState::SentAnswerLost | OutboxItemState::Sent, _) => {
-                    PendingWriteState::SentAnswerLost
+            let (target, state) = match (stored.state, stored.status, stored.payload) {
+                (OutboxItemState::InOutbox, _, StoredPayload::Unanswered(payload)) => {
+                    let content = outbox_content(&row.request_id, &payload)?;
+                    (
+                        content.target,
+                        PendingWriteState::Unsent { body: content.body },
+                    )
                 }
-                (OutboxItemState::Answered, RequestStatus::Answered(reply)) => {
-                    PendingWriteState::Answered(reply)
+                (
+                    OutboxItemState::SentAnswerLost | OutboxItemState::Sent,
+                    _,
+                    StoredPayload::Unanswered(payload),
+                ) => {
+                    let content = outbox_content(&row.request_id, &payload)?;
+                    let body = content.body;
+                    (content.target, PendingWriteState::SentAnswerLost { body })
                 }
-                (OutboxItemState::Answered | OutboxItemState::Refused, _) => {
-                    return Err(corrupt_row(&row.request_id, "item_state"));
-                }
+                (
+                    OutboxItemState::Answered,
+                    RequestStatus::Answered(reply),
+                    StoredPayload::Answered(answered),
+                ) => (answered.target, PendingWriteState::Answered(reply)),
+                _ => return Err(corrupt_row(&row.request_id, "item_state")),
             };
             pending.push(PendingWrite {
                 request_id: parse_request_id(&row.request_id)?,
-                content: outbox_content(&row.request_id, &stored.payload)?,
+                target,
                 flush_at: SyncTime::from_unix_millis(row.flush_at_ms),
                 state,
             });
@@ -290,6 +313,9 @@ impl<'store> MacOutbox<'store> {
                 outcome_json: row.outcome_json,
             };
             let stored = decode_owned_row(&row, caller)?;
+            let StoredPayload::Answered(answered) = stored.payload else {
+                return Err(corrupt_row(&request_id, "payload_json"));
+            };
             let outcome = match stored.status {
                 RequestStatus::Answered(reply) => OutgoingOutcome::Answered(reply),
                 RequestStatus::Refused(reason) => OutgoingOutcome::Refused(reason),
@@ -299,7 +325,7 @@ impl<'store> MacOutbox<'store> {
             };
             outgoing.push(OutgoingWrite {
                 request_id: parse_request_id(&request_id)?,
-                content: outbox_content(&request_id, &stored.payload)?,
+                target: answered.target,
                 outcome,
                 answered_at,
             });
@@ -396,17 +422,23 @@ impl<'store> MacOutbox<'store> {
                 expected: "in the outbox",
             })?;
             let stored = decode_row(&row)?;
+            let StoredPayload::Unanswered(payload) = stored.payload else {
+                return Err(corrupt_row(request_id, "payload_json"));
+            };
             writes.push(StoredOutboxWrite {
                 request: request.clone(),
                 caller: stored.caller,
-                payload: stored.payload,
+                payload,
             });
         }
         transaction.commit().await?;
         Ok(writes)
     }
 
-    /// Keeps central's answer for one sent write.
+    /// Keeps central's answer for one sent write and, in the same transaction,
+    /// drops its text: the stored payload becomes the body-free answered record
+    /// (owner, 2026-11-15: unsent text stays on the Mac only until central
+    /// answers).
     pub async fn record_outcome(
         &mut self,
         request: &RequestId,
@@ -425,11 +457,65 @@ impl<'store> MacOutbox<'store> {
         let from = OutboxItemState::Sent.as_str();
         let now_ms = now.unix_millis();
         let request_id = request.as_str();
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let row = sqlx::query_as!(
+            OutboxRow,
+            r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
+                      flush_at_ms, outcome_json
+               FROM outbox_items WHERE request_id = ? AND item_state = ?"#,
+            request_id,
+            from
+        )
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or_else(|| OutboxStoreError::UnexpectedState {
+            request: request.clone(),
+            expected: "sent",
+        })?;
+        let StoredPayload::Unanswered(payload) = decode_row(&row)?.payload else {
+            return Err(corrupt_row(request_id, "payload_json"));
+        };
+        let answered = AnsweredWrite {
+            request_id: request.clone(),
+            target: outbox_content(request_id, &payload)?.target,
+            content_digest: payload_content_digest(&payload)?,
+        };
+        let payload_json = serde_json::to_string(&answered)?;
         let changed = sqlx::query!(
-            "UPDATE outbox_items SET item_state = ?, outcome_json = ?, updated_at = ?
+            "UPDATE outbox_items SET item_state = ?, outcome_json = ?, payload_json = ?,
+                    updated_at = ?
              WHERE request_id = ? AND item_state = ?",
             to,
             outcome_json,
+            payload_json,
+            now_ms,
+            request_id,
+            from
+        )
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+        expect_one(changed, request, "sent")?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// A sent write central did not apply (link admission refused it) goes back
+    /// to the outbox unsent, with its receipt mark, to be resent after a
+    /// fresh-token reconnect.
+    pub async fn return_unapplied(
+        &mut self,
+        request: &RequestId,
+        now: SyncTime,
+    ) -> Result<(), OutboxStoreError> {
+        let from = OutboxItemState::Sent.as_str();
+        let to = OutboxItemState::InOutbox.as_str();
+        let now_ms = now.unix_millis();
+        let request_id = request.as_str();
+        let changed = sqlx::query!(
+            "UPDATE outbox_items SET item_state = ?, updated_at = ?
+                 WHERE request_id = ? AND item_state = ?",
+            to,
             now_ms,
             request_id,
             from
@@ -471,10 +557,28 @@ impl<'store> MacOutbox<'store> {
     }
 }
 
+/// What `payload_json` holds after central answered: the target and the content
+/// digest central's request log uses, no text.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AnsweredWrite {
+    request_id: RequestId,
+    target: OutboxWriteTarget,
+    /// Tells a resubmit of the same write from a different write under the same id.
+    content_digest: String,
+}
+
+/// `payload_json` by row state: the whole write until central answers, then
+/// the body-free answered record.
+enum StoredPayload {
+    Unanswered(RequestPayload),
+    Answered(AnsweredWrite),
+}
+
 struct DecodedRow {
     state: OutboxItemState,
     caller: Caller,
-    payload: RequestPayload,
+    payload: StoredPayload,
     status: RequestStatus,
 }
 
@@ -485,12 +589,25 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
     };
     parse_request_id(&row.request_id)?;
     let caller = serde_json::from_str(&row.caller_json).map_err(|_| corrupt("caller_json"))?;
-    let payload: RequestPayload =
-        serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
-    if payload.write_request_id().map(RequestId::as_str) != Some(row.request_id.as_str()) {
-        return Err(corrupt("payload_json"));
-    }
     let state = OutboxItemState::parse(&row.item_state).ok_or_else(|| corrupt("item_state"))?;
+    let payload = match state {
+        OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost | OutboxItemState::Sent => {
+            let payload: RequestPayload =
+                serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
+            if payload.write_request_id().map(RequestId::as_str) != Some(row.request_id.as_str()) {
+                return Err(corrupt("payload_json"));
+            }
+            StoredPayload::Unanswered(payload)
+        }
+        OutboxItemState::Answered | OutboxItemState::Refused => {
+            let answered: AnsweredWrite =
+                serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
+            if answered.request_id.as_str() != row.request_id {
+                return Err(corrupt("payload_json"));
+            }
+            StoredPayload::Answered(answered)
+        }
+    };
     let status = match (state, row.outcome_json.as_deref()) {
         (OutboxItemState::InOutbox | OutboxItemState::SentAnswerLost, None) => {
             RequestStatus::InOutbox {
@@ -535,6 +652,15 @@ fn outbox_content(
     payload: &RequestPayload,
 ) -> Result<OutboxWriteContent, OutboxStoreError> {
     OutboxWriteContent::of(payload).ok_or_else(|| corrupt_row(request_id, "payload_json"))
+}
+
+/// The digest central's request log keys this write's content by.
+fn payload_content_digest(payload: &RequestPayload) -> Result<String, OutboxStoreError> {
+    let digest = match payload {
+        RequestPayload::Workspace(request) => operation_content_digest(&request.operation),
+        RequestPayload::Mail(request) => operation_content_digest(&request.operation),
+    };
+    digest.map_err(|_| OutboxStoreError::Digest)
 }
 
 fn corrupt_row(request_id: &str, field: &'static str) -> OutboxStoreError {

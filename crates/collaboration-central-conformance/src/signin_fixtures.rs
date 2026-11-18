@@ -162,6 +162,7 @@ pub struct SignInKeys {
     pub url: String,
     retired: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     fetches: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    failing: std::sync::Arc<std::sync::atomic::AtomicBool>,
     stop: tokio::sync::oneshot::Sender<()>,
     task: tokio::task::JoinHandle<Result<(), std::io::Error>>,
 }
@@ -173,12 +174,18 @@ impl SignInKeys {
         let published = retired.clone();
         let fetches = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counted = fetches.clone();
+        let failing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let unavailable = failing.clone();
         let router = axum::Router::new().route(
             "/api/auth/jwks",
             axum::routing::get(move || {
                 let published = published.clone();
                 counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let unavailable = unavailable.load(std::sync::atomic::Ordering::SeqCst);
                 async move {
+                    if unavailable {
+                        return Err(axum::http::StatusCode::SERVICE_UNAVAILABLE);
+                    }
                     let retired = published
                         .lock()
                         .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
@@ -201,6 +208,7 @@ impl SignInKeys {
             url,
             retired,
             fetches,
+            failing,
             stop,
             task,
         })
@@ -213,6 +221,12 @@ impl SignInKeys {
             .map_err(|_| "retired key list poisoned")?
             .push(kid.to_owned());
         Ok(())
+    }
+    /// Every later key-set fetch answers 503, as an unreachable sign-in service:
+    /// a token whose key is not cached cannot be verified (CentralUnavailable).
+    pub fn fail_fetches(&self) {
+        self.failing
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
     /// How many times central has fetched the published key set.
     pub fn fetches(&self) -> usize {

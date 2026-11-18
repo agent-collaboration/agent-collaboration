@@ -19,7 +19,7 @@ use fleet_identity_protocol::OrganizationId;
 use std::sync::Arc;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use workspace_model::{
-    WorkspaceReply, WorkspaceResult,
+    RefusalReason, WorkspaceReply, WorkspaceResult,
     central_mail::{CentralMailRefusal, CentralMailResult},
 };
 
@@ -203,19 +203,39 @@ async fn serve_link(
                 }
             }
             LinkFrame::Data(DataFrame::Request { request }) => {
-                if !reply_to_request(&mut socket, &state.stop, &runtime, &connection, &request)
+                match reply_to_request(&mut socket, &state.stop, &runtime, &connection, &request)
                     .await
                 {
-                    return;
+                    RequestOutcome::Replied => {}
+                    RequestOutcome::AuthorityLapsed => {
+                        close_lapsed_link(&mut socket, &state.stop).await;
+                        return;
+                    }
+                    RequestOutcome::Stopped => return,
                 }
             }
             LinkFrame::Data(DataFrame::Batch { requests }) => {
+                // Every member is answered, as on the Worker; a lapsed authority
+                // refuses each member and closes the link after the batch.
+                let mut lapsed = false;
                 for request in requests.into_requests() {
-                    if !reply_to_request(&mut socket, &state.stop, &runtime, &connection, &request)
-                        .await
+                    match reply_to_request(
+                        &mut socket,
+                        &state.stop,
+                        &runtime,
+                        &connection,
+                        &request,
+                    )
+                    .await
                     {
-                        return;
+                        RequestOutcome::Replied => {}
+                        RequestOutcome::AuthorityLapsed => lapsed = true,
+                        RequestOutcome::Stopped => return,
                     }
+                }
+                if lapsed {
+                    close_lapsed_link(&mut socket, &state.stop).await;
+                    return;
                 }
             }
             LinkFrame::Data(DataFrame::RenewMachineToken {
@@ -278,24 +298,62 @@ async fn renew(
     }
 }
 
+/// What became of one request frame on the link.
+enum RequestOutcome {
+    Replied,
+    /// The connection's authority expired or was revoked: the request was
+    /// answered Refused(MachineRevoked) and the link must close.
+    AuthorityLapsed,
+    /// The link stopped or failed; it is already closed or closing.
+    Stopped,
+}
+
+/// Closes a link whose authority lapsed. A renewal past the deadline is
+/// refused, so the Router's only way on is a fresh connection; the Worker
+/// closes with the same code and reason.
+async fn close_lapsed_link(socket: &mut WebSocket, stop: &CancellationToken) {
+    close_link(
+        socket,
+        stop,
+        close_code::POLICY,
+        "machine authority expired or revoked",
+    )
+    .await;
+}
+
 async fn reply_to_request(
     socket: &mut WebSocket,
     stop: &CancellationToken,
     runtime: &Runtime,
     connection: &ValidatedMachineConnection,
     request: &LinkRequest,
-) -> bool {
+) -> RequestOutcome {
     if stop.is_cancelled() {
-        return false;
+        return RequestOutcome::Stopped;
     }
-    let result = match dispatch_request(runtime, connection, request).await {
-        Ok(result) => result,
+    // Each request restores the connection against live rows first, as the
+    // Worker does: after the deadline or a revocation it is refused.
+    let (result, outcome) = match runtime
+        .restore_machine_connection(&connection.attachment())
+        .await
+    {
+        Ok(Ok(_)) => match dispatch_request(runtime, connection, request).await {
+            Ok(result) => (result, RequestOutcome::Replied),
+            Err(_) => {
+                close_link(socket, stop, close_code::ERROR, "central unavailable").await;
+                return RequestOutcome::Stopped;
+            }
+        },
+        Ok(Err(_)) => (
+            refused_reply(request.payload(), RefusalReason::MachineRevoked),
+            RequestOutcome::AuthorityLapsed,
+        ),
         Err(_) => {
             close_link(socket, stop, close_code::ERROR, "central unavailable").await;
-            return false;
+            return RequestOutcome::Stopped;
         }
     };
-    send_frame(
+    let sent = send_frame(
         socket,
         stop,
         &LinkFrame::Data(DataFrame::Reply {
@@ -303,7 +361,24 @@ async fn reply_to_request(
             result: Box::new(result),
         }),
     )
-    .await
+    .await;
+    if sent {
+        outcome
+    } else {
+        RequestOutcome::Stopped
+    }
+}
+
+fn refused_reply(payload: &RequestPayload, reason: RefusalReason) -> ReplyPayload {
+    match payload {
+        RequestPayload::Workspace(_) => ReplyPayload::Workspace(WorkspaceReply {
+            result: WorkspaceResult::Refused(reason),
+            actors: vec![],
+        }),
+        RequestPayload::Mail(_) => ReplyPayload::Mail(CentralMailResult::Refused(
+            CentralMailRefusal::Workspace(reason),
+        )),
+    }
 }
 
 async fn dispatch_request(

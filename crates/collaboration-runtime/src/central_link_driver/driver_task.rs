@@ -1,7 +1,10 @@
 //! The one task that owns the Router's central link: the C1 link client, the
 //! socket, the outbox flush reducer and the calls waiting on them. Every
 //! deadline comes from the one injected clock.
-use super::link_transport::{LinkSocket, LinkTransport, MachineTokenSource, TokenAvailability};
+use super::link_transport::{
+    LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource,
+    TokenAvailability, TransportFuture,
+};
 use super::{DriverCommand, FlushJitter};
 use crate::ProviderOperationStore;
 use crate::outbox_store::{MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError};
@@ -36,6 +39,8 @@ struct BatchInFlight {
     /// Every member's caller for the whole batch, for the outcome report.
     callers: BTreeMap<RequestId, Caller>,
     outcomes: Vec<FlushOutcome>,
+    /// Some member went back to the outbox unapplied; the report is incomplete.
+    returned: bool,
 }
 
 type PendingReply = oneshot::Sender<Result<Vec<PendingWrite>, OutboxStoreError>>;
@@ -50,6 +55,9 @@ pub(super) struct LinkDriver {
     pub(super) client: LinkClient,
     pub(super) flush: OutboxFlushState,
     socket: Option<(ConnectionAttempt, Box<dyn LinkSocket>)>,
+    /// A connect in progress. It is polled in the run loop, so the driver keeps
+    /// serving calls, and the client's Welcome deadline abandons it.
+    connecting: Option<PendingConnect>,
     immediate: BTreeMap<CorrelationId, ImmediateCall>,
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
@@ -59,6 +67,11 @@ pub(super) struct LinkDriver {
     /// A RenewMachineToken on the wire and the token it carries.
     renewing: Option<(CorrelationId, MachineTokenText)>,
     renewal_ids: uuid::ContextV7,
+    /// When a renewal central could not answer (CentralUnavailable) is tried again.
+    renew_retry_at: Option<ClockInstant>,
+    /// The token whose connection central closed as authority lapsed; the link
+    /// waits for the source to offer a different one before connecting again.
+    lapsed_token: Option<MachineTokenText>,
 }
 
 impl LinkDriver {
@@ -81,6 +94,7 @@ impl LinkDriver {
             client,
             flush: OutboxFlushState::default(),
             socket: None,
+            connecting: None,
             immediate: BTreeMap::new(),
             batch: None,
             flush_wake: None,
@@ -88,6 +102,8 @@ impl LinkDriver {
             connected_token: None,
             renewing: None,
             renewal_ids: uuid::ContextV7::new(),
+            renew_retry_at: None,
+            lapsed_token: None,
         }
     }
 
@@ -99,10 +115,14 @@ impl LinkDriver {
         self.restore_outbox().await;
         loop {
             self.drive_time().await;
-            let deadline = [self.client.next_deadline(), self.flush_wake]
-                .into_iter()
-                .flatten()
-                .min();
+            let deadline = [
+                self.client.next_deadline(),
+                self.flush_wake,
+                self.renew_retry_at,
+            ]
+            .into_iter()
+            .flatten()
+            .min();
             let clock = self.clock.clone();
             let tokens = self.tokens.clone();
             tokio::select! {
@@ -113,7 +133,8 @@ impl LinkDriver {
                     Some(command) => self.handle_command(command).await,
                     None => break,
                 },
-                text = next_text(&mut self.socket) => self.handle_text(text).await,
+                connected = pending_connect(&mut self.connecting) => self.connect_finished(connected).await,
+                inbound = next_inbound(&mut self.socket) => self.handle_inbound(inbound).await,
                 () = sleep_until(clock.as_ref(), deadline) => {}
             }
         }
@@ -144,6 +165,7 @@ impl LinkDriver {
         while let Some(action) = self.client.poll_time() {
             self.handle_action(action).await;
         }
+        self.drive_renewal_retry().await;
         if self
             .flush_wake
             .is_some_and(|wake| self.clock.monotonic_now() >= wake)
@@ -163,6 +185,8 @@ impl LinkDriver {
                 }
             }
             ClientAction::Reconnect { failed } => {
+                // The Welcome deadline passed: abandon a connect still in progress.
+                self.connecting = None;
                 if let Some((_, mut socket)) = self.socket.take() {
                     socket.close().await;
                 }
@@ -175,8 +199,9 @@ impl LinkDriver {
 
     async fn connect(&mut self, attempt: ConnectionAttempt) {
         let token = match self.tokens.availability() {
-            TokenAvailability::Ready(token) => token,
-            TokenAvailability::RefreshPending => {
+            TokenAvailability::Ready(token) if self.lapsed_token.as_ref() != Some(&token) => token,
+            // The lapsed token cannot connect again: wait, as for a refresh.
+            TokenAvailability::Ready(_) | TokenAvailability::RefreshPending => {
                 if let Ok(failed) = self.client.closed(&attempt) {
                     self.settle_failed(failed).await;
                 }
@@ -193,12 +218,25 @@ impl LinkDriver {
                 return;
             }
         };
-        match self.transport.connect(&token).await.ok() {
-            Some(socket) => {
+        let transport = self.transport.clone();
+        let dialing = token.clone();
+        self.connecting = Some(PendingConnect {
+            attempt,
+            token,
+            connect: Box::pin(async move { transport.connect(&dialing).await }),
+        });
+    }
+
+    async fn connect_finished(
+        &mut self,
+        (attempt, token, socket): (ConnectionAttempt, MachineTokenText, ConnectResult),
+    ) {
+        match socket {
+            Ok(socket) => {
                 self.socket = Some((attempt, socket));
                 self.connected_token = Some(token);
             }
-            None => {
+            Err(_) => {
                 if let Ok(failed) = self.client.closed(&attempt) {
                     self.settle_failed(failed).await;
                 }
@@ -217,10 +255,20 @@ impl LinkDriver {
         self.apply_flush(FlushEvent::LinkLost).await;
     }
 
-    async fn handle_text(&mut self, text: Option<String>) {
-        let Some(text) = text else {
-            self.socket_closed().await;
-            return;
+    async fn handle_inbound(&mut self, inbound: LinkInbound) {
+        let text = match inbound {
+            LinkInbound::Text(text) => text,
+            // Central refused a frame past the deadline or after revocation and
+            // closed: reconnect only with a fresh token.
+            LinkInbound::Closed(LinkClosed::AuthorityLapsed) => {
+                self.lapsed_token = self.connected_token.take();
+                self.socket_closed().await;
+                return;
+            }
+            LinkInbound::Closed(LinkClosed::Other) => {
+                self.socket_closed().await;
+                return;
+            }
         };
         let Some((attempt, _)) = &self.socket else {
             return;
@@ -237,18 +285,24 @@ impl LinkDriver {
             }
         };
         match event {
-            ClientEvent::Welcomed => self.apply_flush(FlushEvent::LinkConnected).await,
+            ClientEvent::Welcomed => {
+                self.lapsed_token = None;
+                self.apply_flush(FlushEvent::LinkConnected).await;
+            }
             ClientEvent::Reply {
                 correlation_id,
                 result,
             } => self.reply_arrived(&correlation_id, result).await,
             // Pong resets the client's heartbeat; a late reply was settled.
-            // Delivery belongs to 2c.
+            // Inbox delivery and message outcomes arrive in 2c steps C and D.
             ClientEvent::TokenRenewal {
                 correlation_id,
                 result,
             } => self.renewal_answered(&correlation_id, &result),
-            ClientEvent::Pong | ClientEvent::LateReply { .. } | ClientEvent::Deliver { .. } => {}
+            ClientEvent::Pong
+            | ClientEvent::LateReply { .. }
+            | ClientEvent::Deliver { .. }
+            | ClientEvent::MessageOutcome { .. } => {}
         }
     }
 
@@ -464,9 +518,18 @@ impl LinkDriver {
                         outcome,
                     });
                 }
-                if self.flush.in_flight_members().next().is_none() {
-                    self.finish_batch(true);
+                self.finish_batch_if_answered();
+            }
+            FlushEffect::ReturnUnapplied { request } => {
+                let mut store = self.store.lock().await;
+                let _ = MacOutbox::new(&mut store)
+                    .return_unapplied(&request, now)
+                    .await;
+                drop(store);
+                if let Some(batch) = self.batch.as_mut() {
+                    batch.returned = true;
                 }
+                self.finish_batch_if_answered();
             }
             FlushEffect::ReturnToOutbox { requests } => {
                 let mut store = self.store.lock().await;
@@ -523,6 +586,7 @@ impl LinkDriver {
                 callers: members.values().cloned().collect(),
                 members,
                 outcomes: Vec::new(),
+                returned: false,
             });
             self.apply_flush(FlushEvent::LinkLost).await;
             return;
@@ -533,6 +597,7 @@ impl LinkDriver {
             members,
             callers,
             outcomes: Vec::new(),
+            returned: false,
         });
         let sent = match LinkRequestBatch::new(frames) {
             Ok(batch) => {
@@ -543,6 +608,15 @@ impl LinkDriver {
         };
         if !sent {
             self.socket_closed().await;
+        }
+    }
+
+    /// Ends the batch once no member is in flight; it is complete unless a
+    /// member went back to the outbox.
+    fn finish_batch_if_answered(&mut self) {
+        if self.flush.in_flight_members().next().is_none() {
+            let complete = !self.batch.as_ref().is_some_and(|batch| batch.returned);
+            self.finish_batch(complete);
         }
     }
 
@@ -576,11 +650,34 @@ fn request_correlation(frame: &LinkFrame) -> Option<CorrelationId> {
     }
 }
 
-async fn next_text(
+type ConnectResult = Result<Box<dyn LinkSocket>, LinkTransportError>;
+
+/// A connect started for one attempt, with the token it dials.
+struct PendingConnect {
+    attempt: ConnectionAttempt,
+    token: MachineTokenText,
+    connect: TransportFuture<'static, ConnectResult>,
+}
+
+/// Resolves when the pending connect finishes; never while none is pending.
+async fn pending_connect(
+    connecting: &mut Option<PendingConnect>,
+) -> (ConnectionAttempt, MachineTokenText, ConnectResult) {
+    let Some(pending) = connecting.as_mut() else {
+        return std::future::pending().await;
+    };
+    let socket = pending.connect.as_mut().await;
+    let Some(PendingConnect { attempt, token, .. }) = connecting.take() else {
+        return std::future::pending().await;
+    };
+    (attempt, token, socket)
+}
+
+async fn next_inbound(
     socket: &mut Option<(ConnectionAttempt, Box<dyn LinkSocket>)>,
-) -> Option<String> {
+) -> LinkInbound {
     match socket {
-        Some((_, socket)) => socket.next_text().await,
+        Some((_, socket)) => socket.next_inbound().await,
         None => std::future::pending().await,
     }
 }

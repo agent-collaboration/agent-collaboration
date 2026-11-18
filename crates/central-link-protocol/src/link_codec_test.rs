@@ -37,7 +37,7 @@ fn heartbeat_is_exact_unquoted_text_and_old_nonce_json_is_rejected() {
 }
 
 #[test]
-fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
+fn welcome_reply_deliver_ack_and_message_outcome_are_closed_and_directional() {
     let id = "01890f2e-7b4c-7cc0-98c4-000000000001";
     let fixtures = [
         (
@@ -50,11 +50,15 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToRouter,
-            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"endpoint":"codex","sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
+            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"endpoint":"codex","sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"},"sendId":id}),
         ),
         (
             FrameDirection::ToCentral,
-            json!({"kind":"ack","messageId":id}),
+            json!({"kind":"ack","messageId":id,"sendId":id,"answer":"accepted"}),
+        ),
+        (
+            FrameDirection::ToRouter,
+            json!({"kind":"messageOutcome","requestId":id,"messageId":id,"outcome":{"kind":"cancelled","reason":"notDeliveredWithin15Min"}}),
         ),
     ];
     for (direction, fixture) in fixtures {
@@ -78,6 +82,9 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         json!({"kind":"unknown"}),
         json!({"kind":"ack"}),
         json!({"kind":"ack","messageId":"bad"}),
+        // An Ack must name the send it answers and say how.
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001"}),
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","sendId":"01890f2e-7b4c-7cc0-98c4-000000000001"}),
     ] {
         assert!(decode_text(&fixture.to_string(), FrameDirection::ToCentral).is_err());
     }
