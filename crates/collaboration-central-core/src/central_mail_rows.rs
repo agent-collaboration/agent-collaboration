@@ -27,18 +27,21 @@ pub(crate) fn insert_message(
     insert_message_due(message, None)
 }
 
-/// A message row; `cancel_due_at` is the direct message's cancel mark
-/// (message_deadline::cancel_due_at), None for kinds that never cancel.
+/// What only a direct message stores: when central cancels it if still queued
+/// (message_deadline::cancel_due_at) and the sender outbox request that
+/// created it, which a delivery outcome names.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DirectMessageTerms {
+    pub cancel_due_at: Timestamp,
+    pub sender_request_id: workspace_model::RequestId,
+}
+
+/// A message row; `direct` is None for kinds that never cancel.
 pub(crate) fn insert_message_due(
     message: &mail::MessageRecord,
-    cancel_due_at: Option<workspace_model::Timestamp>,
+    direct: Option<&DirectMessageTerms>,
 ) -> Result<GuardedStatement, StoreFailure> {
-    let kind = match message.body {
-        mail::MessageBody::Direct { .. } => "direct",
-        mail::MessageBody::Notice { .. } => "notice",
-        mail::MessageBody::Wake { .. } => "wake",
-        mail::MessageBody::Automation { .. } => "automation",
-    };
+    let kind = stored_kind(&message.body);
     let (state, failure) = match &message.state {
         mail::MessageState::Queued => ("queued", SqlValue::Null),
         mail::MessageState::Delivered => ("delivered", SqlValue::Null),
@@ -47,7 +50,7 @@ pub(crate) fn insert_message_due(
     };
     let source = message.source.as_ref();
     Ok(any(
-        "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,cancel_due_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_change_id,recipient_actor) WHERE source_change_id IS NOT NULL DO NOTHING",
+        "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,cancel_due_at,sender_request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_change_id,recipient_actor) WHERE source_change_id IS NOT NULL DO NOTHING",
         vec![
             text(&message.message_id),
             encode(&message.sender)?,
@@ -65,7 +68,19 @@ pub(crate) fn insert_message_due(
                 .map_or(SqlValue::Null, text),
             text(timestamp(message.created_at)),
             text(timestamp(message.updated_at)),
-            cancel_due_at.map_or(SqlValue::Null, |due| text(timestamp(due))),
+            direct.map_or(SqlValue::Null, |terms| text(timestamp(terms.cancel_due_at))),
+            direct.map_or(SqlValue::Null, |terms| text(&terms.sender_request_id)),
         ],
     ))
+}
+
+/// The `messages.message_kind` text for a body; stored rows must match it.
+pub(crate) fn stored_kind(body: &mail::MessageBody) -> &'static str {
+    match body {
+        mail::MessageBody::Direct { .. } => "direct",
+        mail::MessageBody::Notice { .. } => "notice",
+        mail::MessageBody::Wake { .. } => "wake",
+        mail::MessageBody::Automation { .. } => "automation",
+        mail::MessageBody::DeliveryOutcome { .. } => "deliveryOutcome",
+    }
 }

@@ -522,6 +522,7 @@ mod central_mail_store;
 mod central_timer_plans;
 mod central_timer_rows;
 mod central_timers;
+mod direct_message_rows;
 mod guarded_statements;
 pub use engine::AlarmResult;
 mod notification_windows;

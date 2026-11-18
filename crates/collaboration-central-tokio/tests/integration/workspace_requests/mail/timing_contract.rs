@@ -355,9 +355,23 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         panic!("second target send")
     };
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    assert!(
-        r.statement_host().alarm().is_none(),
-        "direct messages never schedule an alarm"
+    let earliest_cancel = r
+        .statement_host()
+        .read(super::super::Statement {
+            sql: "SELECT MIN(cancel_due_at) FROM messages WHERE state='queued'",
+            args: vec![],
+        })
+        .await
+        .unwrap()
+        .rows[0][0]
+        .clone();
+    let central_storage::SqlValue::Text(earliest_cancel) = earliest_cancel else {
+        panic!("each direct message stores its cancel mark")
+    };
+    assert_eq!(
+        r.statement_host().published_alarm().unwrap(),
+        Some(earliest_cancel.parse().unwrap()),
+        "delivery never arms the alarm; only the earliest cancel mark does"
     );
     let immediate = r.queued_for_session(&target).await.unwrap();
     assert_eq!(immediate.messages.len(), 4);
@@ -426,9 +440,10 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         queue
     );
     assert_eq!(r.queued_for_session(&target).await.unwrap(), queue);
-    assert!(
-        r.statement_host().alarm().is_none(),
-        "Queued rows must not spin the alarm"
+    assert_eq!(
+        r.statement_host().published_alarm().unwrap(),
+        Some(earliest_cancel.parse().unwrap()),
+        "queued rows must not spin the alarm: it stays at the earliest cancel mark"
     );
     drop(r);
     f.reopen().await;

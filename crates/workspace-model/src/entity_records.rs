@@ -112,6 +112,17 @@ pub enum Identity {
         person_id: PersonId,
     },
 }
+impl Identity {
+    /// The `actor_identities.identity_kind` text stored beside the identity.
+    #[must_use]
+    pub fn stored_kind(&self) -> &'static str {
+        match self {
+            Self::AgentSession { .. } => "agentSession",
+            Self::RouterComponent { .. } => "routerComponent",
+            Self::Person { .. } => "person",
+        }
+    }
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",

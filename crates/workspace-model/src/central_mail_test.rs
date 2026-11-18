@@ -1,6 +1,6 @@
 use super::{
-    CentralMailOperation, CentralMailRequest, CentralMailResult, MessageBody, MessageDelivery,
-    MessageSender, MessageState,
+    CentralMailOperation, CentralMailRequest, CentralMailResult, MessageBody, MessageCancellation,
+    MessageDelivery, MessageOutcome, MessageRefusal, MessageSender, MessageState,
 };
 use serde_json::json;
 
@@ -156,4 +156,50 @@ fn a_direct_body_keeps_the_message_it_answers() {
         matches!(&body, MessageBody::Direct { reply_to: Some(id), .. } if id.as_str() == "01890f3e-7b8c-7cc0-8000-000000000009")
     );
     assert_eq!(serde_json::to_value(body).unwrap(), stored);
+}
+
+#[test]
+fn a_delivery_outcome_body_has_closed_wire_names_and_refuses_unknown_outcomes() {
+    let outcomes = [
+        (
+            MessageOutcome::DeliveredAfterAll,
+            json!({"kind": "deliveredAfterAll"}),
+        ),
+        (
+            MessageOutcome::Refused {
+                reason: MessageRefusal::RecipientRefused,
+            },
+            json!({"kind": "refused", "reason": "recipientRefused"}),
+        ),
+        (
+            MessageOutcome::Cancelled {
+                reason: MessageCancellation::NotDeliveredWithin15Minutes,
+            },
+            json!({"kind": "cancelled", "reason": "notDeliveredWithin15Minutes"}),
+        ),
+    ];
+    for (outcome, outcome_wire) in outcomes {
+        let wire = json!({
+            "kind": "deliveryOutcome",
+            "messageId": "01890f3e-7b8c-7cc0-8000-000000000001",
+            "requestId": "01890f3e-7b8c-7cc0-8000-000000000002",
+            "outcome": outcome_wire,
+        });
+        let body: MessageBody = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(body, MessageBody::DeliveryOutcome { outcome: decoded, .. } if decoded == outcome)
+        );
+        assert_eq!(serde_json::to_value(body).unwrap(), wire);
+    }
+    for outcome in [json!({"kind": "delivered"}), json!({"kind": "expired"})] {
+        assert!(
+            serde_json::from_value::<MessageBody>(json!({
+                "kind": "deliveryOutcome",
+                "messageId": "01890f3e-7b8c-7cc0-8000-000000000001",
+                "requestId": "01890f3e-7b8c-7cc0-8000-000000000002",
+                "outcome": outcome,
+            }))
+            .is_err()
+        );
+    }
 }

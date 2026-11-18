@@ -22,6 +22,7 @@ pub struct WorkspaceView {
 pub enum EngineKindName {
     WakeTimer,
     AutomationTimer,
+    DirectMessage,
     LegacyNoticeWindows,
     LegacyWorkspaceDrains,
     EngineSource,

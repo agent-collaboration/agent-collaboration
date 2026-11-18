@@ -162,7 +162,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 Ok((
                     vec![crate::central_mail_rows::insert_message_due(
                         &message,
-                        Some(crate::message_deadline::cancel_due_at(*sent_at, now)),
+                        Some(&crate::central_mail_rows::DirectMessageTerms {
+                            cancel_due_at: crate::message_deadline::cancel_due_at(*sent_at, now),
+                            sender_request_id: request.request_id.clone(),
+                        }),
                     )?],
                     mail::CentralMailAnswer::Queued {
                         message_id: message.message_id,

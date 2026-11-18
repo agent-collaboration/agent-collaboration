@@ -58,7 +58,7 @@ fn welcome_reply_deliver_ack_and_message_outcome_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToRouter,
-            json!({"kind":"messageOutcome","requestId":id,"messageId":id,"outcome":{"kind":"cancelled","reason":"notDeliveredWithin15Min"}}),
+            json!({"kind":"messageOutcome","requestId":id,"messageId":id,"outcome":{"kind":"cancelled","reason":"notDeliveredWithin15Minutes"}}),
         ),
     ];
     for (direction, fixture) in fixtures {
