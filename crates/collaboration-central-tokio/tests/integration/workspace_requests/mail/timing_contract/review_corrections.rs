@@ -260,10 +260,22 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
             .rows
             .is_empty()
     );
+    // The jump passes the failing drain's next try, so the driver retries it at
+    // once. That retry finishes against the trigger, and moves the next try to
+    // the next mark, before the trigger goes.
+    let drives = r.alarm_completion_count();
+    let failures = r.alarm_failures().len();
     advance_to(
         f,
         now(f) + chrono::Duration::minutes(30) + chrono::Duration::seconds(20),
     );
+    tokio::select! {
+        () = r.until_alarm_completed(drives + 1) => {}
+        () = r.until_alarm_failed(failures + 1) => panic!(
+            "the overdue drive failed instead of retrying the drain: {:?}",
+            r.alarm_failures()
+        ),
+    }
     assert!(matches!(
         r.statement_host()
             .run_batch(StatementBatch {
@@ -293,6 +305,15 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     // which succeeds now and clears the record; the window then fires at its slot.
     let retry = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
+    let record = r.statement_host().read(Statement { sql: "SELECT state,next_try_at FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![
+            text("failing"),
+            text(retry.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        ]],
+        "the overdue retry failed against the trigger and waits for the next mark"
+    );
     drop(r);
     if retry < due {
         dispatch_to(f, retry).await;

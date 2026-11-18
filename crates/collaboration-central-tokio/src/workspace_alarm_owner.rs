@@ -70,6 +70,8 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                     AlarmWait::UntilPublication => std::future::pending().await,
                 }
             } => {
+                #[cfg(feature = "test-support")]
+                runtime.mark_alarm_started();
                 let result = tokio::select! {
                     () = stop.cancelled() => return,
                     result = runtime.after_event() => result,

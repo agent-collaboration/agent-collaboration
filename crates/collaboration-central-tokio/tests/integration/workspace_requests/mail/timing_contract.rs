@@ -16,15 +16,24 @@ fn advance_to(f: &Fixture, at: m::Timestamp) {
     f.clock.advance(delta.to_std().unwrap()).unwrap();
 }
 /// Advances to `at` and waits for the host's driver to complete that alarm.
-/// Instead of waiting forever it fails loudly when the driver reports a failed
-/// drive (its retry is the next mark, which this manual clock never reaches) or
-/// re-checks its published alarm and finds it not due at `at`.
+/// A drive still running from an earlier clock position (an alarm the clock
+/// jumped past) settles first, so it cannot finish after the move and pass for
+/// this alarm. Instead of waiting forever it fails loudly when the driver
+/// reports a failed drive (its retry is the next mark, which this manual clock
+/// never reaches) or re-checks its published alarm and finds it not due at `at`.
 async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
-    let count = r.alarm_completion_count();
     let failures = r.alarm_failures().len();
-    advance_to(f, at);
+    r.until_alarm_drives_settled().await;
+    assert_eq!(
+        r.alarm_failures().len(),
+        failures,
+        "an in-flight drive failed before the dispatch to {at}: {:?}",
+        r.alarm_failures()
+    );
     let published = r.statement_host().alarm();
+    let count = r.alarm_completion_count();
+    advance_to(f, at);
     let not_due = async {
         match published {
             Some(alarm) if alarm.unix_millis() > at.timestamp_millis() => {
@@ -446,6 +455,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     review_corrections::exercise_shorter_cadence(f).await;
     review_corrections::exercise_non_utc_and_terminal_rows(f).await;
     review_corrections::exercise_late_drain(f).await;
+    in_flight_drive::exercise_dispatch_settles_an_in_flight_drive(f).await;
     review_corrections::exercise_cadence_change_after_clock_rollback(f).await;
 }
 
@@ -525,3 +535,5 @@ mod stored_validation;
 mod review_corrections;
 
 mod admission_refusals;
+
+mod in_flight_drive;
