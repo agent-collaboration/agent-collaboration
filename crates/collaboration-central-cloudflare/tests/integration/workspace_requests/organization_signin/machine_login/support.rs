@@ -283,7 +283,7 @@ impl MachineFixture {
         Ok(())
     }
     pub fn now(&self) -> i64 {
-        use runtime_primitives::Clock;
+        use fleet_runtime_ports::Clock;
         self.inner.clock.now().unix_millis().div_euclid(1000)
     }
     pub async fn advance(&self, millis: u64) -> Result<()> {

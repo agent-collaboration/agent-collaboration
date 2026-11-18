@@ -52,7 +52,7 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
         let deadline = retry.unwrap_or_else(|| match status {
             LastAlarmPublication::Published { deadline } => deadline
                 .map_or(AlarmWait::UntilPublication, |at| {
-                    AlarmWait::Until(clock.wall_deadline(at))
+                    AlarmWait::Until(clock.wall_deadline(router_wall_time(at)))
                 }),
             LastAlarmPublication::Failed { at } => {
                 next_mark_deadline(clock.as_ref(), at.unix_millis())
@@ -114,4 +114,9 @@ fn next_mark_deadline(clock: &dyn RuntimeClock, now: i64) -> AlarmWait {
                 clock.wall_deadline(runtime_primitives::SyncTime::from_unix_millis(millis)),
             )
         })
+}
+
+/// router-clock still reads agent-fleet-sync time until the Router retrofit.
+fn router_wall_time(at: fleet_runtime_ports::SyncTime) -> runtime_primitives::SyncTime {
+    runtime_primitives::SyncTime::from_unix_millis(at.unix_millis())
 }

@@ -201,14 +201,14 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
     alarm.wait_for(|alarm| alarm.is_some()).await?;
     assert_eq!(
         *alarm.borrow_and_update(),
-        Some(runtime_primitives::SyncTime::from_unix_millis(
+        Some(fleet_runtime_ports::SyncTime::from_unix_millis(
             due.timestamp_millis()
         ))
     );
     f.clock
         .not_due_check_now(
             f.clock
-                .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(
+                .wall_deadline(fleet_runtime_ports::SyncTime::from_unix_millis(
                     due.timestamp_millis(),
                 )),
         )

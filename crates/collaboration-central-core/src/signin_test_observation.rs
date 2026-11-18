@@ -1,13 +1,7 @@
 //! Private fixture IPC: one read-only snapshot of the modern org-owned sign-in rows.
 //! The raw compact statement is returned only to the fixture caller; never log it.
-use crate::{
-    ObjectHost,
-    identity_contract::{FenceRevision, OrganizationFenceState, PersonFenceState},
-    organization_change_rows::{ChangeRequestId, OrganizationChangeKind},
-    person_request::AdminOperationId,
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
-};
+use crate::{identity_contract::{FenceRevision, OrganizationFenceState, PersonFenceState}, organization_change_rows::{ChangeRequestId, OrganizationChangeKind}, person_request::AdminOperationId, workspace_decode_error::corrupt, workspace_row_codec::{json, string}};
+use fleet_runtime_ports::{CentralStore};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use central_storage::{ReadOutcome, SafeInteger, Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
@@ -260,7 +254,7 @@ fn non_empty(value: &str, field: &str) -> Result<(), StoreFailure> {
 }
 fn canonical_v7(value: &str, field: &str) -> Result<Uuid, StoreFailure> {
     let id = Uuid::parse_str(value).map_err(|_| corrupt(field))?;
-    if !runtime_primitives::uuid_v7(id) || id.to_string() != value {
+    if !fleet_runtime_ports::uuid_v7(id) || id.to_string() != value {
         return Err(corrupt(field));
     }
     Ok(id)
@@ -432,7 +426,7 @@ fn decode_snapshot(
 /// Observes an already-opened, already-migrated owning store. Unknown-org handling
 /// belongs to the host, which returns `nothing_stored()` without opening storage.
 pub async fn observe_signin_organization(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     organization: &OrganizationId,
 ) -> Result<SignInObservation, StoreFailure> {
     let rows = host

@@ -100,7 +100,7 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
     assert_eq!(alarm_ms(&runtime), previous, "the previous alarm is kept");
     assert_eq!(
         runtime.statement_host().failed_alarm_publication_at(),
-        Some(runtime_primitives::SyncTime::from_unix_millis(edge))
+        Some(fleet_runtime_ports::SyncTime::from_unix_millis(edge))
     );
 
     let completion = runtime.after_event().await;
@@ -149,7 +149,7 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
     );
     assert_eq!(
         runtime.statement_host().failed_alarm_publication_at(),
-        Some(runtime_primitives::SyncTime::from_unix_millis(
+        Some(fleet_runtime_ports::SyncTime::from_unix_millis(
             NO_LATER_MARK_UNIX_MILLIS
         ))
     );

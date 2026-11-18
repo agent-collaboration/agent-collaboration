@@ -17,7 +17,7 @@ use super::{
     },
     port::{Engine, EngineHost},
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::{
     workspace_decode_error::corrupt,
     workspace_row_codec::{column, string},

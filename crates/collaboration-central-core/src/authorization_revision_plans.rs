@@ -1,14 +1,9 @@
 //! Static authorization-floor batches prepared while the caller holds the org turn.
-use crate::{
-    ObjectHost,
-    authorization_floor_rows::{
+use crate::{authorization_floor_rows::{
         integer, organization_guard, organization_state, person_guard, person_state,
         read_organization_floor, read_person_floor,
-    },
-    guarded_statements::{exact, text},
-    identity_contract::AuthorizationRevision,
-    person_request::floor_delivery::{FloorDelivery, FloorMutation, decide_floor_delivery},
-};
+    }, guarded_statements::{exact, text}, identity_contract::AuthorizationRevision, person_request::floor_delivery::{FloorDelivery, FloorMutation, decide_floor_delivery}};
+use fleet_runtime_ports::{CentralStore};
 use central_storage::{GuardedStatement, StoreFailure};
 use workspace_model::Timestamp;
 
@@ -20,7 +15,7 @@ pub(crate) struct AuthorizationRevisionPlan {
 }
 
 pub(crate) async fn prepare_authorization_revision(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     incoming: &AuthorizationRevision,
     now: Timestamp,
 ) -> Result<AuthorizationRevisionPlan, StoreFailure> {

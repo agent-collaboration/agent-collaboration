@@ -9,7 +9,7 @@ use central_storage::{
     AlarmPublication, AlarmPublicationFailure, BatchOutcome, ConstraintKind, CorruptReason,
     EngineAlarmDecider, EngineAlarmTimes, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
 };
-use runtime_primitives::Clock;
+use fleet_runtime_ports::Clock;
 use sqlx_core::column::Column;
 use sqlx_core::error::ErrorKind;
 use sqlx_core::migrate::Migrator;

@@ -1,5 +1,5 @@
 use super::{automation_timer as automation, wake_timer as wake};
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::{
     central_mail_rows::{insert_message, timestamp},
     central_timer_rows::{decode_automations, decode_wakes},

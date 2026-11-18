@@ -8,6 +8,8 @@ members = [
     "crates/workspace-rules",
     "crates/central-storage",
     "crates/central-engine-model",
+    "crates/fleet-runtime-ports",
+    "crates/fleet-contracts",
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-fleet-sync",
@@ -79,6 +81,8 @@ workspace-ids = { path = "crates/workspace-ids", version = "0.1.149" }
 workspace-model = { path = "crates/workspace-model", version = "0.1.149" }
 central-storage = { path = "crates/central-storage", version = "0.1.149" }
 central-engine-model = { path = "crates/central-engine-model", version = "0.1.153" }
+fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156" }
+fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }
 router-clock = { path = "crates/router-clock", version = "0.1.136" }
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }

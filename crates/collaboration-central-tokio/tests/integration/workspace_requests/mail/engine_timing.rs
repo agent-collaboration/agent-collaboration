@@ -26,7 +26,7 @@ async fn driver_settled(fixture: &Fixture, runtime: &Runtime) {
             .not_due_check_now(
                 fixture
                     .clock
-                    .wall_deadline(runtime_primitives::SyncTime::from_unix_millis(alarm)),
+                    .wall_deadline(fleet_runtime_ports::SyncTime::from_unix_millis(alarm)),
             )
             .await;
     }

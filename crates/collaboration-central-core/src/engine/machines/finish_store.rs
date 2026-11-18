@@ -2,7 +2,7 @@
 //! the row's raw stored values as its compare-and-set version, decodes only the
 //! lifecycle `state`, and saves `disabled` guarded on every raw column with IS.
 use super::lifecycle_finish::{AutomationKind, Lifecycle, LifecycleFinish, NoEffect, WakeKind};
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::{
     central_mail_rows::timestamp,
     engine::{

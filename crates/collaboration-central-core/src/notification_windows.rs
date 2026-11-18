@@ -1,12 +1,7 @@
 //! Recipient windows collate source-owned activity across workspace boundaries.
 use crate::engine::legacy_units::LegacyUnitOutcome;
-use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{self, timestamp},
-    guarded_statements::{any, exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, json, string},
-};
+use crate::{WorkspaceRuntime, central_mail_store::{self, timestamp}, guarded_statements::{any, exact, text}, workspace_decode_error::corrupt, workspace_row_codec::{column, json, string}};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 use workspace_ids::{NotificationWindowId, NotificationWindowItemId};
 use workspace_model::central_mail as mail;
@@ -29,7 +24,7 @@ pub(crate) fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFai
     }
     Ok(time)
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn notice_due(
         &self,
         recipient: &ActorIdentityId,

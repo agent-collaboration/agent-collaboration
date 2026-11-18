@@ -6,7 +6,7 @@ use super::{
     effects::{ApplyFailure, classify_batch},
     store_adapter::SubjectVersion,
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use central_engine_model::{
     FailureRecord, FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
 };
@@ -23,7 +23,7 @@ pub(crate) enum FailureOutcome {
 
 impl<R: EngineHost> Engine<'_, R> {
     pub(crate) fn observe_engine_store_down(&self, subject: &EngineSubject, failure: StoreFailure) {
-        self.observe(crate::CentralObservation::EngineStoreDown {
+        self.observe(fleet_contracts::CentralObservation::EngineStoreDown {
             kind: subject.kind,
             key: subject.key.clone(),
             failure,
@@ -31,7 +31,7 @@ impl<R: EngineHost> Engine<'_, R> {
     }
 
     pub(crate) fn observe_alarm_not_published(&self, failure: StoreFailure) {
-        self.observe(crate::CentralObservation::EngineAlarmNotPublished { failure });
+        self.observe(fleet_contracts::CentralObservation::EngineAlarmNotPublished { failure });
     }
     pub(crate) async fn record_failure(
         &self,
@@ -144,7 +144,7 @@ impl<R: EngineHost> Engine<'_, R> {
                 .await,
         ) {
             Ok(()) => {
-                self.observe(crate::CentralObservation::EngineItemFailed {
+                self.observe(fleet_contracts::CentralObservation::EngineItemFailed {
                     kind: subject.kind,
                     key: subject.key.clone(),
                     failure: record.last_failure.clone(),

@@ -39,7 +39,7 @@ impl Fixture {
             "CENTRAL_SIGN_IN_SERVICE_ID":"019f0000-0000-7000-8000-00000000d290"
         },"jwksFixtureUrl":keys.url})).unwrap()).unwrap();
         let clock = Arc::new(
-            ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            ManualClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
                 NOW_SECONDS * 1000,
             ))
             .unwrap(),

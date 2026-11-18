@@ -49,7 +49,7 @@ pub trait OrganizationSignInPort: Send + Sync + 'static {
         request: &crate::identity_contract::DecideMachineToken,
     ) -> impl Future<Output = Result<crate::identity_contract::MachineTokenDecision, StoreFailure>> + Send;
 }
-impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> OrganizationSignInPort
+impl<H: fleet_runtime_ports::CentralStore, S: fleet_runtime_ports::WorkspaceStores> OrganizationSignInPort
     for crate::WorkspaceRuntime<H, S>
 {
     async fn provision(
@@ -106,7 +106,7 @@ impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> OrganizationSignInPort
     }
 }
 
-impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> crate::WorkspaceRuntime<H, S> {
+impl<H: fleet_runtime_ports::CentralStore, S: fleet_runtime_ports::WorkspaceStores> crate::WorkspaceRuntime<H, S> {
     /// Every sign-in entry is an event (P6): after its own work, and after its
     /// central turn is released, it runs the due batch and re-arms. An alarm
     /// problem never replaces the entry's answer; it is observed.

@@ -3,7 +3,7 @@ use super::{
     source::ReceiptStatements,
     store_adapter::{StoreAdapter, Versioned},
 };
-use crate::ObjectHost;
+use fleet_runtime_ports::CentralStore;
 use central_engine_model::{InstanceKey, ItemFailureClass, Machine};
 use central_storage::{AlarmUpdate, BatchOutcome, ConstraintKind, StatementBatch, StoreFailure};
 use std::future::Future;
@@ -56,7 +56,7 @@ fn classify_receipt_batch(
     classify_batch(result)
 }
 
-/// The ObjectHost supplies the platform transaction; the adapter supplies the
+/// The CentralStore supplies the platform transaction; the adapter supplies the
 /// machine's statements. Both modern hosts use this same effect handler.
 pub(crate) trait EffectHandler {
     fn apply<M, Adapter>(
@@ -75,13 +75,13 @@ pub(crate) trait EffectHandler {
         Adapter: StoreAdapter<M>;
 }
 
-pub(crate) struct ObjectHostEffects<'a, Host: ObjectHost> {
+pub(crate) struct ObjectHostEffects<'a, Host: CentralStore> {
     pub host: &'a Host,
     #[cfg(feature = "test-support")]
     pub pauses: &'a crate::PausePoints,
 }
 
-impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
+impl<Host: CentralStore> EffectHandler for ObjectHostEffects<'_, Host> {
     async fn apply<M, Adapter>(
         &self,
         adapter: &Adapter,
@@ -143,7 +143,7 @@ impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
     }
 }
 
-impl<Host: ObjectHost> ObjectHostEffects<'_, Host> {
+impl<Host: CentralStore> ObjectHostEffects<'_, Host> {
     pub(crate) async fn apply_receipt(
         &self,
         receipt: ReceiptStatements,

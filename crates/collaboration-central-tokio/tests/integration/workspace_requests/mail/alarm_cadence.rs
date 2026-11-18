@@ -80,7 +80,7 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
     );
     assert_eq!(
         runtime.statement_host().failed_alarm_publication_at(),
-        Some(runtime_primitives::SyncTime::from_unix_millis(
+        Some(fleet_runtime_ports::SyncTime::from_unix_millis(
             start.timestamp_millis()
         ))
     );
@@ -88,7 +88,7 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
     fixture
         .clock
         .not_due_check_now(fixture.clock.wall_deadline(
-            runtime_primitives::SyncTime::from_unix_millis(retry.timestamp_millis()),
+            fleet_runtime_ports::SyncTime::from_unix_millis(retry.timestamp_millis()),
         ))
         .await;
     let callbacks = runtime.alarm_completion_count();

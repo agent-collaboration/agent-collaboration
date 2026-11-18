@@ -27,8 +27,6 @@ mod pause_points;
 #[cfg(feature = "test-support")]
 pub use pause_points::{HeldPause, PausePoint, PausePoints};
 
-mod object_host;
-pub use object_host::ObjectHost;
 mod machine_login_plans;
 mod machine_login_reads;
 mod machine_login_row_values;
@@ -41,7 +39,7 @@ mod workspace_runtime;
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
 #[cfg(feature = "test-support")]
 pub use workspace_runtime::LegacyUnitInvocations;
-pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime};
 mod organization_workspace_plans;
 mod workspace_actor_identity;
 mod workspace_admission;
@@ -58,8 +56,6 @@ mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
 
-mod access_observation;
-pub use access_observation::CentralObservation;
 
 mod central_mail_requests;
 mod central_mail_rows;
@@ -87,15 +83,11 @@ mod issuer_key_resolution;
 mod issuer_signature_verifier;
 pub mod organization_authority;
 pub mod person_request;
-mod signature_verification;
 pub use issuer_key_cache::{
-    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
+    IssuerKeyCache, IssuerKeyId, IssuerKeySet, IssuerVerificationKey,
 };
-pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
-pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
-pub use signature_verification::{Ed25519Verification, SignatureValidity, VerifyFailure};
-mod key_source_capabilities;
-pub use key_source_capabilities::{KeyFetchFailure, RawJwks};
+pub use issuer_key_resolution::resolve_issuer_key;
+pub use issuer_signature_verifier::IssuerSignatureVerifier;
 mod sign_in_trust_settings;
 pub use sign_in_trust_settings::SignInTrustSettings;
 mod authorization_floor_rows;

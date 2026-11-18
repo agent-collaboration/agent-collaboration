@@ -19,6 +19,8 @@ test-support = ["collaboration-central-core/test-support", "dep:sqlx"]
 
 [dependencies]
 central-storage.workspace = true
+fleet-runtime-ports.workspace = true
+fleet-contracts.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
 fleet-identity-protocol = {path="../fleet-identity-protocol",version="0.1.149"}

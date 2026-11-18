@@ -6,11 +6,12 @@ use crate::organization_authority::machine_login::{
     self, Decided, DecisionTime, EnrollmentFacts, EnrollmentQuery,
 };
 use crate::organization_authority_cache::StampStanding;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceRuntime};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
-use runtime_primitives::SyncTime;
+use fleet_runtime_ports::SyncTime;
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub async fn decide_device_login(
         &self,
         request: &DecideDeviceLogin,

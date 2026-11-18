@@ -1,9 +1,8 @@
 //! Native signature mechanics; core owns the sign-in key and token profiles.
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use collaboration_central_core::{
-    Ed25519Verification, SignatureValidity, VerifyFailure,
-    person_request::{Es256Verification, ProofJwk},
+use fleet_runtime_ports::{
+    Ed25519Verification, Es256Verification, ProofJwk, SignatureValidity, VerifyFailure,
 };
 use ring::signature::{ECDSA_P256_SHA256_FIXED, ED25519, UnparsedPublicKey};
 

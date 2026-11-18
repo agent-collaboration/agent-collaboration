@@ -1,16 +1,9 @@
 //! Verified setup decisions share one org-owned directory, ledger and audit batch.
-use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminResult, WorkspaceRuntime, WorkspaceStoreCalls,
-    organization_admin_contract::{RetainedOrganizationAdminAnswer, WorkspaceView},
-    organization_change_rows::{
+use crate::{AdminRefusal, OrganizationAdminResult, WorkspaceRuntime, organization_admin_contract::{RetainedOrganizationAdminAnswer, WorkspaceView}, organization_change_rows::{
         self, ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
         OrganizationChangeRecord,
-    },
-    person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
-    workspace_directory_rows::{self, DirectoryWorkspace},
-    workspace_row_codec::{json, string},
-};
+    }, person_request::{CreateWorkspaceRequest, VerifiedPersonRequest}, workspace_decode_error::corrupt, workspace_directory_rows::{self, DirectoryWorkspace}, workspace_row_codec::{json, string}};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{GuardedStatement, StoreFailure};
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
@@ -81,7 +74,7 @@ fn retained_result(
     }
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     /// Caller has already admitted this fresh person proof at `now` under the org turn.
     pub(crate) async fn prepare_workspace_create(
         &self,

@@ -5,7 +5,7 @@ use super::engine_probe_support::*;
 use central_storage::{SqlValue, StoreFailure};
 use collaboration_central_core::{AlarmNotPublished, EngineReadFault};
 use router_clock::RuntimeClock;
-use runtime_primitives::SyncTime;
+use fleet_runtime_ports::SyncTime;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };

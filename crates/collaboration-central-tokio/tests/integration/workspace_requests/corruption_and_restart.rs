@@ -171,7 +171,7 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
     };
     f.set_utc(
         chrono::DateTime::from_timestamp_millis(
-            runtime_primitives::Clock::now(f.clock.as_ref()).unix_millis() - 100_000,
+            fleet_runtime_ports::Clock::now(f.clock.as_ref()).unix_millis() - 100_000,
         )
         .unwrap(),
     )

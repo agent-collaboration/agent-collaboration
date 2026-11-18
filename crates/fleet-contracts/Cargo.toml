@@ -1,0 +1,19 @@
+[package]
+name = "fleet-contracts"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Types and traits shared by FleetRuntime and its feature crates"
+
+[lints]
+workspace = true
+
+[dependencies]
+fleet-runtime-ports.workspace = true
+central-storage.workspace = true
+central-engine-model.workspace = true
+workspace-model.workspace = true
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
+thiserror.workspace = true

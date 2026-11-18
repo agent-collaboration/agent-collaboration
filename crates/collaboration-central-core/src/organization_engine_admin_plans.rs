@@ -1,16 +1,10 @@
 //! P8's four admin operations on the existing organization-admin owner: the
 //! reads answer from storage; retry and discard retain their answer under the
 //! operation ID, so a replay returns it as CreateWorkspace's does.
-use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminResult, WorkspaceRuntime, WorkspaceStoreCalls,
-    engine::admin::{AttemptRefusal, DiscardOutcome},
-    organization_admin_contract::{
+use crate::{AdminRefusal, OrganizationAdminResult, WorkspaceRuntime, engine::admin::{AttemptRefusal, DiscardOutcome}, organization_admin_contract::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
-    },
-    person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
-};
+    }, person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest}, workspace_decode_error::corrupt, workspace_row_codec::{json, string}};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
 use workspace_model::{ActorIdentityId, Identity, PersonId, RequestId, Timestamp};
 
@@ -73,7 +67,7 @@ fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, Stor
     }
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub(crate) async fn engine_health_result(&self) -> Result<EngineAdminPlan, StoreFailure> {
         let health = crate::engine::port::Engine::new(self)
             .engine_health()

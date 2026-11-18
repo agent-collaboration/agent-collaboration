@@ -13,7 +13,7 @@ use crate::identity_contract::{
 use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use central_storage::StoreFailure;
 use fleet_identity_protocol::UnixSeconds;
-use runtime_primitives::IdSource;
+use fleet_runtime_ports::IdSource;
 
 pub(crate) fn decide_machine_token(
     request: &DecideMachineToken,

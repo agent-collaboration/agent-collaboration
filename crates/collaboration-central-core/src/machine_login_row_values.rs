@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 pub(crate) fn identifier<T: TryFrom<String>>(value: &str, field: &str) -> Result<T, StoreFailure> {
     let parsed = Uuid::parse_str(value).map_err(|_| corrupt(field))?;
-    if !runtime_primitives::uuid_v7(parsed) || parsed.to_string() != value {
+    if !fleet_runtime_ports::uuid_v7(parsed) || parsed.to_string() != value {
         return Err(corrupt(field));
     }
     T::try_from(value.to_owned()).map_err(|_| corrupt(field))
@@ -18,7 +18,7 @@ pub(crate) fn identifier<T: TryFrom<String>>(value: &str, field: &str) -> Result
 
 pub(crate) fn private_id(value: &str, field: &str) -> Result<Uuid, StoreFailure> {
     let parsed = Uuid::parse_str(value).map_err(|_| corrupt(field))?;
-    if !runtime_primitives::uuid_v7(parsed) || parsed.to_string() != value {
+    if !fleet_runtime_ports::uuid_v7(parsed) || parsed.to_string() != value {
         return Err(corrupt(field));
     }
     Ok(parsed)

@@ -1,6 +1,7 @@
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::{json, string};
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceRuntime};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
@@ -43,7 +44,7 @@ pub(crate) struct ActorIdentityPlan {
     pub statements: Vec<GuardedStatement>,
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// Caller holds the org turn and supplies its sole applying time sample.
     pub(crate) async fn prepare_identity(
         &self,
@@ -180,7 +181,7 @@ fn decode_actor(
         identity,
     })
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
         let rows=self.host.read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
         match rows.rows.first() {

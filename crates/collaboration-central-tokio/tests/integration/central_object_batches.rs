@@ -10,7 +10,7 @@ use collaboration_central_core::storage_conformance::{
     retire_live_widget, widgets_migrator,
 };
 use collaboration_central_tokio::ObjectStorage;
-use runtime_primitives::SyncTime;
+use fleet_runtime_ports::SyncTime;
 use std::sync::Arc;
 
 fn open_storage(root: &tempfile::TempDir) -> ObjectStorage {

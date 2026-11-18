@@ -1,13 +1,8 @@
 //! Person proof admission and read operations on modern org central.
-use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminAnswer, OrganizationAdminResult, WorkspaceRuntime,
-    WorkspaceStoreCalls,
-    organization_authority_cache::StampStanding,
-    person_admission_plans::prepare_person_admission,
-    person_request::{AdminOperation, PersonRequestInput, PersonRequestRefusal},
-};
+use crate::{AdminRefusal, OrganizationAdminAnswer, OrganizationAdminResult, WorkspaceRuntime, organization_authority_cache::StampStanding, person_admission_plans::prepare_person_admission, person_request::{AdminOperation, PersonRequestInput, PersonRequestRefusal}};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub async fn admin_person_request(
         &self,
         input: &PersonRequestInput,
@@ -46,7 +41,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let now = self.now()?;
         if self
             .signin_authority
-            .standing(runtime_primitives::SyncTime::from_unix_millis(
+            .standing(fleet_runtime_ports::SyncTime::from_unix_millis(
                 now.timestamp_millis(),
             ))
             != StampStanding::Valid

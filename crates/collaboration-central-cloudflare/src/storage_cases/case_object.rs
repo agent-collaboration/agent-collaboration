@@ -8,7 +8,7 @@ use central_storage::{AlarmUpdate, RowExpectation, SafeInteger, SqlValue, Statem
 use collaboration_central_core::{
     ClockIds, HeldPause, PausePoint, PausePoints, WorkspaceTurns, storage_conformance,
 };
-use runtime_primitives::{Clock, IdSource, SyncTime};
+use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx_durable_object::DoConnection;

@@ -8,9 +8,8 @@ use crate::{
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{
-    ClockIds, ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
-};
+use collaboration_central_core::{ClockIds, WorkspaceCaller, WorkspaceRuntime};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_identity_protocol::OrganizationId;
 use futures_util::lock::Mutex;
 use serde::{Deserialize, Serialize};
@@ -35,7 +34,7 @@ struct CentralStatements {
     clock: WorkspaceClock,
     decide_alarm: central_storage::EngineAlarmDecider,
 }
-impl ObjectHost for CentralStatements {
+impl CentralStore for CentralStatements {
     fn run_batch(
         &self,
         batch: StatementBatch,
@@ -155,7 +154,7 @@ struct WorkspaceTransport {
     #[cfg(feature = "test-support")]
     lose_read: Arc<std::sync::atomic::AtomicBool>,
 }
-impl WorkspaceStoreCalls for WorkspaceTransport {
+impl WorkspaceStores for WorkspaceTransport {
     fn call_workspace(
         &self,
         id: &workspace_model::WorkspaceId,
@@ -266,7 +265,7 @@ impl CentralObject {
         }
         self.migrate().await?;
         let host = self.statement_host();
-        let clock: Arc<dyn runtime_primitives::Clock> = Arc::new(self.clock.clone());
+        let clock: Arc<dyn fleet_runtime_ports::Clock> = Arc::new(self.clock.clone());
         let runtime = WorkspaceRuntime::new(
             organization.clone(),
             host,
@@ -282,7 +281,7 @@ impl CentralObject {
         let runtime = match crate::organization_signin_link::trust_settings(&self.env) {
             Ok(Some(settings)) => match CloudflareSignInTrust::new(settings).for_organization(organization, clock) {
                 Ok(check) => runtime.with_sign_in_verification(check),
-                Err(collaboration_central_core::organization_authority::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
+                Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
                 Err(_) => return Err(StoreFailure::Unavailable),
             },
             // Invalid/missing trust never permits sign-in. The default checker

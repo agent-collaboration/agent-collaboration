@@ -11,7 +11,7 @@ use super::{
     machines::owed_reply::{Effect, Finish, OwedReply, State},
     port::EngineHost,
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::{
     central_mail_rows::timestamp,
     guarded_statements::{exact, text},

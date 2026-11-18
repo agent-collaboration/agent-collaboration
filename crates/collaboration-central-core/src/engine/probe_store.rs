@@ -8,7 +8,7 @@ use super::{
     port::EngineHost,
     probe_machine::{EngineProbe, ProbeEffect, ProbeState},
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::{
     central_mail_rows::timestamp,
     guarded_statements::{exact, text},

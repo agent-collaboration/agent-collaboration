@@ -2,7 +2,7 @@
 use super::launcher_failure::{LauncherFailure, LauncherResult};
 use collaboration_central_core::{MAX_ALARM_UNIX_MILLIS, SignInTrustSettings};
 use fleet_identity_protocol::OrganizationId;
-use runtime_primitives::SyncTime;
+use fleet_runtime_ports::SyncTime;
 use std::{collections::BTreeMap, path::PathBuf};
 
 const FLAGS: [&str; 10] = [

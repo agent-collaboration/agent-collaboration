@@ -1,6 +1,7 @@
 //! Translate admitted semantic inputs into the existing pure rule's declared rows.
 use crate::workspace_decode_error::corrupt;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceRuntime};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::StoreFailure;
 use workspace_model as m;
 
@@ -9,7 +10,7 @@ pub(crate) struct ResolvedOperation {
     pub tag_ids: Vec<m::WorkLogTagId>,
     pub read_mark_id: m::ReadMarkId,
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_command(
         &self,
         op: &m::WorkspaceOperation,

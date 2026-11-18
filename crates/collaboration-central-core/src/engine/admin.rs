@@ -13,7 +13,7 @@ use super::{
     },
     port::{Engine, EngineHost},
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::organization_admin_contract::{EngineFailureClass, EngineKindName};
 use crate::{
     guarded_statements::{exact, text},

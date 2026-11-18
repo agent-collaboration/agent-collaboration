@@ -6,7 +6,7 @@ use central_storage::{
     AlarmPublication, AlarmPublicationFailure, BatchOutcome, EngineAlarmDecider, EngineAlarmTimes,
     ReadOutcome, Statement, StatementBatch, StoreFailure,
 };
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
 use sqlx::migrate::Migrator;
 use std::path::PathBuf;
 use std::sync::Arc;

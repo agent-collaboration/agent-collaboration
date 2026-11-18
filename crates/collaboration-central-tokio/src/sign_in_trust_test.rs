@@ -1,8 +1,7 @@
 use super::NativeSignInTrust;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use collaboration_central_core::{
-    SignInTrustSettings, organization_authority::FleetOrganizationStatementRefusal,
-};
+use collaboration_central_core::SignInTrustSettings;
+use fleet_contracts::FleetOrganizationStatementRefusal;
 use fleet_identity_protocol::OrganizationId;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use router_clock::ManualClock;

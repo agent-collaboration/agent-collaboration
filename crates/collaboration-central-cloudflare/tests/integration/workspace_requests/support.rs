@@ -5,7 +5,7 @@ use central_storage::{
     StatementBatch,
 };
 use collaboration_central_core::WorkspaceCaller;
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
 use std::sync::{
     Arc,
     atomic::{AtomicI64, Ordering},

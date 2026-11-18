@@ -1,20 +1,13 @@
 //! One org's request owner. Stores execute statements; only this core makes decisions.
-use crate::{ObjectHost, WorkspaceTurns};
+use crate::WorkspaceTurns;
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use fleet_identity_protocol::OrganizationId;
-use runtime_primitives::{Clock, IdSource};
-use std::{future::Future, sync::Arc};
+use fleet_runtime_ports::{CentralStore, Clock, IdSource, WorkspaceStores};
+use std::sync::Arc;
 use workspace_model::{Caller, WorkspaceId};
 
-pub trait WorkspaceStoreCalls: Clone + Send + Sync + 'static {
-    fn call_workspace(
-        &self,
-        workspace: &WorkspaceId,
-        call: StoreCall,
-    ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
-}
 /// Transport-stamped context. No workspace allowance is accepted from the caller.
 #[derive(Clone)]
 pub struct WorkspaceCaller {
@@ -28,7 +21,7 @@ pub use crate::engine::port::LegacyUnitInvocations;
 
 /// One organization's request runtime. Machine grant lifetime is fixed by central
 /// policy and has no public configuration API.
-pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
+pub struct WorkspaceRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     pub(crate) organization: OrganizationId,
     pub(crate) host: Arc<Host>,
     pub(crate) stores: Stores,
@@ -36,7 +29,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) ids: Arc<dyn IdSource>,
     pub(crate) due_batches: Arc<crate::DueBatchState>,
     pub(crate) turns: WorkspaceTurns,
-    pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+    pub(crate) signin_observer: Arc<dyn Fn(fleet_contracts::CentralObservation) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-support")]
@@ -55,7 +48,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub fn new(
         organization: OrganizationId,
         host: Arc<Host>,
@@ -103,7 +96,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     }
     pub fn with_sign_in_observer(
         mut self,
-        observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+        observer: Arc<dyn Fn(fleet_contracts::CentralObservation) + Send + Sync>,
     ) -> Self {
         self.signin_observer = observer;
         self

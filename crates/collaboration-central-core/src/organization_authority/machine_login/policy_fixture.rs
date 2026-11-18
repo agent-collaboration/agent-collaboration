@@ -9,7 +9,7 @@ use crate::identity_contract::{
 };
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
 use message_board::{MachineLabel, WorkspaceId};
-use runtime_primitives::IdSource;
+use fleet_runtime_ports::IdSource;
 use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
 

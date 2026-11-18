@@ -72,7 +72,7 @@ fn automatic_origin_rejects_person_or_permission_cells_instead_of_dropping_them(
 }
 
 struct ReadOnlyRows(ReadOutcome);
-impl ObjectHost for ReadOnlyRows {
+impl CentralStore for ReadOnlyRows {
     async fn published_alarm(
         &self,
     ) -> Result<Option<central_engine_model::EngineTime>, central_storage::StoreFailure> {

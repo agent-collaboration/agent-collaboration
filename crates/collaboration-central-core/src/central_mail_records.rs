@@ -112,7 +112,7 @@ pub(crate) fn decode_messages(
         .collect()
 }
 
-impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
+impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::WorkspaceStores>
     crate::WorkspaceRuntime<Host, Stores>
 {
     /// Reads queued messages without consuming them, in stable message-UUIDv7 order.

@@ -27,7 +27,7 @@ pub struct ProbeRequest {
     pub event: ProbeEvent,
 }
 
-impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
+impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::WorkspaceStores>
     crate::WorkspaceRuntime<Host, Stores>
 {
     pub async fn seed_probe(

@@ -6,13 +6,11 @@ use super::super::support::*;
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublication, CorruptReason, StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{
-    AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, WorkspaceStoreCalls,
-    engine_probe::ProbeEvent,
-};
+use collaboration_central_core::{AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, engine_probe::ProbeEvent};
+use fleet_runtime_ports::{WorkspaceStores};
 use collaboration_central_tokio::ObjectStorage;
 use router_clock::RuntimeClock;
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
 use std::sync::{Arc, Mutex, PoisonError};
 
 fn set(time: Time) -> AlarmPublication {
@@ -152,7 +150,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
 /// Pass-through workspace calls for a hand-built runtime.
 #[derive(Clone)]
 struct WorkspaceStore(Arc<ObjectStorage>);
-impl WorkspaceStoreCalls for WorkspaceStore {
+impl WorkspaceStores for WorkspaceStore {
     async fn call_workspace(
         &self,
         _workspace: &workspace_model::WorkspaceId,

@@ -9,34 +9,16 @@ use super::{
     },
     refusal::PersonRequestRefusal,
 };
-use crate::{
-    Ed25519Verification, IssuerKeySource, IssuerSignatureVerifier, SignatureValidity, VerifyFailure,
+use crate::{IssuerSignatureVerifier};
+use fleet_runtime_ports::{
+    Ed25519Verification, Es256Verification, IssuerKeySource, ProofJwk, SignatureValidity,
 };
 use fleet_identity_protocol::OrganizationId;
-use runtime_primitives::Clock;
+use fleet_runtime_ports::Clock;
 use serde::{Deserialize, Serialize};
-use std::{future::Future, sync::Arc};
+use std::sync::Arc;
 use uuid::Uuid;
 
-/// ES256 proof signatures; the host supplies the mechanics.
-pub trait Es256Verification: Clone + Send + Sync + 'static {
-    fn verify_es256(
-        &self,
-        key: &ProofJwk,
-        signed: &[u8],
-        signature: &[u8],
-    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send;
-}
-
-/// Public P-256 proof key only; a private `d` or any other member is refused.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProofJwk {
-    pub kty: String,
-    pub crv: String,
-    pub x: String,
-    pub y: String,
-}
 
 /// The deployment's trust: who signs person tokens, the audience they name for
 /// central's admin surface, and central's configured external origin.
@@ -212,8 +194,8 @@ impl<Ed: Ed25519Verification, Es: Es256Verification, Keys: IssuerKeySource>
         {
             Ok(SignatureValidity::Valid) => {}
             Ok(SignatureValidity::Invalid) => return Err(PersonRequestRefusal::TokenSignature),
-            Err(crate::IssuerSignatureRefusal::Keys(
-                crate::IssuerKeyResolutionRefusal::KeySet(_),
+            Err(fleet_contracts::IssuerSignatureRefusal::Keys(
+                fleet_contracts::IssuerKeyResolutionRefusal::KeySet(_),
             )) => {
                 return Err(PersonRequestRefusal::IssuerKey);
             }

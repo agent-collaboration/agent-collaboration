@@ -7,7 +7,7 @@ use super::{
     failures::FailureOutcome,
     store_adapter::SubjectVersion,
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use central_engine_model::{AttemptState, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
 

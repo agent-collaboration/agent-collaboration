@@ -2,14 +2,12 @@ use super::{
     FleetOrganizationStatementTrust, FleetOrganizationStatementVerifier,
     VerifiedFleetOrganizationStatement,
 };
-use crate::{
-    Ed25519Verification, IssuerKeyCache, IssuerKeySource, KeyFetchFailure, RawJwks,
-    SignatureValidity, VerifyFailure,
-};
+use crate::{IssuerKeyCache};
+use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, KeyFetchFailure, RawJwks, SignatureValidity, VerifyFailure};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use fleet_identity_protocol::OrganizationId;
 use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
 use serde_json::{Value, json};
 use std::sync::{
     Arc,

@@ -1,14 +1,15 @@
 //! Central-owned statement construction and validated mail rows.
 pub(crate) use crate::central_mail_rows::{applied, encode, insert_message, timestamp};
 use crate::guarded_statements::text;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, workspace_decode_error::corrupt};
+use crate::{WorkspaceRuntime, workspace_decode_error::corrupt};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{AlarmUpdate, Statement, StoreFailure};
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, SessionAddress, Timestamp};
 pub(crate) fn alarm_update() -> AlarmUpdate {
     crate::engine::query_registry::alarm_update()
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) fn prepare_message_record(
         &self,
         sender: mail::MessageSender,

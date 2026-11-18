@@ -11,6 +11,7 @@ test-support = []
 
 [dependencies]
 chrono.workspace = true
+fleet-runtime-ports.workspace = true
 runtime-primitives.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }

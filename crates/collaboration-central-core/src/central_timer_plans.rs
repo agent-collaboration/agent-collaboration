@@ -1,18 +1,13 @@
 //! Timer request plans; validated rows live in central_timer_rows.
 use crate::central_timer_rows::decode_automations;
-use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{encode, timestamp},
-    guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
-};
+use crate::{WorkspaceRuntime, central_mail_store::{encode, timestamp}, guarded_statements::{exact, text}, workspace_decode_error::corrupt, workspace_row_codec::string};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, Statement, StoreFailure};
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::Timestamp;
 use workspace_model::central_mail as mail;
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn plan_timer_request(
         &self,
         operation: &mail::CentralMailOperation,

@@ -2,17 +2,18 @@
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
 use super::{DueBatchState, legacy_units::LegacyUnitOutcome};
-use crate::{CentralObservation, ObjectHost};
+use fleet_contracts::{CentralObservation};
+use fleet_runtime_ports::{CentralStore};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use std::future::Future;
 
 pub(crate) trait EngineHost: Send + Sync {
-    type Host: ObjectHost;
+    type Host: CentralStore;
     fn host(&self) -> &Self::Host;
     /// The one injected clock.
     fn now(&self) -> Result<EngineTime, StoreFailure>;
-    fn ids(&self) -> &dyn runtime_primitives::IdSource;
+    fn ids(&self) -> &dyn fleet_runtime_ports::IdSource;
     fn due_batches(&self) -> &DueBatchState;
     fn observe(&self, observation: CentralObservation);
     /// Today's organization stamp check (P3): `Ok(false)` when unprovisioned.
@@ -52,7 +53,7 @@ impl<'a, R: EngineHost> Engine<'a, R> {
     pub(crate) fn now(&self) -> Result<EngineTime, StoreFailure> {
         self.0.now()
     }
-    pub(crate) fn ids(&self) -> &'a dyn runtime_primitives::IdSource {
+    pub(crate) fn ids(&self) -> &'a dyn fleet_runtime_ports::IdSource {
         self.0.ids()
     }
     pub(crate) fn due_batches(&self) -> &'a DueBatchState {

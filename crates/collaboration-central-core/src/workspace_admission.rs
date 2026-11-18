@@ -1,10 +1,11 @@
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::{json, string};
-use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceCaller, WorkspaceRuntime};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::{SqlValue, Statement, StoreFailure};
 use workspace_model::{MachineId, RefusalReason, WorkspaceId};
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn admit_workspace(
         &self,
         caller: &WorkspaceCaller,

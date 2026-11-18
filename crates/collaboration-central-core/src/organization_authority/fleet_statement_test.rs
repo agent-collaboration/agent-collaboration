@@ -1,4 +1,4 @@
-use super::FleetOrganizationStatementRefusal as Refusal;
+use fleet_contracts::FleetOrganizationStatementRefusal as Refusal;
 use crate::organization_authority::fleet_statement_test_support::{
     FOREIGN_ORGANIZATION, ORGANIZATION, claims, header, organization, signed_statement, verifier,
 };

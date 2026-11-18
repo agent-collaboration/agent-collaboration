@@ -1,8 +1,9 @@
 use super::*;
 use central_storage::{StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{ClockIds, WorkspaceRuntime, WorkspaceStoreCalls};
+use collaboration_central_core::{ClockIds, WorkspaceRuntime};
+use fleet_runtime_ports::{WorkspaceStores};
 use collaboration_central_tokio::ObjectStorage;
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone)]
 struct ArcClock(Arc<dyn router_clock::RuntimeClock>);
@@ -16,7 +17,7 @@ struct LoseFirstRead {
     store: Arc<ObjectStorage>,
     lose: Arc<AtomicBool>,
 }
-impl WorkspaceStoreCalls for LoseFirstRead {
+impl WorkspaceStores for LoseFirstRead {
     async fn call_workspace(
         &self,
         _workspace: &m::WorkspaceId,

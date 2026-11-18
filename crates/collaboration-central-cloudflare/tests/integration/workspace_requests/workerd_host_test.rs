@@ -99,7 +99,7 @@ async fn control_http_connection_reopens_after_real_upstream_idle_close() {
         CloseOrdering::WithholdUntilDispatch,
     ] {
         let clock = Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            router_clock::ManualClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
                 1_900_000_000_000,
             ))
             .unwrap(),

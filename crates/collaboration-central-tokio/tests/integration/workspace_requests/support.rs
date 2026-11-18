@@ -126,7 +126,7 @@ impl Fixture {
     pub async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let clock = Arc::new(
-            router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            router_clock::GatedClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
                 1_794_571_200_000,
             ))
             .unwrap(),
@@ -151,7 +151,7 @@ impl Fixture {
         self.clock.advance(step).await.unwrap();
     }
     /// Moves the clock to `at` under the same gate.
-    pub async fn advance_to(&self, at: runtime_primitives::SyncTime) {
+    pub async fn advance_to(&self, at: fleet_runtime_ports::SyncTime) {
         self.clock.advance_to(at).await.unwrap();
     }
     /// Sets the wall clock under the same gate.

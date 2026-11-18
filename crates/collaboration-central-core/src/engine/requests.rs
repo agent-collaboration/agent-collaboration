@@ -6,7 +6,7 @@ use super::{
     source::RequestSource,
     store_adapter::StoreAdapter,
 };
-use crate::ObjectHost as _;
+use fleet_runtime_ports::CentralStore as _;
 use crate::workspace_decode_error::corrupt;
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::StoreFailure;

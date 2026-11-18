@@ -2,7 +2,8 @@
 use crate::identity_contract::{EndedMachineClient, PersonId};
 use crate::organization_authority::machine_login::{self, EnrollmentQuery};
 use crate::person_request::AdminOperationId;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceRuntime};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use central_storage::StoreFailure;
 use fleet_identity_protocol::{EnrollmentId, InstallationId};
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,7 @@ pub enum MachineLoginControl {
     },
 }
 
-pub async fn machine_login_control<H: ObjectHost, S: WorkspaceStoreCalls>(
+pub async fn machine_login_control<H: CentralStore, S: WorkspaceStores>(
     runtime: &WorkspaceRuntime<H, S>,
     control: MachineLoginControl,
 ) -> Result<Option<EndedMachineClient>, StoreFailure> {

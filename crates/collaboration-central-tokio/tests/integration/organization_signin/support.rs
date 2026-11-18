@@ -10,7 +10,7 @@ use collaboration_central_tokio::{
 };
 use fleet_identity_protocol::OrganizationId;
 use router_clock::GatedClock;
-use runtime_primitives::SyncTime;
+use fleet_runtime_ports::SyncTime;
 use serde_json::{Value, json};
 use std::sync::Arc;
 pub(super) const A: &str = signed::ORGANIZATION;
@@ -118,7 +118,7 @@ impl Fixture {
         .await
     }
     pub fn clock_time(&self) -> i64 {
-        use runtime_primitives::Clock;
+        use fleet_runtime_ports::Clock;
         self.clock.now().unix_millis().div_euclid(1000)
     }
     pub async fn provision(&self, organization: &str, statement: &str) -> Result<Reply> {

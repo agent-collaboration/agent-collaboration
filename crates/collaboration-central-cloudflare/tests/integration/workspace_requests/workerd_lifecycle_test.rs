@@ -76,7 +76,7 @@ pub(crate) fn workerd_child(bridge: u32) -> u32 {
 async fn lifecycle_child_owns_real_workerd() {
     let mode = std::env::var(CHILD_MODE).expect("explicit child mode required");
     let clock = Arc::new(
-        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+        router_clock::ManualClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
             1_900_000_000_000,
         ))
         .unwrap(),
@@ -116,7 +116,7 @@ pub(crate) fn require_exited(bridge: u32, workerd: u32) {
 #[tokio::test]
 async fn real_bridge_eof_disposes_workerd() {
     let clock = Arc::new(
-        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+        router_clock::ManualClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
             1_900_000_000_000,
         ))
         .unwrap(),
@@ -145,7 +145,7 @@ async fn real_bridge_eof_disposes_workerd() {
 #[tokio::test]
 async fn dropping_host_settles_children_even_when_a_remote_handle_remains() {
     let clock = Arc::new(
-        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+        router_clock::ManualClock::starting_at(fleet_runtime_ports::SyncTime::from_unix_millis(
             1_900_000_000_000,
         ))
         .unwrap(),
