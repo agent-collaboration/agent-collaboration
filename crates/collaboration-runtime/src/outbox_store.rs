@@ -170,10 +170,8 @@ impl<'store> MacOutbox<'store> {
             });
         }
         // The creation stamp is the agent's send time (design 2026-11-17).
-        let expires_at_ms = crate::outbox_deadline::expires_at_ms(
-            &outbox_content(request_id, &item.payload)?.target,
-            now_ms,
-        );
+        outbox_content(request_id, &item.payload)?;
+        let expires_at_ms = crate::outbox_deadline::expires_at_ms(now_ms);
         sqlx::query!(
             "INSERT INTO outbox_items
                (request_id, caller_json, payload_json, item_state, flush_at_ms, expires_at_ms,
@@ -270,10 +268,7 @@ impl<'store> MacOutbox<'store> {
                     StoredPayload::Answered(answered),
                 ) => (answered.target, PendingWriteState::Answered(reply)),
                 (
-                    OutboxItemState::Cancelled
-                    | OutboxItemState::Unconfirmed
-                    | OutboxItemState::GaveUpUnsent
-                    | OutboxItemState::GaveUpUnconfirmed,
+                    OutboxItemState::NotSent | OutboxItemState::Unconfirmed,
                     RequestStatus::Cancelled { reason },
                     StoredPayload::Answered(cancelled),
                 ) => (cancelled.target, PendingWriteState::Cancelled { reason }),
@@ -357,18 +352,14 @@ impl<'store> MacOutbox<'store> {
         let cutoff = now.unix_millis().saturating_sub(ANSWERED_RETENTION_MILLIS);
         let answered = OutboxItemState::Answered.as_str();
         let refused = OutboxItemState::Refused.as_str();
-        let cancelled = OutboxItemState::Cancelled.as_str();
+        let not_sent = OutboxItemState::NotSent.as_str();
         let unconfirmed = OutboxItemState::Unconfirmed.as_str();
-        let gave_up_unsent = OutboxItemState::GaveUpUnsent.as_str();
-        let gave_up_unconfirmed = OutboxItemState::GaveUpUnconfirmed.as_str();
         Ok(sqlx::query!(
-            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?, ?, ?) AND updated_at <= ?",
+            "DELETE FROM outbox_items WHERE item_state IN (?, ?, ?, ?) AND updated_at <= ?",
             answered,
             refused,
-            cancelled,
+            not_sent,
             unconfirmed,
-            gave_up_unsent,
-            gave_up_unconfirmed,
             cutoff
         )
         .execute_as_transaction(self.store)
@@ -741,7 +732,7 @@ async fn end_row(
         return Err(corrupt_row(request_id, "payload_json"));
     };
     let target = outbox_content(request_id, &payload)?.target;
-    let reason = crate::outbox_deadline::end_reason(&target, departure);
+    let reason = crate::outbox_deadline::end_reason(departure);
     let request = parse_request_id(request_id)?;
     let record = serde_json::to_string(&AnsweredWrite {
         request_id: request.clone(),
@@ -819,10 +810,8 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
         }
         OutboxItemState::Answered
         | OutboxItemState::Refused
-        | OutboxItemState::Cancelled
-        | OutboxItemState::Unconfirmed
-        | OutboxItemState::GaveUpUnsent
-        | OutboxItemState::GaveUpUnconfirmed => {
+        | OutboxItemState::NotSent
+        | OutboxItemState::Unconfirmed => {
             let answered: AnsweredWrite =
                 serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
             if answered.request_id.as_str() != row.request_id {
@@ -845,24 +834,18 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
             serde_json::from_str::<LinkAdmissionRefusal>(outcome)
                 .map_err(|_| corrupt("outcome_json"))?,
         ),
-        (
-            ended @ (OutboxItemState::Cancelled
-            | OutboxItemState::Unconfirmed
-            | OutboxItemState::GaveUpUnsent
-            | OutboxItemState::GaveUpUnconfirmed),
-            None,
-        ) => RequestStatus::Cancelled {
-            reason: ended.end_reason().ok_or_else(|| corrupt("item_state"))?,
-        },
+        (ended @ (OutboxItemState::NotSent | OutboxItemState::Unconfirmed), None) => {
+            RequestStatus::Cancelled {
+                reason: ended.end_reason().ok_or_else(|| corrupt("item_state"))?,
+            }
+        }
         (
             OutboxItemState::InOutbox
             | OutboxItemState::SentAnswerLost
             | OutboxItemState::Sent
             | OutboxItemState::Resent
-            | OutboxItemState::Cancelled
-            | OutboxItemState::Unconfirmed
-            | OutboxItemState::GaveUpUnsent
-            | OutboxItemState::GaveUpUnconfirmed,
+            | OutboxItemState::NotSent
+            | OutboxItemState::Unconfirmed,
             Some(_),
         )
         | (OutboxItemState::Answered | OutboxItemState::Refused, None) => {

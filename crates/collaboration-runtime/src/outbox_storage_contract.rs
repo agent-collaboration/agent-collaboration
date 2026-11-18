@@ -59,7 +59,6 @@ fn message(seed: u16, body: &str, flush_at: i64) -> NewOutboxItem {
     }
 }
 const FIFTEEN_MINUTES_MS: i64 = 15 * 60 * 1000;
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 fn reply() -> ReplyPayload {
     ReplyPayload::Workspace(WorkspaceReply {
         result: WorkspaceResult::Conflict,
@@ -436,8 +435,8 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
             .iter()
             .map(|w| w.request.clone())
             .collect::<Vec<_>>(),
-        ids(&[&post]),
-        "at its deadline a direct message is never claimed; the post has 24 hours"
+        Vec::<RequestId>::new(),
+        "at its deadline nothing is claimed: posts have the same 15 minutes"
     );
     let ended: Vec<_> = claimed
         .ended
@@ -457,8 +456,13 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
                 lost.caller.clone(),
                 OutboxCancellation::NotConfirmedWithin15Minutes
             ),
+            (
+                post.request.clone(),
+                post.caller.clone(),
+                OutboxCancellation::NotSentWithin15Minutes
+            ),
         ],
-        "both had left the Mac, so either may have been delivered"
+        "the two messages had left the Mac (may have arrived); the post never did"
     );
     let never_left = message(73, "never left", MARK);
     store.insert(&never_left, at(stored_at)).await.unwrap();
@@ -470,7 +474,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
             .collect::<Vec<_>>(),
         vec![(
             never_left.request.clone(),
-            OutboxCancellation::NotDeliveredWithin15Minutes
+            OutboxCancellation::NotSentWithin15Minutes
         )]
     );
     assert_eq!(
@@ -479,7 +483,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
             .await
             .unwrap(),
         RequestStatus::Cancelled {
-            reason: OutboxCancellation::NotDeliveredWithin15Minutes
+            reason: OutboxCancellation::NotSentWithin15Minutes
         }
     );
     let pending = store.pending_for(&never_left.caller).await.unwrap();
@@ -489,7 +493,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
             .any(|write| write.request_id == never_left.request
                 && write.state
                     == PendingWriteState::Cancelled {
-                        reason: OutboxCancellation::NotDeliveredWithin15Minutes
+                        reason: OutboxCancellation::NotSentWithin15Minutes
                     }),
         "the ended write reads as cancelled, with no text: {pending:?}"
     );
@@ -506,7 +510,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
     );
     assert!(
         store.waiting().await.unwrap().is_empty(),
-        "ended writes no longer wait and the post is sent"
+        "ended writes no longer wait"
     );
     assert!(matches!(
         store
@@ -518,7 +522,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
 
 /// A sent write past its deadline ends instead of returning to waiting, so
 /// a replay after a long outage never commits a second time; a write before
-/// its deadline returns as before. A thread post has 24 hours.
+/// its deadline returns as before.
 pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
     store: &mut dyn OutboxStorage,
 ) {
@@ -527,22 +531,29 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
     let fresh = item(81, "lost, still fresh", MARK);
     store.insert(&post, at(stored_at)).await.unwrap();
     store
-        .insert(&fresh, at(stored_at + DAY_MS - 60_000))
+        .insert(&fresh, at(stored_at + FIFTEEN_MINUTES_MS - 60_000))
         .await
         .unwrap();
     store.mark_sent(&ids(&[&post]), at(MARK)).await.unwrap();
     store
-        .mark_sent(&ids(&[&fresh]), at(stored_at + DAY_MS - 30_000))
+        .mark_sent(&ids(&[&fresh]), at(stored_at + FIFTEEN_MINUTES_MS - 30_000))
         .await
         .unwrap();
 
     let ended = store
-        .return_unanswered(&ids(&[&post, &fresh]), at(stored_at + DAY_MS))
+        .return_unanswered(&ids(&[&post, &fresh]), at(stored_at + FIFTEEN_MINUTES_MS))
         .await
         .unwrap();
-    let overdue_waiting = store.end_overdue(at(stored_at + DAY_MS)).await.unwrap();
+    let overdue_waiting = store
+        .end_overdue(at(stored_at + FIFTEEN_MINUTES_MS))
+        .await
+        .unwrap();
     let claimed = store
-        .claim_next_batch(at(stored_at + DAY_MS + 60_000), 64, at(stored_at + DAY_MS))
+        .claim_next_batch(
+            at(stored_at + FIFTEEN_MINUTES_MS + 60_000),
+            64,
+            at(stored_at + FIFTEEN_MINUTES_MS),
+        )
         .await
         .unwrap();
 
@@ -553,7 +564,7 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
             .collect::<Vec<_>>(),
         vec![(
             post.request.clone(),
-            OutboxCancellation::NotConfirmedWithin24Hours
+            OutboxCancellation::NotConfirmedWithin15Minutes
         )]
     );
     assert!(overdue_waiting.is_empty(), "nothing else is overdue");
@@ -563,7 +574,7 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
             .await
             .unwrap(),
         RequestStatus::Cancelled {
-            reason: OutboxCancellation::NotConfirmedWithin24Hours
+            reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );
     assert_eq!(

@@ -17,17 +17,12 @@ pub(crate) enum OutboxItemState {
     Resent,
     Answered,
     Refused,
-    /// Ended at its deadline (outbox_deadline) with its text gone: a direct
-    /// message that never left the Mac within 15 minutes.
-    Cancelled,
-    /// A direct message that left the Mac but was not confirmed within 15
-    /// minutes; it may have been delivered.
+    /// Ended at its deadline (outbox_deadline) with its text gone: it never
+    /// left the Mac within 15 minutes.
+    NotSent,
+    /// Ended at its deadline with its text gone: it left the Mac but was not
+    /// confirmed within 15 minutes, so it may have been applied.
     Unconfirmed,
-    /// Any other write that never left the Mac within 24 hours.
-    GaveUpUnsent,
-    /// Any other write that left the Mac but was not confirmed within 24
-    /// hours; it may have been applied.
-    GaveUpUnconfirmed,
 }
 
 impl OutboxItemState {
@@ -39,10 +34,8 @@ impl OutboxItemState {
             Self::Resent => "resent",
             Self::Answered => "answered",
             Self::Refused => "refused",
-            Self::Cancelled => "cancelled",
+            Self::NotSent => "notSent",
             Self::Unconfirmed => "unconfirmed",
-            Self::GaveUpUnsent => "gaveUpUnsent",
-            Self::GaveUpUnconfirmed => "gaveUpUnconfirmed",
         }
     }
 
@@ -54,10 +47,8 @@ impl OutboxItemState {
             "resent" => Some(Self::Resent),
             "answered" => Some(Self::Answered),
             "refused" => Some(Self::Refused),
-            "cancelled" => Some(Self::Cancelled),
+            "notSent" => Some(Self::NotSent),
             "unconfirmed" => Some(Self::Unconfirmed),
-            "gaveUpUnsent" => Some(Self::GaveUpUnsent),
-            "gaveUpUnconfirmed" => Some(Self::GaveUpUnconfirmed),
             _ => None,
         }
     }
@@ -65,20 +56,16 @@ impl OutboxItemState {
     /// The stored state for a write that ended at its deadline.
     pub(crate) const fn ended(reason: OutboxCancellation) -> Self {
         match reason {
-            OutboxCancellation::NotDeliveredWithin15Minutes => Self::Cancelled,
+            OutboxCancellation::NotSentWithin15Minutes => Self::NotSent,
             OutboxCancellation::NotConfirmedWithin15Minutes => Self::Unconfirmed,
-            OutboxCancellation::NotSentWithin24Hours => Self::GaveUpUnsent,
-            OutboxCancellation::NotConfirmedWithin24Hours => Self::GaveUpUnconfirmed,
         }
     }
 
     /// Why a write in this ended state ended; None for any other state.
     pub(crate) const fn end_reason(self) -> Option<OutboxCancellation> {
         match self {
-            Self::Cancelled => Some(OutboxCancellation::NotDeliveredWithin15Minutes),
+            Self::NotSent => Some(OutboxCancellation::NotSentWithin15Minutes),
             Self::Unconfirmed => Some(OutboxCancellation::NotConfirmedWithin15Minutes),
-            Self::GaveUpUnsent => Some(OutboxCancellation::NotSentWithin24Hours),
-            Self::GaveUpUnconfirmed => Some(OutboxCancellation::NotConfirmedWithin24Hours),
             Self::InOutbox
             | Self::SentAnswerLost
             | Self::Sent
