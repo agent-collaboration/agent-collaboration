@@ -171,12 +171,24 @@ fn stored_receipt(response: Value) -> Value {
     json!({ "result": receipt })
 }
 
-#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) async fn setup() -> (
     tempfile::TempDir,
     Arc<InteractionStore>,
     Arc<RecordingDelivery>,
     ControlHarness,
+) {
+    let (directory, store, delivery, control, _) = setup_with_retention().await;
+    (directory, store, delivery, control)
+}
+
+/// `setup`, plus the application's real retained-content maintenance worker.
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+pub(super) async fn setup_with_retention() -> (
+    tempfile::TempDir,
+    Arc<InteractionStore>,
+    Arc<RecordingDelivery>,
+    ControlHarness,
+    collaboration_runtime::AutomationRetentionWorker,
 ) {
     let directory = tempfile::tempdir().expect("isolated push store");
     let automation = Arc::new(TokioMutex::new(
@@ -225,13 +237,16 @@ pub(super) async fn setup() -> (
         },
     )
     .expect("compose native mail");
+    let retention = identity
+        .automation_retention_worker()
+        .expect("real retention worker");
     let mut control = ControlHarness::start(identity);
     control.lifetime = PushFixtureLifetime::NativeDelivery {
         actors,
         mail,
         automation,
     };
-    (directory, store, delivery, control)
+    (directory, store, delivery, control, retention)
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]

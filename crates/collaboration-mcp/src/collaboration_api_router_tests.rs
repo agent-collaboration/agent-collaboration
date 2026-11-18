@@ -32,6 +32,16 @@ async fn wake_application(directory: &std::path::Path) -> CollaborationApplicati
     (test_identity().with_automation_store(automation_store(directory).await)).build()
 }
 
+/// One application clock, held still, so every read stamps the same time.
+fn fixed_clock() -> Arc<router_clock::ManualClock> {
+    Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_792_432_800_000,
+        ))
+        .expect("fixed application time"),
+    )
+}
+
 fn structured(result: &rmcp::model::CallToolResult) -> Value {
     result
         .structured_content
@@ -271,9 +281,13 @@ async fn the_api_serves_on_ipv6_loopback() {
 
 #[tokio::test]
 async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
-    // Arrange: one wake, written through TCP.
+    // Arrange: one wake, written through TCP, on a still application clock.
     let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let application = test_identity()
+        .with_runtime_clock(fixed_clock())
+        .with_automation_store(automation_store(directory.path()).await)
+        .build();
+    let config = api_config(application, directory.path());
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
@@ -297,17 +311,8 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
         .await
         .expect("Unix tools");
 
-    // Assert: the cursor stamps its own read time, so it is the one field that differs.
-    let without_cursor = |result| {
-        let mut value = structured(result);
-        value
-            .as_object_mut()
-            .expect("wake snapshot")
-            .remove("latestEventCursor")
-            .expect("wake snapshot carries its event cursor");
-        value
-    };
-    assert_eq!(without_cursor(&over_tcp), without_cursor(&over_unix));
+    // Assert
+    assert_eq!(structured(&over_tcp), structured(&over_unix));
     assert_eq!(
         structured(&over_tcp)["definition"]["wakeupId"],
         wakeup_id,

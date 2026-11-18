@@ -71,8 +71,12 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
     // Arrange: a plain mutation belongs to its caller's future; its store is held.
     let directory = private_directory();
     let automation = automation_store(directory.path()).await;
+    let clock = fixed_clock();
     let config = api_config(
-        (test_identity().with_automation_store(Arc::clone(&automation))).build(),
+        (test_identity()
+            .with_runtime_clock(clock.clone())
+            .with_automation_store(Arc::clone(&automation)))
+        .build(),
         directory.path(),
     );
     let tcp = ServedApi::tcp(&config).await;
@@ -91,9 +95,36 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
     }
     drop(held);
 
-    // Assert: neither abandoned call left a wake behind.
+    // Assert: neither abandoned call left a wake, a receipt or an event behind.
     let listed = tcp.call_tool("wake_list", json!({"limit": 10})).await;
     assert_eq!(structured(&listed)["records"], json!([]), "{listed:?}");
+    {
+        use router_clock::RuntimeClock as _;
+        let mut store = automation.lock().await;
+        for (input, _) in &abandoned {
+            let operation: collaboration_protocol::OperationId =
+                serde_json::from_value(input["operationId"].clone()).expect("operation id");
+            assert!(
+                matches!(
+                    store.read_operation(&operation).await,
+                    Err(automation_storage::StorageError::OperationNotFound)
+                ),
+                "an abandoned call left its operation receipt"
+            );
+        }
+        let events = store
+            .read_event_history(&automation_storage::EventHistoryQuery {
+                after: None,
+                now_ms: clock.utc_now().timestamp_millis(),
+                limit: 100,
+            })
+            .await
+            .expect("automation events");
+        let automation_storage::EventHistoryRead::Page(page) = events else {
+            panic!("the event history expired on a still clock");
+        };
+        assert!(page.records.is_empty(), "an abandoned call left an event");
+    }
     // A valid retry is a sensitivity control: neither an invalid input nor a
     // disabled mutation path may make the no-effect check pass.
     for (input, api) in abandoned {
@@ -106,6 +137,21 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
         Some(2),
         "{listed:?}"
     );
+    // The same event read sees the retries' events, so its empty answer above can fail.
+    let events = automation
+        .lock()
+        .await
+        .read_event_history(&automation_storage::EventHistoryQuery {
+            after: None,
+            now_ms: router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis(),
+            limit: 100,
+        })
+        .await
+        .expect("automation events");
+    let automation_storage::EventHistoryRead::Page(page) = events else {
+        panic!("the event history expired on a still clock");
+    };
+    assert_eq!(page.records.len(), 2, "one created event per retried wake");
     tcp.stop().await;
     unix.stop().await;
 }

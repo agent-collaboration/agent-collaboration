@@ -13,6 +13,8 @@ use std::sync::{Arc, atomic::Ordering};
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
+#[path = "push_surface/dm_history_proofs.rs"]
+mod dm_history_proofs;
 #[path = "push_surface/dm_read_proofs.rs"]
 mod dm_read_proofs;
 use crate::served_api;

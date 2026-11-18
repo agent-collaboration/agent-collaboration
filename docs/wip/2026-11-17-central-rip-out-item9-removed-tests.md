@@ -6,8 +6,8 @@ Owner decision (2026-11-17): "Yes remove old and make sure you craft new tests t
 
 | | Tests |
 |---|---|
-| Kept: no old-central dependency (restored on a central-free fixture) | 93 |
-| Deleted: needs the old central | 625 |
+| Kept: no old-central dependency (restored on a central-free fixture) | 95 |
+| Deleted: needs the old central | 623 |
 | **Considered** | **718** |
 
 ## How the kept tests run now
@@ -16,19 +16,21 @@ Owner decision (2026-11-17): "Yes remove old and make sure you craft new tests t
 - **Local mail (F2):** `mail_push_delivery_fixture`'s `FleetClient` has no session. The `machine_session` call and its central synchronization are removed, and the local mail runtime is unchanged.
 - **Overload (F3):** the collaboration-client `SaturatedApi` and the CLI shed case build a session-less local `FleetClient`.
 - **Default listener (F3):** the MCP default-listener cases use the central-free wake application.
-- **Round 2:** `production_host_without_enrollment_keeps_ready_and_creation_unreachable` writes a synthetic enrollment into the collaboration directory, aimed at a test-owned listener, and requires zero connections. `host_router_selects_peer_and_provider_without_cross_loading` runs on a Host with no board session; its last step, a thread-activity follow over the Mac board, is dropped (that code leaves). The MCP listener-parity and schema cases and the abandoned-mutation case run on wakes instead of a board project.
+- **Round 2:** `production_host_without_enrollment_keeps_ready_and_creation_unreachable` writes a synthetic enrollment into the collaboration directory, aimed at a test-owned listener, and requires zero connections. `host_router_selects_peer_and_provider_without_cross_loading` runs on a Host with no board session; its last step, a thread-activity follow over the Mac board, is dropped (that code leaves). The MCP listener-parity and schema cases and the abandoned-mutation case run on wakes instead of a board project, on a still application clock.
+- **Round 3:** the local direct-message read cases (unread inbox, correspondent history, mark-read, the retention boundary, the short preview line and full link) run on the central-free push fixture, with delivered records seeded into the interaction store and the real retention worker.
 
 ## Deleted, by code under test
 
 | Code under test | Tests |
 |---|---|
 | leaves with retrofit: Mac board store, fleet cache and project registry | 234 |
-| leaves with retrofit: Mac mail engine and journal | 165 |
-| leaves with retrofit: Mac project admission and creation | 129 |
-| leaves with retrofit: replication and leases | 64 |
-| leaves with retrofit: old machine session and link client | 17 |
-| leaves with retrofit: board session context over the Mac board | 10 |
+| leaves with retrofit: Mac mail engine and journal | 169 |
+| leaves with retrofit: Mac project admission and creation | 128 |
+| leaves with retrofit: replication and leases | 63 |
+| leaves with retrofit: old machine session and link client | 14 |
+| leaves with retrofit: board session context over the Mac board | 6 |
 | survives (not kept, see below) | 6 |
+| leaves with retrofit: the deleted old-central fixture crate's own self-tests | 3 |
 
 ## Deleted, by fixture reason
 
@@ -37,7 +39,7 @@ Owner decision (2026-11-17): "Yes remove old and make sure you craft new tests t
 | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | 237 |
 | OwnerFixture registers its workspace, board and project through the old central's session | 171 |
 | SubscriptionFixture registers its project through the old central's session | 78 |
-| starts the old central (board-central-test-support) for its setup or calls | 58 |
+| starts the old central (board-central-test-support) for its setup or calls | 56 |
 | process journey on the old central pair or a central-backed board (board_e2e fixtures) | 44 |
 | enrolled machine session against the old central (board composition fixtures) | 16 |
 | central-backed board fixture | 10 |
@@ -155,6 +157,8 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | collaboration-service | `src/remote_wake_replay_tests.rs` | `wake_operations_remote_pause_late_replay_returns_recorded_result` |
 | collaboration-service | `src/remote_wake_wait_tests.rs` | `a_remote_wake_wait_answers_the_status_commit_that_lands_after_its_empty_read` |
 | collaboration-service | `src/remote_wake_wait_tests.rs` | `a_remote_wake_wait_with_nothing_committed_reads_once_then_once_at_its_deadline` |
+| collaboration-service | `tests/integration/push_surface/board_and_history_proofs.rs` | `control_inbox_and_history_order_retained_dms_and_omit_expired_records` |
+| collaboration-service | `tests/integration/push_surface/board_and_history_proofs.rs` | `inbox_and_history_use_literal_short_preview_while_show_keeps_full_body` |
 
 ## Survives, not kept: for Lead A to rule on
 
@@ -243,9 +247,9 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 
 | File | Test | Fixture reason | Code under test |
 |---|---|---|---|
-| `src/fixture_shutdown.rs` | `every_cleanup_runs_and_retains_all_sibling_errors` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: old machine session and link client |
-| `src/fixture_shutdown.rs` | `failed_central_start_joins_the_real_jwks_listener` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: old machine session and link client |
-| `src/mail_wire_observer_test.rs` | `push_wire_observation_keeps_item_frame_and_capacity_refusal` | tests the removed old-central fixture crate itself | leaves with retrofit: old machine session and link client |
+| `src/fixture_shutdown.rs` | `every_cleanup_runs_and_retains_all_sibling_errors` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: the deleted old-central fixture crate's own self-tests |
+| `src/fixture_shutdown.rs` | `failed_central_start_joins_the_real_jwks_listener` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: the deleted old-central fixture crate's own self-tests |
+| `src/mail_wire_observer_test.rs` | `push_wire_observation_keeps_item_frame_and_capacity_refusal` | tests the removed old-central fixture crate itself | leaves with retrofit: the deleted old-central fixture crate's own self-tests |
 
 ### codex-router-host (61)
 
@@ -269,7 +273,7 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `src/collaboration_runtime/board_composition/tests/claim_restart.rs` | `claim_restart_resumes_the_same_install_after_sigkill_without_publishing_seeding` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: replication and leases |
 | `src/collaboration_runtime/board_composition/tests/claim_restart.rs` | `receiving_graceful_stop_during_install_exits_cleanly_then_resumes_and_posts` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: replication and leases |
 | `src/collaboration_runtime/board_composition/tests/claim_restart.rs` | `receiving_restart_resumes_acknowledged_install_from_welcome_without_claim` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: replication and leases |
-| `src/collaboration_runtime/board_composition/tests/claim_restart.rs` | `requested_stop_preserves_a_failed_owned_operation` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: replication and leases |
+| `src/collaboration_runtime/board_composition/tests/claim_restart.rs` | `requested_stop_preserves_a_failed_owned_operation` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: old machine session and link client |
 | `src/collaboration_runtime/board_composition/tests/duplicate_machine_identity.rs` | `duplicate_connection_reports_connection_replaced_before_physical_close` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: old machine session and link client |
 | `src/collaboration_runtime/board_composition/tests/duplicate_machine_identity.rs` | `duplicate_peer_with_new_session_reports_session_ended_before_physical_close` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: old machine session and link client |
 | `src/collaboration_runtime/board_composition/tests/forwarded_post_notifications.rs` | `non_holder_sender_publishes_local_notifications_before_copy_ack_and_deduplicates_retry` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: replication and leases |
@@ -301,7 +305,7 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `src/collaboration_runtime/board_composition/tests/returning_holder_expiry.rs` | `membership_expiry_during_a_returning_install_does_not_quarantine_the_project` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: replication and leases |
 | `src/collaboration_runtime/board_composition/tests/snapshot_restart.rs` | `snapshot_baseline_is_repaired_before_offline_admission_without_waiting_for_welcome` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: replication and leases |
 | `src/collaboration_runtime/startup_contract_tests/duplicate_host_test.rs` | `two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_flop` | enrolled Host: needs the old central's machine session | leaves with retrofit: old machine session and link client |
-| `src/collaboration_runtime/startup_contract_tests/follow_attachment_tests.rs` | `host_follow_attachment_allocates_a_notice_and_retains_only_weak_owners` | enrolled Host: needs the old central's machine session | leaves with retrofit: old machine session and link client |
+| `src/collaboration_runtime/startup_contract_tests/follow_attachment_tests.rs` | `host_follow_attachment_allocates_a_notice_and_retains_only_weak_owners` | enrolled Host: needs the old central's machine session | leaves with retrofit: Mac mail engine and journal |
 | `src/collaboration_runtime/startup_mail_retention_test.rs` | `host_mail_clock_steps_remove_both_holders_at_day_60_and_refuse_day_61` | enrolled Host: needs the old central's machine session | leaves with retrofit: Mac mail engine and journal |
 | `src/enrollment_session_transport_test.rs` | `pending_reenrollment_blocks_the_next_real_socket_until_restart_finishes_reset` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: old machine session and link client |
 | `tests/integration/board_failure_isolation.rs` | `pending_corrupt_feed_is_contained_during_subscription_restart` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
@@ -317,9 +321,9 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 
 | File | Test | Fixture reason | Code under test |
 |---|---|---|---|
-| `src/thread_subscription_entry_tests.rs` | `subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_progress` | needs a real board through the old central (board_application); carried into PR 4's proof plan | leaves with retrofit: board session context over the Mac board |
+| `src/thread_subscription_entry_tests.rs` | `subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_progress` | needs a real board through the old central (board_application); carried into PR 4's proof plan | leaves with retrofit: Mac mail engine and journal |
 
-### collaboration-service (495)
+### collaboration-service (493)
 
 | File | Test | Fixture reason | Code under test |
 |---|---|---|---|
@@ -393,7 +397,7 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `src/project_admission/behavior_tests/window_notices.rs` | `subscription_notice_returns_only_ranges_and_counts_and_keeps_posts_unread` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
 | `src/project_admission/behavior_tests/window_recovery.rs` | `restart_before_notice_settlement_reselects_the_same_range` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
 | `src/project_admission/behavior_tests/window_recovery.rs` | `restore_clears_interrupted_selection_marks_and_keeps_draining_window_deadline` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
-| `src/project_admission/behavior_tests/window_release.rs` | `release_subscription_preserves_unallocated_window_across_arrivals` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
+| `src/project_admission/behavior_tests/window_release.rs` | `release_subscription_preserves_unallocated_window_across_arrivals` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac mail engine and journal |
 | `src/project_admission/behavior_tests/window_release.rs` | `release_subscription_restores_due_without_advancing_delivered` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
 | `src/project_admission/behavior_tests/window_release.rs` | `release_subscription_stale_window_or_through_fence_is_a_noop` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
 | `src/project_admission/behavior_tests/window_selection_fences.rs` | `receipts_require_exact_window_generation_and_frozen_through_before_and_after_arrivals` | SubscriptionFixture registers its project through the old central's session | leaves with retrofit: Mac project admission and creation |
@@ -678,7 +682,7 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `tests/integration/fleet_registration.rs` | `settled_directory_requests_are_durable_before_registration_and_recovered_after_reopen` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: Mac project admission and creation |
 | `tests/integration/forwarded_post_origin.rs` | `forwarded_admission_refuses_operations_outside_the_post_family_without_effects` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: replication and leases |
 | `tests/integration/forwarded_post_origin.rs` | `forwarded_posts_keep_the_declared_actor_and_original_per_observation_origin_on_replay` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: replication and leases |
-| `tests/integration/held_queue_depth.rs` | `records_sequential_admission_costs_at_held_depths_and_the_real_capacity_boundary` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
+| `tests/integration/held_queue_depth.rs` | `records_sequential_admission_costs_at_held_depths_and_the_real_capacity_boundary` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac mail engine and journal |
 | `tests/integration/inbox_acknowledgement_mcp.rs` | `batch_acknowledgements_keep_completed_outcomes_after_an_unavailable_scope` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/inbox_acknowledgement_mcp.rs` | `routed_refusals_keep_the_ledger_and_unreadable_retry_outcomes_stay_unknown` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/inbox_cursor_contracts.rs` | `first_unread_initialization_and_post_assign_activity_to_history_or_unread_atomically` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
@@ -721,9 +725,9 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `tests/integration/native_admission_gates.rs` | `actual_expiry_names_the_deadline_keeps_reads_and_same_epoch_renewal_admits_the_same_key` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
 | `tests/integration/native_admission_gates.rs` | `an_actual_superseding_renewal_keeps_the_write_refusal_and_stops_public_reads` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
 | `tests/integration/native_admission_gates.rs` | `an_unregistered_native_owner_refuses_the_first_write_and_registration_enables_it` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
-| `tests/integration/operation_context_reads.rs` | `admitted_post_and_task_update_read_only_their_rule_operands` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: board session context over the Mac board |
-| `tests/integration/operation_context_reads.rs` | `semantic_identity_matches_survive_json_end_reencoding_and_typed_acknowledgement_readback` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: board session context over the Mac board |
-| `tests/integration/operation_context_reads.rs` | `stale_role_intent_reads_only_the_current_replacement_holder` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: board session context over the Mac board |
+| `tests/integration/operation_context_reads.rs` | `admitted_post_and_task_update_read_only_their_rule_operands` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
+| `tests/integration/operation_context_reads.rs` | `semantic_identity_matches_survive_json_end_reencoding_and_typed_acknowledgement_readback` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
+| `tests/integration/operation_context_reads.rs` | `stale_role_intent_reads_only_the_current_replacement_holder` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
 | `tests/integration/participant_join_history.rs` | `handover_without_a_post_retains_the_advisor_and_promoted_intervals` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/participant_join_history.rs` | `role_change_without_a_leave_or_post_retains_each_join_interval` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/pending_project_scope.rs` | `cold_corrupt_rejected_file_is_excluded_without_reading_it` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
@@ -753,8 +757,6 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `tests/integration/project_failure_isolation_mcp.rs` | `creation_recovery_contains_a_corrupt_sibling` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
 | `tests/integration/project_failure_isolation_mcp.rs` | `healthy_thread_routing_survives_a_corrupt_sibling` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
 | `tests/integration/push_surface/board_and_history_proofs.rs` | `control_dm_send_and_read_leave_board_messages_and_activity_empty` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: Mac board store, fleet cache and project registry |
-| `tests/integration/push_surface/board_and_history_proofs.rs` | `control_inbox_and_history_order_retained_dms_and_omit_expired_records` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: Mac board store, fleet cache and project registry |
-| `tests/integration/push_surface/board_and_history_proofs.rs` | `inbox_and_history_use_literal_short_preview_while_show_keeps_full_body` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/push_surface/subscription_expansion_proofs.rs` | `router_show_expands_only_stored_subscription_range_without_read_acknowledgement` | starts the old central (board-central-test-support) for its setup or calls | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/reader_metadata_retention.rs` | `a_refused_foreign_project_subject_never_receives_this_projects_feed` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/reader_metadata_retention.rs` | `link_events_count_once_for_the_source_task_and_its_workstream` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
@@ -783,9 +785,9 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `tests/integration/retained_epoch_public_reads.rs` | `a_discarded_old_suffix_is_refused_even_when_new_epoch_reuses_its_position` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/retained_epoch_public_reads.rs` | `range_predecessor_and_public_next_reuse_preserve_actual_assigning_epochs` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/retained_epoch_public_reads/activity_reads.rs` | `retained_trail_search_inbox_and_stored_push_ranges_survive_a_later_writer_epoch` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
-| `tests/integration/retained_project_registry.rs` | `cancelled_native_close_stays_unavailable_until_the_same_drain_is_retried` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
-| `tests/integration/retained_project_registry.rs` | `completed_supersession_retries_without_reopening_the_closed_file` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
-| `tests/integration/retained_project_registry.rs` | `snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
+| `tests/integration/retained_project_registry.rs` | `cancelled_native_close_stays_unavailable_until_the_same_drain_is_retried` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
+| `tests/integration/retained_project_registry.rs` | `completed_supersession_retries_without_reopening_the_closed_file` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
+| `tests/integration/retained_project_registry.rs` | `snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/role_authority_mcp.rs` | `lead_release_then_grant_cannot_bypass_the_owner_grant_or_reuse_it` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/role_authority_mcp.rs` | `workstream_pair_and_stand_down_acknowledgement_keep_authority_distinct` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/seeded_registry_restart.rs` | `a_pending_seed_stays_unpublished_after_registry_reopen` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac project admission and creation |
@@ -818,4 +820,3 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | `tests/integration/watch_read_lifecycle.rs` | `future_only_watches_scoped_acknowledgements_and_unread_summaries_survive_reopen` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/work_view_fact_bound.rs` | `public_work_operands_and_native_queries_ignore_growing_unrelated_facts` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
 | `tests/integration/work_view_mcp.rs` | `work_view_orders_dependencies_and_keeps_blockers_progress_and_closed_work_apart` | runs on BoardFixture's old-central board (enrolled Host, central-backed board) | leaves with retrofit: Mac board store, fleet cache and project registry |
-

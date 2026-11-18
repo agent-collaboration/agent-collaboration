@@ -35,7 +35,7 @@ The driver copies only the declared executable bytes into its fresh Codex home, 
 
 ## Three-Host Tokio driver
 
-**Cannot run on this source.** PR 1 of the central rip-out removed the driver's `d1-central` action with the old Tokio central edge (`TokioServer`, `/v1/session`, machine enrollment) it started. `--d1-harness` still issues `d1-central` and fails there; `d1-host` remains but has no fixture producer. The journey needs rewriting against the new central link once it exists. For evidence today, use the read-only [SQLite readback](#sqlite-readback) below on stores a run already produced.
+**Cannot run on this source.** PR 1 of the central rip-out removed the driver's `d1-central` action with the old Tokio central edge (`TokioServer`, `/v1/session`, machine enrollment) it started. `verification/run.ts` no longer accepts `--d1-harness`; `--d1-readback` is the only D1 action it still dispatches. The driver's `d1-host` action remains but has no fixture producer. The journey needs rewriting against the new central link once it exists. For evidence today, use the read-only [SQLite readback](#sqlite-readback) below on stores a run already produced.
 
 > **Historical — retired command.** Everything from here to the readback heading describes the removed driver. Do not run it; it is kept only so earlier evidence can be read.
 
