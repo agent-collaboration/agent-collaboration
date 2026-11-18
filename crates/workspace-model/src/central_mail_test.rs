@@ -102,17 +102,31 @@ fn notice_cadence_request_is_closed_and_round_trips_each_allowed_value() {
 }
 
 #[test]
-fn a_direct_body_stored_before_delivery_existed_decodes_as_auto() {
-    let stored = json!({ "kind": "direct", "body": "hello" });
-    let body: MessageBody = serde_json::from_value(stored).unwrap();
-    assert_eq!(
-        body,
-        MessageBody::Direct {
-            body: "hello".to_owned().try_into().unwrap(),
-            delivery: MessageDelivery::Auto,
-            reply_to: None,
-        }
-    );
+fn a_direct_body_or_send_without_delivery_or_reply_to_is_refused_not_defaulted() {
+    // Hard cutover: no stored or sent message predates these fields.
+    let bodies = [
+        json!({ "kind": "direct", "body": "hello" }),
+        json!({ "kind": "direct", "body": "hello", "delivery": "auto" }),
+        json!({ "kind": "direct", "body": "hello", "replyTo": null }),
+    ];
+    let to = json!({"machineId": "019f0000-0000-7000-8000-000000000001", "endpoint": "codex-local", "sessionId": "s"});
+    let sends = [
+        json!({ "kind": "sendMessage", "to": to, "body": "hello" }),
+        json!({ "kind": "sendMessage", "to": to, "body": "hello", "delivery": "auto" }),
+    ];
+
+    for stored in bodies {
+        assert!(
+            serde_json::from_value::<MessageBody>(stored.clone()).is_err(),
+            "{stored}"
+        );
+    }
+    for send in sends {
+        assert!(
+            serde_json::from_value::<CentralMailOperation>(send.clone()).is_err(),
+            "{send}"
+        );
+    }
 }
 
 #[test]

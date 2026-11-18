@@ -18,7 +18,7 @@ fn a_thread_post_and_a_direct_message_are_outbox_writes_and_commands_are_not() {
         json!({"kind": "mail", "request": {"requestId": ID, "operation": {
         "kind": "sendMessage",
         "to": {"machineId": WORKSPACE, "endpoint": "codex-local", "sessionId": "s1"},
-        "body": "hello"}}}),
+        "body": "hello", "delivery": "auto", "replyTo": null}}}),
     );
     let create_thread = payload(json!({"kind": "workspace", "request": {
         "requestId": ID, "workspaceId": WORKSPACE,

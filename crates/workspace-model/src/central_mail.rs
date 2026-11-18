@@ -29,10 +29,11 @@ pub enum CentralMailOperation {
     SendMessage {
         to: SessionAddress,
         body: PostText,
-        #[serde(default)]
+        /// Required: a missing field is refused, never defaulted.
         delivery: MessageDelivery,
-        /// The message this one answers, carried to the recipient as-is.
-        #[serde(default)]
+        /// The message this one answers, carried to the recipient as-is;
+        /// required (null when it answers none).
+        #[serde(deserialize_with = "present_option")]
         reply_to: Option<MessageId>,
     },
     SetWake {
@@ -160,13 +161,10 @@ pub enum TimingRequirement {
 pub enum MessageBody {
     Direct {
         body: PostText,
-        /// Stored inside the message body JSON; bodies written before this field
-        /// existed decode as `Auto`.
-        #[serde(default)]
+        /// Stored inside the message body JSON; required on decode.
         delivery: MessageDelivery,
-        /// The message this one answers; bodies stored before this field
-        /// existed decode as `None`.
-        #[serde(default)]
+        /// The message this one answers; required on decode (null for none).
+        #[serde(deserialize_with = "present_option")]
         reply_to: Option<MessageId>,
     },
     Notice {
@@ -284,3 +282,14 @@ pub enum AutomationState {
 #[cfg(test)]
 #[path = "central_mail_test.rs"]
 mod tests;
+
+/// An Option field that must be present (null allowed). Serde's derive would
+/// otherwise decode a missing Option as None; a `deserialize_with` field is
+/// required, so a missing `replyTo` is refused, never coerced (AGENTS.md).
+fn present_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
+}
