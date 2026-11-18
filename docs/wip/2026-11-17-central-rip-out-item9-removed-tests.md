@@ -29,7 +29,7 @@ Owner decision (2026-11-17): "Yes remove old and make sure you craft new tests t
 | leaves with retrofit: replication and leases | 63 |
 | leaves with retrofit: old machine session and link client | 14 |
 | leaves with retrofit: board session context over the Mac board | 6 |
-| survives (not kept, see below) | 6 |
+| harness survives; deleted by Lead A's ruling (see below) | 6 |
 | leaves with retrofit: the deleted old-central fixture crate's own self-tests | 3 |
 
 ## Deleted, by fixture reason
@@ -160,9 +160,11 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 | collaboration-service | `tests/integration/push_surface/board_and_history_proofs.rs` | `control_inbox_and_history_order_retained_dms_and_omit_expired_records` |
 | collaboration-service | `tests/integration/push_surface/board_and_history_proofs.rs` | `inbox_and_history_use_literal_short_preview_while_show_keeps_full_body` |
 
-## Survives, not kept: for Lead A to rule on
+## Harness survives, deleted by Lead A's ruling
 
-| File | Test | Reason it is not kept |
+Lead A ruled that these stay deleted: their inventory is built on Mac board roots, and the CLI+MCP Lead has taken "owned resources are cleaned up" into PR 4's proof plan (O1c).
+
+| File | Test | Why the harness half could not be kept |
 |---|---|---|
 | `tests/delivery_matrix/owned_resource_cleanup_producer_runtime_tests.rs` | `actual_two_root_producer_uses_distinct_boards_and_preserves_participant_acl` | same harness; this case asserts two distinct Mac boards and their participant ACLs, so its subject is the Mac board half |
 | `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_enabled_peer_schedule_becomes_disabled` | the delivery-matrix cleanup harness survives, but every case's expected inventory mixes Mac-board readers and thread subscriptions with wakes and schedules; keeping it means rewriting the harness's expected inventory, not extracting setup |
@@ -177,12 +179,12 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 
 | File | Test | Fixture reason | Code under test |
 |---|---|---|---|
-| `tests/delivery_matrix/owned_resource_cleanup_producer_runtime_tests.rs` | `actual_two_root_producer_uses_distinct_boards_and_preserves_participant_acl` | runtime roots with a central-backed board setup | survives (not kept, see below) |
-| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_enabled_peer_schedule_becomes_disabled` | runtime roots with a central-backed board setup | survives (not kept, see below) |
-| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_error_after_wake_receipt_retires_known_prefix` | runtime roots with a central-backed board setup | survives (not kept, see below) |
-| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_first_reader_is_retired_before_second_root_exists` | runtime roots with a central-backed board setup | survives (not kept, see below) |
-| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_schedule_before_prepare_is_cleanup_owned` | runtime roots with a central-backed board setup | survives (not kept, see below) |
-| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `stopped_runtime_keeps_all_cleanup_attempts_unknown_without_retry` | runtime roots with a central-backed board setup | survives (not kept, see below) |
+| `tests/delivery_matrix/owned_resource_cleanup_producer_runtime_tests.rs` | `actual_two_root_producer_uses_distinct_boards_and_preserves_participant_acl` | runtime roots with a central-backed board setup | harness survives; deleted by Lead A's ruling (see below) |
+| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_enabled_peer_schedule_becomes_disabled` | runtime roots with a central-backed board setup | harness survives; deleted by Lead A's ruling (see below) |
+| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_error_after_wake_receipt_retires_known_prefix` | runtime roots with a central-backed board setup | harness survives; deleted by Lead A's ruling (see below) |
+| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_first_reader_is_retired_before_second_root_exists` | runtime roots with a central-backed board setup | harness survives; deleted by Lead A's ruling (see below) |
+| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `runtime_schedule_before_prepare_is_cleanup_owned` | runtime roots with a central-backed board setup | harness survives; deleted by Lead A's ruling (see below) |
+| `tests/delivery_matrix/owned_resource_cleanup_runtime_tests.rs` | `stopped_runtime_keeps_all_cleanup_attempts_unknown_without_retry` | runtime roots with a central-backed board setup | harness survives; deleted by Lead A's ruling (see below) |
 | `tests/e2e/board_central_e2e.rs` | `bc01_replicated_prefix_mapping_replay_and_owning_reopen` | process journey on the old central pair or a central-backed board (board_e2e fixtures) | leaves with retrofit: replication and leases |
 | `tests/e2e/board_central_e2e.rs` | `bc02_move_and_takeover_install_exact_native_authority` | process journey on the old central pair or a central-backed board (board_e2e fixtures) | leaves with retrofit: replication and leases |
 | `tests/e2e/board_central_e2e.rs` | `bc03_archive_notices_settle_and_copied_content_stays_readable` | process journey on the old central pair or a central-backed board (board_e2e fixtures) | leaves with retrofit: replication and leases |
