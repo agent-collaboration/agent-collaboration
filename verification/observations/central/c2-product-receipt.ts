@@ -104,7 +104,11 @@ export function assertC2BaselineWorkspace(
   receipt: Pick<C2ProductReceipt, "baselineRequest" | "baselineReply">,
 ): string {
   const baselineOperation = z
-    .object({ kind: z.literal("createWorkspace"), name: z.string().min(1) })
+    .object({
+      kind: z.literal("createWorkspace"),
+      name: z.string().min(1),
+      description: z.string().nullable(),
+    })
     .strict()
     .parse(receipt.baselineRequest.request.payload.request.operation);
   assert.equal(
@@ -123,6 +127,7 @@ export function assertC2BaselineWorkspace(
         .object({
           workspaceId: uuid,
           name: z.string(),
+          description: z.string(),
           state: z.literal("active"),
         })
         .strict(),

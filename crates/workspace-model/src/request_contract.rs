@@ -5,7 +5,7 @@ use crate::{
     InitiativeId, IssueId, IssueTitle, ItemRef, ItemView, LinkId, ListQuery, MemberRole,
     NotificationSetting, PostText, ProjectId, ProjectRole, ReadScope, ReferenceId, ReferenceSource,
     ReferenceTarget, RefusalReason, RequestId, ResourceName, SessionAddress, ThreadId, TrailTag,
-    TrailText, WorkLogEntryId, WorkStatus, Workspace,
+    TrailText, WorkLogEntryId, WorkStatus, Workspace, WorkspaceDescription,
 };
 use serde::{Deserialize, Serialize};
 
@@ -81,12 +81,12 @@ pub enum WorkspaceOperation {
     /// An absent description is stored empty.
     CreateWorkspace {
         name: ResourceName,
-        description: Option<Description>,
+        description: Option<WorkspaceDescription>,
     },
     /// Targets the request's workspace. The canonical name stays unique per organization.
     UpdateWorkspace {
         name: ResourceName,
-        description: Description,
+        description: WorkspaceDescription,
     },
     /// Targets the request's workspace.
     ArchiveWorkspace,

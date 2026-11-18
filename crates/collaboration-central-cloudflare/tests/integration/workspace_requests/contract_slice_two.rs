@@ -6,6 +6,9 @@ use super::*;
 fn text_value(value: &str) -> m::Description {
     value.to_owned().try_into().unwrap()
 }
+fn workspace_text(value: &str) -> m::WorkspaceDescription {
+    value.to_owned().try_into().unwrap()
+}
 fn required(value: &str) -> m::RequiredDescription {
     value.to_owned().try_into().unwrap()
 }
@@ -269,7 +272,7 @@ async fn workspace_descriptions_default_to_empty_and_search_matches_item_descrip
             request,
             m::WorkspaceOperation::CreateWorkspace {
                 name: super::name(workspace_name),
-                description: description.map(text_value),
+                description: description.map(workspace_text),
             },
         )
         .await;
@@ -319,5 +322,187 @@ async fn workspace_descriptions_default_to_empty_and_search_matches_item_descrip
     let refs: Vec<_> = found.iter().map(m::ItemView::item_ref).collect();
     assert!(refs.contains(&m::ItemRef::Area(area)), "{refs:?}");
     assert!(refs.contains(&m::ItemRef::Project(project)), "{refs:?}");
+    f.host.close().await;
+}
+
+/// A workspace description holds at most 2,048 UTF-8 bytes, the bound the
+/// directory decoder enforces: 2,048 is stored and every directory read still
+/// decodes; 2,049 never leaves the wire decode, so it can never be stored.
+#[tokio::test]
+async fn a_workspace_description_is_bounded_at_the_directory_decoders_2048_bytes() {
+    let f = Fixture::new().await;
+    let longest = format!(
+        "boundary {}",
+        "x".repeat(m::WORKSPACE_DESCRIPTION_MAX_BYTES - 9)
+    );
+    let request = m::WorkspaceRequest {
+        request_id: Some(id(2400)),
+        workspace_id: None,
+        operation: m::WorkspaceOperation::CreateWorkspace {
+            name: super::name("Longest description"),
+            description: Some(workspace_text(&longest)),
+        },
+    };
+
+    // Act: one byte over the bound, on the request's own wire form.
+    let mut over = serde_json::to_value(&request).unwrap();
+    over["operation"]["description"] = serde_json::json!(format!("{longest}x"));
+    let decoded = serde_json::from_value::<m::WorkspaceRequest>(over);
+    let reply = call(
+        &f.host,
+        &fresh_auth(&f.host, &f.caller),
+        None,
+        2400,
+        request.operation.clone(),
+    )
+    .await;
+
+    // Assert
+    assert!(decoded.is_err(), "a 2,049-byte description decoded");
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace }) = reply.result
+    else {
+        panic!("create workspace: {reply:?}");
+    };
+    assert_eq!(workspace.description.as_str(), longest);
+    for (request, query) in [
+        (
+            2401,
+            m::ListQuery::Workspaces {
+                include_archived: true,
+            },
+        ),
+        (
+            2402,
+            m::ListQuery::SearchWorkspaces {
+                text: "boundary".to_owned().try_into().unwrap(),
+                include_archived: true,
+            },
+        ),
+    ] {
+        let listed = call(
+            &f.host,
+            &fresh_auth(&f.host, &f.caller),
+            None,
+            request,
+            m::WorkspaceOperation::List {
+                query,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
+                limit: 10.try_into().unwrap(),
+            },
+        )
+        .await;
+        // Every directory read decodes the whole organization directory before it
+        // filters by the caller's allowance, so a page means the stored row decoded.
+        assert!(
+            matches!(
+                listed.result,
+                m::WorkspaceResult::Done(m::WorkspaceAnswer::Page { .. })
+            ),
+            "directory read after the longest description: {listed:?}"
+        );
+    }
+    f.host.close().await;
+}
+
+/// A reopen reaches the area inbox once, latest and unread alike, for the creator
+/// and for a joined observer with notifications on; a replayed reopen adds nothing.
+#[tokio::test]
+async fn a_reopen_reaches_the_area_inbox_once_for_the_creator_and_a_joined_observer() {
+    // Arrange: a thread the creator resolves, with an observer whose notifications are on.
+    let f = Fixture::new().await;
+    let area = f.area(2500).await;
+    let thread = f.thread(2501, area.clone()).await;
+    let observer = {
+        let mut caller = f.caller.clone();
+        let mut address = session(&f.caller);
+        address.session_id = "inbox-observer".to_owned().try_into().unwrap();
+        caller.caller = m::Caller::Session(address);
+        caller
+    };
+    let joined = call(
+        &f.host,
+        &fresh_auth(&f.host, &observer),
+        Some(f.workspace.clone()),
+        2502,
+        m::WorkspaceOperation::JoinThread {
+            thread_id: thread.clone(),
+            role: m::MemberRole::Observer,
+        },
+    )
+    .await;
+    assert!(
+        matches!(joined.result, m::WorkspaceResult::Done(_)),
+        "{joined:?}"
+    );
+    assert!(updated(
+        &f.call(
+            2503,
+            m::WorkspaceOperation::ResolveThread {
+                thread_id: thread.clone(),
+                closing_post: None,
+            },
+        )
+        .await
+    ));
+    let reopen = m::WorkspaceOperation::ReopenThread {
+        thread_id: thread.clone(),
+    };
+
+    // Act: reopen, then replay the same request.
+    assert!(updated(&f.call(2504, reopen.clone()).await));
+    assert!(updated(&f.call(2504, reopen).await));
+
+    // Assert
+    for (reader, who) in [(&f.caller, "creator"), (&observer, "observer")] {
+        for read_mode in [m::InboxReadMode::Latest, m::InboxReadMode::Unread] {
+            let caller = reader;
+            let reply = call(
+                &f.host,
+                &fresh_auth(&f.host, caller),
+                Some(f.workspace.clone()),
+                0,
+                m::WorkspaceOperation::Inbox {
+                    scope: m::InboxScope::Area {
+                        area_id: area.clone(),
+                    },
+                    read_mode,
+                    after: None,
+                    limit: 100.try_into().unwrap(),
+                },
+            )
+            .await;
+            let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items, .. }) = reply.result
+            else {
+                panic!("{who} inbox: {reply:?}");
+            };
+            // The thread's own creation is also an Open state row; the reopen is
+            // the Open row after the one Resolved row.
+            let states: Vec<_> = items
+                .iter()
+                .filter_map(|item| match item {
+                    m::InboxItem::ThreadStateChanged {
+                        thread_id,
+                        state,
+                        position,
+                        ..
+                    } if *thread_id == thread => Some((*position, *state)),
+                    _ => None,
+                })
+                .collect();
+            let resolved: Vec<_> = states
+                .iter()
+                .filter(|(_, state)| *state == m::ThreadState::Resolved)
+                .map(|(position, _)| *position)
+                .collect();
+            assert_eq!(resolved.len(), 1, "{who} {read_mode:?}: {items:?}");
+            let reopened = states
+                .iter()
+                .filter(|(position, state)| {
+                    *state == m::ThreadState::Open && *position > resolved[0]
+                })
+                .count();
+            assert_eq!(reopened, 1, "{who} {read_mode:?}: {items:?}");
+        }
+    }
     f.host.close().await;
 }

@@ -11,7 +11,7 @@ use workspace_rules::DirectoryChange;
 pub(crate) enum DirectoryRequest<'a> {
     Create {
         name: &'a m::ResourceName,
-        description: Option<&'a m::Description>,
+        description: Option<&'a m::WorkspaceDescription>,
     },
     Change {
         workspace_id: &'a m::WorkspaceId,
@@ -191,7 +191,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
                     name: name.clone(),
                     description: match description {
                         Some(description) => description.clone(),
-                        None => m::Description::try_from(String::new())
+                        None => m::WorkspaceDescription::try_from(String::new())
                             .map_err(|_| corrupt("workspaces.description"))?,
                     },
                     state: m::WorkspaceState::Active,

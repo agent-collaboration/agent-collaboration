@@ -106,7 +106,7 @@ function fixtureRequests(): Pick<
     correlationId: baselineId,
     requestId: baselineId,
     workspaceId: null,
-    operation: { kind: "createWorkspace", name: "Batch workspace" },
+    operation: { kind: "createWorkspace", name: "Batch workspace", description: null },
   });
   const requests = [first, last].map((area, index) => {
     const correlationId = correlations[index === 0 ? 0 : 2];
@@ -167,7 +167,12 @@ function validReceipt(): C2BatchReceipt {
     baselineRequest: requests.baselineRequest,
     baselineReply: reply(baselineId, {
       kind: "workspaceCreated",
-      workspace: { workspaceId: workspace, name: "Batch workspace", state: "active" },
+      workspace: {
+        workspaceId: workspace,
+        name: "Batch workspace",
+        description: "",
+        state: "active",
+      },
     }),
     batchRequest: requests.batchRequest,
     batchReplies: [

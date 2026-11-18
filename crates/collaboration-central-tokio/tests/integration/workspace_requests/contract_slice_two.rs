@@ -6,6 +6,9 @@ use super::*;
 fn text_value(value: &str) -> m::Description {
     value.to_owned().try_into().unwrap()
 }
+fn workspace_text(value: &str) -> m::WorkspaceDescription {
+    value.to_owned().try_into().unwrap()
+}
 fn required(value: &str) -> m::RequiredDescription {
     value.to_owned().try_into().unwrap()
 }
@@ -271,7 +274,7 @@ async fn workspace_descriptions_default_to_empty_and_search_matches_item_descrip
             request,
             m::WorkspaceOperation::CreateWorkspace {
                 name: super::name(workspace_name),
-                description: description.map(text_value),
+                description: description.map(workspace_text),
             },
         )
         .await;
@@ -329,7 +332,8 @@ async fn workspace_descriptions_default_to_empty_and_search_matches_item_descrip
 #[hegel::test(test_cases = 25)]
 fn any_sequence_of_partial_updates_keeps_each_fields_last_present_value(tc: hegel::TestCase) {
     use hegel::generators as gs;
-    const TITLES: [&str; 3] = ["Alpha", "Beta", "Gamma"];
+    // Names and titles arrive as raw wire text, so blank ones can be drawn too.
+    const TITLES: [&str; 6] = ["Alpha", "Beta", "Gamma", "", " ", "\t \n"];
     const DESCRIPTIONS: [&str; 4] = ["first purpose", "second purpose", "third purpose", "  "];
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -346,46 +350,57 @@ fn any_sequence_of_partial_updates_keeps_each_fields_last_present_value(tc: hege
             let on_area = tc.draw(gs::booleans());
             let title = tc
                 .draw(gs::booleans())
-                .then(|| TITLES[tc.draw(gs::integers::<usize>().min_value(0).max_value(2))]);
+                .then(|| TITLES[tc.draw(gs::integers::<usize>().min_value(0).max_value(5))]);
             let description = tc
                 .draw(gs::booleans())
                 .then(|| DESCRIPTIONS[tc.draw(gs::integers::<usize>().min_value(0).max_value(3))]);
-            let operation = if on_area {
-                m::WorkspaceOperation::UpdateArea {
-                    area_id: area.clone(),
-                    name: title.map(super::name),
-                    description: description.map(text_value),
-                }
+            let mut raw = if on_area {
+                serde_json::json!({"kind": "updateArea", "areaId": area})
             } else {
-                m::WorkspaceOperation::UpdateProject {
-                    project_id: project.clone(),
-                    title: title.map(super::name),
-                    description: description.map(text_value),
-                }
+                serde_json::json!({"kind": "updateProject", "projectId": project})
             };
-            let reply = f.call(2410 + step, operation).await;
+            if let Some(title) = title {
+                raw[if on_area { "name" } else { "title" }] = serde_json::json!(title);
+            }
+            if let Some(description) = description {
+                raw["description"] = serde_json::json!(description);
+            }
+            // A blank name or title never leaves the wire decode.
+            let raw_text = raw.to_string();
+            let decoded = serde_json::from_value::<m::WorkspaceOperation>(raw);
+            let blank_title = title.is_some_and(|value| value.trim().is_empty());
             let blank = description.is_some_and(|value| value.trim().is_empty());
-            if title.is_none() && description.is_none() {
-                let field = if on_area {
-                    "nameOrDescription"
-                } else {
-                    "titleOrDescription"
-                };
-                assert_eq!(reply.result, invalid(field));
-            } else if blank {
-                assert_eq!(reply.result, invalid("description"));
-            } else {
-                assert!(updated(&reply), "{reply:?}");
-                let model = if on_area {
-                    &mut area_model
-                } else {
-                    &mut project_model
-                };
-                if let Some(title) = title {
-                    model.0 = title.to_owned();
-                }
-                if let Some(description) = description {
-                    model.1 = description.to_owned();
+            match decoded {
+                Err(_) => assert!(
+                    blank_title,
+                    "a valid partial update did not decode: {raw_text}"
+                ),
+                Ok(_) if blank_title => panic!("a blank name or title decoded: {raw_text}"),
+                Ok(operation) => {
+                    let reply = f.call(2410 + step, operation).await;
+                    if title.is_none() && description.is_none() {
+                        let field = if on_area {
+                            "nameOrDescription"
+                        } else {
+                            "titleOrDescription"
+                        };
+                        assert_eq!(reply.result, invalid(field));
+                    } else if blank {
+                        assert_eq!(reply.result, invalid("description"));
+                    } else {
+                        assert!(updated(&reply), "{reply:?}");
+                        let model = if on_area {
+                            &mut area_model
+                        } else {
+                            &mut project_model
+                        };
+                        if let Some(title) = title {
+                            model.0 = title.to_owned();
+                        }
+                        if let Some(description) = description {
+                            model.1 = description.to_owned();
+                        }
+                    }
                 }
             }
             let m::ItemView::Area(area_view) = shown(&f, m::ItemRef::Area(area.clone())).await
@@ -411,4 +426,181 @@ fn any_sequence_of_partial_updates_keeps_each_fields_last_present_value(tc: hege
         }
         f.host.close().await;
     });
+}
+
+/// A workspace description holds at most 2,048 UTF-8 bytes, the bound the
+/// directory decoder enforces: 2,048 is stored and every directory read still
+/// decodes; 2,049 never leaves the wire decode, so it can never be stored.
+#[tokio::test]
+async fn a_workspace_description_is_bounded_at_the_directory_decoders_2048_bytes() {
+    let f = Fixture::new().await;
+    let longest = format!(
+        "boundary {}",
+        "x".repeat(m::WORKSPACE_DESCRIPTION_MAX_BYTES - 9)
+    );
+    let request = m::WorkspaceRequest {
+        request_id: Some(id(2400)),
+        workspace_id: None,
+        operation: m::WorkspaceOperation::CreateWorkspace {
+            name: super::name("Longest description"),
+            description: Some(workspace_text(&longest)),
+        },
+    };
+
+    // Act: one byte over the bound, on the request's own wire form.
+    let mut over = serde_json::to_value(&request).unwrap();
+    over["operation"]["description"] = serde_json::json!(format!("{longest}x"));
+    let decoded = serde_json::from_value::<m::WorkspaceRequest>(over);
+    let reply = call(&f.host, &f.caller, None, 2400, request.operation.clone()).await;
+
+    // Assert
+    assert!(decoded.is_err(), "a 2,049-byte description decoded");
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace }) = reply.result
+    else {
+        panic!("create workspace: {reply:?}");
+    };
+    assert_eq!(workspace.description.as_str(), longest);
+    for (request, query) in [
+        (
+            2401,
+            m::ListQuery::Workspaces {
+                include_archived: true,
+            },
+        ),
+        (
+            2402,
+            m::ListQuery::SearchWorkspaces {
+                text: "boundary".to_owned().try_into().unwrap(),
+                include_archived: true,
+            },
+        ),
+    ] {
+        let listed = call(
+            &f.host,
+            &f.caller,
+            None,
+            request,
+            m::WorkspaceOperation::List {
+                query,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
+                limit: 10.try_into().unwrap(),
+            },
+        )
+        .await;
+        // Every directory read decodes the whole organization directory before it
+        // filters by the caller's allowance, so a page means the stored row decoded.
+        assert!(
+            matches!(
+                listed.result,
+                m::WorkspaceResult::Done(m::WorkspaceAnswer::Page { .. })
+            ),
+            "directory read after the longest description: {listed:?}"
+        );
+    }
+    f.host.close().await;
+}
+
+/// A reopen reaches the area inbox once, latest and unread alike, for the creator
+/// and for a joined observer with notifications on; a replayed reopen adds nothing.
+#[tokio::test]
+async fn a_reopen_reaches_the_area_inbox_once_for_the_creator_and_a_joined_observer() {
+    // Arrange: a thread the creator resolves, with an observer whose notifications are on.
+    let f = Fixture::new().await;
+    let area = f.area(2500).await;
+    let thread = f.thread(2501, area.clone()).await;
+    let observer = collaboration_central_core::WorkspaceCaller::new(
+        f.caller.connection().clone(),
+        m::Caller::Session({
+            let mut address = session(&f.caller);
+            address.session_id = "inbox-observer".to_owned().try_into().unwrap();
+            address
+        }),
+    )
+    .unwrap();
+    let joined = call(
+        &f.host,
+        &observer,
+        Some(f.workspace.clone()),
+        2502,
+        m::WorkspaceOperation::JoinThread {
+            thread_id: thread.clone(),
+            role: m::MemberRole::Observer,
+        },
+    )
+    .await;
+    assert!(
+        matches!(joined.result, m::WorkspaceResult::Done(_)),
+        "{joined:?}"
+    );
+    assert!(updated(
+        &f.call(
+            2503,
+            m::WorkspaceOperation::ResolveThread {
+                thread_id: thread.clone(),
+                closing_post: None,
+            },
+        )
+        .await
+    ));
+    let reopen = m::WorkspaceOperation::ReopenThread {
+        thread_id: thread.clone(),
+    };
+
+    // Act: reopen, then replay the same request.
+    assert!(updated(&f.call(2504, reopen.clone()).await));
+    assert!(updated(&f.call(2504, reopen).await));
+
+    // Assert
+    for (reader, who) in [(&f.caller, "creator"), (&observer, "observer")] {
+        for read_mode in [m::InboxReadMode::Latest, m::InboxReadMode::Unread] {
+            let caller = reader;
+            let reply = call(
+                &f.host,
+                caller,
+                Some(f.workspace.clone()),
+                0,
+                m::WorkspaceOperation::Inbox {
+                    scope: m::InboxScope::Area {
+                        area_id: area.clone(),
+                    },
+                    read_mode,
+                    after: None,
+                    limit: 100.try_into().unwrap(),
+                },
+            )
+            .await;
+            let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items, .. }) = reply.result
+            else {
+                panic!("{who} inbox: {reply:?}");
+            };
+            // The thread's own creation is also an Open state row; the reopen is
+            // the Open row after the one Resolved row.
+            let states: Vec<_> = items
+                .iter()
+                .filter_map(|item| match item {
+                    m::InboxItem::ThreadStateChanged {
+                        thread_id,
+                        state,
+                        position,
+                        ..
+                    } if *thread_id == thread => Some((*position, *state)),
+                    _ => None,
+                })
+                .collect();
+            let resolved: Vec<_> = states
+                .iter()
+                .filter(|(_, state)| *state == m::ThreadState::Resolved)
+                .map(|(position, _)| *position)
+                .collect();
+            assert_eq!(resolved.len(), 1, "{who} {read_mode:?}: {items:?}");
+            let reopened = states
+                .iter()
+                .filter(|(position, state)| {
+                    *state == m::ThreadState::Open && *position > resolved[0]
+                })
+                .count();
+            assert_eq!(reopened, 1, "{who} {read_mode:?}: {items:?}");
+        }
+    }
+    f.host.close().await;
 }

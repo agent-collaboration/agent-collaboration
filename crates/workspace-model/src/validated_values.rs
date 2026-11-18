@@ -57,6 +57,16 @@ bounded_text!(ResourceName, 1, 256, true, false);
 bounded_text!(SearchQuery, 1, 256, true, false);
 bounded_text!(IssueTitle, 1, 256, true, true);
 bounded_text!(Description, 0, 16 * 1024, false, false);
+/// The UTF-8 byte bound of a workspace description, at the request, the insert
+/// and the directory decode alike.
+pub const WORKSPACE_DESCRIPTION_MAX_BYTES: usize = 2048;
+bounded_text!(
+    WorkspaceDescription,
+    0,
+    WORKSPACE_DESCRIPTION_MAX_BYTES,
+    false,
+    false
+);
 
 /// A description that must hold non-whitespace text: backlog items, areas and
 /// projects. Stored rows cannot deserialize without one.

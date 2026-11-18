@@ -13,7 +13,7 @@ use crate::{
 };
 use central_storage::{GuardedStatement, StoreFailure};
 use workspace_model::{
-    ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
+    ActorIdentityId, Identity, PersonId, RequestId, ResourceName, Timestamp, WorkspaceDescription,
     WorkspaceId, WorkspaceState,
 };
 
@@ -140,7 +140,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .to_owned()
             .try_into()
             .map_err(|_| corrupt("workspace.name"))?;
-        let description: Description = request
+        let description: WorkspaceDescription = request
             .description
             .clone()
             .try_into()
