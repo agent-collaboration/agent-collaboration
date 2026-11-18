@@ -46,9 +46,13 @@ impl CentralStore for ObjectStorage {
 struct ClockHandle(Arc<dyn RuntimeClock>);
 impl Clock for ClockHandle {
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.0.utc_now().timestamp_millis())
+        SyncTime::from_unix_millis(runtime_primitives::Clock::now(self.0.as_ref()).unix_millis())
     }
 }
+
+#[cfg(test)]
+#[path = "workspace_host_test.rs"]
+mod tests;
 #[derive(Clone)]
 pub struct TokioWorkspaceStores {
     root: PathBuf,

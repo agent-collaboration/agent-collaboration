@@ -27,6 +27,7 @@ axum = { workspace = true, features = ["http1", "tokio", "ws", "json"] }
 tokio-util.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
+# Keep the Router clock's timestamp view until its runtime-primitives retrofit.
 runtime-primitives = { workspace = true, features = ["tokio"] }
 thiserror.workspace = true
 tracing.workspace = true

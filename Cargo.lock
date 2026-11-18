@@ -5581,13 +5581,10 @@ name = "runtime-primitives"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "chrono",
- "futures-util",
  "serde",
  "thiserror 2.0.18",
  "tokio",
  "uuid",
- "worker",
 ]
 
 [[package]]
