@@ -30,6 +30,8 @@ pub(super) const LINK_PORT: u16 = 7400;
 pub(super) struct CentralLog {
     pub(super) applied: BTreeMap<String, AppliedWrite>,
     pub(super) replays: usize,
+    /// Each batch central received: when (simulated) and which writes.
+    pub(super) timeline: Vec<(std::time::Duration, Vec<String>)>,
 }
 
 pub(super) struct AppliedWrite {
@@ -76,11 +78,22 @@ async fn serve_one_link(machine: MachineId, log: SharedCentralLog, stream: TcpSt
             Ok(LinkFrame::Data(DataFrame::Request { request })) => {
                 vec![reply(&request, apply(&log, &request))]
             }
-            Ok(LinkFrame::Data(DataFrame::Batch { requests })) => requests
-                .requests()
-                .iter()
-                .map(|request| reply(request, apply(&log, request)))
-                .collect(),
+            Ok(LinkFrame::Data(DataFrame::Batch { requests })) => {
+                let members = requests
+                    .requests()
+                    .iter()
+                    .filter_map(|request| request.payload().write_request_id())
+                    .map(|id| id.as_str().to_owned())
+                    .collect();
+                log.borrow_mut()
+                    .timeline
+                    .push((turmoil::elapsed(), members));
+                requests
+            }
+            .requests()
+            .iter()
+            .map(|request| reply(request, apply(&log, request)))
+            .collect(),
             Ok(_) | Err(_) => return,
         };
         for answer in answers {

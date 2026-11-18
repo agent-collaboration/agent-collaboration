@@ -6,8 +6,8 @@ use super::link_transport::{
     TokenAvailability, TransportFuture,
 };
 use super::{DriverCommand, FlushJitter};
-use crate::MachineLocalStore;
-use crate::outbox_store::{MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError};
+use crate::OutboxStorage;
+use crate::outbox_store::{NewOutboxItem, OutboxInsert, OutboxStoreError};
 use central_link_client::{
     CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEffect, FlushEvent,
     FlushOutcome, FlushOutcomeSink, FlushOutcomes, LinkAdmissionRefusal, LinkClient, MemberOutcome,
@@ -47,7 +47,7 @@ type PendingReply = oneshot::Sender<Result<Vec<PendingWrite>, OutboxStoreError>>
 
 pub(super) struct LinkDriver {
     pub(super) clock: Arc<dyn RuntimeClock>,
-    pub(super) store: Arc<Mutex<MachineLocalStore>>,
+    pub(super) store: Arc<Mutex<dyn OutboxStorage>>,
     pub(super) transport: Arc<dyn LinkTransport>,
     pub(super) tokens: Arc<dyn MachineTokenSource>,
     pub(super) jitter: Arc<dyn FlushJitter>,
@@ -77,7 +77,7 @@ pub(super) struct LinkDriver {
 impl LinkDriver {
     pub(super) fn new(
         clock: Arc<dyn RuntimeClock>,
-        store: Arc<Mutex<MachineLocalStore>>,
+        store: Arc<Mutex<dyn OutboxStorage>>,
         transport: Arc<dyn LinkTransport>,
         tokens: Arc<dyn MachineTokenSource>,
         jitter: Arc<dyn FlushJitter>,
@@ -149,11 +149,26 @@ impl LinkDriver {
         let now = self.clock.now();
         let waiting = {
             let mut store = self.store.lock().await;
-            let mut outbox = MacOutbox::new(&mut store);
-            if let Ok(sent) = outbox.sent_without_answer().await {
-                let _ = outbox.return_unanswered(&sent, now).await;
+            let outbox = &mut *store;
+            // A failed read here must not pass silently: unloaded rows would
+            // wait in the outbox with nothing flushing them.
+            match outbox.sent_without_answer().await {
+                Ok(sent) => {
+                    if let Err(error) = outbox.return_unanswered(&sent, now).await {
+                        tracing::warn!(%error, "outbox restore: returning unanswered writes failed");
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "outbox restore: reading sent writes failed");
+                }
             }
-            outbox.waiting().await.unwrap_or_default()
+            match outbox.waiting().await {
+                Ok(waiting) => waiting,
+                Err(error) => {
+                    tracing::warn!(%error, "outbox restore: reading waiting writes failed; none loaded");
+                    Vec::new()
+                }
+            }
         };
         for (flush_at, request) in waiting {
             self.apply_flush(FlushEvent::Stored { request, flush_at })
@@ -176,10 +191,7 @@ impl LinkDriver {
             // Each flush tick also prunes writes that ended 60 days ago: bodies
             // went at the end, so a kept row is only a receipt.
             let mut store = self.store.lock().await;
-            if let Err(error) = MacOutbox::new(&mut store)
-                .delete_ended_before_retention(now)
-                .await
-            {
+            if let Err(error) = store.delete_ended_before_retention(now).await {
                 tracing::warn!(%error, "outbox retention prune failed; it runs again next flush");
             }
         }
@@ -386,7 +398,7 @@ impl LinkDriver {
                 reply,
             } => {
                 let mut store = self.store.lock().await;
-                let status = MacOutbox::new(&mut store)
+                let status = store
                     .request_status(&caller, &request)
                     .await
                     .unwrap_or(RequestStatus::NotFound);
@@ -409,11 +421,7 @@ impl LinkDriver {
                 reply,
             } => {
                 let mut store = self.store.lock().await;
-                let _ = reply.send(
-                    MacOutbox::new(&mut store)
-                        .outgoing_for(&caller, limit)
-                        .await,
-                );
+                let _ = reply.send(store.outgoing_for(&caller, limit).await);
             }
         }
     }
@@ -432,7 +440,7 @@ impl LinkDriver {
         };
         let inserted = {
             let mut store = self.store.lock().await;
-            MacOutbox::new(&mut store).insert(&item, now).await
+            store.insert(&item, now).await
         };
         match inserted {
             Ok(OutboxInsert::Stored) => {
@@ -517,9 +525,7 @@ impl LinkDriver {
             FlushEffect::RecordOutcome { request, outcome } => {
                 let caller = {
                     let mut store = self.store.lock().await;
-                    let _ = MacOutbox::new(&mut store)
-                        .record_outcome(&request, &outcome, now)
-                        .await;
+                    let _ = store.record_outcome(&request, &outcome, now).await;
                     self.batch_caller(&request)
                 };
                 if let (Some(batch), Some(caller)) = (self.batch.as_mut(), caller) {
@@ -533,9 +539,7 @@ impl LinkDriver {
             }
             FlushEffect::ReturnUnapplied { request } => {
                 let mut store = self.store.lock().await;
-                let _ = MacOutbox::new(&mut store)
-                    .return_unapplied(&request, now)
-                    .await;
+                let _ = store.return_unapplied(&request, now).await;
                 drop(store);
                 if let Some(batch) = self.batch.as_mut() {
                     batch.returned = true;
@@ -544,9 +548,7 @@ impl LinkDriver {
             }
             FlushEffect::ReturnToOutbox { requests } => {
                 let mut store = self.store.lock().await;
-                let _ = MacOutbox::new(&mut store)
-                    .return_unanswered(&requests, now)
-                    .await;
+                let _ = store.return_unanswered(&requests, now).await;
                 drop(store);
                 self.finish_batch(false);
             }
@@ -568,7 +570,7 @@ impl LinkDriver {
         let now = self.clock.now();
         let writes = {
             let mut store = self.store.lock().await;
-            MacOutbox::new(&mut store).mark_sent(requests, now).await
+            store.mark_sent(requests, now).await
         };
         let Ok(writes) = writes else {
             self.apply_flush(FlushEvent::LinkLost).await;
@@ -701,11 +703,11 @@ async fn sleep_until(clock: &dyn RuntimeClock, deadline: Option<ClockInstant>) {
 }
 
 async fn pending_for(
-    store: &Mutex<MachineLocalStore>,
+    store: &Mutex<dyn OutboxStorage>,
     caller: &Caller,
 ) -> Result<Vec<PendingWrite>, OutboxStoreError> {
     let mut store = store.lock().await;
-    MacOutbox::new(&mut store).pending_for(caller).await
+    store.pending_for(caller).await
 }
 
 #[path = "driver_tokens.rs"]

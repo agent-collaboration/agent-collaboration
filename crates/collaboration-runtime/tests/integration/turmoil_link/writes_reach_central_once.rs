@@ -49,8 +49,6 @@ struct Outcome {
     reason = "a harness failure (tempdir, simulation) must fail the test loudly"
 )]
 fn run(seed: u64, plan: RouterPlan, partitions: &[Partition]) -> Outcome {
-    let root = tempfile::tempdir().unwrap();
-    let store_path = root.path().join("machine_local.sqlite");
     let central_log: SharedCentralLog = Rc::new(RefCell::new(CentralLog::default()));
     let report: SharedRouterReport = Rc::new(RefCell::new(RouterReport::default()));
     let mut sim = turmoil::Builder::new()
@@ -66,7 +64,7 @@ fn run(seed: u64, plan: RouterPlan, partitions: &[Partition]) -> Outcome {
         serve_central(INSTALLATION.parse().unwrap(), Rc::clone(&central))
     });
     let router_report = Rc::clone(&report);
-    sim.client(ROUTER_HOST, run_router(store_path, plan, router_report));
+    sim.client(ROUTER_HOST, run_router(plan, router_report));
     let mut partitioned_until: Option<(Duration, Cut)> = None;
     let mut pending: Vec<Partition> = partitions.to_vec();
     pending.sort_by_key(|partition| partition.at);
@@ -220,4 +218,29 @@ fn seeded_fault_schedules_never_lose_or_double_a_write() {
             &format!("seed {seed}: {plan:?} partitions {partitions:?}"),
         );
     }
+}
+
+#[test]
+fn the_same_seed_gives_the_same_timeline_twice() {
+    let plan = RouterPlan {
+        posts_at: vec![
+            Duration::from_secs(5),
+            Duration::from_secs(50),
+            Duration::from_secs(130),
+        ],
+        restart_at: Some(Duration::from_secs(100)),
+        answers_by: Duration::from_secs(20 * 60),
+    };
+    let partitions = [Partition {
+        at: Duration::from_secs(59),
+        lasting: Duration::from_secs(40),
+        cut: Cut::AnswersLost,
+    }];
+
+    let first = run(11, plan.clone(), &partitions);
+    let second = run(11, plan, &partitions);
+
+    assert!(!first.central.timeline.is_empty());
+    assert_eq!(first.central.timeline, second.central.timeline);
+    assert_eq!(first.router.statuses, second.router.statuses);
 }

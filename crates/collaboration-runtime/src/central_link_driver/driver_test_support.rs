@@ -1,6 +1,16 @@
 //! Test harness for the link driver: a scripted central over an in-memory
 //! socket, a scripted token source, no jitter and a recording outcome sink.
 use super::*;
+use crate::{MachineLocalOutbox, MachineLocalStore, MachineLocalStoreError};
+
+/// machine_local.sqlite opened as the driver's outbox.
+pub(crate) async fn open_outbox(
+    path: &std::path::Path,
+) -> Result<MachineLocalOutbox, MachineLocalStoreError> {
+    Ok(MachineLocalOutbox::new(
+        MachineLocalStore::open(path).await?,
+    ))
+}
 use central_link_client::{FlushOutcomes, LinkCalls};
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, MachineTokenText, ReplyPayload, TokenRenewalResult,
@@ -220,7 +230,7 @@ pub(crate) struct Harness {
     pub(crate) connections: mpsc::UnboundedReceiver<CentralEnd>,
     pub(crate) outcomes: Arc<RecordedOutcomes>,
     pub(crate) tokens: Arc<ScriptedTokens>,
-    pub(crate) store: Arc<Mutex<MachineLocalStore>>,
+    pub(crate) store: Arc<Mutex<MachineLocalOutbox>>,
     pub(crate) stop: CancellationToken,
     pub(crate) tasks: TaskTracker,
     _root: tempfile::TempDir,
@@ -229,7 +239,7 @@ pub(crate) struct Harness {
 impl Harness {
     pub(crate) async fn start(root: tempfile::TempDir, clock: Arc<ManualClock>) -> Self {
         let store = Arc::new(Mutex::new(
-            MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+            open_outbox(&root.path().join("machine_local.sqlite"))
                 .await
                 .unwrap(),
         ));
@@ -239,7 +249,7 @@ impl Harness {
     pub(crate) fn start_on(
         root: tempfile::TempDir,
         clock: Arc<ManualClock>,
-        store: Arc<Mutex<MachineLocalStore>>,
+        store: Arc<Mutex<MachineLocalOutbox>>,
     ) -> Self {
         let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
         Self::launch(root, clock, store, ready)
@@ -252,7 +262,7 @@ impl Harness {
         availability: TokenAvailability,
     ) -> Self {
         let store = Arc::new(Mutex::new(
-            MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+            open_outbox(&root.path().join("machine_local.sqlite"))
                 .await
                 .unwrap(),
         ));
@@ -262,7 +272,7 @@ impl Harness {
     fn launch(
         root: tempfile::TempDir,
         clock: Arc<ManualClock>,
-        store: Arc<Mutex<MachineLocalStore>>,
+        store: Arc<Mutex<MachineLocalOutbox>>,
         availability: TokenAvailability,
     ) -> Self {
         let (sender, connections) = mpsc::unbounded_channel();
@@ -274,7 +284,7 @@ impl Harness {
             CentralLinkParts {
                 installation: INSTALLATION.parse().unwrap(),
                 clock: clock.clone(),
-                store: store.clone(),
+                store: store.clone() as Arc<Mutex<dyn OutboxStorage>>,
                 transport: Arc::new(ChannelTransport {
                     connections: sender,
                 }),

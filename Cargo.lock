@@ -2153,6 +2153,7 @@ dependencies = [
  "collaboration-contracts",
  "collaboration-mail-protocol",
  "collaboration-protocol",
+ "collaboration-runtime",
  "durable-steps",
  "fleet-admission",
  "fleet-sync-delivery",

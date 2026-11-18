@@ -2,7 +2,7 @@
 //! refuses immediate calls and keeps outbox writes waiting.
 use super::*;
 use crate::central_link_driver::driver_test_support::{
-    MARK, caller, clock_at, list_areas, thread_post, uuid_v7,
+    MARK, caller, clock_at, list_areas, open_outbox, thread_post, uuid_v7,
 };
 use central_link_client::{
     LinkCalls, LinkStatus, PendingWriteState, RefusalReason, Submission, SubmitRefusal,
@@ -12,7 +12,7 @@ use central_link_client::{
 async fn an_unconfigured_link_reports_not_enrolled_and_keeps_outbox_writes_waiting() {
     let root = tempfile::tempdir().unwrap();
     let store = Arc::new(Mutex::new(
-        MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+        open_outbox(&root.path().join("machine_local.sqlite"))
             .await
             .unwrap(),
     ));

@@ -21,7 +21,7 @@ pub use link_transport::{
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
 
-use crate::MachineLocalStore;
+use crate::OutboxStorage;
 use crate::outbox_store::OutboxStoreError;
 use central_link_client::{
     FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, LinkStatus, OutgoingWrite,
@@ -96,7 +96,7 @@ pub(crate) enum DriverCommand {
 pub struct CentralLinkParts {
     pub installation: MachineId,
     pub clock: Arc<dyn RuntimeClock>,
-    pub store: Arc<Mutex<MachineLocalStore>>,
+    pub store: Arc<Mutex<dyn OutboxStorage>>,
     pub transport: Arc<dyn LinkTransport>,
     pub tokens: Arc<dyn MachineTokenSource>,
     pub jitter: Arc<dyn FlushJitter>,

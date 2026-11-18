@@ -127,14 +127,14 @@ async fn a_restart_resends_writes_that_were_sent_without_an_answer() {
     let root = tempfile::tempdir().unwrap();
     let clock = clock_at(MARK - 20_000);
     let store = Arc::new(Mutex::new(
-        MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+        open_outbox(&root.path().join("machine_local.sqlite"))
             .await
             .unwrap(),
     ));
     let id = uuid_v7(3);
     {
         let mut locked = store.lock().await;
-        let mut outbox = MacOutbox::new(&mut locked);
+        let mut outbox = MacOutbox::new(locked.store_mut());
         let item = NewOutboxItem {
             request: id.parse().unwrap(),
             caller: caller(),
@@ -229,7 +229,7 @@ async fn a_machine_revoked_answer_returns_the_write_unsent_and_the_next_mark_res
 async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
     let root = tempfile::tempdir().unwrap();
     let store = Arc::new(Mutex::new(
-        MachineLocalStore::open(&root.path().join("machine_local.sqlite"))
+        open_outbox(&root.path().join("machine_local.sqlite"))
             .await
             .unwrap(),
     ));
@@ -237,7 +237,7 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
     let old = uuid_v7(5);
     {
         let mut locked = store.lock().await;
-        let mut outbox = MacOutbox::new(&mut locked);
+        let mut outbox = MacOutbox::new(locked.store_mut());
         let item = NewOutboxItem {
             request: old.parse().unwrap(),
             caller: caller(),

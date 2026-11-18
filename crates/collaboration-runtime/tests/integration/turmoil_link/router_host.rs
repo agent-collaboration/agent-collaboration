@@ -9,12 +9,12 @@ use super::{
 use central_link_client::{FlushOutcomeSink, FlushOutcomes, LinkCalls, RequestStatus, Submission};
 use central_link_protocol::{RequestPayload, TokenRenewalResult};
 use collaboration_runtime::{
-    CentralLinkParts, FlushJitter, MachineLocalStore, MachineTokenSource, RouterLinkCalls,
-    TokenAvailability, TransportFuture,
+    CentralLinkParts, FlushJitter, MachineTokenSource, MemoryOutbox, OutboxStorage,
+    RouterLinkCalls, TokenAvailability, TransportFuture,
 };
 use router_clock::RuntimeClock;
 use runtime_primitives::SyncTime;
-use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use workspace_model::{Caller, MachineId, SessionAddress, WorkspaceOperation, WorkspaceRequest};
@@ -100,7 +100,7 @@ struct RunningLink {
     stop: CancellationToken,
 }
 
-fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<MachineLocalStore>>) -> RunningLink {
+fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<dyn OutboxStorage>>) -> RunningLink {
     let tasks = TaskTracker::new();
     let stop = CancellationToken::new();
     let calls = RouterLinkCalls::start(
@@ -131,13 +131,12 @@ impl RunningLink {
 }
 
 /// Host software for "router".
-pub(super) async fn run_router(
-    store_path: PathBuf,
-    plan: RouterPlan,
-    report: SharedRouterReport,
-) -> turmoil::Result {
+pub(super) async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil::Result {
     let clock: Arc<dyn RuntimeClock> = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
-    let store = Arc::new(Mutex::new(MachineLocalStore::open(&store_path).await?));
+    // In memory, so a store call never leaves the simulated host (Lead A's
+    // call): sqlx-sqlite's worker thread turned real I/O latency into
+    // simulated time. The shared contract suite holds it to the real store.
+    let store: Arc<Mutex<dyn OutboxStorage>> = Arc::new(Mutex::new(MemoryOutbox::new()));
     let mut link = start_link(clock.clone(), store.clone());
     let mut restarted = false;
     let started = clock.monotonic_now();

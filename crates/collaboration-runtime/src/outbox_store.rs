@@ -123,7 +123,7 @@ struct OutgoingRow {
 }
 
 /// Answered writes are kept this long after their answer, then deleted.
-const ANSWERED_RETENTION_MILLIS: i64 = 60 * 24 * 60 * 60 * 1000;
+pub(crate) const ANSWERED_RETENTION_MILLIS: i64 = 60 * 24 * 60 * 60 * 1000;
 
 /// The outbox table, borrowed from the machine-local store whose
 /// connection and signalled transactions it uses.
@@ -690,7 +690,7 @@ fn outbox_content(
 }
 
 /// The digest central's request log keys this write's content by.
-fn payload_content_digest(payload: &RequestPayload) -> Result<String, OutboxStoreError> {
+pub(crate) fn payload_content_digest(payload: &RequestPayload) -> Result<String, OutboxStoreError> {
     let digest = match payload {
         RequestPayload::Workspace(request) => operation_content_digest(&request.operation),
         RequestPayload::Mail(request) => operation_content_digest(&request.operation),

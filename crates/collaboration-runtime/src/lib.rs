@@ -37,7 +37,13 @@ pub use codex_conversation_operation_recorder::{
 mod central_link_driver;
 mod machine_local_store;
 pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
+mod outbox_storage;
+#[cfg(test)]
+mod outbox_storage_contract;
 mod outbox_store;
+pub use outbox_storage::{MachineLocalOutbox, OutboxFuture, OutboxStorage};
+#[cfg(feature = "test-support")]
+mod memory_outbox;
 pub use central_link_driver::{
     AUTHORITY_LAPSED_CLOSE,
     CentralLinkParts,
@@ -63,6 +69,8 @@ pub use central_link_driver::{
     open_installation_link,
     start_installation_link,
 };
+#[cfg(feature = "test-support")]
+pub use memory_outbox::MemoryOutbox;
 mod provider_session_event_hub;
 mod provider_session_record;
 pub use outbox_store::{

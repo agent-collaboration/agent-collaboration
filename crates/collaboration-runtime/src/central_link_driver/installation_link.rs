@@ -8,7 +8,7 @@ use super::{
     CentralLinkParts, InstallationFlushJitter, LinkSocket, LinkTransport, LinkTransportError,
     MachineTokenSource, RouterLinkCalls, TokenAvailability, TransportFuture,
 };
-use crate::MachineLocalStore;
+use crate::{MachineLocalStore, OutboxStorage};
 use central_link_client::{FlushOutcomeSink, FlushOutcomes};
 use central_link_protocol::{MachineTokenText, TokenRenewalResult};
 use router_clock::RuntimeClock;
@@ -36,7 +36,8 @@ pub async fn open_installation_link(
 ) -> Option<RouterLinkCalls> {
     let path = state_directory.join(crate::MACHINE_LOCAL_DATABASE);
     let store = match MachineLocalStore::open(&path).await {
-        Ok(store) => Arc::new(Mutex::new(store)),
+        Ok(store) => Arc::new(Mutex::new(crate::MachineLocalOutbox::new(store)))
+            as Arc<Mutex<dyn OutboxStorage>>,
         Err(error) => {
             tracing::warn!(%error, "central link not started: machine-local storage unavailable");
             return None;
@@ -50,7 +51,7 @@ pub async fn open_installation_link(
 pub fn start_installation_link(
     installation: &fleet_sync_protocol::PeerId,
     clock: Arc<dyn RuntimeClock>,
-    store: Arc<Mutex<MachineLocalStore>>,
+    store: Arc<Mutex<dyn OutboxStorage>>,
     configured: Option<ConfiguredCentralLink>,
     tasks: &TaskTracker,
     stop: CancellationToken,
