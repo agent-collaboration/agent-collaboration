@@ -6,7 +6,7 @@ use crate::outbox_deadline::{DepartureAtDeadline, end_reason, expires_at_ms};
 use crate::outbox_storage::{OutboxFuture, OutboxStorage};
 use crate::outbox_store::{
     ANSWERED_RETENTION_MILLIS, ClaimedBatch, NewOutboxItem, OutboxInsert, OutboxStoreError,
-    StoredOutboxWrite, payload_content_digest,
+    StoredOutboxWrite, payload_content_digest, with_send_time,
 };
 use central_link_client::{
     EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
@@ -371,7 +371,7 @@ impl OutboxStorage for MemoryOutbox {
                 writes.push(StoredOutboxWrite {
                     request: request.clone(),
                     caller: row.caller.clone(),
-                    payload,
+                    payload: with_send_time(payload, row.created_at)?,
                 });
             }
             Ok(writes)

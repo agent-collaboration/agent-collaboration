@@ -4,12 +4,12 @@ use crate::{
     pending_calls::{PendingCalls, ReplyDisposition},
 };
 use central_link_protocol::{
-    CorrelationId, DataFrame, LinkFrame, LinkRequest, MessageOutcome, ReplyPayload, RequestPayload,
-    SendId, TokenRenewalResult,
+    CorrelationId, DataFrame, LinkFrame, LinkRequest, ReplyPayload, RequestPayload,
+    TokenRenewalResult,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
-use workspace_model::{Caller, MachineId, MessageId, RequestId, central_mail::MessageRecord};
+use workspace_model::{Caller, MachineId, central_mail::MessageRecord};
 
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 const CALL_DEADLINE: Duration = Duration::from_secs(30);
@@ -77,15 +77,9 @@ pub enum ClientEvent {
     LateReply {
         correlation_id: CorrelationId,
     },
+    /// A message central delivered to this Router (2c); repeats are safe.
     Deliver {
         message: MessageRecord,
-        send_id: SendId,
-    },
-    /// How a direct message this Router sent ended (2c).
-    MessageOutcome {
-        request_id: RequestId,
-        message_id: MessageId,
-        outcome: MessageOutcome,
     },
     /// Central's answer to a RenewMachineToken the Host sent.
     TokenRenewal {
@@ -264,19 +258,9 @@ impl LinkClient {
                 }),
                 ReplyDisposition::AlreadyResolved => Ok(ClientEvent::LateReply { correlation_id }),
             },
-            LinkFrame::Data(DataFrame::Deliver { message, send_id }) => Ok(ClientEvent::Deliver {
-                message: *message,
-                send_id,
-            }),
-            LinkFrame::Data(DataFrame::MessageOutcome {
-                request_id,
-                message_id,
-                outcome,
-            }) => Ok(ClientEvent::MessageOutcome {
-                request_id,
-                message_id,
-                outcome,
-            }),
+            LinkFrame::Data(DataFrame::Deliver { message }) => {
+                Ok(ClientEvent::Deliver { message: *message })
+            }
             // The Host owns renewal correlation (it sent the frame); the client
             // only surfaces central's answer.
             LinkFrame::Data(DataFrame::MachineTokenRenewal {

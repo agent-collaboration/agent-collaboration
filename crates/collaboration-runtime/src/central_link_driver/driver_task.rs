@@ -284,10 +284,7 @@ impl LinkDriver {
                 correlation_id,
                 result,
             } => self.renewal_answered(&correlation_id, &result),
-            ClientEvent::Pong
-            | ClientEvent::LateReply { .. }
-            | ClientEvent::Deliver { .. }
-            | ClientEvent::MessageOutcome { .. } => {}
+            ClientEvent::Pong | ClientEvent::LateReply { .. } | ClientEvent::Deliver { .. } => {}
         }
     }
 

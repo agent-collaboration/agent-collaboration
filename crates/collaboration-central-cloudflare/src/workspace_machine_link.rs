@@ -98,7 +98,6 @@ impl CentralObject {
                 DataFrame::Welcome { .. }
                 | DataFrame::Reply { .. }
                 | DataFrame::Deliver { .. }
-                | DataFrame::MessageOutcome { .. }
                 | DataFrame::Ack { .. }
                 | DataFrame::MachineTokenRenewal { .. },
             ) => return close(&socket, "unsupported link event"),

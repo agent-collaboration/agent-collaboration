@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "UPDATE outbox_items\n           SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?\n           WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?\n           RETURNING request_id AS \"request_id!\", caller_json, payload_json,\n                     item_state, flush_at_ms, outcome_json",
+  "query": "UPDATE outbox_items\n           SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?\n           WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?\n           RETURNING request_id AS \"request_id!\", caller_json, payload_json,\n                     item_state, flush_at_ms, outcome_json, created_at",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "outcome_json"
           }
         }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "created_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +90,9 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "e7bd43df9b42d1c0dd56b7bdf8428a703c8f825c0f33879f2f3f01c3f2badebb"
+  "hash": "a86b1aa8f9a0db73167a338a7b7d6707678349086a98d12ab9eab103594bc25d"
 }

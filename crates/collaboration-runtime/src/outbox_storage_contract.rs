@@ -577,6 +577,67 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
     );
     assert!(store.sent_without_answer().await.unwrap() == ids(&[&fresh]));
 }
+/// A direct message goes out with its row's creation stamp as sent_at,
+/// whatever the submitter wrote, and every replay carries the same value
+/// (design 2026-11-17); a thread post is sent exactly as stored.
+pub(crate) async fn a_direct_message_goes_out_with_its_creation_stamp_as_sent_at(
+    store: &mut dyn OutboxStorage,
+) {
+    let stored_at = MARK - 7_000;
+    let direct = message(90, "stamped", MARK);
+    let post = item(91, "as stored", MARK);
+    store.insert(&direct, at(stored_at)).await.unwrap();
+    store.insert(&post, at(stored_at)).await.unwrap();
+
+    let first = store
+        .claim_next_batch(at(MARK), 64, at(MARK))
+        .await
+        .unwrap()
+        .writes;
+    store
+        .return_unanswered(&ids(&[&direct, &post]), at(MARK + 1_000))
+        .await
+        .unwrap();
+    let replay = store
+        .claim_next_batch(at(MARK + 60_000), 64, at(MARK + 60_000))
+        .await
+        .unwrap()
+        .writes;
+
+    let sent_at = |writes: &[crate::outbox_store::StoredOutboxWrite]| {
+        writes
+            .iter()
+            .find(|write| write.request == direct.request)
+            .map(|write| match &write.payload {
+                RequestPayload::Mail(request) => match &request.operation {
+                    workspace_model::central_mail::CentralMailOperation::SendMessage {
+                        sent_at,
+                        ..
+                    } => sent_at.timestamp_millis(),
+                    other => panic!("not a direct message: {other:?}"),
+                },
+                RequestPayload::Workspace(_) => panic!("not a direct message"),
+            })
+    };
+    assert_eq!(
+        sent_at(&first),
+        Some(stored_at),
+        "the creation stamp, not the submitter's"
+    );
+    assert_eq!(
+        sent_at(&replay),
+        Some(stored_at),
+        "the replay carries the same value"
+    );
+    for writes in [&first, &replay] {
+        let sent_post = writes
+            .iter()
+            .find(|write| write.request == post.request)
+            .unwrap();
+        assert_eq!(sent_post.payload, post.payload);
+    }
+}
+
 /// Runs every contract case on fresh stores from `open`.
 macro_rules! outbox_storage_contract {
     ($open:expr) => {
@@ -626,6 +687,14 @@ macro_rules! outbox_storage_contract {
         async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason() {
             let (_root, mut store) = $open.await;
             crate::outbox_storage_contract::an_overdue_write_is_never_claimed_and_ends_with_its_reason(
+                &mut store,
+            )
+            .await;
+        }
+        #[tokio::test]
+        async fn a_direct_message_goes_out_with_its_creation_stamp_as_sent_at() {
+            let (_root, mut store) = $open.await;
+            crate::outbox_storage_contract::a_direct_message_goes_out_with_its_creation_stamp_as_sent_at(
                 &mut store,
             )
             .await;

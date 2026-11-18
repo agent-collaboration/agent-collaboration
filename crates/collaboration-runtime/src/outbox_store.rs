@@ -71,6 +71,34 @@ struct OutboxRow {
     outcome_json: Option<String>,
 }
 
+/// The row put on the wire, with its creation stamp: a direct message's
+/// sent_at.
+struct OnTheWireRow {
+    request_id: String,
+    caller_json: String,
+    payload_json: String,
+    item_state: String,
+    flush_at_ms: i64,
+    outcome_json: Option<String>,
+    created_at: i64,
+}
+
+impl OnTheWireRow {
+    fn split(self) -> (OutboxRow, i64) {
+        (
+            OutboxRow {
+                request_id: self.request_id,
+                caller_json: self.caller_json,
+                payload_json: self.payload_json,
+                item_state: self.item_state,
+                flush_at_ms: self.flush_at_ms,
+                outcome_json: self.outcome_json,
+            },
+            self.created_at,
+        )
+    }
+}
+
 struct OutgoingRow {
     request_id: String,
     caller_json: String,
@@ -398,12 +426,13 @@ impl<'store> MacOutbox<'store> {
         let mut writes = Vec::with_capacity(requests.len());
         for request in requests {
             let request_id = request.as_str();
-            let row = put_on_the_wire(&mut transaction, request_id, now_ms)
+            let (row, created_at) = put_on_the_wire(&mut transaction, request_id, now_ms)
                 .await?
                 .ok_or_else(|| OutboxStoreError::UnexpectedState {
                     request: request.clone(),
                     expected: "in the outbox before its deadline",
-                })?;
+                })?
+                .split();
             let stored = decode_row(&row)?;
             let StoredPayload::Unanswered(payload) = stored.payload else {
                 return Err(corrupt_row(request_id, "payload_json"));
@@ -411,7 +440,7 @@ impl<'store> MacOutbox<'store> {
             writes.push(StoredOutboxWrite {
                 request: request.clone(),
                 caller: stored.caller,
-                payload,
+                payload: with_send_time(payload, created_at)?,
             });
         }
         transaction.commit().await?;
@@ -451,9 +480,10 @@ impl<'store> MacOutbox<'store> {
         .await?;
         let mut writes = Vec::with_capacity(due.len());
         for request_id in &due {
-            let row = put_on_the_wire(&mut transaction, request_id, now_ms)
+            let (row, created_at) = put_on_the_wire(&mut transaction, request_id, now_ms)
                 .await?
-                .ok_or_else(|| corrupt_row(request_id, "item_state"))?;
+                .ok_or_else(|| corrupt_row(request_id, "item_state"))?
+                .split();
             let stored = decode_row(&row)?;
             let StoredPayload::Unanswered(payload) = stored.payload else {
                 return Err(corrupt_row(request_id, "payload_json"));
@@ -461,7 +491,7 @@ impl<'store> MacOutbox<'store> {
             writes.push(StoredOutboxWrite {
                 request: parse_request_id(request_id)?,
                 caller: stored.caller,
-                payload,
+                payload: with_send_time(payload, created_at)?,
             });
         }
         transaction.commit().await?;
@@ -913,18 +943,18 @@ async fn put_on_the_wire(
     transaction: &mut sqlx::SqliteConnection,
     request_id: &str,
     now_ms: i64,
-) -> Result<Option<OutboxRow>, OutboxStoreError> {
+) -> Result<Option<OnTheWireRow>, OutboxStoreError> {
     let unsent = OutboxItemState::InOutbox.as_str();
     let answer_lost = OutboxItemState::SentAnswerLost.as_str();
     let sent = OutboxItemState::Sent.as_str();
     let resent = OutboxItemState::Resent.as_str();
     Ok(sqlx::query_as!(
-        OutboxRow,
+        OnTheWireRow,
         r#"UPDATE outbox_items
            SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?
            WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?
            RETURNING request_id AS "request_id!", caller_json, payload_json,
-                     item_state, flush_at_ms, outcome_json"#,
+                     item_state, flush_at_ms, outcome_json, created_at"#,
         unsent,
         sent,
         resent,
@@ -936,4 +966,26 @@ async fn put_on_the_wire(
     )
     .fetch_optional(&mut *transaction)
     .await?)
+}
+
+/// A direct message goes out with its outbox row's creation stamp as
+/// sent_at, the agent's send time on this Mac's clock (design 2026-11-17),
+/// so central's cancel mark counts from when the agent sent it and every
+/// replay carries the same value. Other writes are unchanged.
+pub(crate) fn with_send_time(
+    mut payload: RequestPayload,
+    created_at_ms: i64,
+) -> Result<RequestPayload, OutboxStoreError> {
+    if let RequestPayload::Mail(request) = &mut payload
+        && let workspace_model::central_mail::CentralMailOperation::SendMessage { sent_at, .. } =
+            &mut request.operation
+    {
+        *sent_at = chrono::DateTime::from_timestamp_millis(created_at_ms).ok_or_else(|| {
+            OutboxStoreError::CorruptItem {
+                request_id: request.request_id.as_str().to_owned(),
+                field: "created_at",
+            }
+        })?;
+    }
+    Ok(payload)
 }

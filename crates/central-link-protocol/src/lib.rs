@@ -5,9 +5,7 @@ mod link_renewal;
 mod link_request;
 
 pub use link_codec::{DataFrame, FrameDirection, LinkFrame, decode_text, encode_text};
-pub use link_delivery::{
-    DeliveryAnswer, MessageCancellation, MessageOutcome, MessageRefusal, SendId,
-};
+pub use link_delivery::{DeliveryAnswer, MessageCancellation, MessageOutcome, MessageRefusal};
 pub use link_renewal::{
     InvalidMachineToken, MachineTokenText, TokenRenewalRefusal, TokenRenewalResult,
 };
