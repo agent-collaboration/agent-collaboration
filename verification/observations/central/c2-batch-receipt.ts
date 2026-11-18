@@ -102,7 +102,7 @@ function assertBatchFrames(receipt: C2BatchReceipt): void {
       .object({
         kind: z.literal("createArea"),
         name: z.string().min(1),
-        description: z.string().trim().min(1),
+        description: z.string().refine((text) => text.trim().length > 0),
       })
       .strict()
       .parse(member.payload.request.operation);
@@ -139,6 +139,7 @@ function assertBatchFrames(receipt: C2BatchReceipt): void {
       workspace,
       areaId: area.areaId,
       name: area.name,
+      description: operation.description,
     });
     correlations.push(readRequest.request.correlationId);
   }

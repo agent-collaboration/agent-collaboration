@@ -207,7 +207,10 @@ function validReceipt(): C2BatchReceipt {
       assert.ok(correlationId !== undefined);
       return reply(correlationId, {
         kind: "item",
-        item: { kind: "area", item: { ...area, workspaceId: workspace, state: "open" } },
+        item: {
+          kind: "area",
+          item: { ...area, workspaceId: workspace, description: "Test description", state: "open" },
+        },
       });
     }),
     beforeEvents: witnesses.before,
