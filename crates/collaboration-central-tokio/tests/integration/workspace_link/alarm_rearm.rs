@@ -64,6 +64,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
             workspace_id: None,
             operation: WorkspaceOperation::CreateWorkspace {
                 name: "Warm alarm workspace".to_owned().try_into()?,
+                description: None,
             },
         }),
     )
@@ -265,6 +266,7 @@ async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) 
             workspace_id: None,
             operation: WorkspaceOperation::CreateWorkspace {
                 name: "Nonfatal alarm workspace".to_owned().try_into()?,
+                description: None,
             },
         }),
     )

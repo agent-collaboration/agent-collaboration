@@ -266,6 +266,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         7230,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Second workspace"),
+            description: None,
         },
     )
     .await;

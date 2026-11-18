@@ -163,7 +163,7 @@ async fn areas_and_projects_require_a_description_that_is_never_blank() {
             1105,
             m::WorkspaceOperation::UpdateArea {
                 area_id: area.clone(),
-                name: name("Described area"),
+                name: Some(name("Described area")),
                 description: Some(text_value(" ")),
             },
         )
@@ -176,7 +176,7 @@ async fn areas_and_projects_require_a_description_that_is_never_blank() {
             1106,
             m::WorkspaceOperation::UpdateProject {
                 project_id: project.clone(),
-                title: name("Described project"),
+                title: Some(name("Described project")),
                 description: Some(text_value("")),
             },
         )
@@ -202,7 +202,7 @@ async fn areas_and_projects_require_a_description_that_is_never_blank() {
             request,
             m::WorkspaceOperation::UpdateArea {
                 area_id: area.clone(),
-                name: name("Renamed area"),
+                name: Some(name("Renamed area")),
                 description,
             },
         )
@@ -216,7 +216,7 @@ async fn areas_and_projects_require_a_description_that_is_never_blank() {
             request,
             m::WorkspaceOperation::UpdateProject {
                 project_id: project.clone(),
-                title: name("Renamed project"),
+                title: Some(name("Renamed project")),
                 description,
             },
         )
@@ -241,7 +241,7 @@ async fn a_rename_without_a_description_keeps_the_stored_one() {
         1122,
         m::WorkspaceOperation::UpdateProject {
             project_id: project.clone(),
-            title: name("Renamed only"),
+            title: Some(name("Renamed only")),
             description: None,
         },
     )

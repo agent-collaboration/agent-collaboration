@@ -173,6 +173,7 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
         workspace_id: None,
         operation: workspace_model::WorkspaceOperation::CreateWorkspace {
             name: name.to_owned().try_into().unwrap(),
+            description: None,
         },
     };
     let created = f

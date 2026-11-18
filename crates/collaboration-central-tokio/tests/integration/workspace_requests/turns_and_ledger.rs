@@ -261,6 +261,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     let original = f.call(360, area.clone()).await;
     let central = m::WorkspaceOperation::CreateWorkspace {
         name: name("Same central content"),
+        description: None,
     };
     let original_central = call(&f.host, &f.caller, None, 361, central.clone()).await;
     assert_eq!(

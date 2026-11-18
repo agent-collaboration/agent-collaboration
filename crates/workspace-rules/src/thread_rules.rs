@@ -76,16 +76,27 @@ pub fn change_thread(
         | ThreadCommand::LeaveThread { thread_id }
         | ThreadCommand::SetNotifications { thread_id, .. }
         | ThreadCommand::ThreadPost { thread_id, .. }
-        | ThreadCommand::ResolveThread { thread_id, .. } => thread_id,
+        | ThreadCommand::ResolveThread { thread_id, .. }
+        | ThreadCommand::ReopenThread { thread_id } => thread_id,
     };
     let thread = reads
         .thread
         .filter(|row| row.thread_id == *thread_id)
         .ok_or_else(|| not_found(ItemRef::Thread(thread_id.clone())))?;
-    if thread.state == ThreadState::Resolved {
-        return Err(RefusalReason::ThreadResolved {
-            thread_id: thread_id.clone(),
-        });
+    // Only a reopen acts on a resolved thread, and a reopen acts on nothing else.
+    match (command, &thread.state) {
+        (ThreadCommand::ReopenThread { .. }, ThreadState::Open) => {
+            return Err(RefusalReason::ThreadOpen {
+                thread_id: thread_id.clone(),
+            });
+        }
+        (ThreadCommand::ReopenThread { .. }, ThreadState::Resolved) => {}
+        (_, ThreadState::Resolved) => {
+            return Err(RefusalReason::ThreadResolved {
+                thread_id: thread_id.clone(),
+            });
+        }
+        (_, ThreadState::Open) => {}
     }
     let current = reads.caller_member.filter(|row| {
         row.thread_id == *thread_id
@@ -122,6 +133,22 @@ pub fn change_thread(
                 "resolved",
                 None,
                 statements,
+            )
+        }
+        ThreadCommand::ReopenThread { .. } => {
+            if thread.creator != context.actor {
+                return Err(RefusalReason::NotCreator {
+                    creator: thread.creator.clone(),
+                });
+            }
+            (
+                ItemRef::Thread(thread_id.clone()),
+                "reopened",
+                None,
+                vec![exact(
+                    "UPDATE threads SET state='open',updated_at=? WHERE thread_id=? AND creator=? AND state='resolved'",
+                    vec![now(), text(thread_id), text(&context.actor)],
+                )],
             )
         }
         ThreadCommand::JoinThread {

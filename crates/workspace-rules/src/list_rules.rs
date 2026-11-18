@@ -193,7 +193,8 @@ fn selects(query: &ListQuery, item: &ItemView, reads: &ListReads<'_>) -> bool {
             ItemView::Area(row) => {
                 matches!(item_kind, SearchableKind::All | SearchableKind::Area)
                     && (*include_archived || row.state == AreaState::Open)
-                    && contains_text(row.name.as_str(), text)
+                    && (contains_text(row.name.as_str(), text)
+                        || contains_text(row.description.as_str(), text))
             }
             ItemView::Initiative(row) => {
                 matches!(item_kind, SearchableKind::All | SearchableKind::Initiative)
@@ -202,7 +203,8 @@ fn selects(query: &ListQuery, item: &ItemView, reads: &ListReads<'_>) -> bool {
             }
             ItemView::Project(row) => {
                 matches!(item_kind, SearchableKind::All | SearchableKind::Project)
-                    && contains_text(row.title.as_str(), text)
+                    && (contains_text(row.title.as_str(), text)
+                        || contains_text(row.description.as_str(), text))
             }
             _ => false,
         },

@@ -451,6 +451,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         10,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("After expiry"),
+            description: None,
         },
     )
     .await;
@@ -489,6 +490,7 @@ mod turns_and_ledger;
 mod workspace_boundaries;
 
 mod contract_additions;
+mod contract_slice_two;
 mod relation_positions;
 
 mod admission_negatives;

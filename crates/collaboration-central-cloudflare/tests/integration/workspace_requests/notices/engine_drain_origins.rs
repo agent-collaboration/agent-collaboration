@@ -23,6 +23,7 @@ async fn second_workspace(f: &Fixture, request: u32) -> m::WorkspaceId {
         request,
         m::WorkspaceOperation::CreateWorkspace {
             name: name(&format!("Origin workspace {request}")),
+            description: None,
         },
     )
     .await;

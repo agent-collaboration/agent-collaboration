@@ -29,6 +29,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
         2104,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Other workspace"),
+            description: None,
         },
     )
     .await

@@ -26,6 +26,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
         9901,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Late failing workspace"),
+            description: None,
         },
     )
     .await;

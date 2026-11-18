@@ -13,6 +13,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
         801,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Other workspace"),
+            description: None,
         },
     )
     .await;

@@ -38,6 +38,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         41005,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Second cadence workspace"),
+            description: None,
         },
     )
     .await;

@@ -173,6 +173,7 @@ pub enum ChangeEvent {
     Removed,
     Posted,
     Resolved,
+    Reopened,
     Redacted,
     StateChanged,
     Joined {

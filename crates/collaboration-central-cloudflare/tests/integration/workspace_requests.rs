@@ -146,7 +146,8 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
             None,
             10,
             m::WorkspaceOperation::CreateWorkspace {
-                name: name("Denied")
+                name: name("Denied"),
+                description: None,
             }
         )
         .await
@@ -436,6 +437,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         10,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("After expiry"),
+            description: None,
         },
     )
     .await;
@@ -475,6 +477,7 @@ mod migrations_and_loss;
 mod turns_and_ledger;
 
 mod contract_additions;
+mod contract_slice_two;
 mod relation_positions;
 
 mod admission_negatives;

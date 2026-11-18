@@ -174,7 +174,7 @@ fn inbox_item(
                 }
                 (
                     ItemRef::Thread(thread_id),
-                    event @ (ChangeEvent::Created | ChangeEvent::Resolved),
+                    event @ (ChangeEvent::Created | ChangeEvent::Resolved | ChangeEvent::Reopened),
                 ) => Some(InboxItem::ThreadStateChanged {
                     position,
                     acknowledge: acknowledge.clone(),

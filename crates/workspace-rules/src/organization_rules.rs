@@ -3,7 +3,7 @@ use crate::statement_plans::{
 };
 use workspace_model::{
     Area, Deliverable, Initiative, Issue, ItemRef, OrganizationCommand, Project, RefusalReason,
-    RuleAnswer,
+    RequiredDescription, ResourceName, RuleAnswer,
 };
 
 /// Each variant needs only its named parent/current row; central scopes it first.
@@ -51,53 +51,35 @@ pub fn organize_work(
                 false,
             )
         }
-        OrganizationCommand::UpdateArea {
-            area_id,
-            name,
-            description,
-        } => {
+        OrganizationCommand::UpdateArea { area_id, change } => {
             require_area(context, area_id, reads.area)?;
-            let statement = match description {
-                Some(description) => exact(
-                    "UPDATE areas SET name=?,description=?,updated_at=? WHERE area_id=?",
-                    vec![
-                        text(name.as_str()),
-                        text(description.as_str()),
-                        now(),
-                        text(area_id),
-                    ],
-                ),
-                None => exact(
-                    "UPDATE areas SET name=?,updated_at=? WHERE area_id=?",
-                    vec![text(name.as_str()), now(), text(area_id)],
-                ),
-            };
+            // An absent field keeps its stored value.
+            let statement = exact(
+                "UPDATE areas SET name=COALESCE(?,name),description=COALESCE(?,description),updated_at=? WHERE area_id=?",
+                vec![
+                    optional_text(change.title().map(ResourceName::as_str)),
+                    optional_text(change.description().map(RequiredDescription::as_str)),
+                    now(),
+                    text(area_id),
+                ],
+            );
             (ItemRef::Area(area_id.clone()), vec![statement], false)
         }
-        OrganizationCommand::UpdateProject {
-            project_id,
-            title,
-            description,
-        } => {
+        OrganizationCommand::UpdateProject { project_id, change } => {
             reads
                 .project
                 .filter(|row| row.project_id == *project_id)
                 .ok_or_else(|| not_found(ItemRef::Project(project_id.clone())))?;
-            let statement = match description {
-                Some(description) => exact(
-                    "UPDATE projects SET title=?,description=?,updated_at=? WHERE project_id=?",
-                    vec![
-                        text(title.as_str()),
-                        text(description.as_str()),
-                        now(),
-                        text(project_id),
-                    ],
-                ),
-                None => exact(
-                    "UPDATE projects SET title=?,updated_at=? WHERE project_id=?",
-                    vec![text(title.as_str()), now(), text(project_id)],
-                ),
-            };
+            // An absent field keeps its stored value.
+            let statement = exact(
+                "UPDATE projects SET title=COALESCE(?,title),description=COALESCE(?,description),updated_at=? WHERE project_id=?",
+                vec![
+                    optional_text(change.title().map(ResourceName::as_str)),
+                    optional_text(change.description().map(RequiredDescription::as_str)),
+                    now(),
+                    text(project_id),
+                ],
+            );
             (ItemRef::Project(project_id.clone()), vec![statement], false)
         }
         OrganizationCommand::UpdateIssue { issue_id, title } => {
@@ -280,6 +262,11 @@ pub fn organize_work(
         None,
     ))
 }
+/// A present value, or SQL NULL so COALESCE keeps the stored one.
+fn optional_text(value: Option<&str>) -> central_storage::SqlValue {
+    value.map_or(central_storage::SqlValue::Null, text)
+}
+
 pub(crate) fn require_area(
     context: &WriteContext,
     area_id: &workspace_model::AreaId,

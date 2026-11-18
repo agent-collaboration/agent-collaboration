@@ -15,6 +15,7 @@ async fn generic(f: &Fixture, request: &str, name: &str) -> Result<m::WorkspaceR
                 workspace_id: None,
                 operation: m::WorkspaceOperation::CreateWorkspace {
                     name: name.to_owned().try_into()?,
+                    description: None,
                 },
             },
         )

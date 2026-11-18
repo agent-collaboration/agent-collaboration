@@ -11,6 +11,7 @@ use workspace_rules::DirectoryChange;
 pub(crate) enum DirectoryRequest<'a> {
     Create {
         name: &'a m::ResourceName,
+        description: Option<&'a m::Description>,
     },
     Change {
         workspace_id: &'a m::WorkspaceId,
@@ -39,9 +40,12 @@ pub(crate) fn classify<'a>(
         None => Ok(()),
     };
     Ok(Some(match &request.operation {
-        Op::CreateWorkspace { name } => {
+        Op::CreateWorkspace { name, description } => {
             absent()?;
-            DirectoryRequest::Create { name }
+            DirectoryRequest::Create {
+                name,
+                description: description.as_ref(),
+            }
         }
         Op::UpdateWorkspace { name, description } => DirectoryRequest::Change {
             workspace_id: required()?,
@@ -173,7 +177,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     }
     let mut statements = actor_plan.statements;
     let answer = match directory {
-        DirectoryRequest::Create { name } => {
+        DirectoryRequest::Create { name, description } => {
             if crate::workspace_directory_rows::read_by_name(runtime.host.as_ref(), name)
                 .await?
                 .is_some()
@@ -185,8 +189,11 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
                 let workspace = m::Workspace {
                     workspace_id: runtime.mint()?,
                     name: name.clone(),
-                    description: m::Description::try_from(String::new())
-                        .map_err(|_| corrupt("workspaces.description"))?,
+                    description: match description {
+                        Some(description) => description.clone(),
+                        None => m::Description::try_from(String::new())
+                            .map_err(|_| corrupt("workspaces.description"))?,
+                    },
                     state: m::WorkspaceState::Active,
                 };
                 statements.push(crate::workspace_directory_rows::insert(

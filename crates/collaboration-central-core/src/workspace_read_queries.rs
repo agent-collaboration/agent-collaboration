@@ -77,7 +77,8 @@ pub(crate) fn read_statement(
         | Op::LeaveThread { thread_id }
         | Op::SetNotifications { thread_id, .. }
         | Op::ThreadPost { thread_id, .. }
-        | Op::ResolveThread { thread_id, .. } => (
+        | Op::ResolveThread { thread_id, .. }
+        | Op::ReopenThread { thread_id } => (
             include_str!("workspace_sql/threads.sql"),
             text(thread_id),
             SqlValue::Null,

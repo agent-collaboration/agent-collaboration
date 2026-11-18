@@ -19,10 +19,18 @@ fn required_description(
         }
     })
 }
-fn optional_description(
+/// A partial update changes at least one field; a present description is never blank.
+fn partial_update(
+    title: Option<&m::ResourceName>,
     description: Option<&m::Description>,
-) -> Result<Option<m::RequiredDescription>, m::RefusalReason> {
-    description.map(required_description).transpose()
+    empty_field: &str,
+) -> Result<m::PartialUpdate, m::RefusalReason> {
+    let description = description.map(required_description).transpose()?;
+    m::PartialUpdate::new(title.cloned(), description).ok_or_else(|| {
+        m::RefusalReason::InvalidInput {
+            field: empty_field.to_owned(),
+        }
+    })
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_command(
@@ -54,14 +62,17 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 name,
                 description,
             } => {
-                let description = match optional_description(description.as_ref()) {
-                    Ok(description) => description,
+                let change = match partial_update(
+                    name.as_ref(),
+                    description.as_ref(),
+                    "nameOrDescription",
+                ) {
+                    Ok(change) => change,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateArea {
                     area_id: area_id.clone(),
-                    name: name.clone(),
-                    description,
+                    change,
                 })
             }
             Op::UpdateProject {
@@ -69,14 +80,17 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 title,
                 description,
             } => {
-                let description = match optional_description(description.as_ref()) {
-                    Ok(description) => description,
+                let change = match partial_update(
+                    title.as_ref(),
+                    description.as_ref(),
+                    "titleOrDescription",
+                ) {
+                    Ok(change) => change,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateProject {
                     project_id: project_id.clone(),
-                    title: title.clone(),
-                    description,
+                    change,
                 })
             }
             Op::UpdateIssue { issue_id, title } => {
@@ -275,6 +289,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ResolveThread {
                     thread_id: thread_id.clone(),
                     closing_post,
+                })
+            }
+            Op::ReopenThread { thread_id } => {
+                m::WorkspaceCommand::Thread(m::ThreadCommand::ReopenThread {
+                    thread_id: thread_id.clone(),
                 })
             }
             Op::AddDependency { blocking, blocked } => {

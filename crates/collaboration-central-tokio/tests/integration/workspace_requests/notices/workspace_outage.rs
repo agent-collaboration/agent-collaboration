@@ -19,6 +19,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         8800,
         m::WorkspaceOperation::CreateWorkspace {
             name: name("Outage second workspace"),
+            description: None,
         },
     )
     .await;
