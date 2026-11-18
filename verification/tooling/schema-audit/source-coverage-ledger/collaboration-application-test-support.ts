@@ -99,16 +99,6 @@ export const section: LedgerSection = {
     },
   ],
   sendSites: [
-    {
-      file: `${R}board_context_backend.rs`,
-      line: 104,
-      edge: "managed-codex",
-      sends:
-        "stand-in Codex app-server reply {id,result} over the accepted native WebSocket: {} to initialize, {thread:{id,cwd}} to thread/read with includeTurns false; the Router's N10 native connection is the counterparty",
-      owner: { crate: "collaboration-application-test-support" },
-      origin: "apparatus",
-      coverage: { kind: "uncovered", reason: noKeptCapture },
-    },
     fixtureToolCall(121, "repository_attach"),
     fixtureToolCall(232, "workspace_create"),
     fixtureToolCall(241, "board_create"),

@@ -12,11 +12,11 @@ use super::{
 use crate::{
     Ed25519Verification, IssuerKeySource, IssuerSignatureVerifier, SignatureValidity, VerifyFailure,
 };
-use uuid::Uuid;
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, sync::Arc};
+use uuid::Uuid;
 
 /// ES256 proof signatures; the host supplies the mechanics.
 pub trait Es256Verification: Clone + Send + Sync + 'static {

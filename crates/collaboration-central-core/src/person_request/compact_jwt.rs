@@ -1,9 +1,9 @@
 //! Compact JWS parsing shared by the person token and its DPoP proof.
 use super::refusal::PersonRequestRefusal;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use uuid::Uuid;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 pub(crate) const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 

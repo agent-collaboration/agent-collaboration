@@ -16,20 +16,6 @@ pub(crate) struct GenerationPreventedFollow {
     activated_at: message_board::FeedCursor,
 }
 impl GenerationPreventedFollow {
-    #[cfg(test)]
-    pub(crate) fn substituted_for_test(
-        &self,
-        group: MailItemRef,
-        target: DeliveryItemRef,
-        cancel: DeliveryItemRef,
-    ) -> Self {
-        Self {
-            group,
-            target,
-            cancel,
-            ..self.clone()
-        }
-    }
     pub(crate) fn group(&self) -> &MailItemRef {
         &self.group
     }

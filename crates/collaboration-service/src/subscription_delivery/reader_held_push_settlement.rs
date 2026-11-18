@@ -25,7 +25,7 @@ impl ReaderDeliveryOwner {
         match self.settle_selected_held_pushes(&reason).await {
             Ok(_settled) => {
                 #[cfg(test)]
-                self.observe(OwnerObservation::HeldSubscriptionPushesSettled(_settled));
+                self.observe(OwnerObservation::HeldSubscriptionPushesSettled);
                 if self.held_cleanup_backoff.record_success() {
                     tracing::info!(
                         held_cleanup_retry = "recovered",

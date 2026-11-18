@@ -195,11 +195,6 @@ impl MailDeliveryRuntime {
     }
 
     #[cfg(test)]
-    pub(crate) async fn drive_due_for_test(&self) -> Result<(), StoreError> {
-        self.engine.drive_due().await.map(|_| ())
-    }
-
-    #[cfg(test)]
     pub(crate) fn without_registered_task_for_test(mut self) -> Self {
         // The real SDK rejects settlement after the admission transaction commits.
         self.engine = Arc::new(Engine::new(self.store.clone(), self.host.clone()));
@@ -240,25 +235,6 @@ impl MailDeliveryRuntime {
         )
         .map_err(StoreError::backend)?;
         Self::with_limits(peer, props, limits, session)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_test_limits(
-        peer: PeerId,
-        props: MailPushDeliveryProps,
-        limits: DeliveryLimits,
-    ) -> Result<Self, StoreError> {
-        Self::with_limits(peer, props, limits, None)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_test_session_limits(
-        peer: PeerId,
-        props: MailPushDeliveryProps,
-        limits: DeliveryLimits,
-        session: MailDeliverySession,
-    ) -> Result<Self, StoreError> {
-        Self::with_limits(peer, props, limits, Some(session))
     }
 
     fn with_limits(
@@ -380,14 +356,6 @@ impl MailDeliveryRuntime {
             .map_err(|_| StoreError::backend("mail settlement admission lock poisoned"))?;
         settlements.close();
         Ok(settlements.clone())
-    }
-
-    #[cfg(test)]
-    pub(crate) fn settlement_admission_closed_for_test(&self) -> Result<bool, StoreError> {
-        self.settlement_drives
-            .lock()
-            .map(|settlements| settlements.is_closed())
-            .map_err(|_| StoreError::backend("mail settlement admission lock poisoned"))
     }
 
     /// Host monitors this future and drains in-flight native work during shutdown.

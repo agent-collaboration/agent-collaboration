@@ -8,12 +8,12 @@
 //! background.
 use collaboration_client::{
     CollaborationAccess, CollaborationClient, ConversationActor, ConversationCancelInput,
-    ConversationClient, ConversationClientError, ConversationCreateInput, ConversationLoadInput,
+    ConversationClient, ConversationClientError, ConversationCreateInput,
     ConversationOperationResult, ConversationPromptInput, PublicPromptContent,
 };
 use collaboration_protocol::{
-    ConversationCancelRequest, ConversationCreateRequest, ConversationLoadRequest,
-    ConversationOperationSubmission, ConversationPromptRequest, EndpointRef, ProviderIdentity,
+    ConversationCancelRequest, ConversationCreateRequest, ConversationOperationSubmission,
+    ConversationPromptRequest, EndpointRef, ProviderIdentity,
 };
 use std::{path::PathBuf, time::Duration};
 use tokio::task::JoinHandle;
@@ -68,26 +68,6 @@ pub(crate) async fn submit_provider_create(
         .create(input, COMPOSITE_WAIT)
         .await
         .map(|_| ())
-}
-
-/// Loads the provider conversation `request` names and waits for it to settle.
-pub(crate) async fn submit_provider_load(
-    client: &CollaborationClient,
-    request: ConversationLoadRequest,
-) -> Result<ConversationOperationResult, ConversationClientError> {
-    let input = ConversationLoadInput {
-        operation_id: Some(request.operation_id),
-        target: request.target.clone(),
-        working_directory: PathBuf::from(String::from(request.working_directory)),
-        requested_by: request.requested_by.clone(),
-        approver: Some(request.approver.clone()),
-        access: request.requested_policy.access,
-        generation: request.generation,
-    };
-    conversation_client(client, &request.target.endpoint)
-        .await?
-        .load(input, COMPOSITE_WAIT)
-        .await
 }
 
 fn prompt_input(

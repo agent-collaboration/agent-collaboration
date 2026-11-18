@@ -270,28 +270,6 @@ impl ProjectWriter {
         }
     }
 
-    #[cfg(all(test, feature = "runtime-test-support"))]
-    pub(super) async fn join_without_stopping_for_test(&self) -> io::Result<()> {
-        let mut owned = self.tasks.lock().await;
-        let WriterTasks::Running(children) = &mut *owned else {
-            return Err(io::Error::other("writer was not running"));
-        };
-        let mut failure = None;
-        while let Some(result) = children.join_next().await {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    failure.get_or_insert(error);
-                }
-                Err(error) => {
-                    failure.get_or_insert(io::Error::other(error));
-                }
-            }
-        }
-        *owned = WriterTasks::Stopped;
-        failure.map_or(Ok(()), Err)
-    }
-
     pub async fn stop(&self) -> io::Result<()> {
         stop_writer_tasks(&self.tasks, &self.stop).await
     }

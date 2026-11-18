@@ -14,15 +14,6 @@ impl Fixture {
             .await
             .map(|_| ())
     }
-    pub async fn push_item(
-        &self,
-        item: DeliveryItem<RouterDeliveryTypes>,
-    ) -> Result<PushResult<CarrierAcceptance>, StoreError> {
-        self.receive_envelopes(vec![DeliveryEnvelope::Item(item)])
-            .await?
-            .pop()
-            .ok_or_else(|| StoreError::backend("fixture Push receipt absent"))
-    }
     async fn receive_envelopes(
         &self,
         items: Vec<DeliveryEnvelope<RouterDeliveryTypes>>,

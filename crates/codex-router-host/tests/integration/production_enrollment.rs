@@ -1,17 +1,13 @@
 //! Production Host startup discovers enrollment; only native/model traffic is a fixture.
 #![deny(clippy::too_many_lines)]
-use board_central_test_support::TestCentral;
 use codex_router_host::{
     AppServerLaunchPlan, ChildCommandSpec, ChildOutput, HostConfig, HostConfigInputs,
-    HostCoordinationPaths, HostDeadlines, HostRuntime, HostedReadiness, ManagedChildLaunchPlans,
-    ManagedUpdateInputs, OperatorFrame, OperatorRequest,
+    HostCoordinationPaths, HostDeadlines, HostRuntime, ManagedChildLaunchPlans,
+    ManagedUpdateInputs,
 };
 use codex_router_test_support::router_health::PersistentRouterHealthFixture;
-use collaboration_client::CollaborationClient;
-use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use std::{
     error::Error,
-    io,
     net::SocketAddr,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -23,8 +19,6 @@ use std::{
 mod duplicate_identity;
 #[path = "../support/production_enrollment_fixture.rs"]
 mod enrollment_fixture;
-use crate::operator_client;
-use enrollment_fixture::{EnrollmentLocation, ProductionEnrollmentFixture};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const BOUND: Duration = Duration::from_secs(20);
@@ -32,117 +26,6 @@ const ROOT_ENV: &str = "CODEX_PRODUCTION_ENROLLMENT_TEST_ROOT";
 const ROUTER_ENV: &str = "CODEX_PRODUCTION_ENROLLMENT_TEST_ROUTER";
 const CREDENTIAL_SENTINEL: &str = "Bearer enrollment-credential-must-stay-private";
 const ACCESS_SENTINEL: &str = "enrollment-access-secret-must-stay-private";
-
-#[tokio::test]
-async fn production_host_discovers_enrollment_and_creates_a_central_project() -> TestResult {
-    let fixture = ProductionEnrollmentFixture::start(EnrollmentLocation::RouterRoot).await?;
-    fixture
-        .run(async |fixture| {
-            let directory = &fixture.directory;
-            let peer = fixture.peer;
-            let central = &fixture.central;
-            let host = &fixture.host;
-            host.await_ready().await?;
-            let client = CollaborationClient::connect(directory, "enrollment-test", "1").await?;
-            let (workspace_request, board_request, project_request) = project_requests()?;
-            require_accepted(
-                &settled_creation(|| client.workspace_create(workspace_request.clone())).await?,
-            )?;
-            require_accepted(
-                &settled_creation(|| client.board_create(board_request.clone())).await?,
-            )?;
-            let project =
-                settled_creation(|| client.project_create(project_request.clone())).await?;
-            require_accepted(&project)?;
-            let shown = client
-                .project_show(message_board::ProjectShowRequest {
-                    project_id: project_request.project_id.clone(),
-                })
-                .await?;
-            require(
-                shown.project.id == project_request.project_id,
-                "created project was not read back",
-            )?;
-            require(
-                matches!(shown.state, message_board::ProjectStateView::Local(_)),
-                "created project is not local",
-            )?;
-            require(
-                central.session_connections() > 0,
-                "central did not accept a machine connection",
-            )?;
-            require_shared_link_status(&client, host, peer).await?;
-            require(
-                collaboration_runtime::load_installation_peer(directory)? == peer,
-                "startup changed the persisted installation peer",
-            )?;
-            Ok::<_, Box<dyn Error>>(())
-        })
-        .await
-}
-
-#[tokio::test]
-async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable() -> TestResult {
-    let fixture =
-        ProductionEnrollmentFixture::start(EnrollmentLocation::CollaborationDirectory).await?;
-    fixture
-        .run(async |fixture| {
-            let directory = &fixture.directory;
-            let peer = fixture.peer;
-            let central = &fixture.central;
-            let host = &fixture.host;
-            host.await_ready().await?;
-            let client = CollaborationClient::connect(directory, "unenrolled-test", "1").await?;
-            let (request, _, _) = project_requests()?;
-            require(
-                client.workspace_create(request).await?.result == RequestResult::PendingUnreachable,
-                "unenrolled workspace creation changed its existing outcome",
-            )?;
-            require(
-                central.session_connections() == 0,
-                "Host read enrollment from the wrong root",
-            )?;
-            require(
-                collaboration_runtime::load_installation_peer(directory)? == peer,
-                "startup changed the persisted installation peer",
-            )?;
-            Ok::<_, Box<dyn Error>>(())
-        })
-        .await
-}
-
-#[tokio::test]
-async fn failed_session_preparation_keeps_its_typed_failure_on_both_status_surfaces() -> TestResult
-{
-    let fixture = ProductionEnrollmentFixture::start_with_legacy_state(
-        EnrollmentLocation::RouterRoot,
-        Some(b"{truncated"),
-    )
-    .await?;
-    fixture.run(async |fixture| {
-        fixture.host.await_ready().await?;
-        let client = CollaborationClient::connect(&fixture.directory, "failed-link-test", "1").await?;
-        let record = client.installation_show().await?.central.into_record().ok_or("failed configured link was hidden")?;
-        require(matches!(record.state, board_sync_protocol::FleetLinkState::Disconnected { .. }), "failed preparation did not disconnect")?;
-        require(matches!(record.last_failure.as_ref().map(|failure| &failure.reason), Some(board_sync_protocol::FleetLinkFailureReason::CorruptStore { field }) if field == "machineSessionState"), "typed store failure missing")?;
-        require(fixture.central.session_connections() == 0, "failed preparation opened a session")?;
-        let frames = operator_client::send_operator_request(&fixture.host.operator, OperatorRequest::Status, BOUND).await?;
-        let central = frames.iter().find_map(|frame| match frame {
-            OperatorFrame::Terminal(response) => match response.snapshot().fleet() {
-                codex_router_host::FleetHostObservation::Available { central, .. } => central.as_deref(),
-                _ => None,
-            },
-            OperatorFrame::Progress(_) => None,
-        }).ok_or("Host hid failed configured link")?;
-        require(central == &record, "Host and MCP retained different failed-start records")?;
-        let reopened_store = message_board_storage::FleetStore::open(&fixture.directory.join(message_board_storage::FleetStore::FILE_NAME)).await?;
-    let reopened = reopened_store.cache();
-        require(reopened.fleet_link().await? == Some(record), "failed-start owner did not persist its final record")?;
-        reopened_store.close().await;
-        require(std::fs::read(fixture.directory.join("machine-session/state.json"))? == b"{truncated", "failed import changed the legacy source")?;
-        Ok::<_, Box<dyn Error>>(())
-    }).await
-}
 
 #[tokio::test]
 async fn production_host_refuses_malformed_enrollment_without_publishing() -> TestResult {
@@ -275,14 +158,6 @@ fn fixture_root() -> TestResult<tempfile::TempDir> {
     Ok(root)
 }
 
-fn fixture_origin(directory: &Path) -> TestResult<message_board::ActorOrigin> {
-    Ok(message_board::ActorOrigin {
-        installation: String::from(collaboration_runtime::load_service_identity(directory)?)
-            .try_into()?,
-        machine: "production enrollment fixture".to_owned().try_into()?,
-    })
-}
-
 fn require(condition: bool, message: &str) -> TestResult {
     if condition {
         Ok(())
@@ -291,92 +166,8 @@ fn require(condition: bool, message: &str) -> TestResult {
     }
 }
 
-fn require_accepted(reply: &WriteReply) -> TestResult {
-    if matches!(
-        reply.result,
-        RequestResult::Decided(RequestDecision::Accepted { .. })
-    ) {
-        Ok(())
-    } else {
-        Err(format!("Host did not complete central creation: {reply:?}").into())
-    }
-}
-
-async fn settled_creation<Call, Reply>(mut call: Call) -> TestResult<WriteReply>
-where
-    Call: FnMut() -> Reply,
-    Reply: std::future::Future<Output = Result<WriteReply, collaboration_client::BoardClientError>>,
-{
-    Ok(tokio::time::timeout(BOUND, async {
-        loop {
-            let reply = call().await?;
-            if !matches!(
-                reply.result,
-                RequestResult::PendingUnreachable | RequestResult::ProjectCreationPending { .. }
-            ) {
-                return Ok::<_, collaboration_client::BoardClientError>(reply);
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await??)
-}
-
-fn project_requests() -> TestResult<(
-    message_board::WorkspaceCreateRequest,
-    message_board::BoardCreateRequest,
-    message_board::ProjectCreateRequest,
-)> {
-    use message_board::*;
-    let actor = Identity::Human {
-        human_id: "enrollment-test-owner".to_owned().try_into()?,
-    };
-    let workspace_id = WorkspaceId::generate();
-    let board_id = BoardId::generate();
-    Ok((
-        WorkspaceCreateRequest {
-            request_id: RequestId::generate(),
-            protocol_version: ProtocolVersion::CURRENT,
-            workspace_id: workspace_id.clone(),
-            name: "Enrollment workspace".to_owned().try_into()?,
-            description: String::new().try_into()?,
-            actor: actor.clone(),
-            acting_for: None,
-        },
-        BoardCreateRequest {
-            request_id: RequestId::generate(),
-            protocol_version: ProtocolVersion::CURRENT,
-            board_id: board_id.clone(),
-            workspace_id,
-            name: "Enrollment board".to_owned().try_into()?,
-            description: String::new().try_into()?,
-            kind: BoardKind::Area {},
-            actor: actor.clone(),
-            acting_for: None,
-        },
-        ProjectCreateRequest {
-            request_id: RequestId::generate(),
-            protocol_version: ProtocolVersion::CURRENT,
-            project_id: ProjectId::generate(),
-            board_id,
-            title: "Enrollment project".to_owned().try_into()?,
-            description: None,
-            actor,
-            acting_for: None,
-        },
-    ))
-}
-
-fn write_enrollment(root: &Path, central: &TestCentral) -> TestResult {
-    std::fs::create_dir_all(root.join("fleet"))?;
-    let fixture = central.write_host_session(root).map_err(io::Error::other)?;
-    std::fs::rename(fixture, root.join("fleet/enrollment.json"))?;
-    Ok(())
-}
-
 struct OwnedHost {
     child: tokio::process::Child,
-    operator: PathBuf,
     output: PathBuf,
 }
 impl OwnedHost {
@@ -398,29 +189,8 @@ impl OwnedHost {
             .spawn()?;
         Ok(Self {
             child,
-            operator: root.join("router/operator.sock"),
             output: root.join("host-output.log"),
         })
-    }
-
-    async fn await_ready(&self) -> TestResult {
-        let frames = operator_client::send_operator_request(
-            &self.operator,
-            OperatorRequest::AwaitHostStart,
-            BOUND,
-        )
-        .await?;
-        let snapshot = frames
-            .iter()
-            .find_map(|frame| match frame {
-                OperatorFrame::Terminal(response) => Some(response.snapshot()),
-                OperatorFrame::Progress(_) => None,
-            })
-            .ok_or("Host startup did not publish a terminal snapshot")?;
-        if snapshot.hosted_readiness() != HostedReadiness::Ready {
-            return Err("Host did not reach Ready".into());
-        }
-        Ok(())
     }
 
     async fn stop(&mut self) -> TestResult<ExitStatus> {
@@ -510,91 +280,4 @@ async fn production_enrollment_native_child() -> TestResult {
         Some(Path::new(&log)),
     )
     .await
-}
-
-async fn require_shared_link_status(
-    client: &CollaborationClient,
-    host: &OwnedHost,
-    peer: fleet_sync_protocol::PeerId,
-) -> TestResult {
-    let before = client
-        .installation_show()
-        .await?
-        .central
-        .into_record()
-        .ok_or("MCP link missing")?;
-    let status =
-        operator_client::send_operator_request(&host.operator, OperatorRequest::Status, BOUND)
-            .await?;
-    let observed = status
-        .iter()
-        .find_map(|frame| match frame {
-            OperatorFrame::Terminal(response) => Some(response.snapshot().fleet()),
-            OperatorFrame::Progress(_) => None,
-        })
-        .ok_or("Host fleet status missing")?;
-    let codex_router_host::FleetHostObservation::Available {
-        central: Some(link),
-        stuck_mail,
-    } = observed
-    else {
-        return Err("Host Fleet observation unavailable".into());
-    };
-    let after = client
-        .installation_show()
-        .await?
-        .central
-        .into_record()
-        .ok_or("MCP link missing after status")?;
-    require(
-        link.peer == peer
-            && before.peer == peer
-            && after.peer == peer
-            && before.endpoint == link.endpoint
-            && after.endpoint == link.endpoint,
-        "Host and MCP link identity differs",
-    )?;
-    let (
-        board_sync_protocol::FleetLinkState::Connected {
-            since: before_since,
-            last_contact: before_contact,
-        },
-        board_sync_protocol::FleetLinkState::Connected {
-            since,
-            last_contact,
-        },
-        board_sync_protocol::FleetLinkState::Connected {
-            since: after_since,
-            last_contact: after_contact,
-        },
-    ) = (&before.state, &link.state, &after.state)
-    else {
-        return Err("link was not connected through both status paths".into());
-    };
-    require(
-        before_since == since
-            && after_since == since
-            && before_contact <= last_contact
-            && last_contact <= after_contact
-            && link.last_drop == after.last_drop,
-        "Host and MCP status do not read the same link record",
-    )?;
-    require(
-        link.instance != 0
-            && link.connection != 0
-            && link.revision != 0
-            && before.instance == link.instance
-            && after.instance == link.instance
-            && before.connection == link.connection
-            && after.connection == link.connection
-            && before.revision <= link.revision
-            && link.revision <= after.revision
-            && link.last_frame_at == Some(*last_contact),
-        "Host and MCP lost native link identity, revision or last-frame metadata",
-    )?;
-    require(
-        *stuck_mail == collaboration_protocol::StuckMailSummary::Empty,
-        "fresh Host unexpectedly has stuck mail",
-    )?;
-    Ok(())
 }

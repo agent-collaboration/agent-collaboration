@@ -186,20 +186,6 @@ impl ProjectAdmission {
             .or_else(write_gate::refusal_result)
     }
 
-    #[cfg(test)]
-    pub(crate) async fn submit_at(
-        &self,
-        request: &ProjectRequest,
-        now: chrono::DateTime<Utc>,
-    ) -> Result<WriteReply, ProjectAdmissionError> {
-        let result = self
-            .decide_at(request, Some(now), self.record_origin())
-            .await
-            .or_else(write_gate::refusal_result)?;
-        let reader = self.reader_after_result(request, &result).await?;
-        Ok(WriteReply { result, reader })
-    }
-
     async fn decide_at(
         &self,
         request: &ProjectRequest,

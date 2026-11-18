@@ -5,11 +5,11 @@ use central_storage::{ReadOutcome, SqlValue};
 use fleet_identity_protocol::OrganizationId;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteConnection};
 use sqlx_core::{
     connection::ConnectOptions, executor::Executor, query::query, query_scalar::query_scalar,
     row::Row,
 };
-use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteConnection};
 
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000ab01";
 const OTHER_ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000ab02";

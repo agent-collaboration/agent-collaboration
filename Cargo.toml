@@ -10,7 +10,6 @@ members = [
     "crates/central-engine-model",
     "crates/router-clock",
     "crates/tailnet-verification-host",
-    "crates/board-central-test-support",
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",

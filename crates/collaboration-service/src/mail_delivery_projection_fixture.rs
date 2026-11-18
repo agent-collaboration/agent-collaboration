@@ -139,10 +139,6 @@ struct DispatchCheckpoint {
     entered: tokio::sync::oneshot::Sender<()>,
     resume: tokio::sync::oneshot::Receiver<()>,
 }
-pub struct DispatchWitness {
-    pub entered: tokio::sync::oneshot::Receiver<()>,
-    pub resume: tokio::sync::oneshot::Sender<()>,
-}
 impl Clock for ProjectionHost {
     fn now(&self) -> SyncTime {
         self.clock.now()
@@ -238,10 +234,6 @@ pub fn recorded_at() -> DateTime<Utc> {
         .with_timezone(&Utc)
 }
 impl Fixture {
-    pub fn database_path(&self) -> std::path::PathBuf {
-        self.directory.path().join("interaction.sqlite")
-    }
-
     pub async fn new() -> Self {
         let owner = PeerId::new(uuid::Uuid::now_v7()).unwrap();
         Self::open(
@@ -321,25 +313,6 @@ impl Fixture {
             ))
             .unwrap();
         engine
-    }
-    pub fn pause_after_external_answer(&self) -> DispatchWitness {
-        let (entered, observed) = tokio::sync::oneshot::channel();
-        let (resume, waiting) = tokio::sync::oneshot::channel();
-        assert!(
-            self.host
-                .dispatch_checkpoint
-                .lock()
-                .unwrap()
-                .replace(DispatchCheckpoint {
-                    entered,
-                    resume: waiting,
-                })
-                .is_none()
-        );
-        DispatchWitness {
-            entered: observed,
-            resume,
-        }
     }
     pub fn draft(&self) -> PushRecordDraft {
         PushRecordDraft {

@@ -1,9 +1,4 @@
 //! Retained native behavioral claims use the existing crate-local deterministic admission seam.
-#[path = "behavior_tests/subscription_fixture.rs"]
-mod subscription_fixture;
-use chrono::Duration;
-use message_board::*;
-use subscription_fixture::*;
 #[path = "behavior_tests/activity_boundaries.rs"]
 mod activity_boundaries;
 #[path = "behavior_tests/covered_watches.rs"]
@@ -16,7 +11,6 @@ mod membership_completion;
 mod membership_lifecycle;
 #[path = "behavior_tests/membership_renewal.rs"]
 mod membership_renewal;
-use crate::native_worker_faults;
 #[path = "behavior_tests/project_watch_fidelity.rs"]
 mod project_watch_fidelity;
 

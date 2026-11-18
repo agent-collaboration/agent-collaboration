@@ -35,7 +35,6 @@ collaboration-contracts = { version = "0.1.105", path = "../collaboration-contra
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 fleet-sync-writer.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
-board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
 fleet-sync-protocol.workspace = true
 runtime-primitives.workspace = true
 automation-storage = { path = "../automation-storage", version = "0.1.16" }

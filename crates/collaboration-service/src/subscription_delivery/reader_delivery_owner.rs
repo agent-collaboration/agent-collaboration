@@ -65,8 +65,6 @@ pub(super) enum ReaderReconcilePurpose {
 }
 
 pub(super) enum ReaderDeliveryCommand {
-    #[cfg(test)]
-    Barrier(oneshot::Sender<()>),
     Reconcile {
         scope: ReaderScanScope,
         purpose: ReaderReconcilePurpose,
@@ -172,8 +170,6 @@ pub(super) struct ReaderDeliveryOwner {
     /// A failed pass retries on this backoff; the next pass that completes clears it.
     failed_pass_backoff: collaboration_runtime::FailedPassBackoff,
     #[cfg(test)]
-    barriers: Vec<oneshot::Sender<()>>,
-    #[cfg(test)]
     observations: broadcast::Sender<OwnerObservation>,
 }
 
@@ -228,8 +224,6 @@ impl ReaderDeliveryOwner {
             dm_checked: std::collections::HashSet::new(),
             dm_replies: HashMap::new(),
             failed_pass_backoff: collaboration_runtime::FailedPassBackoff::default(),
-            #[cfg(test)]
-            barriers: Vec::new(),
             #[cfg(test)]
             observations,
         }
@@ -293,7 +287,7 @@ impl ReaderDeliveryOwner {
             }
             let now = self.clock.utc_now();
             #[cfg(test)]
-            self.observe(OwnerObservation::RowsLoaded(records.len()));
+            self.observe(OwnerObservation::RowsLoaded);
             self.expiry_notices(&records).await;
             self.prior_records = current;
             if records.is_empty()
@@ -344,7 +338,7 @@ impl ReaderDeliveryOwner {
                 }
             };
             #[cfg(test)]
-            self.observe(OwnerObservation::DueRoots(due.len()));
+            self.observe(OwnerObservation::DueRoots);
             match self.deliver_due(&due, &facts).await {
                 Ok(true) => continue,
                 Ok(false) => {}
@@ -489,11 +483,7 @@ impl ReaderDeliveryOwner {
             )
             .min();
         #[cfg(test)]
-        for barrier in self.barriers.drain(..) {
-            let _ = barrier.send(());
-        }
-        #[cfg(test)]
-        self.observe(OwnerObservation::Sleeping(deadline));
+        self.observe(OwnerObservation::Sleeping);
         // Only a reader holding mail wakes on the signals that its target may have loaded.
         let holding = self.holds_mail();
         let clock = self.clock.clone();
@@ -534,7 +524,7 @@ impl ReaderDeliveryOwner {
                         self.native_checked.clear();
                     }
                     #[cfg(test)]
-                    self.observe(OwnerObservation::HeldMailSignalTaken { owed });
+                    self.observe(OwnerObservation::HeldMailSignalTaken);
                 }
                 true
             },
@@ -544,8 +534,6 @@ impl ReaderDeliveryOwner {
 
     async fn handle_command(&mut self, command: ReaderDeliveryCommand) {
         match command {
-            #[cfg(test)]
-            ReaderDeliveryCommand::Barrier(reply) => self.barriers.push(reply),
             ReaderDeliveryCommand::Reconcile {
                 scope,
                 purpose,
@@ -670,7 +658,7 @@ impl ReaderDeliveryOwner {
     fn failed_pass_retry(&mut self, stage: FailedPassStage, error: &BoardError) -> ClockInstant {
         let retry = self.failed_pass_backoff.record_failure();
         #[cfg(test)]
-        self.observe(OwnerObservation::PassFailed(stage.as_str()));
+        self.observe(OwnerObservation::PassFailed);
         if retry.starts_run {
             tracing::warn!(
                 %error,

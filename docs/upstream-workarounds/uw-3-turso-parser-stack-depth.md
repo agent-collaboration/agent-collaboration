@@ -7,6 +7,10 @@
 
 Pinned `turso_parser` 0.8.1 aborts a native debug process while parsing moderately nested SQL. Its expression-depth guard is 100, but recursive expression and subquery parsing can exhaust a default spawned-thread stack before reaching that guard. One combined reader-metadata query parsed every subject's nested predicates even for a thread reply. The service library's activation-boundary test aborted in the parser. Keeping one checked query per subject preserves the same results and lets that test complete without a stack or Cargo profile change.
 
+## Witness tests removed: 2026-11-17
+
+The two collaboration-service tests named below as reproductions, `activation_is_the_request_position_and_reactivation_changes_the_local_key` and `project_subscription_keeps_off_activity_unread_and_thread_rows_take_precedence`, ran on the old central's test fixtures and were deleted with them (central rip-out, item 9). The workaround is unchanged. The permanent [equivalence test](../../crates/message-board-storage/src/project_thread_unread_tests.rs) and the parser-only recreation below remain the checks; the Router tests that replace the deleted ones come with the central link work.
+
 ## Upstream
 
 - [Issue #6655: Stack overflow in arithmetic](https://github.com/tursodatabase/turso/issues/6655) and [PR #8097: fix stack overflow on moderately nested expressions](https://github.com/tursodatabase/turso/pull/8097) describe large debug frames exhausting the default stack before the expression guard. Both were open when checked on 2026-10-14; no released fix is inferred.
