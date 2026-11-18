@@ -49,7 +49,7 @@ async fn signed_create_deadlines_refuse_at_bound_and_apply_before() -> Result {
             let pending =
                 tokio::spawn(async move { post(&client, signed::CREATE, body, headers).await });
             held.until_held().await;
-            f.clock.advance(Duration::from_millis(advance))?;
+            f.clock.advance(Duration::from_millis(advance)).await?;
             held.release();
             let reply = pending.await??;
             assert_eq!(reply.status, 200, "{bound}");
@@ -116,7 +116,7 @@ async fn sampled_create_commits_original_time_while_revocation_waits_on_org_turn
         tokio::spawn(async move { post(&client, REVISIONS, revocation, vec![]).await });
     let waiting = tokio::select! {()=runtime.until_central_waiting(1)=>true,_=&mut second=>false};
     assert!(waiting, "a second writer crossed the held org turn");
-    f.clock.advance(Duration::from_secs(31))?;
+    f.clock.advance(Duration::from_secs(31)).await?;
     held.release();
     let applied = first.await??;
     assert_eq!(applied.status, 200);

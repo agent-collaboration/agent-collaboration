@@ -33,7 +33,7 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
     let mut initial_deadline = None;
     for (request, advance) in [(7252, 0), (7253, 300), (7254, 420)] {
         if advance != 0 {
-            f.clock.advance(Duration::from_secs(advance)).unwrap();
+            f.advance(Duration::from_secs(advance)).await;
         }
         let reply = f.call(request, post(&thread, vec![])).await;
         let m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { item, position }) = reply.result
@@ -98,7 +98,7 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
     f.clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(900)))
         .await;
-    f.clock.advance(Duration::from_secs(180)).unwrap();
+    f.advance(Duration::from_secs(180)).await;
     fired.until_held().await;
     let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
     assert_eq!(messages.rows.len(), 1);

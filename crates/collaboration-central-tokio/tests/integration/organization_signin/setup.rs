@@ -156,7 +156,8 @@ async fn expired_digest_returns_verified_facts_but_create_stays_refused() -> Res
     let later = expires + 1;
     fixture
         .clock
-        .advance_to(runtime_primitives::SyncTime::from_unix_millis(later * 1000))?;
+        .advance_to(runtime_primitives::SyncTime::from_unix_millis(later * 1000))
+        .await?;
     let before = fixture.snapshot().await?;
     let before_admission = admission_rows(&fixture).await?;
 
@@ -224,7 +225,8 @@ async fn not_yet_valid_digest_returns_facts_without_live_authority() -> Result {
     let before_issuance = signed::NOW_SECONDS - 120;
     fixture
         .clock
-        .set_utc(chrono::DateTime::from_timestamp(before_issuance, 0).ok_or("fixture UTC range")?);
+        .set_utc(chrono::DateTime::from_timestamp(before_issuance, 0).ok_or("fixture UTC range")?)
+        .await;
     let before = admission_rows(&fixture).await?;
     let identity = fixture.snapshot().await?;
     let reply = fixture.digest(A).await?;

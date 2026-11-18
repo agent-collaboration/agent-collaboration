@@ -239,7 +239,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
         vec![text(item)],
     )
     .await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     runtime.after_event().await.unwrap();
     let ids = runtime
         .statement_host()

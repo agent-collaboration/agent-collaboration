@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-test-support = ["collaboration-central-core/test-support"]
+test-support = ["collaboration-central-core/test-support", "router-clock/test-support"]
 
 [dependencies]
 central-storage.workspace = true

@@ -15,8 +15,8 @@ use workspace_model::central_mail::{
 fn now(f: &Fixture) -> TestResult<m::Timestamp> {
     Ok(f.clock.utc_now())
 }
-fn set_time(f: &Fixture, at: m::Timestamp) {
-    f.clock.set_utc(at);
+async fn set_time(f: &Fixture, at: m::Timestamp) {
+    f.set_utc(at).await;
 }
 fn number(value: i64) -> TestResult<SqlValue> {
     Ok(SqlValue::Integer(value.try_into()?))
@@ -230,7 +230,7 @@ async fn malformed_active_due_does_not_rollback_mail_or_healthy_alarm_rearm() ->
     clear_alarm(&f).await?;
     // Timing allowance: setup claimed a due batch at T0 and the unreadable due
     // makes this send's event the first due batch, so hold the clock at T0 + 30 s.
-    set_time(&f, due - chrono::Duration::seconds(570));
+    set_time(&f, due - chrono::Duration::seconds(570)).await;
     assert!(
         matches!(
             send(&f, 8422).await?,

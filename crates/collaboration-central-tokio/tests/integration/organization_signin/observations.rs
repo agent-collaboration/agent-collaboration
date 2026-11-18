@@ -240,7 +240,7 @@ async fn statement_expiring_after_verification_logs_one_applying_time_refusal() 
         logs.organization_events()?.is_empty(),
         "verification must succeed before the hold"
     );
-    f.clock.advance(Duration::from_secs(1))?;
+    f.clock.advance(Duration::from_secs(1)).await?;
     held.release();
     assert_eq!(
         request.await??.status,

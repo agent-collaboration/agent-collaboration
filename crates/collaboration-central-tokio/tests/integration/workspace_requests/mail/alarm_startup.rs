@@ -23,7 +23,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
 -> ConformanceResult<()> {
     for bad_first in [false, true] {
         let root = tempfile::tempdir()?;
-        let clock = Arc::new(HeldClock::starting_at(
+        let clock = Arc::new(router_clock::GatedClock::starting_at(
             runtime_primitives::SyncTime::from_unix_millis(1_794_571_200_000),
         )?);
         let host = TokioWorkspaceHost::open(root.path(), clock.clone()).await?;

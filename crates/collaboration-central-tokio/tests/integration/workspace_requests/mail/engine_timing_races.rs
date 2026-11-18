@@ -40,7 +40,7 @@ async fn a_publication_held_before_a_newer_claim_publishes_the_newer_floor() {
     due_batch_at(&fixture, &runtime, at(start, 4, 0, 0)).await;
     window_due_at(&runtime, at(start, 5, 0, 0)).await;
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 4, 20, 0));
+    fixture.set_utc(at(start, 4, 20, 0)).await;
     // Event A, inside the spacing, holds its only batch after commit and
     // before its alarm decision, with the 10:04:00 start still current.
     let mut held = runtime.statement_host().hold_alarm_publication();
@@ -49,7 +49,7 @@ async fn a_publication_held_before_a_newer_claim_publishes_the_newer_floor() {
         async move { runtime.after_event().await }
     });
     held.until_held().await;
-    fixture.clock.set_utc(at(start, 4, 58, 0));
+    fixture.set_utc(at(start, 4, 58, 0)).await;
     let event_b = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -60,7 +60,7 @@ async fn a_publication_held_before_a_newer_claim_publishes_the_newer_floor() {
         runtime.due_batch_snapshot().last_start_unix_millis,
         ms(at(start, 4, 58, 0))
     );
-    fixture.clock.set_utc(at(start, 4, 59, 0));
+    fixture.set_utc(at(start, 4, 59, 0)).await;
 
     held.release();
     let published_a = event_a.await.unwrap().unwrap().publication;
@@ -108,7 +108,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
         .pause_points()
         .hold_engine(PausePoint::AfterEngineCommit, &traffic.to_string());
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 4, 20, 0));
+    fixture.set_utc(at(start, 4, 20, 0)).await;
     let request_a = tokio::spawn({
         let runtime = runtime.clone();
         let caller = fixture.caller.clone();
@@ -119,7 +119,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
         }
     });
     held.until_held().await;
-    fixture.clock.set_utc(at(start, 4, 58, 0));
+    fixture.set_utc(at(start, 4, 58, 0)).await;
 
     let completion_b = runtime.after_event().await.unwrap();
 
@@ -135,7 +135,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
         250
     );
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 4, 59, 0));
+    fixture.set_utc(at(start, 4, 59, 0)).await;
     held.release();
     assert!(matches!(
         request_a.await.unwrap().unwrap(),
@@ -165,7 +165,7 @@ impl WorkspaceStoreCalls for WorkspaceStore {
     }
 }
 #[derive(Clone)]
-struct SharedClock(Arc<HeldClock>);
+struct SharedClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for SharedClock {
     fn now(&self) -> SyncTime {
         self.0.now()
@@ -211,7 +211,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
-        .with_engine_publication(fixture.clock.clone(), gated),
+        .with_engine_publication(fixture.shared_for_runtime(), gated),
     );
     let workspace = Arc::new(ObjectStorage::new(
         fixture
@@ -225,16 +225,16 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         fixture.caller.organization_id.clone(),
         central.clone(),
         WorkspaceStore(workspace.clone()),
-        fixture.clock.clone(),
-        Arc::new(ClockIds::new(SharedClock(fixture.clock.clone()))),
+        fixture.shared_for_runtime(),
+        Arc::new(ClockIds::new(SharedClock(fixture.shared_for_runtime()))),
         due_batches.clone(),
     ));
-    fixture.clock.set_utc(at(start, 4, 0, 0));
+    fixture.set_utc(at(start, 4, 0, 0)).await;
     assert_eq!(
         runtime.after_event().await.unwrap().publication,
         set(at(start, 5, 0, 0))
     );
-    fixture.clock.set_utc(at(start, 4, 20, 0));
+    fixture.set_utc(at(start, 4, 20, 0)).await;
     let (decided_send, decided) = tokio::sync::oneshot::channel();
     let (release, release_receiver) = std::sync::mpsc::channel();
     *gate.lock().unwrap_or_else(PoisonError::into_inner) = Some(DecisionGate {
@@ -250,7 +250,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         ms(at(start, 5, 0, 0)),
         "A decided with the 10:04:00 start"
     );
-    fixture.clock.set_utc(at(start, 4, 58, 0));
+    fixture.set_utc(at(start, 4, 58, 0)).await;
     let event_b = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -297,7 +297,7 @@ async fn two_events_released_together_run_exactly_one_due_batch() {
     let start = fixture.clock.utc_now();
     due_batch_at(&fixture, &runtime, at(start, 4, 0, 0)).await;
     let before = runtime.legacy_unit_invocations();
-    fixture.clock.set_utc(at(start, 4, 31, 0));
+    fixture.set_utc(at(start, 4, 31, 0)).await;
     let barrier = Arc::new(tokio::sync::Barrier::new(2));
     let events: Vec<_> = (0..2)
         .map(|_| {
@@ -399,7 +399,7 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
         },
     };
     driver_settled(&fixture, &runtime).await;
-    fixture.clock.set_utc(at(start, 5, 0, 0));
+    fixture.set_utc(at(start, 5, 0, 0)).await;
 
     let fan_out = runtime.after_event().await;
     let request = runtime

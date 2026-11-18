@@ -96,7 +96,7 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
     let items = break_window(&engine, &window).await;
     let base = engine.invocations().await.windows;
 
-    engine.set(due);
+    engine.set(due).await;
     engine.after_event().await;
 
     assert_eq!(engine.wake_messages(&wake).await, 1);
@@ -107,7 +107,7 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
     );
     assert_eq!(notices(&engine, &recipient).await, 0, "no window delivered");
     for count in 2..=3 {
-        engine.set(due + minutes(5 * (count - 1)));
+        engine.set(due + minutes(5 * (count - 1))).await;
         engine.after_event().await;
         assert_eq!(
             unit_record(&engine, WINDOWS).await,
@@ -118,7 +118,7 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
 
     // Automatic recovery before retirement.
     repair_window(&engine, items).await;
-    engine.set(due + minutes(15));
+    engine.set(due + minutes(15)).await;
     engine.after_event().await;
     assert!(
         unit_record(&engine, WINDOWS).await.is_empty(),
@@ -134,21 +134,21 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
     engine.post(&thread).await;
     let (window, first_failure) = open_window(&engine, &recipient).await;
     let items = break_window(&engine, &window).await;
-    engine.set(first_failure);
+    engine.set(first_failure).await;
     engine.after_event().await;
     assert_eq!(
         unit_record(&engine, WINDOWS).await,
         failing(1, first_failure + minutes(5))
     );
     let before_sixty = first_failure + days(60) - minutes(5);
-    engine.set(before_sixty);
+    engine.set(before_sixty).await;
     engine.after_event().await;
     assert_eq!(
         unit_record(&engine, WINDOWS).await,
         failing(2, first_failure + days(60)),
         "one mark before 60 days: still failing"
     );
-    engine.set(first_failure + days(60));
+    engine.set(first_failure + days(60)).await;
     engine.after_event().await;
     let retired = unit_record(&engine, WINDOWS).await;
     assert_eq!(
@@ -170,7 +170,7 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
     let mut last = first_failure + days(60);
     for step in 1..=4 {
         last = first_failure + days(60) + minutes(5 * step);
-        engine.set(last);
+        engine.set(last).await;
         engine.after_event().await;
     }
     assert_eq!(
@@ -193,7 +193,9 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
         "P4 floor after the last batch"
     );
     assert_eq!(engine.invocations().await.windows, stopped);
-    engine.set(chrono::DateTime::from_timestamp_millis(alarm).unwrap());
+    engine
+        .set(chrono::DateTime::from_timestamp_millis(alarm).unwrap())
+        .await;
     engine.after_event().await;
     assert_eq!(engine.invocations().await.windows, stopped + 1, "runs once");
     assert_eq!(
@@ -292,7 +294,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
     let items_before = window_items(&engine, &thread).await;
     let base = engine.invocations().await;
 
-    engine.set(due);
+    engine.set(due).await;
     engine.after_event().await;
 
     assert_eq!(engine.wake_messages(&wake).await, 1);
@@ -307,7 +309,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
         "nothing drained"
     );
     for count in 2..=3 {
-        engine.set(due + minutes(5 * (count - 1)));
+        engine.set(due + minutes(5 * (count - 1))).await;
         engine.after_event().await;
         assert_eq!(
             unit_record(&engine, DRAINS).await,
@@ -318,7 +320,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
 
     // Automatic recovery: the drain runs once and the record goes.
     repair_drain(&engine, cursor.clone()).await;
-    engine.set(due + minutes(15));
+    engine.set(due + minutes(15)).await;
     engine.after_event().await;
     assert!(
         unit_record(&engine, DRAINS).await.is_empty(),
@@ -330,7 +332,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
         position(&drained[0]) > position(&cursor),
         "the cursor moves past the post: {drained:?} from {cursor:?}"
     );
-    engine.set(due + minutes(20));
+    engine.set(due + minutes(20)).await;
     engine.after_event().await;
     assert_eq!(drain_row(&engine).await, drained, "drained once, not again");
 
@@ -338,20 +340,20 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
     undrained_post(&engine, &thread).await;
     let cursor = break_drain(&engine).await;
     let first_failure = next_mark(engine.now());
-    engine.set(first_failure);
+    engine.set(first_failure).await;
     engine.after_event().await;
     assert_eq!(
         unit_record(&engine, DRAINS).await,
         corrupt_drain(1, first_failure + minutes(5))
     );
-    engine.set(first_failure + days(60) - minutes(5));
+    engine.set(first_failure + days(60) - minutes(5)).await;
     engine.after_event().await;
     assert_eq!(
         unit_record(&engine, DRAINS).await,
         corrupt_drain(2, first_failure + days(60)),
         "one mark before 60 days: still failing"
     );
-    engine.set(first_failure + days(60));
+    engine.set(first_failure + days(60)).await;
     engine.after_event().await;
     assert_eq!(
         unit_record(&engine, DRAINS).await[0][..3],
@@ -370,7 +372,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
     let mut last = first_failure + days(60);
     for step in 1..=4 {
         last = first_failure + days(60) + minutes(5 * step);
-        engine.set(last);
+        engine.set(last).await;
         engine.after_event().await;
     }
     assert_eq!(
@@ -394,7 +396,9 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
         alarm,
         (last + chrono::Duration::seconds(30)).timestamp_millis()
     );
-    engine.set(chrono::DateTime::from_timestamp_millis(alarm).unwrap());
+    engine
+        .set(chrono::DateTime::from_timestamp_millis(alarm).unwrap())
+        .await;
     engine.after_event().await;
     assert_eq!(
         engine.invocations().await.drains,
@@ -427,7 +431,7 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
         kind: "wake_timer".into(),
     };
     runtime.statement_host().inject_engine_read_fault(fault());
-    engine.set(first);
+    engine.set(first).await;
     engine.after_event().await;
     assert_eq!(
         engine.record("engine_source", "wake_timer").await,
@@ -441,7 +445,7 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
     assert_eq!(engine.wake_messages(&wake).await, 0);
 
     runtime.statement_host().inject_engine_read_fault(fault());
-    engine.set(first + minutes(5));
+    engine.set(first + minutes(5)).await;
     engine.after_event().await;
     assert_eq!(
         engine.record("engine_source", "wake_timer").await[0][..2],
@@ -457,7 +461,7 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
     let mut last = first + minutes(5);
     for step in 2..=5 {
         last = first + minutes(5 * step);
-        engine.set(last);
+        engine.set(last).await;
         engine.after_event().await;
     }
     assert_eq!(
@@ -504,7 +508,9 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
         alarm,
         (last + chrono::Duration::seconds(30)).timestamp_millis()
     );
-    engine.set(chrono::DateTime::from_timestamp_millis(alarm).unwrap());
+    engine
+        .set(chrono::DateTime::from_timestamp_millis(alarm).unwrap())
+        .await;
     engine.after_event().await;
     assert_eq!(
         engine.record("engine_source", "wake_timer").await[0][..2],
@@ -512,7 +518,7 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
         "the next batch reads the kind: the fault armed while retired is consumed now"
     );
     let next = next_mark(engine.now());
-    engine.set(next);
+    engine.set(next).await;
     engine.after_event().await;
     assert_eq!(engine.wake_messages(&wake).await, 1, "the kind runs again");
     assert!(

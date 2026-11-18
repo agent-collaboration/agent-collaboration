@@ -80,7 +80,8 @@ async fn provision_repeat_restart_and_predecessor_renewal_preserve_existing_mode
     );
     assert!(f.snapshot().await? == renewed);
     f.clock
-        .advance(Duration::from_secs(signed::LIFETIME_SECONDS.try_into()?))?;
+        .advance(Duration::from_secs(signed::LIFETIME_SECONDS.try_into()?))
+        .await?;
     let current = f.clock_time();
     assert_eq!(
         f.provision(A, &signed::stamp(A, current)?).await?.status,
@@ -327,7 +328,7 @@ async fn a_warm_key_cache_refuses_a_retired_key_once_its_refresh_bound_passes() 
     assert_eq!(f.provision(A, &first).await?.status, 200);
     let warmed = f.keys.fetches();
     f.keys.retire("stamp-b")?;
-    f.clock.advance(Duration::from_millis(299_999))?;
+    f.clock.advance(Duration::from_millis(299_999)).await?;
     let inside = f
         .provision(
             A,
@@ -335,7 +336,7 @@ async fn a_warm_key_cache_refuses_a_retired_key_once_its_refresh_bound_passes() 
         )
         .await?;
     let inside_fetches = f.keys.fetches();
-    f.clock.advance(Duration::from_millis(1))?;
+    f.clock.advance(Duration::from_millis(1)).await?;
     let past = f
         .provision(
             A,

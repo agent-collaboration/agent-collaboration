@@ -42,7 +42,7 @@ async fn a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_ch
     seed_probe(&runtime, item, group, Some(due), "retry once").await;
     raw(&runtime, REJECT_PROBE, vec![]).await;
     dump(&runtime, TEST, "seeded, before any pass").await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     runtime.after_event().await.unwrap();
     dump(&runtime, TEST, "after the rejected pass").await;
     assert_eq!(
@@ -62,7 +62,7 @@ async fn a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_ch
             key: key(item),
             kind: EngineCommitFaultKind::Unavailable,
         });
-    fixture.clock.set_utc(due + minutes(5));
+    fixture.set_utc(due + minutes(5)).await;
     runtime.after_event().await.unwrap();
     dump(&runtime, TEST, "after the failed success batch").await;
     assert_eq!(
@@ -80,8 +80,8 @@ async fn a_success_deletes_the_record_in_its_batch_and_a_failed_success_batch_ch
 
     // The retry succeeds: the record is gone in the success's own batch.
     fixture
-        .clock
-        .set_utc(due + minutes(5) + chrono::Duration::seconds(30));
+        .set_utc(due + minutes(5) + chrono::Duration::seconds(30))
+        .await;
     runtime.after_event().await.unwrap();
     dump(&runtime, TEST, "after the successful retry").await;
     assert_eq!(
@@ -122,7 +122,7 @@ async fn failing_wake(fixture: &Fixture, number: u32) -> (Runtime, workspace_ids
         vec![],
     )
     .await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     runtime.after_event().await.unwrap();
     raw(&runtime, "DROP TRIGGER wake_reject", vec![]).await;
     assert_eq!(
@@ -159,7 +159,7 @@ async fn failing_automation(fixture: &Fixture, number: u32) -> (Runtime, String)
         vec![],
     )
     .await;
-    fixture.clock.set_utc(fixture.clock.utc_now() + minutes(5));
+    fixture.set_utc(fixture.clock.utc_now() + minutes(5)).await;
     runtime.after_event().await.unwrap();
     raw(&runtime, "DROP TRIGGER automation_reject", vec![]).await;
     let automation_id = automation_id.to_string();
@@ -328,7 +328,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
     )
     .await;
     dump(&runtime, TEST, "damaged record planted").await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
 
     runtime.after_event().await.unwrap();
     dump(&runtime, TEST, "after pass 1").await;
@@ -348,7 +348,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
         ]],
         "replaced once by CorruptRow with the raw value kept; never defaulted"
     );
-    fixture.clock.set_utc(due + minutes(5));
+    fixture.set_utc(due + minutes(5)).await;
     runtime.after_event().await.unwrap();
     dump(&runtime, TEST, "after pass 2 at the next mark").await;
     assert_eq!(
@@ -357,7 +357,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
     );
     let before = probe_facts(&runtime, damaged, broken_group).await;
     for step in 2..14 {
-        fixture.clock.set_utc(due + minutes(5 * step));
+        fixture.set_utc(due + minutes(5 * step)).await;
         runtime.after_event().await.unwrap();
     }
     dump(&runtime, TEST, "after twelve later marks").await;
