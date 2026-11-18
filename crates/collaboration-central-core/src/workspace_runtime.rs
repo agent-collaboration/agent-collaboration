@@ -42,6 +42,9 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     /// Test-support count of alarm drives the host's driver started.
     #[cfg(feature = "test-support")]
     started_alarms: tokio::sync::watch::Sender<u64>,
+    /// Test-support count of started drives that completed or failed.
+    #[cfg(feature = "test-support")]
+    settled_alarms: tokio::sync::watch::Sender<u64>,
     /// Test-support count of callers waiting for in-flight drives to settle.
     #[cfg(feature = "test-support")]
     settle_waiting: tokio::sync::watch::Sender<usize>,
@@ -81,6 +84,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             central_turn: tokio::sync::Mutex::new(()),
             #[cfg(feature = "test-support")]
             started_alarms: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            settled_alarms: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             settle_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
@@ -170,22 +175,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     /// from an earlier clock position cannot finish after the move.
     #[cfg(feature = "test-support")]
     pub async fn until_alarm_drives_settled(&self) {
-        let mut completed = self.completed_alarms.subscribe();
-        let mut failed = self.failed_alarms.subscribe();
-        let mut waiter = None;
-        loop {
-            let settled = completed.borrow_and_update().saturating_add(
-                u64::try_from(failed.borrow_and_update().len()).unwrap_or(u64::MAX),
-            );
-            if *self.started_alarms.borrow() <= settled {
-                return;
-            }
-            waiter.get_or_insert_with(|| CentralWaiter::enter(self.settle_waiting.clone()));
-            tokio::select! {
-                changed = completed.changed() => if changed.is_err() { return; },
-                changed = failed.changed() => if changed.is_err() { return; },
-            }
+        let started = *self.started_alarms.borrow();
+        let mut settled = self.settled_alarms.subscribe();
+        if *settled.borrow_and_update() >= started {
+            return;
         }
+        let _waiter = CentralWaiter::enter(self.settle_waiting.clone());
+        let _ = settled.wait_for(|settled| *settled >= started).await;
     }
     /// Resolves once a caller is waiting in `until_alarm_drives_settled`.
     #[cfg(feature = "test-support")]
@@ -201,6 +197,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn mark_alarm_completed(&self) {
         self.completed_alarms
             .send_modify(|count| *count = count.saturating_add(1));
+        self.settled_alarms
+            .send_modify(|count| *count = count.saturating_add(1));
     }
     #[cfg(feature = "test-support")]
     pub async fn until_alarm_completed(&self, count: u64) {
@@ -212,6 +210,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn mark_alarm_failed(&self, failure: String) {
         self.failed_alarms
             .send_modify(|failures| failures.push(failure));
+        self.settled_alarms
+            .send_modify(|count| *count = count.saturating_add(1));
     }
     #[cfg(feature = "test-support")]
     pub fn alarm_failures(&self) -> Vec<String> {
