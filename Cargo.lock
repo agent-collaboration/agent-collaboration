@@ -1848,6 +1848,7 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "fleet-identity-protocol",
+ "hegeltest",
  "reqwest 0.12.28",
  "ring",
  "router-clock",
