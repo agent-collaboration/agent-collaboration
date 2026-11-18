@@ -5,4 +5,5 @@ mod portable_package_integrity;
 mod route_effect_evidence;
 mod run_admission_rules;
 mod summary_source_reference;
+mod timing_daylight_saving;
 mod timing_occurrences;

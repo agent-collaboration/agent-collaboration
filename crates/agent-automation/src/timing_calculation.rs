@@ -3,6 +3,8 @@ use chrono::{DateTime, Duration, Utc};
 use croner::parser::{CronParser, Seconds, Year};
 use serde::{Deserialize, Serialize};
 
+mod croner_seam;
+
 #[derive(Debug, thiserror::Error)]
 pub enum TimingError {
     #[error("timing duration must be between 1 and 31536000 seconds")]
@@ -73,23 +75,45 @@ impl TimingRule {
                 if expression.split_whitespace().count() != 5 {
                     return Err(TimingError::InvalidCron);
                 }
-                let timezone: chrono_tz::Tz =
-                    timezone.parse().map_err(|_| TimingError::InvalidTimezone)?;
+                // The zone name is checked against our jiff before it crosses the seam.
+                jiff::tz::TimeZone::get(timezone).map_err(|_| TimingError::InvalidTimezone)?;
                 let cron = CronParser::builder()
                     .seconds(Seconds::Disallowed)
                     .year(Year::Disallowed)
                     .build()
                     .parse(expression)
                     .map_err(|_| TimingError::InvalidCron)?;
-                let start = after
-                    .map_or(anchor, |boundary| boundary.max(anchor))
-                    .with_timezone(&timezone);
-                cron.find_next_occurrence(&start, false)
-                    .map(|due| Some(due.with_timezone(&Utc)))
-                    .map_err(|_| TimingError::OutOfRange)
+                let start = timestamp(after.map_or(anchor, |boundary| boundary.max(anchor)))?;
+                croner_seam::next_occurrence(&cron, start, timezone)
+                    .and_then(utc)
+                    .map(Some)
             }
         }
     }
+}
+
+// The public boundary is chrono; zone and calendar work happen in jiff.
+fn timestamp(at: DateTime<Utc>) -> Result<jiff::Timestamp, TimingError> {
+    jiff::Timestamp::new(
+        at.timestamp(),
+        saturating_nanos(at.timestamp_subsec_nanos()),
+    )
+    .map_err(|_| TimingError::OutOfRange)
+}
+
+fn utc(timestamp: jiff::Timestamp) -> Result<DateTime<Utc>, TimingError> {
+    // jiff gives a negative instant's parts with the same sign; chrono wants
+    // whole seconds below it and non-negative nanoseconds.
+    let (seconds, nanos) = match timestamp.subsec_nanosecond() {
+        nanos if nanos < 0 => (timestamp.as_second() - 1, nanos + 1_000_000_000),
+        nanos => (timestamp.as_second(), nanos),
+    };
+    DateTime::from_timestamp(seconds, nanos.unsigned_abs()).ok_or(TimingError::OutOfRange)
+}
+
+/// chrono marks a leap second as 1,000,000,000 or more nanoseconds; jiff has none.
+fn saturating_nanos(nanos: u32) -> i32 {
+    i32::try_from(nanos.min(999_999_999)).unwrap_or(999_999_999)
 }
 
 fn validate_seconds(seconds: u32) -> Result<i64, TimingError> {

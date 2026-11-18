@@ -95,7 +95,11 @@ fleet-sync-delivery = { version = "0.4.0", git = "https://github.com/agent-colla
 aes-gcm = { version = "=0.11.1", features = ["zeroize"] }
 apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
 agent-client-protocol = "=2.2.0"
-croner = "=4.0.0"
+croner = { version = "=4.0.0", default-features = false, features = ["jiff"] }
+jiff = "=1.0.1"
+# croner's `jiff` feature requires jiff ^0.2; only agent-automation's croner seam uses
+# this edge. When croner ships a jiff-1 feature, drop the seam and this dependency.
+jiff-croner = { package = "jiff", version = "=0.2.37" }
 chrono-tz = "0.10.4"
 fs2 = "=0.4.3"
 keyring-core = "1"
