@@ -42,7 +42,7 @@ async fn empty_store() -> SqliteConnection {
         .unwrap();
     let central = fleet_storage_schema::central_migrator();
     for migration in central.iter().take(3) {
-        connection.execute(migration.sql.as_str()).await.unwrap();
+        connection.execute(migration.sql.clone()).await.unwrap();
     }
     connection
 }
