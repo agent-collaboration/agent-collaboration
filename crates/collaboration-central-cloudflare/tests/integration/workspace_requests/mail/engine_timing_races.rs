@@ -19,7 +19,7 @@ use workspace_model::central_mail::CentralMailResult;
 async fn window_due_at(runtime: &Runtime, due: Time) {
     raw(
         runtime,
-        "UPDATE notification_windows SET due_at=?",
+        "UPDATE mail_notification_windows SET due_at=?",
         vec![stamp(due)],
     )
     .await;
@@ -191,7 +191,7 @@ async fn an_eviction_after_a_due_batch_fires_nothing_twice() {
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM messages WHERE message_kind='wake'",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'",
             vec![]
         )
         .await,
@@ -213,7 +213,7 @@ async fn a_wake_due_with_a_window_fires_early_and_the_window_waits_for_its_slot(
     );
     let windows = count(
         &runtime,
-        "SELECT COUNT(*) FROM notification_windows",
+        "SELECT COUNT(*) FROM mail_notification_windows",
         vec![],
     )
     .await;
@@ -285,7 +285,7 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
     let request: Result<Result<ProbeAnswer, StoreFailure>, StoreFailure> = runtime
         .control(
             "engine-probe-request",
-            &serde_json::json!({"caller": fixture.caller.caller, "credentialHash": fixture.caller.credential_hash, "request": probe_request(35705, traffic, ProbeEvent::Run)}),
+            &serde_json::json!({"caller": fixture.caller.caller, "token": fixture.caller.token, "request": probe_request(35705, traffic, ProbeEvent::Run)}),
         )
         .await;
 
@@ -320,7 +320,7 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM central_work_attempts",
+            "SELECT COUNT(*) FROM engine_work_attempts",
             vec![]
         )
         .await,

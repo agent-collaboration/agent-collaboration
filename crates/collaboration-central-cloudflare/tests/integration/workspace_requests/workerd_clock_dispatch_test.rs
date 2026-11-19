@@ -30,7 +30,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
         .inspect_workspace(
             &fixture.workspace,
             Statement {
-                sql: "SELECT created_at FROM areas WHERE area_id=?",
+                sql: "SELECT created_at FROM workspace_areas WHERE area_id=?",
                 args: vec![text(area)],
             },
         )
@@ -56,6 +56,9 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 operation: CentralMailOperation::SendMessage {
                     to: support::session(&fixture.caller),
                     body: "clock dispatch".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
+                    sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                 },
             },
         )
@@ -75,7 +78,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
     };
     let stored = runtime
         .read(Statement {
-            sql: "SELECT created_at FROM messages WHERE message_id=?",
+            sql: "SELECT created_at FROM mail_messages WHERE message_id=?",
             args: vec![text(message_id)],
         })
         .await
@@ -96,6 +99,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 workspace_id: Some(fixture.workspace.clone()),
                 operation: m::WorkspaceOperation::CreateArea {
                     name: support::name("Direct clock"),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             },
         )
@@ -117,7 +121,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
         .inspect_workspace(
             &fixture.workspace,
             Statement {
-                sql: "SELECT created_at FROM areas WHERE area_id=?",
+                sql: "SELECT created_at FROM workspace_areas WHERE area_id=?",
                 args: vec![text(&area)],
             },
         )
@@ -175,6 +179,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
                 workspace_id: Some(fixture.workspace.clone()),
                 operation: m::WorkspaceOperation::CreateArea {
                     name: support::name("Reopened clock"),
+                    description: "Test description".to_owned().try_into().unwrap(),
                 },
             },
         )
@@ -193,7 +198,7 @@ async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {
         panic!("area missing")
     };
     let stored = runtime.inspect_workspace(&fixture.workspace, Statement {
-        sql: "SELECT area_id,created_at FROM areas WHERE area_id IN (?,?) ORDER BY created_at", args: vec![text(&area), text(reopened)],
+        sql: "SELECT area_id,created_at FROM workspace_areas WHERE area_id IN (?,?) ORDER BY created_at", args: vec![text(&area), text(reopened)],
     }).await.unwrap();
     assert_eq!(stored.rows.len(), 2);
     assert_eq!(stored.rows[0][1], text("2029-01-01T00:00:00.300+00:00"));

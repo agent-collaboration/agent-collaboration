@@ -3,6 +3,11 @@
 
 mod clock_ids;
 mod engine;
+pub mod message_deadline;
+/// Test support: the engine's alarm-input aggregate, one row of
+/// `(on_grid_due, legacy_due)` in UTC milliseconds or NULL.
+#[cfg(feature = "test-support")]
+pub const ENGINE_ALARM_INPUTS: &str = engine::query_registry::ALARM_INPUTS;
 #[cfg(feature = "test-support")]
 pub mod engine_owed_probe;
 #[cfg(feature = "test-support")]
@@ -15,6 +20,7 @@ pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineR
 pub use engine::{AlarmNotPublished, EventCompletion};
 pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
+pub mod machine_token;
 #[cfg(feature = "test-support")]
 pub mod signin_test_observation;
 #[cfg(feature = "test-support")]
@@ -29,6 +35,8 @@ pub use pause_points::{HeldPause, PausePoint, PausePoints};
 
 mod object_host;
 pub use object_host::ObjectHost;
+mod machine_connection;
+mod machine_connection_admission;
 mod machine_login_plans;
 mod machine_login_reads;
 mod machine_login_row_values;
@@ -36,6 +44,8 @@ mod machine_login_rows;
 #[cfg(feature = "test-support")]
 mod machine_login_test_control;
 mod machine_login_writes;
+pub use machine_connection::{MachineConnectionAttachment, ValidatedMachineConnection};
+pub use machine_connection_admission::{MachineLinkRequestAuthority, MachineTokenRenewalRefusal};
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
@@ -47,6 +57,7 @@ mod workspace_actor_identity;
 mod workspace_admission;
 mod workspace_change_records;
 mod workspace_decode_error;
+mod workspace_directory_requests;
 mod workspace_directory_rows;
 mod workspace_item_reads;
 mod workspace_json_records;
@@ -54,6 +65,7 @@ pub mod workspace_migrations;
 mod workspace_read_queries;
 mod workspace_request_gate;
 mod workspace_request_log;
+mod workspace_request_status;
 mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
@@ -61,12 +73,24 @@ mod workspace_rule_inputs;
 mod access_observation;
 pub use access_observation::CentralObservation;
 
+mod central_mail_ack;
+pub use central_mail_ack::{MailAckIgnored, MailAckSettlement};
+mod central_mail_delivery_read;
+pub use central_mail_delivery_read::{
+    ResolvedMailDelivery, WELCOME_PAGE_SIZE, WelcomeDeliveryCursor, WelcomeDeliveryPage,
+    WindowedDelivery, WindowedDeliveryDecision,
+};
 mod central_mail_requests;
 mod central_mail_rows;
+mod central_mail_sender;
+mod mail_delivery_ready;
+pub use mail_delivery_ready::MailDeliveryReady;
+mod central_mail_status;
 mod central_mail_store;
 mod central_timer_plans;
 mod central_timer_rows;
 mod central_timers;
+mod direct_message_rows;
 mod guarded_statements;
 pub use engine::AlarmResult;
 mod notification_windows;
@@ -110,6 +134,7 @@ mod organization_signin_http;
 mod organization_signin_port;
 mod organization_stamp_rows;
 mod person_admission_plans;
+mod private_machine_revocation;
 pub use organization_admin_contract::*;
 pub use organization_signin_http::organization_signin_router;
 pub use organization_signin_port::OrganizationSignInPort;

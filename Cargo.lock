@@ -1065,6 +1065,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -1072,6 +1073,7 @@ dependencies = [
 name = "central-link-protocol"
 version = "0.1.156"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1344,14 +1346,18 @@ dependencies = [
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
  "collaboration-client",
  "collaboration-protocol",
  "collaboration-service",
  "comfy-table",
  "crossterm",
+ "fs2",
  "futures-util",
  "indicatif",
  "iocraft",
+ "jsonc-parser",
  "message-board",
  "message-board-storage",
  "nix",
@@ -1360,6 +1366,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "reqwest 0.12.28",
+ "router-clock",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -1742,6 +1749,9 @@ name = "collaboration-central-cloudflare"
 version = "0.1.156"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "central-link-client",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "collaboration-central-conformance",
@@ -1753,6 +1763,7 @@ dependencies = [
  "js-sys",
  "message-board",
  "reqwest 0.12.28",
+ "reqwest-websocket",
  "router-clock",
  "runtime-primitives",
  "rustix 1.1.6",
@@ -1783,6 +1794,8 @@ version = "0.1.156"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "chrono",
+ "reqwest 0.12.28",
  "ring",
  "serde_json",
  "sha2 0.10.9",
@@ -1797,6 +1810,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "central-engine-model",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "fleet-identity-protocol",
@@ -1830,13 +1844,17 @@ dependencies = [
  "aws-lc-rs",
  "axum",
  "base64 0.22.1",
+ "central-link-client",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
  "fleet-identity-protocol",
+ "futures-util",
  "hegeltest",
  "reqwest 0.12.28",
+ "reqwest-websocket",
  "ring",
  "router-clock",
  "runtime-primitives",
@@ -4103,6 +4121,7 @@ version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ecded084f9b9a718d39668a42657c32253663d1f6afb3fbb9134f0305f73f48"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 
@@ -7941,6 +7960,8 @@ dependencies = [
 name = "workspace-ids"
 version = "0.1.156"
 dependencies = [
+ "hegeltest",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7953,8 +7974,13 @@ version = "0.1.156"
 dependencies = [
  "agent-automation",
  "chrono",
+ "collaboration-mail-protocol",
+ "message-board",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "workspace-ids",
 ]
@@ -7964,6 +7990,7 @@ name = "workspace-rules"
 version = "0.1.156"
 dependencies = [
  "central-storage",
+ "hegeltest",
  "proptest",
  "workspace-model",
 ]

@@ -2,17 +2,18 @@
 use super::ConnectionId;
 use super::{CommandId, MachineEnrollment, OrganizationStanding, PersonId};
 use fleet_identity_protocol::{
-    AgentIsolation, InstallationId, IsolationKind, LaunchContext, MachineEnvironment,
-    OrganizationId, SequenceNumber, StartedBy, UnixMillis,
+    AgentIsolation, IsolationKind, LaunchContext, MachineEnvironment, OrganizationId,
+    SequenceNumber, StartedBy, UnixMillis,
 };
 use message_board::{MachineLabel, ProjectId, ResourceName, SessionRef, WorkspaceId};
 use schemars::JsonSchema;
 use schemars::{Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
+use workspace_ids::MachineId;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReadMachinePresence {
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
@@ -72,7 +73,7 @@ pub enum OwnerRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MachineRow {
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub label: MachineLabel,
     pub enrollment: EnrollmentView,
     pub may_serve: Vec<WorkspaceRef>,
@@ -178,7 +179,7 @@ pub struct WorkspaceLookup {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MachineLookup {
     pub organization_id: OrganizationId,
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -200,7 +201,7 @@ pub enum IdentityLookupResult {
     },
     Session {
         session: Box<SessionRef>,
-        machine: InstallationId,
+        machine: MachineId,
         project: ProjectRef,
         workspace: WorkspaceRef,
         isolation: AgentIsolation,
@@ -234,7 +235,7 @@ pub enum WorkspaceLookupResult {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AllowedMachineRow {
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub label: MachineLabel,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -246,7 +247,7 @@ pub struct AllowedMachineRow {
 )]
 pub enum MachineLookupResult {
     Machine {
-        installation: InstallationId,
+        machine_id: MachineId,
         organization_id: OrganizationId,
         label: MachineLabel,
         enrollment: Box<MachineEnrollment>,

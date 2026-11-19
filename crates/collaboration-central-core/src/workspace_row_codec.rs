@@ -33,6 +33,13 @@ pub(crate) fn json<T: DeserializeOwned>(value: &str, field: &str) -> Result<T, S
     serde_json::from_str(value).map_err(|_| corrupt(field))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ListedItem {
+    pub item: workspace_model::ItemRef,
+    pub position: workspace_model::ChangePosition,
+}
+
 #[derive(Default)]
 pub(crate) struct WorkspaceRows {
     pub areas: Vec<workspace_model::Area>,
@@ -53,6 +60,8 @@ pub(crate) struct WorkspaceRows {
     pub marks: Vec<workspace_model::ReadMark>,
     pub changes: Vec<crate::workspace_change_records::StoredChange>,
     pub high_water: workspace_model::ChangePosition,
+    /// The page a list read selected, each with its position in the list.
+    pub listed: Vec<ListedItem>,
     pub created_positions:
         std::collections::BTreeMap<workspace_model::ItemRef, workspace_model::ChangePosition>,
 }
@@ -63,60 +72,70 @@ impl WorkspaceRows {
             let kind = string(&outcome, row, "row_kind")?;
             let payload = string(&outcome, row, "payload")?;
             match kind {
-                "area" => rows.areas.push(json(payload, "areas")?),
-                "project" => rows.projects.push(json(payload, "projects")?),
-                "initiative" => rows.initiatives.push(json(payload, "initiatives")?),
-                "deliverable" => rows.deliverables.push(json(payload, "deliverables")?),
+                "area" => rows.areas.push(json(payload, "workspace_areas")?),
+                "project" => rows.projects.push(json(payload, "workspace_projects")?),
+                "initiative" => rows
+                    .initiatives
+                    .push(json(payload, "workspace_initiatives")?),
+                "deliverable" => rows
+                    .deliverables
+                    .push(json(payload, "workspace_deliverables")?),
                 "projectRole" => rows
                     .project_roles
-                    .push(json(payload, "project_roles.role")?),
+                    .push(json(payload, "workspace_project_roles.role")?),
                 "deliverableRole" => rows
                     .deliverable_roles
-                    .push(json(payload, "deliverable_roles.role")?),
+                    .push(json(payload, "workspace_deliverable_roles.role")?),
                 "dependency" => rows
                     .dependencies
-                    .push(json(payload, "deliverable_dependencies")?),
-                "issue" => rows.issues.push(json(payload, "issues")?),
-                "thread" => rows.threads.push(json(payload, "threads")?),
-                "member" => rows.members.push(json(payload, "thread_members")?),
+                    .push(json(payload, "workspace_deliverable_dependencies")?),
+                "issue" => rows.issues.push(json(payload, "workspace_issues")?),
+                "thread" => rows.threads.push(json(payload, "workspace_threads")?),
+                "member" => rows
+                    .members
+                    .push(json(payload, "workspace_thread_members")?),
                 "post" => rows.posts.push(crate::workspace_json_records::decode(
                     payload,
-                    "posts",
-                    &[("addressees", "posts.addressees")],
+                    "workspace_posts",
+                    &[("addressees", "workspace_posts.addressees")],
                 )?),
-                "entry" => rows.entries.push(json(payload, "work_log_entries")?),
+                "entry" => rows
+                    .entries
+                    .push(json(payload, "workspace_work_log_entries")?),
                 "backlog" => {
-                    let item: workspace_model::BacklogItem = json(payload, "backlog_items")?;
+                    let item: workspace_model::BacklogItem =
+                        json(payload, "workspace_backlog_items")?;
                     match (item.status, item.closing_note.as_deref()) {
                         (workspace_model::BacklogStatus::Open, None) => {}
                         (workspace_model::BacklogStatus::Closed, Some(note)) => {
                             let note = workspace_model::Description::try_from(note.to_owned())
-                                .map_err(|_| corrupt("backlog_items.closing_note"))?;
+                                .map_err(|_| corrupt("workspace_backlog_items.closing_note"))?;
                             if note.as_str().trim().is_empty() {
-                                return Err(corrupt("backlog_items.closing_note"));
+                                return Err(corrupt("workspace_backlog_items.closing_note"));
                             }
                         }
-                        _ => return Err(corrupt("backlog_items.closing_note")),
+                        _ => return Err(corrupt("workspace_backlog_items.closing_note")),
                     }
                     rows.backlog.push(item);
                 }
                 "reference" => rows.references.push(crate::workspace_json_records::decode(
                     payload,
-                    "item_references",
-                    &[("details", "item_references.details")],
+                    "workspace_item_references",
+                    &[("details", "workspace_item_references.details")],
                 )?),
                 "link" => rows.links.push(crate::workspace_json_records::decode(
                     payload,
-                    "links",
-                    &[("details", "links.details")],
+                    "workspace_links",
+                    &[("details", "workspace_links.details")],
                 )?),
                 "mark" => rows.marks.push(crate::workspace_json_records::decode(
                     payload,
-                    "read_marks",
-                    &[("scope", "read_marks.scope")],
+                    "workspace_read_marks",
+                    &[("scope", "workspace_read_marks.scope")],
                 )?),
-                "change" => rows.changes.push(json(payload, "changes")?),
+                "change" => rows.changes.push(json(payload, "workspace_changes")?),
                 "highWater" => rows.high_water = json(payload, "position")?,
+                "listed" => rows.listed.push(json(payload, "listed")?),
                 _ => {
                     return Err(StoreFailure::Corrupt {
                         reason: CorruptReason::UnknownKind {

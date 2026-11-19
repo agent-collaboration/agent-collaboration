@@ -40,6 +40,9 @@ pub(crate) trait StoreAdapter<M: Machine>: Sync {
         key: &InstanceKey,
         effect: &M::Effect,
     ) -> Result<Vec<GuardedStatement>, StoreFailure>;
+    fn mail_ready(&self, _effect: &M::Effect) -> Option<crate::MailDeliveryReady> {
+        None
+    }
     fn failure_sql(&self) -> &'static str;
     fn subject(&self, key: &InstanceKey) -> EngineSubject {
         EngineSubject {

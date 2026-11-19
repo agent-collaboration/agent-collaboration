@@ -10,11 +10,7 @@ fn number(value: i64) -> SqlValue {
 fn approval() -> ReadOutcome {
     let fields = [
         ("approval_id", text("019a3dce-2000-7000-8000-000000000001")),
-        ("machine_id", text("019a3dce-2000-7000-8000-000000000002")),
-        (
-            "installation_id",
-            text("019a3dce-2000-7000-8000-000000000003"),
-        ),
+        ("machine_id", text("019a3dce-2000-7000-8000-000000000003")),
         ("request_id", text("019a3dce-2000-7000-8000-000000000004")),
         (
             "approved_by_person_id",
@@ -94,7 +90,7 @@ fn lifecycle_columns_form_exactly_one_closed_state() {
         set(&mut ended, "last_grant_at", text("2030-03-17T17:46:40Z"));
         assert_eq!(
             enrollment(&ended, &ended.rows[0]),
-            Err(corrupt("machine_approvals.state"))
+            Err(corrupt("login_machine_approvals.state"))
         );
     }
     for (field, value) in [
@@ -110,7 +106,7 @@ fn lifecycle_columns_form_exactly_one_closed_state() {
         set(&mut invalid, field, value);
         assert_eq!(
             enrollment(&invalid, &invalid.rows[0]),
-            Err(corrupt("machine_approvals.state"))
+            Err(corrupt("login_machine_approvals.state"))
         );
     }
 }
@@ -121,33 +117,37 @@ fn malformed_stored_scalars_are_refused_with_the_owning_field() {
         (
             "approval_id",
             text("00000000-0000-4000-8000-000000000001"),
-            "machine_approvals.approval_id",
+            "login_machine_approvals.approval_id",
         ),
         (
             "permission_checked",
             text("machine:other"),
-            "machine_approvals.permission_checked",
+            "login_machine_approvals.permission_checked",
         ),
         (
             "base_generation",
             number(-1),
-            "machine_approvals.base_generation",
+            "login_machine_approvals.base_generation",
         ),
         (
             "base_generation",
             text("3"),
-            "machine_approvals.base_generation",
+            "login_machine_approvals.base_generation",
         ),
-        ("label", text(" Padded label "), "machine_approvals.label"),
+        (
+            "label",
+            text(" Padded label "),
+            "login_machine_approvals.label",
+        ),
         (
             "code_expires_at",
             text("2030-03-17T17:56:40.001Z"),
-            "machine_approvals.code_expires_at",
+            "login_machine_approvals.code_expires_at",
         ),
         (
             "allowed_workspaces",
             text("[\"not-a-workspace\"]"),
-            "machine_approvals.allowed_workspaces",
+            "login_machine_approvals.allowed_workspaces",
         ),
     ] {
         let mut invalid = approval();
@@ -161,8 +161,8 @@ fn duplicate_rows_and_legacy_machine_tags_never_become_facts() {
     let mut rows = approval();
     rows.rows.push(rows.rows[0].clone());
     assert_eq!(
-        only_row(&rows, enrollment, "machine_approvals.request_id"),
-        Err(corrupt("machine_approvals.request_id"))
+        only_row(&rows, enrollment, "login_machine_approvals.request_id"),
+        Err(corrupt("login_machine_approvals.request_id"))
     );
     let mut machine_rows = approval();
     machine_rows
@@ -177,6 +177,30 @@ fn duplicate_rows_and_legacy_machine_tags_never_become_facts() {
     set(&mut machine_rows, "state", text("active"));
     assert_eq!(
         machine(&machine_rows, &machine_rows.rows[0]),
-        Err(corrupt("machines.state"))
+        Err(corrupt("login_machines.state"))
     );
+}
+
+#[test]
+fn every_state_with_a_client_rejects_a_different_enrollment_id() {
+    for end_reason in [None, Some("owner"), Some("superseded"), Some("idle")] {
+        let mut rows = approval();
+        set(
+            &mut rows,
+            "machine_client_id",
+            text("019a3dce-2000-7000-8000-000000000002"),
+        );
+        if let Some(reason) = end_reason {
+            set(&mut rows, "state", text("ended"));
+            set(&mut rows, "end_reason", text(reason));
+            set(&mut rows, "ended_at", text("2030-03-17T17:56:40Z"));
+        } else {
+            set(&mut rows, "state", text("enrolled"));
+            set(&mut rows, "last_grant_at", text("2030-03-17T17:46:40Z"));
+        }
+        assert_eq!(
+            enrollment(&rows, &rows.rows[0]),
+            Err(corrupt("login_machine_approvals.machine_client_id"))
+        );
+    }
 }

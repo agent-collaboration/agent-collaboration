@@ -41,7 +41,7 @@ pub(super) fn next_mark(at: Time) -> Time {
 pub(super) async fn runtime(fixture: &Fixture) -> Runtime {
     fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap()
 }
@@ -84,7 +84,7 @@ pub(super) fn alarm_ms(runtime: &Runtime) -> Option<i64> {
 pub(super) async fn record(runtime: &Runtime, kind: &str, key: &str) -> Vec<Vec<SqlValue>> {
     rows(
         runtime,
-        "SELECT state,failure_count,next_try_at,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+        "SELECT state,failure_count,next_try_at,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
         vec![text(kind), text(key)],
     )
     .await
@@ -93,7 +93,7 @@ pub(super) async fn record(runtime: &Runtime, kind: &str, key: &str) -> Vec<Vec<
 pub(super) async fn whole_record(runtime: &Runtime, kind: &str, key: &str) -> Vec<Vec<SqlValue>> {
     rows(
         runtime,
-        "SELECT * FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+        "SELECT * FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
         vec![text(kind), text(key)],
     )
     .await
@@ -107,7 +107,7 @@ pub(super) async fn count(runtime: &Runtime, sql: &'static str, args: Vec<SqlVal
 pub(super) async fn wake_messages(runtime: &Runtime, wake: &str) -> i64 {
     count(
         runtime,
-        "SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
+        "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
         vec![text(wake)],
     )
     .await
@@ -115,13 +115,13 @@ pub(super) async fn wake_messages(runtime: &Runtime, wake: &str) -> i64 {
 pub(super) async fn automation_messages(runtime: &Runtime, automation: &str) -> i64 {
     count(
         runtime,
-        "SELECT COUNT(*) FROM messages WHERE message_kind='automation' AND json_extract(body,'$.automationId')=?",
+        "SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation' AND json_extract(body,'$.automationId')=?",
         vec![text(automation)],
     )
     .await
 }
 pub(super) async fn all_messages(runtime: &Runtime) -> i64 {
-    count(runtime, "SELECT COUNT(*) FROM messages", vec![]).await
+    count(runtime, "SELECT COUNT(*) FROM mail_messages", vec![]).await
 }
 pub(super) async fn set_wake(fixture: &Fixture, request: u32, due: Time, label: &str) -> String {
     let result = fixture

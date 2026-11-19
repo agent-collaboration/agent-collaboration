@@ -51,7 +51,7 @@ async fn cold_platform_alarm_recovers_organization_and_fires() {
         receipt.result,
         AlarmReceiptResult::Applied { wakes_fired: 1, .. }
     ));
-    let rows = runtime.read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
+    let rows = runtime.read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -100,9 +100,9 @@ async fn stamp_failures_and_unprovisioned_alarm_leave_business_rows_unchanged() 
             ),
             _ => {
                 let column = if case == 4 {
-                    "organization_identity.organization_statement"
+                    "signin_organization_identity.organization_statement"
                 } else {
-                    "organization_identity.id"
+                    "signin_organization_identity.id"
                 };
                 assert_eq!(
                     result.unwrap_err(),
@@ -130,7 +130,7 @@ async fn stamp_failures_and_unprovisioned_alarm_leave_business_rows_unchanged() 
         } else {
             assert!(matches!(receipt.result, AlarmReceiptResult::Error { .. }));
         }
-        let rows: std::result::Result<central_storage::ReadOutcome, central_storage::StoreFailure> = runtime.control("raw-read", &Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
+        let rows: std::result::Result<central_storage::ReadOutcome, central_storage::StoreFailure> = runtime.control("raw-read", &Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='active'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
         let rows = rows.unwrap();
         assert_eq!(
             rows.rows,
@@ -174,7 +174,7 @@ async fn timer_commit_crash_restarts_without_loss_or_duplicate() {
             cold.cold_alarm().await.unwrap().wakes_fired,
             expected_recovered
         );
-        let rows = cold.read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
+        let rows = cold.read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
         assert_eq!(
             rows.rows,
             vec![vec![

@@ -16,3 +16,10 @@ pub use object_storage::ObjectStorage;
 pub use object_storage::StoreMigrations;
 mod workspace_host;
 pub use workspace_host::{TokioWorkspaceHost, TokioWorkspaceStores};
+mod machine_push_registry;
+mod workspace_link;
+pub use workspace_link::WorkspaceLink;
+#[cfg(unix)]
+mod workspace_server;
+#[cfg(unix)]
+pub use workspace_server::{TokioWorkspaceServer, TokioWorkspaceServerError};

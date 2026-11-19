@@ -8,13 +8,6 @@ use workspace_model::central_mail as mail;
 
 pub(crate) struct AutomationTimer;
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(
-    not(target_arch = "wasm32"),
-    expect(
-        clippy::large_enum_variant,
-        reason = "a transient reducer value; boxing the active row would only obscure the pure match"
-    )
-)]
 pub(crate) enum State {
     Active(AutomationRow),
     Done { evaluated: Option<EngineTime> },

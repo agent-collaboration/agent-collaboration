@@ -1,6 +1,7 @@
 //! Native sign-in trust: real HTTP key publication and core-owned cache policy.
 
 use crate::sign_in_crypto::{NativeEd25519, NativeEs256};
+use collaboration_central_core::machine_token::{MachineTokenPolicy, MachineTokenVerifier};
 use collaboration_central_core::{
     IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier, KeyFetchFailure, RawJwks,
     SignInTrustSettings,
@@ -39,6 +40,9 @@ impl NativeSignInTrust {
         organization: OrganizationId,
         clock: Arc<dyn Clock>,
     ) -> Result<Arc<dyn SignInVerification>, FleetOrganizationStatementRefusal> {
+        if !self.settings.machine_audience_is_valid() {
+            return Err(FleetOrganizationStatementRefusal::InvalidConfiguration);
+        }
         let trust = FleetOrganizationStatementTrust::new(
             self.settings.issuer.clone(),
             self.settings.audience.clone(),
@@ -64,11 +68,24 @@ impl NativeSignInTrust {
                     clock.clone(),
                 ),
                 NativeEs256,
-                clock,
+                clock.clone(),
                 PersonRequestPolicy {
                     issuer: self.settings.issuer.clone(),
                     audience: self.settings.admin_audience.clone(),
                     public_origin: self.settings.public_origin.clone(),
+                },
+            ),
+            machines: MachineTokenVerifier::new(
+                IssuerSignatureVerifier::new(
+                    NativeEd25519,
+                    keys(),
+                    self.cache.clone(),
+                    clock.clone(),
+                ),
+                clock,
+                MachineTokenPolicy {
+                    issuer: self.settings.issuer.clone(),
+                    audience: self.settings.machine_audience.clone(),
                 },
             ),
             sign_in_service: self.settings.service_id.clone(),

@@ -28,10 +28,10 @@ pub(super) async fn create(
 pub(super) async fn durable_effects(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
     let mut rows = vec![];
     for sql in [
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM request_log ORDER BY request_id",
-        "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM runtime_request_log ORDER BY request_id",
+        "SELECT * FROM signin_change_records ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
     ] {
         rows.push(f.rows(A, sql, vec![]).await?);
     }
@@ -40,16 +40,12 @@ pub(super) async fn durable_effects(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>
 pub(super) async fn all_effects(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
     let mut rows = durable_effects(f).await?;
     rows.push(
-        f.rows(
-            A,
-            "SELECT * FROM organization_used_requests ORDER BY id",
-            vec![],
-        )
-        .await?,
+        f.rows(A, "SELECT * FROM admin_used_requests ORDER BY id", vec![])
+            .await?,
     );
     for sql in [
-        "SELECT * FROM organization_authorization_floors ORDER BY id",
-        "SELECT * FROM person_organization_authorization_floors ORDER BY id",
+        "SELECT * FROM signin_authorization_floors ORDER BY id",
+        "SELECT * FROM signin_person_authorization_floors ORDER BY id",
     ] {
         rows.push(f.rows(A, sql, vec![]).await?);
     }
@@ -58,21 +54,14 @@ pub(super) async fn all_effects(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>> 
 pub(super) async fn machine_rows(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
     let mut rows = vec![];
     for sql in [
-        "SELECT * FROM machines ORDER BY machine_id",
-        "SELECT * FROM machine_credentials ORDER BY credential_id",
+        "SELECT * FROM login_machines ORDER BY machine_id",
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+        "SELECT * FROM login_machine_approvals ORDER BY approval_id",
     ] {
         rows.push(f.rows(A, sql, vec![]).await?);
     }
     Ok(rows)
 }
-pub(super) fn caller() -> Result<collaboration_central_core::WorkspaceCaller> {
-    Ok(collaboration_central_core::WorkspaceCaller {
-        organization_id: org(A)?,
-        caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
-            machine_id: MACHINE.to_owned().try_into()?,
-            endpoint: "codex-local".to_owned().try_into()?,
-            session_id: "setup-machine-session".to_owned().try_into()?,
-        }),
-        credential_hash: "signin-fixture-hash".to_owned(),
-    })
+pub(super) async fn caller(f: &Fixture) -> Result<collaboration_central_core::WorkspaceCaller> {
+    f.machine_caller("setup-machine-session").await
 }

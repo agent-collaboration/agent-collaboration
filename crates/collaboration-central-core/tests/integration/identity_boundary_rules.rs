@@ -100,8 +100,7 @@ fn device_login_second_factor_is_required_nullable_and_serializes_null() {
         "approver":"019a3dce-2000-7000-8000-000000000001",
         "permissionChecked":"machine:enroll",
         "requestId":"019a3dce-2000-7000-8000-000000000002",
-        "installation":"019a3dce-2000-7000-8000-000000000001",
-        "peer":"019a3dce-2000-7000-8000-000000000002",
+        "machineId":"019a3dce-2000-7000-8000-000000000001",
         "label":"fixture machine","allowedWorkspaces":[],
         "approverSecondFactorAt":null,"codeExpiresAt":1793448600_i64
     });

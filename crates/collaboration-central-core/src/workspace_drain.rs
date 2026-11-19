@@ -12,7 +12,8 @@ use crate::{
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn preset_workspace_drain(
+    /// The caller holds central admission through this deadline and the workspace batch.
+    pub(crate) async fn preset_workspace_drain_held(
         &self,
         workspace: &WorkspaceId,
         now: Timestamp,
@@ -20,9 +21,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let due = now
             .checked_add_signed(chrono::Duration::seconds(5))
             .ok_or_else(|| corrupt("drain_due_at"))?;
-        let _turn = self.take_central_turn().await;
-
-        applied(self.host.run_batch(StatementBatch{statements:vec![exact("INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:alarm_update()}).await?)
+        applied(self.host.run_batch(StatementBatch{statements:vec![exact("INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(mail_workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:alarm_update()}).await?)
     }
     pub async fn drain_workspace(
         &self,
@@ -103,7 +102,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let cursor = self
             .host
             .read(Statement {
-                sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+                sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
                 args: vec![text(workspace)],
             })
             .await?;
@@ -114,8 +113,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             SqlValue::Integer(value) => u64::try_from(value.get())
                 .ok()
                 .and_then(|value| ChangePosition::try_from(value).ok())
-                .ok_or_else(|| corrupt("workspace_drains.drained_through_position"))?,
-            _ => return Err(corrupt("workspace_drains.drained_through_position").into()),
+                .ok_or_else(|| corrupt("mail_workspace_drains.drained_through_position"))?,
+            _ => return Err(corrupt("mail_workspace_drains.drained_through_position").into()),
         };
         let rows = WorkspaceRows::decode(
             self.read_workspace(
@@ -138,13 +137,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             })?,
         )?;
         if rows.high_water < through {
-            return Err(corrupt("workspace_drains.drained_through_position").into());
+            return Err(corrupt("mail_workspace_drains.drained_through_position").into());
         }
         let now = self.now()?;
         let _central = self.take_central_turn().await;
 
         let (mut statements, result) = self.plan_workspace_notices(workspace, &rows, now).await?;
-        statements.push(exact("UPDATE workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(timestamp(now)),text(workspace),position_value(through)?]));
+        statements.push(exact("UPDATE mail_workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(timestamp(now)),text(workspace),position_value(through)?]));
         #[cfg(feature = "test-support")]
         self.pauses
             .reached(workspace, crate::PausePoint::BeforeDrainCommit)
@@ -172,16 +171,16 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         &self,
         now: Timestamp,
     ) -> Result<usize, LegacyUnitOutcome> {
-        let rows=self.host.read(Statement{sql:"SELECT workspace_id,drain_due_at FROM workspace_drains WHERE drain_due_at IS NOT NULL",args:vec![]}).await?;
+        let rows=self.host.read(Statement{sql:"SELECT workspace_id,drain_due_at FROM mail_workspace_drains WHERE drain_due_at IS NOT NULL",args:vec![]}).await?;
         let mut workspaces = vec![];
         for row in &rows.rows {
             let workspace: WorkspaceId = parse(
                 string(&rows, row, "workspace_id")?,
-                "workspace_drains.workspace_id",
+                "mail_workspace_drains.workspace_id",
             )?;
             let due: Timestamp = parse_time(
                 string(&rows, row, "drain_due_at")?,
-                "workspace_drains.drain_due_at",
+                "mail_workspace_drains.drain_due_at",
             )?;
             if due <= now {
                 workspaces.push(workspace);

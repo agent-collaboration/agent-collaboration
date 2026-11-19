@@ -9,7 +9,6 @@ use central_storage::{
     StatementBatch,
 };
 use collaboration_central_conformance::signin_fixtures::{self as signed, Person};
-use collaboration_central_core::WorkspaceCaller;
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -24,7 +23,6 @@ pub(super) const RETRY: &str = "/organization-admin/v1/engine-retry";
 pub(super) const DISCARD: &str = "/organization-admin/v1/engine-discard";
 pub(super) const READ_AUDIT: &str = "organization:readAudit";
 pub(super) const REPAIR_WORK: &str = "organization:repairWork";
-const MACHINE: &str = "019f0000-0000-7000-8000-00000000b302";
 pub(super) type Time = chrono::DateTime<chrono::Utc>;
 
 pub(super) fn text(value: impl ToString) -> SqlValue {
@@ -47,7 +45,7 @@ pub(super) fn next_mark(at: Time) -> Time {
 
 pub(super) struct EngineOrg {
     pub f: Fixture,
-    pub caller: WorkspaceCaller,
+    pub caller: super::super::support::FixtureCaller,
     pub workspace: m::WorkspaceId,
     serial: std::cell::Cell<u32>,
 }
@@ -56,17 +54,9 @@ impl EngineOrg {
         let f = Fixture::new().await;
         assert_eq!(f.provision().await.0, 200);
         f.floors().await;
-        f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'Engine admin fixture','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(MACHINE),text("019f0000-0000-7000-8000-00000000b303")]).await;
-        f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'signin-fixture-hash','2033-05-18T03:33:20Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text("019f0000-0000-7000-8000-00000000b304"),text(MACHINE)]).await;
-        let caller = WorkspaceCaller {
-            organization_id: f.org.clone(),
-            caller: m::Caller::Session(m::SessionAddress {
-                machine_id: MACHINE.to_owned().try_into().unwrap(),
-                endpoint: "codex-local".to_owned().try_into().unwrap(),
-                session_id: "engine-admin".to_owned().try_into().unwrap(),
-            }),
-            credential_hash: "signin-fixture-hash".to_owned(),
-        };
+        let caller = f
+            .enrolled_session_caller("Engine admin fixture", "engine-admin")
+            .await;
         let mut engine = Self {
             f,
             caller,
@@ -93,10 +83,10 @@ impl EngineOrg {
         engine
             .f
             .execute(
-                "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                 vec![
                     text(serde_json::to_string(&vec![engine.workspace.clone()]).unwrap()),
-                    text(MACHINE),
+                    text(FIXTURE_MACHINE),
                 ],
             )
             .await;
@@ -166,10 +156,12 @@ impl EngineOrg {
         workspace: Option<m::WorkspaceId>,
         operation: m::WorkspaceOperation,
     ) -> m::WorkspaceReply {
+        // Engine tests move the clock far past one token; mint one at the clock's now.
+        let caller = super::super::support::fresh_auth(&self.f.host, &self.caller);
         self.f
             .host
             .request(
-                &self.caller,
+                &caller,
                 m::WorkspaceRequest {
                     request_id: operation
                         .is_write()
@@ -197,6 +189,7 @@ impl EngineOrg {
         let m::ItemRef::Area(area_id) = self
             .write(m::WorkspaceOperation::CreateArea {
                 name: format!("Area {serial}").try_into().unwrap(),
+                description: "Test description".to_owned().try_into().unwrap(),
             })
             .await
         else {
@@ -206,6 +199,8 @@ impl EngineOrg {
             .write(m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: "Engine thread".to_owned().try_into().unwrap(),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             })
             .await
         else {
@@ -214,7 +209,7 @@ impl EngineOrg {
         thread
     }
     pub async fn observer(&self, thread: &m::ThreadId) -> m::ActorIdentityId {
-        let mut observer = self.caller.clone();
+        let mut observer = super::super::support::fresh_auth(&self.f.host, &self.caller);
         let m::Caller::Session(address) = &mut observer.caller else {
             panic!("session caller")
         };
@@ -241,7 +236,7 @@ impl EngineOrg {
         );
         let actors = self
             .rows(
-                "SELECT actor_identity_id,identity FROM actor_identities",
+                "SELECT actor_identity_id,identity FROM access_actor_identities",
                 vec![],
             )
             .await;
@@ -266,10 +261,11 @@ impl EngineOrg {
         .await;
     }
     async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
+        let caller = super::super::support::fresh_auth(&self.f.host, &self.caller);
         self.f
             .host
             .request_central(
-                &self.caller,
+                &caller,
                 CentralMailRequest {
                     request_id: self.fresh().try_into().unwrap(),
                     operation,
@@ -278,7 +274,7 @@ impl EngineOrg {
             .await
             .unwrap()
     }
-    pub fn target(&self) -> m::SessionAddress {
+    pub fn target(&self) -> workspace_ids::SessionRef {
         let m::Caller::Session(address) = &self.caller.caller else {
             panic!("session caller")
         };
@@ -314,14 +310,14 @@ impl EngineOrg {
     }
     pub async fn wake_messages(&self, wake: &str) -> i64 {
         self.count(
-            "SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
             vec![text(wake)],
         )
         .await
     }
     pub async fn record(&self, kind: &str, key: &str) -> Vec<Vec<SqlValue>> {
         self.rows(
-            "SELECT state,failure_count,next_try_at,last_failure FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+            "SELECT state,failure_count,next_try_at,last_failure FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
             vec![text(kind), text(key)],
         )
         .await
@@ -329,7 +325,7 @@ impl EngineOrg {
     pub async fn attempt_id(&self, kind: &str, key: &str) -> String {
         match &self
             .rows(
-                "SELECT attempt_id FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+                "SELECT attempt_id FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
                 vec![text(kind), text(key)],
             )
             .await[..]

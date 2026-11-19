@@ -10,22 +10,37 @@ pub(crate) fn run_rule(
     rows: &WorkspaceRows,
 ) -> Result<rules::RulePlan, m::RefusalReason> {
     match &resolved.command {
-        m::WorkspaceCommand::Organization(command) => rules::organize_work(
-            context,
-            command,
+        m::WorkspaceCommand::Organization(command) => rules::organize_work(context, command, {
+            let issue = match command {
+                m::OrganizationCommand::UpdateIssue { issue_id, .. } => {
+                    rows.issues.iter().find(|row| row.issue_id == *issue_id)
+                }
+                _ => None,
+            };
             rules::OrganizationReads {
                 area: rows.areas.first(),
-                project: rows.projects.first(),
-                deliverable: match command {
-                    m::OrganizationCommand::CreateIssue { deliverable_id, .. } => rows
+                project: match command {
+                    m::OrganizationCommand::UpdateProject { project_id, .. } => rows
+                        .projects
+                        .iter()
+                        .find(|row| row.project_id == *project_id),
+                    _ => rows.projects.first(),
+                },
+                deliverable: match (command, issue) {
+                    (m::OrganizationCommand::CreateIssue { deliverable_id, .. }, _) => rows
                         .deliverables
                         .iter()
                         .find(|row| row.deliverable_id == *deliverable_id),
+                    (_, Some(issue)) => rows
+                        .deliverables
+                        .iter()
+                        .find(|row| row.deliverable_id == issue.deliverable_id),
                     _ => rows.deliverables.first(),
                 },
                 initiative: rows.initiatives.first(),
-            },
-        ),
+                issue,
+            }
+        }),
         m::WorkspaceCommand::Role(command) => {
             let (project_id, deliverable_id) = match command {
                 m::RoleCommand::GrantProject { project_id, .. }

@@ -89,7 +89,7 @@ async fn floors_rise_acknowledge_older_pushes_refuse_equal_conflicts_and_never_r
     assert_eq!(
         f.rows(
             A,
-            "SELECT minimum_revision,state FROM organization_authorization_floors",
+            "SELECT minimum_revision,state FROM signin_authorization_floors",
             vec![]
         )
         .await?,
@@ -98,7 +98,7 @@ async fn floors_rise_acknowledge_older_pushes_refuse_equal_conflicts_and_never_r
     assert_eq!(
         f.rows(
             A,
-            "SELECT minimum_revision,state FROM person_organization_authorization_floors",
+            "SELECT minimum_revision,state FROM signin_person_authorization_floors",
             vec![]
         )
         .await?,

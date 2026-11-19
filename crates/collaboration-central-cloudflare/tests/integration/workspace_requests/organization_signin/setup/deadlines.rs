@@ -86,7 +86,7 @@ async fn signed_create_deadlines_refuse_at_bound_and_apply_before() {
                     json!({"result":"applied","workspace":{"workspaceId":operation,"name":"Held create","description":"","state":"active"}}),
                     "{bound}: positive control actually creates one workspace before the deadline"
                 );
-                assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_used_requests)").await.rows,vec![vec![number(1),number(2),number(1),number(1)]]);
+                assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM admin_used_requests)").await.rows,vec![vec![number(1),number(2),number(1),number(1)]]);
             }
             f.close().await;
         }
@@ -171,7 +171,7 @@ async fn signed_create_post_sample_time_advance_keeps_commit_and_next_writer_wai
     assert_eq!(second.0, 200);
     let second: Value = serde_json::from_slice(&second.1).unwrap();
     assert_eq!(second["result"], "applied");
-    let rows=f.read("SELECT created_at FROM organization_change_records WHERE kind='workspaceCreated' ORDER BY id").await.rows;
+    let rows=f.read("SELECT created_at FROM signin_change_records WHERE kind='workspaceCreated' ORDER BY id").await.rows;
     assert_eq!(
         rows,
         vec![
@@ -181,7 +181,7 @@ async fn signed_create_post_sample_time_advance_keeps_commit_and_next_writer_wai
         "each writer owns its own applying sample"
     );
     let workspace_rows = f
-        .read("SELECT created_at FROM workspaces ORDER BY created_at")
+        .read("SELECT created_at FROM directory_workspaces ORDER BY created_at")
         .await
         .rows;
     assert!(

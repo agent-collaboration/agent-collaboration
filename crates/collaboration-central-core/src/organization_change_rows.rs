@@ -117,7 +117,7 @@ pub struct OrganizationChangeRecord {
 }
 
 fn corrupt(field: &str, _message: impl std::fmt::Display) -> StoreFailure {
-    bad_value(&format!("organization_change_records.{field}"))
+    bad_value(&format!("signin_change_records.{field}"))
 }
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
@@ -126,12 +126,12 @@ fn integer(value: i64) -> Result<SqlValue, StoreFailure> {
     value
         .try_into()
         .map(SqlValue::Integer)
-        .map_err(|_| bad_value("organization_change_records.created_at"))
+        .map_err(|_| bad_value("signin_change_records.created_at"))
 }
 fn private_id(value: &str) -> Result<Uuid, StoreFailure> {
-    let id = Uuid::parse_str(value).map_err(|_| bad_value("organization_change_records.id"))?;
+    let id = Uuid::parse_str(value).map_err(|_| bad_value("signin_change_records.id"))?;
     if !runtime_primitives::uuid_v7(id) || id.to_string() != value {
-        return Err(bad_value("organization_change_records.id"));
+        return Err(bad_value("signin_change_records.id"));
     }
     Ok(id)
 }
@@ -147,17 +147,17 @@ pub(crate) fn insert(record: &OrganizationChangeRecord) -> Result<GuardedStateme
             permission_checked,
         } => {
             if person_id.is_empty() || permission_checked.is_empty() {
-                return Err(bad_value("organization_change_records.origin"));
+                return Err(bad_value("signin_change_records.origin"));
             }
             ("person", text(person_id), text(permission_checked))
         }
     };
     if record.target_id.is_empty() {
-        return Err(bad_value("organization_change_records.target_id"));
+        return Err(bad_value("signin_change_records.target_id"));
     }
     Ok(GuardedStatement {
         statement: Statement {
-            sql: "INSERT INTO organization_change_records(id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            sql: "INSERT INTO signin_change_records(id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
             args: vec![
                 text(record.id),
                 text(record.request_id.as_str()),
@@ -201,14 +201,14 @@ fn decode(rows: &ReadOutcome, row: &[SqlValue]) -> Result<OrganizationChangeReco
                 permission_checked,
             }
         }
-        _ => return Err(bad_value("organization_change_records.origin")),
+        _ => return Err(bad_value("signin_change_records.origin")),
     };
     let target_id = string(rows, row, "target_id")?.to_owned();
     if target_id.is_empty() {
-        return Err(bad_value("organization_change_records.target_id"));
+        return Err(bad_value("signin_change_records.target_id"));
     }
     let SqlValue::Integer(created) = column(rows, row, "created_at")? else {
-        return Err(bad_value("organization_change_records.created_at"));
+        return Err(bad_value("signin_change_records.created_at"));
     };
     Ok(OrganizationChangeRecord {
         id,
@@ -224,7 +224,7 @@ pub(crate) async fn read_page(
     after: Option<Uuid>,
     limit: u16,
 ) -> Result<Vec<OrganizationChangeRecord>, StoreFailure> {
-    let rows=host.read(Statement{sql:"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE id>? ORDER BY id LIMIT ?",args:vec![text(after.map(|id|id.to_string()).unwrap_or_default()),integer(i64::from(limit))?]}).await?;
+    let rows=host.read(Statement{sql:"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM signin_change_records WHERE id>? ORDER BY id LIMIT ?",args:vec![text(after.map(|id|id.to_string()).unwrap_or_default()),integer(i64::from(limit))?]}).await?;
     rows.rows.iter().map(|row| decode(&rows, row)).collect()
 }
 
@@ -235,15 +235,13 @@ pub(crate) async fn read_machine_supersession(
     originating_request: &str,
 ) -> Result<Option<OrganizationChangeRecord>, StoreFailure> {
     let rows = host.read(Statement {
-        sql: "SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id>=?1||':machineRevoked:' AND request_id<?1||':machineRevoked;' AND request_id=?1||':machineRevoked:'||target_id LIMIT 2",
+        sql: "SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM signin_change_records WHERE kind='machineRevoked' AND request_id>=?1||':machineRevoked:' AND request_id<?1||':machineRevoked;' AND request_id=?1||':machineRevoked:'||target_id LIMIT 2",
         args: vec![text(originating_request)],
     }).await?;
     match rows.rows.as_slice() {
         [] => Ok(None),
         [row] => decode(&rows, row).map(Some),
-        _ => Err(bad_value(
-            "organization_change_records.machine_supersession",
-        )),
+        _ => Err(bad_value("signin_change_records.machine_supersession")),
     }
 }
 

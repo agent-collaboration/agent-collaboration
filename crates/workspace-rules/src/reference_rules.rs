@@ -23,7 +23,11 @@ pub fn reference_source(item: ItemRef) -> Result<ReferenceSource, RefusalReason>
         | ItemRef::Project(_)
         | ItemRef::Area(_)
         | ItemRef::Reference(_)
-        | ItemRef::Link(_)) => Err(RefusalReason::SourceKindNotAllowed { item }),
+        | ItemRef::Link(_)
+        | ItemRef::Workspace(_)
+        | ItemRef::ThreadMember(_)
+        | ItemRef::ProjectRole(_)
+        | ItemRef::DeliverableRole(_)) => Err(RefusalReason::SourceKindNotAllowed { item }),
     }
 }
 #[derive(Default)]
@@ -149,7 +153,7 @@ pub fn change_reference(
                     item.clone(),
                     "created",
                     vec![exact(
-                        "INSERT INTO item_references (reference_id,source_kind,source_id,target_kind,target_id,details,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                        "INSERT INTO workspace_item_references (reference_id,source_kind,source_id,target_kind,target_id,details,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
                         vec![
                             text(&reference.reference_id),
                             text(source_kind),
@@ -187,7 +191,7 @@ pub fn change_reference(
                     item.clone(),
                     "created",
                     vec![exact(
-                        "INSERT INTO links (link_id,source_kind,source_id,url,title,details,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                        "INSERT INTO workspace_links (link_id,source_kind,source_id,url,title,details,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
                         vec![
                             text(&link.link_id),
                             text(kind),
@@ -221,7 +225,7 @@ pub fn change_reference(
                     item.clone(),
                     "removed",
                     vec![exact(
-                        "DELETE FROM item_references WHERE reference_id=?",
+                        "DELETE FROM workspace_item_references WHERE reference_id=?",
                         vec![text(reference_id)],
                     )],
                     RuleAnswer::Removed { item },
@@ -243,7 +247,7 @@ pub fn change_reference(
                     item.clone(),
                     "removed",
                     vec![exact(
-                        "DELETE FROM links WHERE link_id=?",
+                        "DELETE FROM workspace_links WHERE link_id=?",
                         vec![text(link_id)],
                     )],
                     RuleAnswer::Removed { item },

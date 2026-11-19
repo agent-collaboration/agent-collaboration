@@ -33,7 +33,7 @@ pub(super) async fn exercise_continued_activity(
         recipients.push(address);
     }
     let r = f.host.central(&f.caller.organization_id).await;
-    let rows = r.statement_host().read(Statement {sql:"SELECT identity,actor_identity_id FROM actor_identities WHERE identity LIKE '%sustained-cadence-%'",args:vec![]}).await.unwrap();
+    let rows = r.statement_host().read(Statement {sql:"SELECT identity,actor_identity_id FROM access_actor_identities WHERE identity LIKE '%sustained-cadence-%'",args:vec![]}).await.unwrap();
     let addressees: Vec<_> = recipients
         .iter()
         .map(|address| {

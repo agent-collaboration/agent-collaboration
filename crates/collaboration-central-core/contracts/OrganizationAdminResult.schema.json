@@ -54,7 +54,7 @@
       "type": "string"
     },
     "EngineFailureClass": {
-      "description": "The closed failure classes of central_work_attempts.last_failure.",
+      "description": "The closed failure classes of engine_work_attempts.last_failure.",
       "enum": [
         "corrupt_row",
         "constraint_violated",
@@ -113,6 +113,8 @@
       "enum": [
         "wake_timer",
         "automation_timer",
+        "direct_message",
+        "system_message_expiry",
         "legacy_notice_windows",
         "legacy_workspace_drains",
         "engine_source"

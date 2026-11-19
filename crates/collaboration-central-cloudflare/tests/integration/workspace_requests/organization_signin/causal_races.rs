@@ -33,7 +33,7 @@ async fn held_first_provisions_retain_the_known_second_winner_and_identical_call
                 .0,
                 200
             );
-            let committed=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM organization_change_records)").await;
+            let committed=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM signin_organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM signin_change_records)").await;
             let _: bool = runtime
                 .control("release-central", &"beforeSignInSample")
                 .await
@@ -42,13 +42,13 @@ async fn held_first_provisions_retain_the_known_second_winner_and_identical_call
         };
         let (first_reply, committed) = tokio::join!(waiting, other);
         assert_eq!(first_reply.0, 200);
-        assert!(f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM organization_change_records)").await==committed,"released caller must retain the committed winner");
+        assert!(f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM signin_organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM signin_change_records)").await==committed,"released caller must retain the committed winner");
         let row = f
-            .read("SELECT organization_statement FROM organization_identity")
+            .read("SELECT organization_statement FROM signin_organization_identity")
             .await;
         assert!(matches!(&row.rows[0][0],SqlValue::Text(value)if value==&second));
         assert_eq!(
-            f.read("SELECT id FROM organization_change_records")
+            f.read("SELECT id FROM signin_change_records")
                 .await
                 .rows
                 .len(),
@@ -85,7 +85,7 @@ async fn held_renewal_refuses_after_second_renewal_commits_and_retains_exact_win
             .0,
             200
         );
-        let committed=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM organization_change_records)").await;
+        let committed=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM signin_organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM signin_change_records)").await;
         let _: bool = runtime
             .control("release-central", &"beforeSignInSample")
             .await
@@ -94,13 +94,13 @@ async fn held_renewal_refuses_after_second_renewal_commits_and_retains_exact_win
     };
     let (first_reply, committed) = tokio::join!(waiting, other);
     assert_eq!(first_reply.0, 409);
-    assert!(f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM organization_change_records)").await==committed,"stale held renewal must change no row");
+    assert!(f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM signin_organization_identity),(SELECT json_group_array(json_array(id,request_id,created_at,updated_at)) FROM signin_change_records)").await==committed,"stale held renewal must change no row");
     let rows = f
-        .read("SELECT organization_statement FROM organization_identity")
+        .read("SELECT organization_statement FROM signin_organization_identity")
         .await;
     assert!(matches!(&rows.rows[0][0],SqlValue::Text(value)if value==&second));
     assert_eq!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .len(),

@@ -10,7 +10,17 @@ pub struct ValueValidationError {
 // Preserve message-board::board_metadata's UTF-8 bounds and control policy.
 macro_rules! bounded_text {
     ($name:ident, $min:expr, $max:expr, $trim:expr, $controls:expr) => {
-        #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+        #[derive(
+            Clone,
+            Debug,
+            Eq,
+            PartialEq,
+            Ord,
+            PartialOrd,
+            Serialize,
+            Deserialize,
+            schemars::JsonSchema,
+        )]
         #[serde(try_from = "String", into = "String")]
         pub struct $name(String);
         impl TryFrom<String> for $name {
@@ -58,11 +68,12 @@ bounded_text!(SearchQuery, 1, 256, true, false);
 bounded_text!(IssueTitle, 1, 256, true, true);
 bounded_text!(Description, 0, 16 * 1024, false, false);
 
-/// A stored backlog item cannot deserialize without its required description.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// A description that must hold non-whitespace text: backlog items, areas and
+/// projects. Stored rows cannot deserialize without one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
-pub struct BacklogDescription(String);
-impl TryFrom<String> for BacklogDescription {
+pub struct RequiredDescription(String);
+impl TryFrom<String> for RequiredDescription {
     type Error = ValueValidationError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.trim().is_empty() || value.len() > 16 * 1024 {
@@ -74,12 +85,12 @@ impl TryFrom<String> for BacklogDescription {
         Ok(Self(value))
     }
 }
-impl From<BacklogDescription> for String {
-    fn from(value: BacklogDescription) -> Self {
+impl From<RequiredDescription> for String {
+    fn from(value: RequiredDescription) -> Self {
         value.0
     }
 }
-impl BacklogDescription {
+impl RequiredDescription {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
@@ -89,55 +100,8 @@ bounded_text!(PostText, 1, 64 * 1024, false, true);
 bounded_text!(TrailText, 1, 64 * 1024, false, true);
 bounded_text!(TrailTag, 1, 256, true, true);
 
-// Ported from message-board::board_identity: provider session ids stay opaque.
-macro_rules! identity_text {
-    ($name:ident,$max:expr,$validator:expr,$requirement:literal) => {
-        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-        #[serde(try_from = "String", into = "String")]
-        pub struct $name(String);
-        impl TryFrom<String> for $name {
-            type Error = ValueValidationError;
-            fn try_from(value: String) -> Result<Self, Self::Error> {
-                if value.is_empty() || value.len() > $max || !($validator)(&value) {
-                    return Err(ValueValidationError {
-                        field: stringify!($name),
-                        requirement: $requirement,
-                    });
-                }
-                Ok(Self(value))
-            }
-        }
-        impl From<$name> for String {
-            fn from(value: $name) -> Self {
-                value.0
-            }
-        }
-        impl $name {
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-    };
-}
-identity_text!(
-    SessionId,
-    4096,
-    |value: &str| !value.contains('\0'),
-    "must contain 1 to 4096 UTF-8 bytes without NUL"
-);
-identity_text!(
-    EndpointId,
-    64,
-    |value: &str| value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'),
-    "must start with a lowercase letter and contain only lowercase letters, digits, or hyphens"
-);
-
 /// A page always returns at least one row when a matching row exists.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "u16", into = "u16")]
 pub struct PageLimit(std::num::NonZeroU16);
 impl PageLimit {
@@ -168,7 +132,9 @@ impl From<PageLimit> for u16 {
 }
 
 /// Durable ordering is independent of ids and time, within both hosts' integer range.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(try_from = "u64", into = "u64")]
 pub struct ChangePosition(u64);
 impl Default for ChangePosition {

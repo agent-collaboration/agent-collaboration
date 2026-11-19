@@ -10,3 +10,6 @@ mod debug_plaintext_cli;
 mod fleet_enrollment_cli;
 mod proxy_overload_passthrough;
 mod responses_account_recovery;
+
+#[cfg(unix)]
+mod central_serve;

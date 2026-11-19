@@ -35,9 +35,35 @@
       ],
       "type": "object"
     },
+    "EnrollmentId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
     "IntentVersionOne": {
       "const": 1,
       "type": "integer"
+    },
+    "MachineRevocationParams": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "secondFactorAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "actor",
+        "secondFactorAt"
+      ],
+      "type": "object"
     },
     "OrganizationAdminIntentWire": {
       "oneOf": [
@@ -257,6 +283,39 @@
             },
             "target": {
               "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "RevokeMachineEnrollment",
+              "type": "string"
+            },
+            "operationId": {
+              "type": "null"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/MachineRevocationParams"
+            },
+            "target": {
+              "$ref": "#/$defs/EnrollmentId"
             },
             "v": {
               "$ref": "#/$defs/IntentVersionOne"

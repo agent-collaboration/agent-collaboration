@@ -12,7 +12,7 @@ async fn wake_message_times(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
     runtime
         .statement_host()
         .read(super::super::Statement {
-            sql: "SELECT created_at FROM messages WHERE message_kind='wake' ORDER BY created_at",
+            sql: "SELECT created_at FROM mail_messages WHERE message_kind='wake' ORDER BY created_at",
             args: vec![],
         })
         .await
@@ -22,7 +22,7 @@ async fn wake_message_times(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
 
 #[tokio::test]
 async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = now(&fixture);
     open_notice_window(&fixture, 33000).await;
@@ -32,7 +32,7 @@ async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once(
     );
     let windows = count(
         &runtime,
-        "SELECT COUNT(*) FROM notification_windows",
+        "SELECT COUNT(*) FROM mail_notification_windows",
         vec![],
     )
     .await;
@@ -56,12 +56,14 @@ async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once(
     // The last setup due batch starts at 10:01:45, so the 10:02:15 backstop
     // set before the final setup write sits exactly on its 30 s floor.
     set_now(&fixture, at(start, 1, 45, 0));
+    fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
     assert!(matches!(
         send_message(&fixture, 33030).await.unwrap(),
         CentralMailResult::Done(_)
     ));
     preset_drain(&fixture, &runtime, at(start, 2, 15, 0)).await;
     set_now(&fixture, at(start, 2, 10, 0));
+    fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
     assert!(matches!(
         send_message(&fixture, 33031).await.unwrap(),
         CentralMailResult::Done(_)
@@ -89,6 +91,7 @@ async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once(
 
     for time in probes {
         set_now(&fixture, time);
+        fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
         let dispatched = runtime.dispatch_due_alarm().await.unwrap();
         if expected.contains(&time) {
             assert!(dispatched.is_some(), "a callback is due at {time}");
@@ -128,15 +131,15 @@ async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once(
     );
     assert_eq!(
         alarm_ms(&runtime).await,
-        None,
-        "the alarm reads back NULL once nothing is pending"
+        ms(at(start, 15, 0, 0) + chrono::Duration::hours(24)),
+        "the first pending alarm is the notice's expiry"
     );
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn a_request_every_minute_needs_no_alarm_callback_and_fires_wakes_early() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let start = now(&fixture);
     let early = set_wake(&fixture, 34000, at(start, 5, 0, 0)).await;
@@ -145,6 +148,7 @@ async fn a_request_every_minute_needs_no_alarm_callback_and_fires_wakes_early() 
 
     for minute in 0..30 {
         set_now(&fixture, at(start, minute, 20, 0));
+        fixture.caller = super::super::support::fresh_auth(&fixture.host, &fixture.caller);
         assert!(matches!(
             send_message(&fixture, 34010 + u32::try_from(minute).unwrap())
                 .await

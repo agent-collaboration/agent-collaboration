@@ -1,4 +1,6 @@
 pub(crate) mod automation_timer;
+pub(crate) mod direct_message;
+pub(crate) mod direct_message_store;
 pub(crate) mod finish_store;
 pub(crate) mod lifecycle_finish;
 #[cfg_attr(
@@ -9,6 +11,7 @@ pub(crate) mod lifecycle_finish;
     )
 )]
 pub(crate) mod owed_reply;
+pub(crate) mod system_message_expiry;
 pub(crate) mod timer_store;
 #[cfg(test)]
 mod timer_test_support;

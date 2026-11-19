@@ -1,8 +1,10 @@
 //! A dedicated owner-only Unix listener for the modern private sign-in routes.
 
 use crate::TokioWorkspaceHost;
+use futures_util::FutureExt;
 use std::{
-    os::unix::fs::{MetadataExt, PermissionsExt},
+    io,
+    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -26,6 +28,31 @@ pub struct OrganizationSignInLink {
 }
 
 impl OrganizationSignInLink {
+    pub(crate) fn clear_stale_owned_socket(socket: &Path, owner_uid: u32) -> io::Result<()> {
+        let metadata = match std::fs::symlink_metadata(socket) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        if !metadata.file_type().is_socket() || metadata.uid() != owner_uid {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "private sign-in path must be an owned Unix socket",
+            ));
+        }
+        // Only an explicit refusal proves there is no listener on the pathname.
+        match tokio::net::UnixStream::connect(socket).now_or_never() {
+            Some(Err(error)) if error.kind() == io::ErrorKind::ConnectionRefused => {
+                remove_owned_socket(socket, metadata.dev(), metadata.ino())
+            }
+            Some(Err(error)) => Err(error),
+            Some(Ok(_)) | None => Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                "private sign-in socket may still have a listener",
+            )),
+        }
+    }
+
     /// Binding is exclusive: an existing path is never removed or reused.
     pub fn start(
         host: Arc<TokioWorkspaceHost>,
@@ -85,3 +112,7 @@ impl Drop for OrganizationSignInLink {
         self.stop.cancel();
     }
 }
+
+#[cfg(test)]
+#[path = "organization_signin_link_test.rs"]
+mod tests;

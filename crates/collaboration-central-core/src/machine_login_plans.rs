@@ -23,7 +23,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let _turn = self.take_central_turn().await;
         let time = self.machine_login_time(&request.organization_id).await?;
         let query = EnrollmentQuery {
-            installation: Some(request.installation.clone()),
+            machine_id: Some(request.machine_id.clone()),
             request: Some(request.request_id.clone()),
             workspaces: request.allowed_workspaces.as_slice().to_vec(),
             ..EnrollmentQuery::default()

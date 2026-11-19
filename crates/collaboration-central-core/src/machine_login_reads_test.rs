@@ -34,11 +34,7 @@ async fn retained_approval_returns_before_reading_any_mutable_decision_facts() {
     let stored = row(vec![
         ("approval_id", text("019a3dce-2000-7000-8000-000000000001")),
         ("request_id", text("019a3dce-2000-7000-8000-000000000004")),
-        ("machine_id", text("019a3dce-2000-7000-8000-000000000002")),
-        (
-            "installation_id",
-            text("019a3dce-2000-7000-8000-000000000003"),
-        ),
+        ("machine_id", text("019a3dce-2000-7000-8000-000000000003")),
         ("label", text("First approval")),
         ("allowed_workspaces", text("[]")),
         (
@@ -67,7 +63,7 @@ async fn retained_approval_returns_before_reading_any_mutable_decision_facts() {
                 .try_into()
                 .unwrap(),
         ),
-        installation: Some(
+        machine_id: Some(
             "019a3dce-2000-7000-8000-000000000099"
                 .to_owned()
                 .try_into()
@@ -82,7 +78,7 @@ async fn retained_approval_returns_before_reading_any_mutable_decision_facts() {
         ..EnrollmentQuery::default()
     };
 
-    // Act: mutable installation/workspace choices are deliberately different.
+    // Act: mutable machine_id/workspace choices are deliberately different.
     let found = facts(
         &host,
         "019a3dce-2000-7000-8000-000000000006"
@@ -113,7 +109,7 @@ async fn history_scalar_must_be_present_and_boolean() {
         SqlValue::Integer(2_i64.try_into().unwrap()),
     ] {
         let host = ReadSequence(Mutex::new(vec![(
-            "SELECT EXISTS(SELECT 1 FROM machine_approvals) AS has_enrollment",
+            "SELECT EXISTS(SELECT 1 FROM login_machine_approvals) AS has_enrollment",
             row(vec![("has_enrollment", value)]),
         )]));
         assert!(

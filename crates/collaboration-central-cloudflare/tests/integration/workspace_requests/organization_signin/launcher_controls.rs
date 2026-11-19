@@ -311,6 +311,7 @@ async fn bridge_controls_share_time_with_live_and_future_orgs_and_fresh_process_
         &plan,
         serde_json::to_vec(&json!({
             "textBindings":{
+                "CENTRAL_MACHINE_AUDIENCE":signed::MACHINE_AUDIENCE,
                 "CENTRAL_SIGN_IN_ISSUER":signed::ISSUER,
                 "CENTRAL_SIGN_IN_AUDIENCE":signed::AUDIENCE,
                 "CENTRAL_SIGN_IN_JWKS_URL":"https://signin.test/.well-known/jwks.json",
@@ -372,7 +373,8 @@ async fn setup_private_observe_matches_rows_and_external_fresh_restart() -> Conf
     std::fs::write(
         &plan,
         serde_json::to_vec(&json!({"textBindings":{
-        "CENTRAL_SIGN_IN_ISSUER":signed::ISSUER,"CENTRAL_SIGN_IN_AUDIENCE":signed::AUDIENCE,
+        "CENTRAL_MACHINE_AUDIENCE":signed::MACHINE_AUDIENCE,
+                "CENTRAL_SIGN_IN_ISSUER":signed::ISSUER,"CENTRAL_SIGN_IN_AUDIENCE":signed::AUDIENCE,
         "CENTRAL_SIGN_IN_JWKS_URL":"https://signin.test/.well-known/jwks.json",
         "CENTRAL_ADMIN_AUDIENCE":signed::ADMIN_AUDIENCE,"CENTRAL_PUBLIC_ORIGIN":signed::PUBLIC_ORIGIN,
         "CENTRAL_SIGN_IN_SERVICE_ID":"019f0000-0000-7000-8000-00000000d290"

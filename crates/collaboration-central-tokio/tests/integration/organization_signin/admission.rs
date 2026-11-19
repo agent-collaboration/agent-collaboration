@@ -84,7 +84,7 @@ async fn signed_records_unknown_lookup_fresh_proof_replay_intent_and_actor_permi
     let marker = f
         .rows(
             A,
-            "SELECT actor_person_id,actor_session_id FROM organization_used_requests WHERE id=?",
+            "SELECT actor_person_id,actor_session_id FROM admin_used_requests WHERE id=?",
             vec![text(&request_id)],
         )
         .await?;
@@ -94,11 +94,7 @@ async fn signed_records_unknown_lookup_fresh_proof_replay_intent_and_actor_permi
         "fresh proof records its actual person and session"
     );
     let before = f
-        .rows(
-            A,
-            "SELECT id FROM organization_used_requests ORDER BY id",
-            vec![],
-        )
+        .rows(A, "SELECT id FROM admin_used_requests ORDER BY id", vec![])
         .await?;
     let changed = json!({"organizationId":A,"after":null,"limit":50});
     let tampered = f
@@ -127,12 +123,8 @@ async fn signed_records_unknown_lookup_fresh_proof_replay_intent_and_actor_permi
         json!({"result":"refused","reason":"notPermitted"})
     );
     assert_eq!(
-        f.rows(
-            A,
-            "SELECT id FROM organization_used_requests ORDER BY id",
-            vec![]
-        )
-        .await?,
+        f.rows(A, "SELECT id FROM admin_used_requests ORDER BY id", vec![])
+            .await?,
         before,
         "unauthorized or tampered calls reserve no proof id"
     );
@@ -217,7 +209,7 @@ async fn token_floor_relations_and_current_actor_revocation_refuse_before_a_proo
         json!({"result":"refused","reason":"notPermitted"})
     );
     assert!(
-        f.rows(A, "SELECT id FROM organization_used_requests", vec![])
+        f.rows(A, "SELECT id FROM admin_used_requests", vec![])
             .await?
             .is_empty()
     );

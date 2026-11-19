@@ -1,8 +1,10 @@
-use super::{InboxReads, PositionedItem, ThreadChange, inbox_page, mark_read, ordered_page};
+use super::{
+    InboxReads, PositionedItem, ThreadChange, inbox_page, mark_read, ordered_page, thread_view,
+};
 use crate::fixtures::{context, id, member, thread};
 use workspace_model::{
-    Change, ChangeEvent, ChangePosition, ItemRef, ItemView, MemberRole, ReadMark, ReadScope,
-    RuleAnswer, ThreadState,
+    Change, ChangeEvent, ChangePosition, ItemRef, ItemView, MemberRole, NotificationSetting,
+    ReadMark, ReadScope, RuleAnswer, ThreadState,
 };
 #[test]
 fn r30_b_read_marks_never_go_back() {
@@ -224,7 +226,10 @@ fn r30_a_c_follow_filter_and_resolution_uses_current_item() {
             change,
         },
     ];
-    let items = [ItemView::Thread(thread.clone())];
+    let items = [ItemView::Thread {
+        thread: thread.clone(),
+        me: None,
+    }];
     let output = inbox_page(
         &context,
         InboxReads {
@@ -238,7 +243,7 @@ fn r30_a_c_follow_filter_and_resolution_uses_current_item() {
     );
     assert_eq!(output.len(), 1);
     assert!(
-        matches!(output.first().map(|row|&row.item),Some(ItemView::Thread(thread)) if thread.state == ThreadState::Resolved)
+        matches!(output.first().map(|row|&row.item),Some(ItemView::Thread { thread, .. }) if thread.state == ThreadState::Resolved)
     );
 }
 
@@ -380,4 +385,71 @@ fn ported_search_keeps_literal_ascii_case_scope_and_position_order() {
             .len(),
         1
     );
+}
+
+#[test]
+fn removing_a_link_on_a_post_files_the_change_under_the_posts_thread() {
+    let writer = context();
+    let post = workspace_model::Post {
+        post_id: id(30),
+        thread_id: id(8),
+        author: id(2),
+        body: workspace_model::PostText::try_from("Post".to_owned()).unwrap(),
+        addressees: vec![],
+    };
+    let link = workspace_model::ExternalLink {
+        link_id: id(71),
+        source: workspace_model::ReferenceSource::Post(id(30)),
+        url: "raw".to_owned(),
+        title: "Link".to_owned(),
+        details: None,
+    };
+    let plan = crate::change_reference(
+        &writer,
+        &workspace_model::ReferenceCommand::RemoveLink { link_id: id(71) },
+        crate::ReferenceReads {
+            link: Some(&link),
+            source_post: Some(&post),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let change = &plan.batch.statements.last().unwrap().statement;
+    let thread_id: workspace_model::ThreadId = id(8);
+    assert_eq!(
+        change.args.get(4),
+        Some(&central_storage::SqlValue::Text(thread_id.to_string()))
+    );
+}
+
+#[test]
+fn a_thread_shows_the_readers_membership_and_thread_mark_only_to_members() {
+    let thread = thread();
+    let mut reader_member = member(id(99), MemberRole::Observer);
+    reader_member.notifications = NotificationSetting::Off;
+    let marks = [
+        ReadMark {
+            read_mark_id: id(10),
+            actor_identity_id: id(99),
+            scope: ReadScope::Thread { thread_id: id(8) },
+            through_position: ChangePosition::try_from(7).unwrap(),
+        },
+        ReadMark {
+            read_mark_id: id(11),
+            actor_identity_id: id(99),
+            scope: ReadScope::Inbox,
+            through_position: ChangePosition::try_from(9).unwrap(),
+        },
+    ];
+
+    let member_view = thread_view(&thread, &id(99), &[reader_member.clone()], &marks);
+    let stranger_view = thread_view(&thread, &id(98), &[reader_member], &marks);
+
+    let ItemView::Thread { me: Some(me), .. } = member_view else {
+        panic!("a member sees their own standing");
+    };
+    assert_eq!(me.role, MemberRole::Observer);
+    assert_eq!(me.notifications, NotificationSetting::Off);
+    assert_eq!(me.read_through, Some(ChangePosition::try_from(7).unwrap()));
+    assert!(matches!(stranger_view, ItemView::Thread { me: None, .. }));
 }

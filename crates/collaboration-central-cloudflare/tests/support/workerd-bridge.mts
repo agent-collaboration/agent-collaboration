@@ -14,7 +14,17 @@ import {
   workerdLauncherTimeSchema,
 } from "../../../../verification/targets/workerd-storage.ts";
 import { constructMiniflareWithOwnedSignalShutdown } from "../../../../verification/test-support/miniflare-signal-shutdown.ts";
+import { C2WitnessRecorder } from "../../../../verification/observations/central/c2-witness.ts";
 const arguments_ = process.argv.slice(2);
+const witnessIndex = arguments_.indexOf("--c2-witness");
+const witness = witnessIndex === -1 ? undefined : new C2WitnessRecorder();
+const ordinaryProbeValue = process.env.CODEX_ROUTER_C2_ORDINARY_ACCEPT_PROBE;
+if (ordinaryProbeValue !== undefined && ordinaryProbeValue !== "1")
+  throw new Error("invalid ordinary accept probe selection");
+const ordinaryProbe = ordinaryProbeValue === "1";
+if (ordinaryProbe && witness === undefined)
+  throw new Error("ordinary probe requires C2 witness opt-in");
+if (witnessIndex !== -1) arguments_.splice(witnessIndex, 1);
 let milliseconds: number | undefined;
 const launcherIndex = arguments_.indexOf("--launcher-time-ms");
 if (launcherIndex !== -1) {
@@ -25,13 +35,15 @@ if (launcherIndex !== -1) {
   milliseconds = parsed.data;
   arguments_.splice(launcherIndex, 2);
 }
+if (witness !== undefined && milliseconds === undefined)
+  throw new Error("C2 witness requires an injected launcher clock");
 const [option, planPath] = arguments_;
 if (
   arguments_.length !== 0 &&
   (arguments_.length !== 2 || option !== "--signin-plan" || planPath === undefined)
 )
   throw new Error(
-    "usage: workerd-bridge.mts [--signin-plan <fixture-plan.json>] [--launcher-time-ms <milliseconds>]",
+    "usage: workerd-bridge.mts [--signin-plan <fixture-plan.json>] [--launcher-time-ms <milliseconds>] [--c2-witness]",
   );
 const plan =
   planPath === undefined
@@ -59,6 +71,8 @@ const host = await WorkerdStorage.start(
     ...bundle,
     textBindings: { ...bundle.textBindings, ...plan?.textBindings },
     durableObjects: { ...bundle.durableObjects, CENTRAL: "CentralObject" },
+    ...(witness === undefined ? {} : { c2Witness: witness }),
+    ...(ordinaryProbe ? { c2OrdinaryAcceptProbe: true } : {}),
   },
   plan === undefined || sourceUrl === undefined || linkBundle === undefined
     ? undefined
@@ -98,6 +112,38 @@ async function answer(line: string): Promise<unknown> {
   if (!parsed.success || milliseconds === undefined)
     return { answer: "refused", error: "invalid bridge command" };
   try {
+    if ("c2Evict" in parsed.data) {
+      if (witness === undefined) return { answer: "refused", error: "C2 witness not enabled" };
+      try {
+        await host.evictCentral(parsed.data.c2Evict);
+      } catch (error: unknown) {
+        if (ordinaryProbe)
+          process.stderr.write(
+            `C2_ORDINARY_ACCEPT_PROBE ${JSON.stringify({
+              stage: "eviction",
+              disposition:
+                error instanceof Error &&
+                error.message ===
+                  "Timed out waiting to evict Durable Object: it still has active references."
+                  ? "active-references"
+                  : "unclassified-eviction-failure",
+              events: witness.snapshot(),
+            })}\n`,
+          );
+        throw error;
+      }
+      return { answer: "c2Evicted", organization: parsed.data.c2Evict };
+    }
+    if ("c2Witness" in parsed.data) {
+      if (witness === undefined) return { answer: "refused", error: "C2 witness not enabled" };
+      witness.phase = parsed.data.c2Witness.phase;
+      return { answer: "c2Witness", events: witness.snapshot() };
+    }
+    if ("setExternalTimeMs" in parsed.data) {
+      if (witness === undefined) return { answer: "refused", error: "C2 witness not enabled" };
+      milliseconds = parsed.data.setExternalTimeMs;
+      return { answer: "externalTimeSet", setTimeMs: milliseconds };
+    }
     if ("setTimeMs" in parsed.data) {
       milliseconds = parsed.data.setTimeMs;
       const live = [...organizations];

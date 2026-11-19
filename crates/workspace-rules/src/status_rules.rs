@@ -80,7 +80,7 @@ pub fn set_work_status(
                 ItemRef::Issue(issue_id.clone()),
                 issue.status,
                 *status,
-                "UPDATE issues SET status=?,updated_at=? WHERE issue_id=? AND status=?",
+                "UPDATE workspace_issues SET status=?,updated_at=? WHERE issue_id=? AND status=?",
             )
         }
         StatusCommand::SetProject { project_id, status } => {
@@ -140,7 +140,7 @@ pub fn set_work_status(
                 ItemRef::Project(project_id.clone()),
                 project.status,
                 *status,
-                "UPDATE projects SET status=?,updated_at=? WHERE project_id=? AND status=?",
+                "UPDATE workspace_projects SET status=?,updated_at=? WHERE project_id=? AND status=?",
             )
         }
         StatusCommand::SetInitiative {
@@ -166,7 +166,7 @@ pub fn set_work_status(
                 ItemRef::Initiative(initiative_id.clone()),
                 initiative.status,
                 *status,
-                "UPDATE initiatives SET status=?,updated_at=? WHERE initiative_id=? AND status=?",
+                "UPDATE workspace_initiatives SET status=?,updated_at=? WHERE initiative_id=? AND status=?",
             )
         }
     };

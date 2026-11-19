@@ -25,6 +25,8 @@ pub(super) enum CliCommand {
     Live(LiveCommand),
     Host(HostCommand),
     Fleet(FleetCommand),
+    #[cfg(unix)]
+    Central(super::central_command::CentralCommand),
     Version,
     Help(&'static str),
 }
@@ -66,6 +68,10 @@ impl CliCommand {
             "account" => Ok(Self::Account(AccountCommand::parse(parser)?)),
             "quota" => Ok(Self::Quota(QuotaCommand::parse(parser)?)),
             "live" => Ok(Self::Live(LiveCommand::parse(parser)?)),
+            #[cfg(unix)]
+            "central" => Ok(Self::Central(
+                super::central_command::CentralCommand::parse(parser.remaining_arguments())?,
+            )),
             "fleet" => Ok(Self::Fleet(FleetCommand::parse(
                 parser.remaining_arguments(),
             )?)),

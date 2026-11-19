@@ -1,9 +1,10 @@
 //! An organization's injected checks against the sign-in service's keys: its
-//! organization stamp, and a person's DPoP-bound admin request.
+//! organization stamp, a person's DPoP-bound admin request and machine access tokens.
 use super::{
     FleetOrganizationStatementRefusal, FleetOrganizationStatementVerifier, StoredStatementFacts,
     VerifiedFleetOrganizationStatement,
 };
+use crate::machine_token::{MachineTokenRefusal, MachineTokenVerifier, VerifiedMachineToken};
 use crate::person_request::{
     Es256Verification, PersonRequestInput, PersonRequestRefusal, PersonRequestVerifier,
     VerifiedPersonRequest,
@@ -31,16 +32,24 @@ pub trait SignInVerification: Send + Sync + 'static {
         input: &'a PersonRequestInput,
     ) -> BoxFuture<'a, Result<VerifiedPersonRequest, PersonRequestRefusal>>;
 
-    /// The sign-in service's own ServiceId: the identity of the link authority
-    /// and the installation recorded on what it writes for a person. None when
-    /// the deployment configured none; admin calls then refuse.
+    fn verify_machine_token<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> BoxFuture<'a, Result<VerifiedMachineToken, MachineTokenRefusal>> {
+        let _ = token;
+        Box::pin(async { Err(MachineTokenRefusal::Unavailable) })
+    }
+
+    /// Origin recorded for writes made by the sign-in authority for a person.
+    /// Admin calls require this origin to be configured.
     fn sign_in_service(&self) -> Option<message_board::ServiceId>;
 }
 
-/// The two core verifiers, sharing one key source configuration and crypto.
+/// The three core verifiers share the configured issuer keys and host crypto.
 pub struct SignInVerifiers<Ed, Es, StatementKeys, PersonKeys> {
     pub statements: FleetOrganizationStatementVerifier<Ed, StatementKeys>,
     pub persons: PersonRequestVerifier<Ed, Es, PersonKeys>,
+    pub machines: MachineTokenVerifier<Ed, PersonKeys>,
     pub sign_in_service: Option<message_board::ServiceId>,
 }
 
@@ -72,6 +81,13 @@ where
         input: &'a PersonRequestInput,
     ) -> BoxFuture<'a, Result<VerifiedPersonRequest, PersonRequestRefusal>> {
         Box::pin(self.persons.verify(input))
+    }
+
+    fn verify_machine_token<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> BoxFuture<'a, Result<VerifiedMachineToken, MachineTokenRefusal>> {
+        Box::pin(self.machines.verify(token))
     }
 
     fn sign_in_service(&self) -> Option<message_board::ServiceId> {

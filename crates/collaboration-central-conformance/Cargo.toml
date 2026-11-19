@@ -10,9 +10,11 @@ publish.workspace = true
 workspace = true
 
 [features]
-signin-test-support = ["dep:tokio", "dep:sha2", "dep:ring", "dep:base64", "dep:axum", "dep:serde_json"]
+signin-test-support = ["dep:reqwest", "dep:chrono", "dep:tokio", "dep:sha2", "dep:ring", "dep:base64", "dep:axum", "dep:serde_json"]
 
 [dependencies]
+reqwest = { workspace = true, features = ["json"], optional = true }
+chrono = { workspace = true, optional = true }
 axum = { workspace = true, optional = true, features = ["http1", "tokio", "json"] }
 base64 = { version = "0.22.1", optional = true }
 ring = { version = "=0.17.14", optional = true }

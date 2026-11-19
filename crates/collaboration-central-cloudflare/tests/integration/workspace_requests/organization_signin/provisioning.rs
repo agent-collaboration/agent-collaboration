@@ -64,7 +64,7 @@ async fn private_provision_digest_repeat_and_predecessor_renewal_are_atomic() {
         409
     );
     let records = f
-        .read("SELECT kind,COUNT(*) FROM organization_change_records GROUP BY kind ORDER BY kind")
+        .read("SELECT kind,COUNT(*) FROM signin_change_records GROUP BY kind ORDER BY kind")
         .await;
     assert_eq!(records.rows.len(), 2);
     f.close().await;
@@ -104,7 +104,7 @@ async fn wrong_org_unpublished_and_expired_stamps_do_not_write() {
         .0,
         422
     );
-    let rows=f.read("SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records)").await;
+    let rows=f.read("SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records)").await;
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -125,7 +125,7 @@ async fn cold_tampered_stamp_refuses_and_late_record_failure_rolls_back_stamp() 
     let trigger = StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
-                sql: "CREATE TRIGGER fail_provision_record BEFORE INSERT ON organization_change_records BEGIN SELECT RAISE(ABORT,'fixture record failure'); END",
+                sql: "CREATE TRIGGER fail_provision_record BEFORE INSERT ON signin_change_records BEGIN SELECT RAISE(ABORT,'fixture record failure'); END",
                 args: vec![],
             },
             expect: RowExpectation::Any,
@@ -142,7 +142,7 @@ async fn cold_tampered_stamp_refuses_and_late_record_failure_rolls_back_stamp() 
         (404, serde_json::Value::Null),
         "the rolled-back first stamp must remain absent through its private read"
     );
-    let rows=f.read("SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records)").await;
+    let rows=f.read("SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records)").await;
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -170,7 +170,7 @@ async fn cold_tampered_stamp_refuses_and_late_record_failure_rolls_back_stamp() 
     let original = stamp::stamp(ORG, NOW_SECONDS).unwrap();
     let tampered = stamp::tamper_signature(&original).unwrap();
     f.execute(
-        "UPDATE organization_identity SET organization_statement=?",
+        "UPDATE signin_organization_identity SET organization_statement=?",
         vec![SqlValue::Text(tampered)],
     )
     .await;
@@ -180,7 +180,7 @@ async fn cold_tampered_stamp_refuses_and_late_record_failure_rolls_back_stamp() 
     assert_eq!(f.post(DIGEST, &json!({"organizationId":ORG})).await.0, 503);
     assert_eq!(f.post(REVISIONS, &org_revision(1, "active")).await.0, 503);
     assert_eq!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .len(),
@@ -249,11 +249,11 @@ async fn warm_key_refresh_boundary_rechecks_stored_and_incoming_stamps() {
         409
     );
     let rows = f
-        .read("SELECT organization_statement FROM organization_identity")
+        .read("SELECT organization_statement FROM signin_organization_identity")
         .await;
     assert!(matches!(&rows.rows[0][0],central_storage::SqlValue::Text(value)if value==&first));
     assert_eq!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .len(),
@@ -270,9 +270,9 @@ async fn lost_provisioning_answer_survives_cold_reopen_and_exact_retry() {
         .await
         .unwrap();
     assert_eq!(f.provision().await.0, 503);
-    let before=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM organization_identity),(SELECT json_group_array(json_array(id,request_id,kind,origin,target_id,created_at,updated_at)) FROM organization_change_records)").await;
+    let before=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM signin_organization_identity),(SELECT json_group_array(json_array(id,request_id,kind,origin,target_id,created_at,updated_at)) FROM signin_change_records)").await;
     assert_eq!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .len(),
@@ -282,7 +282,7 @@ async fn lost_provisioning_answer_survives_cold_reopen_and_exact_retry() {
     assert!(reset.is_err());
     f.runtime().await;
     assert_eq!(f.provision().await.0, 200);
-    let after=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM organization_identity),(SELECT json_group_array(json_array(id,request_id,kind,origin,target_id,created_at,updated_at)) FROM organization_change_records)").await;
+    let after=f.read("SELECT (SELECT json_group_array(json_array(id,organization_statement,created_at,updated_at)) FROM signin_organization_identity),(SELECT json_group_array(json_array(id,request_id,kind,origin,target_id,created_at,updated_at)) FROM signin_change_records)").await;
     assert!(
         after == before,
         "exact retry must preserve stamp/record identities and timestamps"
@@ -322,14 +322,14 @@ async fn competing_first_inputs_and_renewals_share_one_org_turn() {
     statuses.sort_unstable();
     assert_eq!(statuses, [200, 409]);
     assert_eq!(
-        f.read("SELECT id FROM organization_identity")
+        f.read("SELECT id FROM signin_organization_identity")
             .await
             .rows
             .len(),
         1
     );
     assert_eq!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .len(),
@@ -341,19 +341,36 @@ async fn competing_first_inputs_and_renewals_share_one_org_turn() {
 async fn provisioning_does_not_rewrite_existing_workspace_machine_or_credential_rows() {
     use central_storage::SqlValue;
     let f = Fixture::new().await;
-    f.execute("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d231','Existing','active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d232','019f0000-0000-7000-8000-00000000d233','Existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d234','019f0000-0000-7000-8000-00000000d232','fixture credential','2040-01-01T00:00:00Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
-    let workspaces = f.read("SELECT * FROM workspaces").await;
-    let machines = f.read("SELECT * FROM machines").await;
-    let credentials = f.read("SELECT * FROM machine_credentials").await;
+    f.execute("INSERT INTO directory_workspaces(workspace_id,name,state,created_at,updated_at) VALUES ('019f0000-0000-7000-8000-00000000d231','Existing','active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![]).await;
+    let caller = super::super::support::machine_caller(
+        f.org.clone(),
+        workspace_model::Caller::Person {
+            machine_id: "019f0000-0000-7000-8000-00000000d233".parse().unwrap(),
+            person_id: "019f0000-0000-7000-8000-00000000d235".parse().unwrap(),
+        },
+        "019f0000-0000-7000-8000-00000000d234".to_owned(),
+        NOW_SECONDS,
+    );
+    super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
+    assert!(
+        f.read("SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'")
+            .await
+            .rows
+            .is_empty()
+    );
+    let workspaces = f.read("SELECT * FROM directory_workspaces").await;
+    let machines = f.read("SELECT * FROM login_machines").await;
+    let approvals = f.read("SELECT * FROM login_machine_approvals").await;
     assert_eq!(f.provision().await.0, 200);
     assert_eq!(f.provision().await.0, 200);
-    assert_eq!(f.read("SELECT * FROM workspaces").await, workspaces);
-    assert_eq!(f.read("SELECT * FROM machines").await, machines);
     assert_eq!(
-        f.read("SELECT * FROM machine_credentials").await,
-        credentials
+        f.read("SELECT * FROM directory_workspaces").await,
+        workspaces
+    );
+    assert_eq!(f.read("SELECT * FROM login_machines").await, machines);
+    assert_eq!(
+        f.read("SELECT * FROM login_machine_approvals").await,
+        approvals
     );
     assert_eq!(
         f.counts().await.rows[0][0],
@@ -385,7 +402,7 @@ async fn expired_after_cold_reset_and_foreign_stored_stamps_refuse_without_rewri
         if foreign {
             let other = "019f0000-0000-7000-8000-00000000d297";
             f.execute(
-                "UPDATE organization_identity SET id=?,organization_statement=?",
+                "UPDATE signin_organization_identity SET id=?,organization_statement=?",
                 vec![
                     SqlValue::Text(other.to_owned()),
                     SqlValue::Text(stamp::stamp(other, NOW_SECONDS).unwrap()),
@@ -399,7 +416,7 @@ async fn expired_after_cold_reset_and_foreign_stored_stamps_refuse_without_rewri
             f.runtime().await;
         }
         let snapshot = || Statement {
-            sql: "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
+            sql: "SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id",
             args: vec![],
         };
         let before: Result<ReadOutcome, StoreFailure> =

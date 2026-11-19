@@ -1,31 +1,32 @@
 use crate::{
     ActorIdentityId, Area, BacklogItem, Change, ChangePosition, Deliverable, DeliverableId,
-    DeliverableStatus, Initiative, Issue, ItemRef, Post, Project, ReadScope, Thread, ThreadId,
-    WorkLogEntry, WorkStatus,
+    DeliverableRoleAssignment, DeliverableStatus, Initiative, Issue, ItemRef, Post, Project,
+    ProjectRoleAssignment, ReadScope, Thread, ThreadId, ThreadMember, WorkLogEntry, WorkStatus,
+    Workspace,
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NamedItem {
     pub item: ItemRef,
     pub name: String,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Blocker {
     pub item: ItemRef,
     pub title: String,
     pub status: BlockerStatus,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DeliverableView {
     pub deliverable: Deliverable,
     pub status: DeliverableStatus,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "status",
@@ -37,7 +38,9 @@ pub enum BlockerStatus {
     Deliverable(DeliverableStatus),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema, thiserror::Error,
+)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -102,7 +105,7 @@ pub enum RefusalReason {
     InvalidInput { field: String },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "item",
@@ -110,6 +113,7 @@ pub enum RefusalReason {
     deny_unknown_fields
 )]
 pub enum ItemView {
+    Workspace(Workspace),
     Area(Area),
     Project(Project),
     Initiative(Initiative),
@@ -118,7 +122,14 @@ pub enum ItemView {
         blocked_by: Vec<DeliverableId>,
     },
     Issue(Issue),
-    Thread(Thread),
+    /// The thread plus the caller's own membership, when the caller is a member.
+    Thread {
+        thread: Thread,
+        me: Option<ThreadReaderView>,
+    },
+    ThreadMember(ThreadMember),
+    ProjectRole(ProjectRoleAssignment),
+    DeliverableRole(DeliverableRoleAssignment),
     Post(Post),
     WorkLogEntry(WorkLogEntry),
     BacklogItem(BacklogItem),
@@ -132,6 +143,7 @@ impl ItemView {
     #[must_use]
     pub fn item_ref(&self) -> ItemRef {
         match self {
+            Self::Workspace(row) => ItemRef::Workspace(row.workspace_id.clone()),
             Self::Area(row) => ItemRef::Area(row.area_id.clone()),
             Self::Project(row) => ItemRef::Project(row.project_id.clone()),
             Self::Initiative(row) => ItemRef::Initiative(row.initiative_id.clone()),
@@ -139,7 +151,10 @@ impl ItemView {
                 ItemRef::Deliverable(view.deliverable.deliverable_id.clone())
             }
             Self::Issue(row) => ItemRef::Issue(row.issue_id.clone()),
-            Self::Thread(row) => ItemRef::Thread(row.thread_id.clone()),
+            Self::Thread { thread, .. } => ItemRef::Thread(thread.thread_id.clone()),
+            Self::ThreadMember(row) => ItemRef::ThreadMember(row.thread_member_id.clone()),
+            Self::ProjectRole(row) => ItemRef::ProjectRole(row.project_role_id.clone()),
+            Self::DeliverableRole(row) => ItemRef::DeliverableRole(row.deliverable_role_id.clone()),
             Self::Post(row) => ItemRef::Post(row.post_id.clone()),
             Self::WorkLogEntry(row) => ItemRef::WorkLogEntry(row.entry_id.clone()),
             Self::BacklogItem(row) => ItemRef::BacklogItem(row.item_id.clone()),
@@ -150,7 +165,7 @@ impl ItemView {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -173,7 +188,57 @@ pub enum RuleAnswer {
         through: ChangePosition,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// The caller's own standing in a thread. Reading it moves no read mark.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ThreadReaderView {
+    pub role: crate::MemberRole,
+    pub notifications: crate::NotificationSetting,
+    pub read_through: Option<ChangePosition>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ListOrder {
+    OldestFirst,
+    NewestFirst,
+}
+/// Where a list page continues: a position and the direction it continues in.
+/// Oldest-first continues strictly after the position, newest-first strictly
+/// before it; without a position the page starts from that direction's end.
+/// Callers start with [`ListCursor::start`] and otherwise hand back the
+/// `next_cursor` of the previous page.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ListCursor {
+    order: ListOrder,
+    position: Option<ChangePosition>,
+}
+impl ListCursor {
+    #[must_use]
+    pub const fn start(order: ListOrder) -> Self {
+        Self {
+            order,
+            position: None,
+        }
+    }
+    /// The cursor that continues past `position` in the same direction.
+    #[must_use]
+    pub const fn continue_past(self, position: ChangePosition) -> Self {
+        Self {
+            order: self.order,
+            position: Some(position),
+        }
+    }
+    #[must_use]
+    pub const fn order(self) -> ListOrder {
+        self.order
+    }
+    #[must_use]
+    pub const fn position(self) -> Option<ChangePosition> {
+        self.position
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InboxEntry {
     pub position: ChangePosition,

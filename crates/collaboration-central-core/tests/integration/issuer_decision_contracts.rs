@@ -16,9 +16,9 @@ fn decide_device_login_wire_contract() {
     contract_artifacts::assert_contract::<DecideDeviceLogin>(
         "DecideDeviceLogin",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"],"approverSecondFactorAt":null,"codeExpiresAt":1793448600_i64}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64,"codeExpiresAt":1793448600_i64}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"é".repeat(128),"allowedWorkspaces":vec!["019a3dce-2000-7000-8000-000000000001";100],"approverSecondFactorAt":0,"codeExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"],"approverSecondFactorAt":null,"codeExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64,"codeExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","label":"é".repeat(128),"allowedWorkspaces":vec!["019a3dce-2000-7000-8000-000000000001";100],"approverSecondFactorAt":0,"codeExpiresAt":1793448600_i64}),
         ],
         false,
     );
@@ -102,8 +102,8 @@ fn machine_token_decision_wire_contract() {
     contract_artifacts::assert_contract::<MachineTokenDecision>(
         "MachineTokenDecision",
         vec![
-            json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64}),
-            json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64,"superseded":{"enrollmentId":"019a3dce-2000-7000-8000-000000000003","clientId":"019a3dce-2000-7000-8000-000000000003"}}),
+            json!({"result":"grant","machineId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64}),
+            json!({"result":"grant","machineId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64,"superseded":{"enrollmentId":"019a3dce-2000-7000-8000-000000000003","clientId":"019a3dce-2000-7000-8000-000000000003"}}),
             json!({"result":"refuse","reason":{"kind":"enrollmentNotActive"}}),
             json!({"result":"refuse","reason":{"kind":"superseded"}}),
             json!({"result":"refuse","reason":{"kind":"wrongClient"}}),
@@ -131,9 +131,7 @@ fn machine_token_refusal_wire_contract() {
 fn presented_machine_wire_contract() {
     contract_artifacts::assert_contract::<PresentedMachine>(
         "PresentedMachine",
-        vec![
-            json!({"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002"}),
-        ],
+        vec![json!({"machineId":"019a3dce-2000-7000-8000-000000000001"})],
         false,
     );
 }
@@ -143,7 +141,7 @@ fn admit_machine_connection_wire_contract() {
     contract_artifacts::assert_contract::<AdmitMachineConnection>(
         "AdmitMachineConnection",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","clientId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","presented":{"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002"},"tokenExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","clientId":"019a3dce-2000-7000-8000-000000000002","presented":{"machineId":"019a3dce-2000-7000-8000-000000000001"},"tokenExpiresAt":1793448600_i64}),
         ],
         false,
     );
@@ -154,7 +152,7 @@ fn admitted_machine_wire_contract() {
     contract_artifacts::assert_contract::<AdmittedMachine>(
         "AdmittedMachine",
         vec![
-            json!({"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}),
         ],
         false,
     );
@@ -165,7 +163,7 @@ fn machine_connection_admission_wire_contract() {
     contract_artifacts::assert_contract::<MachineConnectionAdmission>(
         "MachineConnectionAdmission",
         vec![
-            json!({"result":"admitted","machine":{"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}}),
+            json!({"result":"admitted","machine":{"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}}),
             json!({"result":"refused","reason":{"kind":"unknownMachine"}}),
             json!({"result":"refused","reason":{"kind":"enrollmentNotActive"}}),
             json!({"result":"refused","reason":{"kind":"superseded"}}),
@@ -256,7 +254,7 @@ fn machine_principal_wire_contract() {
     contract_artifacts::assert_contract::<MachinePrincipal>(
         "MachinePrincipal",
         vec![
-            json!({"kind":"machine","installation_id":"019a3dce-2000-7000-8000-000000000001","enrollment_id":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"kind":"machine","machine_id":"019a3dce-2000-7000-8000-000000000001","enrollment_id":"019a3dce-2000-7000-8000-000000000002"}),
         ],
         false,
     );
@@ -267,7 +265,7 @@ fn machine_token_claims_wire_contract() {
     contract_artifacts::assert_contract::<MachineTokenClaims>(
         "MachineTokenClaims",
         vec![
-            json!({"principal":{"kind":"machine","installation_id":"019a3dce-2000-7000-8000-000000000001","enrollment_id":"019a3dce-2000-7000-8000-000000000002"},"organization_id":"019a3dce-2000-7000-8000-000000000001","grant_expires_at":1793448600_i64}),
+            json!({"principal":{"kind":"machine","machine_id":"019a3dce-2000-7000-8000-000000000001","enrollment_id":"019a3dce-2000-7000-8000-000000000002"},"organization_id":"019a3dce-2000-7000-8000-000000000001","grant_expires_at":1793448600_i64}),
         ],
         true,
     );

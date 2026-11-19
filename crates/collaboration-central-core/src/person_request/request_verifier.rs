@@ -266,7 +266,12 @@ impl<Ed: Ed25519Verification, Es: Es256Verification, Keys: IssuerKeySource>
         if claims.ath != sha256_url(token.as_bytes()) {
             return Err(PersonRequestRefusal::TokenHash);
         }
-        let operation = AdminOperation::parse(input.route, input.body.as_bytes())?;
+        let operation = AdminOperation::parse_for_person(
+            input.route,
+            input.body.as_bytes(),
+            &person.sub,
+            person.second_factor_at,
+        )?;
         let intent_digest = operation.intent_digest()?;
         if claims.intent != intent_digest {
             return Err(PersonRequestRefusal::Intent);

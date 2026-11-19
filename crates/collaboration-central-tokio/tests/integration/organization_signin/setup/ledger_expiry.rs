@@ -7,12 +7,12 @@ use std::time::Duration;
 async fn unchanged_directory(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
     let mut rows = vec![];
     for sql in [
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
-        "SELECT * FROM organization_identity ORDER BY id",
-        "SELECT * FROM organization_authorization_floors ORDER BY id",
-        "SELECT * FROM person_organization_authorization_floors ORDER BY id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM signin_change_records ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM signin_organization_identity ORDER BY id",
+        "SELECT * FROM signin_authorization_floors ORDER BY id",
+        "SELECT * FROM signin_person_authorization_floors ORDER BY id",
     ] {
         rows.push(f.rows(A, sql, vec![]).await?);
     }
@@ -20,7 +20,7 @@ async fn unchanged_directory(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
 }
 
 async fn ledger(f: &Fixture, operation: &str) -> Result<Vec<Vec<SqlValue>>> {
-    f.rows(A,"SELECT caller,content_digest,answer,created_at,updated_at FROM request_log WHERE request_id=?",vec![text(operation)]).await
+    f.rows(A,"SELECT caller,content_digest,answer,created_at,updated_at FROM runtime_request_log WHERE request_id=?",vec![text(operation)]).await
 }
 
 #[expect(
@@ -86,7 +86,7 @@ async fn admin_create_after_ledger_expiry_retains_name_refusal_and_rolls_back_id
             assert!(
                 f.rows(
                     A,
-                    "SELECT workspace_id FROM workspaces WHERE lower(trim(name))=lower(trim(?))",
+                    "SELECT workspace_id FROM directory_workspaces WHERE lower(trim(name))=lower(trim(?))",
                     vec![text(name)]
                 )
                 .await?
@@ -160,7 +160,7 @@ async fn admin_create_after_ledger_expiry_retains_name_refusal_and_rolls_back_id
                 "late name refusal changed workspace, audit, actor or authority"
             );
             assert_eq!(
-                f.rows(A, "SELECT COUNT(*) FROM organization_used_requests", vec![])
+                f.rows(A, "SELECT COUNT(*) FROM admin_used_requests", vec![])
                     .await?,
                 vec![vec![number(2)?]]
             );

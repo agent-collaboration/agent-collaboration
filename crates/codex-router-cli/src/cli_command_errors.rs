@@ -156,6 +156,11 @@ pub enum CliError {
         message: String,
     },
 
+    /// Self-hosted central command failed.
+    #[cfg(unix)]
+    #[error(transparent)]
+    Central(#[from] crate::central_command::CentralCommandError),
+
     /// Fleet enrollment or local inspection failed.
     #[error(transparent)]
     Fleet(#[from] crate::fleet_command::FleetCommandError),

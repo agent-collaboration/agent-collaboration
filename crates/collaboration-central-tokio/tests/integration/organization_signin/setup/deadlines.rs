@@ -69,9 +69,9 @@ async fn signed_create_deadlines_refuse_at_bound_and_apply_before() -> Result {
                     json!({"result":"applied","workspace":{"workspaceId":operation,"name":"Deadline","description":"held create","state":"active"}}),
                     "{bound}"
                 );
-                assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests)",vec![]).await?,vec![vec![number(1)?,number(1)?,number(2)?,number(1)?]]);
+                assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests)",vec![]).await?,vec![vec![number(1)?,number(1)?,number(2)?,number(1)?]]);
                 let at = signed::NOW_SECONDS * 1000 + 29_999;
-                assert_eq!(f.rows(A,"SELECT created_at,updated_at FROM organization_change_records WHERE kind='workspaceCreated'",vec![]).await?,vec![vec![number(at)?,number(at)?]]);
+                assert_eq!(f.rows(A,"SELECT created_at,updated_at FROM signin_change_records WHERE kind='workspaceCreated'",vec![]).await?,vec![vec![number(at)?,number(at)?]]);
             }
             f.close().await?;
         }
@@ -122,7 +122,18 @@ async fn sampled_create_commits_original_time_while_revocation_waits_on_org_turn
     assert_eq!(applied.status, 200);
     assert_eq!(applied.value()?.get("result"), Some(&json!("applied")));
     assert_eq!(second.await??.status, 200);
-    assert_eq!(f.rows(A,"SELECT created_at,updated_at FROM organization_change_records WHERE kind='workspaceCreated'",vec![]).await?,vec![vec![number(signed::NOW_SECONDS*1000)?,number(signed::NOW_SECONDS*1000)?]]);
+    assert_eq!(
+        f.rows(
+            A,
+            "SELECT created_at,updated_at FROM signin_change_records WHERE kind='workspaceCreated'",
+            vec![]
+        )
+        .await?,
+        vec![vec![
+            number(signed::NOW_SECONDS * 1000)?,
+            number(signed::NOW_SECONDS * 1000)?
+        ]]
+    );
     let before = all_effects(&f).await?;
     let refused = create(&f, &owner, operation, "Sampled create", "").await?;
     assert_eq!(refused.status, 200);

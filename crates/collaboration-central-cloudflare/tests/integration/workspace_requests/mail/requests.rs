@@ -7,7 +7,7 @@ use workspace_model::central_mail::{
 
 async fn request(
     fixture: &Fixture,
-    caller: &collaboration_central_core::WorkspaceCaller,
+    caller: &FixtureCaller,
     number: u32,
     operation: Operation,
 ) -> Result {
@@ -24,10 +24,13 @@ async fn request(
         .unwrap()
 }
 
-fn send(to: m::SessionAddress, body: &str) -> Operation {
+fn send(to: workspace_ids::SessionRef, body: &str) -> Operation {
     Operation::SendMessage {
         to,
         body: body.to_owned().try_into().unwrap(),
+        delivery: workspace_model::central_mail::MessageDelivery::Auto,
+        reply_to: None,
+        sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
     }
 }
 
@@ -57,7 +60,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         panic!("message not queued")
     };
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT sender,target_session,body,(SELECT identity FROM actor_identities WHERE actor_identity_id=json_extract(messages.sender,'$.value')) FROM messages WHERE message_id=?", args: vec![text(message_id)] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT sender,target_session,body,(SELECT identity FROM access_actor_identities WHERE actor_identity_id=json_extract(mail_messages.sender,'$.value')) FROM mail_messages WHERE message_id=?", args: vec![text(message_id)] }).await.unwrap();
     let [row] = rows.rows.as_slice() else {
         panic!("expected one direct message: {:?}", rows.rows)
     };
@@ -81,13 +84,15 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         }
     );
     assert_eq!(
-        serde_json::from_str::<m::SessionAddress>(target).unwrap(),
+        serde_json::from_str::<workspace_ids::SessionRef>(target).unwrap(),
         first
     );
     assert_eq!(
         serde_json::from_str::<workspace_model::central_mail::MessageBody>(body).unwrap(),
         workspace_model::central_mail::MessageBody::Direct {
-            body: "one".to_owned().try_into().unwrap()
+            body: "one".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         }
     );
 
@@ -96,26 +101,13 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
     second.machine_id = id(1001);
     second.session_id = "second-session".to_owned().try_into().unwrap();
     second_caller.caller = m::Caller::Session(second.clone());
-    second_caller.credential_hash = "second-credential-digest".to_owned();
-    let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    use central_storage::{
-        AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
-    };
-    let statements = vec![
-        ("INSERT INTO machines (machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,?,'enrolled',?,?,?)", vec![text(&second.machine_id), text(id::<m::WorkspaceId>(1005)), text("Second"), text("[]"), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]),
-        ("INSERT INTO machine_credentials (credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)", vec![text(id::<m::WorkspaceId>(1006)), text(&second.machine_id), text(&second_caller.credential_hash), text("2030-01-01T00:00:00Z"), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]),
-    ].into_iter().map(|(sql, args)| GuardedStatement { statement: Statement { sql, args }, expect: RowExpectation::Exactly(1) }).collect();
-    assert!(matches!(
-        runtime
-            .statement_host()
-            .run_batch(StatementBatch {
-                statements,
-                alarm: AlarmUpdate::Unchanged
-            })
-            .await
-            .unwrap(),
-        BatchOutcome::Applied { .. }
-    ));
+    second_caller = machine_caller(
+        fixture.caller.organization_id.clone(),
+        second_caller.caller,
+        id::<m::WorkspaceId>(1006).to_string(),
+        FIXTURE_NOW,
+    );
+    seed_enrollment(&fixture.host, &second_caller, "[]", FIXTURE_NOW).await;
     // Resolve the second session as an admitted caller before targeting it.
     assert!(matches!(
         request(
@@ -158,6 +150,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         .clock
         .0
         .fetch_add(86_400_001, std::sync::atomic::Ordering::SeqCst);
+    fixture.caller = fresh_auth(&fixture.host, &fixture.caller);
     let after_expiry = request(&fixture, &fixture.caller, 1000, operation).await;
     assert!(matches!(after_expiry, Result::Done(Answer::Queued { .. })));
     assert_ne!(after_expiry, answer);
@@ -165,6 +158,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         .clock
         .0
         .fetch_add(86_400_001, std::sync::atomic::Ordering::SeqCst);
+    fixture.caller = fresh_auth(&fixture.host, &fixture.caller);
     assert!(matches!(
         request(
             &fixture,
@@ -176,7 +170,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         Result::Done(Answer::Queued { .. })
     ));
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT target_machine_id, COUNT(*) FROM messages WHERE message_kind='direct' GROUP BY target_machine_id ORDER BY target_machine_id", args: vec![] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT target_machine_id, COUNT(*) FROM mail_messages WHERE message_kind='direct' GROUP BY target_machine_id ORDER BY target_machine_id", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![
@@ -204,7 +198,7 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
         request(&fixture, &fixture.caller, 1010, operation.clone()).await,
         Result::OutcomeUnknown
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='direct'), (SELECT COUNT(*) FROM request_log WHERE request_id=?)", args: vec![text(id::<m::RequestId>(1010))] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'), (SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)", args: vec![text(id::<m::RequestId>(1010))] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -217,6 +211,45 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
     assert_eq!(
         request(&fixture, &fixture.caller, 1010, operation).await,
         replay
+    );
+    fixture.host.close().await;
+}
+
+#[tokio::test]
+async fn a_chosen_delivery_and_reply_to_are_stored_in_the_message_body_for_the_recipient_router() {
+    let fixture = Fixture::new().await;
+    let target = session(&fixture.caller);
+    let answer = request(
+        &fixture,
+        &fixture.caller,
+        1050,
+        Operation::SendMessage {
+            to: target,
+            body: "steer this".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Steer,
+            reply_to: Some(id(1049)),
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
+        },
+    )
+    .await;
+    let Result::Done(Answer::Queued { message_id }) = &answer else {
+        panic!("message not queued: {answer:?}")
+    };
+    let runtime = fixture.host.central(&fixture.caller.organization_id).await;
+    let rows = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT json_extract(body,'$.delivery'),json_extract(body,'$.replyTo') FROM mail_messages WHERE message_id=?",
+            args: vec![text(message_id)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            text("steer"),
+            text(id::<workspace_model::MessageId>(1049))
+        ]]
     );
     fixture.host.close().await;
 }

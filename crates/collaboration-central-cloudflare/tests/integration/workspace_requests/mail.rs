@@ -3,6 +3,7 @@ mod automation_occurrences;
 mod automations;
 mod cold_alarm;
 mod corruption;
+mod direct_message_cancel;
 mod engine_publication;
 mod requests;
 mod stored_row_use;

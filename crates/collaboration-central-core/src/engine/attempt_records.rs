@@ -50,7 +50,7 @@ fn corrupt_attempt_field(name: &str, raw: Option<&SqlValue>) -> AttemptCorruptio
         None => "<missing column>".into(),
     };
     AttemptCorruption {
-        column: format!("central_work_attempts.{name}"),
+        column: format!("engine_work_attempts.{name}"),
         raw_value,
     }
 }
@@ -206,7 +206,7 @@ pub(crate) fn decode_attempt(outcome: &ReadOutcome) -> Result<Option<StoredAttem
     let values = match outcome.rows.as_slice() {
         [] => return Ok(None),
         [row] => row,
-        _ => return Err(corrupt("central_work_attempts.subject")),
+        _ => return Err(corrupt("engine_work_attempts.subject")),
     };
     let get = |name| column(outcome, values, name).cloned();
     let guard = AttemptGuard {

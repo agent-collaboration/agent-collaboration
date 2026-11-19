@@ -77,7 +77,7 @@ async fn creator_window(fixture: &Fixture) -> SqlValue {
     let windows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT window_id FROM notification_windows",
+            sql: "SELECT window_id FROM mail_notification_windows",
             args: vec![],
         })
         .await
@@ -98,11 +98,23 @@ enum Corrupt {
 #[tokio::test]
 async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
     for (index, corrupt, column) in [
-        (0_u32, Corrupt::AutomationExpiry, "automations.expires_at"),
-        (1, Corrupt::AutomationAnchor, "automations.anchor_at"),
-        (2, Corrupt::AutomationNextDue, "automations.next_due_at"),
-        (3, Corrupt::WakeCreation, "wakes.created_at"),
-        (4, Corrupt::WindowDue, "notification_windows.due_at"),
+        (
+            0_u32,
+            Corrupt::AutomationExpiry,
+            "automation_schedules.expires_at",
+        ),
+        (
+            1,
+            Corrupt::AutomationAnchor,
+            "automation_schedules.anchor_at",
+        ),
+        (
+            2,
+            Corrupt::AutomationNextDue,
+            "automation_schedules.next_due_at",
+        ),
+        (3, Corrupt::WakeCreation, "automation_wakes.created_at"),
+        (4, Corrupt::WindowDue, "mail_notification_windows.due_at"),
     ] {
         let fixture = Fixture::new().await;
         let start = chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst))
@@ -154,7 +166,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
             Corrupt::AutomationExpiry => {
                 execute(
                     &fixture,
-                    "UPDATE automations SET expires_at=? WHERE automation_id=?",
+                    "UPDATE automation_schedules SET expires_at=? WHERE automation_id=?",
                     vec![
                         stamp(start + chrono::Duration::days(8)),
                         text(&automation_id),
@@ -166,7 +178,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
             Corrupt::AutomationAnchor => {
                 execute(
                     &fixture,
-                    "UPDATE automations SET anchor_at=? WHERE automation_id=?",
+                    "UPDATE automation_schedules SET anchor_at=? WHERE automation_id=?",
                     vec![
                         stamp(anchor - chrono::Duration::seconds(300)),
                         text(&automation_id),
@@ -180,7 +192,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 let due = anchor + chrono::Duration::seconds(300);
                 execute(
                     &fixture,
-                    "UPDATE automations SET next_due_at=? WHERE automation_id=?",
+                    "UPDATE automation_schedules SET next_due_at=? WHERE automation_id=?",
                     vec![stamp(due), text(&automation_id)],
                 )
                 .await;
@@ -189,7 +201,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
             Corrupt::WakeCreation => {
                 execute(
                     &fixture,
-                    "UPDATE wakes SET created_at='not-a-timestamp' WHERE wake_id=?",
+                    "UPDATE automation_wakes SET created_at='not-a-timestamp' WHERE wake_id=?",
                     vec![text(&wake_id)],
                 )
                 .await;
@@ -201,7 +213,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
                 assert_ne!(anchor.timestamp().rem_euclid(900), 0);
                 execute(
                     &fixture,
-                    "UPDATE notification_windows SET due_at=? WHERE window_id=?",
+                    "UPDATE mail_notification_windows SET due_at=? WHERE window_id=?",
                     vec![stamp(anchor), window],
                 )
                 .await;
@@ -216,7 +228,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
         let work = runtime.after_event().await;
 
         let work = work.unwrap_or_else(|error| panic!("{column}: the event failed: {error:?}"));
-        let records = runtime.statement_host().read(Statement { sql: "SELECT machine_kind,subject_key,state,failure_count,last_failure,last_failure_detail FROM central_work_attempts", args: vec![] }).await.unwrap();
+        let records = runtime.statement_host().read(Statement { sql: "SELECT machine_kind,subject_key,state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts", args: vec![] }).await.unwrap();
         assert_eq!(records.rows.len(), 1, "{column}: {:?}", records.rows);
         assert_eq!(
             &records.rows[0][..5],
@@ -234,7 +246,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
             "{column}: {:?}",
             records.rows[0][5]
         );
-        let effects = runtime.statement_host().read(Statement { sql: "SELECT (SELECT state FROM wakes WHERE wake_id=?),(SELECT COUNT(*) FROM messages WHERE message_kind='wake'),(SELECT COUNT(*) FROM messages WHERE message_kind='automation'),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')", args: vec![text(&wake_id)] }).await.unwrap();
+        let effects = runtime.statement_host().read(Statement { sql: "SELECT (SELECT state FROM automation_wakes WHERE wake_id=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice')", args: vec![text(&wake_id)] }).await.unwrap();
         let (wake_state, wakes, automations) = match corrupt {
             Corrupt::WakeCreation => ("active", 0, 1),
             Corrupt::WindowDue => ("done", 1, 1),

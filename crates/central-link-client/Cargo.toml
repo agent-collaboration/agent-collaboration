@@ -8,6 +8,7 @@ autotests = false
 
 [dependencies]
 central-link-protocol.workspace = true
+workspace-ids.workspace = true
 workspace-model.workspace = true
 router-clock.workspace = true
 thiserror.workspace = true

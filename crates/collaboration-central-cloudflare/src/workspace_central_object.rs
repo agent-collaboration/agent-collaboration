@@ -8,12 +8,9 @@ use crate::{
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::{
-    ClockIds, ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
-};
+use collaboration_central_core::{ClockIds, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
 use fleet_identity_protocol::OrganizationId;
 use futures_util::lock::Mutex;
-use serde::{Deserialize, Serialize};
 use sqlx_durable_object::DoConnection;
 use std::sync::Arc;
 use worker::{
@@ -28,6 +25,8 @@ struct CentralStatements {
         Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
     #[cfg(feature = "test-support")]
     engine_read_fault: Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
+    #[cfg(feature = "test-support")]
+    witness_env: SendWrapper<Env>,
     #[cfg(feature = "test-support")]
     alarm_batch_failure: Arc<std::sync::Mutex<Option<StoreFailure>>>,
     connection: SendWrapper<DoConnection>,
@@ -120,7 +119,19 @@ impl ObjectHost for CentralStatements {
                     });
                 }
             }
-            statement_store::read(&self.connection, statement.into()).await
+            #[cfg(feature = "test-support")]
+            let sql = statement.sql;
+            let result = statement_store::read(&self.connection, statement.into()).await;
+            #[cfg(feature = "test-support")]
+            workspace_link_witness::read_completed(
+                &self.witness_env,
+                self.state.id().to_string(),
+                sql,
+                &result,
+            )
+            .await
+            .map_err(|_| StoreFailure::Unavailable)?;
+            result
         })
     }
     fn published_alarm(
@@ -179,22 +190,6 @@ impl WorkspaceStoreCalls for WorkspaceTransport {
         })
     }
 }
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct CentralRequest {
-    pub organization_id: OrganizationId,
-    pub caller: workspace_model::Caller,
-    pub credential_hash: String,
-    pub request: workspace_model::WorkspaceRequest,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct CentralMailRequest {
-    pub organization_id: OrganizationId,
-    pub caller: workspace_model::Caller,
-    pub credential_hash: String,
-    pub request: workspace_model::central_mail::CentralMailRequest,
-}
 type OrgRuntime = WorkspaceRuntime<CentralStatements, WorkspaceTransport>;
 enum AlarmFailure {
     Store(StoreFailure),
@@ -208,6 +203,7 @@ pub struct CentralObject {
     runtime: Mutex<Option<Arc<OrgRuntime>>>,
     clock: WorkspaceClock,
     due_batches: Arc<collaboration_central_core::DueBatchState>,
+    mail_pushes: Arc<std::sync::Mutex<Vec<collaboration_central_core::MailDeliveryReady>>>,
     #[cfg(feature = "test-support")]
     controls: workspace_cases::Controls,
     #[cfg(feature = "test-support")]
@@ -233,6 +229,8 @@ impl CentralObject {
             engine_commit_fault: self.controls.engine_commit_fault.clone(),
             #[cfg(feature = "test-support")]
             engine_read_fault: self.controls.engine_read_fault.clone(),
+            #[cfg(feature = "test-support")]
+            witness_env: SendWrapper::new(self.env.clone()),
             #[cfg(feature = "test-support")]
             alarm_batch_failure: self.controls.alarm_batch_failure.clone(),
             connection: SendWrapper::new(DoConnection::new(self.state.storage())),
@@ -289,8 +287,23 @@ impl CentralObject {
             // returns the closed InvalidConfiguration refusal for core to observe.
             Ok(None) | Err(_) => runtime,
         };
+        let mail_pushes = self.mail_pushes.clone();
+        let state_for_revocation = self.state.clone();
         let runtime = Arc::new(
-            runtime.with_sign_in_observer(Arc::new(crate::signin_observation::observe_signin)),
+            runtime
+                .with_sign_in_observer(Arc::new(crate::signin_observation::observe_signin))
+                .with_mail_delivery_observer(Arc::new(move |message| {
+                    mail_pushes
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(message);
+                }))
+                .with_machine_revocation_observer(Arc::new(move |machine_id| {
+                    for socket in state_for_revocation.get_websockets_with_tag(machine_id.as_str())
+                    {
+                        let _ = socket.close(Some(1008), Some("machine authority revoked"));
+                    }
+                })),
         );
         runtime.recompute_alarm().await?;
         *initialized = Some(runtime.clone());
@@ -331,13 +344,14 @@ impl DurableObject for CentralObject {
             runtime: Mutex::new(None),
             clock: WorkspaceClock::default(),
             due_batches: Arc::new(collaboration_central_core::DueBatchState::default()),
+            mail_pushes: Default::default(),
             #[cfg(feature = "test-support")]
             controls: workspace_cases::Controls::default(),
             #[cfg(feature = "test-support")]
             launcher_clock_sampled: Mutex::new(false),
         }
     }
-    async fn fetch(&self, mut request: Request) -> Result<Response> {
+    async fn fetch(&self, request: Request) -> Result<Response> {
         let address = request
             .headers()
             .get("x-central-object-address")?
@@ -388,35 +402,44 @@ impl DurableObject for CentralObject {
                 }
             };
             use tower_service::Service;
-            let response = collaboration_central_core::organization_signin_router(runtime)
+            let response = collaboration_central_core::organization_signin_router(runtime.clone())
                 .call(http::Request::from_parts(parts, body))
                 .await?;
+            self.flush_ready_mail(&runtime).await;
             return response.try_into();
         }
-        if request.path() == "/mail" {
-            let call: CentralMailRequest = request.json().await?;
-            if call.organization_id != organization {
+        if let Some(path_organization) = crate::workspace_link_entry::organization(&request.path())
+        {
+            if path_organization.as_ref() != Ok(&organization) {
                 return Response::error("wrong organization", 403);
             }
-            let runtime = self.runtime(organization).await?;
-            let caller = WorkspaceCaller {
-                organization_id: call.organization_id,
-                caller: call.caller,
-                credential_hash: call.credential_hash,
-            };
-            return Response::from_json(&runtime.request_central(&caller, call.request).await);
+            return self.upgrade_machine_link(organization, &request).await;
         }
-        let call: CentralRequest = request.json().await?;
-        if call.organization_id != organization {
-            return Response::error("wrong organization", 403);
-        }
-        let runtime = self.runtime(organization).await?;
-        let caller = WorkspaceCaller {
-            organization_id: call.organization_id,
-            caller: call.caller,
-            credential_hash: call.credential_hash,
-        };
-        Response::from_json(&runtime.request(&caller, call.request).await)
+        Response::error("unknown central route", 404)
+    }
+
+    async fn websocket_message(
+        &self,
+        socket: worker::WebSocket,
+        message: worker::WebSocketIncomingMessage,
+    ) -> Result<()> {
+        self.handle_machine_message(socket, message).await
+    }
+    async fn websocket_close(
+        &self,
+        socket: worker::WebSocket,
+        _code: usize,
+        _reason: String,
+        _was_clean: bool,
+    ) -> Result<()> {
+        socket.close(Some(1000), Some("closed"))
+    }
+    async fn websocket_error(
+        &self,
+        socket: worker::WebSocket,
+        _error: worker::Error,
+    ) -> Result<()> {
+        socket.close(Some(1011), Some("link error"))
     }
 
     async fn alarm(&self) -> Result<Response> {
@@ -432,10 +455,9 @@ impl DurableObject for CentralObject {
                 }
                 Err(AlarmFailure::Platform(error)) => return Err(error),
             };
-            runtime
-                .after_event()
-                .await
-                .map_err(|error| worker::Error::RustError(error.to_string()))?;
+            let result = runtime.after_event().await;
+            self.flush_ready_mail(&runtime).await;
+            result.map_err(|error| worker::Error::RustError(error.to_string()))?;
             Response::ok("alarm applied")
         }
     }
@@ -448,3 +470,10 @@ pub(crate) mod workspace_cases;
 #[cfg(feature = "test-support")]
 #[path = "signin_launcher_controls.rs"]
 mod signin_launcher_controls;
+
+#[path = "workspace_machine_link.rs"]
+mod workspace_machine_link;
+
+#[cfg(feature = "test-support")]
+#[path = "workspace_link_witness.rs"]
+mod workspace_link_witness;

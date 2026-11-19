@@ -109,11 +109,11 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
         ));
     }
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let identities = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -132,7 +132,7 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
     };
     let old = find("first-advisor");
     let new = find("second-advisor");
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder,ended_at FROM project_roles WHERE project_id=? AND role='advisor' ORDER BY created_at,project_role_id",args:vec![text(&project)]}).await.unwrap();
+    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder,ended_at FROM workspace_project_roles WHERE project_id=? AND role='advisor' ORDER BY created_at,project_role_id",args:vec![text(&project)]}).await.unwrap();
     assert_eq!(rows.rows.len(), 2);
     assert!(
         rows.rows
@@ -147,7 +147,11 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
         vec![&vec![text(&new), SqlValue::Null]]
     );
     let mut nonlead = f.caller.clone();
-    nonlead.caller = m::Caller::Session(second);
+    nonlead = collaboration_central_core::WorkspaceCaller::new(
+        nonlead.connection().clone(),
+        m::Caller::Session(second),
+    )
+    .unwrap();
     let refused = call(
         &f.host,
         &nonlead,

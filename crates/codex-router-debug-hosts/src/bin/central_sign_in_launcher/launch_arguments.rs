@@ -1,16 +1,17 @@
-//! The historical ten flags and their CENTRAL_LAUNCHER_<FLAG> fallbacks.
+//! Explicit launcher flags and their CENTRAL_LAUNCHER_<FLAG> fallbacks.
 use super::launcher_failure::{LauncherFailure, LauncherResult};
 use collaboration_central_core::{MAX_ALARM_UNIX_MILLIS, SignInTrustSettings};
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::SyncTime;
 use std::{collections::BTreeMap, path::PathBuf};
 
-const FLAGS: [&str; 10] = [
+const FLAGS: [&str; 11] = [
     "root",
     "socket",
     "issuer",
     "audience",
     "admin-audience",
+    "machine-audience",
     "public-origin",
     "jwks-url",
     "service-id",
@@ -88,6 +89,7 @@ impl LaunchConfiguration {
                 issuer: arguments.get("issuer")?,
                 audience: arguments.get("audience")?,
                 admin_audience: arguments.get("admin-audience")?,
+                machine_audience: arguments.get("machine-audience")?,
                 public_origin: arguments.get("public-origin")?,
                 jwks_url: arguments.get("jwks-url")?,
                 service_id: Some(

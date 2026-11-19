@@ -1,8 +1,9 @@
 //! Observable enrollment states always retain the machine client they authorized.
 use super::{AdmissionId, ClientId, DeviceLoginRequestId, PersonId};
-use fleet_identity_protocol::{EnrollmentId, InstallationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, UnixSeconds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use workspace_ids::MachineId;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "kind",
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum AdmissionRef {
     Admission { admission_id: AdmissionId },
-    Machine { installation: InstallationId },
+    Machine { machine_id: MachineId },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
@@ -37,7 +38,7 @@ pub enum EnrollmentAuthorization {
 pub enum MachineEnrollment {
     Enrolled {
         enrollment_id: EnrollmentId,
-        installation: InstallationId,
+        machine_id: MachineId,
         authorized_by: EnrollmentAuthorization,
         machine_client_id: ClientId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -45,7 +46,7 @@ pub enum MachineEnrollment {
     },
     Revoked {
         enrollment_id: EnrollmentId,
-        installation: InstallationId,
+        machine_id: MachineId,
         authorized_by: EnrollmentAuthorization,
         machine_client_id: ClientId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -54,7 +55,7 @@ pub enum MachineEnrollment {
     },
     Expired {
         enrollment_id: EnrollmentId,
-        installation: InstallationId,
+        machine_id: MachineId,
         authorized_by: EnrollmentAuthorization,
         machine_client_id: ClientId,
         #[serde(default, skip_serializing_if = "Option::is_none")]

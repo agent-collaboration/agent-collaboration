@@ -22,7 +22,8 @@ use central_storage::SqlValue;
 use collaboration_central_core::{
     EngineCommitFault, EngineCommitFaultKind,
     engine_probe::{
-        EngineReceipt, EngineRequestOutcome, InstanceKey, ProbeEvent, ProbeRequest, SeedProbe,
+        EngineReceipt, EngineRequestOutcome, InstanceKey, ProbeEvent, ProbeRefusal, ProbeRequest,
+        ProbeState, SeedProbe,
     },
 };
 use hegel::{TestCase, generators as gs};
@@ -440,17 +441,16 @@ impl EngineModel {
                         kind,
                     });
             }
-            runtime
-                .request_probe(
-                    &self.engine().caller,
-                    ProbeRequest {
-                        request_id: request_id.clone().try_into().unwrap(),
-                        key: InstanceKey(key.clone()),
-                        event: ProbeEvent::Stop,
-                    },
-                )
-                .await
-                .unwrap()
+            request_probe_as_engine_admin(
+                self.engine(),
+                &runtime,
+                ProbeRequest {
+                    request_id: request_id.clone().try_into().unwrap(),
+                    key: InstanceKey(key.clone()),
+                    event: ProbeEvent::Stop,
+                },
+            )
+            .await
         });
         tc.note(&format!("stop probe {key} (loss {loss}): {outcome:?}"));
         self.request_consumed_fault(&key);
@@ -460,7 +460,7 @@ impl EngineModel {
             vec![text(&key)],
         )) == 1;
         let stored = self.block(self.engine().rows(
-            "SELECT answer FROM request_log WHERE request_id=?",
+            "SELECT answer FROM runtime_request_log WHERE request_id=?",
             vec![text(&request_id)],
         ));
         let stored_refusal = match stored.first().map(|row| &row[0]) {
@@ -520,13 +520,13 @@ impl EngineModel {
         let key = self.subjects[index].key.clone();
         tc.assume(!self.subjects[index].fired);
         tc.assume(!self.fault_armed_on(&key));
-        let original = self.block(
-            self.engine()
-                .rows("SELECT target FROM wakes WHERE wake_id=?", vec![text(&key)]),
-        )[0][0]
+        let original = self.block(self.engine().rows(
+            "SELECT target FROM automation_wakes WHERE wake_id=?",
+            vec![text(&key)],
+        ))[0][0]
             .clone();
         self.block(self.engine().raw(
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
             vec![text(&key)],
         ));
         tc.note(&format!("corrupt wake {key}"));
@@ -549,7 +549,7 @@ impl EngineModel {
         if tc.draw(gs::booleans()) {
             if let Some(original) = self.subjects[index].corrupted_target.take() {
                 self.block(self.engine().raw(
-                    "UPDATE wakes SET target=? WHERE wake_id=?",
+                    "UPDATE automation_wakes SET target=? WHERE wake_id=?",
                     vec![original, text(&key)],
                 ));
             }
@@ -664,7 +664,7 @@ impl EngineModel {
             subject.expected.assert_stored(&subject.key, &stored);
         }
         let rows = self.block(self.engine().rows(
-            "SELECT machine_kind,subject_key FROM central_work_attempts",
+            "SELECT machine_kind,subject_key FROM engine_work_attempts",
             vec![],
         ));
         for row in rows {
@@ -716,6 +716,58 @@ impl Drop for EngineModel {
             self.runtime.block_on(engine.close());
         }
     }
+}
+
+async fn request_probe_as_engine_admin(
+    engine: &EngineOrg,
+    runtime: &Runtime,
+    request: ProbeRequest,
+) -> EngineRequestOutcome<ProbeState, ProbeRefusal> {
+    let caller = engine.f.machine_caller("engine-admin").await.unwrap();
+    runtime.request_probe(&caller, request).await.unwrap()
+}
+
+#[tokio::test]
+async fn probe_stop_uses_fresh_authority_after_the_fixture_clock_advances() {
+    let engine = EngineOrg::new().await;
+    let runtime = engine.runtime().await;
+    let key = engine.fresh().parse().unwrap();
+    let seeded = runtime
+        .seed_probe(SeedProbe {
+            key,
+            group: engine.fresh().parse().unwrap(),
+            due: None,
+            claim: key.to_string(),
+        })
+        .await
+        .unwrap();
+    assert!(matches!(
+        seeded,
+        central_storage::BatchOutcome::Applied { .. }
+    ));
+    engine
+        .set(engine.now() + chrono::Duration::minutes(10))
+        .await;
+    let outcome = request_probe_as_engine_admin(
+        &engine,
+        &runtime,
+        ProbeRequest {
+            request_id: engine.fresh().try_into().unwrap(),
+            key: InstanceKey(key.to_string()),
+            event: ProbeEvent::Stop,
+        },
+    )
+    .await;
+    assert!(
+        matches!(
+            outcome,
+            EngineRequestOutcome::Answer {
+                receipt: EngineReceipt::Applied { .. }
+            }
+        ),
+        "{outcome:?}",
+    );
+    engine.f.close().await.unwrap();
 }
 
 #[hegel::test(test_cases = 50)]

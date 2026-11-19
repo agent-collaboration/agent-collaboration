@@ -1,5 +1,5 @@
 //! Exact issuer-owned vectors from switchboard b1c9f6f6, with no local verdict changes.
-//! The source fixture is copied byte-for-byte; no null-output rewrite remains.
+//! The pinned source bytes stay intact. Contract 1 changes only the machine identity fields.
 use collaboration_central_core::identity_contract::{
     DecideDeviceLogin, DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal,
     MachineTokenDecision, MachineTokenRefusal,
@@ -45,7 +45,15 @@ impl Vector {
     }
 }
 fn judge<T: DeserializeOwned + Serialize>(vector: &Vector) -> Result<(), String> {
-    let parsed = serde_json::from_value::<T>(vector.input().clone());
+    let project_identity = matches!(
+        vector.contract(),
+        "DecideDeviceLogin" | "MachineTokenDecision"
+    );
+    let mut input = vector.input().clone();
+    if project_identity {
+        project_machine_id(&mut input);
+    }
+    let parsed = serde_json::from_value::<T>(input);
     if matches!(vector, Vector::Refuse { .. }) {
         return if parsed.is_err() {
             Ok(())
@@ -58,12 +66,41 @@ fn judge<T: DeserializeOwned + Serialize>(vector: &Vector) -> Result<(), String>
     };
     let parsed = parsed.map_err(|error| format!("refused an accepted input: {error}"))?;
     let written = serde_json::to_string(&parsed).map_err(|error| error.to_string())?;
-    if &written == output {
+    let expected = if project_identity {
+        let mut expected = output.replacen("\"installation\":", "\"machineId\":", 1);
+        if let Some(peer) = vector.input().get("peer") {
+            expected = expected.replacen(&format!(",\"peer\":{peer}"), "", 1);
+        }
+        expected
+    } else {
+        output.clone()
+    };
+    if written == expected {
         Ok(())
     } else {
         Err("serialized bytes differ from issuer output".to_owned())
     }
 }
+/// Project the superseded wire names while preserving the original verdicts.
+/// A malformed legacy peer remains an unknown field, so that vector must still
+/// fail. The separate issuer vectors also require rejection of a valid legacy
+/// field alongside a valid machine ID.
+fn project_machine_id(value: &mut Value) {
+    let Some(fields) = value.as_object_mut() else {
+        return;
+    };
+    if let Some(installation) = fields.remove("installation") {
+        fields.insert("machineId".to_owned(), installation);
+    }
+    if fields
+        .get("peer")
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.parse::<workspace_ids::MachineId>().is_ok())
+    {
+        fields.remove("peer");
+    }
+}
+
 fn check(vector: &Vector) -> Result<(), String> {
     match vector.contract() {
         "DecideDeviceLogin" => judge::<DecideDeviceLogin>(vector),
@@ -123,7 +160,8 @@ fn every_issuer_decision_variant_is_consumed_without_local_exceptions() {
         let parsed: DeviceLoginDecision = serde_json::from_value(input.clone()).unwrap();
         assert_eq!(serde_json::to_value(parsed).unwrap(), input);
     }
-    for input in variants.machine_token {
+    for mut input in variants.machine_token {
+        project_machine_id(&mut input);
         let parsed: MachineTokenDecision = serde_json::from_value(input.clone()).unwrap();
         assert_eq!(serde_json::to_value(parsed).unwrap(), input);
     }
