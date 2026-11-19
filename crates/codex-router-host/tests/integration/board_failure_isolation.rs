@@ -170,7 +170,7 @@ async fn subscription_restart_contains_project_failure(
     )
     .await?;
     let written = sqlx::query("UPDATE machine_identity SET machine_id = ?")
-        .bind(fixture_peer.as_str())
+        .bind(fixture_peer.as_uuid().to_string())
         .execute(&mut identity_database)
         .await?;
     assert_eq!(written.rows_affected(), 1);
