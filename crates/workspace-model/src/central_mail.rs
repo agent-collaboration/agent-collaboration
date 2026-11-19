@@ -7,7 +7,7 @@ use workspace_ids::{
     ActorIdentityId, AutomationId, ChangeId, MessageId, RequestId, ThreadId, WakeId, WorkspaceId,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CentralMailRequest {
     pub request_id: RequestId,
@@ -26,7 +26,7 @@ pub struct SendMessageRequest {
     pub reply_to: Option<MessageId>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -166,7 +166,7 @@ pub enum TimingRequirement {
     FutureTime,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -193,9 +193,8 @@ pub enum MessageBody {
         automation_id: AutomationId,
         text: PostText,
     },
-    /// Central telling a sender how its direct message ended, when that was not
-    /// the normal delivery. It never has a cancel mark of its own and never
-    /// produces an outcome about itself.
+    /// Central's update to the sender after a refusal, cancellation or late
+    /// acceptance. It has a 24-hour delivery window and produces no outcome.
     DeliveryOutcome {
         message_id: MessageId,
         /// The sender Router's outbox request that created the message.
@@ -206,7 +205,7 @@ pub enum MessageBody {
 
 /// How a direct message ended, when the sender is told. A normal delivery
 /// sends nothing: the sender's receipt already covers it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -237,7 +236,7 @@ pub enum MessageRefusal {
 /// The recipient Router's answer to a delivered message: into its inbox, or
 /// refused for good. A valid message always goes into the inbox (owner,
 /// record:297), so there is no "send it again later".
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -278,7 +277,7 @@ pub enum MessageDelivery {
     Steer,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NoticeItem {
     pub workspace_id: WorkspaceId,
@@ -290,7 +289,7 @@ pub struct NoticeItem {
     pub event: ChangeEvent,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageKind {
     Direct,
@@ -300,7 +299,7 @@ pub enum MessageKind {
     DeliveryOutcome,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MessageState {
     Queued,
@@ -309,7 +308,7 @@ pub enum MessageState {
     Failed { reason: String },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -321,7 +320,7 @@ pub enum MessageSender {
     Central,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MessageRecord {
     pub message_id: MessageId,
@@ -335,14 +334,14 @@ pub struct MessageRecord {
 }
 
 /// Non-destructive view of one session's queued messages in stable UUIDv7 order.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SessionQueue {
     pub session: SessionRef,
     pub messages: Vec<MessageRecord>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NoticeSource {
     pub change_id: ChangeId,
@@ -351,7 +350,7 @@ pub struct NoticeSource {
     pub thread_id: Option<ThreadId>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum WakeState {
     Active,

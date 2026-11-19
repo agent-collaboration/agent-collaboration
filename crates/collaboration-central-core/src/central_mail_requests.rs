@@ -165,6 +165,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         &message,
                         Some(&crate::central_mail_rows::DirectMessageTerms {
                             cancel_due_at: crate::message_deadline::cancel_due_at(*sent_at, now),
+                            delivery_window_ends_at:
+                                crate::message_deadline::delivery_window_ends_at(*sent_at, now),
                             sender_request_id: request.request_id.clone(),
                         }),
                     )?],

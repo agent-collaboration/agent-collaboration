@@ -44,6 +44,16 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         panic!("send refused: {answer:?}")
     };
     let mark = collaboration_central_core::message_deadline::cancel_due_at(sent_at, sent_at);
+    let deadline = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT delivery_window_ends_at FROM mail_messages WHERE message_id=?",
+            args: vec![text(&message_id)],
+        })
+        .await
+        .unwrap();
+    let deadline: chrono::DateTime<chrono::Utc> = row_text(&deadline.rows[0][0]).parse().unwrap();
+    assert_eq!(deadline, sent_at + chrono::Duration::minutes(15));
     let state = || async {
         runtime
             .statement_host()
@@ -81,7 +91,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     let notices = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body,cancel_due_at FROM mail_messages WHERE message_kind='deliveryOutcome'",
+            sql: "SELECT sender,target_session,body,cancel_due_at,created_at,delivery_window_ends_at FROM mail_messages WHERE message_kind='deliveryOutcome'",
             args: vec![],
         })
         .await
@@ -109,6 +119,9 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         }
     );
     assert_eq!(notice[3], SqlValue::Null);
+    let created: chrono::DateTime<chrono::Utc> = row_text(&notice[4]).parse().unwrap();
+    let deadline: chrono::DateTime<chrono::Utc> = row_text(&notice[5]).parse().unwrap();
+    assert_eq!(deadline, created + chrono::Duration::hours(24));
     assert_eq!(
         runtime
             .control::<Option<i64>>("raw-alarm-time", &())

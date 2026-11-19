@@ -7,7 +7,7 @@ use workspace_model::Timestamp;
 
 /// A sign-in-issued machine token. It is a credential: `Debug` never shows it
 /// and nothing logs or echoes it.
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 pub struct MachineTokenText(String);
 
@@ -45,7 +45,7 @@ impl std::fmt::Debug for MachineTokenText {
 }
 
 /// Central's answer to one renewal on the open connection.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -60,7 +60,7 @@ pub enum TokenRenewalResult {
     Refused { reason: TokenRenewalRefusal },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenRenewalRefusal {
     /// The token failed sign-in verification.

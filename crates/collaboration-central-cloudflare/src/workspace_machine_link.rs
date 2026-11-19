@@ -97,6 +97,8 @@ impl CentralObject {
             | LinkFrame::Data(
                 DataFrame::Welcome { .. }
                 | DataFrame::Reply { .. }
+                | DataFrame::RequestStatus { .. }
+                | DataFrame::RequestStatusReply { .. }
                 | DataFrame::Deliver { .. }
                 | DataFrame::Ack { .. }
                 | DataFrame::MachineTokenRenewal { .. },

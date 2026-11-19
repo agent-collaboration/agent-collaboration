@@ -290,6 +290,8 @@ impl LinkClient {
             | LinkFrame::Data(
                 DataFrame::Welcome { .. }
                 | DataFrame::Request { .. }
+                | DataFrame::RequestStatus { .. }
+                | DataFrame::RequestStatusReply { .. }
                 | DataFrame::Batch { .. }
                 | DataFrame::Ack { .. }
                 | DataFrame::RenewMachineToken { .. },

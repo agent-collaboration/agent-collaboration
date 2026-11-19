@@ -2,6 +2,83 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn scoped_status_reads_round_trip_in_their_wire_directions() {
+    let id = "019f0000-0000-7000-8000-000000000001";
+    let frames = [
+        (
+            FrameDirection::ToCentral,
+            json!({
+                "kind":"requestStatus", "correlationId":id,
+                "caller":{"kind":"session","value":{"machineId":id,"sessionId":"provider/opaque"}},
+                "query":{"requestId":id,"scope":{"kind":"workspace","workspaceId":id}}
+            }),
+        ),
+        (
+            FrameDirection::ToRouter,
+            json!({
+                "kind":"requestStatusReply", "correlationId":id,
+                "result":{"kind":"refused","value":{"kind":"mail","reason":{"kind":"notSession"}}}
+            }),
+        ),
+        (
+            FrameDirection::ToRouter,
+            json!({
+                "kind":"reply", "correlationId":id,
+                "result":{"kind":"workspace","reply":{"actors":[],"result":{
+                    "kind":"done","answer":{"kind":"messageStatus","status":{"kind":"delivered"}}
+                }}}
+            }),
+        ),
+    ];
+    for (direction, mut wire) in frames {
+        let frame = decode_text(&wire.to_string(), direction).unwrap();
+        let encoded = encode_text(&frame, direction).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+            wire
+        );
+        let reverse = match direction {
+            FrameDirection::ToCentral => FrameDirection::ToRouter,
+            FrameDirection::ToRouter => FrameDirection::ToCentral,
+        };
+        assert!(decode_text(&encoded, reverse).is_err());
+
+        wire["extra"] = json!(true);
+        assert!(decode_text(&wire.to_string(), direction).is_err());
+    }
+}
+
+#[test]
+fn status_frame_schema_closes_the_request_and_answer_envelopes() {
+    let schema = serde_json::to_value(schemars::schema_for!(DataFrame)).unwrap();
+    let variants = schema["oneOf"].as_array().unwrap();
+    for (kind, required) in [
+        (
+            "requestStatus",
+            ["caller", "correlationId", "kind", "query"].as_slice(),
+        ),
+        (
+            "requestStatusReply",
+            ["correlationId", "kind", "result"].as_slice(),
+        ),
+    ] {
+        let variant = variants
+            .iter()
+            .find(|variant| variant["properties"]["kind"]["const"] == kind)
+            .unwrap();
+        assert_eq!(variant["additionalProperties"], false);
+        let mut actual: Vec<_> = variant["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field.as_str().unwrap())
+            .collect();
+        actual.sort_unstable();
+        assert_eq!(actual, required);
+    }
+}
+
+#[test]
 fn heartbeat_is_exact_unquoted_text_and_old_nonce_json_is_rejected() {
     assert_eq!(
         encode_text(&LinkFrame::Ping, FrameDirection::ToCentral).unwrap(),
