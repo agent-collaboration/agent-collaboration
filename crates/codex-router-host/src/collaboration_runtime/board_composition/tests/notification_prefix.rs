@@ -16,7 +16,7 @@ async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Resu
     let remote = fixture.seed_item;
     // Freeze the later local handoff before Welcome starts the live publisher.
     // A manual claim after start would race its first-claim-only item selection.
-    let local_service: ServiceId = "00000000-0000-4000-8000-000000000001"
+    let local_service: ServiceId = "00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()?;
     let post = fixture

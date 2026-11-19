@@ -500,7 +500,8 @@ async fn production_enrollment_host_child() -> TestResult {
         ),
         ManagedUpdateInputs::production(),
     ))
-    .await?;
+    .await
+    .inspect_err(|error| eprintln!("Host startup: {error}"))?;
     Ok(())
 }
 

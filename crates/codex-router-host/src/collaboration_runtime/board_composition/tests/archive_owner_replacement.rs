@@ -85,7 +85,7 @@ impl ReplacementFixture {
             enrollment: None,
             second_origin: ActorOrigin {
                 installation: ServiceId::try_from(
-                    "550e8400-e29b-41d4-a716-446655441208".to_owned(),
+                    "550e8400-e29b-71d4-a716-446655441208".to_owned(),
                 )?,
                 machine: MachineLabel::try_from("archive replacement successor".to_owned())?,
             },

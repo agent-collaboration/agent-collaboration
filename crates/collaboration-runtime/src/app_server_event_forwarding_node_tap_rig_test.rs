@@ -193,8 +193,8 @@ pub(crate) fn session_event_kind(event: &SessionEvent) -> String {
     }
 }
 
-/// The thread alias of [`tap_session`], pinned: a UUIDv5 over the fixed service and endpoint.
-pub(crate) const THREAD_ID: &str = "512e6214-c5bf-5439-a18b-963e5afe2d91";
+/// The thread alias of [`tap_session`], pinned: a UUIDv5 over the fixed machine and endpoint.
+pub(crate) const THREAD_ID: &str = "91ae3711-254d-5b31-a1d6-88a631add296";
 
 /// One expected frame: its method and params, with the thread id filled in.
 pub(crate) fn frame(method: &str, params: Value) -> Value {

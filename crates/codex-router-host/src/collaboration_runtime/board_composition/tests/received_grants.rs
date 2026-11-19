@@ -93,7 +93,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
     )
     .await?;
     let second_origin = ActorOrigin {
-        installation: ServiceId::try_from("550e8400-e29b-41d4-a716-446655440985".to_owned())?,
+        installation: ServiceId::try_from("550e8400-e29b-71d4-a716-446655440985".to_owned())?,
         machine: MachineLabel::try_from("receiving Router".to_owned())?,
     };
     let second_machine = fixture
@@ -311,7 +311,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
     let mut claimed = tokio::spawn(async move { claiming.claim(&request).await });
     let mut claim_joined = false;
     let second_origin = ActorOrigin {
-        installation: ServiceId::try_from("550e8400-e29b-41d4-a716-446655440986".to_owned())?,
+        installation: ServiceId::try_from("550e8400-e29b-71d4-a716-446655440986".to_owned())?,
         machine: MachineLabel::try_from("intervening Router".to_owned())?,
     };
     let second_machine = fixture
@@ -493,7 +493,7 @@ async fn received_idle_holder_move_preserves_claimed_prefix_without_an_interveni
     )
     .await?;
     let target_origin = ActorOrigin {
-        installation: ServiceId::try_from("550e8400-e29b-41d4-a716-446655441002".to_owned())?,
+        installation: ServiceId::try_from("550e8400-e29b-71d4-a716-446655441002".to_owned())?,
         machine: MachineLabel::try_from("idle Move receiving Router".to_owned())?,
     };
     let target = fixture

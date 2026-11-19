@@ -40,7 +40,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     let later_project = ProjectId::generate();
     let second_origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(
-            "550e8400-e29b-41d4-a716-446655440992".to_owned(),
+            "550e8400-e29b-71d4-a716-446655440992".to_owned(),
         )?,
         machine: message_board::MachineLabel::try_from("later-notice-target".to_owned())?,
     };

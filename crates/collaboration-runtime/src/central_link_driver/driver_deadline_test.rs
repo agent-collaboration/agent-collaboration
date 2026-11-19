@@ -272,6 +272,9 @@ async fn an_offline_router_ends_waiting_writes_at_the_exact_deadline() {
     assert!(harness.outcomes.1.lock().unwrap().is_empty());
 
     harness.clock.advance(Duration::from_millis(1)).unwrap();
+    // The first command can wake an already pending select before the time
+    // branch is polled. The next command runs after the loop drains the due work.
+    let _ = harness.calls.link_status().await;
     let _ = harness.calls.link_status().await;
     let mut ended = harness.outcomes.1.lock().unwrap().clone();
     ended.sort_by_key(|outcome| outcome.request_id.clone());

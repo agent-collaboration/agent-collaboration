@@ -58,7 +58,7 @@ async fn native_rows(
     );
     let store = InteractionAtomicStore::new(owner.clone(), readback_host());
     let binding = collaboration_service::MachineSenderBinding::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         peer,
@@ -102,7 +102,7 @@ async fn origin_rows(
         )
         .await?;
     let binding = collaboration_service::MachineSenderBinding::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         peer,

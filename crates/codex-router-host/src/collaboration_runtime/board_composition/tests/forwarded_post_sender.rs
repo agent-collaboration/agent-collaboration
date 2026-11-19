@@ -27,7 +27,7 @@ impl SenderFixture {
         holder: &claim_fixture::ClaimFixture,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let origin = ActorOrigin {
-            installation: ServiceId::try_from("550e8400-e29b-41d4-a716-446655440988".to_owned())?,
+            installation: ServiceId::try_from("550e8400-e29b-71d4-a716-446655440988".to_owned())?,
             machine: MachineLabel::try_from("forwarding sender fixture".to_owned())?,
         };
         let machine = holder
