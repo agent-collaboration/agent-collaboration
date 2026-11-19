@@ -6,9 +6,6 @@ use agent_client_protocol::schema::v1::{
 };
 use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
 use provider_session_machines::ProviderSettingKind;
-use provider_session_machines::session_setting_machine::{
-    RestoreModeMismatch, RestoreModeObservation, SettingValueId,
-};
 
 use crate::provider_acp_error_mapping::acp_operation_error;
 use crate::{AppliedProviderSetting, ProviderSettingsCatalog, RequestedProviderSettings};
@@ -33,6 +30,12 @@ pub(crate) enum SettingSetupFailure {
         value: String,
         restore_readback: Option<RestoreModeObservation>,
     },
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum RestoreModeObservation {
+    Confirmed(String),
+    Unconfirmed,
 }
 
 enum SettingResponseFailure {
@@ -335,10 +338,6 @@ fn judge_agent_mode(
 pub(crate) struct RestoredPermissionMode {
     pub(crate) report: crate::PermissionModeReport,
     pub(crate) router_auto_active: bool,
-    /// The record's named mode wasn't put back and the agent's mode allows
-    /// more: the session loads but holds prompts until its mode is set
-    /// (the Lead's mode-mismatch rule under owner Decision 3).
-    pub(crate) mode_not_restored: Option<RestoreModeMismatch>,
 }
 
 /// Judges the mode the agent reports for a restored session against the mode
@@ -359,7 +358,6 @@ pub(crate) fn restored_permission_mode(
             reason: None,
         },
         router_auto_active: false,
-        mode_not_restored: None,
     };
     if requested_mode == crate::RequestedPermissionMode::Unspecified {
         return restored;
@@ -401,8 +399,8 @@ pub(crate) fn restored_permission_mode(
 /// one the Router sets it as a create does, before the session is registered
 /// and any prompt admitted. The result is judged on the mode in force after
 /// that. A set that fails leaves the session loaded without Router auto, its
-/// requested and actual modes showing the mismatch (fail closed).
-async fn put_back_recorded_mode(
+/// requested and actual modes describe what the agent confirmed.
+pub(crate) async fn reapply_recorded_mode(
     session: &ActiveSession<'_, Agent>,
     requested: Option<&str>,
     catalog: &mut ProviderSettingsCatalog,
@@ -425,7 +423,6 @@ async fn put_back_recorded_mode(
                 reason: kept.report.reason,
             },
             router_auto_active: false,
-            mode_not_restored: None,
         };
     };
     let outcome = apply_settings(
@@ -452,7 +449,7 @@ async fn put_back_recorded_mode(
                 restore_readback: Some(readback),
                 ..
             } => match readback {
-                RestoreModeObservation::Confirmed(mode) => Some(mode.0),
+                RestoreModeObservation::Confirmed(mode) => Some(mode),
                 RestoreModeObservation::Unconfirmed => None,
             },
             _ => catalog.effective_settings().mode,
@@ -464,67 +461,12 @@ async fn put_back_recorded_mode(
                 reason: kept.report.reason,
             },
             router_auto_active: false,
-            mode_not_restored: None,
         };
     }
     RestoredPermissionMode {
         report: outcome.permission_mode,
         router_auto_active: outcome.router_auto_active,
-        mode_not_restored: None,
     }
-}
-
-/// Marks a restore whose record names a mode the agent isn't in afterwards,
-/// when the agent's mode allows more (or isn't ranked): the session holds
-/// prompts until its mode is set. Router auto and a record with no mode keep
-/// their own rules (the Lead's mode-mismatch rule).
-fn with_mode_hold(
-    mut restored: RestoredPermissionMode,
-    requested: Option<&str>,
-    behavior: &dyn crate::ProviderBehavior,
-) -> RestoredPermissionMode {
-    let crate::RequestedPermissionMode::AgentMode(recorded) =
-        crate::RequestedPermissionMode::from_request(requested)
-    else {
-        return restored;
-    };
-    let actual = restored.report.actual.as_deref();
-    if actual == Some(recorded.as_str()) {
-        return restored;
-    }
-    let allows_more = match (
-        actual.and_then(|mode| behavior.permission_rank(mode)),
-        behavior.permission_rank(&recorded),
-    ) {
-        (Some(actual_rank), Some(recorded_rank)) => actual_rank > recorded_rank,
-        // An unranked or unreported mode counts as allowing more.
-        _ => true,
-    };
-    if allows_more {
-        restored.mode_not_restored = Some(RestoreModeMismatch {
-            recorded: SettingValueId(recorded),
-            observed: actual.map_or(RestoreModeObservation::Unconfirmed, |mode| {
-                RestoreModeObservation::Confirmed(SettingValueId(mode.to_owned()))
-            }),
-        });
-    }
-    restored
-}
-
-/// Puts back the recorded mode (`put_back_recorded_mode`), then marks the
-/// restore when the agent is left in a more permissive mode (V6; the Lead's
-/// mode-mismatch rule).
-pub(crate) async fn reapply_recorded_mode(
-    session: &ActiveSession<'_, Agent>,
-    requested: Option<&str>,
-    catalog: &mut ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
-    claim_write: impl FnOnce() -> Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
-    clock: &dyn router_clock::RuntimeClock,
-) -> RestoredPermissionMode {
-    let restored =
-        put_back_recorded_mode(session, requested, catalog, behavior, claim_write, clock).await;
-    with_mode_hold(restored, requested, behavior)
 }
 
 /// Whether the agent restored the session in a mode other than the one its
@@ -670,7 +612,7 @@ fn apply_config_response(
     };
     if selected != Some(value) && (selected.is_none() || selected != accepted_fallback) {
         if restore && let Some(mode) = selected {
-            let readback = RestoreModeObservation::Confirmed(SettingValueId(mode.to_owned()));
+            let readback = RestoreModeObservation::Confirmed(mode.to_owned());
             *catalog = updated;
             return Err(SettingResponseFailure::RestoreReadback(readback));
         }

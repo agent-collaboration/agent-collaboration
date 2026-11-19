@@ -46,14 +46,6 @@ impl ProviderBehavior for CursorAcpBehavior {
     ) -> Option<StatedPermissionTarget> {
         cursor_stated_permission_target(action, title)
     }
-    fn permission_rank(&self, mode: &str) -> Option<u8> {
-        match mode {
-            "plan" => Some(0),
-            "ask" => Some(1),
-            "agent" => Some(3),
-            _ => None,
-        }
-    }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
         // Auto-review is not honoured over ACP (E1), so agent mode asks first and
         // the Router allows in-folder actions.

@@ -8,8 +8,7 @@ use crate::queue_line_machine::QueueLineMachine;
 use crate::session_lifecycle_answers::state_answer;
 use crate::session_lifecycle_machine::SessionLifecycle;
 use crate::session_setting_machine::{
-    RestoreModeMismatch, RestoreModeObservation, SessionSetting, SessionSettingMachine,
-    SettingValueId, UnresolvedCause,
+    SessionSetting, SessionSettingMachine, SettingValueId, UnresolvedCause,
 };
 use crate::session_turn_machine::{SessionTurn, SessionTurnMachine};
 use state_machine_core::{StateMachine, StateTag};
@@ -155,21 +154,9 @@ pub fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
     steps
 }
 
-/// Work refused because the restore couldn't put back its recorded mode.
-pub fn mode_not_restored_answer(mismatch: &RestoreModeMismatch) -> String {
-    let observation = match &mismatch.observed {
-        RestoreModeObservation::Confirmed(mode) => format!("the agent reported `{}`", mode.0),
-        RestoreModeObservation::Unconfirmed => "the agent's current mode is unconfirmed".to_owned(),
-    };
-    format!(
-        "the session's recorded mode `{}` couldn't be put back and {observation}; set a mode this agent offers, or close the session",
-        mismatch.recorded.0,
-    )
-}
-
 /// Work refused because a setting holds the session, held for `cause`.
 pub fn settings_hold_answer(cause: UnresolvedCause) -> String {
-    let state = match &cause {
+    let state = match cause {
         UnresolvedCause::DefiniteFailure => "a setting change was refused",
         UnresolvedCause::OutcomeUnknown => "a setting change's outcome is unknown",
     };

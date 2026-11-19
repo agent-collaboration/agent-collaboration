@@ -192,15 +192,7 @@ fn hold_steps_are_the_moves_the_reducer_allows(case: hegel::TestCase) {
             case.draw(gs::integers::<u8>().max_value(3)),
         )))
     };
-    let mismatch = || RestoreModeMismatch {
-        recorded: value(&case),
-        observed: if case.draw(gs::booleans()) {
-            RestoreModeObservation::Confirmed(value(&case))
-        } else {
-            RestoreModeObservation::Unconfirmed
-        },
-    };
-    let state = match case.draw(gs::integers::<u8>().max_value(5)) {
+    let state = match case.draw(gs::integers::<u8>().max_value(3)) {
         0 => SessionSetting::Current {
             value: value(&case),
         },
@@ -213,14 +205,9 @@ fn hold_steps_are_the_moves_the_reducer_allows(case: hegel::TestCase) {
             cause: UnresolvedCause::DefiniteFailure,
             observed: value(&case),
         },
-        3 => SessionSetting::Unresolved {
+        _ => SessionSetting::Unresolved {
             cause: UnresolvedCause::OutcomeUnknown,
             observed: value(&case),
-        },
-        4 => SessionSetting::RestoreModeMismatch(mismatch()),
-        _ => SessionSetting::RepairingRestoreMode {
-            application: application(&case),
-            mismatch: mismatch(),
         },
     };
     let set = SessionSettingEvent::SetRequested {

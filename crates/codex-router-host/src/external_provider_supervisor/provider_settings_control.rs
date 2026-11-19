@@ -28,15 +28,13 @@ pub(super) async fn set(
     {
         Ok(result) => Ok(result),
         Err(SettingControlFailure::Provider(error)) => Err(*error),
-        Err(SettingControlFailure::ContextChanged(target)) => Err(failure(
+        Err(
+            SettingControlFailure::ContextChanged(target)
+            | SettingControlFailure::Unresolved(target),
+        ) => Err(failure(
             ProviderSettingsFailureKind::Unavailable,
             &target,
             "setting context unavailable",
-        )),
-        Err(SettingControlFailure::Unresolved { target, answer }) => Err(failure(
-            ProviderSettingsFailureKind::Unavailable,
-            &target,
-            &answer,
         )),
     }
 }
@@ -44,7 +42,7 @@ pub(super) async fn set(
 pub(super) enum SettingControlFailure {
     Provider(Box<ProviderSettingsFailure>),
     ContextChanged(SessionRef),
-    Unresolved { target: SessionRef, answer: String },
+    Unresolved(SessionRef),
 }
 impl From<ProviderSettingsFailure> for SettingControlFailure {
     fn from(error: ProviderSettingsFailure) -> Self {
@@ -162,7 +160,7 @@ async fn apply_and_record(
 ) -> Result<acp_client_runtime::EffectiveProviderSettings, SettingControlFailure> {
     let session_id = String::from(request.target.session_id.clone());
     let observed = runtime
-        .set_setting(
+        .apply_setting(
             session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
                 kind,
@@ -176,11 +174,8 @@ async fn apply_and_record(
             ExternalProviderRuntimeError::SettingsContextChanged => {
                 SettingControlFailure::ContextChanged(request.target.clone())
             }
-            ExternalProviderRuntimeError::SettingsUnresolved { answer } => {
-                SettingControlFailure::Unresolved {
-                    target: request.target.clone(),
-                    answer,
-                }
+            ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
+                SettingControlFailure::Unresolved(request.target.clone())
             }
             other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
         })?;
@@ -190,12 +185,12 @@ async fn apply_and_record(
             .record_settings_catalog(request.target.clone(), catalog)
             .await;
     }
-    if records_mode {
+    if records_mode && let Some(confirmed_mode) = observed.confirmed_requested_mode {
         #[cfg(any(test, feature = "test-support"))]
-        hold_before_mode_record(&supervisor, &request.target, &request.value).await;
-        record_explicit_mode(&supervisor, &runtime, &request.target, &request.value).await?;
+        hold_before_mode_record(&supervisor, &request.target, &confirmed_mode).await;
+        record_explicit_mode(&supervisor, &runtime, &request.target, &confirmed_mode).await?;
     }
-    Ok(observed)
+    Ok(observed.effective_settings)
 }
 
 /// A test holds this change here, applied and not yet recorded (V6b).
@@ -468,9 +463,7 @@ impl ExternalProviderSupervisor {
             .map(|_| ())
             .map_err(|error| match error {
                 SettingControlFailure::ContextChanged(_) => CommandFailure::SettingsContextChanged,
-                SettingControlFailure::Unresolved { answer, .. } => {
-                    CommandFailure::SettingsUnresolved { answer }
-                }
+                SettingControlFailure::Unresolved(_) => CommandFailure::SettingsUnresolved,
                 SettingControlFailure::Provider(error) => match error.kind {
                     collaboration_protocol::ProviderSettingsFailureKind::WrongActor => {
                         CommandFailure::UnauthorizedActor

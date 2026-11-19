@@ -18,7 +18,7 @@ use crate::session_cell_table::SessionCellTable;
 
 /// The caller's end of a setting change, before any run admitted it.
 pub(in crate::agent_session_client) type SettingReplySender = tokio::sync::oneshot::Sender<
-    Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>,
+    Result<crate::ProviderSettingApplication, ExternalProviderRuntimeError>,
 >;
 
 /// A setting change's reply, owed by the run it was admitted to.
@@ -66,7 +66,7 @@ impl AdmittedSettingReply {
 impl crate::provider_session_actor::SettingReply for AdmittedSettingReply {
     fn send(
         mut self,
-        result: Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>,
+        result: Result<crate::ProviderSettingApplication, ExternalProviderRuntimeError>,
     ) {
         if let Some(reply) = self.reply.take() {
             let _delivered = reply.send(result);

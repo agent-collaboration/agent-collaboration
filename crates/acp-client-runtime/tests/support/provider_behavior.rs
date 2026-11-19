@@ -68,15 +68,6 @@ impl ProviderBehavior for ClaudeLikeAutoBehavior {
     ) -> acp_client_runtime::ModelReasoningMetadata {
         TestProviderBehavior.decode_model_metadata(value)
     }
-    fn permission_rank(&self, mode: &str) -> Option<u8> {
-        match mode {
-            "plan" => Some(0),
-            "default" => Some(1),
-            "acceptEdits" => Some(2),
-            "auto" => Some(3),
-            _ => None,
-        }
-    }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
         acp_client_runtime::AutoPermissionMode {
             realized_by: Some("auto"),

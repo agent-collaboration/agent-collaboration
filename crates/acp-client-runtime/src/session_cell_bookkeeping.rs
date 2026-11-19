@@ -19,11 +19,9 @@ use provider_session_machines::session_lifecycle_machine::{
     SessionLifecycleRefusal,
 };
 use provider_session_machines::session_refusal_answers::{
-    mode_not_restored_answer, session_busy_answer, settings_hold_answer,
+    session_busy_answer, settings_hold_answer,
 };
-use provider_session_machines::session_setting_machine::{
-    RestoreModeMismatch, SessionSettingEvent, UnresolvedCause,
-};
+use provider_session_machines::session_setting_machine::UnresolvedCause;
 use provider_session_machines::session_turn_machine::TurnId;
 use state_machine_core::TransitionError;
 
@@ -377,50 +375,13 @@ pub(crate) fn busy_answer(
     })
 }
 
-/// Holds the session's prompts because its restore couldn't put back the
-/// record's named mode and left the agent in one that allows more (the
-/// Lead's mode-mismatch rule under owner Decision 3).
-pub(crate) fn hold_mode_not_restored(
-    cells: &SessionCellTable,
-    session_id: &str,
-    mismatch: &RestoreModeMismatch,
-) {
-    apply_setting(
-        cells,
-        session_id,
-        provider_session_machines::ProviderSettingKind::Mode,
-        SessionSettingEvent::RestoreModeMismatch(mismatch.clone()),
-    );
-}
-
-pub(crate) fn mode_mismatch_answer_for(
-    cells: &SessionCellTable,
-    session_id: &str,
-) -> Option<String> {
-    cells.read(session_id, |cell| {
-        cell.restore_mode_mismatch().map(mode_not_restored_answer)
-    })
-}
-
-/// A held setting's answer, read from the session's cell (D1 M8); a mode a
-/// restore couldn't put back names both modes and the next step.
+/// Describes the independent setting uncertainty or refusal that holds input.
 pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
-    cells.read(session_id, describe_settings_hold)
-}
-
-pub(crate) fn settings_refusal_for(cells: &SessionCellTable, session_id: &str) -> Option<String> {
-    cells.read(session_id, |cell| {
-        cell.settings_held().then(|| describe_settings_hold(cell))
-    })
-}
-
-fn describe_settings_hold(
-    cell: &provider_session_machines::session_cell_machine::SessionCell,
-) -> String {
-    if let Some(mismatch) = cell.restore_mode_mismatch() {
-        return mode_not_restored_answer(mismatch);
-    }
-    settings_hold_answer(if cell.any_setting_outcome_unknown() {
+    let unknown = cells.read(
+        session_id,
+        provider_session_machines::session_cell_machine::SessionCell::any_setting_outcome_unknown,
+    );
+    settings_hold_answer(if unknown {
         UnresolvedCause::OutcomeUnknown
     } else {
         UnresolvedCause::DefiniteFailure

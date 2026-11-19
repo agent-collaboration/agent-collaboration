@@ -590,9 +590,7 @@ fn command_error(error: collaboration_contracts::CommandFailure) -> ThreadMethod
             ThreadMethodError::InvalidParams
         }
         CommandFailure::SettingsContextChanged => ThreadMethodError::SettingsContextChanged,
-        CommandFailure::SettingsUnresolved { answer } => {
-            ThreadMethodError::SettingsUnresolved { answer }
-        }
+        CommandFailure::SettingsUnresolved => ThreadMethodError::SettingsUnresolved,
         CommandFailure::UnauthorizedActor | CommandFailure::ProviderFailure => {
             ThreadMethodError::Unavailable
         }

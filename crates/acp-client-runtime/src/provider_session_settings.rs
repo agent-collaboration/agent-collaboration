@@ -52,6 +52,13 @@ pub struct EffectiveProviderSettings {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderSettingApplication {
+    pub effective_settings: EffectiveProviderSettings,
+    /// The requested mode confirmed by this application without a fallback.
+    pub confirmed_requested_mode: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppliedProviderSetting {
     pub kind: ProviderSettingKind,
     pub value: String,

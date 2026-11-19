@@ -12,7 +12,7 @@
 //   clamp-auto: a requested "auto" lands on "acceptEdits", as claude-agent-acp
 //     0.81.0 does for a model without auto support.
 //   reject-mode: every mode change is answered with an error.
-//   reject-plan: choosing plan gets a definite refusal.
+//   plain-prompts: record and end prompts without asking for permission.
 //   malformed-mode-reply: the first mode change gets a success with no
 //     configOptions, which a client cannot read; the mode stays and later
 //     changes are answered normally.
@@ -39,7 +39,7 @@ const behaviours = new Set(process.argv.slice(5));
 const known = [
   "clamp-auto",
   "reject-mode",
-  "reject-plan",
+  "plain-prompts",
   "malformed-mode-reply",
   "advertise-close",
   "offer-fast",
@@ -163,7 +163,7 @@ for (;;) {
       observed.modeRequests.push({ sessionId, value });
       agent.receipt(receipt, observed);
       modeChanges += 1;
-      if (behaviours.has("reject-mode") || (behaviours.has("reject-plan") && value === "plan")) {
+      if (behaviours.has("reject-mode")) {
         refuse(request, "mode change refused");
         break;
       }
@@ -180,6 +180,11 @@ for (;;) {
       // The prompt text is the tool call to ask permission for, as ACP JSON.
       const sessionId = String(field(request, "params", "sessionId"));
       observed.prompts.push(sessionId);
+      if (behaviours.has("plain-prompts")) {
+        agent.receipt(receipt, observed);
+        agent.endTurn(request);
+        break;
+      }
       const blocks = field(request, "params", "prompt") as Record<string, unknown>[];
       const toolCall = JSON.parse(String(blocks[0]?.text)) as Record<string, unknown>;
       permissionRequestId += 1;

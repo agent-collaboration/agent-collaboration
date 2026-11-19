@@ -1,22 +1,21 @@
-//! A delivery to an already-loaded session carries its restore-mode refusal.
+//! An already-loaded provider can receive messages after a mode difference.
 
 use super::{NoLivePeer, RecordedEvidence, available_directory, provider_binding, request, target};
 use crate::provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
-    ProviderAcpDeliveryRoute, ProviderPromptContentsError, ProviderQueueAdmissionError,
+    ProviderAcpDeliveryRoute,
 };
 use collaboration_contracts::{ProviderConversationBackend, SessionDeliveryRoute};
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryRejectionReason, OperationId, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, RouterAccess,
+    DeliveryOutcome, OperationId, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
 };
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionRecord};
 use serde_json::Value;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn an_already_loaded_restore_mismatch_names_both_modes_at_delivery() {
+async fn an_already_loaded_session_accepts_delivery_despite_a_mode_difference() {
     let root = tempfile::tempdir().expect("provider root");
     let wire_receipt = root.path().join("agent.json");
     let runtime = ExternalProviderRuntime::initialize(
@@ -29,6 +28,7 @@ async fn an_already_loaded_restore_mismatch_names_both_modes_at_delivery() {
                 "advertise-close".into(),
                 "advertise-restore".into(),
                 "restored-in-auto".into(),
+                "plain-prompts".into(),
             ],
         ),
         Arc::new(acp_provider_adapters::ClaudeAcpBehavior::new(
@@ -122,52 +122,78 @@ async fn an_already_loaded_restore_mismatch_names_both_modes_at_delivery() {
         std::iter::once(target.endpoint.clone()).collect(),
         available_directory(&target, &binding),
         Arc::clone(&supervisor),
-        store,
+        Arc::clone(&store),
         Arc::new(NoLivePeer),
         Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
+    let request = request(target.clone(), "next message");
+    let operation_id =
+        OperationId::try_from(request.attempt.as_str().to_owned()).expect("delivery operation");
     let delivery = route
-        .deliver(request(target.clone(), "held message"), &evidence)
+        .deliver(request, &evidence)
         .await
-        .expect("delivery refused")
+        .expect("delivery result")
         .into_receipt();
+    let wait_for_prompt = |operation_id| {
+        supervisor.wait(collaboration_protocol::ConversationOperationWaitRequest {
+            operation_id,
+            timeout_seconds: collaboration_protocol::PositiveSeconds::try_from(2)
+                .expect("wait budget"),
+        })
+    };
+    assert!(
+        matches!(
+            delivery.outcome,
+            DeliveryOutcome::Started | DeliveryOutcome::Queued
+        ),
+        "{delivery:?}"
+    );
+    let delivered = wait_for_prompt(operation_id)
+        .await
+        .expect("delivery settles");
     let content = route
         .prompt_contents(
             target.clone(),
             target.clone().into(),
             session_event_model::InputId::generate(),
             session_event_model::ProviderSubmission::plain(vec![
-                session_event_model::PromptContent::text("held prompt".into()).expect("text"),
+                session_event_model::PromptContent::text("next content command".into())
+                    .expect("text"),
             ]),
         )
-        .await;
+        .await
+        .expect("content admitted");
+    let prompted = wait_for_prompt(content.operation.operation_id)
+        .await
+        .expect("content settles");
+    for completed in [delivered, prompted] {
+        assert!(
+            matches!(
+                completed.output,
+                collaboration_protocol::ConversationOperationWaitOutput::Available {
+                    settlement:
+                        collaboration_protocol::ConversationOperationSettlement::PromptCompleted { .. },
+                }
+            ),
+            "{completed:?}"
+        );
+    }
+    let record = store
+        .lock()
+        .await
+        .session_record(&target)
+        .await
+        .expect("read record")
+        .expect("saved record");
+    assert_eq!(record.resume.requested_mode.as_deref(), Some("acceptEdits"));
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
-
-    let DeliveryOutcome::Rejected(rejection) = delivery.outcome else {
-        panic!("mismatch did not refuse delivery: {delivery:?}");
-    };
-    assert_eq!(
-        rejection.reason,
-        DeliveryRejectionReason::SettingsUnresolved
-    );
-    let detail = rejection.detail.expect("cell's refusal answer");
-    assert!(
-        detail.contains("`acceptEdits`")
-            && detail.contains("`auto`")
-            && detail.contains("set a mode this agent offers")
-            && detail.contains("close the session"),
-        "{detail}"
-    );
-    assert!(!detail.contains("accept current values"), "{detail}");
-    assert!(
-        matches!(content, Err(ProviderPromptContentsError::Admission(ProviderQueueAdmissionError::SettingsUnresolved { ref answer })) if answer == &detail),
-        "{content:?}"
-    );
-    assert!(evidence.0.lock().await.is_empty());
     let agent: Value = serde_json::from_slice(&std::fs::read(wire_receipt).expect("agent receipt"))
         .expect("agent receipt JSON");
-    assert_eq!(agent["prompts"], serde_json::json!([]));
+    assert_eq!(
+        agent["prompts"],
+        serde_json::json!([target.session_id, target.session_id])
+    );
 }

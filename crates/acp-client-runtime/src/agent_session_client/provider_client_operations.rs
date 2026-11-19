@@ -95,14 +95,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         super::settings_held(&self.session_cells, provider_session_id)
     }
 
-    /// The session cell's reason and recovery steps if settings hold input.
-    pub fn settings_refusal(&self, provider_session_id: &str) -> Option<String> {
-        crate::session_cell_bookkeeping::settings_refusal_for(
-            &self.session_cells,
-            provider_session_id,
-        )
-    }
-
     /// True while this setting's last change has an unknown outcome, so a
     /// reader never reports the catalog's old value as confirmed (D1 R2).
     pub fn setting_outcome_unknown(
@@ -152,6 +144,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         request: crate::ProviderSettingRequest,
     ) -> Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError> {
+        self.apply_setting(provider_session_id, request)
+            .await
+            .map(|application| application.effective_settings)
+    }
+
+    pub async fn apply_setting(
+        &self,
+        provider_session_id: String,
+        request: crate::ProviderSettingRequest,
+    ) -> Result<crate::ProviderSettingApplication, ExternalProviderRuntimeError> {
         let uncertain_session_id = provider_session_id.clone();
         let uncertain_value = request.value.clone();
         let kind = request.kind;

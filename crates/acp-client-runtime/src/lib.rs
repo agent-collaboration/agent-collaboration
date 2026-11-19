@@ -103,8 +103,8 @@ pub use provider_session_actor::{ProviderSessionActivity, ProviderSteeringOutcom
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
     FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
-    ProviderConfigValue, ProviderSettingRequest, ProviderSettingsCatalog,
-    RequestedProviderSettings,
+    ProviderConfigValue, ProviderSettingApplication, ProviderSettingRequest,
+    ProviderSettingsCatalog, RequestedProviderSettings,
 };
 pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_cell_table::QueueEntrySink;

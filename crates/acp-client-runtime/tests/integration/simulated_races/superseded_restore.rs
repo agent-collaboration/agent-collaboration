@@ -205,23 +205,18 @@ fn a_superseded_restores_late_completion_leaves_the_newer_runs_routing() {
 }
 
 #[tokio::test]
-async fn a_restore_ranks_the_mode_in_its_set_reply() {
-    assert_restore_holds_after_set(
-        ModeReply::Selected("auto".to_owned()),
-        Some("auto"),
-        "`auto`",
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn a_restore_holds_when_its_sent_set_reply_has_no_mode() {
-    assert_restore_holds_after_set(ModeReply::NoCatalogue, None, "current mode is unconfirmed")
+async fn a_different_set_reply_keeps_the_restored_session_usable() {
+    assert_restore_accepts_input_after_set(ModeReply::Selected("auto".to_owned()), Some("auto"))
         .await;
 }
 
-async fn assert_restore_holds_after_set(reply: ModeReply, actual: Option<&str>, answer_part: &str) {
-    // Arrange: the load's initial `plan` is less permissive than `default`.
+#[tokio::test]
+async fn an_unconfirmed_set_reply_keeps_the_restored_session_usable() {
+    assert_restore_accepts_input_after_set(ModeReply::NoCatalogue, None).await;
+}
+
+async fn assert_restore_accepts_input_after_set(reply: ModeReply, actual: Option<&str>) {
+    // Arrange: the load initially reports plan, and the saved mode is default.
     let (client, agent, session) = closed_session(
         restore_clock(),
         Arc::new(crate::test_behavior::ClaudeLikeAutoBehavior),
@@ -239,7 +234,7 @@ async fn assert_restore_holds_after_set(reply: ModeReply, actual: Option<&str>, 
             session,
             session_event_model::InputId::generate(),
             ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(vec![
-                session_event_model::PromptContent::text("a held prompt".to_owned())
+                session_event_model::PromptContent::text("next prompt".to_owned())
                     .expect("prompt text"),
             ])),
             (),
@@ -247,18 +242,16 @@ async fn assert_restore_holds_after_set(reply: ModeReply, actual: Option<&str>, 
         )
         .await;
 
-    // Assert: the load stays available, while the prompt never reaches ACP.
     assert_eq!(loaded.permission_mode.actual.as_deref(), actual);
-    assert!(
-        matches!(prompt, Err(ExternalProviderRuntimeError::SettingsUnresolved { ref answer }) if answer.contains("`default`") && answer.contains(answer_part)),
-        "{prompt:?}"
-    );
+    assert!(prompt.is_ok(), "{prompt:?}");
     assert_eq!(agent.mode_sets(), ["default"]);
-    assert!(
-        !agent
+    assert_eq!(
+        agent
             .methods()
             .iter()
-            .any(|method| method == "session/prompt")
+            .filter(|method| *method == "session/prompt")
+            .count(),
+        1
     );
     client.shutdown().await;
 }

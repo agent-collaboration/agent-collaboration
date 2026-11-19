@@ -294,7 +294,7 @@ fn native_error_response(id: Value, error: &ThreadMethodError) -> Value {
         ThreadMethodError::Unavailable
         | ThreadMethodError::Unsupported
         | ThreadMethodError::UnavailableThreadOrdering { .. }
-        | ThreadMethodError::SettingsUnresolved { .. }
+        | ThreadMethodError::SettingsUnresolved
         | ThreadMethodError::CreatedWithoutSettings { .. } => -32000,
         ThreadMethodError::Busy => -32600,
     };
@@ -302,7 +302,7 @@ fn native_error_response(id: Value, error: &ThreadMethodError) -> Value {
         ThreadMethodError::SettingsContextChanged => {
             Some(json!({"kind":"settings_context_changed"}))
         }
-        ThreadMethodError::SettingsUnresolved { .. } => Some(json!({"kind":"settings_unresolved"})),
+        ThreadMethodError::SettingsUnresolved => Some(json!({"kind":"settings_unresolved"})),
         ThreadMethodError::InvalidCreateSetting { target, detail } => {
             Some(json!({"kind":"InvalidSetting","target":target,"detail":detail}))
         }

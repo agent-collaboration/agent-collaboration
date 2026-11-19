@@ -352,10 +352,6 @@ impl ExternalProviderRuntime {
         self.client.settings_unresolved(provider_session_id)
     }
 
-    pub(crate) fn settings_refusal(&self, provider_session_id: &str) -> Option<String> {
-        self.client.settings_refusal(provider_session_id)
-    }
-
     pub fn setting_outcome_unknown(
         &self,
         provider_session_id: &str,
@@ -371,6 +367,16 @@ impl ExternalProviderRuntime {
         request: acp_client_runtime::ProviderSettingRequest,
     ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
         self.client.set_setting(provider_session_id, request).await
+    }
+
+    pub(crate) async fn apply_setting(
+        &self,
+        provider_session_id: String,
+        request: acp_client_runtime::ProviderSettingRequest,
+    ) -> Result<acp_client_runtime::ProviderSettingApplication, ExternalProviderRuntimeError> {
+        self.client
+            .apply_setting(provider_session_id, request)
+            .await
     }
 
     pub fn accept_session_settings(

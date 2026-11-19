@@ -216,10 +216,10 @@ impl ProviderAcpDeliveryRoute {
             ));
         };
         let provider_session_id = String::from(request.target.session_id.clone());
-        if let Some(answer) = runtime.settings_refusal(&provider_session_id) {
+        if runtime.settings_unresolved(&provider_session_id) {
             return Ok(Self::rejected(
                 DeliveryRejectionReason::SettingsUnresolved,
-                &answer,
+                "settingsUnresolved: set requested settings or accept current values before prompt, steer or queue",
             ));
         }
         let capabilities = runtime.capability_report(&provider_session_id).await;

@@ -7,7 +7,7 @@ use super::{
     ensure_provider_session_loaded,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ProviderQueueAdmissionError {
     #[error("provider session not found")]
     SessionNotFound,
@@ -15,8 +15,8 @@ pub enum ProviderQueueAdmissionError {
     Unavailable,
     #[error("provider session is live elsewhere")]
     LiveElsewhere,
-    #[error("{answer}")]
-    SettingsUnresolved { answer: String },
+    #[error("session settings are unresolved")]
+    SettingsUnresolved,
     #[error("provider prompt content is empty")]
     EmptyContent,
     #[error("provider does not accept {content_type} content")]
@@ -137,8 +137,8 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if let Some(answer) = runtime.settings_refusal(&String::from(target.session_id.clone())) {
-            return Err(ProviderQueueAdmissionError::SettingsUnresolved { answer }.into());
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
+            return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
         let capabilities = runtime
             .capability_report(&String::from(target.session_id.clone()))
@@ -201,8 +201,8 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if let Some(answer) = runtime.settings_refusal(&String::from(target.session_id.clone())) {
-            return Err(ProviderQueueAdmissionError::SettingsUnresolved { answer }.into());
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
+            return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
         let capabilities = runtime
             .capability_report(&String::from(target.session_id.clone()))
@@ -263,8 +263,8 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if let Some(answer) = runtime.settings_refusal(&String::from(target.session_id.clone())) {
-            return Err(ProviderQueueAdmissionError::SettingsUnresolved { answer });
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
+            return Err(ProviderQueueAdmissionError::SettingsUnresolved);
         }
         let capabilities = runtime
             .capability_report(&String::from(target.session_id.clone()))

@@ -8,7 +8,7 @@ use crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles;
 use crate::provider_setting_application::{FAST_OFF, SettingSetupFailure, apply_initial_settings};
 use crate::{
     EffectiveProviderSettings, FastRequest, InvalidSettingSessionDisposition,
-    ProviderSettingsCatalog, RequestedProviderSettings,
+    ProviderSettingApplication, ProviderSettingsCatalog, RequestedProviderSettings,
 };
 use provider_session_machines::session_setting_machine::{
     SessionSettingEvent, SettingApplication, SettingValueId,
@@ -22,7 +22,7 @@ pub(crate) async fn apply_loaded_setting(
     session: &ActiveSession<'_, Agent>,
     request: crate::ProviderSettingRequest,
     handles: &ProviderSessionRuntimeHandles,
-) -> Result<EffectiveProviderSettings, ExternalProviderRuntimeError> {
+) -> Result<ProviderSettingApplication, ExternalProviderRuntimeError> {
     let provider_session_id = session.session_id().to_string();
     let crate::ProviderSettingRequest {
         kind,
@@ -63,7 +63,10 @@ pub(crate) async fn apply_loaded_setting(
             handles.run_generation,
             false,
         );
-        return Ok(current);
+        return Ok(ProviderSettingApplication {
+            effective_settings: current,
+            confirmed_requested_mode: None,
+        });
     }
     let current_value = match kind {
         ProviderSettingKind::Mode => current.mode.as_ref(),
@@ -75,7 +78,10 @@ pub(crate) async fn apply_loaded_setting(
         && handles.behavior.can_reuse_setting_confirmation(kind)
         && current_value == Some(&value)
     {
-        return Ok(current);
+        return Ok(ProviderSettingApplication {
+            effective_settings: current,
+            confirmed_requested_mode: None,
+        });
     }
     let mut requested = RequestedProviderSettings::default();
     match kind {
@@ -172,21 +178,6 @@ pub(crate) async fn apply_loaded_setting(
             })
         }
         None => {
-            if kind == ProviderSettingKind::Mode
-                && !outcome.applied.iter().any(|applied| applied.kind == kind)
-                && let Some(answer) = crate::session_cell_bookkeeping::mode_mismatch_answer_for(
-                    &handles.session_cells,
-                    &provider_session_id,
-                )
-            {
-                record(
-                    handles,
-                    &provider_session_id,
-                    kind,
-                    SessionSettingEvent::Refused { application },
-                );
-                return Err(ExternalProviderRuntimeError::SettingsUnresolved { answer });
-            }
             if kind == ProviderSettingKind::Mode {
                 // The mode the agent confirmed decides whether auto's in-folder
                 // grant applies; uncertain or failed changes never reach here.
@@ -197,18 +188,39 @@ pub(crate) async fn apply_loaded_setting(
                     outcome.router_auto_active,
                 );
             }
+            if outcome.applied.is_empty() {
+                record(
+                    handles,
+                    &provider_session_id,
+                    kind,
+                    SessionSettingEvent::Refused { application },
+                );
+                return Ok(ProviderSettingApplication {
+                    effective_settings: current,
+                    confirmed_requested_mode: None,
+                });
+            }
+            let confirmed_requested_mode =
+                if kind == ProviderSettingKind::Mode && outcome.permission_mode.reason.is_none() {
+                    outcome.permission_mode.requested
+                } else {
+                    None
+                };
             commit_confirmed_setting(handles, &provider_session_id, kind, application, &catalog)?;
-            if kind == ProviderSettingKind::Model
+            let effective_settings = if kind == ProviderSettingKind::Model
                 && catalog.offers_fast()
                 && crate::session_cell_bookkeeping::keep_fast_off(
                     &handles.session_cells,
                     &provider_session_id,
-                )
-            {
-                return keep_fast_off_after_model(session, handles, &provider_session_id, catalog)
-                    .await;
-            }
-            Ok(catalog.effective_settings())
+                ) {
+                keep_fast_off_after_model(session, handles, &provider_session_id, catalog).await?
+            } else {
+                catalog.effective_settings()
+            };
+            Ok(ProviderSettingApplication {
+                effective_settings,
+                confirmed_requested_mode,
+            })
         }
     }
 }

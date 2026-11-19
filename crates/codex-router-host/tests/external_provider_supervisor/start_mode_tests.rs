@@ -385,11 +385,11 @@ async fn a_refused_explicit_mode_change_leaves_the_recorded_mode() -> TestResult
     Ok(())
 }
 
-/// A no-wire Router-auto repair must preserve the named record and refuse
-/// Accept. A confirmed set then replaces the record (fix round 2 ruling).
+/// An unoffered auto leaves the named record untouched. The same session
+/// accepts input, then a confirmed change survives reopening the store.
 #[cfg(unix)]
 #[tokio::test]
-async fn a_no_wire_mode_repair_preserves_the_named_record_until_a_confirmed_set() -> TestResult {
+async fn a_no_wire_mode_change_keeps_the_saved_mode_and_allows_input() -> TestResult {
     let fixture = ModeFixture::start(
         "claude",
         &[
@@ -397,6 +397,7 @@ async fn a_no_wire_mode_repair_preserves_the_named_record_until_a_confirmed_set(
             "advertise-close",
             "restored-in-auto",
             "narrow-restore-modes",
+            "plain-prompts",
         ],
     )
     .await?;
@@ -418,18 +419,40 @@ async fn a_no_wire_mode_repair_preserves_the_named_record_until_a_confirmed_set(
         .await;
     let before_confirmed = fixture.recorded_mode(&target).await?;
     let mode_sets_before_confirmed = fixture.mode_values_seen()?;
+    let prompt_id = OperationId::generate();
+    operation(
+        fixture
+            .backend
+            .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
+                input_id: None,
+                operation_id: prompt_id.clone(),
+                target: target.clone(),
+                generation: Some(generation()?),
+                requested_by: fixture.creator.clone().into(),
+                approver: fixture.creator.clone().into(),
+                prompt: MessageContent::HumanUser {
+                    text: MessageText::try_from("after restore".to_owned())?,
+                },
+            })
+            .await,
+    )?;
+    let prompted = operation(wait(&fixture.backend, prompt_id).await)?.output;
+    let agent: Value = serde_json::from_slice(&std::fs::read(&fixture.receipt)?)?;
     let repaired = fixture.set_mode(&target, "plan").await;
-    let after_confirmed = fixture.recorded_mode(&target).await?;
     let mode_sets_after_confirmed = fixture.mode_values_seen()?;
     fixture.backend.shutdown().await.map_err(str::to_owned)?;
 
-    let refusal = no_wire.expect_err("a no-wire Keep must not clear this mismatch");
-    ensure!(
-        refusal.contains("`acceptEdits`")
-            && refusal.contains("`auto`")
-            && refusal.contains("set a mode this agent offers")
-    );
-    ensure!(accept.is_err());
+    no_wire.map_err(|error| format!("auto Keep failed: {error}"))?;
+    ensure!(accept.is_ok());
+    ensure!(matches!(
+        prompted,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. }
+        }
+    ));
+    ensure_eq!(agent["prompts"], json!([target.session_id]));
+    let after_confirmed = fixture.recorded_mode(&target).await?;
     ensure_eq!(before_confirmed.as_deref(), Some("acceptEdits"));
     ensure_eq!(mode_sets_before_confirmed, ["acceptEdits"]);
     repaired.map_err(|error| format!("advertised repair failed: {error}"))?;

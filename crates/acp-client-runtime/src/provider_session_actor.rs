@@ -55,7 +55,7 @@ pub(crate) type SteeringReply<P> = tokio::sync::oneshot::Sender<
 /// only answer it; the connection loop that admitted the change owns what an
 /// unanswered reply means (Lead V4, admission exactness).
 pub(crate) trait SettingReply: Send + 'static {
-    fn send(self, result: Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>);
+    fn send(self, result: Result<crate::ProviderSettingApplication, ExternalProviderRuntimeError>);
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

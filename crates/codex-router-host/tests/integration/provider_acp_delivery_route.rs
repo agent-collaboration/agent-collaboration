@@ -1,6 +1,6 @@
 //! Provider route decisions before any client effect.
 
-mod restore_mode_refusal;
+mod restored_mode_delivery;
 
 use crate::provider_fixture_launch;
 

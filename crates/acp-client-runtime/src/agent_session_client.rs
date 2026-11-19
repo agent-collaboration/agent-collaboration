@@ -197,7 +197,7 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         request: crate::ProviderSettingRequest,
         reply: tokio::sync::oneshot::Sender<
-            Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>,
+            Result<crate::ProviderSettingApplication, ExternalProviderRuntimeError>,
         >,
     },
 }

@@ -48,16 +48,6 @@ impl ProviderBehavior for ClaudeAcpBehavior {
     ) -> acp_client_runtime::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_claude_models(value)
     }
-    fn permission_rank(&self, mode: &str) -> Option<u8> {
-        match mode {
-            "plan" => Some(0),
-            "default" => Some(1),
-            "acceptEdits" => Some(2),
-            "auto" => Some(3),
-            "bypassPermissions" => Some(4),
-            _ => None,
-        }
-    }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
         // Claude's own `auto` realizes Router auto. claude-agent-acp offers `auto`
         // only for a model that supports it, and lands a requested `auto` on
