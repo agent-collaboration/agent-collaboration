@@ -1,4 +1,5 @@
 use super::*;
+use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{ClockIds, WorkspaceRuntime, WorkspaceStoreCalls};
 use collaboration_central_tokio::ObjectStorage;
@@ -61,12 +62,13 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             .join(format!("{}.sqlite", f.workspace)),
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
+    let lose = Arc::new(AtomicBool::new(true));
     let runtime = WorkspaceRuntime::new(
         f.caller.organization_id().clone(),
         central.clone(),
         LoseFirstRead {
             store: store.clone(),
-            lose: Arc::new(AtomicBool::new(true)),
+            lose: lose.clone(),
         },
         f.shared_for_runtime(),
         Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
@@ -111,6 +113,20 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
     assert_eq!(runtime.request(&f.caller, request).await.unwrap(), replay);
+
+    let status = RequestStatusQuery {
+        request_id: id(891),
+        scope: RequestScope::Workspace(f.workspace.clone()),
+    };
+    lose.store(true, Ordering::SeqCst);
+    assert_eq!(
+        runtime.request_status(&f.caller, &status).await,
+        Err(StoreFailure::AnswerLost)
+    );
+    assert_eq!(
+        runtime.request_status(&f.caller, &status).await.unwrap(),
+        RequestStatusAnswer::Answered(ReplyPayload::Workspace(replay))
+    );
     central.close().await;
     store.close().await;
 }

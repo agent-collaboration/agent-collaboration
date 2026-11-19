@@ -2,7 +2,7 @@
 use super::{CentralObject, OrgRuntime, OrganizationId};
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, LinkRequestBatch, ReplyPayload,
-    RequestPayload,
+    RequestPayload, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::StoreFailure;
 use collaboration_central_core::{MachineConnectionAttachment, WorkspaceCaller};
@@ -20,6 +20,11 @@ enum IncomingRequests {
     Renewal {
         correlation_id: central_link_protocol::CorrelationId,
         token: central_link_protocol::MachineTokenText,
+    },
+    Status {
+        correlation_id: central_link_protocol::CorrelationId,
+        caller: workspace_model::Caller,
+        query: RequestStatusQuery,
     },
 }
 enum MachineRequestResult {
@@ -91,13 +96,21 @@ impl CentralObject {
                 correlation_id,
                 token,
             },
+            LinkFrame::Data(DataFrame::RequestStatus {
+                correlation_id,
+                caller,
+                query,
+            }) => IncomingRequests::Status {
+                correlation_id,
+                caller,
+                query,
+            },
             // Literal ping/pong is answered by the platform without calling this handler.
             LinkFrame::Ping
             | LinkFrame::Pong
             | LinkFrame::Data(
                 DataFrame::Welcome { .. }
                 | DataFrame::Reply { .. }
-                | DataFrame::RequestStatus { .. }
                 | DataFrame::RequestStatusReply { .. }
                 | DataFrame::Deliver { .. }
                 | DataFrame::Ack { .. }
@@ -116,6 +129,31 @@ impl CentralObject {
         super::signin_launcher_controls::sample_clock(self, &organization).await?;
         let runtime = self.runtime(organization).await?;
         match requests {
+            IncomingRequests::Status {
+                correlation_id,
+                caller,
+                query,
+            } => {
+                let active = match runtime.restore_machine_connection(&attachment).await {
+                    Ok(Ok(active)) => active,
+                    Ok(Err(_)) => return close(&socket, "machine authority expired or revoked"),
+                    Err(_) => return socket.close(Some(1011), Some("central unavailable")),
+                };
+                let result = match WorkspaceCaller::new(active, caller) {
+                    Ok(caller) => runtime.request_status(&caller, &query).await,
+                    Err(_) => Ok(RequestStatusAnswer::NotFound),
+                };
+                let Ok(result) = result else {
+                    return socket.close(Some(1011), Some("central unavailable"));
+                };
+                send(
+                    &socket,
+                    DataFrame::RequestStatusReply {
+                        correlation_id,
+                        result: Box::new(result),
+                    },
+                )
+            }
             IncomingRequests::Renewal {
                 correlation_id,
                 token,

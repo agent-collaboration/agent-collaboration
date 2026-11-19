@@ -100,6 +100,7 @@ pub mod workspace_migrations;
 mod workspace_read_queries;
 mod workspace_request_gate;
 mod workspace_request_log;
+mod workspace_request_status;
 mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
