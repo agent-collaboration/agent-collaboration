@@ -124,7 +124,7 @@ impl ProviderConnectionActivity {
 
     /// A continuation can't claim ownership. A known ID can update its
     /// original turn, or continue an item established by replay without a
-    /// live turn. A retired owner cannot update either projection.
+    /// live turn. Once a turn is running, updates from retired owners are dropped.
     fn allows_tool_continuation(&self, session_id: &str, tool_call_id: &str) -> bool {
         let state = self
             .0
