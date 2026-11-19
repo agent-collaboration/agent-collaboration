@@ -240,6 +240,14 @@ impl ScriptedLineAgent {
         .await;
     }
 
+    pub(super) async fn update_tool(&self, session_id: &str, tool_id: &str, title: &str) {
+        self.send_frame(&json!({"jsonrpc":"2.0","method":"session/update","params":{
+            "sessionId":session_id,"update":{"sessionUpdate":"tool_call_update","toolCallId":tool_id,
+            "title":title,"status":"completed"}
+        }}))
+        .await;
+    }
+
     pub(super) async fn send_stale_tool_callbacks(&self, tool_id: &str) {
         let todo = self.request_callback("stale-todo", "cursor/update_todos", json!({
             "toolCallId":tool_id,"todos":[{"id":"stale","content":"expired restore todo sentinel","status":"pending"}],"merge":false,

@@ -17,6 +17,7 @@ pub mod session_refusal_answers;
 pub mod session_run_claims;
 pub mod session_setting_machine;
 pub mod session_turn_machine;
+pub mod tool_ownership;
 pub mod uncertainty_cell_machine;
 
 pub use monotonic_instant::MonotonicInstant;

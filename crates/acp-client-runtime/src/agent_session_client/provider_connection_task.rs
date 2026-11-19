@@ -115,7 +115,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             crate::ProviderSettingsCatalog,
         >::new(Arc::clone(&session_cells)));
         let task_session_settings = Arc::clone(&session_settings);
-        let tool_registry = Arc::new(ProviderConnectionActivity::default());
+        let tool_registry = Arc::new(ProviderConnectionActivity::new(Arc::clone(&session_cells)));
         let task_tool_registry = Arc::clone(&tool_registry);
         let retirement_registry = Arc::clone(&tool_registry);
         let todo_state = Arc::new(CursorPlanItems::default());
@@ -228,7 +228,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             let final_interaction_port = Arc::clone(&callback_interaction_port);
             let connection = Client.builder().name("codex-router-host")
                 .with_handler(ProviderRequestSessionGuard::new(request_known_sessions))
-                .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry), Arc::clone(&task_session_cells)))
+                .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry)))
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, connection| {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);

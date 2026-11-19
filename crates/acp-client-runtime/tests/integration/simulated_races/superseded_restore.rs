@@ -17,6 +17,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[path = "restore_tool_ownership.rs"]
+mod tool_ownership;
+
 /// A connected client whose one session the agent knows but the client has
 /// closed, so the next step is a load.
 async fn closed_session(
@@ -368,6 +371,7 @@ async fn prompt_restored_session(client: &AgentSessionClient<NoInteraction>, ses
 #[derive(Default)]
 struct RestoreObservations {
     events: std::sync::Mutex<Vec<session_event_model::SessionEvent>>,
+    events_changed: tokio::sync::Notify,
     retired_entries: std::sync::Mutex<Vec<(String, String)>>,
 }
 
@@ -393,6 +397,7 @@ impl acp_client_runtime::SessionEventSink for RestoreObservations {
             .lock()
             .map_err(|_| acp_client_runtime::EventSinkClosed)?
             .push(event);
+        self.events_changed.notify_waiters();
         Ok(())
     }
 }

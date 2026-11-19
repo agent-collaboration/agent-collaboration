@@ -1,46 +1,32 @@
-//! Track active provider Turns and resolve tool-scoped connection requests.
+//! Connection-local tool ownership and active turn routing.
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
 use provider_session_machines::SessionGeneration;
+use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
+use provider_session_machines::session_turn_machine::TurnId;
+use provider_session_machines::tool_ownership::{
+    ToolObservation, ToolOwnership, ToolOwnershipEffect, ToolOwnershipEvent, ToolSessionPhase,
+    reduce_tool_ownership,
+};
 
 use crate::session_cell_table::SessionCellTable;
 
-#[derive(Default)]
-pub(crate) struct ProviderConnectionActivity(Mutex<RegistryState>);
+pub(crate) struct ProviderConnectionActivity {
+    session_cells: Arc<SessionCellTable>,
+    state: Mutex<RegistryState>,
+}
 
-/// The turn a session is running now, and the run it belongs to.
-#[derive(Clone)]
 struct RunningTurn {
-    turn_id: String,
+    turn: TurnId,
     generation: SessionGeneration,
 }
 
-/// Who announced a tool call: the session, its run and turn when one was
-/// running, and whether that turn has ended. An ended owner stays as a
-/// tombstone through the session's next run (review F4), so a late callback
-/// for it is dropped rather than resolved to whatever turn runs now.
-#[derive(Clone)]
-struct ToolOwner {
-    session_id: String,
-    generation: SessionGeneration,
-    turn_id: Option<String>,
-    ended: bool,
-}
-
-impl ToolOwner {
-    fn owns_turn(&self, turn: &RunningTurn) -> bool {
-        !self.ended
-            && self.generation == turn.generation
-            && self.turn_id.as_deref() == Some(&turn.turn_id)
-    }
-}
-
-/// The session and generation that own a tool-scoped callback.
+/// The session and generation that may receive a tool-scoped callback.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ToolCallOwner {
     pub(crate) session_id: String,
@@ -50,218 +36,204 @@ pub(crate) struct ToolCallOwner {
 #[derive(Default)]
 struct RegistryState {
     running_sessions: HashMap<String, RunningTurn>,
-    tool_owners: HashMap<String, Vec<ToolOwner>>,
+    /// The outer key is the tool ID because Cursor callbacks omit sessionId.
+    /// Empty maps are never stored, so only a missing key permits fallback.
+    tool_owners: HashMap<String, HashMap<String, ToolOwnership>>,
+    /// A retirement visits the session's active claims, independent of how
+    /// many historical IDs the connection has seen.
+    active_tool_ids: HashMap<String, HashSet<String>>,
 }
 
 impl RegistryState {
-    /// The session's turn ended: its tool calls become tombstones.
-    fn end_session_turn(&mut self, session_id: &str) {
-        if let Some(turn) = self.running_sessions.remove(session_id) {
-            self.retire_owners(session_id, turn.generation);
+    fn phase(&self, session_id: &str, lifecycle: &SessionLifecycle) -> Option<ToolSessionPhase> {
+        match *lifecycle {
+            SessionLifecycle::Loading { generation, .. } => {
+                Some(ToolSessionPhase::Loading { generation })
+            }
+            SessionLifecycle::Live { generation } => match self.running_sessions.get(session_id) {
+                Some(running) if running.generation == generation => {
+                    Some(ToolSessionPhase::LiveRunning {
+                        generation,
+                        turn: running.turn,
+                    })
+                }
+                _ => Some(ToolSessionPhase::LiveIdle { generation }),
+            },
+            SessionLifecycle::NotLoaded { .. } | SessionLifecycle::Closing { .. } => None,
         }
     }
 
-    fn retire_owners(&mut self, session_id: &str, generation: SessionGeneration) {
-        for owners in self.tool_owners.values_mut() {
-            for owner in owners
-                .iter_mut()
-                .filter(|owner| owner.session_id == session_id && owner.generation == generation)
-            {
-                owner.ended = true;
-            }
+    fn update_owners(&mut self, session_id: &str, event: ToolOwnershipEvent) {
+        let Some(active_ids) = self.active_tool_ids.get_mut(session_id) else {
+            return;
+        };
+        active_ids.retain(|tool_id| {
+            let Some(owner) = self
+                .tool_owners
+                .get_mut(tool_id)
+                .and_then(|owners| owners.get_mut(session_id))
+            else {
+                return false;
+            };
+            let (Some(updated), _) = reduce_tool_ownership(Some(*owner), event) else {
+                return false;
+            };
+            *owner = updated;
+            owner.owned_generation().is_some()
+        });
+        if active_ids.is_empty() {
+            self.active_tool_ids.remove(session_id);
         }
+    }
+
+    fn callback_candidate(&self, tool_id: &str) -> Option<&str> {
+        if let Some(owners) = self.tool_owners.get(tool_id) {
+            let mut candidates = owners.iter().filter_map(|(session_id, owner)| {
+                owner.owned_generation().map(|_| session_id.as_str())
+            });
+            let candidate = candidates.next()?;
+            return candidates.next().is_none().then_some(candidate);
+        }
+        let mut sessions = self.running_sessions.keys();
+        let candidate = sessions.next()?;
+        sessions.next().is_none().then_some(candidate.as_str())
     }
 }
 
 impl ProviderConnectionActivity {
+    pub(crate) fn new(session_cells: Arc<SessionCellTable>) -> Self {
+        Self {
+            session_cells,
+            state: Mutex::new(RegistryState::default()),
+        }
+    }
+
+    fn lock_state(&self) -> MutexGuard<'_, RegistryState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     pub(crate) fn turn_started(
         &self,
         session_id: &str,
-        turn_id: &str,
+        turn: TurnId,
         generation: SessionGeneration,
     ) {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.running_sessions.insert(
-            session_id.to_owned(),
-            RunningTurn {
-                turn_id: turn_id.to_owned(),
-                generation,
-            },
-        );
-        // Tombstones last through the session's next run, then go.
-        state.tool_owners.retain(|_, owners| {
-            owners.retain(|owner| {
-                !(owner.session_id == session_id
-                    && owner.ended
-                    && owner.generation.number().saturating_add(1) < generation.number())
-            });
-            !owners.is_empty()
-        });
-    }
-
-    /// A first announcement can claim an ID for this session. A repeated
-    /// announcement carries no turn identity and cannot replace that owner.
-    fn announce_tool_call(
-        &self,
-        session_id: &str,
-        tool_call_id: &str,
-        generation: SessionGeneration,
-    ) -> bool {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let turn = state
+        self.lock_state()
             .running_sessions
-            .get(session_id)
-            .filter(|turn| turn.generation == generation)
-            .cloned();
-        let owners = state
-            .tool_owners
-            .entry(tool_call_id.to_owned())
-            .or_default();
-        if let Some(owner) = owners.iter().find(|owner| owner.session_id == session_id) {
-            return turn.as_ref().is_none_or(|turn| owner.owns_turn(turn));
-        }
-        owners.push(ToolOwner {
-            session_id: session_id.to_owned(),
-            generation,
-            turn_id: turn.map(|turn| turn.turn_id),
-            ended: false,
-        });
-        true
+            .insert(session_id.to_owned(), RunningTurn { turn, generation });
     }
 
-    /// A continuation can't claim ownership. A known ID can update its
-    /// original turn, or continue an item established by replay without a
-    /// live turn. Once a turn is running, updates from retired owners are dropped.
-    fn allows_tool_continuation(&self, session_id: &str, tool_call_id: &str) -> bool {
-        let state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(turn) = state.running_sessions.get(session_id) else {
-            return true;
-        };
-        state.tool_owners.get(tool_call_id).is_none_or(|owners| {
-            owners.iter().any(|owner| {
-                owner.session_id == session_id
-                    && (owner.owns_turn(turn)
-                        || (!owner.ended
-                            && owner.generation == turn.generation
-                            && owner.turn_id.is_none()))
-            })
+    fn observe_tool(&self, session_id: &str, tool_id: &str, observation: ToolObservation) -> bool {
+        self.session_cells.read(session_id, |cell| {
+            // Use the cell, then the registry. A retired run cannot record
+            // ownership after the cell admits a newer run.
+            let mut state = self.lock_state();
+            let Some(phase) = state.phase(session_id, &cell.lifecycle) else {
+                return false;
+            };
+            let previous = state
+                .tool_owners
+                .get(tool_id)
+                .and_then(|owners| owners.get(session_id))
+                .copied();
+            let (owner, effect) =
+                reduce_tool_ownership(previous, ToolOwnershipEvent::Observe { phase, observation });
+            if owner != previous
+                && let Some(owner) = owner
+            {
+                state
+                    .tool_owners
+                    .entry(tool_id.to_owned())
+                    .or_default()
+                    .insert(session_id.to_owned(), owner);
+                state
+                    .active_tool_ids
+                    .entry(session_id.to_owned())
+                    .or_default()
+                    .insert(tool_id.to_owned());
+            }
+            matches!(effect, ToolOwnershipEffect::ForwardFrame { .. })
         })
     }
 
-    /// The owner of a tool-scoped callback. An announced tool call resolves
-    /// to its one live owner; one whose turn has ended resolves to nothing,
-    /// so the callback is dropped. A tool call never announced falls back to
-    /// the one running turn (Cursor omits sessionId; the tested contract).
-    pub(crate) fn resolve_session(&self, tool_call_id: &str) -> Option<ToolCallOwner> {
-        let state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(owners) = state.tool_owners.get(tool_call_id) {
-            let live: Vec<&ToolOwner> = owners.iter().filter(|owner| !owner.ended).collect();
-            let sessions: HashSet<&str> =
-                live.iter().map(|owner| owner.session_id.as_str()).collect();
-            if sessions.len() != 1 {
+    pub(crate) fn resolve_session(&self, tool_id: &str) -> Option<ToolCallOwner> {
+        let candidate = self.lock_state().callback_candidate(tool_id)?.to_owned();
+        self.session_cells.read(&candidate, |cell| {
+            let state = self.lock_state();
+            // Revalidate after taking the cell lock so a changed candidate
+            // doesn't inherit the earlier result or invert the lock order.
+            if state.callback_candidate(tool_id) != Some(candidate.as_str()) {
                 return None;
             }
-            return live.last().map(|owner| ToolCallOwner {
-                session_id: owner.session_id.clone(),
-                generation: owner.generation,
-            });
-        }
-        if state.running_sessions.len() != 1 {
-            return None;
-        }
-        state
-            .running_sessions
-            .iter()
-            .next()
-            .map(|(session_id, run)| ToolCallOwner {
-                session_id: session_id.clone(),
-                generation: run.generation,
-            })
+            let phase = state.phase(&candidate, &cell.lifecycle)?;
+            let owner = state
+                .tool_owners
+                .get(tool_id)
+                .and_then(|owners| owners.get(&candidate))
+                .copied();
+            let (_, effect) = reduce_tool_ownership(owner, ToolOwnershipEvent::Callback { phase });
+            match effect {
+                ToolOwnershipEffect::ResolveOwner { generation }
+                | ToolOwnershipEffect::UseSoleRunningTurn { generation } => Some(ToolCallOwner {
+                    session_id: candidate.clone(),
+                    generation,
+                }),
+                _ => None,
+            }
+        })
     }
 
-    #[cfg(test)]
-    pub(crate) fn turn_ended(&self, session_id: &str) {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .end_session_turn(session_id);
-    }
-
-    /// A failed restore, close, or lost actor retires every owner from its run.
     pub(crate) fn retire_run(&self, session_id: &str, generation: SessionGeneration) {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self.lock_state();
         if state
             .running_sessions
             .get(session_id)
-            .is_some_and(|turn| turn.generation == generation)
+            .is_some_and(|run| run.generation == generation)
         {
             state.running_sessions.remove(session_id);
         }
-        state.retire_owners(session_id, generation);
+        state.update_owners(session_id, ToolOwnershipEvent::RunRetired { generation });
     }
 
-    pub(crate) fn claim_turn_end(&self, session_id: &str, turn_id: &str) -> bool {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if state
+    pub(crate) fn claim_turn_end(&self, session_id: &str, turn: TurnId) -> bool {
+        let mut state = self.lock_state();
+        let Some(running) = state
             .running_sessions
             .get(session_id)
-            .map(|run| run.turn_id.as_str())
-            != Some(turn_id)
-        {
+            .filter(|running| running.turn == turn)
+        else {
             return false;
-        }
-        state.end_session_turn(session_id);
+        };
+        let generation = running.generation;
+        state.running_sessions.remove(session_id);
+        state.update_owners(
+            session_id,
+            ToolOwnershipEvent::TurnEnded { generation, turn },
+        );
         true
     }
 
     pub(crate) fn drain_running_turns(&self) -> Vec<(String, String)> {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self.lock_state();
         state.tool_owners.clear();
+        state.active_tool_ids.clear();
         state
             .running_sessions
             .drain()
-            .map(|(session_id, run)| (session_id, run.turn_id))
+            .map(|(session_id, run)| (session_id, run.turn.0.to_string()))
             .collect()
     }
 }
 
 /// Observe tool ownership before the SDK hands a session/update to its
 /// Session actor. Cursor may send a connection request immediately afterward.
-pub(crate) struct ToolCallOwnershipHandler {
-    registry: Arc<ProviderConnectionActivity>,
-    session_cells: Arc<SessionCellTable>,
-}
+pub(crate) struct ToolCallOwnershipHandler(Arc<ProviderConnectionActivity>);
 
 impl ToolCallOwnershipHandler {
-    pub(crate) fn new(
-        registry: Arc<ProviderConnectionActivity>,
-        session_cells: Arc<SessionCellTable>,
-    ) -> Self {
-        Self {
-            registry,
-            session_cells,
-        }
+    pub(crate) fn new(registry: Arc<ProviderConnectionActivity>) -> Self {
+        Self(registry)
     }
 }
 
@@ -287,21 +259,12 @@ impl HandleDispatchFrom<Agent> for ToolCallOwnershipHandler {
                         .and_then(serde_json::Value::as_str),
                 )
             {
-                let accepted = match kind {
-                    Some("tool_call") => self.session_cells.read(session_id, |cell| {
-                        // Keep the cell guard until ownership is recorded, so a
-                        // retired attempt can never register a live owner later.
-                        cell.run_generation().is_none_or(|generation| {
-                            self.registry
-                                .announce_tool_call(session_id, tool_call_id, generation)
-                        })
-                    }),
-                    Some("tool_call_update") => self
-                        .registry
-                        .allows_tool_continuation(session_id, tool_call_id),
-                    _ => true,
+                let observation = if kind == Some("tool_call") {
+                    ToolObservation::Announcement
+                } else {
+                    ToolObservation::Continuation
                 };
-                if !accepted {
+                if !self.0.observe_tool(session_id, tool_call_id, observation) {
                     return Ok(Handled::Yes);
                 }
             }

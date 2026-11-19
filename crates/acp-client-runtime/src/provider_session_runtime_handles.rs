@@ -65,7 +65,7 @@ impl ProviderSessionRuntimeHandles {
             clock: Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             event_sink,
             sink_closed: CancellationToken::new(),
-            tool_registry: Arc::new(ProviderConnectionActivity::default()),
+            tool_registry: Arc::new(ProviderConnectionActivity::new(Arc::clone(&cells))),
             todo_state: Arc::new(CursorPlanItems::default()),
             session_settings: Arc::new(RunOwnedMap::new(Arc::clone(&cells))),
             session_capabilities: Arc::new(RunOwnedMap::new(Arc::clone(&cells))),
