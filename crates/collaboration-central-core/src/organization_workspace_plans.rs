@@ -7,13 +7,13 @@ use crate::{
         OrganizationChangeRecord,
     },
     person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
-    workspace_directory_rows::{self, DirectoryWorkspace},
 };
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_directory::DirectoryWorkspace;
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
     WorkspaceId, WorkspaceState,
@@ -153,7 +153,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             .try_into()
             .map_err(|_| corrupt("workspace.description"))?;
         let mut statements = actor.statements;
-        let result = if workspace_directory_rows::read_by_name(self.statement_host(), &name)
+        let result = if fleet_workspace_directory::read_by_name(self.statement_host(), &name)
             .await?
             .is_some()
         {
@@ -165,7 +165,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 .to_owned()
                 .try_into()
                 .map_err(|_| corrupt("workspace_id"))?;
-            statements.push(workspace_directory_rows::insert(
+            statements.push(fleet_workspace_directory::insert(
                 &workspace_id,
                 &name,
                 &description,

@@ -1,13 +1,13 @@
 //! Shared modern directory rows; each caller retains its own decision and replay contract.
-use crate::{guarded_statements::exact, person_request::MAXIMUM_DESCRIPTION_BYTES};
-use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use central_storage::{GuardedStatement, ReadOutcome, RowExpectation, Statement, StoreFailure};
+use fleet_contracts::MAXIMUM_DESCRIPTION_BYTES;
 use fleet_runtime_ports::CentralStore;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model::{Description, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
 
-pub(crate) struct DirectoryWorkspace {
+pub struct DirectoryWorkspace {
     pub workspace_id: WorkspaceId,
     pub name: ResourceName,
     pub description: Description,
@@ -54,7 +54,7 @@ fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure
     }))
 }
 
-pub(crate) async fn read_by_id(
+pub async fn read_by_id(
     host: &impl CentralStore,
     workspace_id: &WorkspaceId,
 ) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
@@ -72,7 +72,7 @@ pub(crate) async fn read_by_id(
     Ok(workspace)
 }
 
-pub(crate) async fn read_by_name(
+pub async fn read_by_name(
     host: &impl CentralStore,
     name: &ResourceName,
 ) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
@@ -85,22 +85,25 @@ pub(crate) async fn read_by_name(
     decode(&rows)
 }
 
-pub(crate) fn insert(
+pub fn insert(
     workspace_id: &WorkspaceId,
     name: &ResourceName,
     description: &Description,
     now: Timestamp,
 ) -> Result<GuardedStatement, StoreFailure> {
-    Ok(exact(
-        "INSERT INTO workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'active',?,?)",
-        vec![
-            text(workspace_id),
-            text(name.as_str()),
-            text(description.as_str()),
-            text(now.to_rfc3339()),
-            text(now.to_rfc3339()),
-        ],
-    ))
+    Ok(GuardedStatement {
+        statement: Statement {
+            sql: "INSERT INTO workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'active',?,?)",
+            args: vec![
+                text(workspace_id),
+                text(name.as_str()),
+                text(description.as_str()),
+                text(now.to_rfc3339()),
+                text(now.to_rfc3339()),
+            ],
+        },
+        expect: RowExpectation::Exactly(1),
+    })
 }
 
 #[cfg(test)]

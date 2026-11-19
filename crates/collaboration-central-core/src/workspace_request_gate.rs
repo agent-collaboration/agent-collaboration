@@ -96,30 +96,27 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             return Ok(reply(answer));
         }
         let mut statements = actor_plan.statements;
-        let answer =
-            if crate::workspace_directory_rows::read_by_name(runtime.statement_host(), name)
-                .await?
-                .is_some()
-            {
-                m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse {
-                    name: name.clone(),
-                })
-            } else {
-                let workspace = m::Workspace {
-                    workspace_id: runtime.fleet_runtime.mint()?,
-                    name: name.clone(),
-                    state: m::WorkspaceState::Active,
-                };
-                let description = m::Description::try_from(String::new())
-                    .map_err(|_| corrupt("workspaces.description"))?;
-                statements.push(crate::workspace_directory_rows::insert(
-                    &workspace.workspace_id,
-                    name,
-                    &description,
-                    now,
-                )?);
-                m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace })
+        let answer = if fleet_workspace_directory::read_by_name(runtime.statement_host(), name)
+            .await?
+            .is_some()
+        {
+            m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse { name: name.clone() })
+        } else {
+            let workspace = m::Workspace {
+                workspace_id: runtime.fleet_runtime.mint()?,
+                name: name.clone(),
+                state: m::WorkspaceState::Active,
             };
+            let description = m::Description::try_from(String::new())
+                .map_err(|_| corrupt("workspaces.description"))?;
+            statements.push(fleet_workspace_directory::insert(
+                &workspace.workspace_id,
+                name,
+                &description,
+                now,
+            )?);
+            m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace })
+        };
         statements.extend(fleet_runtime::workspace_request_log::retain(
             request_id,
             &actor,

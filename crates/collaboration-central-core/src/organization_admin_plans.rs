@@ -93,7 +93,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                         fleet_runtime_ports::workspace_decode_error::corrupt("workspace_id")
                     })?;
                 let found =
-                    crate::workspace_directory_rows::read_by_id(self.statement_host(), &workspace)
+                    fleet_workspace_directory::read_by_id(self.statement_host(), &workspace)
                         .await?
                         .map(crate::organization_workspace_plans::workspace_view)
                         .transpose()?;

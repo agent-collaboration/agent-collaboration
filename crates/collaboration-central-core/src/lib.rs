@@ -27,7 +27,6 @@ pub use machine_login_test_control::{MachineLoginControl, machine_login_control}
 pub use workspace_runtime::LegacyUnitInvocations;
 pub use workspace_runtime::WorkspaceRuntime;
 mod organization_workspace_plans;
-mod workspace_directory_rows;
 mod workspace_item_reads;
 mod workspace_read_queries;
 mod workspace_request_gate;

@@ -3,6 +3,7 @@
 //! operationId, params}`, RFC 8785 JCS, SHA-256, base64url).
 use super::compact_jwt::sha256_url;
 use super::refusal::PersonRequestRefusal;
+use fleet_contracts::MAXIMUM_DESCRIPTION_BYTES;
 use fleet_identity_protocol::OrganizationId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -41,7 +42,6 @@ impl AdminOperationId {
     }
 }
 
-pub const MAXIMUM_DESCRIPTION_BYTES: usize = 2048;
 pub const MAXIMUM_RECORD_PAGE: u16 = 100;
 
 pub(crate) fn description_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
