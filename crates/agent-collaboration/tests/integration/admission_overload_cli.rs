@@ -3,8 +3,8 @@
 //! untyped command as the retryable overload, never as a connection failure or protocol
 //! violation.
 
-use crate::board_fixture::native_registry;
 use automation_storage::AutomationStore;
+use collaboration_application_test_support::native_registry;
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_protocol::OperationId;
@@ -45,19 +45,18 @@ async fn shed_commands_report_an_overload_to_retry() {
         .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir_in("/tmp")
         .expect("private directory");
-    let origin = message_board::ActorOrigin {
-        installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
-            .expect("fixture service"),
-        machine: message_board::MachineLabel::try_from("overload proof".to_owned())
-            .expect("fixture machine"),
-    };
-    let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
-        directory.path(),
+    // A local, unenrolled machine: the Fleet client has no session and no central.
+    let fleet = collaboration_runtime::FleetClient::new(
+        &message_board_storage::FleetStore::open(
+            &directory
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await
+        .expect("local Fleet store"),
         Arc::new(native_registry::PendingRegistration),
-        &origin,
-    )
-    .await
-    .expect("real central fixture");
+        None,
+    );
     let admission = Arc::new(
         ProjectAdmission::new(ProjectAdmissionProps {
             clock: clock.clone(),
@@ -196,8 +195,4 @@ async fn shed_commands_report_an_overload_to_retry() {
     if let Ok(served) = Arc::try_unwrap(served) {
         served.stop().await.expect("API stops");
     }
-    fleet_runtime
-        .shutdown()
-        .await
-        .expect("stop real central fixture");
 }

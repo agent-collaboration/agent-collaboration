@@ -9,7 +9,7 @@ use crate::person_request::{
     VerifiedPersonRequest,
 };
 use crate::{Ed25519Verification, IssuerKeySource};
-use durable_steps::BoxFuture;
+use futures_util::future::BoxFuture;
 
 /// Hosts build one per organization runtime, bound to that organization, the
 /// sign-in issuer and audiences, its published keys and the host's crypto.

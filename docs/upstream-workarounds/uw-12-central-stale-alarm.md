@@ -1,6 +1,6 @@
 # UW-12: replace stale central alarms at event entry
 
-Status: in place. Dependency: runtime-primitives 0.4.0, pinned through
+Status: removed. 2026-11-17: PR 1, the old central rip-out, deleted the old Cloudflare object shell and `ShellActor::rearm_stale_alarm`. Dependency: runtime-primitives 0.4.0, pinned through
 agent-fleet-sync `84935efdab03615843611bb5723983d7655e6e26`.
 
 `AlarmOwner::wake_at` preserves any stored deadline at or before a requested

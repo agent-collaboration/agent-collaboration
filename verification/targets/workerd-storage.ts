@@ -115,22 +115,14 @@ export function centralTestBundle(): WorkerdBundle {
   return {
     bundleDirectory: join(centralCrate, "build-test-support"),
     buildCommand:
-      "worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance",
+      "worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support",
     compatibilityDate: "2026-08-21",
     durableObjects: {
-      FLEET: "FleetObject",
       WORKSPACE_STORE: "WorkspaceStoreObject",
       STORAGE_CASES: "StorageCaseObject",
       DRIVER_SCENARIOS: "DriverScenarioObject",
     },
-    textBindings: {
-      CENTRAL_REGISTRY_CONFIG: JSON.stringify({
-        lease: { leaseDuration: { secs: 14400, nanos: 0 }, renewInterval: { secs: 900, nanos: 0 } },
-        authoritativeReceiver: "019f0000-0000-7000-8000-000000000010",
-        releaseUnsentFor: { secs: 1800, nanos: 0 },
-        moveNeedsRenewalWithin: { secs: 1800, nanos: 0 },
-      }),
-    },
+    textBindings: {},
   };
 }
 
@@ -140,7 +132,7 @@ export function centralLinkTestBundle(): WorkerdBundle {
     ...centralTestBundle(),
     bundleDirectory: join(centralCrate, "build-link-test-support"),
     buildCommand:
-      "worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --features link,test-support,conformance",
+      "worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --features link,test-support",
     durableObjects: {},
   };
 }

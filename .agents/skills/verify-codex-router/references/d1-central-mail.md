@@ -35,7 +35,11 @@ The driver copies only the declared executable bytes into its fresh Codex home, 
 
 ## Three-Host Tokio driver
 
-The maintained executable entry is:
+**Cannot run on this source.** PR 1 of the central rip-out removed the driver's `d1-central` action with the old Tokio central edge (`TokioServer`, `/v1/session`, machine enrollment) it started. `verification/run.ts` no longer accepts `--d1-harness`; `--d1-readback` is the only D1 action it still dispatches. The driver's `d1-host` action remains but has no fixture producer. The journey needs rewriting against the new central link once it exists. For evidence today, use the read-only [SQLite readback](#sqlite-readback) below on stores a run already produced.
+
+> **Historical — retired command.** Everything from here to the readback heading describes the removed driver. Do not run it; it is kept only so earlier evidence can be read.
+
+The retired entry was:
 
 ```sh
 node verification/run.ts --d1-harness "$D1_HARNESS_DECLARATION"
@@ -51,7 +55,9 @@ The Rust driver launches an enrolled Tokio central and three independent native-
 
 `online-timing` keeps both Hosts online, unloads B's recipient and sends twenty distinct queue items. It retains each actual sender outcome as a causal settlement barrier, then stops the owners and reads exactly one matching B inbox row per item. `timing-report.json` reports actual `accepted_at − created_at` samples and their median; no polling duration supplies a sample and no latency threshold is inferred. `timing-inbox-readback.json` preserves the original rows. Delivery/refusal outcomes remain alongside the timing report: an unloaded metadata-only native thread can return `recipientUnknown` after inbox acceptance. Such samples characterize inbox timing, not successful native delivery or a persisted recipient Session. Missing rows fail the drive. Final target qualification and staging remain separate obligations.
 
-For read-only SQLite evidence after every consumer has settled:
+### SQLite readback
+
+Still maintained. For read-only SQLite evidence after every consumer has settled:
 
 ```sh
 node verification/run.ts --d1-readback "$D1_READBACK_PLAN"

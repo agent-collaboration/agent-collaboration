@@ -1,1 +1,0 @@
-INSERT INTO fleet_archive_reports(report_id,board_id,project_id,epoch,commit_sequence,installation,reported_at,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,CAST(?8 AS INTEGER),CAST(?8 AS INTEGER));

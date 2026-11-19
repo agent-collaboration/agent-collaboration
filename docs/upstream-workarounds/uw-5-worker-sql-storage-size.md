@@ -1,6 +1,6 @@
 # UW-5: worker0.8.7 narrows database bytes on wasm32
 
-**Status:** in place, 2026-10-16
+**Status:** removed. 2026-11-17: PR 1, the old central rip-out, deleted `storage_measurement.rs`, the only user of this read.
 **SDKs:** worker0.8.7 and worker-sys0.8.7
 
 ## Problem and evidence

@@ -4,7 +4,7 @@ use super::{start_host, start_host_in};
 
 #[tokio::test]
 async fn a_host_with_a_journal_runs_no_observation_rechecks() {
-    let fixture = start_host(false).await;
+    let fixture = start_host().await;
 
     let rechecking = fixture.runtime.journal_unavailable_rechecks.is_some();
     let journal_open = fixture.runtime.journal.is_some();
@@ -23,7 +23,7 @@ async fn a_journal_that_failed_to_open_is_replaced_by_observation_rechecks() {
     // A directory where the journal file should be: SQLite cannot open it.
     std::fs::create_dir(directory.path().join("session-registry.sqlite"))
         .expect("blocked journal path");
-    let fixture = start_host_in(false, directory).await;
+    let fixture = start_host_in(directory).await;
 
     let rechecking = fixture.runtime.journal_unavailable_rechecks.is_some();
     let journal_missing = fixture.runtime.journal.is_none();

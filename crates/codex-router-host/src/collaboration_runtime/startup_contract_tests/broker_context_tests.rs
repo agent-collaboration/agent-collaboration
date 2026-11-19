@@ -7,7 +7,7 @@ use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 #[tokio::test]
 async fn host_broker_notices_use_the_shared_display_names_and_physical_push_store() {
-    let fixture = start_host(false).await;
+    let fixture = start_host().await;
     let requester = target(&fixture.runtime, "named-requester");
     let approver = target(&fixture.runtime, "approver");
     fixture

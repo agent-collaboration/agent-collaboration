@@ -184,18 +184,6 @@ impl ServedApi {
         }
     }
 
-    /// Serves the API on the service directory's `control.sock` and publishes the manifest
-    /// beside it, the way the CLIs find a Host.
-    pub(crate) fn service_socket(config: &CollaborationApiConfig) -> Self {
-        let directory = &config.service_directory;
-        let mut served = Self::unix(
-            config,
-            &directory.join(ApiSocketPath::ServiceSocket.file_name()),
-        );
-        served.publication = Some(publish_manifest(directory, &config.application));
-        served
-    }
-
     /// The URL a client names; a Unix-socket client names localhost.
     pub(crate) fn url(&self) -> String {
         match &self.endpoint {

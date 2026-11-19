@@ -69,9 +69,6 @@ fn main() {
     {
         std::process::exit(agent_collaboration::run_board_command(arguments));
     }
-    if arguments.first().is_some_and(|arg| arg == "central") {
-        std::process::exit(agent_collaboration::run_central_command(arguments));
-    }
     if arguments.first().is_some_and(|arg| arg == "automation") {
         std::process::exit(agent_collaboration::run_automation_command(arguments));
     }

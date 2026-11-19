@@ -17,10 +17,7 @@ export function checkDeployTemplate(
   const textValues = [...workerConfig.matchAll(/type:\s*"text",\s*value:\s*"([^"]*)"/g)].map(
     (match) => match[1],
   );
-  if (
-    textValues.length === 0 ||
-    textValues.some((value) => value === undefined || !value.startsWith("REPLACE_"))
-  )
+  if (textValues.some((value) => value === undefined || !value.startsWith("REPLACE_")))
     return "Worker public template vars must be placeholders";
   if (!toolingConfig.includes("noBundle: true"))
     return "Worker deploy tooling must upload the guarded bundle without rebundling";

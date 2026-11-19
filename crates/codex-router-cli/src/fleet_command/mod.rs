@@ -1,16 +1,8 @@
-//! Owner enrollment and local metadata inspection never restart or reload a Router.
+//! Local enrollment metadata inspection never restarts or reloads a Router.
 mod arguments;
-mod enrollment_credentials;
-mod enrollment_http;
-mod enrollment_prepare;
-#[cfg(test)]
-mod enrollment_prepare_tests;
-mod enrollment_publish;
 pub(crate) use arguments::FleetCommand;
 
-use crate::CliContext;
 use codex_router_host::FleetEnrollmentMetadata;
-use collaboration_central_core::EnrollmentDecision;
 use serde::Serialize;
 use std::{
     io::{self, Write},
@@ -20,30 +12,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum FleetCommandError {
-    #[error(transparent)]
-    CredentialFile(#[from] codex_router_secret_store::central_credentials::CredentialFileError),
     #[error("{0}")]
     Arguments(String),
     #[error("{0}")]
     InvalidInput(&'static str),
-    #[error("Fleet enrollment local operation failed: {0}")]
-    LocalIo(#[from] io::Error),
-    #[error(transparent)]
-    SecretStore(#[from] codex_router_secret_store::model::SecretStoreError),
     #[error("Fleet commands require async dispatch")]
     AsyncDispatchRequired,
-    #[error(
-        "central enrollment outcome is unknown: {0}; local enrollment was not published; inspect central before retrying"
-    )]
-    OutcomeUnknown(&'static str),
-    #[error(
-        "owner enrollment returned HTTP {0}; local enrollment was not published and the central outcome is unverified"
-    )]
-    UnexpectedStatus(u16),
-    #[error(transparent)]
-    Publication(codex_router_host::FleetEnrollmentPublishError),
-    #[error("enrollment was not published; cleanup of newly staged secrets could not be confirmed")]
-    CleanupUnconfirmed,
     #[error("Fleet enrollment local task failed")]
     LocalTask,
     #[error("could not write Fleet command output")]
@@ -71,17 +45,9 @@ struct StatusReply {
     activation: Activation,
     restart_instruction: Option<&'static str>,
 }
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct EnrollmentReply {
-    decision: EnrollmentDecision,
-    activation: Activation,
-    restart_instruction: Option<&'static str>,
-}
 
 pub(crate) async fn run_fleet_command(
     command: FleetCommand,
-    context: &CliContext,
     stdout: &mut (impl Write + Send),
 ) -> Result<(), FleetCommandError> {
     match command {
@@ -101,40 +67,6 @@ pub(crate) async fn run_fleet_command(
                 .await
                 .map_err(|_| FleetCommandError::LocalTask)?;
             output(stdout, &status)
-        }
-        FleetCommand::Enroll(arguments) => {
-            let context = context.clone();
-            let prepared = tokio::task::spawn_blocking(move || {
-                enrollment_prepare::prepare(arguments, &context)
-            })
-            .await
-            .map_err(|_| FleetCommandError::LocalTask)??;
-            let decision = enrollment_http::enroll(&prepared).await?;
-            match &decision {
-                EnrollmentDecision::MachineEnrolled { .. } => {
-                    let accepted = decision.clone();
-                    tokio::task::spawn_blocking(move || {
-                        enrollment_publish::publish(prepared, &accepted)
-                    })
-                    .await
-                    .map_err(|_| FleetCommandError::LocalTask)??;
-                }
-                EnrollmentDecision::Refused(_)
-                | EnrollmentDecision::RevocationInProgress
-                | EnrollmentDecision::EnrollmentInProgress => {}
-            }
-            output(
-                stdout,
-                &EnrollmentReply {
-                    restart_instruction: matches!(
-                        &decision,
-                        EnrollmentDecision::MachineEnrolled { .. }
-                    )
-                    .then_some(codex_router_host::ENROLLMENT_RESTART_INSTRUCTION),
-                    decision,
-                    activation: Activation::NextRouterStart,
-                },
-            )
         }
     }
 }

@@ -1,1 +1,0 @@
-INSERT INTO lease_incarnation(row_id, name, incarnation, created_at, updated_at) VALUES (?1, 'fleet', CAST(?2 AS INTEGER), ?3, ?3) ON CONFLICT(name) DO UPDATE SET incarnation = excluded.incarnation, updated_at=excluded.updated_at;

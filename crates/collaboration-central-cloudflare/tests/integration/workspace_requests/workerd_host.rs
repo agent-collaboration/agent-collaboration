@@ -329,9 +329,6 @@ impl WorkerdHost {
                 .expect("sign-in topology")
         )
     }
-    pub fn public_origin(&self) -> &str {
-        &self.transport.origin
-    }
     pub async fn central(&self, organization: &OrganizationId) -> Arc<RemoteRuntime> {
         let runtime = self.cold_runtime(organization);
         runtime.apply_clock().await;

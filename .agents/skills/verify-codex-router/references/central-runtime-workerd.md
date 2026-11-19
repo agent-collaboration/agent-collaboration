@@ -1,13 +1,13 @@
 # Local Worker conformance obligations
 
-This section retains the former wrapper’s Worker selectors, qualification evidence and coverage obligations. The wrapper retired in0.1.102; these selectors are historical, not current CLI flags. Use the retained Rust `composed_scope_workerd` and `session_scope_workerd` examples with CI’s pinned tools and explicit scenarios. Current TypeScript target declarations are in `verification/declaration.ts`. An obligation without a mapped retained case remains unavailable. See [central runtime](central-runtime.md) for current entries, native coverage and shared cleanup rules.
+This page records historical Worker commands, qualification evidence and coverage obligations. The wrapper retired in 0.1.102. C1 removed the Tokio `conformance` feature and the example binaries listed below. See [central runtime](central-runtime.md) for the related native record.
 
 D1 source mapping: Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3` (including the retirement removal at `381326da8`), with Fleet mail expiry built at `77957e00d828ea70ff22a603669630513777188f`. Fleet owns machine sessions, admission, lease state and mail outbox custody; Copy owns project storage. Historical selector names such as `owner-registry` do not name another physical object. Typed Submitter and D1 retention remain pending their combined library/Central pin; retained pre-cutover results do not qualify them.
 
-The default Worker selection is `composed-transactions` plus `composed-numeric`.
-Use repeated `--workerd-mode` flags for another explicit selection:
+The wrapper defaulted to `composed-transactions` plus `composed-numeric`.
+Repeated `--workerd-mode` flags selected other modes.
 
-| Mode | Retained entry and scope |
+| Historical mode | Former entry and scope |
 | --- | --- |
 | `composed-copy-suite`, `composed-transactions`, `composed-numeric`, `runtime-controls`, `composed-fleet-conflict` | `collaboration-central-tokio --features conformance --example composed_scope_workerd -- MODE NODE MF PERSIST PORT`; shared core scenarios, with physical reopen where the scenario requires it |
 | `fleet-receipt` | `step_scope_workerd -- NODE MF PERSIST PORT`; owner-verified `/admin/v1/conformance/fleet-receipt`, ten checked-step groups |

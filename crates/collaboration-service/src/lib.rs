@@ -60,8 +60,6 @@ mod automation_inspection_failure;
 mod delivery_projection;
 #[cfg(test)]
 mod frozen_mail_query_fixture;
-#[cfg(test)]
-use collaboration_runtime::test_support::native_worker_faults;
 mod operation_receipt_projection;
 mod run_projection;
 mod schedule_activation;

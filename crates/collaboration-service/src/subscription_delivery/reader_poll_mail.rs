@@ -146,7 +146,7 @@ impl ReaderDeliveryOwner {
             .and_then(|port| port.publisher.upgrade());
         let Some(publisher) = publisher else {
             #[cfg(test)]
-            self.observe(OwnerObservation::PollPublisherUnavailable(item.id()));
+            self.observe(OwnerObservation::PollPublisherUnavailable);
             return poll_unsent("Poll item waits for its cancellation checker");
         };
         if !matches!(
@@ -156,7 +156,7 @@ impl ReaderDeliveryOwner {
             Ok(false)
         ) {
             #[cfg(test)]
-            self.observe(OwnerObservation::PollCancellationDeferred(item.id()));
+            self.observe(OwnerObservation::PollCancellationDeferred);
             return poll_unsent("Poll item waits for its cancellation check");
         }
         let Some(runtime) = self.native_mail.get().and_then(std::sync::Weak::upgrade) else {

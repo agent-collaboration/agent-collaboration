@@ -1,6 +1,4 @@
 //! The Host's real router selects provider and peer clients through the collaboration API.
-use crate::registered_route_project;
-use crate::session_follow_fixture::post_thread_activity_for_sessions;
 #[path = "../support/session_message_route_fixture.rs"]
 mod route_fixture;
 use codex_router_host::{
@@ -14,11 +12,9 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
-use registered_route_project::route_project_requests;
 use route_fixture::{
     create_provider_target, load_provider_target, message, prompt_and_approve_from_peer_provider,
     provider_fixture, publish_peer, send_and_wait_wake, wait_for_completed_provider_prompts,
-    wait_for_prompt_text,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
@@ -29,29 +25,6 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     let root = tempfile::tempdir().expect("Host root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
-    let route_project = route_project_requests();
-    let identity = collaboration_contracts::MachineIdentity::new(
-        collaboration_runtime::load_service_identity(root.path()).expect("Host service identity"),
-        None,
-    )
-    .expect("Host machine label");
-    let central = board_central_test_support::TestCentral::start_with_peer(
-        &root.path().join("test-central"),
-        &message_board::ActorOrigin {
-            installation: String::from(identity.service_id().clone())
-                .try_into()
-                .expect("origin service"),
-            machine: identity
-                .machine_label()
-                .as_str()
-                .to_owned()
-                .try_into()
-                .expect("origin label"),
-        },
-        collaboration_runtime::load_installation_peer(root.path()).expect("installation peer"),
-    )
-    .await
-    .expect("real route central enrollment");
     let registry = root.path().join("peer-registry");
     std::fs::create_dir(&registry).expect("peer registry");
     let executable = root.path().join("provider.ts");
@@ -62,11 +35,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     let cursor_prompts = root.path().join("cursor-prompts.log");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: Some(
-                central
-                    .session_inputs()
-                    .expect("real enrolled board session"),
-            ),
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -294,17 +263,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         &claude_prompts,
     )
     .await;
-    std::fs::write(&claude_prompts, "").expect("clear Claude prompt log before subscription proof");
-    std::fs::write(&cursor_prompts, "").expect("clear Cursor prompt log before subscription proof");
-    post_thread_activity_for_sessions(&client, [held_claude, held_cursor], None, route_project)
-        .await;
-    wait_for_prompt_text(&claude_prompts, "🧵 Router: new thread activity").await;
-    wait_for_prompt_text(&cursor_prompts, "🧵 Router: new thread activity").await;
-    wait_for_completed_provider_prompts(&claude_prompts, 1).await;
-    wait_for_completed_provider_prompts(&cursor_prompts, 1).await;
-
     runtime.shutdown().await.expect("Host shutdown");
-    central.shutdown().await.expect("route central shutdown");
 }
 
 #[tokio::test]

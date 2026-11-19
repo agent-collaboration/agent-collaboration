@@ -6,7 +6,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn host_inbound_wake_waits_exhaust_outbound_wait_capacity() {
-    let fixture = start_host(false).await;
+    let fixture = start_host().await;
     let api = client(&fixture).await;
     let inbound_target = target(&fixture.runtime, "inbound-capacity");
     let mut wakes = Vec::new();

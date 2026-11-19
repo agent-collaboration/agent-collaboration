@@ -53,9 +53,9 @@ pub struct SubscriptionDeliveryServiceProps {
 #[derive(Clone, Debug)]
 pub(super) enum OwnerObservation {
     Started,
-    RowsLoaded(usize),
+    RowsLoaded,
     SelectingDueRoots,
-    DueRoots(usize),
+    DueRoots,
     Selected,
     Settled,
     SettlementRetry,
@@ -63,25 +63,20 @@ pub(super) enum OwnerObservation {
     WaitQueued,
     ReconcileRequested,
     ActivityLagged,
-    Sleeping(Option<router_clock::ClockInstant>),
+    Sleeping,
     DirectMessageQueued,
     MailAttemptQueued(PushId),
-    PollCancellationDeferred(fleet_sync_protocol::ItemId),
-    PollPublisherUnavailable(fleet_sync_protocol::ItemId),
-    NativeHeldChecked {
-        item: PushId,
-        running: bool,
-    },
+    PollCancellationDeferred,
+    PollPublisherUnavailable,
+    NativeHeldChecked,
     /// The reader took a signal that its held mail's target may have loaded, and
     /// whether it owed another presence check.
-    HeldMailSignalTaken {
-        owed: bool,
-    },
+    HeldMailSignalTaken,
     /// A pass failed at this stage and armed its backoff retry.
-    PassFailed(&'static str),
+    PassFailed,
     DirectMessageHeld,
     DirectMessageSettled,
-    HeldSubscriptionPushesSettled(u64),
+    HeldSubscriptionPushesSettled,
     Stopped,
 }
 
@@ -617,64 +612,8 @@ impl SubscriptionDeliveryService {
     }
 
     #[cfg(test)]
-    pub(super) fn observe_startup_passes(
-        &self,
-    ) -> tokio::sync::broadcast::Receiver<Vec<ProjectId>> {
-        self.inner.startup_passes.subscribe()
-    }
-
-    #[cfg(test)]
-    pub(super) fn observe_startup_retry_deadlines(
-        &self,
-    ) -> tokio::sync::broadcast::Receiver<router_clock::ClockInstant> {
-        self.inner.startup_retry_deadlines.subscribe()
-    }
-
-    #[cfg(test)]
     pub(super) fn observe_owners(&self) -> tokio::sync::broadcast::Receiver<OwnerObservation> {
         self.inner.observations.subscribe()
-    }
-
-    #[cfg(test)]
-    pub(super) async fn synchronize_reader(&self, reader: Identity) {
-        let (reply, response) = oneshot::channel();
-        self.ensure_owner(reader)
-            .await
-            .expect("active owner")
-            .send(ReaderDeliveryCommand::Barrier(reply))
-            .await
-            .expect("owner command");
-        response
-            .await
-            .expect("owner reached storage-derived sleep boundary");
-    }
-
-    #[cfg(test)]
-    pub(super) async fn request_reconcile_receipt(
-        &self,
-        reader: Identity,
-    ) -> oneshot::Receiver<Result<ReaderSubscriptionSnapshot, BoardError>> {
-        let (reply, response) = oneshot::channel();
-        self.ensure_owner(reader)
-            .await
-            .expect("active owner")
-            .send(ReaderDeliveryCommand::Reconcile {
-                scope: ReaderScanScope::All,
-                purpose: ReaderReconcilePurpose::Refresh,
-                reply,
-            })
-            .await
-            .expect("owner command");
-        response
-    }
-    /// Resolves once a `reconcile_reader` call has queued its command with an owner.
-    #[cfg(test)]
-    pub(super) async fn reconcile_queued(&self) {
-        self.inner.reconcile_queued.notified().await;
-    }
-    #[cfg(test)]
-    pub(super) async fn request_reconcile(&self, reader: Identity) {
-        drop(self.request_reconcile_receipt(reader).await);
     }
 }
 

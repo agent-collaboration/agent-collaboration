@@ -1,1 +1,0 @@
-SELECT attempt_id, project_id, state_kind, outcome, CAST(created_at AS TEXT) AS created_at, typeof(created_at) AS created_class, CAST(updated_at AS TEXT) AS updated_at, typeof(updated_at) AS updated_class FROM lease_claim_reservations WHERE attempt_id=?;

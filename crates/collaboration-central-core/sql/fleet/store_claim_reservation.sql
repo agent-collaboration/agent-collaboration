@@ -1,1 +1,0 @@
-INSERT INTO lease_claim_reservations(attempt_id,project_id,state_kind,outcome,created_at,updated_at) VALUES(?1,?2,?3,?4,CAST(?5 AS INTEGER),CAST(?5 AS INTEGER)) ON CONFLICT(attempt_id) DO UPDATE SET state_kind=excluded.state_kind,outcome=excluded.outcome,updated_at=excluded.updated_at;

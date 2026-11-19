@@ -36,7 +36,7 @@ async fn the_hosts_scheduler_wakes_on_each_completion_source() {
         "enable fixture provider".to_owned(),
     )
     .expect("configured endpoint");
-    let fixture = start_host_with_providers(false, directory, vec![unavailable]).await;
+    let fixture = start_host_with_providers(directory, vec![unavailable]).await;
     let runtime = &fixture.runtime;
     let observation = runtime
         .schedule_observation

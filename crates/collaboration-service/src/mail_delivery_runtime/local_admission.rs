@@ -5,7 +5,7 @@ use super::{
     SyncTime, TursoScope, outgoing_mail_message,
 };
 #[cfg(test)]
-use super::{CarrierAcceptance, DeliveryError, DeliveryItemRef, ItemId, RecipientOutcome};
+use super::{CarrierAcceptance, ItemId, RecipientOutcome};
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult};
 use fleet_sync_delivery::{
@@ -26,32 +26,6 @@ enum LocalAdmission {
 
 impl MailDeliveryRuntime {
     #[cfg(test)]
-    pub(crate) async fn local_custody_is_absent_for_test(
-        &self,
-        reference: DeliveryItemRef,
-    ) -> Result<bool, StoreError> {
-        let binding = self.binding.clone();
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let rows =
-                        fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
-                            scope,
-                            fleet_sync_delivery::DeliveryHostRole::Machine,
-                            binding.as_ref(),
-                        )
-                        .await
-                        .map_err(StoreError::backend)?;
-                    Ok(!rows.iter().any(|row| {
-                        row.category == "inbox"
-                            && row.identity == reference.item.as_uuid().to_string()
-                    }))
-                })
-            })
-            .await
-    }
-
-    #[cfg(test)]
     pub(crate) async fn local_outcome_for_test(
         &self,
         item: ItemId,
@@ -71,42 +45,6 @@ impl MailDeliveryRuntime {
                         .local_outcome(item)
                         .await
                         .map_err(StoreError::backend)
-                    })
-                }
-            })
-            .await
-    }
-    #[cfg(test)]
-    pub(crate) async fn local_payload_is_compacted_for_test(
-        &self,
-        reference: DeliveryItemRef,
-    ) -> Result<bool, StoreError> {
-        let config = self.config;
-        self.store
-            .transaction({
-                let binding = self.binding.clone();
-                move |scope| {
-                    Box::pin(async move {
-                        let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
-                            scope,
-                            config.owner,
-                            config.limits,
-                            binding.as_ref(),
-                        );
-                        if !matches!(
-                            inbox
-                                .local_outcome(reference.item)
-                                .await
-                                .map_err(StoreError::backend)?,
-                            Some(RecipientOutcome::Delivered { .. })
-                        ) {
-                            return Ok(false);
-                        }
-                        match inbox.resolve_delivery(&reference).await {
-                            Err(DeliveryError::CustodyMissing) => Ok(true),
-                            Ok(_) => Ok(false),
-                            Err(error) => Err(StoreError::backend(error)),
-                        }
                     })
                 }
             })

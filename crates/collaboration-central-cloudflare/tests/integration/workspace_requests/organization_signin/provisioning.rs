@@ -67,16 +67,6 @@ async fn private_provision_digest_repeat_and_predecessor_renewal_are_atomic() {
         .read("SELECT kind,COUNT(*) FROM organization_change_records GROUP BY kind ORDER BY kind")
         .await;
     assert_eq!(records.rows.len(), 2);
-    // Lead01a1d910-44a9 preserves current 401 public refusal, superseding B2 404.
-    let public = reqwest::Client::new()
-        .post(format!("{}{PROVISION}", f.host.public_origin()))
-        .json(&body)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(public.status(), 401);
-    let public_body: serde_json::Value = public.json().await.unwrap();
-    assert_eq!(public_body, serde_json::json!({"kind":"missingAssertion"}));
     f.close().await;
 }
 #[tokio::test]

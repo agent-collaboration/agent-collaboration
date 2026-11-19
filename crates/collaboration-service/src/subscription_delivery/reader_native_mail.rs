@@ -26,7 +26,7 @@ impl ReaderDeliveryOwner {
             })?;
         let held_ids = items.iter().collect::<std::collections::HashSet<_>>();
         self.native_checked.retain(|id| held_ids.contains(id));
-        let Some(item) = items
+        let Some(_) = items
             .iter()
             .find(|item| !self.native_checked.contains(*item))
         else {
@@ -42,12 +42,7 @@ impl ReaderDeliveryOwner {
         })?;
         let running = matches!(presence, TargetPresence::Running);
         #[cfg(test)]
-        self.observe(OwnerObservation::NativeHeldChecked {
-            item: item.clone(),
-            running,
-        });
-        #[cfg(not(test))]
-        let _ = item;
+        self.observe(OwnerObservation::NativeHeldChecked);
         // A target that is not running and that nothing can start, a closed Claude Code
         // terminal, is not held for: its mail goes back through delivery, whose route refuses
         // it at once.

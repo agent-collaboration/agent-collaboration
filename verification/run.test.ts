@@ -14,11 +14,11 @@ test("two-Mac entry refuses before reading a declaration or launching setup", ()
   assert.equal(result.stdout, "");
 });
 
-test("help names the unavailable two-Mac route and retains D1 entry points", (): void => {
+test("help names the unavailable two-Mac route and the D1 entry points that remain", (): void => {
   const result = spawnSync(process.execPath, [entry, "--help"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, unavailable);
-  assert.match(result.stdout, /--d1-harness/);
+  assert.doesNotMatch(result.stdout, /--d1-harness/);
   assert.match(result.stdout, /--d1-readback/);
 });
 

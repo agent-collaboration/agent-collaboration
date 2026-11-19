@@ -1,38 +1,28 @@
 use crate::native_delivery;
 
-use crate::board_fixture;
-
-use automation_storage::AutomationStore;
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, MessageContent, MessageDelivery,
-    PushActivityRange, PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
-    PushOrigin, PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
+    DeliveryOutcome, EndpointId, EndpointRef, MessageContent, MessageDelivery, PushActivityRange,
+    PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
+    PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::ApplicationFixture;
 
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::Ordering};
-use tokio::sync::Mutex as TokioMutex;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
-#[path = "push_surface/board_and_history_proofs.rs"]
-mod board_and_history_proofs;
+#[path = "push_surface/dm_history_proofs.rs"]
+mod dm_history_proofs;
 #[path = "push_surface/dm_read_proofs.rs"]
 mod dm_read_proofs;
 use crate::served_api;
-#[path = "push_surface/subscription_expansion_proofs.rs"]
-mod subscription_expansion_proofs;
 
 use crate::native_mail_owner;
 #[path = "push_surface/native_push_fixture.rs"]
 mod native_push_fixture;
-use native_push_fixture::{
-    ControlHarness, PushFixtureLifetime, RecordingDelivery, RunningPresence, setup,
-    setup_without_push_store,
-};
+use native_push_fixture::{setup, setup_without_push_store};
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn session(endpoint_id: &str, session_id: &str) -> SessionRef {

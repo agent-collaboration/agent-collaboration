@@ -65,7 +65,6 @@ collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime"
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 fleet-sync-session.workspace = true
-board-central-test-support = { version = "0.1.96", path = "../board-central-test-support", features = ["conformance"] }
 fleet-sync-receiver.workspace = true
 tracing-subscriber.workspace = true
 turso_parser = { workspace = true, features = ["serde"] }

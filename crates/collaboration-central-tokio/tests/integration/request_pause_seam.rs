@@ -1,6 +1,7 @@
 //! The test-support pause points and write turns on the Tokio host: a forced race and
 //! a crash at a held point, with rows read back from the workspace store's file.
 
+use crate::storage_support::WorkspaceStorePlatform;
 use crate::storage_support::{HeldClock, open_platform, read_store, single_integer, workspace};
 use central_storage::{
     AlarmUpdate, BatchOutcome, RowExpectation, StatementBatch, StoreCall, StoreReply,
@@ -8,14 +9,13 @@ use central_storage::{
 use collaboration_central_core::storage_conformance::{
     count_owners, insert_owner, widgets_migrator,
 };
-use collaboration_central_core::{CentralPlatform, PausePoint, PausePoints, WorkspaceTurns};
-use collaboration_central_tokio::TokioCentralPlatform;
+use collaboration_central_core::{PausePoint, PausePoints, WorkspaceTurns};
 use std::sync::Arc;
 
 /// A stand-in rule with the shape central's rules will have: take the turn, read what
 /// the rule needs, then write. Rule: a workspace has at most one owner.
 async fn register_first_owner(
-    platform: TokioCentralPlatform,
+    platform: WorkspaceStorePlatform,
     turns: Arc<WorkspaceTurns>,
     pauses: PausePoints,
     owner_id: &'static str,

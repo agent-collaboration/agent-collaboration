@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-client-protocol",
  "codex-router-test-support",
@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "acp-provider-adapters"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "acp-client-runtime",
  "codex-router-test-support",
@@ -127,7 +127,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "agent-collaboration-tui",
@@ -200,7 +200,6 @@ dependencies = [
  "agent-session-tui",
  "automation-storage",
  "axum",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
@@ -210,8 +209,6 @@ dependencies = [
  "codex-router-host",
  "codex-router-test-support",
  "collaboration-application-test-support",
- "collaboration-central-admin-protocol",
- "collaboration-central-conformance",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-mcp",
@@ -263,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration-tui"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "futures-util",
  "iocraft",
@@ -277,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "agent-router-quota-tui"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-collaboration-tui",
  "chrono",
@@ -297,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-inventory"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "axum",
  "chrono",
@@ -331,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-tui"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-collaboration-tui",
  "agent-session-inventory",
@@ -682,7 +679,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -900,41 +897,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-central-test-support"
-version = "0.1.154"
-dependencies = [
- "axum",
- "board-fleet-sync",
- "board-sync-protocol",
- "codex-router-core",
- "codex-router-secret-store",
- "collaboration-central-admin-protocol",
- "collaboration-central-conformance",
- "collaboration-central-core",
- "collaboration-central-tokio",
- "collaboration-contracts",
- "collaboration-runtime",
- "collaboration-service",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "futures-util",
- "message-board",
- "message-board-storage",
- "reqwest 0.12.28",
- "reqwest-websocket",
- "runtime-primitives",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "board-fleet-sync"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "axum",
  "board-sync-protocol",
@@ -967,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "board-sync-protocol"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -1081,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "central-engine-model"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "central-storage",
  "chrono",
@@ -1094,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "central-link-client"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "central-link-protocol",
  "router-clock",
@@ -1106,7 +1070,7 @@ dependencies = [
 
 [[package]]
 name = "central-link-protocol"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "serde",
  "serde_json",
@@ -1118,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "central-storage"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "serde",
  "serde_json",
@@ -1268,7 +1232,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -1299,7 +1263,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "acp-provider-adapters",
  "base64 0.22.1",
@@ -1323,7 +1287,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "codex-router-test-support",
  "futures-util",
@@ -1344,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-auth"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1364,13 +1328,11 @@ dependencies = [
 
 [[package]]
 name = "codex-router-cli"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-collaboration-tui",
  "agent-router-quota-tui",
  "base64 0.22.1",
- "board-central-test-support",
- "chrono",
  "clap",
  "codex-native-integration",
  "codex-router-auth",
@@ -1382,18 +1344,11 @@ dependencies = [
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
- "codex-router-test-support",
- "collaboration-central-core",
- "collaboration-central-tokio",
  "collaboration-client",
  "collaboration-protocol",
- "collaboration-runtime",
  "collaboration-service",
  "comfy-table",
  "crossterm",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fs2",
  "futures-util",
  "indicatif",
  "iocraft",
@@ -1404,7 +1359,6 @@ dependencies = [
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
- "owned-process-test-support",
  "reqwest 0.12.28",
  "rustix 1.1.6",
  "serde",
@@ -1423,12 +1377,11 @@ dependencies = [
  "tungstenite 0.28.0",
  "ui-preference-store",
  "unicode-width 0.2.2",
- "uuid",
 ]
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1440,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-debug-hosts"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "acp-client-runtime",
  "chrono",
@@ -1476,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "acp-client-runtime",
  "acp-provider-adapters",
@@ -1484,7 +1437,6 @@ dependencies = [
  "agent-client-protocol",
  "automation-storage",
  "axum",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
@@ -1550,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-proxy"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "async-compression",
  "bytes",
@@ -1585,7 +1537,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "codex-router-core",
  "thiserror 2.0.18",
@@ -1593,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-reset-test-harness"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-collaboration",
  "axum",
@@ -1614,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-service"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "codex-router-auth",
@@ -1639,7 +1591,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1662,7 +1614,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1677,7 +1629,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1691,18 +1643,14 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tailnet-verification-host"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "axum",
  "board-fleet-sync",
  "chrono",
  "codex-native-integration",
  "codex-router-host",
- "collaboration-central-conformance",
- "collaboration-central-core",
- "collaboration-central-tokio",
  "collaboration-runtime",
- "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-session",
  "fs2",
@@ -1721,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-test-support"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-client-protocol",
  "codex-native-integration",
@@ -1749,17 +1697,16 @@ dependencies = [
 
 [[package]]
 name = "codex-router-ux-prototype"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "iocraft",
 ]
 
 [[package]]
 name = "collaboration-application-test-support"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "automation-storage",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-native-integration",
@@ -1791,33 +1738,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "collaboration-central-admin-protocol"
-version = "0.1.154"
-dependencies = [
- "board-sync-protocol",
- "chrono",
- "fleet-admission",
- "fleet-sync-protocol",
- "message-board",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "collaboration-central-cloudflare"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "axum",
- "base64 0.22.1",
  "central-storage",
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
- "durable-steps",
  "fleet-identity-protocol",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-session",
  "futures-channel",
  "futures-util",
  "http",
@@ -1850,55 +1779,27 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "axum",
  "base64 0.22.1",
- "board-sync-protocol",
- "chrono",
- "collaboration-central-core",
- "collaboration-client",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "futures-util",
- "message-board",
- "reqwest 0.12.28",
- "reqwest-websocket",
  "ring",
- "serde",
  "serde_json",
  "sha2 0.10.9",
- "tempfile",
  "tokio",
- "uuid",
 ]
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "axum",
  "base64 0.22.1",
- "board-sync-protocol",
  "central-engine-model",
  "central-storage",
  "chrono",
- "collaboration-central-admin-protocol",
- "collaboration-mail-protocol",
- "durable-steps",
- "fleet-admission",
  "fleet-identity-protocol",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "futures-channel",
  "futures-util",
  "hegeltest",
  "http",
@@ -1913,8 +1814,6 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx",
  "sqlx-core",
- "sqlx-turso",
- "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "url",
@@ -1926,52 +1825,30 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "aws-lc-rs",
  "axum",
  "base64 0.22.1",
- "board-fleet-sync",
- "board-sync-protocol",
  "central-storage",
  "chrono",
- "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-central-core",
- "collaboration-contracts",
- "collaboration-runtime",
- "collaboration-service",
- "durable-steps",
- "fleet-admission",
  "fleet-identity-protocol",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
  "hegeltest",
- "message-board",
- "message-board-storage",
  "reqwest 0.12.28",
- "reqwest-websocket",
  "ring",
  "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
  "sqlx",
- "sqlx-core",
- "sqlx-turso",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "turso_parser",
  "uuid",
  "workspace-ids",
  "workspace-model",
@@ -1979,16 +1856,14 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "automation-storage",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
  "collaboration-application-test-support",
- "collaboration-central-admin-protocol",
  "collaboration-contracts",
  "collaboration-mcp",
  "collaboration-protocol",
@@ -2019,7 +1894,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-contracts"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2043,7 +1918,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "message-board",
@@ -2056,13 +1931,12 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "acp-provider-adapters",
  "agent-collaboration",
  "automation-storage",
  "axum",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-acp-adapter",
@@ -2093,6 +1967,7 @@ dependencies = [
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "sqlx",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -2105,7 +1980,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "board-sync-protocol",
@@ -2127,7 +2002,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-runtime"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "acp-provider-adapters",
  "agent-automation",
@@ -2176,12 +2051,11 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "automation-storage",
  "base64 0.22.1",
- "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
@@ -2799,12 +2673,10 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx",
  "sqlx-core",
- "sqlx-durable-object",
  "sqlx-turso",
  "thiserror 2.0.18",
  "tokio",
  "uuid",
- "worker",
 ]
 
 [[package]]
@@ -2979,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "fleet-sync-protocol",
@@ -2992,7 +2864,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-identity-protocol"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "jsonschema",
@@ -4052,7 +3924,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-storage"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -4343,7 +4215,7 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4491,7 +4363,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "petgraph",
@@ -4507,7 +4379,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
@@ -4623,7 +4495,7 @@ dependencies = [
 
 [[package]]
 name = "node-test-fixture"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "serde_json",
 ]
@@ -4855,7 +4727,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "owned-process-test-support"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "futures-util",
  "tokio",
@@ -5604,7 +5476,7 @@ dependencies = [
 
 [[package]]
 name = "router-clock"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "runtime-primitives",
@@ -6026,7 +5898,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "base64 0.22.1",
  "message-board",
@@ -6252,7 +6124,7 @@ dependencies = [
 
 [[package]]
 name = "sqlite-storage-maintenance"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "chrono",
  "fs2",
@@ -7434,7 +7306,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "ui-preference-store"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "sqlx",
  "tempfile",
@@ -8055,7 +7927,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-architecture-check"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "proc-macro2",
  "serde",
@@ -8067,7 +7939,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-ids"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "serde",
  "serde_json",
@@ -8077,7 +7949,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-model"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -8089,7 +7961,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-rules"
-version = "0.1.154"
+version = "0.1.156"
 dependencies = [
  "central-storage",
  "proptest",

@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
     process::{Child, ChildStdout, Command},
 };
 
@@ -68,60 +68,6 @@ impl StoppedHost {
 
     // SIGKILL skips listener Drop; only this joined child's three paths qualify.
     // Shared by targets that exercise joined SIGKILL readback.
-    async fn remove_listener_residue(&self) -> FixtureResult {
-        use std::os::unix::fs::{FileTypeExt, MetadataExt};
-
-        let mut failures = Vec::new();
-        // The same listener paths the Host clears at start, provider endpoints included.
-        for name in [
-            "control.sock",
-            "codex-native.sock",
-            "codex-acp.sock",
-            "router-sessions/claude-local.sock",
-            "router-sessions/cursor-local.sock",
-        ] {
-            let path = self.directory.join(name);
-            let removed: FixtureResult = async {
-                let before = match std::fs::symlink_metadata(&path) {
-                    Ok(metadata) => metadata,
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-                    Err(error) => return Err(error.into()),
-                };
-                if !before.file_type().is_socket() {
-                    return Err("joined Host listener path is not a socket".into());
-                }
-                match tokio::time::timeout(
-                    Duration::from_secs(2),
-                    tokio::net::UnixStream::connect(&path),
-                )
-                .await?
-                {
-                    Ok(_) => return Err("joined Host socket still has an active listener".into()),
-                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-                    Err(error) => return Err(error.into()),
-                }
-                let after = std::fs::symlink_metadata(&path)?;
-                if !after.file_type().is_socket()
-                    || before.dev() != after.dev()
-                    || before.ino() != after.ino()
-                {
-                    return Err("joined Host listener inode changed during cleanup".into());
-                }
-                std::fs::remove_file(&path)?;
-                Ok(())
-            }
-            .await;
-            if let Err(error) = removed {
-                failures.push(format!("{name}: {error}"));
-            }
-        }
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(failures.join("; ").into())
-        }
-    }
 }
 
 pub struct McpReply {
@@ -292,74 +238,6 @@ impl BoardHost {
     }
 
     // Only takeover targets need the private replay observation.
-    pub async fn local_cancel_delivery_recorded(
-        &mut self,
-        cancel: fleet_sync_protocol::ItemId,
-    ) -> FixtureResult<bool> {
-        let reply = self
-            .query_project(json!({"kind":"localCancelDelivery", "cancel": cancel}))
-            .await?;
-        if reply.get("kind") != Some(&json!("localCancelDelivery"))
-            || reply.get("cancel") != Some(&json!(cancel))
-        {
-            return Err("owned Host Local cancel observation identity mismatch".into());
-        }
-        reply
-            .get("recorded")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| "owned Host omitted Local cancel observation".into())
-    }
-
-    pub async fn replicate_project(&mut self, project: &str) -> FixtureResult {
-        let reply = self
-            .query_project(json!({"kind":"replicateProject", "project":project}))
-            .await?;
-        if reply != json!({"kind":"projectReplicated", "project":project}) {
-            return Err("owned Host project replication identity mismatch".into());
-        }
-        Ok(())
-    }
-
-    pub async fn drain_project_publisher(&mut self, project: &str) -> FixtureResult {
-        let reply = self
-            .query_project(json!({"kind":"drainProjectPublisher","project":project}))
-            .await?;
-        if reply != json!({"kind":"projectPublisherIdle","project":project}) {
-            return Err("owned Host publisher completion identity mismatch".into());
-        }
-        Ok(())
-    }
-
-    pub async fn seeded_handoff_frontier(&mut self, project: &str) -> FixtureResult<Value> {
-        let reply = self
-            .query_project(json!({"kind":"seededHandoffFrontier","project":project}))
-            .await?;
-        if reply.get("kind") != Some(&json!("seededHandoffFrontier"))
-            || reply.get("project") != Some(&json!(project))
-        {
-            return Err("owned Host seed frontier observation identity mismatch".into());
-        }
-        reply
-            .get("frontier")
-            .cloned()
-            .ok_or_else(|| "owned Host seed frontier is absent".into())
-    }
-
-    async fn query_project(&mut self, query: Value) -> FixtureResult<Value> {
-        let mut request = serde_json::to_vec(&query)?;
-        request.push(b'\n');
-        self.child
-            .stdin
-            .as_mut()
-            .ok_or("owned Host observation input is absent")?
-            .write_all(&request)
-            .await?;
-        let mut line = String::new();
-        if self.output.read_line(&mut line).await? == 0 {
-            return Err("owned Host exited before Local cancel observation".into());
-        }
-        Ok(serde_json::from_str(&line)?)
-    }
 
     pub async fn cli_output(&self, arguments: &[&OsStr]) -> FixtureResult<std::process::Output> {
         let mut command = artifact_command(Path::new(env!("CARGO_BIN_EXE_agent-collaboration")))?;
@@ -468,58 +346,6 @@ impl BoardHost {
         let directory = self.directory.canonicalize()?;
         self.stop().await?;
         Ok(StoppedHost { directory })
-    }
-
-    /// Readback begins only after this owned child is killed, reaped and drained.
-    // Some process-test roots only need graceful readback.
-    pub async fn crash_for_readback(mut self) -> FixtureResult<StoppedHost> {
-        use std::os::unix::process::ExitStatusExt;
-
-        let directory = self.directory.canonicalize();
-        let killed = self.child.start_kill();
-        let mut remaining = Vec::new();
-        let (waited, drained) = tokio::join!(
-            tokio::time::timeout(STOP_BOUND, self.child.wait()),
-            tokio::time::timeout(STOP_BOUND, self.output.read_to_end(&mut remaining)),
-        );
-        let mut failures = Vec::new();
-        if let Err(error) = killed {
-            failures.push(format!("owned child SIGKILL: {error}"));
-        }
-        match waited {
-            Ok(Ok(status)) if status.signal() == Some(9) => {}
-            Ok(Ok(status)) => failures.push(format!("expected owned child SIGKILL9, got {status}")),
-            Ok(Err(error)) => failures.push(format!("owned child reap: {error}")),
-            Err(error) => {
-                failures.push(format!("owned child reap bound: {error}"));
-                match tokio::time::timeout(STOP_BOUND, self.child.kill()).await {
-                    Ok(Ok(())) => {}
-                    Ok(Err(error)) => {
-                        failures.push(format!("owned child fallback kill/reap: {error}"))
-                    }
-                    Err(error) => {
-                        failures.push(format!("owned child fallback kill/reap bound: {error}"))
-                    }
-                }
-            }
-        }
-        match drained {
-            Ok(Ok(_)) => {}
-            Ok(Err(error)) => failures.push(format!("owned child stdout drain: {error}")),
-            Err(error) => failures.push(format!("owned child stdout drain bound: {error}")),
-        }
-        match directory {
-            Ok(directory) if failures.is_empty() => {
-                let stopped = StoppedHost { directory };
-                stopped.remove_listener_residue().await?;
-                Ok(stopped)
-            }
-            Ok(_) => Err(failures.join("; ").into()),
-            Err(error) => {
-                failures.push(format!("owned directory: {error}"));
-                Err(failures.join("; ").into())
-            }
-        }
     }
 
     pub async fn stop(mut self) -> FixtureResult {

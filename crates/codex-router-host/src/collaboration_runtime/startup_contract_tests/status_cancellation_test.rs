@@ -17,7 +17,7 @@ impl fleet_sync_tokio_runner::CallRouter for NoCalls {
 #[tokio::test]
 async fn cancelling_a_pending_fleet_read_releases_store_ownership_before_runtime_cleanup() {
     // Arrange: actual runtime/store ownership, with its writer held at a causal gate.
-    let fixture = start_host(false).await;
+    let fixture = start_host().await;
     let store = fixture
         .runtime
         .interactions
