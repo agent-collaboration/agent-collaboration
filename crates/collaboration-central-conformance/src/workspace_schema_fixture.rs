@@ -22,6 +22,18 @@ pub const ORGANIZATION_TABLES: &[&str] = &[
     "signin_person_authorization_floors",
 ];
 
+/// The owning-host fixtures install the due-engine probe migration as well.
+pub fn organization_test_tables() -> Vec<&'static str> {
+    let mut tables = ORGANIZATION_TABLES.to_vec();
+    tables.extend([
+        "engine_alarm_only_items",
+        "engine_probe_groups",
+        "engine_probe_items",
+    ]);
+    tables.sort_unstable();
+    tables
+}
+
 pub const WORKSPACE_TABLES: &[&str] = &[
     "workspace_areas",
     "workspace_backlog_items",
