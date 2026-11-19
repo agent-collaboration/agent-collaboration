@@ -24,7 +24,7 @@ fn write_new_list(root: &Path) {
         root,
         "agent-sessions.jsonc",
         "New machine",
-        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-7000-8000-000000000002",
     );
 }
 
@@ -33,7 +33,7 @@ fn write_old_list(root: &Path) {
         root,
         "routers.jsonc",
         "Old machine",
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
     );
 }
 

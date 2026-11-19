@@ -259,7 +259,7 @@ fn picker_lists_machines_from_agent_sessions_jsonc() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(
         root.path().join("agent-sessions.jsonc"),
-        machine_list("New machine", "00000000-0000-4000-8000-000000000002"),
+        machine_list("New machine", "00000000-0000-7000-8000-000000000002"),
     )
     .unwrap();
 
@@ -301,7 +301,7 @@ fn picker_uses_neither_file_when_both_are_present_and_names_both() {
     .unwrap();
     std::fs::write(
         root.path().join("agent-sessions.jsonc"),
-        machine_list("New machine", "00000000-0000-4000-8000-000000000002"),
+        machine_list("New machine", "00000000-0000-7000-8000-000000000002"),
     )
     .unwrap();
 

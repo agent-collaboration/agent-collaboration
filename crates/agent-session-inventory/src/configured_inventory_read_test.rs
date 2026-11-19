@@ -77,7 +77,7 @@ async fn configured_dispatch_reads_two_real_mcp_sources_without_collapsing_equal
     let (first, second) = tokio::join!(
         SourceApiFixture::start("00000000-0000-7000-8000-000000000001", "first-source-model"),
         SourceApiFixture::start(
-            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-7000-8000-000000000002",
             "second-source-model"
         ),
     );
@@ -121,12 +121,12 @@ async fn configured_dispatch_reads_two_real_mcp_sources_without_collapsing_equal
 #[tokio::test]
 async fn configured_dispatch_rejects_wrong_service_and_unqualified_credential_before_source_rows() {
     let fixture =
-        SourceApiFixture::start("00000000-0000-4000-8000-000000000003", "source-model").await;
+        SourceApiFixture::start("00000000-0000-7000-8000-000000000003", "source-model").await;
     let mut wrong = fixture.request("Wrong identity");
     let PickerSourceContext::ConfiguredHosted(profile) = &mut wrong.source_context else {
         panic!("configured fixture");
     };
-    profile.service_id = "00000000-0000-4000-8000-000000000004"
+    profile.service_id = "00000000-0000-7000-8000-000000000004"
         .to_owned()
         .try_into()
         .unwrap();
@@ -205,7 +205,7 @@ fn source_provider_projection_keeps_source_path_and_unknown_model_without_caller
 async fn configured_any_reads_real_native_and_provider_api_storage_without_equal_id_collision() {
     // Arrange durable source data only: no provider conversation or native backend is started.
     let fixture = SourceApiFixture::start_with_provider(
-        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-7000-8000-000000000005",
         "native-source-model",
         true,
     )
@@ -248,7 +248,7 @@ async fn configured_any_reads_real_native_and_provider_api_storage_without_equal
 async fn provider_sources_reject_unsupported_source_filters_before_any_provider_request() {
     use crate::source_inventory_request::SourceInventoryRejection;
     let fixture = SourceApiFixture::start_with_provider(
-        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-7000-8000-000000000007",
         "source-model",
         true,
     )
@@ -293,7 +293,7 @@ async fn provider_sources_reject_unsupported_source_filters_before_any_provider_
 #[tokio::test]
 async fn native_only_source_keeps_supported_interactive_filter_and_no_provider_call() {
     let fixture =
-        SourceApiFixture::start("00000000-0000-4000-8000-000000000008", "interactive-model").await;
+        SourceApiFixture::start("00000000-0000-7000-8000-000000000008", "interactive-model").await;
     let mut request = fixture.request("Native source");
     request.query.source = SessionsSource::Interactive;
     let snapshot = read_complete_source(fixture.loader(), request)
@@ -315,7 +315,7 @@ async fn configured_full_uuid_search_reads_later_pages_without_reinterpreting_re
     use crate::sessions::SessionPickerIdentity;
     let session_id = "01a146f5-0cda-7cf0-a4d1-c7ff5461d497";
     let mut fixture = SourceApiFixture::start_with_provider(
-        "00000000-0000-4000-8000-000000000008",
+        "00000000-0000-7000-8000-000000000008",
         "source-model",
         true,
     )
@@ -360,7 +360,7 @@ async fn configured_inventory_retains_real_stored_rows_with_explicit_native_unav
         NativeClaudeInventoryCoverage, NativeClaudeInventoryPart, NativeInventoryUnavailableReason,
     };
     let fixture = SourceApiFixture::start_with_provider(
-        "00000000-0000-4000-8000-000000000008",
+        "00000000-0000-7000-8000-000000000008",
         "stored-model",
         true,
     )

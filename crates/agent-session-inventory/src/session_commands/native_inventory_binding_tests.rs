@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
-const FOREIGN: &str = "00000000-0000-4000-8000-000000000003";
+const FOREIGN: &str = "00000000-0000-7000-8000-000000000003";
 
 fn manifest_identity() -> collaboration_client::RouterIdentity {
     collaboration_client::RouterIdentity {

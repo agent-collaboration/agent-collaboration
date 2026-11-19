@@ -220,7 +220,7 @@ async fn real_source_services_page_sparse_stored_catalogs_without_runtime_genera
     let mut observed = Vec::new();
     for (service_id, model) in [
         (SERVICE, "gpt-6.1-sol"),
-        ("00000000-0000-4000-8000-000000000003", "gpt-6-luna"),
+        ("00000000-0000-7000-8000-000000000003", "gpt-6-luna"),
     ] {
         let (mut client, fixture) = StoredServiceFixture::open(service_id, model).await;
         let inventory = client.list_endpoints().await.unwrap();
@@ -292,7 +292,7 @@ async fn real_source_services_page_sparse_stored_catalogs_without_runtime_genera
 #[tokio::test]
 async fn real_source_service_rejects_an_inventory_request_for_another_service() {
     let (mut client, fixture) =
-        StoredServiceFixture::open("00000000-0000-4000-8000-000000000003", "gpt-6-luna").await;
+        StoredServiceFixture::open("00000000-0000-7000-8000-000000000003", "gpt-6-luna").await;
     let mut pager =
         NativeInventoryPager::new(paging_request(NativeSessionView::Stored), None).unwrap();
     assert!(pager.next_page(&mut client).await.is_err());
@@ -305,7 +305,7 @@ async fn real_source_service_rejects_an_inventory_request_for_another_service() 
 
 #[tokio::test]
 async fn concurrent_source_services_keep_equal_session_ids_and_cross_source_reads_isolated() {
-    let second_service = "00000000-0000-4000-8000-000000000003";
+    let second_service = "00000000-0000-7000-8000-000000000003";
     let ((mut first_client, first_fixture), (mut second_client, second_fixture)) = tokio::join!(
         StoredServiceFixture::open(SERVICE, "first-source-model"),
         StoredServiceFixture::open(second_service, "second-source-model"),
