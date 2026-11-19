@@ -297,10 +297,8 @@ async fn approval_broker_fixture(
     broker.install_session_delivery(Arc::new(
         collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
     ))?;
-    let push_fixture =
-        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
-            .await
-            .map_err(|error| format!("approval push fixture composition: {error}"))?;
+    let push_fixture = approval_push_fixture::ApprovalPushFixture::compose(service_id, &broker)
+        .map_err(|error| format!("approval push fixture composition: {error}"))?;
     let captured_approver = approver.clone();
     let backend = tokio::spawn(async move {
         let (stream, _) =

@@ -256,7 +256,6 @@ async fn unconfigured_remote_direct_send_is_unavailable_without_native_admission
         "00000000-0000-4000-8000-000000000001",
     )
     .unwrap()
-    .with_automation_store(runtime.automation.clone())
     .with_subscription_delivery_service(runtime.actors.clone(), presence)
     .with_interaction_store(runtime.fixture.owner.clone())
     .with_installation_peer(peer)

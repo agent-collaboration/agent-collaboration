@@ -39,7 +39,6 @@ struct ApprovalFixture {
     directory: tempfile::TempDir,
     application: collaboration_service::CollaborationApplication,
     broker: Arc<ServiceInteractionBroker>,
-    _automation_store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     generation: CodexGeneration,
     requester: SessionRef,
     approver: SessionRef,
@@ -107,12 +106,6 @@ impl ApprovalFixture {
             std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
                 .expect("private permissions");
         }
-        let automation_path = directory.path().join("automation.sqlite");
-        let automation_store = Arc::new(tokio::sync::Mutex::new(
-            automation_storage::AutomationStore::open(&automation_path)
-                .await
-                .expect("automation store"),
-        ));
         let service_id: collaboration_protocol::UuidIdentity =
             SERVICE_ID.to_owned().try_into().expect("service id");
         let machine_identity = MachineIdentity::new(service_id.clone(), Some("Permission fixture"))
@@ -227,7 +220,6 @@ impl ApprovalFixture {
             .expect("machine identity")
             .with_native_backend(native_backend)
             .expect("native backend")
-            .with_automation_store(Arc::clone(&automation_store))
             .with_approval_broker(Arc::clone(&broker));
         // The CLI reaches the API on the service socket the manifest names; the response-loss
         // case puts a proxy there that forwards to the real socket and drops the decision's
@@ -257,7 +249,6 @@ impl ApprovalFixture {
             directory,
             application,
             broker,
-            _automation_store: automation_store,
             generation,
             requester,
             approver,
