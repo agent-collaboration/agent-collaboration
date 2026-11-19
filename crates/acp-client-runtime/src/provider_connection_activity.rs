@@ -29,6 +29,15 @@ struct ToolOwner {
     ended: bool,
 }
 
+impl ToolOwner {
+    fn owns_turn(&self, turn: &RunningTurn) -> bool {
+        !self.ended
+            && self.run.as_ref().is_some_and(|claimed| {
+                claimed.generation == turn.generation && claimed.turn_id == turn.turn_id
+            })
+    }
+}
+
 /// The session a tool-scoped callback belongs to, and the run it was
 /// announced in when known.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,7 +99,9 @@ impl ProviderConnectionActivity {
         });
     }
 
-    pub(crate) fn observe_tool_call(&self, session_id: &str, tool_call_id: &str) {
+    /// A first announcement can claim an ID for this session. A repeated
+    /// announcement carries no turn identity and cannot replace that owner.
+    fn announce_tool_call(&self, session_id: &str, tool_call_id: &str) -> bool {
         let mut state = self
             .0
             .lock()
@@ -100,19 +111,33 @@ impl ProviderConnectionActivity {
             .tool_owners
             .entry(tool_call_id.to_owned())
             .or_default();
-        let already = owners.iter().any(|owner| {
-            !owner.ended
-                && owner.session_id == session_id
-                && owner.run.as_ref().map(|run| &run.turn_id)
-                    == run.as_ref().map(|run| &run.turn_id)
-        });
-        if !already {
-            owners.push(ToolOwner {
-                session_id: session_id.to_owned(),
-                run,
-                ended: false,
-            });
+        if let Some(owner) = owners.iter().find(|owner| owner.session_id == session_id) {
+            return run.as_ref().is_none_or(|turn| owner.owns_turn(turn));
         }
+        owners.push(ToolOwner {
+            session_id: session_id.to_owned(),
+            run,
+            ended: false,
+        });
+        true
+    }
+
+    /// A continuation can't claim ownership. A known ID can update only
+    /// the turn that announced it. With no running turn, the notification
+    /// remains available to the session's history replay.
+    fn allows_tool_continuation(&self, session_id: &str, tool_call_id: &str) -> bool {
+        let state = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(turn) = state.running_sessions.get(session_id) else {
+            return true;
+        };
+        state.tool_owners.get(tool_call_id).is_none_or(|owners| {
+            owners
+                .iter()
+                .any(|owner| owner.session_id == session_id && owner.owns_turn(turn))
+        })
     }
 
     /// The owner of a tool-scoped callback. An announced tool call resolves
@@ -219,7 +244,16 @@ impl HandleDispatchFrom<Agent> for ToolCallOwnershipHandler {
                         .and_then(serde_json::Value::as_str),
                 )
             {
-                self.0.observe_tool_call(session_id, tool_call_id);
+                let accepted = match kind {
+                    Some("tool_call") => self.0.announce_tool_call(session_id, tool_call_id),
+                    Some("tool_call_update") => {
+                        self.0.allows_tool_continuation(session_id, tool_call_id)
+                    }
+                    _ => true,
+                };
+                if !accepted {
+                    return Ok(Handled::Yes);
+                }
             }
         }
         Ok(Handled::No {

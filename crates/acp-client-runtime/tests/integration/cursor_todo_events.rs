@@ -262,8 +262,7 @@ async fn prompt_turn(client: &AgentSessionClient<NoopInteractionPort>, session_i
 
 /// Oracle: review F4 and the Lead's ruling (option b): a todo update that
 /// names a tool call announced in an ended turn is dropped, never attributed
-/// to the turn running now (wrong build: an ended call falls back to the one
-/// running turn).
+/// to the turn running now, even after a late tool_call_update names it.
 #[tokio::test]
 async fn a_late_cursor_todo_for_an_ended_turns_tool_call_is_dropped() {
     // Arrange
@@ -293,12 +292,20 @@ async fn a_late_cursor_todo_for_an_ended_turns_tool_call_is_dropped() {
     client.shutdown().await;
 
     // Assert
-    let attributed = sink.0.lock().expect("event sink").iter().any(|(_, event)| {
+    let events = sink.0.lock().expect("event sink");
+    let attributed = events.iter().any(|(_, event)| {
         matches!(event, SessionEvent::ItemStarted { item }
                 if item.text.as_deref().is_some_and(|text| text.contains("Late task")))
     });
     assert!(
         !attributed,
         "the ended turn's todo update was attributed to the running turn"
+    );
+    let first_call_starts = events.iter().filter(|(_, event)| {
+        matches!(event, SessionEvent::ItemStarted { item } if item.item_id == "early-tool")
+    }).count();
+    assert_eq!(
+        first_call_starts, 1,
+        "the late continuation cannot start another tool item"
     );
 }

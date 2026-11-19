@@ -11,8 +11,8 @@ async function requireResponse(id: string, result: unknown): Promise<void> {
   assert.deepEqual(response.result, result);
 }
 if (scenario === "late") {
-  // Turn one announces a tool call and ends; in turn two a late todo update
-  // still names it (review F4): the client must drop it.
+  // Turn one announces a tool call and ends. A late continuation arrives
+  // before the todo callback, with both still naming the ended call.
   await agent.newSession("late-session");
   const first = await agent.read("session/prompt");
   agent.update(
@@ -27,6 +27,10 @@ if (scenario === "late") {
   );
   agent.endTurn(first);
   const second = await agent.read("session/prompt");
+  agent.update(
+    { sessionUpdate: "tool_call_update", toolCallId: "early-tool", status: "completed" },
+    "late-session",
+  );
   agent.send({
     jsonrpc: "2.0",
     id: "late-todo",
