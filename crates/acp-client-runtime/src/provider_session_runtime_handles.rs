@@ -16,6 +16,7 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     // the generation it was admitted under (for_session_generation).
     pub(crate) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(crate) behavior: Arc<dyn crate::ProviderBehavior>,
+    pub(crate) clock: Arc<dyn router_clock::RuntimeClock>,
     pub(crate) event_sink: Arc<dyn SessionEventSink>,
     pub(crate) sink_closed: CancellationToken,
     pub(crate) tool_registry: Arc<ProviderConnectionActivity>,
@@ -61,6 +62,7 @@ impl ProviderSessionRuntimeHandles {
         Self {
             connection_model_reasoning: crate::ModelReasoningMetadata::default(),
             behavior: Arc::new(crate::test_behavior::TestProviderBehavior),
+            clock: Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             event_sink,
             sink_closed: CancellationToken::new(),
             tool_registry: Arc::new(ProviderConnectionActivity::default()),

@@ -23,6 +23,8 @@ pub(super) struct ScriptedLineAgent {
     hold_settings: Arc<AtomicBool>,
     settings_released: Arc<tokio::sync::Notify>,
     settings_answered: Arc<AtomicUsize>,
+    offers_fast: Arc<AtomicBool>,
+    fast_off_requests: Arc<AtomicUsize>,
     hold_loads: Arc<AtomicBool>,
     loads_released: Arc<tokio::sync::Notify>,
     hold_next_load: Arc<AtomicBool>,
@@ -92,6 +94,20 @@ impl ScriptedLineAgent {
         loop {
             let changed = self.changed.notified();
             if self.settings_answered.load(Ordering::SeqCst) >= count {
+                return;
+            }
+            changed.await;
+        }
+    }
+
+    pub(super) fn offer_fast_on_admission(&self) {
+        self.offers_fast.store(true, Ordering::SeqCst);
+    }
+
+    pub(super) async fn fast_off_requests_received(&self, count: usize) {
+        loop {
+            let changed = self.changed.notified();
+            if self.fast_off_requests.load(Ordering::SeqCst) >= count {
                 return;
             }
             changed.await;
@@ -343,7 +359,11 @@ impl ScriptedLineAgent {
                     };
                     json!({"jsonrpc": "2.0", "id": id, "result": {
                         "sessionId": session_id,
-                        "configOptions": effort_options("medium"),
+                        "configOptions": if self.offers_fast.load(Ordering::SeqCst) {
+                            fast_options(true)
+                        } else {
+                            effort_options("medium")
+                        },
                     }})
                 }
                 "session/set_config_option"
@@ -373,6 +393,17 @@ impl ScriptedLineAgent {
                         None => json!({"configOptions": mode_and_effort_options(&value)}),
                     };
                     json!({"jsonrpc": "2.0", "id": id, "result": result})
+                }
+                "session/set_config_option"
+                    if frame.pointer("/params/configId").and_then(Value::as_str)
+                        == Some("fast") =>
+                {
+                    assert_eq!(frame.pointer("/params/value"), Some(&Value::Bool(false)));
+                    self.fast_off_requests.fetch_add(1, Ordering::SeqCst);
+                    self.changed.notify_waiters();
+                    json!({"jsonrpc": "2.0", "id": id, "result": {
+                        "configOptions": fast_options(false),
+                    }})
                 }
                 "session/set_config_option" => {
                     let value = frame
@@ -423,6 +454,11 @@ impl ScriptedLineAgent {
                             Some(mode) => json!({"jsonrpc": "2.0", "id": id, "result": {
                                 "configOptions": mode_and_effort_options(&mode),
                             }}),
+                            None if self.offers_fast.load(Ordering::SeqCst) => {
+                                json!({"jsonrpc": "2.0", "id": id, "result": {
+                                    "configOptions": fast_options(true),
+                                }})
+                            }
                             None => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
                         }
                     };
@@ -516,6 +552,11 @@ fn effort_options(value: &str) -> Value {
         "currentValue": value,
         "options": [{"value": "medium", "name": "Medium"}, {"value": "high", "name": "High"}],
     }])
+}
+
+fn fast_options(enabled: bool) -> Value {
+    json!([{"id": "fast", "name": "Fast", "category": "model_config",
+        "type": "boolean", "currentValue": enabled}])
 }
 
 /// A mode select option currently `mode`, and the effort setting.

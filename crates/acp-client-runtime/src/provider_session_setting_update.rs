@@ -119,8 +119,14 @@ pub(crate) async fn apply_loaded_setting(
             application,
         },
     );
-    let outcome =
-        apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
+    let outcome = apply_initial_settings(
+        session,
+        &requested,
+        &mut catalog,
+        handles.behavior.as_ref(),
+        handles.clock.as_ref(),
+    )
+    .await;
     match outcome.failure {
         Some(SettingSetupFailure::Invalid { advertised, .. }) => {
             // An unadvertised value holds nothing, as today.
@@ -249,8 +255,14 @@ async fn keep_fast_off_after_model(
             application,
         },
     );
-    let outcome =
-        apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
+    let outcome = apply_initial_settings(
+        session,
+        &requested,
+        &mut catalog,
+        handles.behavior.as_ref(),
+        handles.clock.as_ref(),
+    )
+    .await;
     match outcome.failure {
         None => {
             commit_confirmed_setting(handles, provider_session_id, fast, application, &catalog)?;

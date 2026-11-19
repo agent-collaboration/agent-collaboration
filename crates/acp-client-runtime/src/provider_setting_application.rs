@@ -45,9 +45,9 @@ enum SettingResponseFailure {
     RestoreReadback(RestoreModeObservation),
 }
 
-struct RestoreModeWrite<'clock> {
-    claim: crate::session_cell_bookkeeping::RestoreModeWriteClaim,
+struct SettingResponseWait<'clock> {
     clock: &'clock dyn router_clock::RuntimeClock,
+    restore_claim: Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
 }
 
 /// The outcome of applying a start's settings in order.
@@ -77,8 +77,9 @@ pub(crate) async fn apply_initial_settings(
     requested: &RequestedProviderSettings,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
+    clock: &dyn router_clock::RuntimeClock,
 ) -> InitialSettingsOutcome {
-    apply_settings(session, requested, catalog, behavior, None).await
+    apply_settings(session, requested, catalog, behavior, clock, None).await
 }
 
 async fn apply_settings(
@@ -86,7 +87,8 @@ async fn apply_settings(
     requested: &RequestedProviderSettings,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
-    mut restore_write: Option<RestoreModeWrite<'_>>,
+    clock: &dyn router_clock::RuntimeClock,
+    mut restore_claim: Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
 ) -> InitialSettingsOutcome {
     let requested_mode = crate::RequestedPermissionMode::from_request(requested.mode.as_deref());
     let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
@@ -144,7 +146,7 @@ async fn apply_settings(
             if !fast_off_requested(requested.fast, catalog) {
                 continue;
             }
-            if let Err(failure) = apply_fast_off(session, catalog, behavior).await {
+            if let Err(failure) = apply_fast_off(session, catalog, behavior, clock).await {
                 outcome.failure = Some(failure);
                 return outcome;
             }
@@ -176,7 +178,10 @@ async fn apply_settings(
             kind,
             value,
             accepted_fallback,
-            restore_write.take(),
+            SettingResponseWait {
+                clock,
+                restore_claim: restore_claim.take(),
+            },
         )
         .await
         {
@@ -219,6 +224,7 @@ async fn apply_fast_off(
     session: &ActiveSession<'_, Agent>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
+    clock: &dyn router_clock::RuntimeClock,
 ) -> Result<(), SettingSetupFailure> {
     let invalid = |advertised: Vec<String>| SettingSetupFailure::Invalid {
         kind: ProviderSettingKind::Fast,
@@ -246,7 +252,16 @@ async fn apply_fast_off(
     let request =
         SetSessionConfigOptionRequest::new(session.session_id().clone(), option.id.clone(), value);
     let result = match request.to_untyped_message() {
-        Ok(request) => match send_setting_request(session.connection(), request, None).await {
+        Ok(request) => match send_setting_request(
+            session.connection(),
+            request,
+            SettingResponseWait {
+                clock,
+                restore_claim: None,
+            },
+        )
+        .await
+        {
             Ok(response) => apply_fast_response(catalog, response, behavior),
             Err(failure) => Err(failure),
         },
@@ -444,7 +459,8 @@ pub(crate) async fn reapply_recorded_mode(
         },
         catalog,
         behavior,
-        Some(RestoreModeWrite { claim, clock }),
+        clock,
+        Some(claim),
     )
     .await;
     if let Some(failure) = outcome.failure {
@@ -526,7 +542,7 @@ async fn apply_one_setting(
     kind: ProviderSettingKind,
     value: &String,
     accepted_fallback: Option<&str>,
-    restore_write: Option<RestoreModeWrite<'_>>,
+    wait: SettingResponseWait<'_>,
 ) -> Result<(), SettingSetupFailure> {
     let advertised = catalog.advertised_values(kind);
     if !advertised.iter().any(|offered| offered == value) {
@@ -536,7 +552,7 @@ async fn apply_one_setting(
             advertised,
         });
     }
-    let restore = restore_write.is_some();
+    let restore = wait.restore_claim.is_some();
     let result = if let Some(option) = catalog.config_option(kind) {
         let request = SetSessionConfigOptionRequest::new(
             session.session_id().clone(),
@@ -544,26 +560,24 @@ async fn apply_one_setting(
             SessionConfigOptionValue::value_id(value.clone()),
         );
         match request.to_untyped_message() {
-            Ok(request) => {
-                match send_setting_request(session.connection(), request, restore_write).await {
-                    Ok(response) => apply_config_response(
-                        catalog,
-                        kind,
-                        value,
-                        accepted_fallback,
-                        response,
-                        behavior,
-                        restore,
-                    ),
-                    Err(failure) => Err(failure),
-                }
-            }
+            Ok(request) => match send_setting_request(session.connection(), request, wait).await {
+                Ok(response) => apply_config_response(
+                    catalog,
+                    kind,
+                    value,
+                    accepted_fallback,
+                    response,
+                    behavior,
+                    restore,
+                ),
+                Err(failure) => Err(failure),
+            },
             Err(_) => Err(SettingResponseFailure::Unknown),
         }
     } else if kind == ProviderSettingKind::Mode && !catalog.modes.is_empty() {
         let request = SetSessionModeRequest::new(session.session_id().clone(), value.clone());
         let result = match request.to_untyped_message() {
-            Ok(request) => send_setting_request(session.connection(), request, restore_write)
+            Ok(request) => send_setting_request(session.connection(), request, wait)
                 .await
                 .and_then(|response| {
                     response
@@ -673,34 +687,34 @@ fn catalog_from_config_response(
 async fn send_setting_request(
     connection: &ConnectionTo<Agent>,
     request: UntypedMessage,
-    restore_write: Option<RestoreModeWrite<'_>>,
+    wait: SettingResponseWait<'_>,
 ) -> Result<serde_json::Value, SettingResponseFailure> {
     let (reply, result) = tokio::sync::oneshot::channel();
-    let (claim, clock) =
-        restore_write.map_or((None, None), |write| (Some(write.claim), Some(write.clock)));
-    let restore = clock.is_some();
+    let SettingResponseWait {
+        clock,
+        restore_claim,
+    } = wait;
+    let restore = restore_claim.is_some();
     connection
         .send_request(request)
         .on_receiving_result(async move |response| {
             // This callback is owned by the connection's response correlation.
             // It stays registered when the local timeout drops `result`.
-            drop(claim);
+            drop(restore_claim);
             let _result = reply.send(response);
             Ok(())
         })
         .map_err(|_| unconfirmed_response(restore))?;
-    let response = if let Some(clock) = clock {
-        router_clock::timeout(clock, SETTING_RESPONSE_TIMEOUT, result)
-            .await
-            .map_err(|_| {
+    let response = router_clock::timeout(clock, SETTING_RESPONSE_TIMEOUT, result)
+        .await
+        .map_err(|_| {
+            if restore {
                 SettingResponseFailure::RestoreReadback(RestoreModeObservation::NoAnswer)
-            })?
-    } else {
-        tokio::time::timeout(SETTING_RESPONSE_TIMEOUT, result)
-            .await
-            .map_err(|_| unconfirmed_response(restore))?
-    }
-    .map_err(|_| unconfirmed_response(restore))?;
+            } else {
+                SettingResponseFailure::Unknown
+            }
+        })?
+        .map_err(|_| unconfirmed_response(restore))?;
     match response {
         Ok(response) => Ok(response),
         Err(error) if agent_client_protocol::is_incoming_transport_closed(&error) => {

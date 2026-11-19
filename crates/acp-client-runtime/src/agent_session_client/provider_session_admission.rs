@@ -194,7 +194,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             // The caller's wish to keep fast off holds whatever this start's outcome (D1 R9).
             let keep_fast_off = fast_off_requested(requested_settings.fast, &settings_catalog);
             let InitialSettingsOutcome { applied, failure, permission_mode, router_auto_active } =
-                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref()).await;
+                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref(), runtime_handles.clock.as_ref()).await;
             // The allowance follows the mode the agent confirmed (D1 R4); the
             // connection writes it under the run it admits (design note §11.3).
             let in_folder = in_folder.map(|grant| crate::in_folder_allowance::SessionInFolderGrant { grant, router_auto: router_auto_active });

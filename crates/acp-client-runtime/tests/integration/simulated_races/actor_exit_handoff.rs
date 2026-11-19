@@ -25,7 +25,7 @@ enum RunFact {
 
 /// Records the run facts whose claims the session's runs admit.
 #[derive(Default)]
-struct RunCheckingSink {
+pub(super) struct RunCheckingSink {
     runs: Mutex<Option<Arc<dyn SessionRuns>>>,
     accepted: Mutex<Vec<RunFact>>,
     unloaded_outcome: Mutex<Option<GenerationPublication>>,
@@ -67,7 +67,7 @@ impl RunCheckingSink {
     }
 
     /// Resolves once an Unloaded has been offered, whatever its outcome.
-    async fn unloaded_offered(&self) {
+    pub(super) async fn unloaded_offered(&self) {
         loop {
             let offered = self.unloaded_attempted.notified();
             if self.unloaded_outcome().is_some() {

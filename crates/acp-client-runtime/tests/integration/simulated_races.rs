@@ -10,6 +10,7 @@
 
 mod actor_exit_handoff;
 mod held_session_mailbox;
+mod restore_fast_off;
 mod scripted_line_agent;
 mod superseded_restore;
 

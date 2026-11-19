@@ -132,6 +132,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task_runtime_handles = ProviderSessionRuntimeHandles {
             connection_model_reasoning: crate::ModelReasoningMetadata::default(),
             behavior: Arc::clone(&behavior),
+            clock: Arc::clone(&clock),
             event_sink: Arc::clone(&event_sink),
             sink_closed: sink_closed.clone(),
             tool_registry: Arc::clone(&tool_registry),
