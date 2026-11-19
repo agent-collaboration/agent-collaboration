@@ -54,7 +54,7 @@ fn current_items(rows: &WorkspaceRows) -> Vec<m::ItemView> {
         .chain(rows.links.iter().cloned().map(m::ItemView::Link))
         .collect()
 }
-pub(crate) fn read_answer(
+pub fn read_answer(
     context: &workspace_rules::WriteContext,
     operation: &m::WorkspaceOperation,
     rows: &WorkspaceRows,
@@ -226,7 +226,7 @@ pub(crate) fn read_answer(
         Err(refusal) => m::WorkspaceResult::Refused(refusal),
     })
 }
-pub(crate) fn actor_ids(result: &m::WorkspaceResult) -> Vec<m::ActorIdentityId> {
+pub fn actor_ids(result: &m::WorkspaceResult) -> Vec<m::ActorIdentityId> {
     fn add(ids: &mut Vec<m::ActorIdentityId>, actor: &m::ActorIdentityId) {
         if !ids.contains(actor) {
             ids.push(actor.clone());

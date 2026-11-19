@@ -1817,6 +1817,7 @@ dependencies = [
  "fleet-storage-schema",
  "fleet-workspace-access",
  "fleet-workspace-directory",
+ "fleet-workspace-requests",
  "futures-util",
  "hegeltest",
  "http",
@@ -3184,6 +3185,19 @@ dependencies = [
  "fleet-contracts",
  "fleet-runtime-ports",
  "workspace-model",
+]
+
+[[package]]
+name = "fleet-workspace-requests"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-runtime",
+ "fleet-runtime-ports",
+ "fleet-workspace-access",
+ "serde_json",
+ "workspace-model",
+ "workspace-rules",
 ]
 
 [[package]]

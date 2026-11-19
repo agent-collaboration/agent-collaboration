@@ -198,18 +198,14 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             .fleet_runtime
             .read_workspace(
                 workspace,
-                crate::workspace_read_queries::read_statement(
-                    workspace,
-                    &actor,
-                    &request.operation,
-                )?,
+                fleet_workspace_requests::read_statement(workspace, &actor, &request.operation)?,
             )
             .await?,
     )?;
     if !request.operation.is_write() {
         return enrich(
             runtime,
-            crate::workspace_item_reads::read_answer(&context, &request.operation, &rows)?,
+            fleet_workspace_requests::read_answer(&context, &request.operation, &rows)?,
             false,
         )
         .await;
@@ -220,9 +216,14 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         .pause_points()
         .reached(workspace, fleet_runtime::PausePoint::AfterReads)
         .await;
-    let resolved = runtime.resolve_command(&request.operation, &actor).await?;
+    let resolved = fleet_workspace_requests::resolve_command(
+        &runtime.fleet_runtime,
+        &request.operation,
+        &actor,
+    )
+    .await?;
     let decision = match &resolved {
-        Ok(command) => crate::workspace_rule_inputs::run_rule(&context, command, &rows),
+        Ok(command) => fleet_workspace_requests::run_rule(&context, command, &rows),
         Err(refusal) => Err(refusal.clone()),
     };
     let (mut batch, answer) = match decision {
@@ -324,7 +325,7 @@ async fn enrich<Host: CentralStore, Stores: WorkspaceStores>(
 ) -> Result<m::WorkspaceReply, StoreFailure> {
     let actors = match runtime
         .workspace_access()
-        .actor_views(&crate::workspace_item_reads::actor_ids(&result))
+        .actor_views(&fleet_workspace_requests::actor_ids(&result))
         .await
     {
         Ok(actors) => actors,
