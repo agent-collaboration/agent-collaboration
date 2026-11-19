@@ -122,6 +122,7 @@ fn a_close_frees_the_session_only_after_its_held_turn_end() {
                 Arc::new(NoInteraction),
                 Arc::new(DiscardingSink),
                 Arc::new(super::test_behavior::TestProviderBehavior),
+                Arc::new(router_clock::SystemRuntimeClock::new()),
             )
             .await
             .expect("the connection initializes"),
@@ -197,6 +198,7 @@ async fn connected() -> (
             Arc::new(NoInteraction),
             Arc::new(DiscardingSink),
             Arc::new(super::test_behavior::TestProviderBehavior),
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         )
         .await
         .expect("the connection initializes"),

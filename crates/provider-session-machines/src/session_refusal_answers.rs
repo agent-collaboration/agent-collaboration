@@ -8,7 +8,8 @@ use crate::queue_line_machine::QueueLineMachine;
 use crate::session_lifecycle_answers::state_answer;
 use crate::session_lifecycle_machine::SessionLifecycle;
 use crate::session_setting_machine::{
-    SessionSetting, SessionSettingMachine, SettingValueId, UnresolvedCause,
+    RestoreModeMismatch, RestoreModeObservation, SessionSetting, SessionSettingMachine,
+    SettingValueId, UnresolvedCause,
 };
 use crate::session_turn_machine::{SessionTurn, SessionTurnMachine};
 use state_machine_core::{StateMachine, StateTag};
@@ -154,13 +155,15 @@ pub fn hold_steps(setting: &SessionSetting) -> Vec<RefusalStep> {
     steps
 }
 
-/// Work refused because a restore couldn't put back the session's recorded
-/// mode `recorded` and the agent runs `observed`, which allows more (Lead's
-/// mode-mismatch rule under owner Decision 3).
-pub fn mode_not_restored_answer(recorded: &SettingValueId, observed: &SettingValueId) -> String {
+/// Work refused because the restore couldn't put back its recorded mode.
+pub fn mode_not_restored_answer(mismatch: &RestoreModeMismatch) -> String {
+    let observation = match &mismatch.observed {
+        RestoreModeObservation::Confirmed(mode) => format!("the agent reported `{}`", mode.0),
+        RestoreModeObservation::Unconfirmed => "the agent's current mode is unconfirmed".to_owned(),
+    };
     format!(
-        "the session's recorded mode `{}` couldn't be put back and the agent is in `{}`, which allows more; set the mode, or close the session",
-        recorded.0, observed.0
+        "the session's recorded mode `{}` couldn't be put back and {observation}; set a mode this agent offers, or close the session",
+        mismatch.recorded.0,
     )
 }
 
@@ -169,7 +172,6 @@ pub fn settings_hold_answer(cause: UnresolvedCause) -> String {
     let state = match &cause {
         UnresolvedCause::DefiniteFailure => "a setting change was refused",
         UnresolvedCause::OutcomeUnknown => "a setting change's outcome is unknown",
-        UnresolvedCause::ModeNotRestored { .. } => "the session's recorded mode wasn't put back",
     };
     let held = SessionSetting::Unresolved {
         cause,

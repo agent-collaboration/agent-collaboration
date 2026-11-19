@@ -685,7 +685,12 @@ async fn a_restore_left_in_a_more_permissive_mode_admits_no_prompt_until_its_mod
     // Arrange
     let fixture = Fixture::start_in_profile(
         "claude-without-auto-or-accept-edits",
-        &["advertise-restore", "restored-in-auto"],
+        &[
+            "advertise-restore",
+            "restored-in-auto",
+            "malformed-mode-reply",
+            "reject-plan",
+        ],
     )
     .await;
     fixture
@@ -703,30 +708,111 @@ async fn a_restore_left_in_a_more_permissive_mode_admits_no_prompt_until_its_mod
     let accepted = fixture
         .client
         .accept_session_settings("resumed-session".to_owned());
-    let set = fixture
-        .client
-        .set_setting(
+    let set_mode = |value: &str| {
+        fixture.client.set_setting(
             "resumed-session".to_owned(),
-            crate::ProviderSettingRequest {
-                kind: provider_session_machines::ProviderSettingKind::Mode,
-                value: "default".to_owned(),
+            ProviderSettingRequest {
+                kind: ProviderSettingKind::Mode,
+                value: value.to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
             },
         )
-        .await;
+    };
+    let refused_keep = set_mode("auto").await;
+    let held_after_keep = fixture.prompt_in_folder_edit("resumed-session").await;
+    let accept_after_keep = fixture
+        .client
+        .accept_session_settings("resumed-session".to_owned());
+    let invalid = set_mode("acceptEdits").await;
+    let held_after_invalid = fixture.prompt_in_folder_edit("resumed-session").await;
+    let accept_after_invalid = fixture
+        .client
+        .accept_session_settings("resumed-session".to_owned());
+    let before_agent_repairs = fixture.receipt();
+    let unknown = set_mode("default").await;
+    let held_after_unknown = fixture.prompt_in_folder_edit("resumed-session").await;
+    let accept_after_unknown = fixture
+        .client
+        .accept_session_settings("resumed-session".to_owned());
+    let refused = set_mode("plan").await;
+    let held_after_refusal = fixture.prompt_in_folder_edit("resumed-session").await;
+    let accept_after_refusal = fixture
+        .client
+        .accept_session_settings("resumed-session".to_owned());
+    let before_confirmed = fixture.receipt();
+    let set = set_mode("default").await;
     let unblocked_prompt = fixture.prompt_in_folder_edit("resumed-session").await;
     fixture.client.shutdown().await;
 
     // Assert
-    let Err(ExternalProviderRuntimeError::SettingsUnresolved { answer }) = held_prompt else {
-        panic!("a prompt ran in a mode allowing more than the record: {held_prompt:?}");
-    };
+    for refused in [
+        held_prompt,
+        refused_keep.map(|_| ()),
+        held_after_keep,
+        held_after_invalid,
+    ] {
+        let Err(ExternalProviderRuntimeError::SettingsUnresolved { answer }) = refused else {
+            panic!("the recorded mode still mismatches the provider: {refused:?}");
+        };
+        assert!(
+            answer.contains("`acceptEdits`")
+                && answer.contains("`auto`")
+                && answer.contains("set a mode this agent offers"),
+            "{answer}"
+        );
+    }
     assert!(
-        answer.contains("`acceptEdits`")
-            && answer.contains("`auto`")
-            && answer.contains("set the mode"),
-        "{answer}"
+        matches!(
+            invalid,
+            Err(ExternalProviderRuntimeError::InvalidSetting { .. })
+        ),
+        "{invalid:?}"
+    );
+    assert!(
+        accept_after_keep.is_err(),
+        "Accept cleared the hold after `auto` kept the mode"
+    );
+    assert!(
+        accept_after_invalid.is_err(),
+        "Accept cleared the hold after the invalid repair"
+    );
+    assert!(
+        matches!(
+            unknown,
+            Err(ExternalProviderRuntimeError::SettingOutcomeUnknown { .. })
+        ),
+        "{unknown:?}"
+    );
+    assert!(
+        matches!(
+            refused,
+            Err(ExternalProviderRuntimeError::SettingFailed { .. })
+        ),
+        "{refused:?}"
+    );
+    for held in [held_after_unknown, held_after_refusal] {
+        assert!(
+            matches!(held, Err(ExternalProviderRuntimeError::SettingsUnresolved { ref answer }) if answer.contains("`acceptEdits`") && answer.contains("current mode is unconfirmed")),
+            "{held:?}"
+        );
+    }
+    assert!(
+        accept_after_unknown.is_err(),
+        "Accept cleared the hold after an unknown result"
+    );
+    assert!(
+        accept_after_refusal.is_err(),
+        "Accept cleared the hold after the refused retry"
+    );
+    assert_eq!(
+        before_confirmed["prompts"],
+        json!([]),
+        "the agent received a held prompt"
+    );
+    assert!(
+        mode_requests_for(&before_agent_repairs, "resumed-session").is_empty(),
+        "a no-wire or invalid repair was sent"
     );
     assert!(
         accepted.is_err(),
@@ -734,4 +820,5 @@ async fn a_restore_left_in_a_more_permissive_mode_admits_no_prompt_until_its_mod
     );
     assert!(set.is_ok(), "{set:?}");
     assert!(unblocked_prompt.is_ok(), "{unblocked_prompt:?}");
+    assert_eq!(fixture.receipt()["prompts"], json!(["resumed-session"]));
 }

@@ -42,6 +42,7 @@ fn a_session_held_in_a_setting_change_never_holds_up_another_sessions_prompt() {
                 Arc::new(NoInteraction),
                 Arc::new(DiscardingSink),
                 Arc::new(crate::test_behavior::TestProviderBehavior),
+                Arc::new(router_clock::SystemRuntimeClock::new()),
             )
             .await
             .expect("the connection initializes"),

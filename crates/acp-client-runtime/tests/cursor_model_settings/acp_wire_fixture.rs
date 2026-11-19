@@ -212,6 +212,7 @@ impl AcpWireFixture {
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
                     behavior,
+                    Arc::new(router_clock::SystemRuntimeClock::new()),
                 )
                 .await
             }

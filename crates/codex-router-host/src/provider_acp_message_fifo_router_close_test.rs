@@ -265,6 +265,7 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
         Arc::clone(&hub),
         hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("fixture provider");
@@ -434,6 +435,7 @@ async fn a_load_continuation_held_past_a_router_close_publishes_nothing() {
         Arc::clone(&hub),
         hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("fixture provider");

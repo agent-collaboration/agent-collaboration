@@ -18,6 +18,7 @@ test-support = []
 [dependencies]
 agent-client-protocol.workspace = true
 provider-session-machines.workspace = true
+router-clock.workspace = true
 # The type of the child the ACP SDK spawns (provider_transport.rs).
 async-process = "2.5.0"
 futures-util.workspace = true
@@ -34,6 +35,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 acp-client-runtime = { path = ".", features = ["test-support"] }
+chrono.workspace = true
+router-clock = { workspace = true, features = ["test-support"] }
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 # Client-level race scenarios (design note §11.8); dev-only, never a normal dependency.
 turmoil = { version = "=0.7.2", features = ["unstable-barriers"] }

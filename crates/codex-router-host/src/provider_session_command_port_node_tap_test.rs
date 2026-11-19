@@ -200,6 +200,7 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
         Arc::clone(&hub),
         board_endpoint,
         behavior,
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("provider runtime");

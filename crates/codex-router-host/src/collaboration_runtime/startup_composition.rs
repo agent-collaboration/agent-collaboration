@@ -241,6 +241,7 @@ impl CollaborationRuntime {
                 .parent()
                 .map(codex_native_integration::router_scratch_root),
             Some(inputs.directory.join("hooks")),
+            std::sync::Arc::clone(&worker_clock),
         )
         .await?;
         let provider_face_endpoints = startup.endpoints.clone();

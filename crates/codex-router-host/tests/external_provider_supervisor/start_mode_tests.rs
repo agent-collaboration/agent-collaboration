@@ -385,6 +385,59 @@ async fn a_refused_explicit_mode_change_leaves_the_recorded_mode() -> TestResult
     Ok(())
 }
 
+/// A no-wire Router-auto repair must preserve the named record and refuse
+/// Accept. A confirmed set then replaces the record (fix round 2 ruling).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_no_wire_mode_repair_preserves_the_named_record_until_a_confirmed_set() -> TestResult {
+    let fixture = ModeFixture::start(
+        "claude",
+        &[
+            "advertise-restore",
+            "advertise-close",
+            "restored-in-auto",
+            "narrow-restore-modes",
+        ],
+    )
+    .await?;
+    let target = fixture.create_in("acceptEdits").await?;
+    fixture.close(&target).await?;
+    let restored = fixture.load(&target).await?;
+    ensure!(matches!(
+        restored,
+        ConversationOperationWaitOutput::Available { .. }
+    ));
+
+    let no_wire = fixture.set_mode(&target, "auto").await;
+    let accept = fixture
+        .backend
+        .settings_accept(collaboration_protocol::ProviderSettingsAcceptRequest {
+            target: target.clone(),
+            actor: fixture.creator.clone().into(),
+        })
+        .await;
+    let before_confirmed = fixture.recorded_mode(&target).await?;
+    let mode_sets_before_confirmed = fixture.mode_values_seen()?;
+    let repaired = fixture.set_mode(&target, "plan").await;
+    let after_confirmed = fixture.recorded_mode(&target).await?;
+    let mode_sets_after_confirmed = fixture.mode_values_seen()?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    let refusal = no_wire.expect_err("a no-wire Keep must not clear this mismatch");
+    ensure!(
+        refusal.contains("`acceptEdits`")
+            && refusal.contains("`auto`")
+            && refusal.contains("set a mode this agent offers")
+    );
+    ensure!(accept.is_err());
+    ensure_eq!(before_confirmed.as_deref(), Some("acceptEdits"));
+    ensure_eq!(mode_sets_before_confirmed, ["acceptEdits"]);
+    repaired.map_err(|error| format!("advertised repair failed: {error}"))?;
+    ensure_eq!(after_confirmed.as_deref(), Some("plan"));
+    ensure_eq!(mode_sets_after_confirmed, ["acceptEdits", "plan"]);
+    Ok(())
+}
+
 /// Oracle: the Lead's V6b ruling: explicit mode changes on one session are
 /// recorded in the order the agent applied them. Change A (plan) is applied
 /// and held before its record write. Change B (acceptEdits) is submitted and

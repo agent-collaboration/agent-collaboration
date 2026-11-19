@@ -19,8 +19,8 @@ use crate::session_lifecycle_machine::{
     SessionLifecycleEvent, SessionLifecycleMachine, SessionLifecycleRefusal,
 };
 use crate::session_setting_machine::{
-    SessionSetting, SessionSettingEvent, SessionSettingMachine, SessionSettingRefusal,
-    SettingValueId, UnresolvedCause,
+    RestoreModeMismatch, RestoreModeObservation, SessionSetting, SessionSettingEvent,
+    SessionSettingMachine, SessionSettingRefusal, SettingValueId, UnresolvedCause,
 };
 use crate::session_turn_machine::{
     SessionTurn, SessionTurnEffect, SessionTurnEvent, SessionTurnMachine, SessionTurnRefusal,
@@ -102,9 +102,16 @@ impl SessionCell {
     /// A kind holds prompts: its last change was refused (where refusals
     /// hold) or its outcome is unknown.
     pub fn settings_held(&self) -> bool {
+        self.settings.values().any(|setting| {
+            matches!(setting, SessionSetting::Unresolved { .. })
+                || setting.restore_mode_mismatch().is_some()
+        })
+    }
+
+    pub fn restore_mode_mismatch(&self) -> Option<&RestoreModeMismatch> {
         self.settings
-            .values()
-            .any(|setting| matches!(setting, SessionSetting::Unresolved { .. }))
+            .get(&ProviderSettingKind::Mode)?
+            .restore_mode_mismatch()
     }
 
     /// Some held setting's last change has an unknown outcome.
@@ -122,13 +129,17 @@ impl SessionCell {
 
     /// The kind's last change has an unknown outcome.
     pub fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
-        matches!(
-            self.settings.get(&kind),
-            Some(SessionSetting::Unresolved {
-                cause: UnresolvedCause::OutcomeUnknown,
-                ..
-            })
-        )
+        self.settings.get(&kind).is_some_and(|setting| {
+            matches!(
+                setting,
+                SessionSetting::Unresolved {
+                    cause: UnresolvedCause::OutcomeUnknown,
+                    ..
+                }
+            ) || setting
+                .restore_mode_mismatch()
+                .is_some_and(|mismatch| mismatch.observed == RestoreModeObservation::Unconfirmed)
+        })
     }
 
     fn line_open_for(&self, generation: SessionGeneration) -> bool {
@@ -799,32 +810,14 @@ impl StateMachine for SessionCellMachine {
                 Ok((next, Vec::new()))
             }
             V::AcceptSettings => {
-                if cell.settings.values().any(|setting| {
-                    matches!(
-                        setting,
-                        SessionSetting::Unresolved {
-                            cause: UnresolvedCause::OutcomeUnknown,
-                            ..
-                        }
-                    )
-                }) {
-                    return Err(TransitionError::Domain(SessionCellRefusal::Setting(
-                        SessionSettingRefusal::OutcomeUnknown,
-                    )));
-                }
-                // Accepting the agent's mode never unblocks a mode a restore
-                // couldn't put back.
-                if cell.settings.values().any(|setting| {
-                    matches!(
-                        setting,
-                        SessionSetting::Unresolved {
-                            cause: UnresolvedCause::ModeNotRestored { .. },
-                            ..
-                        }
-                    )
-                }) {
+                if cell.restore_mode_mismatch().is_some() {
                     return Err(TransitionError::Domain(SessionCellRefusal::Setting(
                         SessionSettingRefusal::ModeMustBeSet,
+                    )));
+                }
+                if cell.any_setting_outcome_unknown() {
+                    return Err(TransitionError::Domain(SessionCellRefusal::Setting(
+                        SessionSettingRefusal::OutcomeUnknown,
                     )));
                 }
                 let mut next = cell.clone();

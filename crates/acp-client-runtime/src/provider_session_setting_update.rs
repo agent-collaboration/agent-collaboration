@@ -172,6 +172,21 @@ pub(crate) async fn apply_loaded_setting(
             })
         }
         None => {
+            if kind == ProviderSettingKind::Mode
+                && !outcome.applied.iter().any(|applied| applied.kind == kind)
+                && let Some(answer) = crate::session_cell_bookkeeping::mode_mismatch_answer_for(
+                    &handles.session_cells,
+                    &provider_session_id,
+                )
+            {
+                record(
+                    handles,
+                    &provider_session_id,
+                    kind,
+                    SessionSettingEvent::Refused { application },
+                );
+                return Err(ExternalProviderRuntimeError::SettingsUnresolved { answer });
+            }
             if kind == ProviderSettingKind::Mode {
                 // The mode the agent confirmed decides whether auto's in-folder
                 // grant applies; uncertain or failed changes never reach here.

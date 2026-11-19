@@ -28,13 +28,15 @@ pub(super) async fn set(
     {
         Ok(result) => Ok(result),
         Err(SettingControlFailure::Provider(error)) => Err(*error),
-        Err(
-            SettingControlFailure::ContextChanged(target)
-            | SettingControlFailure::Unresolved(target),
-        ) => Err(failure(
+        Err(SettingControlFailure::ContextChanged(target)) => Err(failure(
             ProviderSettingsFailureKind::Unavailable,
             &target,
             "setting context unavailable",
+        )),
+        Err(SettingControlFailure::Unresolved { target, answer }) => Err(failure(
+            ProviderSettingsFailureKind::Unavailable,
+            &target,
+            &answer,
         )),
     }
 }
@@ -42,7 +44,7 @@ pub(super) async fn set(
 pub(super) enum SettingControlFailure {
     Provider(Box<ProviderSettingsFailure>),
     ContextChanged(SessionRef),
-    Unresolved(SessionRef),
+    Unresolved { target: SessionRef, answer: String },
 }
 impl From<ProviderSettingsFailure> for SettingControlFailure {
     fn from(error: ProviderSettingsFailure) -> Self {
@@ -180,8 +182,11 @@ async fn apply_and_record(
             ExternalProviderRuntimeError::SettingsContextChanged => {
                 SettingControlFailure::ContextChanged(request.target.clone())
             }
-            ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
-                SettingControlFailure::Unresolved(request.target.clone())
+            ExternalProviderRuntimeError::SettingsUnresolved { answer } => {
+                SettingControlFailure::Unresolved {
+                    target: request.target.clone(),
+                    answer,
+                }
             }
             other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
         })?;
@@ -469,7 +474,7 @@ impl ExternalProviderSupervisor {
             .map(|_| ())
             .map_err(|error| match error {
                 SettingControlFailure::ContextChanged(_) => CommandFailure::SettingsContextChanged,
-                SettingControlFailure::Unresolved(_) => CommandFailure::SettingsUnresolved,
+                SettingControlFailure::Unresolved { .. } => CommandFailure::SettingsUnresolved,
                 SettingControlFailure::Provider(error) => match error.kind {
                     collaboration_protocol::ProviderSettingsFailureKind::WrongActor => {
                         CommandFailure::UnauthorizedActor

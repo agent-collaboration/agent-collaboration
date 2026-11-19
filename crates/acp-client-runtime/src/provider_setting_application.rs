@@ -6,6 +6,9 @@ use agent_client_protocol::schema::v1::{
 };
 use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
 use provider_session_machines::ProviderSettingKind;
+use provider_session_machines::session_setting_machine::{
+    RestoreModeMismatch, RestoreModeObservation, SettingValueId,
+};
 
 use crate::provider_acp_error_mapping::acp_operation_error;
 use crate::{AppliedProviderSetting, ProviderSettingsCatalog, RequestedProviderSettings};
@@ -28,12 +31,20 @@ pub(crate) enum SettingSetupFailure {
     Uncertain {
         kind: ProviderSettingKind,
         value: String,
+        restore_readback: Option<RestoreModeObservation>,
     },
 }
 
 enum SettingResponseFailure {
     Rejected(String),
     Unknown,
+    RestoreReadback(RestoreModeObservation),
+}
+
+struct RestoreModeWrite<'clock> {
+    claim: crate::session_cell_bookkeeping::RestoreModeWriteClaim,
+    clock: &'clock dyn router_clock::RuntimeClock,
+    report_named_mode: bool,
 }
 
 /// The outcome of applying a start's settings in order.
@@ -63,6 +74,16 @@ pub(crate) async fn apply_initial_settings(
     requested: &RequestedProviderSettings,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
+) -> InitialSettingsOutcome {
+    apply_settings(session, requested, catalog, behavior, None).await
+}
+
+async fn apply_settings(
+    session: &ActiveSession<'_, Agent>,
+    requested: &RequestedProviderSettings,
+    catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+    mut restore_write: Option<RestoreModeWrite<'_>>,
 ) -> InitialSettingsOutcome {
     let requested_mode = crate::RequestedPermissionMode::from_request(requested.mode.as_deref());
     let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
@@ -145,8 +166,16 @@ pub(crate) async fn apply_initial_settings(
             },
             ProviderSettingKind::Fast => continue,
         };
-        if let Err(failure) =
-            apply_one_setting(session, catalog, behavior, kind, value, accepted_fallback).await
+        if let Err(failure) = apply_one_setting(
+            session,
+            catalog,
+            behavior,
+            kind,
+            value,
+            accepted_fallback,
+            restore_write.take(),
+        )
+        .await
         {
             outcome.failure = Some(failure);
             return outcome;
@@ -214,7 +243,7 @@ async fn apply_fast_off(
     let request =
         SetSessionConfigOptionRequest::new(session.session_id().clone(), option.id.clone(), value);
     let result = match request.to_untyped_message() {
-        Ok(request) => match send_setting_request(session.connection(), request).await {
+        Ok(request) => match send_setting_request(session.connection(), request, None).await {
             Ok(response) => apply_fast_response(catalog, response, behavior),
             Err(failure) => Err(failure),
         },
@@ -226,10 +255,13 @@ async fn apply_fast_off(
             value: FAST_OFF.to_owned(),
             reason,
         },
-        SettingResponseFailure::Unknown => SettingSetupFailure::Uncertain {
-            kind: ProviderSettingKind::Fast,
-            value: FAST_OFF.to_owned(),
-        },
+        SettingResponseFailure::Unknown | SettingResponseFailure::RestoreReadback(_) => {
+            SettingSetupFailure::Uncertain {
+                kind: ProviderSettingKind::Fast,
+                value: FAST_OFF.to_owned(),
+                restore_readback: None,
+            }
+        }
     })
 }
 
@@ -306,14 +338,7 @@ pub(crate) struct RestoredPermissionMode {
     /// The record's named mode wasn't put back and the agent's mode allows
     /// more: the session loads but holds prompts until its mode is set
     /// (the Lead's mode-mismatch rule under owner Decision 3).
-    pub(crate) mode_not_restored: Option<ModeNotRestored>,
-}
-
-/// A restore that left a session in a more permissive mode than its record.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ModeNotRestored {
-    pub(crate) recorded: String,
-    pub(crate) actual: String,
+    pub(crate) mode_not_restored: Option<RestoreModeMismatch>,
 }
 
 /// Judges the mode the agent reports for a restored session against the mode
@@ -377,12 +402,13 @@ pub(crate) fn restored_permission_mode(
 /// and any prompt admitted. The result is judged on the mode in force after
 /// that. A set that fails leaves the session loaded without Router auto, its
 /// requested and actual modes showing the mismatch (fail closed).
-async fn put_back_recorded_mode<Claim>(
+async fn put_back_recorded_mode(
     session: &ActiveSession<'_, Agent>,
     requested: Option<&str>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
-    claim_write: impl FnOnce() -> Option<Claim>,
+    claim_write: impl FnOnce() -> Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
+    clock: &dyn router_clock::RuntimeClock,
 ) -> RestoredPermissionMode {
     let kept = restored_permission_mode(requested, catalog, behavior);
     if !restored_mode_drifted(requested, catalog, behavior) {
@@ -391,7 +417,7 @@ async fn put_back_recorded_mode<Claim>(
     // The write belongs to this load attempt: a close that came first means
     // nothing is sent, and the claim is held until the write is answered
     // (review F1).
-    let Some(_write_claim) = claim_write() else {
+    let Some(claim) = claim_write() else {
         return RestoredPermissionMode {
             report: crate::PermissionModeReport {
                 requested: kept.report.requested,
@@ -402,7 +428,7 @@ async fn put_back_recorded_mode<Claim>(
             mode_not_restored: None,
         };
     };
-    let outcome = apply_initial_settings(
+    let outcome = apply_settings(
         session,
         &RequestedProviderSettings {
             mode: requested.map(str::to_owned),
@@ -410,13 +436,31 @@ async fn put_back_recorded_mode<Claim>(
         },
         catalog,
         behavior,
+        Some(RestoreModeWrite {
+            claim,
+            clock,
+            report_named_mode: matches!(
+                crate::RequestedPermissionMode::from_request(requested),
+                crate::RequestedPermissionMode::AgentMode(_)
+            ),
+        }),
     )
     .await;
-    if outcome.failure.is_some() {
+    if let Some(failure) = outcome.failure {
+        let actual = match failure {
+            SettingSetupFailure::Uncertain {
+                restore_readback: Some(readback),
+                ..
+            } => match readback {
+                RestoreModeObservation::Confirmed(mode) => Some(mode.0),
+                RestoreModeObservation::Unconfirmed => None,
+            },
+            _ => catalog.effective_settings().mode,
+        };
         return RestoredPermissionMode {
             report: crate::PermissionModeReport {
                 requested: kept.report.requested,
-                actual: catalog.effective_settings().mode,
+                actual,
                 reason: kept.report.reason,
             },
             router_auto_active: false,
@@ -437,7 +481,6 @@ async fn put_back_recorded_mode<Claim>(
 fn with_mode_hold(
     mut restored: RestoredPermissionMode,
     requested: Option<&str>,
-    catalog: &ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
 ) -> RestoredPermissionMode {
     let crate::RequestedPermissionMode::AgentMode(recorded) =
@@ -445,14 +488,12 @@ fn with_mode_hold(
     else {
         return restored;
     };
-    let actual = catalog.effective_settings().mode;
-    if actual.as_deref() == Some(recorded.as_str()) {
+    let actual = restored.report.actual.as_deref();
+    if actual == Some(recorded.as_str()) {
         return restored;
     }
     let allows_more = match (
-        actual
-            .as_deref()
-            .and_then(|mode| behavior.permission_rank(mode)),
+        actual.and_then(|mode| behavior.permission_rank(mode)),
         behavior.permission_rank(&recorded),
     ) {
         (Some(actual_rank), Some(recorded_rank)) => actual_rank > recorded_rank,
@@ -460,9 +501,11 @@ fn with_mode_hold(
         _ => true,
     };
     if allows_more {
-        restored.mode_not_restored = Some(ModeNotRestored {
-            recorded,
-            actual: actual.unwrap_or_default(),
+        restored.mode_not_restored = Some(RestoreModeMismatch {
+            recorded: SettingValueId(recorded),
+            observed: actual.map_or(RestoreModeObservation::Unconfirmed, |mode| {
+                RestoreModeObservation::Confirmed(SettingValueId(mode.to_owned()))
+            }),
         });
     }
     restored
@@ -471,15 +514,17 @@ fn with_mode_hold(
 /// Puts back the recorded mode (`put_back_recorded_mode`), then marks the
 /// restore when the agent is left in a more permissive mode (V6; the Lead's
 /// mode-mismatch rule).
-pub(crate) async fn reapply_recorded_mode<Claim>(
+pub(crate) async fn reapply_recorded_mode(
     session: &ActiveSession<'_, Agent>,
     requested: Option<&str>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
-    claim_write: impl FnOnce() -> Option<Claim>,
+    claim_write: impl FnOnce() -> Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
+    clock: &dyn router_clock::RuntimeClock,
 ) -> RestoredPermissionMode {
-    let restored = put_back_recorded_mode(session, requested, catalog, behavior, claim_write).await;
-    with_mode_hold(restored, requested, catalog, behavior)
+    let restored =
+        put_back_recorded_mode(session, requested, catalog, behavior, claim_write, clock).await;
+    with_mode_hold(restored, requested, behavior)
 }
 
 /// Whether the agent restored the session in a mode other than the one its
@@ -517,6 +562,7 @@ async fn apply_one_setting(
     kind: ProviderSettingKind,
     value: &String,
     accepted_fallback: Option<&str>,
+    restore_write: Option<RestoreModeWrite<'_>>,
 ) -> Result<(), SettingSetupFailure> {
     let advertised = catalog.advertised_values(kind);
     if !advertised.iter().any(|offered| offered == value) {
@@ -526,6 +572,9 @@ async fn apply_one_setting(
             advertised,
         });
     }
+    let restore = restore_write
+        .as_ref()
+        .is_some_and(|write| write.report_named_mode);
     let result = if let Some(option) = catalog.config_option(kind) {
         let request = SetSessionConfigOptionRequest::new(
             session.session_id().clone(),
@@ -533,29 +582,32 @@ async fn apply_one_setting(
             SessionConfigOptionValue::value_id(value.clone()),
         );
         match request.to_untyped_message() {
-            Ok(request) => match send_setting_request(session.connection(), request).await {
-                Ok(response) => apply_config_response(
-                    catalog,
-                    kind,
-                    value,
-                    accepted_fallback,
-                    response,
-                    behavior,
-                ),
-                Err(failure) => Err(failure),
-            },
+            Ok(request) => {
+                match send_setting_request(session.connection(), request, restore_write).await {
+                    Ok(response) => apply_config_response(
+                        catalog,
+                        kind,
+                        value,
+                        accepted_fallback,
+                        response,
+                        behavior,
+                        restore,
+                    ),
+                    Err(failure) => Err(failure),
+                }
+            }
             Err(_) => Err(SettingResponseFailure::Unknown),
         }
     } else if kind == ProviderSettingKind::Mode && !catalog.modes.is_empty() {
         let request = SetSessionModeRequest::new(session.session_id().clone(), value.clone());
         let result = match request.to_untyped_message() {
-            Ok(request) => send_setting_request(session.connection(), request)
+            Ok(request) => send_setting_request(session.connection(), request, restore_write)
                 .await
                 .and_then(|response| {
                     response
                         .is_object()
                         .then_some(())
-                        .ok_or(SettingResponseFailure::Unknown)
+                        .ok_or_else(|| unconfirmed_response(restore))
                 }),
             Err(_) => Err(SettingResponseFailure::Unknown),
         };
@@ -579,6 +631,12 @@ async fn apply_one_setting(
         SettingResponseFailure::Unknown => SettingSetupFailure::Uncertain {
             kind,
             value: value.clone(),
+            restore_readback: None,
+        },
+        SettingResponseFailure::RestoreReadback(readback) => SettingSetupFailure::Uncertain {
+            kind,
+            value: value.clone(),
+            restore_readback: Some(readback),
         },
     })
 }
@@ -590,10 +648,20 @@ fn apply_config_response(
     accepted_fallback: Option<&str>,
     response: serde_json::Value,
     behavior: &dyn crate::ProviderBehavior,
+    restore: bool,
 ) -> Result<(), SettingResponseFailure> {
-    let updated = catalog_from_config_response(catalog, &response, behavior)?;
+    let updated = catalog_from_config_response(catalog, &response, behavior)
+        .map_err(|_| unconfirmed_response(restore))?;
     let effective = updated.effective_settings();
     let selected = match kind {
+        ProviderSettingKind::Mode if restore => {
+            updated
+                .config_option(kind)
+                .and_then(|option| match &option.current_value {
+                    crate::ProviderConfigValue::Select(value) => Some(value.as_str()),
+                    crate::ProviderConfigValue::Boolean(_) => None,
+                })
+        }
         ProviderSettingKind::Mode => effective.mode.as_deref(),
         ProviderSettingKind::Model => effective.model.as_deref(),
         ProviderSettingKind::Effort => effective.effort.as_deref(),
@@ -601,7 +669,12 @@ fn apply_config_response(
         ProviderSettingKind::Fast => return Err(SettingResponseFailure::Unknown),
     };
     if selected != Some(value) && (selected.is_none() || selected != accepted_fallback) {
-        return Err(SettingResponseFailure::Unknown);
+        if restore && let Some(mode) = selected {
+            let readback = RestoreModeObservation::Confirmed(SettingValueId(mode.to_owned()));
+            *catalog = updated;
+            return Err(SettingResponseFailure::RestoreReadback(readback));
+        }
+        return Err(unconfirmed_response(restore));
     }
     *catalog = updated;
     Ok(())
@@ -637,26 +710,51 @@ fn catalog_from_config_response(
 async fn send_setting_request(
     connection: &ConnectionTo<Agent>,
     request: UntypedMessage,
+    restore_write: Option<RestoreModeWrite<'_>>,
 ) -> Result<serde_json::Value, SettingResponseFailure> {
     let (reply, result) = tokio::sync::oneshot::channel();
+    let (claim, clock, restore) = restore_write.map_or((None, None, false), |write| {
+        (
+            Some(write.claim),
+            Some(write.clock),
+            write.report_named_mode,
+        )
+    });
     connection
         .send_request(request)
         .on_receiving_result(async move |response| {
+            // This callback is owned by the connection's response correlation.
+            // It stays registered when the local timeout drops `result`.
+            drop(claim);
             let _result = reply.send(response);
             Ok(())
         })
-        .map_err(|_| SettingResponseFailure::Unknown)?;
-    let response = tokio::time::timeout(SETTING_RESPONSE_TIMEOUT, result)
-        .await
-        .map_err(|_| SettingResponseFailure::Unknown)?
-        .map_err(|_| SettingResponseFailure::Unknown)?;
+        .map_err(|_| unconfirmed_response(restore))?;
+    let response = if let Some(clock) = clock {
+        router_clock::timeout(clock, SETTING_RESPONSE_TIMEOUT, result)
+            .await
+            .map_err(|_| unconfirmed_response(restore))?
+    } else {
+        tokio::time::timeout(SETTING_RESPONSE_TIMEOUT, result)
+            .await
+            .map_err(|_| unconfirmed_response(restore))?
+    }
+    .map_err(|_| unconfirmed_response(restore))?;
     match response {
         Ok(response) => Ok(response),
         Err(error) if agent_client_protocol::is_incoming_transport_closed(&error) => {
-            Err(SettingResponseFailure::Unknown)
+            Err(unconfirmed_response(restore))
         }
         Err(error) => Err(SettingResponseFailure::Rejected(
             acp_operation_error(error).to_string(),
         )),
+    }
+}
+
+fn unconfirmed_response(restore: bool) -> SettingResponseFailure {
+    if restore {
+        SettingResponseFailure::RestoreReadback(RestoreModeObservation::Unconfirmed)
+    } else {
+        SettingResponseFailure::Unknown
     }
 }

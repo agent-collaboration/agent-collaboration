@@ -267,7 +267,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     },
                     permission_mode: Box::new(permission_mode.clone()),
                 }),
-                Some(SettingSetupFailure::Uncertain { kind, value }) => {
+                Some(SettingSetupFailure::Uncertain { kind, value, .. }) => {
                     Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                         provider_session_id: provider_session_id.clone(),
                         not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),

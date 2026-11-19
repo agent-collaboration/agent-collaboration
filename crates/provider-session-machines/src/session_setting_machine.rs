@@ -20,12 +20,20 @@ pub struct SettingApplication(pub uuid::Uuid);
 pub enum UnresolvedCause {
     DefiniteFailure,
     OutcomeUnknown,
-    /// A restore couldn't put back the session's recorded named mode, and
-    /// the agent's mode allows more (Lead's mode-mismatch rule under owner
-    /// Decision 3): only setting the mode, or closing, unblocks it.
-    ModeNotRestored {
-        recorded: SettingValueId,
-    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RestoreModeObservation {
+    Confirmed(SettingValueId),
+    Unconfirmed,
+}
+
+/// A run whose restore couldn't put back its recorded named mode remains
+/// held until a correlated setting reply confirms an applied mode.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RestoreModeMismatch {
+    pub recorded: SettingValueId,
+    pub observed: RestoreModeObservation,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,6 +50,22 @@ pub enum SessionSetting {
         cause: UnresolvedCause,
         observed: SettingValueId,
     },
+    RestoreModeMismatch(RestoreModeMismatch),
+    RepairingRestoreMode {
+        application: SettingApplication,
+        mismatch: RestoreModeMismatch,
+    },
+}
+
+impl SessionSetting {
+    pub fn restore_mode_mismatch(&self) -> Option<&RestoreModeMismatch> {
+        match self {
+            Self::RestoreModeMismatch(mismatch) | Self::RepairingRestoreMode { mismatch, .. } => {
+                Some(mismatch)
+            }
+            Self::Current { .. } | Self::Changing { .. } | Self::Unresolved { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -74,12 +98,7 @@ pub enum SessionSettingEvent {
         value: SettingValueId,
     },
     Accept,
-    /// A restore couldn't put back `recorded`, and the agent runs `observed`,
-    /// which allows more.
-    ModeNotRestored {
-        recorded: SettingValueId,
-        observed: SettingValueId,
-    },
+    RestoreModeMismatch(RestoreModeMismatch),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -139,10 +158,9 @@ pub fn prompt_hold(state: &SessionSetting) -> Option<&'static str> {
             cause: UnresolvedCause::OutcomeUnknown,
             ..
         } => Some("a setting change's outcome is unknown; set a value explicitly"),
-        SessionSetting::Unresolved {
-            cause: UnresolvedCause::ModeNotRestored { .. },
-            ..
-        } => Some("the session's mode wasn't put back; set the mode or close the session"),
+        SessionSetting::RestoreModeMismatch(_) | SessionSetting::RepairingRestoreMode { .. } => {
+            Some("the session's mode wasn't put back; set the mode or close the session")
+        }
     }
 }
 
@@ -159,16 +177,18 @@ impl StateTag for SessionSetting {
                 cause: UnresolvedCause::OutcomeUnknown,
                 ..
             } => "unresolved_unknown",
-            Self::Unresolved {
-                cause: UnresolvedCause::ModeNotRestored { .. },
-                ..
-            } => "unresolved_mode_not_restored",
+            Self::RestoreModeMismatch(_) => "restore_mode_mismatch",
+            Self::RepairingRestoreMode { .. } => "repairing_restore_mode",
         }
     }
 
     fn is_terminal(&self) -> bool {
         match self {
-            Self::Current { .. } | Self::Changing { .. } | Self::Unresolved { .. } => false,
+            Self::Current { .. }
+            | Self::Changing { .. }
+            | Self::Unresolved { .. }
+            | Self::RestoreModeMismatch(_)
+            | Self::RepairingRestoreMode { .. } => false,
         }
     }
 }
@@ -184,7 +204,7 @@ impl EventTag for SessionSettingEvent {
             Self::OutcomeUnknown { .. } => "outcome_unknown",
             Self::Observed { .. } => "observed",
             Self::Accept => "accept",
-            Self::ModeNotRestored { .. } => "mode_not_restored",
+            Self::RestoreModeMismatch(_) => "restore_mode_mismatch",
         }
     }
 }
@@ -202,7 +222,27 @@ const TRANSITIONS: &[Transition] = &[
     edge("current", "set_requested", "changing"),
     edge("unresolved_refused", "set_requested", "changing"),
     edge("unresolved_unknown", "set_requested", "changing"),
-    edge("unresolved_mode_not_restored", "set_requested", "changing"),
+    edge(
+        "restore_mode_mismatch",
+        "set_requested",
+        "repairing_restore_mode",
+    ),
+    edge("repairing_restore_mode", "applied", "current"),
+    edge("repairing_restore_mode", "failed", "restore_mode_mismatch"),
+    edge("repairing_restore_mode", "refused", "restore_mode_mismatch"),
+    edge(
+        "repairing_restore_mode",
+        "outcome_unknown",
+        "restore_mode_mismatch",
+    ),
+    edge("repairing_restore_mode", "lost", "restore_mode_mismatch"),
+    edge("restore_mode_mismatch", "lost", "restore_mode_mismatch"),
+    edge("restore_mode_mismatch", "observed", "restore_mode_mismatch"),
+    edge(
+        "repairing_restore_mode",
+        "observed",
+        "repairing_restore_mode",
+    ),
     edge("changing", "applied", "current"),
     edge("changing", "failed", "unresolved_refused"),
     edge("changing", "refused", "current"),
@@ -210,42 +250,33 @@ const TRANSITIONS: &[Transition] = &[
     edge("changing", "lost", "unresolved_unknown"),
     edge("unresolved_refused", "lost", "unresolved_unknown"),
     edge("unresolved_unknown", "lost", "unresolved_unknown"),
-    edge("unresolved_mode_not_restored", "lost", "unresolved_unknown"),
     edge("changing", "outcome_unknown", "unresolved_unknown"),
     edge("current", "observed", "current"),
     edge("changing", "observed", "changing"),
     edge("unresolved_refused", "observed", "unresolved_refused"),
     edge("unresolved_unknown", "observed", "unresolved_unknown"),
-    edge(
-        "unresolved_mode_not_restored",
-        "observed",
-        "unresolved_mode_not_restored",
-    ),
     edge("unresolved_refused", "accept", "current"),
-    edge(
-        "current",
-        "mode_not_restored",
-        "unresolved_mode_not_restored",
-    ),
-    edge(
-        "changing",
-        "mode_not_restored",
-        "unresolved_mode_not_restored",
-    ),
+    edge("current", "restore_mode_mismatch", "restore_mode_mismatch"),
+    edge("changing", "restore_mode_mismatch", "restore_mode_mismatch"),
     edge(
         "unresolved_refused",
-        "mode_not_restored",
-        "unresolved_mode_not_restored",
+        "restore_mode_mismatch",
+        "restore_mode_mismatch",
     ),
     edge(
         "unresolved_unknown",
-        "mode_not_restored",
-        "unresolved_mode_not_restored",
+        "restore_mode_mismatch",
+        "restore_mode_mismatch",
     ),
     edge(
-        "unresolved_mode_not_restored",
-        "mode_not_restored",
-        "unresolved_mode_not_restored",
+        "restore_mode_mismatch",
+        "restore_mode_mismatch",
+        "restore_mode_mismatch",
+    ),
+    edge(
+        "repairing_restore_mode",
+        "restore_mode_mismatch",
+        "restore_mode_mismatch",
     ),
 ];
 
@@ -266,29 +297,64 @@ impl StateMachine for SessionSettingMachine {
         use SessionSettingEffect as E;
         use SessionSettingEvent as V;
         use SessionSettingRefusal as R;
-        let observed_now = |state: &SessionSetting| match state {
-            S::Current { value } => value.clone(),
-            S::Changing { observed, .. } | S::Unresolved { observed, .. } => observed.clone(),
-        };
         match (state, event) {
-            (S::Current { .. } | S::Unresolved { .. }, V::SetRequested { to, application }) => {
-                Ok((
-                    S::Changing {
-                        to: to.clone(),
-                        application,
-                        observed: observed_now(state),
-                    },
-                    vec![E::SendChange { to, application }],
-                ))
+            (
+                S::Current { value }
+                | S::Unresolved {
+                    observed: value, ..
+                },
+                V::SetRequested { to, application },
+            ) => Ok((
+                S::Changing {
+                    to: to.clone(),
+                    application,
+                    observed: value.clone(),
+                },
+                vec![E::SendChange { to, application }],
+            )),
+            (S::RestoreModeMismatch(mismatch), V::SetRequested { to, application }) => Ok((
+                S::RepairingRestoreMode {
+                    application,
+                    mismatch: mismatch.clone(),
+                },
+                vec![E::SendChange { to, application }],
+            )),
+            (S::Changing { .. } | S::RepairingRestoreMode { .. }, V::SetRequested { .. }) => {
+                refused(R::ChangeInProgress)
             }
-            (S::Changing { .. }, V::SetRequested { .. }) => refused(R::ChangeInProgress),
             (
                 S::Changing {
+                    application: current,
+                    ..
+                }
+                | S::RepairingRestoreMode {
                     application: current,
                     ..
                 },
                 V::Applied { application, value },
             ) if *current == application => Ok((S::Current { value }, vec![E::PublishSettings])),
+            (
+                S::RepairingRestoreMode {
+                    application: current,
+                    mismatch,
+                },
+                V::Failed { application } | V::Refused { application },
+            ) if *current == application => {
+                Ok((S::RestoreModeMismatch(mismatch.clone()), Vec::new()))
+            }
+            (
+                S::RepairingRestoreMode {
+                    application: current,
+                    mismatch,
+                },
+                V::OutcomeUnknown { application },
+            ) if *current == application => Ok((
+                S::RestoreModeMismatch(RestoreModeMismatch {
+                    recorded: mismatch.recorded.clone(),
+                    observed: RestoreModeObservation::Unconfirmed,
+                }),
+                Vec::new(),
+            )),
             (
                 S::Changing {
                     application: current,
@@ -316,11 +382,30 @@ impl StateMachine for SessionSettingMachine {
                 },
                 Vec::new(),
             )),
-            (S::Current { .. } | S::Changing { .. } | S::Unresolved { .. }, V::Lost) => Ok((
+            (
+                S::Current { value }
+                | S::Changing {
+                    observed: value, ..
+                }
+                | S::Unresolved {
+                    observed: value, ..
+                },
+                V::Lost,
+            ) => Ok((
                 S::Unresolved {
                     cause: UnresolvedCause::OutcomeUnknown,
-                    observed: observed_now(state),
+                    observed: value.clone(),
                 },
+                Vec::new(),
+            )),
+            (
+                S::RestoreModeMismatch(mismatch) | S::RepairingRestoreMode { mismatch, .. },
+                V::Lost,
+            ) => Ok((
+                S::RestoreModeMismatch(RestoreModeMismatch {
+                    recorded: mismatch.recorded.clone(),
+                    observed: RestoreModeObservation::Unconfirmed,
+                }),
                 Vec::new(),
             )),
             (
@@ -338,7 +423,7 @@ impl StateMachine for SessionSettingMachine {
                 Vec::new(),
             )),
             (
-                S::Current { .. } | S::Changing { .. } | S::Unresolved { .. },
+                _,
                 V::Applied { .. } | V::Failed { .. } | V::Refused { .. } | V::OutcomeUnknown { .. },
             ) => Err(TransitionError::Stale),
             (S::Current { .. }, V::Observed { value }) => {
@@ -364,6 +449,9 @@ impl StateMachine for SessionSettingMachine {
                 },
                 vec![E::PublishSettings],
             )),
+            (S::RestoreModeMismatch(_) | S::RepairingRestoreMode { .. }, V::Observed { .. }) => {
+                Ok((state.clone(), vec![E::PublishSettings]))
+            }
             (
                 S::Unresolved {
                     cause: UnresolvedCause::DefiniteFailure,
@@ -383,20 +471,12 @@ impl StateMachine for SessionSettingMachine {
                 },
                 V::Accept,
             ) => refused(R::OutcomeUnknown),
-            (
-                S::Unresolved {
-                    cause: UnresolvedCause::ModeNotRestored { .. },
-                    ..
-                },
-                V::Accept,
-            ) => refused(R::ModeMustBeSet),
-            (_, V::ModeNotRestored { recorded, observed }) => Ok((
-                S::Unresolved {
-                    cause: UnresolvedCause::ModeNotRestored { recorded },
-                    observed,
-                },
-                vec![E::PublishSettings],
-            )),
+            (S::RestoreModeMismatch(_) | S::RepairingRestoreMode { .. }, V::Accept) => {
+                refused(R::ModeMustBeSet)
+            }
+            (_, V::RestoreModeMismatch(mismatch)) => {
+                Ok((S::RestoreModeMismatch(mismatch), vec![E::PublishSettings]))
+            }
             (S::Changing { .. }, V::Accept) => refused(R::ChangeInProgress),
             (S::Current { .. }, V::Accept) => refused(R::NothingToAccept),
         }

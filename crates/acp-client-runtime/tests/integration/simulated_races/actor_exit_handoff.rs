@@ -152,6 +152,7 @@ async fn connected() -> (
             Arc::new(NoInteraction),
             Arc::clone(&sink) as Arc<dyn SessionEventSink>,
             Arc::new(crate::test_behavior::TestProviderBehavior),
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         )
         .await
         .expect("the connection initializes"),

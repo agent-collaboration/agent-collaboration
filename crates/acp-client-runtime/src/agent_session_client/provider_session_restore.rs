@@ -43,6 +43,7 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     /// The connection's session cells: the restore's mode write is claimed
     /// on them for its load attempt (review F1).
     pub(super) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
+    pub(super) clock: Arc<dyn router_clock::RuntimeClock>,
     pub(super) reply: tokio::sync::oneshot::Sender<
         Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError>,
     >,
@@ -65,6 +66,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         generation,
         attempt,
         session_cells,
+        clock,
         reply,
     } = inputs;
     let replay_started = if mode == RestoreHistoryMode::Replay {
@@ -133,6 +135,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                         attempt,
                     )
                 },
+                clock.as_ref(),
             )
             .await;
             Ok(RestoredProviderSession {

@@ -64,6 +64,7 @@ async fn hub_runtime_with(behaviours: &[&str]) -> HubRuntime {
         Arc::clone(&hub),
         hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("fixture provider");

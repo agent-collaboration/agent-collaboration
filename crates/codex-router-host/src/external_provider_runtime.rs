@@ -150,6 +150,7 @@ impl ExternalProviderRuntime {
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
             behavior,
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         )
         .await?;
         Ok(Self {
@@ -162,6 +163,10 @@ impl ExternalProviderRuntime {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The hub and ACP connection share the Host clock."
+    )]
     pub(crate) async fn initialize_with_mcp_http_and_hub(
         launch: ExternalProviderLaunch,
         model_picker: acp_client_runtime::ProviderModelPicker,
@@ -170,6 +175,7 @@ impl ExternalProviderRuntime {
         hub: Arc<ProviderSessionEventHub>,
         endpoint: SessionEndpointRef,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let event_sink = Arc::new(HubSessionEventSink::new(hub, endpoint));
@@ -185,6 +191,7 @@ impl ExternalProviderRuntime {
             Arc::clone(&interaction_port),
             published_sink,
             behavior,
+            clock,
         )
         .await;
         let client = match result {

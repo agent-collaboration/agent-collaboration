@@ -23,6 +23,10 @@ use super::{
 };
 
 impl<P: InteractionPort> AgentSessionClient<P> {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Passes the ACP connection inputs to the transport initializer."
+    )]
     pub(super) async fn initialize_with_timeout_and_mcp_servers(
         launch: ExternalProviderLaunch,
         model_picker: crate::ProviderModelPicker,
@@ -31,6 +35,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
         behavior: Arc<dyn crate::ProviderBehavior>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let transport = super::provider_transport::ProviderTransport::spawn(&launch)?;
         Self::initialize_over_transport(
@@ -42,6 +47,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             interaction_port,
             event_sink,
             behavior,
+            clock,
         )
         .await
     }
@@ -60,6 +66,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
         behavior: Arc<dyn crate::ProviderBehavior>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let initialize_deadline = tokio::time::Instant::now() + initialize_timeout;
         let super::provider_transport::ProviderTransport {
@@ -699,6 +706,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 generation,
                                                 attempt,
                                                 session_cells: Arc::clone(&session_cells),
+                                                clock: Arc::clone(&clock),
                                                 reply,
                                             };
                                             admission_tasks.spawn(async move {

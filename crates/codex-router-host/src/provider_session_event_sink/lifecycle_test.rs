@@ -82,6 +82,7 @@ async fn closed_session_loads_real_history_through_the_host_hub() {
             Arc::clone(&hub),
             endpoint.clone(),
             Arc::new(acp_provider_adapters::StandardAcpBehavior),
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         ),
     )
     .await
@@ -242,6 +243,7 @@ async fn fixture_with_script(script: &str, arguments: &[&str]) -> Fixture {
         Arc::clone(&hub),
         endpoint,
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("runtime");

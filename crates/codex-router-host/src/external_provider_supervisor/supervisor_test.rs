@@ -296,6 +296,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         Arc::clone(&hub),
         hub_endpoint,
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("fixture initializes");

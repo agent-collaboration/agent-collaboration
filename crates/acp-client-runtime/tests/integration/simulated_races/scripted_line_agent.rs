@@ -22,15 +22,23 @@ pub(super) struct ScriptedLineAgent {
     sessions: Arc<AtomicUsize>,
     hold_settings: Arc<AtomicBool>,
     settings_released: Arc<tokio::sync::Notify>,
+    settings_answered: Arc<AtomicUsize>,
     hold_loads: Arc<AtomicBool>,
     loads_released: Arc<tokio::sync::Notify>,
     restored_mode: Arc<Mutex<Option<String>>>,
     mode_sets: Arc<Mutex<Vec<String>>>,
+    mode_reply: Arc<Mutex<Option<ModeReply>>>,
     writer: Arc<Mutex<Option<AgentWriter>>>,
     responses: Arc<Mutex<Vec<Value>>>,
 }
 
 type AgentWriter = Arc<tokio::sync::Mutex<WriteHalf<tokio::io::DuplexStream>>>;
+
+#[derive(Clone)]
+pub(super) enum ModeReply {
+    Selected(String),
+    NoCatalogue,
+}
 
 impl ScriptedLineAgent {
     /// Serves `connection` until it closes.
@@ -73,6 +81,16 @@ impl ScriptedLineAgent {
         self.settings_released.notify_waiters();
     }
 
+    pub(super) async fn setting_answers_sent(&self, count: usize) {
+        loop {
+            let changed = self.changed.notified();
+            if self.settings_answered.load(Ordering::SeqCst) >= count {
+                return;
+            }
+            changed.await;
+        }
+    }
+
     /// Answers to session/load wait until `release_load_answers`.
     pub(super) fn hold_load_answers(&self) {
         self.hold_loads.store(true, Ordering::SeqCst);
@@ -90,6 +108,13 @@ impl ScriptedLineAgent {
             .restored_mode
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(mode.to_owned());
+    }
+
+    pub(super) fn next_mode_reply(&self, reply: ModeReply) {
+        *self
+            .mode_reply
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(reply);
     }
 
     /// Every mode value the agent was asked to switch to, in order.
@@ -195,9 +220,19 @@ impl ScriptedLineAgent {
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .push(value.clone());
-                    json!({"jsonrpc": "2.0", "id": id, "result": {
-                        "configOptions": mode_and_effort_options(&value),
-                    }})
+                    let result = match self
+                        .mode_reply
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take()
+                    {
+                        Some(ModeReply::Selected(mode)) => {
+                            json!({"configOptions": mode_and_effort_options(&mode)})
+                        }
+                        Some(ModeReply::NoCatalogue) => json!({}),
+                        None => json!({"configOptions": mode_and_effort_options(&value)}),
+                    };
+                    json!({"jsonrpc": "2.0", "id": id, "result": result})
                 }
                 "session/set_config_option" => {
                     let value = frame
@@ -205,19 +240,9 @@ impl ScriptedLineAgent {
                         .and_then(Value::as_str)
                         .unwrap_or("medium")
                         .to_owned();
-                    let reply = json!({"jsonrpc": "2.0", "id": id, "result": {
+                    json!({"jsonrpc": "2.0", "id": id, "result": {
                         "configOptions": effort_options(&value),
-                    }});
-                    if self.hold_settings.load(Ordering::SeqCst) {
-                        let held = self.clone();
-                        let writer = Arc::clone(&writer);
-                        tokio::spawn(async move {
-                            held.settings_released_now().await;
-                            let _sent = write_line(&writer, &reply).await;
-                        });
-                        continue;
-                    }
-                    reply
+                    }})
                 }
                 "session/prompt" => json!({"jsonrpc": "2.0", "id": id, "result": {
                     "stopReason": "end_turn",
@@ -250,10 +275,30 @@ impl ScriptedLineAgent {
                     "code": -32601, "message": "method not found",
                 }}),
             };
+            let is_setting = method == "session/set_config_option";
+            if is_setting && self.hold_settings.load(Ordering::SeqCst) {
+                let held = self.clone();
+                let writer = Arc::clone(&writer);
+                tokio::spawn(async move {
+                    held.settings_released_now().await;
+                    if write_line(&writer, &reply).await {
+                        held.record_setting_answer();
+                    }
+                });
+                continue;
+            }
             if !write_line(&writer, &reply).await {
                 return;
             }
+            if is_setting {
+                self.record_setting_answer();
+            }
         }
+    }
+
+    fn record_setting_answer(&self) {
+        self.settings_answered.fetch_add(1, Ordering::SeqCst);
+        self.changed.notify_waiters();
     }
 
     /// Resolves once load answers are no longer held.

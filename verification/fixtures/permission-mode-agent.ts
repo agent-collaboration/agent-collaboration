@@ -12,6 +12,7 @@
 //   clamp-auto: a requested "auto" lands on "acceptEdits", as claude-agent-acp
 //     0.81.0 does for a model without auto support.
 //   reject-mode: every mode change is answered with an error.
+//   reject-plan: choosing plan gets a definite refusal.
 //   malformed-mode-reply: the first mode change gets a success with no
 //     configOptions, which a client cannot read; the mode stays and later
 //     changes are answered normally.
@@ -23,6 +24,7 @@
 //     records each restore's additionalDirectories and _meta, and answers it
 //     with the session in its profile's start mode.
 //   restored-in-auto: with advertise-restore, a restored session is in auto.
+//   narrow-restore-modes: after a restore, advertise only default and plan.
 //   restore-fast-on: with advertise-restore and offer-fast, a restored
 //     session reads fast on, as an agent that forgot its fast setting.
 import { field } from "../exact-json.ts";
@@ -37,12 +39,14 @@ const behaviours = new Set(process.argv.slice(5));
 const known = [
   "clamp-auto",
   "reject-mode",
+  "reject-plan",
   "malformed-mode-reply",
   "advertise-close",
   "offer-fast",
   "refuse-fast-once",
   "advertise-restore",
   "restored-in-auto",
+  "narrow-restore-modes",
   "restore-fast-on",
 ];
 for (const behaviour of behaviours)
@@ -96,11 +100,12 @@ const observed: Observed = {
 };
 let permissionRequestId = 900;
 const currentMode = new Map<string, string>();
+const narrowedModeCatalogues = new Set<string>();
 const modeOption = (sessionId: string): Record<string, unknown> =>
   selectOption({
     id: "mode",
     current: currentMode.get(sessionId) ?? chosen.start,
-    values: chosen.modes,
+    values: narrowedModeCatalogues.has(sessionId) ? ["default", "plan"] : chosen.modes,
   });
 const currentFast = new Map<string, string>();
 const configOptions = (sessionId: string): Record<string, unknown>[] => [
@@ -158,7 +163,7 @@ for (;;) {
       observed.modeRequests.push({ sessionId, value });
       agent.receipt(receipt, observed);
       modeChanges += 1;
-      if (behaviours.has("reject-mode")) {
+      if (behaviours.has("reject-mode") || (behaviours.has("reject-plan") && value === "plan")) {
         refuse(request, "mode change refused");
         break;
       }
@@ -212,6 +217,7 @@ for (;;) {
         meta: params._meta ?? null,
       });
       currentMode.set(sessionId, behaviours.has("restored-in-auto") ? "auto" : chosen.start);
+      if (behaviours.has("narrow-restore-modes")) narrowedModeCatalogues.add(sessionId);
       if (behaviours.has("restore-fast-on")) currentFast.set(sessionId, "true");
       agent.receipt(receipt, observed);
       agent.respond(request, { configOptions: configOptions(sessionId) });

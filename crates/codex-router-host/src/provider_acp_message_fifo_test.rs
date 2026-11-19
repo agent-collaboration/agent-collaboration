@@ -431,6 +431,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         Arc::clone(&hub),
         hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::CursorAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("provider");

@@ -60,6 +60,10 @@ pub(crate) struct ProviderStartupComposition {
     pub cache_warm: Option<(EndpointRef, crate::CacheWarmSetting)>,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Provider startup uses the Host's identity, endpoints, and runtime clock."
+)]
 pub(crate) async fn compose_provider_startup(
     configured: Vec<ExternalProviderStartup>,
     store: Option<Arc<Mutex<ProviderOperationStore>>>,
@@ -68,6 +72,7 @@ pub(crate) async fn compose_provider_startup(
     mcp_url: &str,
     scratch_root: Option<std::path::PathBuf>,
     hook_directory: Option<std::path::PathBuf>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 ) -> io::Result<ProviderStartupComposition> {
     let hub = store
         .as_ref()
@@ -179,6 +184,7 @@ pub(crate) async fn compose_provider_startup(
                     })?),
                     hub_endpoint,
                     behavior,
+                    Arc::clone(&clock),
                 )
                 .await;
                 match runtime {
