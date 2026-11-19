@@ -254,7 +254,9 @@ impl AdminRoute {
             // Mapped by the sign-in service's policy (Fleet access Lead); until it
             // is, admission refuses these two routes with NotPermitted.
             Self::EngineRetry | Self::EngineDiscard => "organization:repairWork",
-            Self::RevokeMachineEnrollment => "machine:enroll",
+            Self::RevokeMachineEnrollment => {
+                crate::identity_contract::RevokePermission::MachineRevoke.as_str()
+            }
         }
     }
     /// Changes need a fresh second factor; reads are exempt.

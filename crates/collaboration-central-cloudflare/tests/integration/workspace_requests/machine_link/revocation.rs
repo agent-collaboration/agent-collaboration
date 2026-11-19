@@ -47,7 +47,7 @@ async fn revocation_journey(fixture: &Fixture) -> Result<()> {
     }
 
     let readback = fixture.runtime().read(Statement {
-        sql: "SELECT m.state AS machine_state,m.allowed_workspaces,m.enrollment_generation,a.state,a.end_reason,(SELECT COUNT(*) FROM signin_change_records WHERE kind='machineRevoked' AND target_id=a.approval_id AND actor_person_id=? AND permission_checked='machine:enroll') AS audit_records FROM login_machine_approvals a JOIN login_machines m USING(machine_id) WHERE a.approval_id=?",
+        sql: "SELECT m.state AS machine_state,m.allowed_workspaces,m.enrollment_generation,a.state,a.end_reason,a.permission_checked,(SELECT COUNT(*) FROM signin_change_records WHERE kind='machineRevoked' AND target_id=a.approval_id AND actor_person_id=? AND permission_checked='machine:revoke') AS audit_records FROM login_machine_approvals a JOIN login_machines m USING(machine_id) WHERE a.approval_id=?",
         args: vec![SqlValue::Text(owner.id), SqlValue::Text(enrollment.to_owned())],
     }).await?;
     if readback.rows
@@ -57,6 +57,7 @@ async fn revocation_journey(fixture: &Fixture) -> Result<()> {
             SqlValue::Integer(2.try_into()?),
             SqlValue::Text("ended".into()),
             SqlValue::Text("owner".into()),
+            SqlValue::Text("machine:enroll".into()),
             SqlValue::Integer(1.try_into()?),
         ]]
     {

@@ -211,6 +211,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             json!(["019A3DCE-2000-7000-8000-000000000001"]),
         ]),
         "EnrollPermission" => invalid.extend([json!("machine:revoke"), json!("Machine:Enroll")]),
+        "RevokePermission" => invalid.extend([json!("machine:enroll"), json!("Machine:Revoke")]),
         "DeviceLoginRefusal" => invalid.extend([
             json!({"kind":"notOwner"}),
             json!({"kind":"formerServiceLinkedElsewhere"}),

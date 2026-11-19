@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Permission required for the private machine revocation command.",
+  "enum": [
+    "machine:revoke"
+  ],
+  "title": "RevokePermission",
+  "type": "string"
+}

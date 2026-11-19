@@ -29,7 +29,7 @@ impl RevocationJourney<'_> {
             }
         }
         let mut owner = Person::owner(self.organization, self.now)?;
-        owner.permissions.push("machine:enroll".to_owned());
+        owner.permissions = vec!["machine:revoke".to_owned()];
         Ok(owner)
     }
 
@@ -38,9 +38,10 @@ impl RevocationJourney<'_> {
         owner: &mut Person,
         enrollment: &str,
     ) -> ConformanceResult<()> {
-        let unpermitted = Person::owner(self.organization, self.now)?;
+        let mut enroll_only = Person::owner(self.organization, self.now)?;
+        enroll_only.permissions = vec!["machine:enroll".to_owned()];
         self.expect(
-            &unpermitted,
+            &enroll_only,
             enrollment,
             json!({"result":"refused","reason":"notPermitted"}),
         )
@@ -83,9 +84,13 @@ impl RevocationJourney<'_> {
         let body = json!({"organizationId":self.organization,"enrollmentId":enrollment});
         let reply = self.post(person, enrollment, body).await?;
         let status = reply.status().as_u16();
-        if status != 200 || reply.json::<Value>().await? != expected {
+        if status != 200 {
+            return Err(format!("revocation expected HTTP 200, got HTTP {status}").into());
+        }
+        let actual = reply.json::<Value>().await?;
+        if actual != expected {
             return Err(format!(
-                "revocation reply did not match expected {expected}: HTTP {status}"
+                "revocation reply mismatch: expected {expected}, got {actual} (HTTP {status})"
             )
             .into());
         }
