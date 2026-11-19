@@ -1,12 +1,24 @@
 //! Select a page of still-deliverable messages for one live machine link.
 use crate::{
     MachineConnectionAttachment, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_records::decode_messages, central_mail_rows::timestamp, guarded_statements::text,
-    workspace_decode_error::corrupt, workspace_row_codec::string,
+    central_mail_records::decode_messages,
+    central_mail_rows::{encode, timestamp},
+    direct_message_rows::failure_text,
+    engine::{
+        attempt_records::EngineSubject, attempt_statements::delete_attempt,
+        machines::direct_message::DirectMessage,
+    },
+    guarded_statements::{exact, text},
+    workspace_decode_error::corrupt,
+    workspace_row_codec::string,
 };
-use central_storage::{SqlValue, Statement, StoreFailure};
+use central_engine_model::{InstanceKey, Machine};
+use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
 use workspace_ids::MessageId;
-use workspace_model::{ResolvedSender, Timestamp, central_mail::MessageRecord};
+use workspace_model::{
+    ResolvedSender, Timestamp,
+    central_mail::{MessageFailureReason, MessageRecord, MessageSender},
+};
 
 pub const WELCOME_PAGE_SIZE: usize = central_engine_model::DueBatchPolicy::DEFAULT.per_kind_cap;
 
@@ -46,6 +58,7 @@ pub struct ResolvedMailDelivery {
 pub enum WindowedDeliveryDecision {
     Ready(ResolvedMailDelivery),
     Ineligible,
+    /// Central terminally settled the message without offering a frame.
     SenderUnresolved,
     AuthorityLapsed,
 }
@@ -134,12 +147,52 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             return Err(corrupt("mail_messages.delivery_window_ends_at"));
         }
         let Some(sender) = self.resolve_message_sender(&message).await? else {
-            return Ok(WindowedDeliveryDecision::SenderUnresolved);
+            return self.fail_unresolved_sender(&message).await;
         };
         Ok(WindowedDeliveryDecision::Ready(ResolvedMailDelivery {
             message: Box::new(message),
             sender,
             expires_at,
         }))
+    }
+
+    /// Terminalize only the still-current direct send. There is no sender to notify.
+    async fn fail_unresolved_sender(
+        &self,
+        message: &MessageRecord,
+    ) -> Result<WindowedDeliveryDecision, StoreFailure> {
+        let MessageSender::Actor(_) = &message.sender else {
+            return Err(corrupt("mail_messages.sender"));
+        };
+        let now = timestamp(self.now()?);
+        let statements = vec![
+            exact(
+                "UPDATE mail_messages SET state='failed',failure_reason=?,updated_at=? WHERE message_id=? AND target_machine_id=? AND sender=? AND message_kind='direct' AND state='queued' AND failure_reason IS NULL AND delivery_window_ends_at>?",
+                vec![
+                    text(failure_text(MessageFailureReason::SenderUnresolved)?),
+                    text(&now),
+                    text(&message.message_id),
+                    text(&message.target.machine_id),
+                    encode(&message.sender)?,
+                    text(now),
+                ],
+            ),
+            delete_attempt(&EngineSubject {
+                kind: DirectMessage::KIND,
+                key: InstanceKey(message.message_id.to_string()),
+            }),
+        ];
+        match self
+            .host
+            .run_batch(StatementBatch {
+                statements,
+                alarm: crate::engine::query_registry::alarm_update(),
+            })
+            .await?
+        {
+            BatchOutcome::Applied { .. } => Ok(WindowedDeliveryDecision::SenderUnresolved),
+            BatchOutcome::GuardFailed { index: 0, .. } => Ok(WindowedDeliveryDecision::Ineligible),
+            _ => Err(StoreFailure::Unavailable),
+        }
     }
 }

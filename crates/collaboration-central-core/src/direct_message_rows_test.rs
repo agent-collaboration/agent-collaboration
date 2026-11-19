@@ -61,7 +61,7 @@ fn a_queued_direct_message_decodes_with_its_mark_sender_and_request() {
     .unwrap();
     assert_eq!(
         failed.status,
-        DirectMessageStatus::Failed(mail::MessageRefusal::UnknownSession)
+        DirectMessageStatus::Failed(mail::MessageFailureReason::UnknownSession)
     );
     assert_eq!(
         refusal_text(mail::MessageRefusal::UnknownSession).unwrap(),
