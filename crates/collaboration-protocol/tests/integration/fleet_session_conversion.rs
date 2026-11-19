@@ -40,16 +40,17 @@ fn assert_lossless_session(wire: Value) {
     assert_eq!(HarnessSessionRef::try_from(fleet).unwrap(), router);
 }
 
-fn assert_legacy_session_is_refused(wire: Value) -> serde_json::Result<()> {
-    let fleet: message_board::SessionRef = serde_json::from_value(wire.clone())?;
+fn assert_legacy_session_is_refused(wire: Value) {
+    let legacy_session = serde_json::from_value::<message_board::SessionRef>(wire.clone());
     assert!(serde_json::from_value::<HarnessSessionRef>(wire).is_err());
-    assert!(HarnessSessionRef::try_from(fleet).is_err());
-    Ok(())
+    assert!(
+        legacy_session.is_ok_and(|session| HarnessSessionRef::try_from(session).is_err()),
+        "a legacy session must decode in message-board and fail to convert to a harness session"
+    );
 }
 
 #[test]
-fn only_machine_uuid_v7_crosses_the_harness_boundary_and_provider_ids_round_trip()
--> serde_json::Result<()> {
+fn only_machine_uuid_v7_crosses_the_harness_boundary_and_provider_ids_round_trip() {
     for version in "0123456789abcdef".chars() {
         for variant in "0123456789abcdef".chars() {
             for endpoint in ["a".to_owned(), "a".repeat(64)] {
@@ -64,7 +65,7 @@ fn only_machine_uuid_v7_crosses_the_harness_boundary_and_provider_ids_round_trip
                     if version == '7' && matches!(variant, '8' | '9' | 'a' | 'b') {
                         assert_lossless_session(wire);
                     } else {
-                        assert_legacy_session_is_refused(wire)?;
+                        assert_legacy_session_is_refused(wire);
                     }
                 }
             }
@@ -77,9 +78,8 @@ fn only_machine_uuid_v7_crosses_the_harness_boundary_and_provider_ids_round_trip
         assert_legacy_session_is_refused(json!({
             "endpoint": {"serviceId": service, "endpointId": "codex-local"},
             "sessionId": "provider:opaque/thread#1"
-        }))?;
+        }));
     }
-    Ok(())
 }
 
 #[derive(serde::Deserialize)]
