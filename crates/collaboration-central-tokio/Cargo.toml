@@ -48,7 +48,7 @@ uuid.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 chrono.workspace = true
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
-fleet-runtime-test-support = { path = "../fleet-runtime-test-support" }
+fleet-runtime-test-support.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile = "3.27.0"

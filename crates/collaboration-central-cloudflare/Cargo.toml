@@ -53,7 +53,7 @@ js-sys = "=0.3.106"
 
 [dev-dependencies]
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.150" }
-fleet-runtime-test-support = { path = "../fleet-runtime-test-support" }
+fleet-runtime-test-support.workspace = true
 router-clock = {path="../router-clock",version="0.1.150",features=["test-support"]}
 runtime-primitives.workspace = true
 tempfile = "3.27.0"
