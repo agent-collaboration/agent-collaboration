@@ -64,7 +64,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         }
     };
     let terms = stored(
-        "SELECT cancel_due_at,sender_request_id,state FROM mail_messages WHERE message_id=?",
+        "SELECT cancel_due_at,sender_request_id,state,delivery_window_ends_at FROM mail_messages WHERE message_id=?",
     )
     .await;
     assert_eq!(
@@ -76,6 +76,11 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
             ),
             Some(id::<workspace_ids::RequestId>(1500).to_string().as_str()),
             Some("queued"),
+            Some(
+                (sent_at + chrono::Duration::minutes(15))
+                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                    .as_str()
+            ),
         ],
         "accept stores the cancel mark and the sender's request id"
     );
@@ -103,7 +108,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     let notices = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body,state,cancel_due_at,sender_request_id FROM mail_messages WHERE message_kind='deliveryOutcome'",
+            sql: "SELECT sender,target_session,body,state,cancel_due_at,sender_request_id,created_at,delivery_window_ends_at FROM mail_messages WHERE message_kind='deliveryOutcome'",
             args: vec![],
         })
         .await
@@ -131,7 +136,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         }
     );
     assert_eq!(
-        notice[3..],
+        notice[3..6],
         [
             SqlValue::Text("queued".to_owned()),
             SqlValue::Null,
@@ -139,6 +144,10 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         ],
         "the outcome message is queued with no cancel of its own"
     );
+
+    let created: chrono::DateTime<chrono::Utc> = row_text(&notice[6]).unwrap().parse().unwrap();
+    let deadline: chrono::DateTime<chrono::Utc> = row_text(&notice[7]).unwrap().parse().unwrap();
+    assert_eq!(deadline, created + chrono::Duration::hours(24));
 
     fixture.set_utc(mark + chrono::Duration::minutes(30)).await;
     runtime.after_event().await.unwrap();

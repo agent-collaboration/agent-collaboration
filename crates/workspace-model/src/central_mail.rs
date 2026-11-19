@@ -193,9 +193,8 @@ pub enum MessageBody {
         automation_id: AutomationId,
         text: PostText,
     },
-    /// Central telling a sender how its direct message ended, when that was not
-    /// the normal delivery. It never has a cancel mark of its own and never
-    /// produces an outcome about itself.
+    /// Central's update to the sender after a refusal, cancellation or late
+    /// acceptance. It has a 24-hour delivery window and produces no outcome.
     DeliveryOutcome {
         message_id: MessageId,
         /// The sender Router's outbox request that created the message.

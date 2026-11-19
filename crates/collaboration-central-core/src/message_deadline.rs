@@ -8,6 +8,7 @@ use chrono::{DateTime, Duration, Utc};
 
 /// The one delivery window, from when the agent sent the message.
 pub const DELIVERY_WINDOW: Duration = Duration::minutes(15);
+pub(crate) const SYSTEM_MESSAGE_DELIVERY_WINDOW: Duration = Duration::hours(24);
 /// Room for the recipient's Ack before the cancel runs.
 pub const ACK_MARGIN: Duration = Duration::minutes(2);
 /// Due items run on this grid, like wakes.
@@ -21,8 +22,14 @@ const DUE_GRID_SECONDS: i64 = 5 * 60;
 /// next 5-minute mark (a time already on a mark stays).
 #[must_use]
 pub fn cancel_due_at(sent_at: DateTime<Utc>, accepted_at: DateTime<Utc>) -> DateTime<Utc> {
-    let sent = sent_at.clamp(accepted_at - DELIVERY_WINDOW, accepted_at);
-    round_up_to_grid(sent + DELIVERY_WINDOW + ACK_MARGIN)
+    round_up_to_grid(delivery_window_ends_at(sent_at, accepted_at) + ACK_MARGIN)
+}
+
+pub(crate) fn delivery_window_ends_at(
+    sent_at: DateTime<Utc>,
+    accepted_at: DateTime<Utc>,
+) -> DateTime<Utc> {
+    sent_at.clamp(accepted_at - DELIVERY_WINDOW, accepted_at) + DELIVERY_WINDOW
 }
 
 /// Whether the message's delivery window has run out at `now`: central never
@@ -33,8 +40,7 @@ pub fn delivery_window_open(
     accepted_at: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> bool {
-    let sent = sent_at.clamp(accepted_at - DELIVERY_WINDOW, accepted_at);
-    now < sent + DELIVERY_WINDOW
+    now < delivery_window_ends_at(sent_at, accepted_at)
 }
 
 fn round_up_to_grid(at: DateTime<Utc>) -> DateTime<Utc> {
