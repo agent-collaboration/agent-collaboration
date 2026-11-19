@@ -54,6 +54,14 @@ pub trait OutboxStorage: Send {
     ) -> OutboxFuture<'_, ClaimedBatch>;
     /// Ends every waiting write past its deadline.
     fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>>;
+    /// Recover the original acceptance and retain the typed late delivery fact.
+    /// True means the caller's pending inbox handoff can notify its sink.
+    fn record_sender_delivery<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        notice: &'call central_link_client::SenderDeliveryOutcome,
+        now: SyncTime,
+    ) -> OutboxFuture<'call, bool>;
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>>;
     fn mark_sent<'call>(
         &'call mut self,
@@ -175,6 +183,21 @@ impl OutboxStorage for MachineLocalOutbox {
     }
     fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>> {
         Box::pin(async move { MacOutbox::new(&mut self.store).end_overdue(now).await })
+    }
+    fn record_sender_delivery<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        notice: &'call central_link_client::SenderDeliveryOutcome,
+        now: SyncTime,
+    ) -> OutboxFuture<'call, bool> {
+        Box::pin(
+            crate::outbox_delivery_outcome_store::record_sender_delivery(
+                &mut self.store,
+                caller,
+                notice,
+                now,
+            ),
+        )
     }
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         Box::pin(async move { MacOutbox::new(&mut self.store).sent_without_answer().await })

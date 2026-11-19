@@ -496,7 +496,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
             .request_status(&never_left.caller, &never_left.request)
             .await
             .unwrap(),
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotSentWithin15Minutes
         }
     );
@@ -513,7 +513,7 @@ pub(crate) async fn an_overdue_write_is_never_claimed_and_ends_with_its_reason(
     );
     assert!(matches!(
         store.insert(&never_left, at(deadline + 1)).await.unwrap(),
-        OutboxInsert::AlreadyStored(RequestStatus::Cancelled { .. })
+        OutboxInsert::AlreadyStored(RequestStatus::Ended { .. })
     ));
     let mut changed = never_left.clone();
     changed.payload = message(73, "different words", MARK).payload;
@@ -587,7 +587,7 @@ pub(crate) async fn a_sent_write_past_its_deadline_ends_instead_of_returning(
             .request_status(&post.caller, &post.request)
             .await
             .unwrap(),
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );

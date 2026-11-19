@@ -1,7 +1,9 @@
 //! The seam between Router tools and the link (frozen 2026-11-17, see
 //! `docs/specs/2026-11-17-link-and-router-retrofit/seam.html`). A tool submits a
 //! caller's payload; the operation's kind, never the caller, picks the path.
-use central_link_protocol::{ProtocolError, ReplyPayload, RequestPayload, RequestScope};
+use central_link_protocol::{
+    ProtocolError, ReplyPayload, RequestPayload, RequestScope, RequestStatusQuery,
+};
 use runtime_primitives::SyncTime;
 use std::{future::Future, pin::Pin};
 use workspace_model::{Caller, RequestId};
@@ -28,7 +30,7 @@ pub trait LinkCalls: Send + Sync {
     fn request_status(
         &self,
         caller: Caller,
-        request: RequestId,
+        query: RequestStatusQuery,
     ) -> LinkCallFuture<'_, RequestStatus>;
 }
 
@@ -58,12 +60,22 @@ pub struct OutboxReceipt {
     pub flush_at: SyncTime,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum RequestStatus {
     /// The Router could not establish whether the caller's request is known.
     StatusUnavailable,
     NotFound,
     InOutbox {
+        #[schemars(with = "i64")]
         flush_at: SyncTime,
     },
     /// Flushed; central's answer not yet in.
@@ -74,13 +86,15 @@ pub enum RequestStatus {
     /// Central never admitted the frame.
     Refused(LinkAdmissionRefusal),
     /// The Router stopped trying to send it (owner, record:358).
-    Cancelled {
+    Ended {
         reason: OutboxCancellation,
     },
 }
 
 /// Why the Router stopped trying to send an outbox write (owner, record:358).
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum OutboxCancellation {
     /// Never left the Mac within 15 minutes of when the agent wrote it: "15
@@ -95,7 +109,9 @@ pub enum OutboxCancellation {
 
 /// Why central never admitted a frame: the link's own admission, not a domain
 /// refusal (those arrive inside an answered reply).
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum LinkAdmissionRefusal {
     /// The machine token was refused.

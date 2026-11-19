@@ -8,7 +8,9 @@ use collaboration_runtime::{
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use workspace_ids::{MachineId, SessionRef};
-use workspace_model::central_mail::{DeliveryAnswer, MessageRefusal};
+use workspace_model::central_mail::{
+    DeliveryAnswer, MessageBody, MessageRecord, MessageRefusal, MessageSender,
+};
 
 pub(super) struct CentralRecipientDirectory {
     pub(super) machine_id: MachineId,
@@ -100,10 +102,17 @@ impl CentralRecipientDirectory {
 impl CentralRecipientLookup for CentralRecipientDirectory {
     fn answer<'call>(
         &'call self,
-        target: &'call SessionRef,
+        message: &'call MessageRecord,
     ) -> TransportFuture<'call, Result<DeliveryAnswer, CentralRecipientUnavailable>> {
         Box::pin(async move {
-            let answer = match self.resolve(target).await? {
+            if message.target.machine_id == self.machine_id
+                && message.sender == MessageSender::Central
+                && matches!(message.body, MessageBody::DeliveryOutcome { .. })
+            {
+                // Request correction uses the outbox even if the sender session has exited.
+                return Ok(DeliveryAnswer::Accepted);
+            }
+            let answer = match self.resolve(&message.target).await? {
                 RecipientMatch::Known(endpoint) => {
                     tracing::debug!(endpoint_id = %String::from(endpoint.endpoint_id), "central inbox recipient resolved");
                     DeliveryAnswer::Accepted

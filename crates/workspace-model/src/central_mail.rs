@@ -255,7 +255,9 @@ pub enum MessageStatus {
     Cancelled { reason: MessageCancellation },
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageDelivery {
     #[default]

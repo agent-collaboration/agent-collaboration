@@ -121,6 +121,18 @@ impl FlushOutcomeSink for LoggedFlushOutcomes {
             );
         }
     }
+    fn delivery_outcome(
+        &self,
+        _: &workspace_model::Caller,
+        outcome: &central_link_client::SenderDeliveryOutcome,
+    ) {
+        tracing::info!(
+            event = "centralLink.deliveryOutcome",
+            request_id = outcome.request_id.as_str(),
+            message_id = outcome.message_id.as_str(),
+            outcome = ?outcome.outcome,
+        );
+    }
 }
 
 #[cfg(test)]

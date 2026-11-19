@@ -46,7 +46,9 @@ mod machine_local_store;
 pub use machine_identity_store::{MachineIdentityError, load_or_create_machine_id};
 pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
 mod outbox_deadline;
+mod outbox_delivery_outcome_store;
 mod outbox_item_state;
+mod outbox_receipt_profile;
 mod outbox_storage;
 #[cfg(test)]
 mod outbox_storage_contract;

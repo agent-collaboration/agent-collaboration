@@ -15,7 +15,7 @@ struct KnownRecipient;
 impl crate::CentralRecipientLookup for KnownRecipient {
     fn answer<'call>(
         &'call self,
-        _: &'call workspace_ids::SessionRef,
+        _: &'call MessageRecord,
     ) -> crate::TransportFuture<'call, Result<DeliveryAnswer, crate::CentralRecipientUnavailable>>
     {
         Box::pin(std::future::ready(Ok(DeliveryAnswer::Accepted)))

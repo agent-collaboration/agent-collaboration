@@ -1104,6 +1104,7 @@ dependencies = [
  "hegeltest",
  "router-clock",
  "runtime-primitives",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

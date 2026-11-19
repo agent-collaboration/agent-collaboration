@@ -54,7 +54,7 @@ struct FakeRequest {
 }
 
 enum FakePayload {
-    Immediate,
+    Immediate(central_link_protocol::RequestScope),
     Queued {
         write: Box<QueuedWrite>,
         created_at: Timestamp,
@@ -211,7 +211,7 @@ fn immediate_submission(
                 request_id.clone(),
                 FakeRequest {
                     caller,
-                    payload: FakePayload::Immediate,
+                    payload: FakePayload::Immediate(scope.clone()),
                     status: RequestStatus::Sent,
                 },
             );
@@ -227,7 +227,7 @@ fn immediate_submission(
                     request_id,
                     FakeRequest {
                         caller,
-                        payload: FakePayload::Immediate,
+                        payload: FakePayload::Immediate(payload.request_scope()),
                         status: RequestStatus::Answered(reply.clone()),
                     },
                 );
@@ -287,7 +287,7 @@ fn resubmitted_outbox_write(
         RequestStatus::Answered(ref reply) => Submission::Answered(reply.clone()),
         RequestStatus::Sent
         | RequestStatus::Refused(_)
-        | RequestStatus::Cancelled { .. }
+        | RequestStatus::Ended { .. }
         | RequestStatus::StatusUnavailable
         | RequestStatus::NotFound => Submission::Uncertain {
             request: request_id,
@@ -333,13 +333,19 @@ impl LinkCalls for FakeLinkCalls {
     fn request_status(
         &self,
         caller: Caller,
-        request: RequestId,
+        query: central_link_protocol::RequestStatusQuery,
     ) -> LinkCallFuture<'_, RequestStatus> {
         let status = self
             .lock()
             .requests
-            .get(&request)
-            .filter(|entry| entry.caller == caller)
+            .get(&query.request_id)
+            .filter(|entry| {
+                entry.caller == caller
+                    && match &entry.payload {
+                        FakePayload::Immediate(scope) => *scope == query.scope,
+                        FakePayload::Queued { write, .. } => write.request_scope() == query.scope,
+                    }
+            })
             .map_or(RequestStatus::NotFound, |entry| entry.status.clone());
         Box::pin(async move { status })
     }

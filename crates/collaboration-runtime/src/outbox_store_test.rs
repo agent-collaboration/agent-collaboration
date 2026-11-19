@@ -279,10 +279,10 @@ async fn ended_rows_read_as_cancelled_hold_no_text_and_are_pruned() {
     assert_eq!(
         statuses,
         vec![
-            RequestStatus::Cancelled {
+            RequestStatus::Ended {
                 reason: OutboxCancellation::NotSentWithin15Minutes
             },
-            RequestStatus::Cancelled {
+            RequestStatus::Ended {
                 reason: OutboxCancellation::NotConfirmedWithin15Minutes
             },
         ]
@@ -535,7 +535,7 @@ impl ModelWrite {
             ModelState::Sent => RequestStatus::Sent,
             ModelState::Accepted => RequestStatus::Answered(accepted_reply()),
             ModelState::Refused => RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict),
-            ModelState::Ended(reason) => RequestStatus::Cancelled { reason },
+            ModelState::Ended(reason) => RequestStatus::Ended { reason },
         }
     }
 }

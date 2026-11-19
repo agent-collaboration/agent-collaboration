@@ -28,6 +28,7 @@ pub use outbox_flush::{
     FlushEffect, FlushEvent, FlushTransitionError, LinkAvailability, MAX_BATCH_WRITES,
     MemberOutcome, OutboxFlushState, transition,
 };
+pub use outbox_views::SenderDeliveryOutcome;
 pub use outbox_views::{
     EndedWrite, FlushOutcome, FlushOutcomeSink, FlushOutcomes, OutboxWriteContent,
     OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,

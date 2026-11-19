@@ -45,7 +45,7 @@ async fn a_caller_gone_before_admission_leaves_no_row_and_no_frame() {
     first.await.unwrap();
     let unresolved = harness
         .calls
-        .request_status(caller(), dropped.parse().unwrap())
+        .request_status(caller(), status_query(&dropped))
         .await;
     let dropped_status = harness.local_status(&dropped).await;
     harness
@@ -128,7 +128,7 @@ async fn a_caller_gone_after_the_insert_still_has_its_write_flushed_and_answered
     for _ in 0..64 {
         status = harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
         if status != RequestStatus::Sent {
             break;

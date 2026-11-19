@@ -169,6 +169,18 @@ impl OutboxStorage for FaultyOutbox {
     ) -> OutboxFuture<'_, Vec<central_link_client::EndedWrite>> {
         faulty!(self, "end_overdue", self.inner.end_overdue(now))
     }
+    fn record_sender_delivery<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        notice: &'call central_link_client::SenderDeliveryOutcome,
+        now: SyncTime,
+    ) -> OutboxFuture<'call, bool> {
+        faulty!(
+            self,
+            "record_sender_delivery",
+            self.inner.record_sender_delivery(caller, notice, now)
+        )
+    }
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         faulty!(
             self,

@@ -29,7 +29,7 @@ async fn a_failed_local_status_read_is_unavailable() {
     plan.fail_once("request_status");
     let status = harness
         .calls
-        .request_status(caller(), uuid_v7(29).parse().unwrap())
+        .request_status(caller(), status_query(&uuid_v7(29)))
         .await;
     assert_eq!(status, RequestStatus::StatusUnavailable);
     assert!(
@@ -187,7 +187,7 @@ async fn a_failed_return_or_answer_write_is_reconciled_and_the_write_answered() 
         }
         let status = harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
 
         assert_eq!(resent[0].payload().write_request_id().unwrap().as_str(), id);

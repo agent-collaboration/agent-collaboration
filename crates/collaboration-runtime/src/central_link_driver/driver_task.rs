@@ -388,10 +388,10 @@ impl LinkDriver {
             },
             DriverCommand::Status {
                 caller,
-                request,
+                query,
                 reply,
             } => {
-                let status = self.read_request_status(&caller, &request).await;
+                let status = self.read_request_status(&caller, &query).await;
                 let _ = reply.send(status);
             }
             DriverCommand::Pending { caller, reply } => {
@@ -416,12 +416,16 @@ impl LinkDriver {
         }
     }
 
-    async fn read_request_status(&mut self, caller: &Caller, request: &RequestId) -> RequestStatus {
+    async fn read_request_status(
+        &mut self,
+        caller: &Caller,
+        query: &central_link_protocol::RequestStatusQuery,
+    ) -> RequestStatus {
         let local = self
             .store
             .lock()
             .await
-            .request_status(caller, request)
+            .request_status(caller, &query.request_id)
             .await;
         match local {
             // The central request-log read is pending the shared query contract.
@@ -482,12 +486,10 @@ impl LinkDriver {
                 RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict) => {
                     Submission::Refused(SubmitRefusal::RequestIdConflict)
                 }
-                RequestStatus::Refused(_) | RequestStatus::Cancelled { .. } => {
-                    Submission::Uncertain {
-                        request,
-                        scope: item.payload.request_scope(),
-                    }
-                }
+                RequestStatus::Refused(_) | RequestStatus::Ended { .. } => Submission::Uncertain {
+                    request,
+                    scope: item.payload.request_scope(),
+                },
             },
             Ok(OutboxInsert::ConflictingContent) => {
                 Submission::Refused(SubmitRefusal::RequestIdConflict)
@@ -615,6 +617,9 @@ async fn pending_for(
     store.pending_for(caller).await
 }
 
+#[cfg(test)]
+#[path = "delivery_outcome_test.rs"]
+mod delivery_outcome_tests;
 #[path = "driver_flush.rs"]
 mod driver_flush;
 #[path = "driver_tokens.rs"]

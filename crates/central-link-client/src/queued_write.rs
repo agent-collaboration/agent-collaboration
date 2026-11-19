@@ -8,7 +8,7 @@ use workspace_model::{
     central_mail::{CentralMailOperation, CentralMailRequest, MessageDelivery},
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolSendMessage {
     pub request_id: RequestId,

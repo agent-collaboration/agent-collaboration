@@ -73,7 +73,14 @@ impl OutboxWriteContent {
 /// stays on the Mac only until central answers (owner, 2026-11-15: "unsent text
 /// in the Mac outbox: allowed until central answers"), so only the unanswered
 /// states carry the body.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum PendingWriteState {
     /// Never left the Mac.
     Unsent { body: PostText },
@@ -138,12 +145,25 @@ pub struct EndedWrite {
     pub reason: crate::link_calls::OutboxCancellation,
 }
 
+/// The sender's delivery notice. The inbox id is its idempotency key.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SenderDeliveryOutcome {
+    pub inbox_message_id: workspace_model::MessageId,
+    pub message_id: workspace_model::MessageId,
+    pub request_id: RequestId,
+    pub outcome: workspace_model::central_mail::MessageOutcome,
+}
+
 /// Receives every flush's outcomes and every write that ended unsent; the
 /// CLI+MCP side groups and words them per session.
 pub trait FlushOutcomeSink: Send + Sync {
     fn deliver(&self, outcomes: FlushOutcomes);
     /// Writes that passed their deadline, told when the Router ends them.
     fn ended(&self, ended: Vec<EndedWrite>);
+    /// Admit a durable receipt keyed by the inbox message id. Retrying an
+    /// interrupted handoff must reuse that same receipt.
+    fn delivery_outcome(&self, caller: &Caller, outcome: &SenderDeliveryOutcome);
 }
 
 #[cfg(test)]

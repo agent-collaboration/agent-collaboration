@@ -62,6 +62,7 @@ struct IgnoredOutcomes;
 impl FlushOutcomeSink for IgnoredOutcomes {
     fn deliver(&self, _outcomes: FlushOutcomes) {}
     fn ended(&self, _ended: Vec<central_link_client::EndedWrite>) {}
+    fn delivery_outcome(&self, _: &Caller, _: &central_link_client::SenderDeliveryOutcome) {}
 }
 
 fn installation() -> MachineId {
@@ -169,7 +170,13 @@ pub async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil
             #[expect(clippy::unwrap_used, reason = "ids minted as UUIDv7 above")]
             let status = link
                 .calls
-                .request_status(caller(), id.parse().unwrap())
+                .request_status(
+                    caller(),
+                    central_link_protocol::RequestStatusQuery {
+                        request_id: id.parse().unwrap(),
+                        scope: thread_post(&id).request_scope(),
+                    },
+                )
                 .await;
             all_answered &= matches!(status, RequestStatus::Answered(_));
             report.borrow_mut().statuses.insert(id, status);

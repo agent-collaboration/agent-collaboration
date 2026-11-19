@@ -5,10 +5,11 @@ use crate::MachineLocalStore;
 use crate::machine_local_store::MachineLocalWrite;
 use crate::outbox_deadline::DepartureAtDeadline;
 use crate::outbox_item_state::OutboxItemState;
+use crate::outbox_receipt_profile::AnsweredWrite;
 use central_link_client::QueuedWrite;
 use central_link_client::{
-    EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutboxWriteTarget,
-    OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
+    EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutgoingOutcome,
+    OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
 };
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
@@ -17,6 +18,8 @@ use workspace_model::{Caller, RequestId, operation_content_digest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OutboxStoreError {
+    #[error("central delivery outcome does not match request {request}")]
+    DeliveryOutcomeMismatch { request: RequestId },
     #[error("the outbox insert did not start")]
     InsertNotStarted(#[source] sqlx::Error),
     #[error("outbox storage unavailable")]
@@ -206,20 +209,9 @@ impl<'store> MacOutbox<'store> {
         caller: &Caller,
         request: &RequestId,
     ) -> Result<RequestStatus, OutboxStoreError> {
-        let request_id = request.as_str();
-        let row = sqlx::query_as!(
-            OutboxRow,
-            r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
-                      flush_at_ms, outcome_json
-               FROM outbox_items WHERE request_id = ?"#,
-            request_id
-        )
-        .fetch_optional(&mut self.store.connection)
-        .await?;
-        let Some(row) = row else {
+        let Some(stored) = read_decoded_outbox(&mut self.store.connection, request).await? else {
             return Ok(RequestStatus::NotFound);
         };
-        let stored = decode_row(&row)?;
         Ok(if stored.caller == *caller {
             stored.status
         } else {
@@ -277,7 +269,7 @@ impl<'store> MacOutbox<'store> {
                 ) => (answered.target, PendingWriteState::Answered(reply)),
                 (
                     OutboxItemState::NotSent | OutboxItemState::Unconfirmed,
-                    RequestStatus::Cancelled { reason },
+                    RequestStatus::Ended { reason },
                     StoredPayload::Answered(cancelled),
                 ) => (cancelled.target, PendingWriteState::Cancelled { reason }),
                 _ => return Err(corrupt_row(&row.request_id, "item_state")),
@@ -338,7 +330,7 @@ impl<'store> MacOutbox<'store> {
                 | RequestStatus::NotFound
                 | RequestStatus::InOutbox { .. }
                 | RequestStatus::Sent
-                | RequestStatus::Cancelled { .. } => {
+                | RequestStatus::Ended { .. } => {
                     return Err(corrupt_row(&request_id, "item_state"));
                 }
             };
@@ -556,6 +548,7 @@ impl<'store> MacOutbox<'store> {
             return Err(corrupt_row(request_id, "payload_json"));
         };
         let answered = AnsweredWrite {
+            delivery_outcome: None,
             request_id: request.clone(),
             target: outbox_content(request_id, &payload)?.target,
             content_digest: payload_content_digest(&payload)?,
@@ -744,6 +737,7 @@ async fn end_row(
     let reason = crate::outbox_deadline::end_reason(departure);
     let request = parse_request_id(request_id)?;
     let record = serde_json::to_string(&AnsweredWrite {
+        delivery_outcome: None,
         request_id: request.clone(),
         target: target.clone(),
         content_digest: payload_content_digest(&payload)?,
@@ -771,30 +765,37 @@ async fn end_row(
     })
 }
 
-/// What `payload_json` holds once a write ends (answered, refused or past its
-/// deadline): the target and the content digest central's request log uses,
-/// no text.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct AnsweredWrite {
-    request_id: RequestId,
-    target: OutboxWriteTarget,
-    /// Tells a resubmit of the same write from a different write under the same id.
-    content_digest: String,
-}
-
 /// `payload_json` by row state: the whole write until central answers, then
 /// the body-free answered record.
-enum StoredPayload {
+pub(crate) enum StoredPayload {
     Unanswered(QueuedWrite),
     Answered(AnsweredWrite),
 }
 
-struct DecodedRow {
-    state: OutboxItemState,
-    caller: Caller,
-    payload: StoredPayload,
-    status: RequestStatus,
+pub(crate) struct DecodedRow {
+    pub(crate) state: OutboxItemState,
+    pub(crate) caller: Caller,
+    pub(crate) payload: StoredPayload,
+    pub(crate) status: RequestStatus,
+}
+
+pub(crate) async fn read_decoded_outbox(
+    connection: &mut sqlx::SqliteConnection,
+    request: &RequestId,
+) -> Result<Option<DecodedRow>, OutboxStoreError> {
+    let request_id = request.as_str();
+    sqlx::query_as!(
+        OutboxRow,
+        r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
+                      flush_at_ms, outcome_json
+               FROM outbox_items WHERE request_id = ?"#,
+        request_id
+    )
+    .fetch_optional(connection)
+    .await?
+    .as_ref()
+    .map(decode_row)
+    .transpose()
 }
 
 fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
@@ -844,7 +845,7 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
                 .map_err(|_| corrupt("outcome_json"))?,
         ),
         (ended @ (OutboxItemState::NotSent | OutboxItemState::Unconfirmed), None) => {
-            RequestStatus::Cancelled {
+            RequestStatus::Ended {
                 reason: ended.end_reason().ok_or_else(|| corrupt("item_state"))?,
             }
         }
@@ -861,6 +862,11 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
             return Err(corrupt("outcome_json"));
         }
     };
+    if let StoredPayload::Answered(profile) = &payload
+        && !profile.matches_delivery_receipt(&status)
+    {
+        return Err(corrupt("payload_json.delivery_outcome"));
+    }
     Ok(DecodedRow {
         state,
         caller,
@@ -878,7 +884,7 @@ fn decode_owned_row(row: &OutboxRow, caller: &Caller) -> Result<DecodedRow, Outb
     Ok(stored)
 }
 
-fn outbox_content(
+pub(crate) fn outbox_content(
     request_id: &str,
     payload: &QueuedWrite,
 ) -> Result<OutboxWriteContent, OutboxStoreError> {

@@ -323,7 +323,7 @@ async fn a_timed_out_batch_is_replayed_and_its_late_reply_cannot_settle_the_repl
         let after_late_reply = custody
             .harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
         assert_eq!(
             after_late_reply,

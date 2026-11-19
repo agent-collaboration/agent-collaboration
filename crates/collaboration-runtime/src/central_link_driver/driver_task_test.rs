@@ -33,7 +33,7 @@ async fn a_post_flushes_on_its_mark_as_one_batch_and_its_answer_is_reported() {
     let status = loop {
         let status = harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
         if status != RequestStatus::Sent {
             break status;
@@ -198,7 +198,7 @@ async fn a_machine_revoked_answer_returns_the_write_unsent_and_the_next_mark_res
     let pending = harness.calls.pending_for(caller()).await.unwrap();
     let status = harness
         .calls
-        .request_status(caller(), id.parse().unwrap())
+        .request_status(caller(), status_query(&id))
         .await;
     assert!(matches!(
         &pending[..],
@@ -265,7 +265,7 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
     harness.calls.submit(caller(), thread_post(&fresh)).await;
     let before = harness
         .calls
-        .request_status(caller(), old.parse().unwrap())
+        .request_status(caller(), status_query(&old))
         .await;
 
     harness

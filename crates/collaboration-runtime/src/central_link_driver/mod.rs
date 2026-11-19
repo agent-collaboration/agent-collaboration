@@ -38,7 +38,7 @@ use runtime_primitives::SyncTime;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_model::{Caller, RequestId};
+use workspace_model::Caller;
 
 /// Where on a minute mark's ±3 s window this Router sends (owner, 2026-11-15:
 /// "jitter i was thinking +-3s"). Injected so tests and simulations decide it.
@@ -85,7 +85,7 @@ pub(crate) enum DriverCommand {
     },
     Status {
         caller: Caller,
-        request: RequestId,
+        query: central_link_protocol::RequestStatusQuery,
         reply: oneshot::Sender<RequestStatus>,
     },
     Pending {
@@ -135,7 +135,13 @@ impl RouterLinkCalls {
         let client = LinkClient::new(parts.machine_id.clone(), parts.clock.clone());
         let stop = stop.child_token();
         if let Some(inbox) = &parts.inbox {
-            inbox.start_handoff(parts.clock.clone(), tasks, stop.clone());
+            inbox.start_handoff(
+                parts.clock.clone(),
+                parts.store.clone(),
+                parts.outcomes.clone(),
+                tasks,
+                stop.clone(),
+            );
         }
         let driver = driver_task::LinkDriver::new(parts, client);
         tasks.spawn(async move {
@@ -237,7 +243,7 @@ impl LinkCalls for RouterLinkCalls {
     fn request_status(
         &self,
         caller: Caller,
-        request: RequestId,
+        query: central_link_protocol::RequestStatusQuery,
     ) -> LinkCallFuture<'_, RequestStatus> {
         Box::pin(async move {
             let (reply, answer) = oneshot::channel();
@@ -245,7 +251,7 @@ impl LinkCalls for RouterLinkCalls {
                 .commands
                 .send(DriverCommand::Status {
                     caller,
-                    request,
+                    query,
                     reply,
                 })
                 .await;

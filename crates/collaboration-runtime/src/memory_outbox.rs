@@ -40,6 +40,7 @@ struct Row {
     payload: Option<QueuedWrite>,
     target: OutboxWriteTarget,
     content_digest: String,
+    delivery_outcome: Option<central_link_client::SenderDeliveryOutcome>,
     flush_at: SyncTime,
     expires_at: i64,
     state: RowState,
@@ -56,7 +57,7 @@ impl Row {
             RowState::Sent | RowState::Resent => RequestStatus::Sent,
             RowState::Answered(reply) => RequestStatus::Answered(reply.clone()),
             RowState::Refused(reason) => RequestStatus::Refused(*reason),
-            RowState::Ended(reason) => RequestStatus::Cancelled { reason: *reason },
+            RowState::Ended(reason) => RequestStatus::Ended { reason: *reason },
         }
     }
 }
@@ -146,6 +147,7 @@ impl OutboxStorage for MemoryOutbox {
                     payload: Some(item.payload.clone()),
                     target,
                     content_digest: digest,
+                    delivery_outcome: None,
                     flush_at: item.flush_at,
                     expires_at,
                     state: RowState::InOutbox,
@@ -339,6 +341,59 @@ impl OutboxStorage for MemoryOutbox {
 
     fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>> {
         Box::pin(async move { self.end_overdue_waiting(now) })
+    }
+    fn record_sender_delivery<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        notice: &'call central_link_client::SenderDeliveryOutcome,
+        now: SyncTime,
+    ) -> OutboxFuture<'call, bool> {
+        Box::pin(async move {
+            let Some(row) = self
+                .rows
+                .get_mut(&notice.request_id)
+                .filter(|row| row.caller == *caller)
+            else {
+                return Ok(false);
+            };
+            if !matches!(row.target, OutboxWriteTarget::Session { .. }) {
+                return Err(OutboxStoreError::DeliveryOutcomeMismatch {
+                    request: notice.request_id.clone(),
+                });
+            }
+            let may_have_left = matches!(
+                row.state,
+                RowState::Sent
+                    | RowState::Resent
+                    | RowState::SentAnswerLost
+                    | RowState::Ended(OutboxCancellation::NotConfirmedWithin15Minutes)
+            );
+            let accepted = crate::outbox_delivery_outcome_store::confirmed_request(
+                &row.status(),
+                may_have_left,
+                notice,
+            )?;
+            match row.delivery_outcome.as_ref() {
+                Some(previous) if previous == notice => return Ok(true),
+                Some(previous) if previous.inbox_message_id == notice.inbox_message_id => {
+                    return Err(OutboxStoreError::DeliveryOutcomeMismatch {
+                        request: notice.request_id.clone(),
+                    });
+                }
+                Some(previous)
+                    if previous.outcome
+                        == workspace_model::central_mail::MessageOutcome::DeliveredAfterAll =>
+                {
+                    return Ok(false);
+                }
+                Some(_) | None => {}
+            }
+            row.delivery_outcome = Some(notice.clone());
+            row.state = RowState::Answered(accepted);
+            row.payload = None;
+            row.updated_at = now.unix_millis();
+            Ok(true)
+        })
     }
 
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {

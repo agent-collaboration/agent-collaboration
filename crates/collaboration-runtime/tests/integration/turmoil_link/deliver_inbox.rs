@@ -79,7 +79,7 @@ struct RouterFixture;
 impl CentralRecipientLookup for RouterFixture {
     fn answer<'call>(
         &'call self,
-        _: &'call workspace_ids::SessionRef,
+        _: &'call MessageRecord,
     ) -> TransportFuture<'call, Result<DeliveryAnswer, CentralRecipientUnavailable>> {
         Box::pin(std::future::ready(Ok(DeliveryAnswer::Accepted)))
     }
@@ -107,6 +107,12 @@ impl FlushJitter for RouterFixture {
 impl FlushOutcomeSink for RouterFixture {
     fn deliver(&self, _: FlushOutcomes) {}
     fn ended(&self, _: Vec<central_link_client::EndedWrite>) {}
+    fn delivery_outcome(
+        &self,
+        _: &workspace_model::Caller,
+        _: &central_link_client::SenderDeliveryOutcome,
+    ) {
+    }
 }
 
 #[expect(clippy::unwrap_used, reason = "the fixed fixture is a valid message")]

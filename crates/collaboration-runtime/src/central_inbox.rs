@@ -1,18 +1,17 @@
 //! The link acknowledges durable inbox custody. Local handoff has its own task.
 use crate::{
-    MachineLocalStore, MachineLocalStoreError,
+    MachineLocalStore, MachineLocalStoreError, OutboxStorage, OutboxStoreError,
     inbox_store::{InboxStore, InboxStoreError, PendingAck, RecordDelivery},
 };
-use central_link_client::next_mark_after;
+use central_link_client::{FlushOutcomeSink, SenderDeliveryOutcome, next_mark_after};
 use router_clock::RuntimeClock;
 use runtime_primitives::SyncTime;
 use std::{collections::BTreeMap, future::Future, path::Path, pin::Pin, sync::Arc};
 use tokio::sync::{Mutex, Notify};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_ids::SessionRef;
 use workspace_model::{
-    MessageId,
-    central_mail::{DeliveryAnswer, MessageRecord},
+    Caller, MessageId,
+    central_mail::{DeliveryAnswer, MessageBody, MessageRecord, MessageSender},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -26,7 +25,7 @@ pub struct CentralRecipientUnavailable;
 pub trait CentralRecipientLookup: Send + Sync {
     fn answer<'call>(
         &'call self,
-        target: &'call SessionRef,
+        message: &'call MessageRecord,
     ) -> Pin<
         Box<
             dyn Future<Output = Result<DeliveryAnswer, CentralRecipientUnavailable>> + Send + 'call,
@@ -72,6 +71,8 @@ impl CentralInbox {
     pub(super) fn start_handoff(
         &self,
         clock: Arc<dyn RuntimeClock>,
+        outbox: Arc<Mutex<dyn OutboxStorage>>,
+        outcomes: Arc<dyn FlushOutcomeSink>,
         tasks: &TaskTracker,
         stop: CancellationToken,
     ) {
@@ -79,6 +80,8 @@ impl CentralInbox {
             store: Arc::clone(&self.store),
             changed: Arc::clone(&self.changed),
             sink: self.handoff.clone(),
+            outbox,
+            outcomes,
             clock,
         };
         tasks.spawn(async move {
@@ -113,7 +116,7 @@ impl CentralInbox {
                 return;
             }
         }
-        let Ok(answer) = self.recipients.answer(&message.target).await else {
+        let Ok(answer) = self.recipients.answer(&message).await else {
             self.uncommitted.insert(message.message_id.clone(), message);
             return;
         };
@@ -192,6 +195,8 @@ struct LocalHandoff {
     store: Arc<Mutex<InboxStore>>,
     changed: Arc<Notify>,
     sink: Option<Arc<dyn CentralMessageHandoff>>,
+    outbox: Arc<Mutex<dyn OutboxStorage>>,
+    outcomes: Arc<dyn FlushOutcomeSink>,
     clock: Arc<dyn RuntimeClock>,
 }
 
@@ -218,11 +223,6 @@ impl LocalHandoff {
     }
 
     async fn drain(&self, now: SyncTime) -> Result<Option<SyncTime>, InboxStoreError> {
-        let Some(sink) = &self.sink else {
-            let mut store = self.store.lock().await;
-            store.prune_ended(now).await?;
-            return store.next_prune().await;
-        };
         let messages = {
             let mut store = self.store.lock().await;
             store.prune_ended(now).await?;
@@ -230,9 +230,37 @@ impl LocalHandoff {
         };
         let mut handoff_retry = None;
         for message in messages {
-            if sink.handoff(&message).await.is_err() {
-                handoff_retry = Some(next_mark_after(self.clock.now()));
-                continue;
+            match &message.body {
+                MessageBody::DeliveryOutcome {
+                    message_id,
+                    request_id,
+                    outcome,
+                } => {
+                    if message.sender == MessageSender::Central
+                        && let Err(error) = self
+                            .handoff_sender_outcome(
+                                &Caller::Session(message.target.clone()),
+                                &SenderDeliveryOutcome {
+                                    inbox_message_id: message.message_id.clone(),
+                                    message_id: message_id.clone(),
+                                    request_id: request_id.clone(),
+                                    outcome: *outcome,
+                                },
+                            )
+                            .await
+                    {
+                        tracing::warn!(%error, "inbox: sender outcome handoff unavailable");
+                        handoff_retry = Some(next_mark_after(self.clock.now()));
+                        continue;
+                    }
+                }
+                _ => {
+                    let Some(sink) = &self.sink else { continue };
+                    if sink.handoff(&message).await.is_err() {
+                        handoff_retry = Some(next_mark_after(self.clock.now()));
+                        continue;
+                    }
+                }
             }
             self.store
                 .lock()
@@ -242,5 +270,27 @@ impl LocalHandoff {
         }
         let prune = self.store.lock().await.next_prune().await?;
         Ok(handoff_retry.into_iter().chain(prune).min())
+    }
+
+    async fn handoff_sender_outcome(
+        &self,
+        caller: &Caller,
+        notice: &SenderDeliveryOutcome,
+    ) -> Result<(), OutboxStoreError> {
+        let stored = self
+            .outbox
+            .lock()
+            .await
+            .record_sender_delivery(caller, notice, self.clock.now())
+            .await;
+        match stored {
+            Ok(true) => self.outcomes.delivery_outcome(caller, notice),
+            Ok(false) => {}
+            Err(error @ OutboxStoreError::DeliveryOutcomeMismatch { .. }) => {
+                tracing::warn!(%error, "inbox: sender outcome conflicts with its local request");
+            }
+            Err(error) => return Err(error),
+        }
+        Ok(())
     }
 }

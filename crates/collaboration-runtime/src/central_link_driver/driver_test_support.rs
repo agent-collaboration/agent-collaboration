@@ -64,6 +64,13 @@ pub(crate) fn direct_message(request: &str) -> central_link_client::ToolSendMess
     .unwrap()
 }
 
+pub(crate) fn status_query(request: &str) -> central_link_protocol::RequestStatusQuery {
+    central_link_protocol::RequestStatusQuery {
+        request_id: request.parse().unwrap(),
+        scope: thread_post(request).request_scope(),
+    }
+}
+
 pub(crate) fn list_areas() -> RequestPayload {
     serde_json::from_value(json!({"kind": "workspace", "request": {
         "requestId": null, "workspaceId": uuid_v7(9000),
@@ -238,6 +245,8 @@ impl FlushJitter for NoJitter {
 pub(crate) struct RecordedOutcomes(
     pub(crate) StdMutex<Vec<FlushOutcomes>>,
     pub(crate) StdMutex<Vec<central_link_client::EndedWrite>>,
+    pub(crate) StdMutex<Vec<central_link_client::SenderDeliveryOutcome>>,
+    pub(crate) tokio::sync::Notify,
 );
 impl FlushOutcomeSink for RecordedOutcomes {
     fn deliver(&self, outcomes: FlushOutcomes) {
@@ -245,6 +254,10 @@ impl FlushOutcomeSink for RecordedOutcomes {
     }
     fn ended(&self, ended: Vec<central_link_client::EndedWrite>) {
         self.1.lock().unwrap().extend(ended);
+    }
+    fn delivery_outcome(&self, _: &Caller, outcome: &central_link_client::SenderDeliveryOutcome) {
+        self.2.lock().unwrap().push(outcome.clone());
+        self.3.notify_one();
     }
 }
 
@@ -285,7 +298,7 @@ impl Harness {
         store: Arc<Mutex<dyn OutboxStorage>>,
     ) -> Self {
         let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
-        Self::launch(root, clock, store, ready)
+        Self::launch(root, clock, store, ready, None)
     }
 
     /// Starts on a fresh store with the token source in `availability`.
@@ -299,7 +312,17 @@ impl Harness {
                 .await
                 .unwrap(),
         ));
-        Self::launch(root, clock, store, availability)
+        Self::launch(root, clock, store, availability, None)
+    }
+
+    pub(crate) fn start_with_inbox(
+        root: tempfile::TempDir,
+        clock: Arc<ManualClock>,
+        store: Arc<Mutex<dyn OutboxStorage>>,
+        inbox: CentralInbox,
+    ) -> Self {
+        let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
+        Self::launch(root, clock, store, ready, Some(inbox))
     }
 
     fn launch(
@@ -307,6 +330,7 @@ impl Harness {
         clock: Arc<ManualClock>,
         store: Arc<Mutex<dyn OutboxStorage>>,
         availability: TokenAvailability,
+        inbox: Option<CentralInbox>,
     ) -> Self {
         let (sender, connections) = mpsc::unbounded_channel();
         let outcomes = Arc::new(RecordedOutcomes::default());
@@ -315,7 +339,7 @@ impl Harness {
         let tasks = TaskTracker::new();
         let calls = RouterLinkCalls::start(
             CentralLinkParts {
-                inbox: None,
+                inbox,
                 machine_id: INSTALLATION.parse().unwrap(),
                 clock: clock.clone(),
                 store: store.clone(),
@@ -348,7 +372,7 @@ impl Harness {
         // A status read is a round trip through the driver's loop.
         let _ = self
             .calls
-            .request_status(caller(), uuid_v7(1).parse().unwrap())
+            .request_status(caller(), status_query(&uuid_v7(1)))
             .await;
         central
     }

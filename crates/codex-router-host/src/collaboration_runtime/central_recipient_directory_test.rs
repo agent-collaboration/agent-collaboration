@@ -99,8 +99,16 @@ async fn endpoint_free_admission_refuses_when_two_local_catalogs_match_the_same_
         lookup.resolve(&address).await.unwrap(),
         RecipientMatch::Ambiguous
     ));
+    let delivery: MessageRecord = serde_json::from_value(serde_json::json!({
+        "messageId": "019f0000-0000-7000-8000-00000000c302",
+        "target": address, "sender": {"kind": "central"},
+        "body": {"kind": "direct", "body": "fixture", "delivery": "auto", "replyTo": null},
+        "state": {"kind": "queued"}, "source": null,
+        "createdAt": "2030-01-01T00:00:00Z", "updatedAt": "2030-01-01T00:00:00Z"
+    }))
+    .unwrap();
     assert_eq!(
-        lookup.answer(&address).await.unwrap(),
+        lookup.answer(&delivery).await.unwrap(),
         DeliveryAnswer::Refused {
             reason: MessageRefusal::AmbiguousSession,
         }

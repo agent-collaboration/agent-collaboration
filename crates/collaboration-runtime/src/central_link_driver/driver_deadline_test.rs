@@ -60,6 +60,7 @@ async fn committed_then_lost_then_restarted_after(
         reopened(&database).await,
     );
     let mut central = first.connected().await;
+    let scope = payload.request_scope();
     match payload {
         QueuedWrite::Workspace(request) => {
             first
@@ -106,7 +107,13 @@ async fn committed_then_lost_then_restarted_after(
     }
     let status = second
         .calls
-        .request_status(caller(), id.parse().unwrap())
+        .request_status(
+            caller(),
+            central_link_protocol::RequestStatusQuery {
+                request_id: id.parse().unwrap(),
+                scope,
+            },
+        )
         .await;
     let ended = second.outcomes.1.lock().unwrap().clone();
     second.stop().await;
@@ -123,7 +130,7 @@ async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
         status,
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );
@@ -150,7 +157,7 @@ async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minute
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
         status,
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );
@@ -206,7 +213,7 @@ async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
     }
     let status = second
         .calls
-        .request_status(caller(), id.parse().unwrap())
+        .request_status(caller(), status_query(&id))
         .await;
     let ended = second.outcomes.1.lock().unwrap().clone();
     second.stop().await;
@@ -214,7 +221,7 @@ async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
     assert_eq!(received, 0, "an overdue write is never sent");
     assert_eq!(
         status,
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotSentWithin15Minutes
         }
     );
