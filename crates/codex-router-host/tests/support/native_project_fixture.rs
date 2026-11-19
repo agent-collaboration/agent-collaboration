@@ -26,10 +26,10 @@ impl ProjectRegistration for UnsettledRegistration {
     }
 }
 
-pub fn registry(directory: &Path) -> io::Result<Arc<ProjectStoreRegistry>> {
+pub async fn registry(directory: &Path) -> io::Result<Arc<ProjectStoreRegistry>> {
     Ok(Arc::new(ProjectStoreRegistry::new(
         directory,
-        Some(collaboration_runtime::load_installation_peer(directory)?),
+        Some(crate::machine_identity_fixture::board_peer(directory).await?),
         Arc::new(SystemClock),
         message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
             .map_err(std::io::Error::other)?,

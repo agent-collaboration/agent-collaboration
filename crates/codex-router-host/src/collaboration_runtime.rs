@@ -143,7 +143,7 @@ pub struct CollaborationRuntime {
     /// `nativeSchemaDigest`.
     native_digest: Option<SchemaDigest>,
     payload_cache: crate::native_schema_cache::NativeSchemaCache,
-    service_id: workspace_ids::MachineId,
+    machine_id: workspace_ids::MachineId,
     installation_peer: fleet_sync_protocol::PeerId,
     service_epoch: UuidIdentity,
     publication: BackendPublication,
@@ -277,7 +277,7 @@ impl CollaborationRuntime {
 
     #[must_use]
     pub fn service_id(&self) -> &workspace_ids::MachineId {
-        &self.service_id
+        &self.machine_id
     }
     #[must_use]
     pub fn installation_peer(&self) -> fleet_sync_protocol::PeerId {

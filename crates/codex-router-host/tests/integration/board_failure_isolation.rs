@@ -95,7 +95,7 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: Some(native_project_fixture::offline_inputs(
             offline_endpoint.local_addr()?,
-            collaboration_runtime::load_installation_peer(root)?,
+            crate::machine_identity_fixture::board_peer(root).await?,
         )?),
         directory: root.to_path_buf(),
         codex_home: root.to_path_buf(),
@@ -170,7 +170,7 @@ async fn subscription_restart_contains_project_failure(
     identity_file.sync_all()?;
     drop(identity_file);
     assert_eq!(
-        collaboration_runtime::load_installation_peer(fixture._directory.path())?,
+        crate::machine_identity_fixture::board_peer(fixture._directory.path()).await?,
         fixture_peer
     );
     let (healthy, _) = fixture.project().await?;
@@ -290,7 +290,7 @@ async fn subscription_restart_contains_project_failure(
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: Some(native_project_fixture::offline_inputs(
             offline_endpoint.local_addr()?,
-            collaboration_runtime::load_installation_peer(&root)?,
+            crate::machine_identity_fixture::board_peer(&root).await?,
         )?),
         directory: root.clone(),
         codex_home: root.clone(),
@@ -389,7 +389,7 @@ async fn subscription_restart_contains_project_failure(
     // through an owning reopen after Host shutdown, preserving the public
     // isolation and healthy-delivery assertions made above while it was live.
     if let Some(reader) = direct_reader {
-        let registry = native_project_fixture::registry(&root)?;
+        let registry = native_project_fixture::registry(&root).await?;
         let direct = registry
             .existing_project(&broken)
             .await?

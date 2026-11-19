@@ -25,7 +25,9 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
     let identity = collaboration_contracts::MachineIdentity::new(
-        collaboration_runtime::load_service_identity(root.path()).expect("Host service identity"),
+        crate::machine_identity_fixture::machine_id(root.path())
+            .await
+            .expect("Host service identity"),
         None,
     )
     .expect("Host machine label");
@@ -42,7 +44,9 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
                 .try_into()
                 .expect("origin label"),
         },
-        collaboration_runtime::load_installation_peer(root.path()).expect("installation peer"),
+        crate::machine_identity_fixture::board_peer(root.path())
+            .await
+            .expect("installation peer"),
     )
     .await
     .expect("real central enrollment");

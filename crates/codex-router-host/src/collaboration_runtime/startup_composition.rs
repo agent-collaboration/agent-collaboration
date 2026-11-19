@@ -927,7 +927,7 @@ impl CollaborationRuntime {
             directory: inputs.directory,
             native_digest,
             payload_cache: crate::native_schema_cache::NativeSchemaCache::default(),
-            service_id: machine_id,
+            machine_id,
             service_epoch,
             publication,
             shutdown,
@@ -960,7 +960,7 @@ impl CollaborationRuntime {
             match prepared
                 .start(
                     exposure_backend,
-                    &runtime.service_id,
+                    &runtime.machine_id,
                     &runtime.service_epoch,
                 )
                 .await

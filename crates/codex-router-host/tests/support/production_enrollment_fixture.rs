@@ -25,7 +25,7 @@ impl ProductionEnrollmentFixture {
     ) -> TestResult<Self> {
         let root = fixture_root()?;
         let directory = root.path().join("collaboration");
-        let peer = collaboration_runtime::load_installation_peer(&directory)?;
+        let peer = crate::machine_identity_fixture::board_peer(&directory).await?;
         let central = TestCentral::start_with_peer(
             &root.path().join("central"),
             &fixture_origin(&directory)?,

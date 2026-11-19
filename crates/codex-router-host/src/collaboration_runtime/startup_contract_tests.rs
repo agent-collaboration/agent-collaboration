@@ -98,7 +98,14 @@ async fn start_host_with_providers(
         std::fs::Permissions::from_mode(0o700),
     )
     .expect("private peer registry");
-    let service = collaboration_runtime::load_service_identity(directory.path()).expect("service");
+    let service = collaboration_runtime::load_or_create_machine_id(
+        directory.path(),
+        runtime_primitives::SyncTime::from_unix_millis(0),
+    )
+    .await
+    .expect("fixture machine identity");
+    let legacy_peer = fleet_sync_protocol::PeerId::try_from(service.as_str().to_owned())
+        .expect("fixture board peer");
     let machine = collaboration_contracts::MachineIdentity::new(service.clone(), None)
         .expect("machine identity");
     let central = if enrolled {
@@ -114,7 +121,7 @@ async fn start_host_with_providers(
                         .try_into()
                         .expect("label"),
                 },
-                collaboration_runtime::load_installation_peer(directory.path()).expect("peer"),
+                legacy_peer,
             )
             .await
             .expect("enrolled central"),

@@ -67,7 +67,7 @@ impl CollaborationRuntime {
         let store = std::sync::Arc::clone(journal);
         let scope = collaboration_protocol::ObservationScope {
             endpoint: EndpointRef {
-                service_id: self.service_id.clone(),
+                service_id: self.machine_id.clone(),
                 endpoint_id: EndpointId::try_from("codex-local".to_owned())
                     .map_err(io::Error::other)?,
             },
@@ -211,7 +211,7 @@ impl CollaborationRuntime {
             source: collaboration_protocol::ObservationSource::HostLifecycle,
             scope: collaboration_protocol::ObservationScope {
                 endpoint: EndpointRef {
-                    service_id: self.service_id.clone(),
+                    service_id: self.machine_id.clone(),
                     endpoint_id: EndpointId::try_from("codex-local".to_owned())
                         .map_err(io::Error::other)?,
                 },
