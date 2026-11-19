@@ -1915,7 +1915,6 @@ name = "collaboration-contracts"
 version = "0.1.156"
 dependencies = [
  "agent-automation",
- "automation-storage",
  "board-sync-protocol",
  "collaboration-mail-protocol",
  "collaboration-protocol",
