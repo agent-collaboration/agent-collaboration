@@ -27,9 +27,6 @@ mod delivery_matrix_support {
 mod held_cells;
 #[path = "../delivery_matrix/held_subscription_producer.rs"]
 mod held_subscription_producer;
-use crate::native_push_correlation_fixture as native_push_correlation;
-#[path = "../delivery_matrix/native_push_receipt.rs"]
-mod native_push_receipt;
 #[path = "../delivery_matrix/owned_resource_cleanup.rs"]
 mod owned_resource_cleanup;
 #[path = "../delivery_matrix/owned_resources.rs"]
@@ -56,20 +53,18 @@ mod proof_context {
         }
     }
 }
-use crate::public_push_receipt_fixture as public_push_receipt;
 #[path = "../delivery_matrix/settled_creation.rs"]
 mod settled_creation;
 use crate::subscription_notice_observer as subscription;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use collaboration_protocol::{
-    FireReceipt, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft,
-    PushRecordListParams, PushRecordShowParams, RouterOriginRef,
+    PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft, PushRecordListParams,
+    PushRecordShowParams,
 };
 use interaction_storage::InteractionStore;
 #[path = "../delivery_matrix/push_matrix_driver.rs"]
 mod push_matrix_driver;
-use native_push_receipt::record_push_input_correlation;
 use proof_context::{ProofContext, ProofResult};
 use push_matrix_driver::*;
 use serde_json::json;
@@ -143,7 +138,7 @@ async fn exercise_push_delivery_matrix(
     proof.record(
         "pushDeliveryMatrixRun",
         json!({"runId":uuid::Uuid::now_v7().to_string(),
-        "cells":["S1","S1-long","S2","S3","S4","S5","S6","S7","S8","S9","S10"]}),
+        "cells":["S1","S1-long","S2","S3","S4","S5","S7","S8","S9","S10"]}),
     )?;
     *peer_owner = Some(peer_fixture::start(&proof).await?);
     let peer = peer_owner
@@ -367,7 +362,7 @@ async fn exercise_push_delivery_matrix(
 
     proof.record(
         "pushDeliveryMatrix",
-        json!({"coveredCells":covered_cells,"separateModelCells":["S3","S5","S6"]}),
+        json!({"coveredCells":covered_cells,"separateModelCells":["S3","S5"]}),
     )?;
     config_guard.verify()?;
     Ok(())
@@ -482,15 +477,12 @@ async fn exercise_held_codex_recipients(
     proof.record(
         "pushDeliveryMatrixRun",
         json!({
-            "runId":uuid::Uuid::now_v7().to_string(),"cells":["S3","S5","S6"],
+            "runId":uuid::Uuid::now_v7().to_string(),"cells":["S3","S5"],
             "route":"documentedAcceptanceHost",
         }),
     )?;
     let unloaded_targets = held_cells::prepare_unloaded_targets(&mut proof).await?;
     let sender = proof.start_thread("Held matrix sender").await?;
-    let machine_label = machine_label(&proof)?;
-    let interactions =
-        InteractionStore::open(proof.service_directory.join("interaction.sqlite")).await?;
     let mut covered_cells = Vec::new();
     // S3: a DM sent to an unloaded Codex conversation is stored as held and
     // arrives as the same line after an explicit conversation load.
@@ -509,112 +501,6 @@ async fn exercise_held_codex_recipients(
     .await?;
     config_guard.verify()?;
     covered_cells.push("S5 held two-thread subscription batch delivered after Codex load");
-
-    // S6: an unloaded Codex session resumes for a wake; a scheduled run then targets
-    // a separate existing native session. Both inputs are matched back to their PushId.
-    let wake_target = unloaded_targets.wake;
-    let wake_marker = matrix_marker("wake");
-    let wake_receipt =
-        cli_wake_send(&proof, &sender, &wake_target, &wake_marker, resources).await?;
-    let fire: FireReceipt = serde_json::from_value(
-        wake_receipt
-            .pointer("/result/record/firstFire")
-            .cloned()
-            .ok_or("wake receipt omitted firstFire")?,
-    )?;
-    let wake_origin = RouterOriginRef::Wake {
-        wakeup_id: fire.wakeup_id,
-        occurrence_id: fire.occurrence_id,
-    };
-    let wake_record = interactions
-        .get_push_record_by_origin_reference(&wake_origin)
-        .await?
-        .ok_or("fired wake has no stored push record")?;
-    let wake_show = proof
-        .client
-        .router_show(PushRecordShowParams {
-            caller: wake_target.clone(),
-            reference: wake_record.push_id.as_str().to_owned(),
-        })
-        .await?;
-    let collaboration_client::protocol::MessageShowResult::Local(wake_show) = wake_show else {
-        return Err("native proof expected a stored local push".into());
-    };
-    let wake_expected = expected_push_line(&wake_show, &machine_label)?;
-    let wake_deadline = tokio::time::Instant::now() + OBSERVATION_TIMEOUT;
-    let wake_item = wait_for_codex_input(
-        &mut proof,
-        &wake_target,
-        &wake_marker,
-        wake_deadline.saturating_duration_since(tokio::time::Instant::now()),
-    )
-    .await?;
-    assert_exact_notice_line(&user_message_text(&wake_item)?, &wake_expected)?;
-    let wake_correlation = record_push_input_correlation(
-        &mut proof,
-        "wake",
-        &wake_show.record,
-        &wake_item,
-        wake_deadline,
-    )
-    .await?;
-
-    let schedule_target = proof
-        .start_thread("S6 scheduled existing-session recipient")
-        .await?;
-    let schedule_marker = matrix_marker("schedule-run");
-    let schedule_id =
-        create_existing_session_schedule(&mut proof, &schedule_target, &schedule_marker, resources)
-            .await?;
-    let (schedule_origin, schedule_record) =
-        wait_for_schedule_push(&mut proof, &interactions, schedule_id, OBSERVATION_TIMEOUT).await?;
-    let schedule_show = proof
-        .client
-        .router_show(PushRecordShowParams {
-            caller: schedule_target.clone(),
-            reference: schedule_record.push_id.as_str().to_owned(),
-        })
-        .await?;
-    let collaboration_client::protocol::MessageShowResult::Local(schedule_show) = schedule_show
-    else {
-        return Err("native proof expected a stored local push".into());
-    };
-    let schedule_expected = expected_push_line(&schedule_show, &machine_label)?;
-    let schedule_deadline = tokio::time::Instant::now() + OBSERVATION_TIMEOUT;
-    let schedule_item = wait_for_codex_input(
-        &mut proof,
-        &schedule_target,
-        &schedule_marker,
-        schedule_deadline.saturating_duration_since(tokio::time::Instant::now()),
-    )
-    .await?;
-    assert_exact_notice_line(&user_message_text(&schedule_item)?, &schedule_expected)?;
-    let schedule_correlation = record_push_input_correlation(
-        &mut proof,
-        "schedule-run",
-        &schedule_show.record,
-        &schedule_item,
-        schedule_deadline,
-    )
-    .await?;
-    proof.record(
-        "pushDeliveryCorrelation",
-        json!({
-            "wake":wake_correlation,
-            "scheduleRun":schedule_correlation,
-            "scheduleOrigin":schedule_origin,
-        }),
-    )?;
-    record_passed_matrix_cell(
-        &proof,
-        config_guard,
-        "S6",
-        &[
-            user_message_text(&wake_item)?,
-            user_message_text(&schedule_item)?,
-        ],
-    )?;
-    covered_cells.push("S6 wake and existing-session schedule run");
 
     config_guard.verify()?;
     proof.record(

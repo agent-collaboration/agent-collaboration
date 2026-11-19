@@ -20,7 +20,7 @@ board request/result types through `collaboration_client::board`. SDK consumers
 do not need to invoke the CLI or depend on its argument types.
 
 Queue delivery falls back to steer when the selected target does not support
-queueing. This applies to messages and timed wakes for every target. The receipt
+queueing. This applies to messages for every target. The receipt
 reports the actual delivery outcome; an uncertain submission is never replayed.
 
 Current design source of truth:
@@ -199,8 +199,7 @@ new restart request. Subsequent compatible upgrades use `host restart`.
 See [Host restart validation](docs/testing/host-restart.md) for isolation and
 replacement proof.
 
-For discovery, agent-declared messages, queue/steer, timed wake-ups and scheduled
-work, see the [agent CLI guide](docs/agent-guidance/agent-collaboration.md).
+For discovery, agent-declared messages and queue/steer, see the [agent CLI guide](docs/agent-guidance/agent-collaboration.md).
 `agent-collaboration conversation create|prompt|load|cancel` uses the target
 endpoint's client, including Codex, Claude, and Cursor. Use `conversation
 operation show|wait|reconcile` for inspectable operations. `message send` can
@@ -209,8 +208,8 @@ also reach a live Claude Code session through its peer socket; its
 That guide also documents registering the running Router Host's manifest-advertised
 Streamable HTTP MCP endpoint with Codex. Use the selected current `service.json`;
 do not guess a port or expose the unauthenticated endpoint beyond loopback.
-Automation uses a separate `automation.sqlite` database and the same Rust SDK
-and CLI. [Debug testing instructions](docs/testing/automation-debug-testing.md)
+Local wakes and schedules are not available in this build; they return with central
+wakes and schedules. [Debug testing instructions](docs/testing/automation-debug-testing.md)
 cover the opt-in Luna acceptance runner and its isolated Host. Shared message boards use the same client and service; see the
 [agent collaboration skill](agent-skills/agent-collaboration/SKILL.md). Other language
 SDK implementations and remote transport follow separately.

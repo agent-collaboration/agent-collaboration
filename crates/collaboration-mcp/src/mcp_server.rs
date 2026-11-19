@@ -63,10 +63,7 @@ use application_tool_results::{
     operation_failure_result, rejection_failure, success_result, typed_failure_result,
 };
 use catalog_descriptions::operation_description;
-use catalog_tools::{
-    EmptyToolInput, register_automation_inspection_tools, register_automation_mutation_tools,
-    register_board_tools,
-};
+use catalog_tools::{EmptyToolInput, register_board_tools};
 use conversation_operation_tools::register_conversation_operation_tools;
 use conversation_tool_requests::{
     ConversationCreatePromptToolRequest, ConversationCreateToolRequest,
@@ -83,7 +80,7 @@ pub(crate) use result_converters::structured_tool_error;
 use result_converters::{
     failure, failure_naming, message_receipt_result, message_reply_receipt_result,
     operation_error_result, structured_argument_refusal, structured_result,
-    thread_wait_outcome_unknown, validation_failure, wake_wait_failure,
+    thread_wait_outcome_unknown, validation_failure,
 };
 use schema_binding::bind_native_schema_refs;
 use tool_output_contract::{McpToolError, McpToolOutput};
@@ -102,8 +99,6 @@ impl ToolSurface {
             + CollaborationMcpServer::wait_tool_router()
             + CollaborationMcpServer::carrier_tool_router();
         register_board_tools(&mut router);
-        register_automation_inspection_tools(&mut router);
-        register_automation_mutation_tools(&mut router);
         register_conversation_operation_tools(&mut router);
         let tools = resolve_tool_schemas(
             &router,

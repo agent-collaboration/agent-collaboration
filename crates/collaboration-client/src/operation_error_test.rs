@@ -18,29 +18,6 @@ fn decided_mail_refusals_have_no_effect_after_submission() {
 }
 
 #[test]
-fn every_decided_wake_refusal_has_no_effect_after_submission() {
-    for reason in [
-        json!({"kind":"wakeExists","wakeup":"019f0000-0000-7000-8000-000000000101","creator":{"kind":"owner"}}),
-        json!({"kind":"tooFarAhead","max":86400}),
-        json!({"kind":"intervalTooShort","min":300}),
-        json!({"kind":"lifetimeTooLong","max":86400}),
-        json!({"kind":"expiryRequired"}),
-    ] {
-        let mut data = reason.clone();
-        let fields = data.as_object_mut().expect("literal object");
-        fields.extend(json!({"stage":"admission","message":"Decided refusal","operationId":null,"wakeupId":null,"effects":{"kind":"local","mutation":"none"},"nextAction":"correctRequest"}).as_object().expect("literal object").clone());
-        let failure = operation_failure_from_client_error(
-            ClientError::Rejected {
-                code: -32050,
-                data: Some(data),
-            },
-            OperationEffect::Unknown,
-        );
-        assert_eq!(failure.effect, OperationEffect::None, "{reason}");
-    }
-}
-
-#[test]
 fn uncertain_transport_and_unrecognized_refusals_keep_unknown_effect() {
     for source in [
         ClientError::Timeout,

@@ -4,7 +4,6 @@ use super::{
     delivery_matrix_support::ConfigHashGuard,
     matrix_marker, mcp_send,
     proof_context::{ProofContext, ProofResult},
-    schedule_send, wake_send,
 };
 use collaboration_client::{
     ConversationActor, ConversationClient, ConversationCreateInput, ConversationOperationResult,
@@ -44,30 +43,6 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
             &marker,
         )?;
     }
-
-    let marker = matrix_marker("wakeSend", "providerAcp");
-    wake_send(&proof, &sender, &target, &marker).await?;
-    observe_single_prompt(&receipt_path, &target, &marker, Duration::from_secs(90)).await?;
-    record_cell(
-        &mut proof,
-        &mut cells,
-        &mut markers,
-        config_guard,
-        "wakeSend",
-        &marker,
-    )?;
-
-    let marker = matrix_marker("scheduledRun", "providerAcp");
-    schedule_send(&mut proof, &target, &marker).await?;
-    observe_single_prompt(&receipt_path, &target, &marker, Duration::from_secs(150)).await?;
-    record_cell(
-        &mut proof,
-        &mut cells,
-        &mut markers,
-        config_guard,
-        "scheduledRun",
-        &marker,
-    )?;
 
     let marker = matrix_marker("boardSubscription", "providerAcp");
     board_subscription_push_targets(&mut proof, &sender, &[(&target, &marker)]).await?;

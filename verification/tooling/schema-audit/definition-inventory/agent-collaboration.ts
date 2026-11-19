@@ -49,30 +49,6 @@ export const rows: InventoryRow[] = [
     fixedBy: "D2",
   },
   {
-    file: "crates/agent-collaboration/src/automation_collection_commands.rs",
-    line: 236,
-    owner: "router-vocabulary",
-    kind: "hand-json",
-    defines:
-      "inspection error envelopes {kind:error,error:AutomationInspectionFailure|WakeFailure} (L236, L237) and the hand body {kind:unsupportedCapability|unavailable,stage:inspection,message,nextAction:retryLater} chosen from ClientError (L239-L245)",
-    usedBy: [{ crate: "agent-collaboration" }],
-    duplicateGroup: "cli-error-envelopes",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/agent-collaboration/src/automation_configuration_commands.rs",
-    line: 153,
-    owner: "router-vocabulary",
-    kind: "hand-json",
-    defines:
-      "configuration result {operationId,result} inside result_envelope (L153), error envelope {kind:error,operationId,error:ConfigurationFailure} (L163) and the hand body {kind:outcomeUnknown|unavailable,message,nextAction} with no stage (L170)",
-    usedBy: [{ crate: "agent-collaboration" }],
-    duplicateGroup: "cli-error-envelopes",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
     file: "crates/agent-collaboration/src/board_commands/board_entity_execution.rs",
     line: 17,
     owner: "router-vocabulary",

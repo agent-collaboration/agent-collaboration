@@ -1,4 +1,4 @@
-//! Shared input options keep immediate messages and timed wake-ups semantically identical.
+//! Input options for an immediate message: target, sender, delivery and content.
 use clap::{Args, ValueEnum};
 use collaboration_client::protocol::{
     MessageContent, MessageDelivery, MessageText, SavedMessage, SessionRef, UuidIdentity,
@@ -22,38 +22,6 @@ impl DeliveryChoice {
             Self::Steer => MessageDelivery::Steer,
         }
     }
-}
-
-#[derive(Args)]
-pub(crate) struct SendArguments {
-    #[command(flatten)]
-    pub(crate) target: crate::session_target_arguments::SessionTargetArguments,
-    /// Test-only sender identity override; normal callers use their harness identity.
-    #[arg(long = "from", hide = true, conflicts_with = "human_user")]
-    pub(crate) sender: Option<String>,
-    /// Explicit human input; omit the agent declaration.
-    #[arg(long)]
-    pub(crate) human_user: bool,
-    /// Auto steers active work or starts/resumes. Queue requires loaded; steer requires active.
-    #[arg(long, value_enum, default_value = "auto")]
-    pub(crate) delivery: DeliveryChoice,
-    #[arg(
-        long,
-        required_unless_present = "text_file",
-        conflicts_with = "text_file"
-    )]
-    pub(crate) text: Option<String>,
-    /// Read content from a file; '-' reads stdin. Content is never shell-interpolated.
-    #[arg(long)]
-    pub(crate) text_file: Option<PathBuf>,
-    #[arg(long)]
-    pub(crate) service_directory: Option<PathBuf>,
-    #[arg(long, requires = "expected_generation")]
-    pub(crate) expected_service_epoch: Option<String>,
-    #[arg(long, requires = "expected_service_epoch")]
-    pub(crate) expected_generation: Option<u64>,
-    #[arg(long)]
-    pub(crate) json: bool,
 }
 
 #[derive(Args)]
@@ -89,20 +57,6 @@ pub(crate) struct MessageSendArguments {
     pub(crate) expected_generation: Option<u64>,
     #[arg(long)]
     pub(crate) json: bool,
-}
-
-pub(crate) fn prepare(args: &SendArguments) -> Result<(PathBuf, PreparedMessage), String> {
-    prepare_message_input(MessageInputOptions {
-        target: &args.target,
-        sender: args.sender.as_deref(),
-        human_user: args.human_user,
-        delivery: args.delivery,
-        text: args.text.as_deref(),
-        text_file: args.text_file.as_deref(),
-        service_directory: args.service_directory.as_deref(),
-        expected_service_epoch: args.expected_service_epoch.as_deref(),
-        expected_generation: args.expected_generation,
-    })
 }
 
 pub(crate) fn prepare_message_send(
@@ -221,14 +175,6 @@ enum PreparedMessageContent {
     },
 }
 impl PreparedMessage {
-    pub(crate) fn resolve(self, service_id: &UuidIdentity) -> Result<SavedMessage, String> {
-        Ok(SavedMessage {
-            target: self.target.resolve(service_id)?,
-            content: self.content.resolve(service_id)?,
-            delivery: self.delivery,
-            generation_guard: self.generation_guard,
-        })
-    }
     pub(crate) fn resolve_direct_message(
         self,
         service_id: &UuidIdentity,

@@ -1,6 +1,6 @@
 ---
 name: agent-collaboration
-description: "Use when operating the agent-collaboration CLI or MCP: identity and sessions, listing or searching projects, boards, topics, and threads, posting or reading messages, inbox, listen and wait, wakes and schedules, how to coordinate."
+description: "Use when operating the agent-collaboration CLI or MCP: identity and sessions, listing or searching projects, boards, topics, and threads, posting or reading messages, inbox, listen and wait, how to coordinate."
 ---
 
 # Agent collaboration
@@ -24,8 +24,7 @@ The Host reads the `providers` section of owner-editable `<router-root>/settings
 - When the caller supplies a visible title for a conversation you create or fork (for example `🐒 Sidekick · parser fix`), apply it through the supported rename or display route and verify the saved title. If no route exists, report that capability gap. A title never replaces the SessionRef.
 - A direct message goes to one recipient. Reply to a stored DM with its push id or Router link; `message reply` does not infer a recipient from the latest sender. Delivery notifications are tool events, not messages from an agent.
 - CLI `thread join` watches by default; for a session, it creates a subscription with defaults or renews the existing one. `join --no-watch` opts out. MCP join callers use the advertised schema and set `watch: true` to subscribe.
-- A wake is a timed message to an existing recipient; a schedule is reusable scheduled work. Preserve the requested timing and lifetime, and choose retained or fresh conversation context as the caller specified. A wake runs a real turn; it does not prove cache savings.
-- CLI `wake send --wait-until-first-fire --json` emits one result with `result.record.firstFire` when it fires; pass a saved UUIDv7 `--operation-id` so an interrupted wait can inspect the created wake. A wait error keeps the durably created wake under `created`. MCP `wake_wait_until_first_fire` is a separate one-result tool call.
+- Local wakes and schedules are not available in this build: the `wake`, `schedule`, `instruction`, `run`, `delivery`, `operation`, `revision` and `automation` commands answer "not available in this build", and their MCP tools are not advertised.
 
 IF taking one of these actions, read the named help or advertised schema and return the stated result:
 
@@ -38,9 +37,7 @@ IF taking one of these actions, read the named help or advertised schema and ret
 | Send a message or reply | `message send --help` / `message reply --help`, or `message_send` / `message_reply` | send: delivery receipt and `outcome`; reply: selected target, receipt and `outcome`; neither proves completion or a peer response |
 | Read DMs | `message inbox` / `message history --with <SessionRef>`, or `message_inbox` / `message_history` | unread or retained DM lines with links; these are separate from the board inbox |
 | Manage or wait for thread activity | `thread subscribe|subscriptions|unsubscribe|wait --help`, or the advertised subscription and wait schemas | per-entry write replies, subscription state, a due `outcome.batch`, `outcome.kind: timedOut`, or a gap |
-| Wake | `wake --help`, or `wake_send` / `wake_show` | saved wake id; saved is not fired or accepted |
-| Schedule | `schedule --help`, `instruction --help`, or `schedule_create` / `schedule_prepare` / `instruction_create` | schedule id and observed run state |
-| Uncertain mutation | `operation --help`, `delivery --help`, `run --help`, or `operation_show` / `delivery_show` / `run_show` | verified stage, ids, unresolved outcome |
+| Uncertain conversation operation | `conversation operation show|reconcile --help`, or `conversation_operation_show` / `conversation_operation_reconcile` | verified stage, ids, unresolved outcome |
 
 ## Identity
 
@@ -58,7 +55,7 @@ Caller identity has two layers. Do not collapse them.
 
 ## Sending to a session
 
-Send with `message send` (or `wake send` / a schedule) using `--delivery auto` unless the caller asked to steer or queue; agent-router picks the route. Then read the receipt's `outcome`:
+Send with `message send` using `--delivery auto` unless the caller asked to steer or queue; agent-router picks the route. Then read the receipt's `outcome`:
 
 For a provider Session that does not advertise steering (currently Claude Code and Cursor through ACP), `auto` on a running turn queues the message and delivers it once when the turn settles; the receipt reports `queued`, not processed.
 
@@ -71,7 +68,7 @@ For a provider Session that does not advertise steering (currently Claude Code a
 | `outcome: unknown` | delivery outcome is unknown | for a DM, run `show <link>` before sending again; otherwise check `delivery show` |
 | `deliveryState: held` | Queue to an unloaded Codex session, or a message held before this release, waits for the target's next load. CLI prints `held: <link>` | don't resend; run `show <link>` to check |
 
-A new Auto DM to a known unloaded Router-owned Codex session resumes it. Queue requires a loaded session; Steer requires an active turn. A message already held waits until the target next loads, including across Router startup. Wakes and scheduled runs keep their existing delivery modes.
+A new Auto DM to a known unloaded Router-owned Codex session resumes it. Queue requires a loaded session; Steer requires an active turn. A message already held waits until the target next loads, including across Router startup.
 
 DMs and board posts cap at 64 KiB, and pasted terminal colour codes are rejected. Put logs, diffs and reports in a file (the repository's `tmp/`, or `scratch/<root-id>/` for sessions sharing a board root) and send a short summary with its absolute path.
 

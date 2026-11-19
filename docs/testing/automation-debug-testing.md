@@ -1,6 +1,6 @@
-# Testing scheduled automation locally
+# Testing with the opt-in debug Host locally
 
-Use the existing `codex-router-debug` profile and fresh test threads. The opt-in acceptance Host selects `gpt-5.6-luna` in memory, keeps normal Codex home, and puts its sockets, automation database and workspace in a new private directory under `/tmp`. It disables home hooks only in its owned test app-server so they cannot inject extra work. It uses the existing debug router credentials. It never edits the home profile or replaces the production router.
+Use the existing `codex-router-debug` profile and fresh test threads. The opt-in acceptance Host selects `gpt-5.6-luna` in memory, keeps normal Codex home, and puts its sockets, Router state and workspace in a new private directory under `/tmp`. It disables home hooks only in its owned test app-server so they cannot inject extra work. It uses the existing debug router credentials. It never edits the home profile or replaces the production router.
 
 ## Build once
 
@@ -48,18 +48,7 @@ The Host should report `OwnedReachable` and `NativeReady`; endpoint discovery mu
 
 The outer test process needs permission to use the debug Unix sockets and normal Codex state. The Luna threads themselves use their own `workspace-write` sandbox and `approvalPolicy=never`; the acceptance test does not remove that sandbox.
 
-## Run the agent-to-agent acceptance test
-
-```sh
-CODEX_AUTOMATION_PROOF_ROOT="$proof_root" \
-  cargo test -p agent-collaboration --test debug_luna_acceptance \
-  luna_agents_arrange_wake_and_reply_through_the_real_cli \
-  -- --ignored --exact --nocapture
-```
-
-This test creates two new Luna threads. A calls the actual CLI to arrange a timed message to B. B calls `message send` to reply explicitly. The test checks the durable firing, native delivery acceptance, B's successful CLI receipt, the incoming message in A's thread, and A's acknowledgement. An agent's completion text alone is insufficient.
-
-A separate opt-in OS test verifies the socket permission boundary without a
+An opt-in OS test verifies the socket permission boundary without a
 model or app-server:
 
 ```sh
@@ -104,7 +93,7 @@ env HOME="$proof_root/home" CODEX_HOME="$proof_root/codex-home" \
   -- --ignored --exact --nocapture
 ```
 
-The suite exercises CLI and MCP messages, fired wakes, scheduled runs, Board Thread Listen pushes, and approval notices. Its Codex ACP load-route cell runs CLI `conversation create` then `conversation prompt --to` on separate connections with provider routes present; it rejects any failure before prompt dispatch. The isolated home has no model authentication, so that cell proves load routing, not prompt completion. The approval requester is the scripted Cursor ACP fixture; native Codex approvals under the owner's `auto_review` reviewer do not reach Router. It counts a Codex message cell only after the exact input appears in `thread/read(includeTurns=true)`, and a Claude peer cell only after its fixture socket reads the user frame. Approval cells also require a pending broker record before the approver decides. The suite compares owner `~/.codex/config.toml` and `~/.claude/settings.json` hashes at entry, after each cell, and at exit; a change fails the run and must be reported without restoration. A five-minute Board Listen debounce makes the complete run longer than a typical smoke test.
+The suite exercises CLI and MCP messages, Board Thread Listen pushes, and approval notices. Its Codex ACP load-route cell runs CLI `conversation create` then `conversation prompt --to` on separate connections with provider routes present; it rejects any failure before prompt dispatch. The isolated home has no model authentication, so that cell proves load routing, not prompt completion. The approval requester is the scripted Cursor ACP fixture; native Codex approvals under the owner's `auto_review` reviewer do not reach Router. It counts a Codex message cell only after the exact input appears in `thread/read(includeTurns=true)`, and a Claude peer cell only after its fixture socket reads the user frame. Approval cells also require a pending broker record before the approver decides. The suite compares owner `~/.codex/config.toml` and `~/.claude/settings.json` hashes at entry, after each cell, and at exit; a change fails the run and must be reported without restoration. A five-minute Board Listen debounce makes the complete run longer than a typical smoke test.
 
 For a quick load-route regression check, use a separate freshly prepared matrix root and run the ignored `codex_acp_cli_create_then_prompt_load_route` test with the same environment and foreground Host. Its CLI create and prompt calls use separate ACP connections, so a missing `_meta.router.sessionRef` fails at load before the model is invoked.
 
@@ -114,7 +103,7 @@ The ACP column does not attest the Host's `HOME` or `CODEX_HOME`. It relies on `
 
 A Codex thread active in another app-server or desktop client remains a separate target row needing recipient-observed proof.
 
-The materialized existing Codex target is a pending matrix cell in this isolated run: the private Codex home has no model authentication to finish an initial turn and return the thread to idle. A default-run fake app-server integration test covers its declared cwd and scheduled turn/start. Recipient-observed live proof remains for the post-release real-session run.
+The materialized existing Codex target is a pending matrix cell in this isolated run: the private Codex home has no model authentication to finish an initial turn and return the thread to idle. Recipient-observed live proof remains for the post-release real-session run.
 
 After the owner replaces production with a release containing this suite's fixes, repeat one documented pass against real sessions: read the Codex recipient's exact input through `thread/read`, and obtain an explicit receipt confirmation from the Claude Code recipient. Keep that live result separate from the isolated fixture matrix.
 
@@ -168,69 +157,6 @@ CODEX_AUTOMATION_PROOF_ROOT="$proof_root" \
 It verifies persisted projects, references, archive state, watches and read
 acknowledgements through the CLI after confirming the Host PID changed. Stop the
 owned resumed Host with Ctrl-C after this check.
-
-## Run the schedule and recovery scenarios
-
-Start a new debug Host with a previously unused `proof_root` for **each** command below, using the same launch and readiness checks above. Stop the previous test Host first. Do not run the whole ignored test binary against one root: scenarios change test-owned settings or restart its backend, and some diagnostic tests require their own recorded identities.
-
-Fresh scheduled execution with continuity:
-
-```sh
-CODEX_AUTOMATION_PROOF_ROOT="$proof_root" \
-  cargo test -p agent-collaboration --test debug_luna_acceptance \
-  fresh_scheduled_run_uses_previous_luna_summary \
-  -- --ignored --exact --nocapture
-```
-
-The first worker produces a unique token. A separate Luna summary carries it into a different native execution thread after the current instructions have been changed to omit the token. The test requires actual worker output and holds the Run's execution slot through required summarization.
-
-Busy-thread behavior and owned app-server replacement:
-
-```sh
-CODEX_AUTOMATION_PROOF_ROOT="$proof_root" \
-  cargo test -p agent-collaboration --test debug_luna_acceptance \
-  scheduled_work_waits_while_ordinary_messages_steer \
-  -- --ignored --exact --nocapture
-```
-
-The schedule waits while ordinary input steers the busy thread. The driver interrupts only its exact original test turn, confirms cessation, then observes a distinct scheduled turn. It uses the existing Host restart command with verified test ownership to replace that app-server. It checks the new native generation, unchanged completed Run evidence, and queue rejection for the now-unloaded saved thread. This establishes app-server replacement behavior, not automatic TUI reconnection or a full Host-process crash.
-
-Worker timeout, summary retry, import and durable delivery:
-
-```sh
-CODEX_AUTOMATION_PROOF_ROOT="$proof_root" \
-  cargo test -p agent-collaboration --test debug_luna_acceptance \
-  summary_recovery_and_durable_delivery_preserve_original_work \
-  -- --ignored --exact --nocapture
-```
-
-The scheduler interrupts a worker using its captured two-second override. The driver separately interrupts an exact test summary; an explicit retry preserves the worker result and Run identity. The exported real summary is imported disabled into a separate test-owned automation store without creating synthetic Runs.
-
-For delivery recovery, this scenario uses production service code over paired Unix streams with the real debug Codex backend and its generated validators. A controlled backend-admission gate proves first firing before acceptance, known non-submission, and later acceptance under the same delivery ID with exactly one correlated native input. It also verifies the typed pause-before-first-fire error. This controlled transport does not prove Host discovery or a whole-process restart; those boundaries have separate coverage.
-
-## Inspect durable outcomes
-
-The following commands use the same Rust SDK as applications. Replace each identity with the UUID from its creation or listing response:
-
-```sh
-./target/debug/agent-collaboration operation show --operation-id UUID --service-directory "$proof_root/agent-communication" --json
-./target/debug/agent-collaboration operation reconcile --operation-id UUID --service-directory "$proof_root/agent-communication" --json
-./target/debug/agent-collaboration delivery show --delivery-id UUID --service-directory "$proof_root/agent-communication" --json
-./target/debug/agent-collaboration delivery reconcile --delivery-id UUID --service-directory "$proof_root/agent-communication" --json
-./target/debug/agent-collaboration run show --run-id UUID --service-directory "$proof_root/agent-communication" --json
-./target/debug/agent-collaboration run reconcile --run-id UUID --service-directory "$proof_root/agent-communication" --json
-```
-
-Use these while the owning Host is running. Reconciliation observes native evidence and may persist a confirmed outcome; it never resends input, starts a native thread or interrupts work. Configuration reconciliation can recover the original intended local settings-file update. Reconciliation of an older completed operation returns its original outcome without restoring old settings.
-
-| Observation | What it establishes |
-| --- | --- |
-| `wake send` creation result | The timed message was durably arranged. |
-| `--wait-until-first-fire` | The first firing was recorded; native acceptance is separate. |
-| Delivery accepted | Codex accepted the input; agent completion or a reply is separate. |
-| Delivery uncertain | The original attempt has unresolved effects; do not blindly resend. |
-| Run stopping | An interruption was requested; cessation is not yet established. |
-| Run finished | The recorded native work and required summary handling reached their terminal states; it does not certify the objective was achieved. |
 
 The observer uses `thread/read` with `includeTurns=true` and verifies the returned
 thread and exact turn identity. Codex 0.153.4 can temporarily reject this read with
@@ -314,4 +240,4 @@ python3 -m unittest scripts.tests.test_update_homebrew_formula -v
 
 CI also builds the router with all features, checks an isolated Cargo installation, and runs the quota-reset PTY harness. Preserve those gates when preparing the PR.
 
-Source: [debug Host launcher](../../crates/codex-router-debug-hosts/src/bin/automation-debug-host.rs), [Claude launch target](../../crates/agent-collaboration/src/session_commands/claude_launch_target.rs), [Claude launch target tests](../../crates/agent-collaboration/src/session_commands/claude_launch_target_tests.rs), [Host Claude launch environment](../../crates/codex-router-host/src/claude_provider_launch_environment.rs), [Host token startup](../../crates/codex-router-host/src/lifecycle_owner/startup_convergence.rs), [live acceptance test](../../crates/agent-collaboration/tests/debug_luna_acceptance.rs), [scheduled workflow requirements](../specs/2026-09-07-scheduled-agent-workflows/2026-09-07-scheduled-agent-workflows-requirements.md).
+Source: [debug Host launcher](../../crates/codex-router-debug-hosts/src/bin/automation-debug-host.rs), [Claude launch target](../../crates/agent-collaboration/src/session_commands/claude_launch_target.rs), [Claude launch target tests](../../crates/agent-collaboration/src/session_commands/claude_launch_target_tests.rs), [Host Claude launch environment](../../crates/codex-router-host/src/claude_provider_launch_environment.rs), [Host token startup](../../crates/codex-router-host/src/lifecycle_owner/startup_convergence.rs), and the [live acceptance tests](../../crates/agent-collaboration/tests/integration/debug_luna_acceptance.rs).

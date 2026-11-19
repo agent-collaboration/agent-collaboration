@@ -169,12 +169,6 @@ pub(super) fn failure(error: ClientError, possible_effect: OperationEffect) -> C
     operation_failure_result(&operation_failure_from_client_error(error, possible_effect))
 }
 
-pub(super) fn wake_wait_failure(error: collaboration_client::WakeWaitError) -> CallToolResult {
-    serde_json::to_value(error.into_operation_failure())
-        .map(structured_tool_error)
-        .unwrap_or_else(|_| validation_failure("wake wait error encoding failed"))
-}
-
 pub(super) fn validation_failure(message: &str) -> CallToolResult {
     structured_tool_error(serde_json::json!({
         "kind": "protocolViolation",

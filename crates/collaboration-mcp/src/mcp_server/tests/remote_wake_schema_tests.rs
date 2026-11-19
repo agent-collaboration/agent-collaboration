@@ -5,66 +5,46 @@ use super::emitted_result_schema_tests::{
 use super::*;
 use collaboration_protocol::{
     MessageHistoryEntry, MessageHistoryResult, MessageShowResult, RemoteMessageStatus,
-    WakeMutationRequest, WakeSendRequest, WakeState,
 };
+
+/// A cancelled wake snapshot as a remote Router reports it: no next due time, first fire or
+/// pending delivery. Recorded from the wake operations before they were removed from this
+/// build; the remote acceptance decodes it into the portable snapshot.
+fn cancelled_wake_snapshot() -> Value {
+    serde_json::json!({
+        "definition": {
+            "wakeupId": "01a1f5d7-0542-7523-b8d6-2e17bbc686f4",
+            "changeId": "01a1f5d7-0542-7523-b8d6-2e2cc8d845a1",
+            "createdBy": {"kind": "owner"},
+            "message": {
+                "target": fixture_session("codex-local", "schema-wake"),
+                "content": {"kind": "humanUser", "text": "schema regression"},
+                "delivery": "auto"
+            },
+            "timing": {"kind": "after", "seconds": 60},
+            "anchorAt": "2026-11-19T22:04:31.936Z",
+            "expiresAt": "2026-11-19T22:06:31.936Z",
+            "createdAt": "2026-11-19T22:04:31.936Z"
+        },
+        "state": "cancelled",
+        "nextDueAt": null,
+        "firstFire": null,
+        "pendingDeliveryId": null,
+        "latestEventCursor": "[1,\"00000000-0000-4000-8000-000000000001\",\"automation-events\",2,1795125871938]"
+    })
+}
 
 #[tokio::test]
 async fn remote_wake_history_and_show_schemas_accept_cancelled_nullable_snapshots() {
-    // Arrange: real wake operations supply the snapshot, rather than a schema-shaped sample.
-    let directory = tempfile::tempdir().expect("automation directory");
-    let store = std::sync::Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-            .await
-            .expect("automation store"),
-    ));
-    let application =
-        (crate::api_test_harness::test_identity().with_automation_store(store)).build();
-    let created = application
-        .wakes()
-        .wake_send(
-            serde_json::from_value::<WakeSendRequest>(serde_json::json!({
-                "operationId": OperationId::generate(),
-                "requestedBy": {"kind":"owner"},
-                "replace": false,
-                "message": {
-                    "target": fixture_session("codex-local", "schema-wake"),
-                    "content": {"kind":"humanUser", "text":"schema regression"},
-                    "delivery": "auto"
-                },
-                "timing": {"kind":"after", "seconds":60},
-                "expiry": {"kind":"after", "seconds":120}
-            }))
-            .expect("wake request"),
-        )
-        .await
-        .expect("create real wake");
-    let cancelled = application
-        .wakes()
-        .wake_cancel(WakeMutationRequest {
-            operation_id: OperationId::generate(),
-            wakeup_id: created.definition.wakeup_id.clone(),
-        })
-        .await
-        .expect("cancel real wake");
-    assert_eq!(cancelled.wakeup.state, WakeState::Cancelled);
-    let cancelled_wire = serde_json::to_value(&cancelled.wakeup).expect("cancelled snapshot");
-    for field in ["nextDueAt", "firstFire", "pendingDeliveryId"] {
-        assert_eq!(cancelled_wire.get(field), Some(&Value::Null), "{field}");
-    }
-    assert!(
-        cancelled_wire["definition"]["message"]
-            .get("generationGuard")
-            .is_none()
-    );
-
-    // Also cover the required nullable expiry contract (retained wakes may have no expiry).
+    // Arrange: a cancelled snapshot, the active one it came from, and one with no expiry
+    // (retained wakes may have none).
+    let cancelled_wire = cancelled_wake_snapshot();
+    let mut active = cancelled_wire.clone();
+    active["state"] = serde_json::json!("active");
+    active["nextDueAt"] = serde_json::json!("2026-11-19T22:05:31.936Z");
     let mut no_expiry = cancelled_wire.clone();
     no_expiry["definition"]["expiresAt"] = Value::Null;
-    for snapshot in [
-        cancelled_wire,
-        serde_json::to_value(&created).expect("active snapshot"),
-        no_expiry,
-    ] {
+    for snapshot in [cancelled_wire, active, no_expiry] {
         // Decoding here constructs the portable RemoteWakeSnapshot inside the real acceptance.
         let mail: RemoteMessageStatus = serde_json::from_value(serde_json::json!({
             "item": FIXTURE_PUSH_ID,

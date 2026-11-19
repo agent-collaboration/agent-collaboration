@@ -829,8 +829,6 @@ impl CollaborationRuntime {
                 .ok_or_else(|| io::Error::other("debug mail clock requires mail storage"))?;
             tasks.spawn(control.run(mail, shutdown.clone()));
         }
-        #[cfg(test)]
-        let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]
         let runtime_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         if let Some(mail) = mail_delivery {
@@ -892,8 +890,6 @@ impl CollaborationRuntime {
             clock: worker_clock,
             fleet_link,
             interactions: interactions_reader,
-            #[cfg(test)]
-            startup_test_mail,
             #[cfg(test)]
             startup_test_broker,
             #[cfg(test)]

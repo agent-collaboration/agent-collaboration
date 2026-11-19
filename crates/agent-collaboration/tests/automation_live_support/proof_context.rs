@@ -400,66 +400,6 @@ impl ProofContext {
             }
         }
     }
-    pub async fn wait_for_arranged_wake(
-        &mut self,
-        origin: &SessionRef,
-        turn_id: &str,
-        marker: &str,
-    ) -> ProofResult<()> {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
-        let mut interval = tokio::time::interval(Duration::from_millis(500));
-        loop {
-            interval.tick().await;
-            let turns = self.turns(origin).await?;
-            let wakes = self
-                .client
-                .list_wakeups(collaboration_client::protocol::AutomationPageRequest {
-                    cursor: None,
-                    limit: 100.try_into()?,
-                })
-                .await?;
-            if let Some(wake) =
-                wakes
-                    .records
-                    .iter()
-                    .find(|wake| match &wake.definition.message.content {
-                        collaboration_client::protocol::MessageContent::Agent { text, .. } => {
-                            text.as_str().starts_with(marker)
-                        }
-                        _ => false,
-                    })
-            {
-                self.record(
-                    "wakeArrangedByAgent",
-                    json!({"wakeupId":wake.definition.wakeup_id}),
-                )?;
-                return Ok(());
-            }
-            if let Some(turn) = turns.iter().find(|turn| {
-                turn.get("id").and_then(Value::as_str) == Some(turn_id)
-                    && matches!(
-                        turn.get("status").and_then(Value::as_str),
-                        Some("completed" | "failed" | "interrupted")
-                    )
-            }) {
-                self.record(
-                    "senderStoppedBeforeWake",
-                    json!({"target":origin,"turn":turn}),
-                )?;
-                return Err(
-                    "Sender stopped without arranging the wake; inspect its private tool output"
-                        .into(),
-                );
-            }
-            if tokio::time::Instant::now() >= deadline {
-                self.record(
-                    "senderWaitExpired",
-                    json!({"target":origin,"observedTurns":turns}),
-                )?;
-                return Err("Sender did not arrange a wake before the proof deadline".into());
-            }
-        }
-    }
     pub fn record(&self, event: &str, details: Value) -> ProofResult<()> {
         let mut file = std::fs::OpenOptions::new()
             .append(true)
@@ -486,19 +426,4 @@ pub fn agent_text(turn: &Value) -> String {
 }
 pub fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
-}
-
-pub async fn node_executable() -> ProofResult<PathBuf> {
-    let output = tokio::process::Command::new("node")
-        .args([
-            "-p",
-            "(() => { if (process.versions.node !== require(process.argv[1]).engines.node) throw new Error('repository Node version required'); return process.execPath; })()",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/../../verification/package.json"),
-        ])
-        .output()
-        .await?;
-    if !output.status.success() {
-        return Err("The Node version pinned in verification/package.json is required for the permission probe".into());
-    }
-    Ok(PathBuf::from(String::from_utf8(output.stdout)?.trim()).canonicalize()?)
 }

@@ -180,23 +180,6 @@ pub use conversation_contract::{
 };
 mod acp_transport_connection;
 pub use acp_transport_connection::AcpTransportConnection;
-mod instruction_operations;
-pub use instruction_operations::InstructionClientError;
-mod wakeup_operations;
-pub use wakeup_operations::WakeClientError;
-
-mod wakeup_waiting;
-pub use wakeup_waiting::{WakeWaitConnection, WakeWaitError};
-pub use wakeup_waiting::{WakeWaitFailure, WakeWaitFailureKind};
-mod automation_inspection_operations;
-mod schedule_operations;
-pub use automation_inspection_operations::AutomationInspectionClientError;
-pub use schedule_operations::ScheduleClientError;
-mod run_operations;
-pub use run_operations::RunClientError;
-mod automation_configuration_operations;
-pub use automation_configuration_operations::ConfigurationClientError;
-
 mod board_operations;
 pub use board_operations::BoardClientError;
 

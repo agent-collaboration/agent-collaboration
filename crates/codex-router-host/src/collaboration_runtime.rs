@@ -138,8 +138,6 @@ pub struct CollaborationRuntime {
     fleet_link: board_fleet_sync::FleetLinkObservation,
     interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
-    startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
-    #[cfg(test)]
     startup_test_broker: std::sync::Weak<collaboration_runtime::ServiceInteractionBroker>,
     #[cfg(test)]
     startup_test_display_names: collaboration_runtime::SessionDisplayNameCache,
