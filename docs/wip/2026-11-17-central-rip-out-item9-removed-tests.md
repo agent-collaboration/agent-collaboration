@@ -10,6 +10,14 @@ Owner decision (2026-11-17): "Yes remove old and make sure you craft new tests t
 | Deleted: needs the old central | 623 |
 | **Considered** | **718** |
 
+## Separate O10 deletion from the old central SQL cost inventory
+
+| Package | Test | Bucket |
+|---|---|---|
+| `collaboration-service` | `read_cost_counter::tests::typed_canonical_heads_and_children_remain_visible_in_the_core_row_budget` | O10 old Fleet SQL cost scope |
+
+The SQL classification module stays. The scoped SQLx trace counter and the old Fleet canonical and feed queries were removed. This O10 case is outside the Item 9 totals above.
+
 ## How the kept tests run now
 
 - **Host startup (F1):** `startup_contract_tests`'s fixture is a local, unenrolled Host. Its enrolled branch, which started `board_central_test_support::TestCentral`, is removed, and so are the two enrolled cases.
@@ -162,7 +170,7 @@ The agent-collaboration CLI and collaboration-mcp tools survive as front ends, b
 
 ## Harness survives, deleted by Lead A's ruling
 
-Lead A ruled that these stay deleted: their inventory is built on Mac board roots, and the CLI+MCP Lead has taken "owned resources are cleaned up" into PR 4's proof plan (O1c).
+Lead A ruled that these stay deleted because their inventory is built on Mac board roots. The replacement proof is recorded as carried obligations CO1 to CO4, owned by the central Lead, proven in deliverable M2 (Mac deletion design set) and the schedules set. See `docs/specs/2026-11-19-central-and-mac/plan.html`, section “Proof carried forward from C1”, on branch `design/central-and-mac`.
 
 | File | Test | Why the harness half could not be kept |
 |---|---|---|

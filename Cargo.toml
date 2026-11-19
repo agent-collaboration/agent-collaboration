@@ -33,7 +33,6 @@ members = [
     "crates/collaboration-contracts",
     "crates/collaboration-runtime",
     "crates/collaboration-protocol",
-    "crates/collaboration-central-admin-protocol",
     "crates/collaboration-central-core",
     "crates/collaboration-central-cloudflare",
     "crates/collaboration-central-tokio",

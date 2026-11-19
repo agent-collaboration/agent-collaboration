@@ -4,16 +4,16 @@ For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). Its thr
 
 This mapping is pinned to Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3`. Fleet owns sessions, admission, lease state and mail outbox custody; Copy owns project storage. Legacy test/selector names and logical envelope facets may retain `registry`, but there is no separate object or store for that role. Typed Submitter and D1 mail expiry/retention await their combined pin.
 
-## Current entry
+## Historical native and local workerd commands
 
-The wrapper retired in 0.1.102. Current native conformance belongs to `crates/collaboration-central-tokio/tests/`; the retained local-process CI selection is:
+The wrapper retired in 0.1.102. C1 removed `collaboration-central-tokio`’s `conformance` feature, its `e2e` target and its workerd examples. The former local-process CI selection was:
 
 ```sh
 cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e -E 'test(/^(forwarded_posts|forwarding_real_timer|mailbox_rules)::/)' --test-threads 1
 ```
 
-That retained legacy selection does not qualify D1 mail. Current Fleet mail
-observations are the real `integration` modules `fleet_mail_dispatch`,
+That legacy selection predates D1 mail. Historical Fleet mail
+observations used the `integration` modules `fleet_mail_dispatch`,
 `fleet_mail_receipt_loss`, `fleet_mail_reports`, `fleet_mail_query`,
 `fleet_mail_settle` and `fleet_mail_status_wire`:
 
@@ -27,16 +27,16 @@ publication to the submitter. Query/Settle bind sender authority and digest;
 retired Fetch/Received/Retire return InvalidShape without changing custody.
 These Native fixtures do not establish a Router/model turn or Worker/hosted parity.
 
-Current local workerd entries are the crate’s `composed_scope_workerd` and `session_scope_workerd` examples, using the pinned tools and scenario selections in the CI Worker job. The two-Mac `verification/run.ts` harness is unavailable until deliverable C; ordinary invocation refuses with exit 2 before declaration access or setup. C will connect its retained non-import cases to the new path. Select actual retained targets and cases; a historical target name below is not an executable current selection.
+The former CI Worker job ran the removed `composed_scope_workerd` and `session_scope_workerd` examples. The two-Mac `verification/run.ts` harness is unavailable until deliverable C; ordinary invocation refuses with exit 2 before declaration access or setup. C will connect its retained non-import cases to the new path.
 
 ## Retained obligations and historical evidence
 
-The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
+The sections below preserve the governing obligations and earlier qualification limits. Commands using retired targets, features, or examples are historical. Report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
 
-Observe central through explicit retained one-core conformance entries on Tokio
-and local workerd. A completed run means its selected scenarios completed;
-the gaps and retired obligations in `run.json` remain open. It does not establish
-all of OB6 or OB8, or equivalence to a retired aggregate.
+Earlier runs observed central through the one-core conformance entries on Tokio
+and local workerd. Their results cover the selected scenarios. The gaps and
+retired obligations in `run.json` remain open, including full OB6 and OB8
+coverage and equivalence to the retired aggregate.
 
 The adopted oracle is the one-core Program Design §13 and the board Verification
 Design OB6, OB8, OB9 and §5c–§5d at the commissioning design revision. The
