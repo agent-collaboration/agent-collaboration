@@ -3,16 +3,35 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
 };
+use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
-    ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason,
+    ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, NoticeCadence, RefusalReason,
+    Timestamp,
 };
 
-fn text(value: impl ToString) -> SqlValue {
-    SqlValue::Text(value.to_string())
+/// Plans the actor's cadence update for the caller's central batch.
+pub fn set_notice_cadence(
+    actor: &ActorIdentityId,
+    cadence: NoticeCadence,
+    now: Timestamp,
+) -> Result<GuardedStatement, StoreFailure> {
+    let encoded = serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
+    let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
+    Ok(GuardedStatement {
+        statement: Statement {
+            sql: "UPDATE actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
+            args: vec![
+                text(cadence_text),
+                text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+                text(actor),
+            ],
+        },
+        expect: RowExpectation::Exactly(1),
+    })
 }
 
 fn identity_fields(identity: &Identity) -> Result<(&'static str, String), StoreFailure> {

@@ -10,7 +10,7 @@ mod workspace_change_records;
 mod workspace_json_records;
 mod workspace_row_codec;
 
-pub use workspace_actor_identity::ActorIdentityPlan;
+pub use workspace_actor_identity::{ActorIdentityPlan, set_notice_cadence};
 pub use workspace_change_records::StoredChange;
 pub use workspace_row_codec::WorkspaceRows;
 

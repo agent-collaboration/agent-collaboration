@@ -111,19 +111,9 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             if !matches!(caller.caller, m::Caller::Session(_)) {
                 Err(Refusal::NotSession)
             } else {
-                let encoded =
-                    serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
-                let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
-                let mut statements = vec![crate::guarded_statements::exact(
-                    "UPDATE actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
-                    vec![
-                        fleet_runtime_ports::guarded_statements::text(cadence_text),
-                        fleet_runtime_ports::guarded_statements::text(
-                            central_mail_store::timestamp(now),
-                        ),
-                        fleet_runtime_ports::guarded_statements::text(&actor),
-                    ],
-                )];
+                let mut statements = vec![fleet_workspace_access::set_notice_cadence(
+                    &actor, *cadence, now,
+                )?];
                 // Recompute the pending deadline from now on the new epoch cadence;
                 // the actual policy and deadline writes share this request's ledger batch.
                 for window in self
