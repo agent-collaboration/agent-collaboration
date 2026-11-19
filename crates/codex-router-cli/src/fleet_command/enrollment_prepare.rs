@@ -86,6 +86,8 @@ pub(super) fn prepare(
         .recursive(true)
         .mode(0o700)
         .create(&directory)?;
+    // Legacy central enrollment only. Retires with #301 and the retrofit.
+    // Host startup uses the machine-local database.
     let installation = String::from(collaboration_runtime::load_service_identity(&directory)?)
         .try_into()
         .map_err(|_| FleetCommandError::InvalidInput("invalid installation identity"))?;
