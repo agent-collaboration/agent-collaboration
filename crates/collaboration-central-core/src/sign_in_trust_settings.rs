@@ -2,7 +2,8 @@
 
 /// Hosts supply these settings explicitly when constructing an organization's
 /// verifier. Transport addresses and the organization's clock belong to the host.
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SignInTrustSettings {
     pub issuer: String,
     /// Audience of organization stamps for this central deployment.

@@ -1407,6 +1407,7 @@ dependencies = [
  "futures-util",
  "indicatif",
  "iocraft",
+ "jsonc-parser",
  "message-board",
  "message-board-storage",
  "nix",
@@ -1416,6 +1417,7 @@ dependencies = [
  "opentelemetry_sdk",
  "owned-process-test-support",
  "reqwest 0.12.28",
+ "router-clock",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -4261,6 +4263,7 @@ version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ecded084f9b9a718d39668a42657c32253663d1f6afb3fbb9134f0305f73f48"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 
