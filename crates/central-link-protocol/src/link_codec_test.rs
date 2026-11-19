@@ -2,6 +2,126 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn delivery_resolves_sender_beside_the_unchanged_message_record() {
+    let id = "019f0000-0000-7000-8000-000000000001";
+    let mut wire = json!({
+        "kind":"deliver",
+        "message":{
+            "messageId":id,"sender":{"kind":"actor","value":id},
+            "target":{"machineId":id,"sessionId":"recipient"},
+            "body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},
+            "state":{"kind":"queued"},"source":null,
+            "createdAt":"2030-03-17T17:46:40Z","updatedAt":"2030-03-17T17:46:40Z"
+        },
+        "sender":{
+            "kind":"session","session":{"machineId":id,"sessionId":"sender"},
+            "displayName":"Session display","machineLabel":"Machine label"
+        }
+    });
+    for sender in [
+        wire["sender"].clone(),
+        json!({"kind":"person","personId":id,"displayName":"Person display"}),
+        json!({"kind":"central"}),
+    ] {
+        wire["sender"] = sender;
+        let frame = decode_text(&wire.to_string(), FrameDirection::ToRouter).unwrap();
+        let encoded = encode_text(&frame, FrameDirection::ToRouter).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+            wire
+        );
+        assert!(decode_text(&wire.to_string(), FrameDirection::ToCentral).is_err());
+    }
+    for sender in [
+        json!({"kind":"central","displayName":"extra"}),
+        json!({"kind":"person","personId":id,"displayName":"   "}),
+        json!({"kind":"session","session":{"machineId":id,"sessionId":"sender","endpoint":"codex-local"}}),
+    ] {
+        wire["sender"] = sender;
+        assert!(decode_text(&wire.to_string(), FrameDirection::ToRouter).is_err());
+    }
+    wire.as_object_mut().unwrap().remove("sender");
+    assert!(decode_text(&wire.to_string(), FrameDirection::ToRouter).is_err());
+}
+
+#[test]
+fn scoped_status_reads_round_trip_in_their_wire_directions() {
+    let id = "019f0000-0000-7000-8000-000000000001";
+    let frames = [
+        (
+            FrameDirection::ToCentral,
+            json!({
+                "kind":"requestStatus", "correlationId":id,
+                "caller":{"kind":"session","value":{"machineId":id,"sessionId":"provider/opaque"}},
+                "query":{"requestId":id,"scope":{"kind":"workspace","workspaceId":id}}
+            }),
+        ),
+        (
+            FrameDirection::ToRouter,
+            json!({
+                "kind":"requestStatusReply", "correlationId":id,
+                "result":{"kind":"refused","value":{"kind":"mail","reason":{"kind":"notSession"}}}
+            }),
+        ),
+        (
+            FrameDirection::ToRouter,
+            json!({
+                "kind":"reply", "correlationId":id,
+                "result":{"kind":"workspace","reply":{"actors":[],"result":{
+                    "kind":"done","answer":{"kind":"messageStatus","status":{"kind":"delivered"}}
+                }}}
+            }),
+        ),
+    ];
+    for (direction, mut wire) in frames {
+        let frame = decode_text(&wire.to_string(), direction).unwrap();
+        let encoded = encode_text(&frame, direction).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+            wire
+        );
+        let reverse = match direction {
+            FrameDirection::ToCentral => FrameDirection::ToRouter,
+            FrameDirection::ToRouter => FrameDirection::ToCentral,
+        };
+        assert!(decode_text(&encoded, reverse).is_err());
+
+        wire["extra"] = json!(true);
+        assert!(decode_text(&wire.to_string(), direction).is_err());
+    }
+}
+
+#[test]
+fn status_frame_schema_closes_the_request_and_answer_envelopes() {
+    let schema = serde_json::to_value(schemars::schema_for!(DataFrame)).unwrap();
+    let variants = schema["oneOf"].as_array().unwrap();
+    for (kind, required) in [
+        (
+            "requestStatus",
+            ["caller", "correlationId", "kind", "query"].as_slice(),
+        ),
+        (
+            "requestStatusReply",
+            ["correlationId", "kind", "result"].as_slice(),
+        ),
+    ] {
+        let variant = variants
+            .iter()
+            .find(|variant| variant["properties"]["kind"]["const"] == kind)
+            .unwrap();
+        assert_eq!(variant["additionalProperties"], false);
+        let mut actual: Vec<_> = variant["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field.as_str().unwrap())
+            .collect();
+        actual.sort_unstable();
+        assert_eq!(actual, required);
+    }
+}
+
+#[test]
 fn heartbeat_is_exact_unquoted_text_and_old_nonce_json_is_rejected() {
     assert_eq!(
         encode_text(&LinkFrame::Ping, FrameDirection::ToCentral).unwrap(),
@@ -50,11 +170,15 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToRouter,
-            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"endpoint":"codex","sessionId":"s"},"body":{"kind":"direct","body":"hello"},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
+            json!({"kind":"deliver","sender":{"kind":"central"},"message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
         ),
         (
             FrameDirection::ToCentral,
-            json!({"kind":"ack","messageId":id}),
+            json!({"kind":"ack","messageId":id,"answer":{"kind":"accepted"}}),
+        ),
+        (
+            FrameDirection::ToCentral,
+            json!({"kind":"ack","messageId":id,"answer":{"kind":"refused","reason":"unknownSession"}}),
         ),
     ];
     for (direction, fixture) in fixtures {
@@ -78,6 +202,12 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         json!({"kind":"unknown"}),
         json!({"kind":"ack"}),
         json!({"kind":"ack","messageId":"bad"}),
+        // An Ack must say how it answers; there is no per-send id, no
+        // "refused for good" without a reason, and no outcome frame.
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001"}),
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","sendId":"01890f2e-7b4c-7cc0-98c4-000000000001","answer":{"kind":"accepted"}}),
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","answer":"refusedForGood"}),
+        json!({"kind":"messageOutcome","requestId":"01890f2e-7b4c-7cc0-98c4-000000000001","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","outcome":{"kind":"deliveredAfterAll"}}),
     ] {
         assert!(decode_text(&fixture.to_string(), FrameDirection::ToCentral).is_err());
     }
@@ -89,7 +219,7 @@ fn mail_request_and_reply_reuse_the_existing_contract_without_wire_coercion() {
     let fixtures = [
         (
             FrameDirection::ToCentral,
-            json!({"kind":"request","request":{"correlationId":id,"caller":{"kind":"session","value":{"machineId":id,"endpoint":"codex","sessionId":"s"}},"payload":{"kind":"mail","request":{"requestId":"01890f2e-7b4c-7cc0-98c4-000000000002","operation":{"kind":"setNoticeCadence","cadence":"m25"}}}}}),
+            json!({"kind":"request","request":{"correlationId":id,"caller":{"kind":"session","value":{"machineId":id,"sessionId":"s"}},"payload":{"kind":"mail","request":{"requestId":"01890f2e-7b4c-7cc0-98c4-000000000002","operation":{"kind":"setNoticeCadence","cadence":"m25"}}}}}),
         ),
         (
             FrameDirection::ToRouter,
@@ -103,5 +233,95 @@ fn mail_request_and_reply_reuse_the_existing_contract_without_wire_coercion() {
                 .unwrap(),
             fixture
         );
+    }
+}
+
+#[test]
+fn batch_of_writes_round_trips_raw_json() {
+    let fixture = json!({"kind":"batch","requests":[{"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001","caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}}]});
+    let frame = decode_text(&fixture.to_string(), FrameDirection::ToCentral).unwrap();
+    let encoded = encode_text(&frame, FrameDirection::ToCentral).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+        fixture
+    );
+}
+
+fn batch_member(number: usize) -> serde_json::Value {
+    json!({"correlationId":format!("01890f2e-7b4c-7cc0-98c4-{number:012x}"),"caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}})
+}
+
+#[test]
+fn batch_enforces_bound_and_unique_correlations_for_wire_and_constructor() {
+    let members: Vec<_> = (0..64).map(batch_member).collect();
+    let wire = json!({"kind":"batch", "requests":members});
+    let frame = decode_text(&wire.to_string(), FrameDirection::ToCentral).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            &encode_text(&frame, FrameDirection::ToCentral).unwrap()
+        )
+        .unwrap(),
+        wire
+    );
+    let LinkFrame::Data(DataFrame::Batch { requests }) = frame else {
+        panic!("expected batch")
+    };
+    assert_eq!(requests.requests().len(), 64);
+    let mut too_many = requests.into_requests();
+    too_many.push(too_many[0].clone());
+    assert!(crate::LinkRequestBatch::new(too_many).is_err());
+    for requests in [
+        vec![],
+        (0..65).map(batch_member).collect(),
+        vec![batch_member(1), batch_member(1)],
+    ] {
+        assert!(
+            decode_text(
+                &json!({"kind":"batch", "requests":requests}).to_string(),
+                FrameDirection::ToCentral
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn batch_rejects_reads_wrong_direction_unknown_fields_and_malformed_members() {
+    let mut read = batch_member(1);
+    read["payload"]["request"]["requestId"] = serde_json::Value::Null;
+    read["payload"]["request"]["operation"] =
+        serde_json::to_value(workspace_model::WorkspaceOperation::List {
+            query: workspace_model::ListQuery::Areas {
+                include_archived: false,
+            },
+            cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
+            limit: workspace_model::PageLimit::try_from(10).unwrap(),
+        })
+        .unwrap();
+    let read_wire = json!({"kind":"batch","requests":[read]});
+    assert!(decode_text(&read_wire.to_string(), FrameDirection::ToCentral).is_err());
+    let valid = json!({"kind":"batch","requests":[batch_member(1)]});
+    assert!(matches!(
+        decode_text(&valid.to_string(), FrameDirection::ToRouter),
+        Err(ProtocolError::WrongDirection)
+    ));
+    let frame = decode_text(&valid.to_string(), FrameDirection::ToCentral).unwrap();
+    assert!(matches!(
+        encode_text(&frame, FrameDirection::ToRouter),
+        Err(ProtocolError::WrongDirection)
+    ));
+    let mut extra = valid.clone();
+    extra["extra"] = json!(true);
+    let mut member_extra = valid.clone();
+    member_extra["requests"][0]["extra"] = json!(true);
+    let mut invalid = valid;
+    invalid["requests"][0]["payload"]["request"]["requestId"] = json!("bad");
+    for wire in [
+        extra,
+        member_extra,
+        invalid,
+        json!({"kind":"batch", "requests":[null]}),
+    ] {
+        assert!(decode_text(&wire.to_string(), FrameDirection::ToCentral).is_err());
     }
 }

@@ -1,10 +1,73 @@
 use crate::ProtocolError;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
-use workspace_model::{Caller, RequestId, WorkspaceReply, WorkspaceRequest};
+use workspace_model::{Caller, RequestId, WorkspaceOperation, WorkspaceReply, WorkspaceRequest};
+
+/// The one ledger that can contain a request's retained decision.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "workspaceId",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RequestScope {
+    Organization,
+    Workspace(workspace_ids::WorkspaceId),
+}
+
+pub const MAX_LINK_REQUEST_BATCH_SIZE: usize = 64;
+
+/// A nonempty bounded collection of independent writes with distinct correlations.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(try_from = "Vec<LinkRequest>", into = "Vec<LinkRequest>")]
+pub struct LinkRequestBatch(Vec<LinkRequest>);
+
+impl LinkRequestBatch {
+    pub fn new(requests: Vec<LinkRequest>) -> Result<Self, ProtocolError> {
+        if requests.is_empty() || requests.len() > MAX_LINK_REQUEST_BATCH_SIZE {
+            return Err(ProtocolError::InvalidBatch);
+        }
+        let mut correlations = BTreeSet::new();
+        for request in &requests {
+            if request.payload().write_request_id().is_none()
+                || !correlations.insert(request.correlation_id())
+            {
+                return Err(ProtocolError::InvalidBatch);
+            }
+        }
+        Ok(Self(requests))
+    }
+
+    #[must_use]
+    pub fn requests(&self) -> &[LinkRequest] {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_requests(self) -> Vec<LinkRequest> {
+        self.0
+    }
+}
+
+impl TryFrom<Vec<LinkRequest>> for LinkRequestBatch {
+    type Error = ProtocolError;
+    fn try_from(requests: Vec<LinkRequest>) -> Result<Self, Self::Error> {
+        Self::new(requests)
+    }
+}
+
+impl From<LinkRequestBatch> for Vec<LinkRequest> {
+    fn from(batch: LinkRequestBatch) -> Self {
+        batch.into_requests()
+    }
+}
 
 /// Transport correlation has a separate type and lifetime from durable write idempotency.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(try_from = "String", into = "String")]
 pub struct CorrelationId(String);
 
@@ -35,7 +98,7 @@ impl std::str::FromStr for CorrelationId {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "request",
@@ -55,6 +118,23 @@ impl RequestPayload {
         }
     }
 
+    /// The store that can log a write, determined from its original payload.
+    #[must_use]
+    pub fn request_scope(&self) -> RequestScope {
+        match self {
+            Self::Mail(_) => RequestScope::Organization,
+            Self::Workspace(request) => match request.operation {
+                WorkspaceOperation::CreateWorkspace { .. }
+                | WorkspaceOperation::UpdateWorkspace { .. }
+                | WorkspaceOperation::ArchiveWorkspace => RequestScope::Organization,
+                _ => request
+                    .workspace_id
+                    .clone()
+                    .map_or(RequestScope::Organization, RequestScope::Workspace),
+            },
+        }
+    }
+
     fn validate(&self) -> Result<(), ProtocolError> {
         if let Self::Workspace(request) = self
             && request.operation.is_write() != request.request_id.is_some()
@@ -65,7 +145,7 @@ impl RequestPayload {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "reply",
@@ -88,7 +168,7 @@ impl ReplyPayload {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "RequestWire", into = "RequestWire")]
 pub struct LinkRequest {
     correlation_id: CorrelationId,
@@ -120,7 +200,7 @@ impl LinkRequest {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RequestWire {
     correlation_id: CorrelationId,

@@ -89,7 +89,7 @@ pub fn change_dependency(
                     item.clone(),
                     "updated",
                     vec![exact(
-                        "INSERT INTO deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+                        "INSERT INTO workspace_deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)",
                         vec![
                             text(dependency_id),
                             text(blocking),
@@ -128,7 +128,7 @@ pub fn change_dependency(
                     item.clone(),
                     "updated",
                     vec![exact(
-                        "DELETE FROM deliverable_dependencies WHERE dependency_id=?",
+                        "DELETE FROM workspace_deliverable_dependencies WHERE dependency_id=?",
                         vec![text(dependency_id)],
                     )],
                     RuleAnswer::Updated { item },

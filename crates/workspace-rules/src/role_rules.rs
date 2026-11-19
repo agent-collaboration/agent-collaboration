@@ -17,8 +17,17 @@ pub fn change_role(
     command: &RoleCommand,
     reads: RoleReads<'_>,
 ) -> Result<RulePlan, RefusalReason> {
-    // Ported equality check from message-board::work_rules::require_role_grant.
-    if reads.project.lead != context.actor {
+    // Owner decision: anyone, agent session or person, may take the lead role
+    // or hand it to another caller, with no precondition. Every other role
+    // change stays with the project's lead.
+    let anyone_may_take_lead = matches!(
+        command,
+        RoleCommand::GrantProject {
+            role: ProjectRole::Lead,
+            ..
+        }
+    );
+    if !anyone_may_take_lead && reads.project.lead != context.actor {
         return Err(RefusalReason::NotLead {
             project: named_project(reads.project),
             lead: reads.project.lead.clone(),
@@ -49,7 +58,7 @@ pub fn change_role(
                 holder.clone(),
                 vec![
                     any(
-                        "UPDATE project_roles SET ended_at=?,updated_at=? WHERE project_id=? AND role=? AND ended_at IS NULL",
+                        "UPDATE workspace_project_roles SET ended_at=?,updated_at=? WHERE project_id=? AND role=? AND ended_at IS NULL",
                         vec![
                             now(),
                             now(),
@@ -58,7 +67,7 @@ pub fn change_role(
                         ],
                     ),
                     exact(
-                        "INSERT INTO project_roles (project_role_id,project_id,role,holder,granted_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?)",
+                        "INSERT INTO workspace_project_roles (project_role_id,project_id,role,holder,granted_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?)",
                         vec![
                             text(assignment_id),
                             text(project_id),
@@ -94,7 +103,7 @@ pub fn change_role(
                 project_role_name(*role),
                 assignment.holder.clone(),
                 vec![exact(
-                    "UPDATE project_roles SET ended_at=?,updated_at=? WHERE project_role_id=? AND ended_at IS NULL",
+                    "UPDATE workspace_project_roles SET ended_at=?,updated_at=? WHERE project_role_id=? AND ended_at IS NULL",
                     vec![now(), now(), text(&assignment.project_role_id)],
                 )],
                 "roleEnded",
@@ -127,7 +136,7 @@ pub fn change_role(
                 holder.clone(),
                 vec![
                     any(
-                        "UPDATE deliverable_roles SET ended_at=?,updated_at=? WHERE deliverable_id=? AND role=? AND ended_at IS NULL",
+                        "UPDATE workspace_deliverable_roles SET ended_at=?,updated_at=? WHERE deliverable_id=? AND role=? AND ended_at IS NULL",
                         vec![
                             now(),
                             now(),
@@ -136,7 +145,7 @@ pub fn change_role(
                         ],
                     ),
                     exact(
-                        "INSERT INTO deliverable_roles (deliverable_role_id,deliverable_id,role,holder,granted_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?)",
+                        "INSERT INTO workspace_deliverable_roles (deliverable_role_id,deliverable_id,role,holder,granted_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?)",
                         vec![
                             text(assignment_id),
                             text(deliverable_id),
@@ -174,7 +183,7 @@ pub fn change_role(
                 deliverable_role_name(*role),
                 assignment.holder.clone(),
                 vec![exact(
-                    "UPDATE deliverable_roles SET ended_at=?,updated_at=? WHERE deliverable_role_id=? AND ended_at IS NULL",
+                    "UPDATE workspace_deliverable_roles SET ended_at=?,updated_at=? WHERE deliverable_role_id=? AND ended_at IS NULL",
                     vec![now(), now(), text(&assignment.deliverable_role_id)],
                 )],
                 "roleEnded",

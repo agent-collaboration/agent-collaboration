@@ -67,7 +67,7 @@ fn r33_a_issue_statuses_and_reopen_have_guarded_values() {
         let mutation = &output.batch.statements.first().unwrap().statement;
         assert_eq!(
             mutation.sql,
-            "UPDATE issues SET status=?,updated_at=? WHERE issue_id=? AND status=?"
+            "UPDATE workspace_issues SET status=?,updated_at=? WHERE issue_id=? AND status=?"
         );
         assert_eq!(
             mutation.args,

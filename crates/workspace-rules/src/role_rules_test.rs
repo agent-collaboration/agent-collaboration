@@ -38,11 +38,11 @@ fn r3_b_e_lead_required_and_advisor_replacement_is_one_batch() {
         .collect();
     assert!(
         sql.first()
-            .is_some_and(|row| row.starts_with("UPDATE project_roles SET ended_at="))
+            .is_some_and(|row| row.starts_with("UPDATE workspace_project_roles SET ended_at="))
     );
     assert!(
         sql.get(1)
-            .is_some_and(|row| row.starts_with("INSERT INTO project_roles"))
+            .is_some_and(|row| row.starts_with("INSERT INTO workspace_project_roles"))
     );
     assert!(
         output

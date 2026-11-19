@@ -1065,6 +1065,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -1072,6 +1073,7 @@ dependencies = [
 name = "central-link-protocol"
 version = "0.1.156"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7941,6 +7943,8 @@ dependencies = [
 name = "workspace-ids"
 version = "0.1.156"
 dependencies = [
+ "hegeltest",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7953,8 +7957,13 @@ version = "0.1.156"
 dependencies = [
  "agent-automation",
  "chrono",
+ "collaboration-mail-protocol",
+ "message-board",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "workspace-ids",
 ]
@@ -7964,6 +7973,7 @@ name = "workspace-rules"
 version = "0.1.156"
 dependencies = [
  "central-storage",
+ "hegeltest",
  "proptest",
  "workspace-model",
 ]

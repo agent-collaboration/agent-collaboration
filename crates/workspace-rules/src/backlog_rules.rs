@@ -31,7 +31,7 @@ pub fn change_backlog(
                 item_id,
                 "created",
                 vec![exact(
-                    "INSERT INTO backlog_items (item_id,area_id,title,description,creator,status,closing_note,created_at,updated_at) VALUES (?,?,?,?,?,'open',NULL,?,?)",
+                    "INSERT INTO workspace_backlog_items (item_id,area_id,title,description,creator,status,closing_note,created_at,updated_at) VALUES (?,?,?,?,?,'open',NULL,?,?)",
                     vec![
                         text(item_id),
                         text(area_id),
@@ -61,7 +61,7 @@ pub fn change_backlog(
                 item_id,
                 "updated",
                 vec![exact(
-                    "UPDATE backlog_items SET title=?,description=?,updated_at=? WHERE item_id=?",
+                    "UPDATE workspace_backlog_items SET title=?,description=?,updated_at=? WHERE item_id=?",
                     vec![
                         text(title.as_str()),
                         text(description.as_str()),
@@ -85,7 +85,7 @@ pub fn change_backlog(
                 return Err(RefusalReason::EmptyDescription);
             }
             let mut statements = vec![exact(
-                "UPDATE backlog_items SET status='closed',closing_note=?,updated_at=? WHERE item_id=? AND status='open'",
+                "UPDATE workspace_backlog_items SET status='closed',closing_note=?,updated_at=? WHERE item_id=? AND status='open'",
                 vec![text(note.as_str()), now(), text(item_id)],
             )];
             if let Some(link) = link {
@@ -116,7 +116,7 @@ pub fn change_backlog(
                     reference_item.clone(),
                     "created",
                     vec![exact(
-                        "INSERT INTO item_references (reference_id,source_kind,source_id,target_kind,target_id,details,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?)",
+                        "INSERT INTO workspace_item_references (reference_id,source_kind,source_id,target_kind,target_id,details,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?)",
                         vec![
                             text(&reference.reference_id),
                             text(source_kind),
@@ -160,15 +160,15 @@ pub fn change_backlog(
                 "removed",
                 vec![
                     any(
-                        "DELETE FROM item_references WHERE (source_kind='backlogItem' AND source_id=?) OR (target_kind='backlogItem' AND target_id=?)",
+                        "DELETE FROM workspace_item_references WHERE (source_kind='backlogItem' AND source_id=?) OR (target_kind='backlogItem' AND target_id=?)",
                         vec![text(item_id), text(item_id)],
                     ),
                     any(
-                        "DELETE FROM links WHERE source_kind='backlogItem' AND source_id=?",
+                        "DELETE FROM workspace_links WHERE source_kind='backlogItem' AND source_id=?",
                         vec![text(item_id)],
                     ),
                     exact(
-                        "DELETE FROM backlog_items WHERE item_id=?",
+                        "DELETE FROM workspace_backlog_items WHERE item_id=?",
                         vec![text(item_id)],
                     ),
                 ],

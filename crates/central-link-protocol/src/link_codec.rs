@@ -1,7 +1,11 @@
-use crate::{CorrelationId, LinkRequest, ProtocolError, ReplyPayload};
+use crate::{
+    CorrelationId, DeliveryAnswer, LinkRequest, LinkRequestBatch, MachineTokenText, ProtocolError,
+    ReplyPayload, RequestStatusAnswer, RequestStatusQuery, TokenRenewalResult,
+};
 use serde::{Deserialize, Serialize};
+use workspace_ids::MachineId;
 use workspace_ids::MessageId;
-use workspace_model::{MachineId, Timestamp, central_mail::MessageRecord};
+use workspace_model::{Caller, ResolvedSender, Timestamp, central_mail::MessageRecord};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameDirection {
@@ -17,7 +21,7 @@ pub enum LinkFrame {
     Data(DataFrame),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -32,15 +36,43 @@ pub enum DataFrame {
     Request {
         request: Box<LinkRequest>,
     },
+    Batch {
+        requests: LinkRequestBatch,
+    },
     Reply {
         correlation_id: CorrelationId,
         result: Box<ReplyPayload>,
     },
+    RequestStatus {
+        correlation_id: CorrelationId,
+        caller: Caller,
+        query: RequestStatusQuery,
+    },
+    RequestStatusReply {
+        correlation_id: CorrelationId,
+        result: Box<RequestStatusAnswer>,
+    },
+    /// Central to the recipient's Router: a queued direct message, pushed at
+    /// once when it is accepted and again on reconnect while inside its window.
     Deliver {
         message: Box<MessageRecord>,
+        sender: ResolvedSender,
     },
+    /// The recipient's Router to central: its answer to a delivered message,
+    /// sent on its minute flush (owner, record:218).
     Ack {
         message_id: MessageId,
+        answer: DeliveryAnswer,
+    },
+    /// Router to central: a fresh machine token for the open connection.
+    RenewMachineToken {
+        correlation_id: CorrelationId,
+        token: MachineTokenText,
+    },
+    /// Central to Router: the answer to one RenewMachineToken.
+    MachineTokenRenewal {
+        correlation_id: CorrelationId,
+        result: TokenRenewalResult,
     },
 }
 
@@ -50,12 +82,16 @@ impl LinkFrame {
             Self::Ping => direction == FrameDirection::ToCentral,
             Self::Pong => direction == FrameDirection::ToRouter,
             Self::Data(data) => match data {
-                DataFrame::Request { .. } | DataFrame::Ack { .. } => {
-                    direction == FrameDirection::ToCentral
-                }
-                DataFrame::Welcome { .. } | DataFrame::Reply { .. } | DataFrame::Deliver { .. } => {
-                    direction == FrameDirection::ToRouter
-                }
+                DataFrame::Request { .. }
+                | DataFrame::Batch { .. }
+                | DataFrame::RequestStatus { .. }
+                | DataFrame::Ack { .. }
+                | DataFrame::RenewMachineToken { .. } => direction == FrameDirection::ToCentral,
+                DataFrame::Welcome { .. }
+                | DataFrame::Reply { .. }
+                | DataFrame::RequestStatusReply { .. }
+                | DataFrame::Deliver { .. }
+                | DataFrame::MachineTokenRenewal { .. } => direction == FrameDirection::ToRouter,
             },
         };
         if valid {

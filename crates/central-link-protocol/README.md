@@ -16,3 +16,9 @@ decoder enforce this policy together.
 Caller stamping, token verification, workspace authorization, socket admission,
 delivery acknowledgement and object hibernation have other owners. Successful
 decoding establishes none of that authority. See `tests/README.md` for proof scope.
+
+A `batch` carries one to 64 writes in `requests`, each with a distinct
+correlation ID and its existing durable request ID. The whole frame is rejected
+if any member is invalid or a read. Batches travel only toward central; replies
+remain individual `reply` frames. The batch is not a transaction or an
+acknowledgement of its members.
