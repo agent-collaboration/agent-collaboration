@@ -40,6 +40,7 @@ mod external_provider_supervisor;
 mod fixed_mcp_bind;
 mod global_harness_selection;
 mod host_replacement_failures;
+mod interaction_retention_runtime;
 mod journal_failure_isolation;
 mod local_mail_cancellation;
 mod maintenance_authority;

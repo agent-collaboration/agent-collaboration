@@ -485,9 +485,12 @@ impl CollaborationRuntime {
                 store.clone(),
                 std::sync::Arc::clone(&worker_clock),
             )
-            .with_native_push_store(interactions.clone())
-            .with_interaction_broker(approval_broker.clone())
         });
+        // Interaction records and history are retained whether or not automation opened.
+        let interaction_retention_worker = collaboration_runtime::InteractionRetentionWorker::new(
+            approval_broker.clone(),
+            std::sync::Arc::clone(&worker_clock),
+        );
         let codex_recorder = crate::codex_conversation_recording_composition::recording_for_store(
             provider_store.as_ref(),
             &inputs.directory,
@@ -796,6 +799,9 @@ impl CollaborationRuntime {
             schedule_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let automation_maintenance =
             retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
+        let interaction_retention = Some(tokio::spawn(
+            interaction_retention_worker.run(shutdown.clone()),
+        ));
         let fleet_outbox_maintenance = prepared_board
             .as_ref()
             .and_then(board_composition::BoardComposition::fleet_client)
@@ -922,6 +928,7 @@ impl CollaborationRuntime {
             automation_task,
             schedule_task,
             automation_maintenance,
+            interaction_retention,
             fleet_outbox_maintenance,
             current_generation: None,
             observer_task: None,

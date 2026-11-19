@@ -170,24 +170,6 @@ impl ApplicationFixture {
         }
     }
 
-    pub fn automation_retention_worker(
-        &self,
-    ) -> Option<collaboration_runtime::AutomationRetentionWorker> {
-        self.automation.as_ref().map(|store| {
-            let worker = collaboration_runtime::AutomationRetentionWorker::new(
-                std::sync::Arc::clone(store),
-                self.runtime_clock.clone(),
-            );
-            let worker = match self.interaction_store.as_ref() {
-                Some(store) => worker.with_native_push_store(std::sync::Arc::clone(store)),
-                None => worker,
-            };
-            match self.approval_broker.as_ref() {
-                Some(broker) => worker.with_interaction_broker(std::sync::Arc::clone(broker)),
-                None => worker,
-            }
-        })
-    }
     pub fn with_automation_configuration(
         mut self,
         handle: collaboration_runtime::AutomationConfigurationHandle,

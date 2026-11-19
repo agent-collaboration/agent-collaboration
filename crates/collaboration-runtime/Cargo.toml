@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-test-support = ["dep:sqlx-turso"]
+test-support = []
 runtime-test-support = ["interaction-storage/runtime-test-support"]
 
 [lints]
@@ -15,7 +15,6 @@ workspace = true
 
 [dependencies]
 router-clock.workspace = true
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", optional = true }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 fleet-sync-tokio-runner.workspace = true
