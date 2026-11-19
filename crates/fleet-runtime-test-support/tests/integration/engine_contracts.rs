@@ -7,7 +7,8 @@ use central_storage::{
 };
 use fleet_contracts::{
     AlarmRecompute, CentralObservation, ControlGate, DueWorkSource, EngineAttemptControl,
-    EngineSubject, FailureOutcome, LegacyUnitOutcome, ObservedControl, SubjectVersion,
+    EngineSubject, FailureOutcome, LegacyUnitOutcome, ObservedControl, OrganizationStamp,
+    SubjectVersion,
 };
 use fleet_engine::{Engine, EngineHost};
 use fleet_runtime::{DueBatchState, FleetRuntime, LegacyUnitInvocations, PausePoints, TurnGuard};
@@ -19,6 +20,12 @@ use fleet_runtime_test_support::{
 struct InMemoryEngineHost<'a> {
     runtime: &'a FleetRuntime<InMemoryCentralStore, InMemoryWorkspaceStores>,
     notices: InMemoryNoticeUnits,
+}
+
+impl OrganizationStamp for InMemoryEngineHost<'_> {
+    async fn organization_is_provisioned(&self) -> Result<bool, StoreFailure> {
+        Ok(false)
+    }
 }
 
 impl EngineHost for InMemoryEngineHost<'_> {
@@ -45,7 +52,7 @@ impl EngineHost for InMemoryEngineHost<'_> {
     }
 
     async fn organization_is_provisioned(&self) -> Result<bool, StoreFailure> {
-        Ok(false)
+        OrganizationStamp::organization_is_provisioned(self).await
     }
 
     async fn plan_due_windows(

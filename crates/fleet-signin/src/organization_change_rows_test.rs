@@ -75,7 +75,7 @@ struct ReadOnlyRows(ReadOutcome);
 impl CentralStore for ReadOnlyRows {
     async fn published_alarm(
         &self,
-    ) -> Result<Option<central_engine_model::EngineTime>, central_storage::StoreFailure> {
+    ) -> Result<Option<fleet_runtime_ports::EngineTime>, central_storage::StoreFailure> {
         panic!("this test double never reads the physical alarm")
     }
     async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {

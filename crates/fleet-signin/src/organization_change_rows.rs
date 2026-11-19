@@ -22,7 +22,7 @@ pub enum OrganizationChangeKind {
 }
 
 impl OrganizationChangeKind {
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::OrganizationProvisioned => "organizationProvisioned",
             Self::StampRenewed => "stampRenewed",
@@ -134,7 +134,7 @@ fn private_id(value: &str) -> Result<Uuid, StoreFailure> {
     }
     Ok(id)
 }
-pub(crate) fn insert(record: &OrganizationChangeRecord) -> Result<GuardedStatement, StoreFailure> {
+pub fn insert(record: &OrganizationChangeRecord) -> Result<GuardedStatement, StoreFailure> {
     private_id(&record.id.to_string())?;
     let (origin, person, permission) = match &record.origin {
         OrganizationChangeOrigin::SignInProvisioning {} => {
@@ -218,7 +218,7 @@ fn decode(rows: &ReadOutcome, row: &[SqlValue]) -> Result<OrganizationChangeReco
         created_at_millis: created.get(),
     })
 }
-pub(crate) async fn read_page(
+pub async fn read_page(
     host: &impl CentralStore,
     after: Option<Uuid>,
     limit: u16,
@@ -229,7 +229,7 @@ pub(crate) async fn read_page(
 
 /// Find the predecessor ended by this approval's activation, without paging
 /// through unrelated audit history. The operation key already stores this link.
-pub(crate) async fn read_machine_supersession(
+pub async fn read_machine_supersession(
     host: &impl CentralStore,
     originating_request: &str,
 ) -> Result<Option<OrganizationChangeRecord>, StoreFailure> {

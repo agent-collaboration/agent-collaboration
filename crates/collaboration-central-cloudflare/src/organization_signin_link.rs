@@ -1,13 +1,10 @@
 //! Private Worker entry and routing to the organization's modern central object.
 
-use collaboration_central_core::{
-    SignInTrustSettings,
-    identity_contract::{
-        AUTHORIZATION_REVISIONS_ROUTE, ORGANIZATION_STATEMENT_DIGEST_ROUTE,
-        PROVISION_ORGANIZATION_ROUTE,
-    },
-    person_request::AdminRoute,
-};
+use fleet_signin::SignInTrustSettings;
+use fleet_signin::identity_contract::AUTHORIZATION_REVISIONS_ROUTE;
+use fleet_signin::identity_contract::ORGANIZATION_STATEMENT_DIGEST_ROUTE;
+use fleet_signin::identity_contract::PROVISION_ORGANIZATION_ROUTE;
+use fleet_signin::person_request::AdminRoute;
 use worker::Env;
 
 pub(crate) fn is_signin_path(path: &str) -> bool {

@@ -21,6 +21,7 @@ test-support = ["collaboration-central-core/test-support", "fleet-storage-schema
 central-storage.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-contracts.workspace = true
+fleet-signin.workspace = true
 fleet-runtime.workspace = true
 fleet-storage-schema.workspace = true
 workspace-model.workspace = true

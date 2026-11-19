@@ -1,8 +1,8 @@
 use super::support::*;
 use central_storage::StoreFailure;
-use collaboration_central_core::identity_contract::ProvisionOrganization;
-use collaboration_central_core::organization_authority::OrganizationProvisioningFailure;
 use fleet_contracts::WorkspaceCaller;
+use fleet_signin::identity_contract::ProvisionOrganization;
+use fleet_signin::organization_authority::OrganizationProvisioningFailure;
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,

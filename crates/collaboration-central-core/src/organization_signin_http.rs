@@ -1,14 +1,6 @@
 //! HTTP policy shared by both hosts' private sign-in links.
-use crate::{
-    identity_contract::{
-        AUTHORIZATION_REVISIONS_ROUTE, AuthorizationRevision, ORGANIZATION_STATEMENT_DIGEST_ROUTE,
-        PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization, ReadOrganizationStatementDigest,
-    },
-    organization_admin_contract::OrganizationAdminAnswer,
-    organization_authority::OrganizationProvisioningFailure,
-    organization_signin_port::OrganizationSignInPort,
-    person_request::{AdminRoute, PersonRequestInput},
-};
+use crate::organization_admin_contract::OrganizationAdminAnswer;
+use crate::organization_signin_port::OrganizationSignInPort;
 use axum::{
     Json, Router,
     body::Bytes,
@@ -18,6 +10,15 @@ use axum::{
     routing::post,
 };
 use fleet_identity_protocol::OrganizationId;
+use fleet_signin::identity_contract::AUTHORIZATION_REVISIONS_ROUTE;
+use fleet_signin::identity_contract::AuthorizationRevision;
+use fleet_signin::identity_contract::ORGANIZATION_STATEMENT_DIGEST_ROUTE;
+use fleet_signin::identity_contract::PROVISION_ORGANIZATION_ROUTE;
+use fleet_signin::identity_contract::ProvisionOrganization;
+use fleet_signin::identity_contract::ReadOrganizationStatementDigest;
+use fleet_signin::organization_authority::OrganizationProvisioningFailure;
+use fleet_signin::person_request::AdminRoute;
+use fleet_signin::person_request::PersonRequestInput;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

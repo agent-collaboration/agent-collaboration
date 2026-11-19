@@ -9,7 +9,7 @@ use crate::organization_authority::{
     StoredStampRead, decide_organization_statement_replacement,
 };
 use crate::{
-    WorkspaceRuntime,
+    OrganizationSignIn,
     organization_authority_cache::StampStanding,
     organization_change_rows::{
         self, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
@@ -17,16 +17,16 @@ use crate::{
     organization_stamp_rows,
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
-use fleet_contracts::FleetOrganizationStatementRefusal;
+use fleet_contracts::{AlarmRecompute, FleetOrganizationStatementRefusal};
 use fleet_runtime_ports::SyncTime;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
-impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
-    pub(crate) async fn prepare_signin_authority(&self) -> Result<(), StoreFailure> {
-        let authority = &self.signin_authority;
+impl<H: CentralStore, S: WorkspaceStores, A: AlarmRecompute> OrganizationSignIn<'_, H, S, A> {
+    pub async fn prepare_signin_authority(&self) -> Result<(), StoreFailure> {
+        let authority = &self.authority;
         if authority.needs_check() {
             let stored = organization_stamp_rows::read(self.statement_host()).await?;
             if let StoredStampRead::Stamped(stamp) = &stored
-                && stamp.organization_id() != self.fleet_runtime.organization()
+                && stamp.organization_id() != self.runtime.organization()
             {
                 return Err(fleet_runtime_ports::workspace_decode_error::corrupt(
                     "organization_identity.id",
@@ -53,21 +53,21 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         request: &ProvisionOrganization,
     ) -> Result<ProvisionOrganizationResult, OrganizationProvisioningFailure> {
         use OrganizationProvisioningFailure as Failure;
-        if request.organization_id != *self.fleet_runtime.organization() {
+        if request.organization_id != *self.runtime.organization() {
             return Err(Failure::OrganizationMismatch);
         }
         {
-            let _turn = self.fleet_runtime.take_central_turn().await;
+            let _turn = self.runtime.take_central_turn().await;
             self.prepare_signin_authority().await?;
         }
-        let check = self.signin_authority.check().ok_or(Failure::Unavailable)?;
+        let check = self.authority.check().ok_or(Failure::Unavailable)?;
         let verified = check
             .verify_statement(request.organization_statement.as_str())
             .await
             .map_err(|reason| {
-                self.fleet_runtime.observe(
+                self.runtime.observe(
                     fleet_contracts::CentralObservation::OrganizationStatementRefused {
-                        organization: self.fleet_runtime.organization().clone(),
+                        organization: self.runtime.organization().clone(),
                         refusal: reason,
                     },
                 );
@@ -83,23 +83,23 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 }
             })?;
         #[cfg(feature = "test-support")]
-        self.fleet_runtime
+        self.runtime
             .pause_points()
             .reached_central(fleet_runtime::PausePoint::BeforeSignInSample)
             .await;
-        let _turn = self.fleet_runtime.take_central_turn().await;
+        let _turn = self.runtime.take_central_turn().await;
         self.prepare_signin_authority().await?;
-        let now = self.fleet_runtime.clock().now();
+        let now = self.runtime.clock().now();
         verified.require_valid_at(now).map_err(|refusal| {
-            self.fleet_runtime.observe(
+            self.runtime.observe(
                 fleet_contracts::CentralObservation::OrganizationStatementRefused {
-                    organization: self.fleet_runtime.organization().clone(),
+                    organization: self.runtime.organization().clone(),
                     refusal,
                 },
             );
             Failure::InvalidStatement
         })?;
-        let stored_trusted = self.signin_authority.standing(now) != StampStanding::Refused;
+        let stored_trusted = self.authority.standing(now) != StampStanding::Refused;
         let stored = organization_stamp_rows::read(self.statement_host()).await?;
         let current = match &stored {
             StoredStampRead::Unprovisioned => None,
@@ -124,7 +124,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                         self.statement_host()
                             .run_batch(StatementBatch {
                                 statements: vec![],
-                                alarm: fleet_engine::alarm_update(),
+                                alarm: self.alarm.alarm_update(),
                             })
                             .await?,
                     )
@@ -136,19 +136,19 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                         Failure::Unavailable
                     }
                 })?;
-                self.signin_authority.forget();
+                self.authority.forget();
                 return Ok(ProvisionOrganizationResult::Provisioned {});
             }
             OrganizationStatementReplacement::Initialize => (
                 organization_stamp_rows::insert(
-                    self.fleet_runtime.organization(),
+                    self.runtime.organization(),
                     request.organization_statement.as_str(),
                     now.unix_millis(),
                     verified.issued_at().0,
                     verified.expires_at().0,
                 )?,
                 OrganizationChangeKind::OrganizationProvisioned,
-                self.fleet_runtime.organization().as_str().to_owned(),
+                self.runtime.organization().as_str().to_owned(),
             ),
             OrganizationStatementReplacement::Replace => {
                 let StoredStampRead::Stamped(previous) = &stored else {
@@ -168,18 +168,18 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
         };
         let record = OrganizationChangeRecord {
-            id: uuid::Uuid::parse_str(&self.fleet_runtime.ids().new_id().to_string())
+            id: uuid::Uuid::parse_str(&self.runtime.ids().new_id().to_string())
                 .map_err(|_| Failure::Unavailable)?,
             request_id: request_id.try_into()?,
             kind,
             origin: OrganizationChangeOrigin::SignInProvisioning {},
-            target_id: self.fleet_runtime.organization().as_str().to_owned(),
+            target_id: self.runtime.organization().as_str().to_owned(),
             created_at_millis: now.unix_millis(),
         };
 
         let statements = vec![stamp, organization_change_rows::insert(&record)?];
         #[cfg(feature = "test-support")]
-        self.fleet_runtime
+        self.runtime
             .pause_points()
             .reached_central(fleet_runtime::PausePoint::AfterSignInSample)
             .await;
@@ -187,7 +187,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
-                alarm: fleet_engine::alarm_update(),
+                alarm: self.alarm.alarm_update(),
             })
             .await?
         {
@@ -196,9 +196,9 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             BatchOutcome::StatementRejected { .. } => return Err(Failure::Unavailable),
             _ => return Err(Failure::StaleStatement),
         }
-        self.signin_authority.forget();
+        self.authority.forget();
         #[cfg(feature = "test-support")]
-        if self.take_lost_provisioning_reply() {
+        if self.authority.take_lost_provisioning_reply() {
             return Err(Failure::OutcomeUnknown);
         }
         Ok(ProvisionOrganizationResult::Provisioned {})
@@ -208,19 +208,19 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         request: &ReadOrganizationStatementDigest,
     ) -> Result<OrganizationStatementDigestReply, OrganizationProvisioningFailure> {
         use OrganizationProvisioningFailure as Failure;
-        if request.organization_id != *self.fleet_runtime.organization() {
+        if request.organization_id != *self.runtime.organization() {
             return Err(Failure::OrganizationMismatch);
         }
-        let _turn = self.fleet_runtime.take_central_turn().await;
+        let _turn = self.runtime.take_central_turn().await;
         let StoredStampRead::Stamped(stamp) =
             organization_stamp_rows::read(self.statement_host()).await?
         else {
             return Err(Failure::Unprovisioned);
         };
-        if stamp.organization_id() != self.fleet_runtime.organization() {
+        if stamp.organization_id() != self.runtime.organization() {
             return Err(Failure::Unavailable);
         }
-        let check = self.signin_authority.check().ok_or(Failure::Unavailable)?;
+        let check = self.authority.check().ok_or(Failure::Unavailable)?;
         let verified = check
             .verify_stored_statement_facts(stamp.statement())
             .await
@@ -236,14 +236,14 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         revision: &AuthorizationRevision,
     ) -> Result<AuthorizationRevisionAcknowledgement, OrganizationProvisioningFailure> {
         use OrganizationProvisioningFailure as Failure;
-        if revision.organization_id() != self.fleet_runtime.organization() {
+        if revision.organization_id() != self.runtime.organization() {
             return Err(Failure::OrganizationMismatch);
         }
-        let _turn = self.fleet_runtime.take_central_turn().await;
+        let _turn = self.runtime.take_central_turn().await;
         self.prepare_signin_authority().await?;
-        let now = self.fleet_runtime.now()?;
+        let now = self.runtime.now()?;
         if self
-            .signin_authority
+            .authority
             .standing(SyncTime::from_unix_millis(now.timestamp_millis()))
             != StampStanding::Valid
         {
@@ -264,7 +264,7 @@ fn stored_unexpired(stored: &StoredStampRead, now: SyncTime) -> bool {
     };
     crate::organization_authority::stored_statement_unexpired(stamp.statement(), now)
 }
-impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores, A: AlarmRecompute> OrganizationSignIn<'_, H, S, A> {
     async fn apply_revision_plan(
         &self,
         plan: crate::authorization_revision_plans::AuthorizationRevisionPlan,
@@ -279,7 +279,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
         };
         #[cfg(feature = "test-support")]
-        self.fleet_runtime
+        self.runtime
             .pause_points()
             .reached_central(fleet_runtime::PausePoint::AfterSignInSample)
             .await;

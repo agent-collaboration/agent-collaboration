@@ -1,18 +1,13 @@
 //! Native sign-in trust: real HTTP key publication and core-owned cache policy.
 
 use crate::sign_in_crypto::{NativeEd25519, NativeEs256};
-use collaboration_central_core::{
-    IssuerKeyCache, IssuerSignatureVerifier, SignInTrustSettings,
-    organization_authority::{
-        FleetOrganizationStatementTrust, FleetOrganizationStatementVerifier, SignInVerification,
-        SignInVerifiers,
-    },
-    person_request::{PersonRequestPolicy, PersonRequestVerifier},
-};
 use fleet_contracts::FleetOrganizationStatementRefusal;
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::Clock;
 use fleet_runtime_ports::{IssuerKeySource, KeyFetchFailure, RawJwks};
+use fleet_signin::IssuerKeyCache;
+use fleet_signin::SignInTrustSettings;
+use fleet_signin::organization_authority::SignInVerification;
 use std::sync::Arc;
 
 /// The host retains one trust configuration and key cache across its org runtimes.
@@ -40,40 +35,18 @@ impl NativeSignInTrust {
         organization: OrganizationId,
         clock: Arc<dyn Clock>,
     ) -> Result<Arc<dyn SignInVerification>, FleetOrganizationStatementRefusal> {
-        let trust = FleetOrganizationStatementTrust::new(
-            self.settings.issuer.clone(),
-            self.settings.audience.clone(),
-            organization,
-        )?;
         let keys = || NativeSignInKeys {
             client: self.client.clone(),
             source: self.settings.jwks_url.clone(),
         };
-        Ok(Arc::new(SignInVerifiers {
-            statements: FleetOrganizationStatementVerifier::new(
-                NativeEd25519,
-                keys(),
-                self.cache.clone(),
-                clock.clone(),
-                trust,
-            ),
-            persons: PersonRequestVerifier::new(
-                IssuerSignatureVerifier::new(
-                    NativeEd25519,
-                    keys(),
-                    self.cache.clone(),
-                    clock.clone(),
-                ),
-                NativeEs256,
-                clock,
-                PersonRequestPolicy {
-                    issuer: self.settings.issuer.clone(),
-                    audience: self.settings.admin_audience.clone(),
-                    public_origin: self.settings.public_origin.clone(),
-                },
-            ),
-            sign_in_service: self.settings.service_id.clone(),
-        }))
+        self.settings.for_organization(
+            organization,
+            clock,
+            &self.cache,
+            keys,
+            || NativeEd25519,
+            NativeEs256,
+        )
     }
 }
 

@@ -255,8 +255,7 @@ impl CentralObject {
         let identity = collaboration_central_core::prepare_central_alarm(host.as_ref())
             .await
             .map_err(AlarmFailure::Store)?;
-        let collaboration_central_core::CentralOrganizationIdentity::Stamped { organization_id } =
-            identity
+        let fleet_signin::CentralOrganizationIdentity::Stamped { organization_id } = identity
         else {
             return Ok(None);
         };
@@ -310,11 +309,10 @@ impl DurableObject for CentralObject {
         self.migrate()
             .await
             .map_err(|error| worker::Error::RustError(error.to_string()))?;
-        let identity =
-            collaboration_central_core::read_central_organization(self.statement_host().as_ref())
-                .await
-                .map_err(|error| worker::Error::RustError(error.to_string()))?;
-        if matches!(identity, collaboration_central_core::CentralOrganizationIdentity::Stamped { organization_id } if organization_id != organization)
+        let identity = fleet_signin::read_central_organization(self.statement_host().as_ref())
+            .await
+            .map_err(|error| worker::Error::RustError(error.to_string()))?;
+        if matches!(identity, fleet_signin::CentralOrganizationIdentity::Stamped { organization_id } if organization_id != organization)
         {
             if crate::organization_signin_link::is_signin_path(&request.path()) {
                 return Response::empty().map(|response| response.with_status(503));

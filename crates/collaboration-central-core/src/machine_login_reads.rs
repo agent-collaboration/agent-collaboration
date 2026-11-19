@@ -1,19 +1,23 @@
 //! Read only the machine-login facts named by an organization-serialized query.
-use crate::{
-    identity_contract::{EndedMachineClient, EnrollmentRevocationReason},
-    machine_login_row_values::{identifier, nonnegative_integer},
-    machine_login_rows::{enrollment, machine, only_row},
-    organization_authority::machine_login::{
-        EnrollmentFacts, EnrollmentQuery, StoredEnrollment, StoredEnrollmentState,
-    },
-    organization_change_rows::{OrganizationChangeOrigin, read_machine_supersession},
-};
+use crate::identity_contract::EndedMachineClient;
+use crate::identity_contract::EnrollmentRevocationReason;
+use crate::machine_login_row_values::identifier;
+use crate::machine_login_row_values::nonnegative_integer;
+use crate::machine_login_rows::enrollment;
+use crate::machine_login_rows::machine;
+use crate::machine_login_rows::only_row;
+use crate::organization_authority::machine_login::EnrollmentFacts;
+use crate::organization_authority::machine_login::EnrollmentQuery;
+use crate::organization_authority::machine_login::StoredEnrollment;
+use crate::organization_authority::machine_login::StoredEnrollmentState;
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::CentralStore;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_signin::organization_change_rows::OrganizationChangeOrigin;
+use fleet_signin::organization_change_rows::read_machine_supersession;
 
 const BY_REQUEST: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.request_id=?";
 const BY_ENROLLMENT: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.approval_id=?";

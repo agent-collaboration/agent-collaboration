@@ -10,7 +10,7 @@ use fleet_runtime_ports::stored_values::column;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 
-pub(crate) fn integer(value: i64, field: &str) -> Result<SqlValue, StoreFailure> {
+pub fn integer(value: i64, field: &str) -> Result<SqlValue, StoreFailure> {
     SafeInteger::new(value)
         .map(SqlValue::Integer)
         .map_err(|_| corrupt(field))
@@ -93,7 +93,7 @@ pub(crate) fn decode_person_floor(
     }))
 }
 
-pub(crate) async fn read_organization_floor(
+pub async fn read_organization_floor(
     host: &impl CentralStore,
     organization: &str,
 ) -> Result<Option<OrganizationFloor>, StoreFailure> {
@@ -104,7 +104,7 @@ pub(crate) async fn read_organization_floor(
     decode_organization_floor(&rows, organization)
 }
 
-pub(crate) async fn read_person_floor(
+pub async fn read_person_floor(
     host: &impl CentralStore,
     organization: &str,
     person: &str,
@@ -131,7 +131,7 @@ pub(crate) fn person_state(state: PersonFloorState) -> &'static str {
 }
 
 /// A zero-row guard means the read snapshot changed; the caller retries admission.
-pub(crate) fn organization_guard(
+pub fn organization_guard(
     organization: &str,
     floor: &OrganizationFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
@@ -146,7 +146,7 @@ pub(crate) fn organization_guard(
         ],
     ))
 }
-pub(crate) fn person_guard(
+pub fn person_guard(
     organization: &str,
     person: &str,
     floor: &PersonFloor,

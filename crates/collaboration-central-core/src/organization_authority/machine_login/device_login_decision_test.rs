@@ -10,10 +10,9 @@ use super::{SD8_MILLIS, decide_device_login};
 use crate::identity_contract::{
     DecideDeviceLogin, DeviceLoginDecision, DeviceLoginRefusal, EnrollmentRevocationReason,
 };
-use crate::organization_change_rows::{
-    OrganizationChangeKind as Kind, OrganizationChangeOrigin as Origin,
-};
 use fleet_identity_protocol::UnixSeconds;
+use fleet_signin::organization_change_rows::OrganizationChangeKind as Kind;
+use fleet_signin::organization_change_rows::OrganizationChangeOrigin as Origin;
 
 #[test]
 fn approval_plans_an_inactive_snapshot_and_allowance_records_after_its_machine() {
@@ -330,7 +329,7 @@ fn first_machine_exemption_and_later_machine_factor_boundaries_are_preserved() {
     ));
     facts.organization_has_enrollment = true;
     let now_ms = NOW_S * 1000;
-    let window = crate::person_request::SECOND_FACTOR_WINDOW_SECONDS;
+    let window = fleet_signin::person_request::SECOND_FACTOR_WINDOW_SECONDS;
     for factor in [None, Some(NOW_S - window - 1), Some(NOW_S + 1)] {
         let request = DecideDeviceLogin {
             approver_second_factor_at: factor.map(UnixSeconds),

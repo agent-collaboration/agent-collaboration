@@ -118,10 +118,7 @@ fn decode(value: &str) -> Result<Vec<u8>, FleetOrganizationStatementRefusal> {
 }
 
 /// A stored statement's expiry guard only; this does not establish signature trust.
-pub fn stored_statement_unexpired(
-    compact: &str,
-    now: fleet_runtime_ports::SyncTime,
-) -> bool {
+pub fn stored_statement_unexpired(compact: &str, now: fleet_runtime_ports::SyncTime) -> bool {
     ParsedFleetStatement::parse(compact)
         .is_ok_and(|parsed| now.unix_millis().div_euclid(1000) < parsed.claims.exp.0)
 }

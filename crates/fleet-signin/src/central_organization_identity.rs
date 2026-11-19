@@ -1,5 +1,6 @@
 //! The provisioned sign-in stamp is central's sole durable organization identity.
 use central_storage::{Statement, StoreFailure};
+use fleet_contracts::AlarmRecompute;
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::CentralStore;
 use fleet_runtime_ports::stored_values::string;
@@ -35,13 +36,14 @@ pub async fn read_central_organization(
 /// Prepares a cold alarm without fabricating an identity for an unprovisioned store.
 pub async fn prepare_central_alarm(
     host: &impl CentralStore,
+    alarm: &impl AlarmRecompute,
 ) -> Result<CentralOrganizationIdentity, StoreFailure> {
     let identity = read_central_organization(host).await?;
     if identity == CentralOrganizationIdentity::Unprovisioned {
         fleet_contracts::central_mail_rows::applied(
             host.run_batch(central_storage::StatementBatch {
                 statements: vec![],
-                alarm: fleet_engine::alarm_update(),
+                alarm: alarm.alarm_update(),
             })
             .await?,
         )?;

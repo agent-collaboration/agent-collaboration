@@ -148,7 +148,7 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
 /// Both types and their intended consumers remain usable:
 ///
 /// ```
-/// use collaboration_central_core::organization_authority::{
+/// use fleet_signin::organization_authority::{
 ///     CurrentStamp, StoredStatementFacts, VerifiedFleetOrganizationStatement,
 /// };
 /// fn authorizing_control(verified: &VerifiedFleetOrganizationStatement) -> CurrentStamp {
@@ -162,7 +162,7 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
 /// Facts cannot enter the same authorizing policy boundary:
 ///
 /// ```compile_fail,E0308
-/// use collaboration_central_core::organization_authority::{CurrentStamp, StoredStatementFacts};
+/// use fleet_signin::organization_authority::{CurrentStamp, StoredStatementFacts};
 /// fn cannot_authorize(facts: &StoredStatementFacts) {
 ///     let _ = CurrentStamp::of_verified(facts);
 /// }

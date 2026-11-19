@@ -9,6 +9,7 @@ mod engine_attempts;
 mod event_completion;
 mod issuer_refusals;
 mod legacy_units;
+mod organization_stamp;
 mod statement_refusal;
 pub mod timer_schedule;
 mod workspace_caller;
@@ -24,6 +25,7 @@ pub use engine_attempts::{
 pub use event_completion::{AlarmNotPublished, AlarmResult, EventCompletion, EventCompletionHook};
 pub use issuer_refusals::{IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerSignatureRefusal};
 pub use legacy_units::LegacyUnitOutcome;
+pub use organization_stamp::OrganizationStamp;
 pub use statement_refusal::FleetOrganizationStatementRefusal;
 pub use workspace_caller::WorkspaceCaller;
 pub use workspace_description::MAXIMUM_DESCRIPTION_BYTES;

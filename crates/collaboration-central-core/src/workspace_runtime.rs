@@ -9,31 +9,22 @@ use workspace_model::WorkspaceId;
 /// policy and has no public configuration API.
 pub struct WorkspaceRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     pub(crate) fleet_runtime: FleetRuntime<Host, Stores>,
-    pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
+    pub(crate) signin_authority: fleet_signin::OrganizationAuthority,
     #[cfg(feature = "test-support")]
     pub(crate) completed_alarms: tokio::sync::watch::Sender<u64>,
     /// Test-support record of every alarm drive that failed, in order.
     #[cfg(feature = "test-support")]
     failed_alarms: tokio::sync::watch::Sender<Vec<String>>,
-    #[cfg(feature = "test-support")]
-    lost_provisioning_reply: std::sync::atomic::AtomicBool,
 }
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub fn from_runtime(
         runtime: FleetRuntime<Host, Stores>,
         verification: Result<
-            Option<Arc<dyn crate::organization_authority::SignInVerification>>,
+            Option<Arc<dyn fleet_signin::organization_authority::SignInVerification>>,
             fleet_contracts::FleetOrganizationStatementRefusal,
         >,
     ) -> Result<Self, central_storage::StoreFailure> {
-        let signin_authority =
-            crate::organization_authority_cache::OrganizationAuthority::default();
-        match verification {
-            Ok(Some(check)) => signin_authority.install_check(check),
-            Ok(None)
-            | Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => {}
-            Err(_) => return Err(central_storage::StoreFailure::Unavailable),
-        }
+        let signin_authority = fleet_signin::OrganizationAuthority::open(verification)?;
         Ok(Self {
             fleet_runtime: runtime,
             signin_authority,
@@ -41,19 +32,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             completed_alarms: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             failed_alarms: tokio::sync::watch::channel(Vec::new()).0,
-            #[cfg(feature = "test-support")]
-            lost_provisioning_reply: Default::default(),
         })
     }
     #[cfg(feature = "test-support")]
     pub fn lose_next_provisioning_reply(&self) {
-        self.lost_provisioning_reply
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-    #[cfg(feature = "test-support")]
-    pub(crate) fn take_lost_provisioning_reply(&self) -> bool {
-        self.lost_provisioning_reply
-            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        self.signin_authority.lose_next_provisioning_reply();
     }
     pub(crate) fn workspace_directory(&self) -> impl fleet_contracts::WorkspaceDirectory + '_ {
         fleet_workspace_directory::CentralWorkspaceDirectory::new(self.statement_host())

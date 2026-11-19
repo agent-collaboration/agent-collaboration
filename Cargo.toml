@@ -19,6 +19,7 @@ members = [
     "crates/fleet-workspace-requests",
     "crates/fleet-mail",
     "crates/fleet-engine",
+    "crates/fleet-signin",
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-fleet-sync",
@@ -101,6 +102,7 @@ fleet-workspace-directory = { path = "crates/fleet-workspace-directory", version
 fleet-workspace-requests = { path = "crates/fleet-workspace-requests", version = "0.1.156" }
 fleet-mail = { path = "crates/fleet-mail", version = "0.1.156" }
 fleet-engine = { path = "crates/fleet-engine", version = "0.1.156" }
+fleet-signin = { path = "crates/fleet-signin", version = "0.1.156" }
 router-clock = { path = "crates/router-clock", version = "0.1.136" }
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }
