@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the key saved by this serialized main run, then remove its predecessors.
+# Keep the key saved in each cache family by this serialized main run, then remove its predecessors.
 set -euo pipefail
 
 prune_mode="${1:-}"
@@ -22,7 +22,7 @@ if [[ "$prune_mode" == --apply ]]; then
     --attempt "$GITHUB_RUN_ATTEMPT" --json jobs)"
   writers_started_at="$(printf '%s\n' "$cache_jobs" | jq -er '
     [.jobs[] | select(.name == "Static validation" or (.name | startswith("Test Rust workspace ("))
-      or .name == "Rust local end-to-end" or .name == "Central Worker build and local workerd conformance")
+      or .name == "Rust local end-to-end" or (.name | startswith("Central Worker build and local workerd conformance (")))
       | select(.conclusion != "skipped" and .startedAt != null and .startedAt != "0001-01-01T00:00:00Z")
       | .startedAt] | min // error("No cache writer start time")')"
   cache_inventory="$(gh cache list --repo "$GITHUB_REPOSITORY" \
@@ -36,8 +36,8 @@ fi
 # rust-cache exposes no primary-key output. Main runs are serialized by the
 # workflow concurrency group, and this job waits for every writer's post hook.
 # A key created since the first writer started therefore belongs to this run.
-# Cache hits create no entry: a single existing key needs no pruning. Refuse an
-# ambiguous family rather than guess from last-access order or delete its key.
+# Cache hits create no entry, so preserve groups with no fresh key. Refuse a
+# group with multiple distinct fresh keys before deleting anything.
 # The release workflow saves its own Apple Silicon cache from manual main
 # dispatches; GitHub expires older entries, so this job leaves that family alone.
 cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_started_at" '
@@ -46,10 +46,19 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
       // error("Expected a UTC cache-writer timestamp"))
     | .whole + "." + (((.fraction // "") + "000000000")[0:9]) + "Z";
   def family($key):
-    ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
-     "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
-     "v0-rust-e2e-", "v0-rust-wasm-", "node-cache-Linux-x64-pnpm-"]
-    | map(. as $prefix | select($key | startswith($prefix))) | first;
+    if $key | startswith("v0-rust-") then
+      if $key | test("^v0-rust-release-arm64-background-Darwin-arm64-[0-9a-f]{8}-[0-9a-f]{8}$") then null
+      else
+        # rust-cache restores by family, platform and environment hash, then
+        # appends the dependency hash to form the saved key.
+        ($key | capture("^(?<restore_prefix>v0-rust-(static|test|e2e|wasm)-Linux-x64-[0-9a-f]{8})-[0-9a-f]{8}$").restore_prefix)
+        // error("Unexpected rust-cache key: " + $key)
+      end
+    else
+      ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
+       "Linux-X64-worker-build-", "node-cache-Linux-x64-pnpm-"]
+      | map(. as $prefix | select($key | startswith($prefix))) | first
+    end;
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
       error("Cache inventory must be a complete array with fewer than 1000 entries")
@@ -63,20 +72,14 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
   | group_by(.family)
   | map(
       . as $entries
-      | (map(.key) | unique) as $keys
       | (map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
-      # pnpm caching is disabled in this workflow. Older main stores are
-      # obsolete; a new store signals an unexpected writer and is protected.
-      | if .[0].family == "node-cache-Linux-x64-pnpm-" then
-          if ($saved | length) != 0 then error("Unexpected pnpm cache writer in this run")
-          else {family: .[0].family, keepKey: null, retired: true,
-                delete: [$entries[] | {id, key, sizeInBytes}]} end
-        else
-          (if ($keys | length) == 1 then $keys[0]
-           elif ($saved | length) == 1 then $saved[0]
-           else error("Cannot identify the saved key for " + .[0].family) end) as $keep
+      | if ($saved | length) == 0 then
+          {family: .[0].family, keepKey: null, reason: "No key saved in this run", delete: []}
+        elif ($saved | length) == 1 then
+          $saved[0] as $keep
           | {family: .[0].family, keepKey: $keep,
              delete: [$entries[] | select(.key != $keep) | {id, key, sizeInBytes}]}
+        else error("Multiple keys saved in this run for " + .[0].family)
         end)
 ')"
 
