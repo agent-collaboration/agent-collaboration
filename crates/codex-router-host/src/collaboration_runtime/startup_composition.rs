@@ -326,7 +326,9 @@ impl CollaborationRuntime {
         let interactions = approval_broker.interaction_store();
         // Created before the readers and the scheduler that subscribe to it.
         let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
-        let subscription_delivery = automation_store.as_ref().map(|_| {
+        // Local message delivery needs only the interaction store; it never waits on automation.
+        // The value stays optional until the board composition (M1) no longer needs it so.
+        let subscription_delivery = Some({
             let board_availability = match project_admission.as_ref() {
                 Some(admission) => collaboration_service::BoardAvailability::Available(
                     std::sync::Arc::new(tokio::sync::Mutex::new(
