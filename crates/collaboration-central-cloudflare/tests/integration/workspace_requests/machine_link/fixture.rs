@@ -24,12 +24,12 @@ use workspace_ids::SessionRef;
 use workspace_model::{Caller, WorkspaceId, WorkspaceRequest};
 
 pub(super) const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000cf01";
-pub(super) const INSTALLATION: &str = "019f0000-0000-7000-8000-00000000cf02";
+pub(super) const MACHINE_ID: &str = "019f0000-0000-7000-8000-00000000cf02";
 pub(super) const OTHER_ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000cf03";
 
 pub(super) fn session_caller() -> Result<Caller> {
     Ok(Caller::Session(SessionRef {
-        machine_id: INSTALLATION.parse()?,
+        machine_id: MACHINE_ID.parse()?,
         session_id: "019f0000-0000-7000-8000-00000000cf07"
             .to_owned()
             .try_into()?,
@@ -99,7 +99,7 @@ impl Fixture {
         else {
             return Err("real machine token grant refused".into());
         };
-        if machine_id.as_str() != INSTALLATION
+        if machine_id.as_str() != MACHINE_ID
             || enrollment_id != enrollment
             || decided_at.0 != signed::NOW_SECONDS
             || grant_expires_at.0 != signed::NOW_SECONDS + 600
@@ -108,7 +108,7 @@ impl Fixture {
         }
         let token = signed::machine_token(
             ORGANIZATION,
-            INSTALLATION,
+            MACHINE_ID,
             enrollment.as_str(),
             signed::NOW_SECONDS,
             grant_expires_at.0,
@@ -149,7 +149,7 @@ impl Fixture {
             statements: vec![GuardedStatement {
                 statement: Statement {
                     sql:"UPDATE login_machines SET allowed_workspaces=?,updated_at=? WHERE machine_id=?",
-                    args:vec![SqlValue::Text(serde_json::to_string(&vec![workspace])?),SqlValue::Text(timestamp.to_rfc3339()),SqlValue::Text(INSTALLATION.into())],
+                    args:vec![SqlValue::Text(serde_json::to_string(&vec![workspace])?),SqlValue::Text(timestamp.to_rfc3339()),SqlValue::Text(MACHINE_ID.into())],
                 }, expect:RowExpectation::Exactly(1),
             }], alarm:AlarmUpdate::Unchanged,
         }).await?;
@@ -213,7 +213,7 @@ async fn approve(
 ) -> Result<EnrollmentId> {
     let request: DecideDeviceLogin = serde_json::from_value(json!({
         "organizationId":ORGANIZATION,"approver":signed::OWNER,"permissionChecked":"machine:enroll",
-        "requestId":request_id,"machineId":INSTALLATION,"label":"Hibernating machine",
+        "requestId":request_id,"machineId":MACHINE_ID,"label":"Hibernating machine",
         "allowedWorkspaces":[],"approverSecondFactorAt":now-60,"codeExpiresAt":now+600,
     }))?;
     match post(host, client, "/internal/device-login-decisions", &request).await? {
@@ -247,7 +247,7 @@ pub(super) struct Exchange {
 
 impl ConnectedLink {
     pub async fn open(fixture: &Fixture) -> Result<Self> {
-        let mut client = LinkClient::new(INSTALLATION.parse()?, fixture.clock.clone());
+        let mut client = LinkClient::new(MACHINE_ID.parse()?, fixture.clock.clone());
         let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
             return Err("ordinary client did not start a connection".into());
         };

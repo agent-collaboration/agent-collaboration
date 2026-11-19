@@ -1,5 +1,5 @@
 //! Only a session bound to the signed machine may act on a public link.
-use super::fixture::{ConnectedLink, Fixture, INSTALLATION, receive, send};
+use super::fixture::{ConnectedLink, Fixture, MACHINE_ID, receive, send};
 use central_link_protocol::{
     CorrelationId, DataFrame, LinkRequest, LinkRequestBatch, ReplyPayload, RequestPayload,
     RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
@@ -24,7 +24,7 @@ async fn rejected_callers(fixture: &Fixture) -> Result<()> {
     let socket = &mut link.socket;
     let store = fixture.runtime();
     let forged_person = Caller::Person {
-        machine_id: INSTALLATION.parse()?,
+        machine_id: MACHINE_ID.parse()?,
         person_id: signed::OWNER.parse()?,
     };
     let foreign_session = Caller::Session(SessionRef {

@@ -196,7 +196,6 @@ pub struct ThreadReaderView {
     pub notifications: crate::NotificationSetting,
     pub read_through: Option<ChangePosition>,
 }
-/// One workspace's inbox page covers an area's threads or a project's.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ListOrder {

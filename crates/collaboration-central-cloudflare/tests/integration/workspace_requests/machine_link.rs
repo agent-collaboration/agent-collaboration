@@ -18,7 +18,7 @@ use super::workerd_host::c2_controls::{
 use central_link_protocol::{CorrelationId, DataFrame, ReplyPayload};
 use central_storage::{SqlValue, Statement};
 use collaboration_central_conformance::{ConformanceResult as Result, signin_fixtures as signed};
-use fixture::{ConnectedLink, Exchange, Fixture, INSTALLATION, ORGANIZATION, OTHER_ORGANIZATION};
+use fixture::{ConnectedLink, Exchange, Fixture, MACHINE_ID, ORGANIZATION, OTHER_ORGANIZATION};
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use receipt::{AreaReceipt, HibernationReceipt};
 use reqwest_websocket::{CloseCode, Message, RequestBuilderExt};
@@ -199,7 +199,7 @@ async fn hibernation_journey(fixture: &Fixture) -> Result<HibernationReceipt> {
     Ok(HibernationReceipt {
         kind: "c2Hibernation",
         organization: fixture.organization.clone(),
-        machine_id: INSTALLATION.parse()?,
+        machine_id: MACHINE_ID.parse()?,
         welcome,
         baseline_request: baseline.request,
         baseline_reply: baseline.reply,
@@ -234,7 +234,7 @@ async fn baseline(
         DataFrame::Welcome {
             machine_id,
             central_time,
-        } if machine_id.as_str() == INSTALLATION
+        } if machine_id.as_str() == MACHINE_ID
             && central_time.timestamp_millis() == fixture.clock.now().unix_millis() => {}
         _ => return Err("Welcome must expose the machine_id and one injected clock".into()),
     }
@@ -459,7 +459,7 @@ async fn denied_journey(fixture: &Fixture, change: AuthorityChange) -> Result<()
                         operation_id: "019f0000-0000-7000-8000-00000000cf30"
                             .to_owned()
                             .try_into()?,
-                        machine_id: INSTALLATION.to_owned().try_into()?,
+                        machine_id: MACHINE_ID.to_owned().try_into()?,
                         enrollment_id: fixture.enrollment.clone(),
                     },
                 )

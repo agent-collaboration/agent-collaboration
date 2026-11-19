@@ -3,7 +3,7 @@ use super::super::workerd_host::c2_controls::{
     AttachmentSnapshot, EnrollmentReadOutcome, EnrollmentReadQuery, RestoreOutcome, WitnessEvent,
     WitnessPhase, WitnessRecord,
 };
-use super::fixture::{Fixture, INSTALLATION, session_caller};
+use super::fixture::{Fixture, MACHINE_ID, session_caller};
 use super::receipt::{AreaReceipt, BatchHibernationReceipt};
 use super::{baseline, workspace_reply};
 use central_link_protocol::{DataFrame, ReplyPayload, RequestPayload};
@@ -169,7 +169,7 @@ async fn batch_journey(fixture: &Fixture) -> Result<BatchHibernationReceipt> {
     Ok(BatchHibernationReceipt {
         kind: "c2BatchHibernation",
         organization: fixture.organization.clone(),
-        machine_id: INSTALLATION.parse()?,
+        machine_id: MACHINE_ID.parse()?,
         welcome,
         baseline_request: baseline.request,
         baseline_reply: baseline.reply,

@@ -1,7 +1,7 @@
 //! R40/V32 on the hibernating Worker socket: a RenewMachineToken renews the open
 //! connection, its rewritten attachment survives eviction, and a refusal keeps
 //! the old expiry.
-use super::fixture::{self, Fixture, INSTALLATION, ORGANIZATION};
+use super::fixture::{self, Fixture, MACHINE_ID, ORGANIZATION};
 use super::{baseline, create_area};
 use central_link_protocol::RequestPayload;
 use central_link_protocol::{DataFrame, TokenRenewalRefusal, TokenRenewalResult};
@@ -81,7 +81,7 @@ async fn renewal_journey(fixture: &Fixture) -> Result<()> {
         .unwrap();
     let token = signed::machine_token(
         ORGANIZATION,
-        INSTALLATION,
+        MACHINE_ID,
         fixture.enrollment.as_str(),
         signed::NOW_SECONDS + 300,
         signed::NOW_SECONDS + 900,
@@ -158,7 +158,7 @@ pub(super) async fn advance(fixture: &Fixture, seconds: u64) -> Result<()> {
 fn fresh(fixture: &Fixture, now: i64, until: i64) -> Result<String> {
     signed::machine_token(
         ORGANIZATION,
-        INSTALLATION,
+        MACHINE_ID,
         fixture.enrollment.as_str(),
         signed::NOW_SECONDS + now,
         signed::NOW_SECONDS + until,
@@ -270,7 +270,7 @@ async fn refusals_journey(fixture: &Fixture) -> Result<()> {
     )?;
     let other_enrollment = signed::machine_token(
         ORGANIZATION,
-        INSTALLATION,
+        MACHINE_ID,
         OTHER_ENROLLMENT,
         signed::NOW_SECONDS,
         signed::NOW_SECONDS + 900,

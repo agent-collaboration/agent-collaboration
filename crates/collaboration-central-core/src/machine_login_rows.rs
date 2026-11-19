@@ -60,6 +60,10 @@ pub(crate) fn enrollment(
     let client: Option<ClientId> = values::optional_text(rows, row, "machine_client_id")?
         .map(|value| values::identifier(value, "login_machine_approvals.machine_client_id"))
         .transpose()?;
+    let id: fleet_identity_protocol::EnrollmentId = values::identifier(
+        string(rows, row, "approval_id")?,
+        "login_machine_approvals.approval_id",
+    )?;
     let last_grant = values::optional_text(rows, row, "last_grant_at")?
         .map(|value| values::seconds(value, "login_machine_approvals.last_grant_at"))
         .transpose()?;
@@ -67,6 +71,12 @@ pub(crate) fn enrollment(
         .map(|value| values::millis(value, "login_machine_approvals.ended_at"))
         .transpose()?;
     let reason = values::optional_text(rows, row, "end_reason")?;
+    if client
+        .as_ref()
+        .is_some_and(|client_id| client_id.as_str() != id.as_str())
+    {
+        return Err(corrupt("login_machine_approvals.machine_client_id"));
+    }
     let state = match (
         string(rows, row, "state")?,
         reason,
@@ -107,10 +117,7 @@ pub(crate) fn enrollment(
         "login_machine_approvals.allowed_workspaces",
     )?;
     Ok(StoredEnrollment {
-        id: values::identifier(
-            string(rows, row, "approval_id")?,
-            "login_machine_approvals.approval_id",
-        )?,
+        id,
         machine_id: string(rows, row, "machine_id")?
             .parse()
             .map_err(|_| corrupt("login_machine_approvals.machine_id"))?,

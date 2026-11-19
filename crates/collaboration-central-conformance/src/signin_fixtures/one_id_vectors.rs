@@ -105,7 +105,9 @@ pub fn check_admission_identity_vectors(
         for field in legacy_fields {
             let mut legacy = input.clone();
             let target = if name == "MachineConnectionAdmission" {
-                &mut legacy["machine"]
+                legacy
+                    .get_mut("machine")
+                    .ok_or("admitted response has no machine")?
             } else {
                 &mut legacy
             };

@@ -3,7 +3,7 @@ use super::super::workerd_host::c2_controls::{
     AttachmentSnapshot, EnrollmentReadOutcome, EnrollmentReadQuery, RestoreOutcome, WitnessEvent,
     WitnessPhase, WitnessRecord,
 };
-use super::fixture::{INSTALLATION, ORGANIZATION};
+use super::fixture::{MACHINE_ID, ORGANIZATION};
 use central_link_protocol::CorrelationId;
 use collaboration_central_conformance::ConformanceResult as Result;
 
@@ -76,7 +76,7 @@ pub(super) fn baseline_attachment(
     };
     require(
         attachment.organization_id.as_str() == ORGANIZATION
-            && attachment.machine_id.as_str() == INSTALLATION,
+            && attachment.machine_id.as_str() == MACHINE_ID,
         "attachment public identity changed",
     )?;
     require(

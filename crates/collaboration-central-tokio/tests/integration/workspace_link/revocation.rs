@@ -106,3 +106,54 @@ fn issuer_one_machine_id_vectors_are_closed_on_this_host() -> Result<()> {
         round_trip::<MachineConnectionAdmission>,
     )
 }
+
+#[tokio::test]
+async fn valid_uuid_for_the_wrong_stored_client_is_corrupt() -> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = mismatched_stored_client(&fixture).await;
+    fixture.close().await?;
+    result
+}
+
+async fn mismatched_stored_client(fixture: &Fixture) -> Result<()> {
+    use central_storage::{
+        AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
+    };
+    use reqwest_websocket::RequestBuilderExt;
+
+    let runtime = fixture
+        .host
+        .central(&signed::ORGANIZATION.to_owned().try_into()?)
+        .await?;
+    let result = runtime.statement_host().run_batch(StatementBatch {
+        statements: vec![GuardedStatement {
+            statement: Statement {
+                sql: "UPDATE login_machine_approvals SET machine_client_id=? WHERE approval_id=?",
+                args: vec![
+                    SqlValue::Text("019f0000-0000-7000-8000-00000000e600".to_owned()),
+                    SqlValue::Text(fixture.enrollment_id.as_str().to_owned()),
+                ],
+            },
+            expect: RowExpectation::Exactly(1),
+        }],
+        alarm: AlarmUpdate::Unchanged,
+    }).await?;
+    if !matches!(result, BatchOutcome::Applied { .. }) {
+        return Err("fixture must change exactly one stored client ID".into());
+    }
+    let client = &fixture.client()?;
+    let response = client
+        .get(fixture.url(signed::ORGANIZATION))
+        .bearer_auth(&fixture.token)
+        .upgrade()
+        .send()
+        .await?;
+    if response.status() != reqwest::StatusCode::SERVICE_UNAVAILABLE {
+        return Err(format!(
+            "expected corrupt storage to return 503, got {}",
+            response.status()
+        )
+        .into());
+    }
+    Ok(())
+}

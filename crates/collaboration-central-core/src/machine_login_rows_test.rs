@@ -180,3 +180,27 @@ fn duplicate_rows_and_legacy_machine_tags_never_become_facts() {
         Err(corrupt("login_machines.state"))
     );
 }
+
+#[test]
+fn every_state_with_a_client_rejects_a_different_enrollment_id() {
+    for end_reason in [None, Some("owner"), Some("superseded"), Some("idle")] {
+        let mut rows = approval();
+        set(
+            &mut rows,
+            "machine_client_id",
+            text("019a3dce-2000-7000-8000-000000000002"),
+        );
+        if let Some(reason) = end_reason {
+            set(&mut rows, "state", text("ended"));
+            set(&mut rows, "end_reason", text(reason));
+            set(&mut rows, "ended_at", text("2030-03-17T17:56:40Z"));
+        } else {
+            set(&mut rows, "state", text("enrolled"));
+            set(&mut rows, "last_grant_at", text("2030-03-17T17:46:40Z"));
+        }
+        assert_eq!(
+            enrollment(&rows, &rows.rows[0]),
+            Err(corrupt("login_machine_approvals.machine_client_id"))
+        );
+    }
+}
