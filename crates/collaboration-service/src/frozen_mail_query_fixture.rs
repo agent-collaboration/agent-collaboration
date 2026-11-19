@@ -28,8 +28,6 @@ type QueriedItemStatus = (ItemId, ItemStatus<CarrierAcceptance>);
 
 pub(crate) struct FrozenMailQuery {
     answers: Arc<Mutex<Vec<QueriedItemStatus>>>,
-    accept_submissions: Arc<AtomicBool>,
-    submissions: Arc<Mutex<Vec<fleet_sync_protocol::DeliveryItemRef>>>,
     pub session: collaboration_runtime::MailDeliverySession,
     pub entered: mpsc::UnboundedReceiver<Vec<ItemId>>,
     released: watch::Sender<bool>,
@@ -223,8 +221,6 @@ impl FrozenMailQuery {
         .unwrap();
         Self {
             answers,
-            accept_submissions,
-            submissions,
             session: collaboration_runtime::MailDeliverySession {
                 requests,
                 welcomed: readiness,
@@ -245,12 +241,6 @@ impl FrozenMailQuery {
     }
     pub fn release(&self) {
         self.released.send_replace(true);
-    }
-    pub fn accept_submissions(&self) {
-        self.accept_submissions.store(true, Ordering::SeqCst);
-    }
-    pub fn submissions(&self) -> Vec<fleet_sync_protocol::DeliveryItemRef> {
-        self.submissions.lock().unwrap().clone()
     }
     pub async fn close(mut self) {
         self.release();

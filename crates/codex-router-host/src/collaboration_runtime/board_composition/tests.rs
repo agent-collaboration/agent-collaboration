@@ -9,15 +9,12 @@ use message_board::*;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path, sync::atomic::Ordering};
 use tokio::{sync::watch, time::timeout};
+#[path = "tests/cache_write_failure.rs"]
+mod cache_write_failure;
 #[path = "tests/install_attempt_completion_test.rs"]
 mod install_attempt_completion_test;
 #[path = "tests/install_attempt_observer.rs"]
 mod install_attempt_observer;
-pub(super) use install_attempt_observer::{
-    attempt_bytes, attempt_count, attempt_key, attempt_record,
-};
-#[path = "tests/cache_write_failure.rs"]
-mod cache_write_failure;
 use cache_write_failure::{CacheWriteFailure, CacheWriteTarget};
 
 #[path = "tests/archive_observation.rs"]

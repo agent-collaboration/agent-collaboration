@@ -251,16 +251,6 @@ impl MailDeliveryRuntime {
         Self::with_limits(peer, props, limits, None)
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_test_session_limits(
-        peer: PeerId,
-        props: MailPushDeliveryProps,
-        limits: DeliveryLimits,
-        session: MailDeliverySession,
-    ) -> Result<Self, StoreError> {
-        Self::with_limits(peer, props, limits, Some(session))
-    }
-
     fn with_limits(
         peer: PeerId,
         props: MailPushDeliveryProps,
@@ -380,14 +370,6 @@ impl MailDeliveryRuntime {
             .map_err(|_| StoreError::backend("mail settlement admission lock poisoned"))?;
         settlements.close();
         Ok(settlements.clone())
-    }
-
-    #[cfg(test)]
-    pub(crate) fn settlement_admission_closed_for_test(&self) -> Result<bool, StoreError> {
-        self.settlement_drives
-            .lock()
-            .map(|settlements| settlements.is_closed())
-            .map_err(|_| StoreError::backend("mail settlement admission lock poisoned"))
     }
 
     /// Host monitors this future and drains in-flight native work during shutdown.

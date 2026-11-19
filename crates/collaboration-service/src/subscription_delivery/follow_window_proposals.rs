@@ -10,8 +10,6 @@ use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{NotificationSource, RootRange};
 use fleet_sync_protocol::DeliveryEnvelope;
 use message_board_storage::MailHandoffItem;
-#[cfg(test)]
-use std::sync::Arc;
 
 #[cfg(test)]
 pub(in crate::subscription_delivery) struct ExpiryReadProbe {
@@ -19,14 +17,7 @@ pub(in crate::subscription_delivery) struct ExpiryReadProbe {
     released: tokio::sync::Notify,
 }
 #[cfg(test)]
-impl ExpiryReadProbe {
-    pub async fn wait_for_read(&self) {
-        self.entered.notified().await;
-    }
-    pub fn release(&self) {
-        self.released.notify_one();
-    }
-}
+impl ExpiryReadProbe {}
 
 pub(in crate::subscription_delivery) struct FollowWindowProposal {
     pub project: ProjectId,
@@ -50,17 +41,6 @@ impl SubscriptionWindowStore {
             .map(|_| ())
     }
 
-    #[cfg(test)]
-    pub(in crate::subscription_delivery) async fn pause_next_expiry_read_for_test(
-        &self,
-    ) -> Arc<ExpiryReadProbe> {
-        let probe = Arc::new(ExpiryReadProbe {
-            entered: tokio::sync::Notify::new(),
-            released: tokio::sync::Notify::new(),
-        });
-        *self.expiry_read_probe.lock().await = Some(probe.clone());
-        probe
-    }
     pub(in crate::subscription_delivery) async fn membership_expiry_candidates(
         &self,
         reader: &Identity,

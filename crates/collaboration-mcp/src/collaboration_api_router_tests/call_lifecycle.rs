@@ -25,119 +25,6 @@ async fn a_client_that_disconnects_cancels_its_call_on_both_listeners() {
 }
 
 #[tokio::test]
-async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_no_mutation() {
-    // A durable creation survives caller cancellation. This plain mutation still
-    // belongs to the caller's future, so cancelling it must release its native wait.
-    let directory = private_directory();
-    let (admission, registry, fleet, fleet_runtime) = project_admission(directory.path()).await;
-    let config = api_config(
-        (test_identity().with_project_admission(admission.clone())).build(),
-        directory.path(),
-    );
-    let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let board = board_scope(&tcp).await;
-    let project = ProjectId::generate();
-    let create = project_create_arguments("Cancellation setup", &board, project.clone());
-    crate::native_board_test_fixture::prepare_registered_creation(
-        &fleet,
-        &registry,
-        &serde_json::from_value(create.clone()).unwrap(),
-        &message_board::ActorOrigin {
-            installation: TEST_SERVICE_ID.to_owned().try_into().unwrap(),
-            machine: "API proof".to_owned().try_into().unwrap(),
-        },
-    )
-    .await
-    .expect("accepted registered creation input");
-    let created = tcp.call_tool("project_create", create).await;
-    assert_eq!(
-        structured(&created)["result"]["decision"]["kind"],
-        "accepted"
-    );
-    let grant = tcp.call_tool("role_grant", json!({
-        "requestId":RequestId::generate(),"protocolVersion":1,"actor":owner(),"actingFor":null,
-        "projectId":project,"operation":{"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"lead","holder":owner(),"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}
-    })).await;
-    assert_eq!(
-        structured(&grant)["result"]["decision"]["kind"],
-        "accepted",
-        "{grant:?}"
-    );
-    let store = registry.existing_project(&project).await.unwrap().unwrap();
-    let mut read = store.snapshot().await.unwrap();
-    let before_head = read.high_water();
-    let before_requests = read
-        .records(message_board::RecordKind::Request)
-        .await
-        .unwrap();
-    assert!(
-        read.records(message_board::RecordKind::Workstream)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    read.finish().await.unwrap();
-    let database = registry
-        .database(&project)
-        .await
-        .expect("native project database");
-    let held = database.begin_write().await.expect("native writer guard");
-    let mut abandoned = Vec::new();
-    for (api, name) in [(&tcp, "Abandoned over TCP"), (&unix, "Abandoned over Unix")] {
-        let request = RequestId::generate();
-        let input = json!({
-            "requestId":request,"protocolVersion":1,"actor":owner(),"actingFor":null,
-            "projectId":project,"operation":{"kind":"workstreamCreate","workstreamId":message_board::WorkstreamId::generate(),"name":name,"goal":""}
-        });
-        api.abandon_tool_call("workstream_create", input.clone())
-            .await;
-        abandoned.push((request, input, api));
-        api.await_active_calls(0, Duration::from_secs(5)).await;
-    }
-    drop(held);
-    let mut read = store.snapshot().await.unwrap();
-    assert!(
-        read.records(message_board::RecordKind::Workstream)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(
-        read.records(message_board::RecordKind::Request)
-            .await
-            .unwrap(),
-        before_requests
-    );
-    assert_eq!(read.high_water(), before_head);
-    for (request, _, _) in &abandoned {
-        assert!(
-            read.record(&request.clone().into())
-                .await
-                .unwrap()
-                .is_none()
-        );
-    }
-    read.finish().await.unwrap();
-    // A valid retry is a sensitivity control: neither an invalid tool input nor
-    // a disabled mutation path may make the no-effect cancellation check pass.
-    for (_, input, api) in abandoned {
-        let reply = api.call_tool("workstream_create", input).await;
-        assert_eq!(
-            structured(&reply)["result"]["decision"]["kind"],
-            "accepted",
-            "{reply:?}"
-        );
-    }
-    tcp.stop().await;
-    unix.stop().await;
-    fleet_runtime
-        .shutdown()
-        .await
-        .expect("stop real central fixture");
-}
-
-#[tokio::test]
 async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
     // Arrange: a wake-up, then its store held by someone else past the waits' one-second bound.
     let directory = private_directory();
@@ -177,4 +64,155 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
     assert_eq!(structured(&resuming)["outcome"]["kind"], "timedOut");
     assert_eq!(structured(&resuming)["cursor"], cursor);
     api.stop().await;
+}
+
+#[tokio::test]
+async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_no_mutation() {
+    // Arrange: a plain mutation belongs to its caller's future; its store is held.
+    let directory = private_directory();
+    let automation = automation_store(directory.path()).await;
+    let clock = fixed_clock();
+    let config = api_config(
+        (test_identity()
+            .with_runtime_clock(clock.clone())
+            .with_automation_store(Arc::clone(&automation)))
+        .build(),
+        directory.path(),
+    );
+    let tcp = ServedApi::tcp(&config).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
+    let before = store_snapshot(&automation, &clock, directory.path()).await;
+    let held = automation.lock().await;
+
+    // Act: each listener's client sends a wake, then goes away while it waits on the store.
+    let mut abandoned = Vec::new();
+    for (index, api) in [&tcp, &unix].into_iter().enumerate() {
+        // One wake per target, so each listener's wake names its own session.
+        let mut input = wake_send_arguments();
+        input["message"]["target"]["sessionId"] = json!(format!("abandoned-{index}"));
+        api.abandon_tool_call("wake_send", input.clone()).await;
+        api.await_active_calls(0, Duration::from_secs(5)).await;
+        abandoned.push((input, api));
+    }
+    drop(held);
+
+    // Assert: neither abandoned call left a wake, a receipt or an event behind.
+    let listed = tcp.call_tool("wake_list", json!({"limit": 10})).await;
+    assert_eq!(structured(&listed)["records"], json!([]), "{listed:?}");
+    {
+        use router_clock::RuntimeClock as _;
+        let mut store = automation.lock().await;
+        for (input, _) in &abandoned {
+            let operation: collaboration_protocol::OperationId =
+                serde_json::from_value(input["operationId"].clone()).expect("operation id");
+            assert!(
+                matches!(
+                    store.read_operation(&operation).await,
+                    Err(automation_storage::StorageError::OperationNotFound)
+                ),
+                "an abandoned call left its operation receipt"
+            );
+        }
+        let events = store
+            .read_event_history(&automation_storage::EventHistoryQuery {
+                after: None,
+                now_ms: clock.utc_now().timestamp_millis(),
+                limit: 100,
+            })
+            .await
+            .expect("automation events");
+        let automation_storage::EventHistoryRead::Page(page) = events else {
+            panic!("the event history expired on a still clock");
+        };
+        assert!(page.records.is_empty(), "an abandoned call left an event");
+    }
+    // The whole store, not just the submitted ids: no receipt under any id, and
+    // no event appended, even one removed again.
+    assert_eq!(
+        store_snapshot(&automation, &clock, directory.path()).await,
+        before,
+        "an abandoned call changed the receipt inventory or the event high-water mark"
+    );
+    // A valid retry is a sensitivity control: neither an invalid input nor a
+    // disabled mutation path may make the no-effect check pass.
+    for (input, api) in abandoned {
+        let reply = api.call_tool("wake_send", input).await;
+        assert_eq!(reply.is_error, Some(false), "{reply:?}");
+    }
+    let listed = tcp.call_tool("wake_list", json!({"limit": 10})).await;
+    assert_eq!(
+        structured(&listed)["records"].as_array().map(Vec::len),
+        Some(2),
+        "{listed:?}"
+    );
+    // The snapshot sees the retries' receipts and events, so its equality above can fail.
+    assert_eq!(
+        store_snapshot(&automation, &clock, directory.path()).await,
+        StoreSnapshot {
+            receipts: before.receipts + 2,
+            event_high_water: before.event_high_water + 2,
+        },
+        "the retries did not each add one receipt and one event"
+    );
+    // The same event read sees the retries' events, so its empty answer above can fail.
+    let events = automation
+        .lock()
+        .await
+        .read_event_history(&automation_storage::EventHistoryQuery {
+            after: None,
+            now_ms: router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis(),
+            limit: 100,
+        })
+        .await
+        .expect("automation events");
+    let automation_storage::EventHistoryRead::Page(page) = events else {
+        panic!("the event history expired on a still clock");
+    };
+    assert_eq!(page.records.len(), 2, "one created event per retried wake");
+    tcp.stop().await;
+    unix.stop().await;
+}
+
+/// The automation store's whole receipt inventory and its event high-water mark.
+#[derive(Debug, PartialEq, Eq)]
+struct StoreSnapshot {
+    receipts: i64,
+    event_high_water: i64,
+}
+
+async fn store_snapshot(
+    automation: &Arc<Mutex<automation_storage::AutomationStore>>,
+    clock: &Arc<router_clock::ManualClock>,
+    directory: &std::path::Path,
+) -> StoreSnapshot {
+    use sqlx::{ConnectOptions as _, Connection as _};
+    let events = automation
+        .lock()
+        .await
+        .read_event_history(&automation_storage::EventHistoryQuery {
+            after: None,
+            now_ms: router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis(),
+            limit: 100,
+        })
+        .await
+        .expect("automation events");
+    let automation_storage::EventHistoryRead::Page(page) = events else {
+        panic!("the event history expired on a still clock");
+    };
+    // No store method lists every receipt, so a read-only connection counts them.
+    let mut reader = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(directory.join("automation.sqlite"))
+        .read_only(true)
+        .connect()
+        .await
+        .expect("read-only automation connection");
+    let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operation_receipts")
+        .fetch_one(&mut reader)
+        .await
+        .expect("receipt inventory");
+    reader.close().await.expect("close the reader");
+    StoreSnapshot {
+        receipts,
+        event_high_water: page.next.sequence,
+    }
 }

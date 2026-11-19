@@ -52,7 +52,7 @@ integration tests, run with `pnpm --dir verification run test:workerd` after bui
 the central Worker's test-support bundle:
 
 ```sh
-worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support
 ```
 
 CI builds this bundle (and `build-link-test-support`) with `CARGO_PROFILE_DEV_OPT_LEVEL=1`:

@@ -4,9 +4,6 @@ use crate::api_test_harness::{
     ServedApi, TEST_PROTOCOL_VERSION, TEST_SERVICE_ID, api_config, test_identity,
 };
 use collaboration_service::CollaborationApplication;
-use message_board::{
-    BoardId, Identity, PageRequest, ProjectId, ProjectListRequest, RequestId, WorkspaceId,
-};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
@@ -21,93 +18,6 @@ fn private_directory() -> tempfile::TempDir {
     directory
 }
 
-async fn project_admission(
-    directory: &std::path::Path,
-) -> (
-    Arc<collaboration_service::ProjectAdmission>,
-    Arc<collaboration_runtime::ProjectStoreRegistry>,
-    Arc<collaboration_runtime::FleetClient>,
-    board_central_test_support::FleetTestRuntime,
-) {
-    let clock = Arc::new(router_clock::SystemRuntimeClock::new());
-
-    let registry =
-        crate::native_board_test_fixture::new_registry_with_clock(directory, clock.clone())
-            .await
-            .expect("native project registry");
-    let origin = message_board::ActorOrigin {
-        installation: TEST_SERVICE_ID
-            .to_owned()
-            .try_into()
-            .expect("fixture service"),
-        machine: "API proof".to_owned().try_into().expect("fixture machine"),
-    };
-    let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
-        directory,
-        Arc::new(crate::native_board_test_fixture::PendingRegistration),
-        &origin,
-    )
-    .await
-    .expect("real central fixture");
-    let fleet = Arc::new(fleet);
-    let admission = Arc::new(
-        collaboration_service::ProjectAdmission::new(
-            collaboration_service::ProjectAdmissionProps {
-                clock: clock.clone(),
-                registry: registry.clone(),
-                fleet: fleet.clone(),
-                identity: collaboration_contracts::MachineIdentity::new(
-                    collaboration_protocol::UuidIdentity::try_from(TEST_SERVICE_ID.to_owned())
-                        .expect("service"),
-                    Some("API proof"),
-                )
-                .expect("machine"),
-            },
-        )
-        .expect("admission"),
-    );
-    (admission, registry, fleet, fleet_runtime)
-}
-async fn board_application(
-    directory: &std::path::Path,
-) -> (
-    CollaborationApplication,
-    board_central_test_support::FleetTestRuntime,
-) {
-    let (admission, _, _, runtime) = project_admission(directory).await;
-    (
-        (test_identity().with_project_admission(admission)).build(),
-        runtime,
-    )
-}
-async fn board_scope(api: &ServedApi) -> BoardId {
-    let workspace = WorkspaceId::generate();
-    let board = BoardId::generate();
-    let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":owner()});
-    let mut request = header();
-    request["workspaceId"] = json!(workspace);
-    request["name"] = json!("API workspace");
-    request["description"] = json!("");
-    let reply = api.call_tool("workspace_create", request).await;
-    assert_eq!(
-        structured(&reply)["result"]["decision"]["kind"],
-        "accepted",
-        "{reply:?}"
-    );
-    let mut request = header();
-    request["workspaceId"] = json!(workspace);
-    request["boardId"] = json!(board);
-    request["name"] = json!("API board");
-    request["description"] = json!("");
-    request["kind"] = json!({"kind":"area"});
-    let reply = api.call_tool("board_create", request).await;
-    assert_eq!(
-        structured(&reply)["result"]["decision"]["kind"],
-        "accepted",
-        "{reply:?}"
-    );
-    board
-}
 async fn automation_store(
     directory: &std::path::Path,
 ) -> Arc<Mutex<automation_storage::AutomationStore>> {
@@ -122,19 +32,14 @@ async fn wake_application(directory: &std::path::Path) -> CollaborationApplicati
     (test_identity().with_automation_store(automation_store(directory).await)).build()
 }
 
-fn project_create_arguments(name: &str, board: &BoardId, project: ProjectId) -> Value {
-    json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,
-        "projectId":project,"boardId":board,"title":name,"actor":owner()})
-}
-fn project_list_arguments(board: &BoardId) -> Value {
-    serde_json::to_value(ProjectListRequest {
-        board_id: board.clone(),
-        page: PageRequest::default(),
-    })
-    .expect("list request")
-}
-fn owner() -> Identity {
-    serde_json::from_value(json!({"kind":"human","humanId":"api-test-owner"})).expect("owner")
+/// One application clock, held still, so every read stamps the same time.
+fn fixed_clock() -> Arc<router_clock::ManualClock> {
+    Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_792_432_800_000,
+        ))
+        .expect("fixed application time"),
+    )
 }
 
 fn structured(result: &rmcp::model::CallToolResult) -> Value {
@@ -159,84 +64,6 @@ fn wake_send_arguments() -> Value {
         "timing": {"kind": "after", "seconds": 600},
         "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
     })
-}
-
-#[tokio::test]
-async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
-    // Arrange
-    let directory = private_directory();
-    let (admission, registry, fleet, fleet_runtime) = project_admission(directory.path()).await;
-    let config = api_config(
-        (test_identity().with_project_admission(admission.clone())).build(),
-        directory.path(),
-    );
-    let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let board = board_scope(&tcp).await;
-    let create = project_create_arguments("API listeners", &board, ProjectId::generate());
-    let project_id = create["projectId"].clone();
-    let creating_input: message_board::ProjectCreateRequest =
-        serde_json::from_value(create.clone()).unwrap();
-    // Exercise Pending -> Accepted and an already Accepted replay with the
-    // same durable input/IDs. Ready recovery may initialize it before the call.
-    for _ in 0..2 {
-        crate::native_board_test_fixture::prepare_registered_creation(
-            &fleet,
-            &registry,
-            &creating_input,
-            &message_board::ActorOrigin {
-                installation: TEST_SERVICE_ID.to_owned().try_into().unwrap(),
-                machine: "API proof".to_owned().try_into().unwrap(),
-            },
-        )
-        .await
-        .expect("accepted registered creation input");
-    }
-    let created = tcp.call_tool("project_create", create).await;
-    assert_eq!(created.is_error, Some(false), "{created:?}");
-    let store = registry
-        .existing_project(&creating_input.project_id)
-        .await
-        .unwrap()
-        .expect("created native project");
-    let read = store.snapshot().await.unwrap();
-    assert_eq!(
-        read.high_water().position.get(),
-        3,
-        "the creating ledger must appear once across helper and API replays"
-    );
-    read.finish().await.unwrap();
-    let list = project_list_arguments(&board);
-
-    // Act
-    let over_tcp = tcp.call_tool("project_list", list.clone()).await;
-    let over_unix = unix.call_tool("project_list", list).await;
-    let tcp_tools = tcp
-        .client()
-        .await
-        .list_all_tools()
-        .await
-        .expect("TCP tools");
-    let unix_tools = unix
-        .client()
-        .await
-        .list_all_tools()
-        .await
-        .expect("Unix tools");
-
-    // Assert
-    assert_eq!(structured(&over_tcp), structured(&over_unix));
-    assert_eq!(
-        structured(&over_tcp)["page"]["records"][0]["id"],
-        project_id
-    );
-    assert_eq!(tcp_tools, unix_tools, "both listeners offer the same tools");
-    tcp.stop().await;
-    unix.stop().await;
-    fleet_runtime
-        .shutdown()
-        .await
-        .expect("stop real central fixture");
 }
 
 #[tokio::test]
@@ -404,12 +231,14 @@ async fn a_listener_past_its_request_limit_answers_overloaded() {
     api.stop().await;
 }
 
+#[path = "collaboration_api_router_tests/call_lifecycle.rs"]
+mod call_lifecycle;
+
 #[tokio::test]
 async fn a_foreign_browser_origin_is_refused_before_dispatch() {
-    // Arrange
+    // Arrange: the default listener, with no proxy authority configured.
     let directory = private_directory();
-    let (application, fleet_runtime) = board_application(directory.path()).await;
-    let config = api_config(application, directory.path());
+    let config = api_config(wake_application(directory.path()).await, directory.path());
     let api = ServedApi::tcp(&config).await;
 
     // Act
@@ -426,18 +255,13 @@ async fn a_foreign_browser_origin_is_refused_before_dispatch() {
     // Assert
     assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
     api.stop().await;
-    fleet_runtime
-        .shutdown()
-        .await
-        .expect("stop real central fixture");
 }
 
 #[tokio::test]
 async fn the_api_serves_on_ipv6_loopback() {
     // Arrange
     let directory = private_directory();
-    let (application, fleet_runtime) = board_application(directory.path()).await;
-    let config = api_config(application, directory.path());
+    let config = api_config(wake_application(directory.path()).await, directory.path());
     let api = ServedApi::tcp_at(&config, "[::1]:0").await;
 
     // Act
@@ -453,18 +277,57 @@ async fn the_api_serves_on_ipv6_loopback() {
             .is_some_and(|tools| !tools.is_empty())
     );
     api.stop().await;
-    fleet_runtime
-        .shutdown()
+}
+
+#[tokio::test]
+async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
+    // Arrange: one wake, written through TCP, on a still application clock.
+    let directory = private_directory();
+    let application = test_identity()
+        .with_runtime_clock(fixed_clock())
+        .with_automation_store(automation_store(directory.path()).await)
+        .build();
+    let config = api_config(application, directory.path());
+    let tcp = ServedApi::tcp(&config).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
+    let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
+    assert_eq!(wake.is_error, Some(false), "{wake:?}");
+    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
+    let show = json!({"wakeupId": wakeup_id});
+
+    // Act
+    let over_tcp = tcp.call_tool("wake_show", show.clone()).await;
+    let over_unix = unix.call_tool("wake_show", show).await;
+    let tcp_tools = tcp
+        .client()
         .await
-        .expect("stop real central fixture");
+        .list_all_tools()
+        .await
+        .expect("TCP tools");
+    let unix_tools = unix
+        .client()
+        .await
+        .list_all_tools()
+        .await
+        .expect("Unix tools");
+
+    // Assert
+    assert_eq!(structured(&over_tcp), structured(&over_unix));
+    assert_eq!(
+        structured(&over_tcp)["definition"]["wakeupId"],
+        wakeup_id,
+        "both listeners read the wake the TCP call wrote"
+    );
+    assert_eq!(tcp_tools, unix_tools, "both listeners offer the same tools");
+    tcp.stop().await;
+    unix.stop().await;
 }
 
 #[tokio::test]
 async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
-    // Arrange
+    // Arrange: no stores behind the tools; each call only has to decode.
     let directory = private_directory();
-    let (application, fleet_runtime) = board_application(directory.path()).await;
-    let config = api_config(application, directory.path());
+    let config = api_config(test_identity().build(), directory.path());
     let api = ServedApi::tcp(&config).await;
     let (_, listed) = api
         .post(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
@@ -501,10 +364,6 @@ async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
         }
     }
     api.stop().await;
-    fleet_runtime
-        .shutdown()
-        .await
-        .expect("stop real central fixture");
 }
 
 fn schema_required_object(schema: &Value, definitions: &Value) -> Value {
@@ -565,6 +424,3 @@ fn schema_required_object(schema: &Value, definitions: &Value) -> Value {
         _ => Value::Null,
     }
 }
-
-#[path = "collaboration_api_router_tests/call_lifecycle.rs"]
-mod call_lifecycle;

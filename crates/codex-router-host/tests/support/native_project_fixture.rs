@@ -3,11 +3,9 @@ use board_fleet_sync::{AccessServiceToken, BoardSessionInputs};
 use collaboration_contracts::ProjectRegistration;
 use collaboration_contracts::ProjectRegistrationFuture;
 use collaboration_contracts::ProjectRegistrationState;
-use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_protocol::{PeerId, ReceiverId};
 use fleet_sync_session::{Endpoint, PeerCredential};
-use runtime_primitives::SystemClock;
-use std::{io, net::SocketAddr, path::Path, sync::Arc};
+use std::{io, net::SocketAddr};
 
 pub struct UnsettledRegistration;
 impl ProjectRegistration for UnsettledRegistration {
@@ -24,16 +22,6 @@ impl ProjectRegistration for UnsettledRegistration {
     ) -> ProjectRegistrationFuture<'runtime> {
         Box::pin(async { Ok(ProjectRegistrationState::Pending) })
     }
-}
-
-pub fn registry(directory: &Path) -> io::Result<Arc<ProjectStoreRegistry>> {
-    Ok(Arc::new(ProjectStoreRegistry::new(
-        directory,
-        Some(collaboration_runtime::load_installation_peer(directory)?),
-        Arc::new(SystemClock),
-        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
-            .map_err(std::io::Error::other)?,
-    )))
 }
 
 /// The caller retains its own listening socket without sending Welcome. This is

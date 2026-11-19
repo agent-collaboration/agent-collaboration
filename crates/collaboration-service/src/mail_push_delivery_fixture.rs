@@ -140,7 +140,6 @@ pub(super) struct Runtime {
     pub(super) automation: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     pub(super) client: Arc<NativeClient>,
     publisher: Arc<crate::NotificationPublisher>,
-    fleet_runtime: board_central_test_support::FleetTestRuntime,
     _directory: tempfile::TempDir,
 }
 impl Runtime {
@@ -182,8 +181,7 @@ impl Runtime {
                 .unwrap(),
         ));
         let client = Arc::new(NativeClient::default());
-        let (actors, publisher, fleet_runtime) =
-            Self::start_actors(&fixture, &client, directory.path()).await;
+        let (actors, publisher) = Self::start_actors(&fixture, &client, directory.path()).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
@@ -191,7 +189,6 @@ impl Runtime {
             automation,
             client,
             publisher,
-            fleet_runtime,
             _directory: directory,
         }
     }
@@ -202,7 +199,6 @@ impl Runtime {
     ) -> (
         SubscriptionDeliveryService,
         Arc<crate::NotificationPublisher>,
-        board_central_test_support::FleetTestRuntime,
     ) {
         let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
@@ -221,17 +217,8 @@ impl Runtime {
             message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
                 .expect("32-byte fixture cursor key"),
         ));
-        let origin = message_board::ActorOrigin {
-            installation: message_board::ServiceId::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )
-            .unwrap(),
-            machine: message_board::MachineLabel::try_from("Recipient".to_owned()).unwrap(),
-        };
-        let (requests, fleet_runtime) =
-            board_central_test_support::machine_session(directory, &origin)
-                .await
-                .unwrap();
+        // A local, unenrolled machine: the Fleet client has no session and no
+        // central behind it, so project admission answers from local state only.
         let fleet = Arc::new(collaboration_runtime::FleetClient::new(
             &message_board_storage::FleetStore::open(
                 &(directory).join(message_board_storage::FleetStore::FILE_NAME),
@@ -239,9 +226,8 @@ impl Runtime {
             .await
             .unwrap(),
             Arc::new(crate::test_project_runtime::PendingRegistration),
-            Some(requests),
+            None,
         ));
-        fleet.synchronize().await.unwrap();
         let admission = Arc::new(
             crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
                 clock: fixture.host.clock.clone(),
@@ -258,7 +244,7 @@ impl Runtime {
         ));
         actors.attach_follow_admission(Arc::downgrade(&admission), Arc::downgrade(&publisher));
         actors.start().await.unwrap();
-        (actors, publisher, fleet_runtime)
+        (actors, publisher)
     }
     fn attach(fixture: &Fixture, actors: &SubscriptionDeliveryService) {
         Self::attach_with_presence(fixture, actors, Arc::new(Running));
@@ -342,7 +328,6 @@ impl Runtime {
             automation,
             client,
             publisher,
-            fleet_runtime,
             _directory,
         } = self;
         fixture.host.consumer.native.lock().unwrap().take();
@@ -350,10 +335,8 @@ impl Runtime {
         actors.shutdown().await;
         drop(actors);
         drop(publisher);
-        fleet_runtime.shutdown().await.unwrap();
         let fixture = fixture.reopen().await;
-        let (actors, publisher, fleet_runtime) =
-            Self::start_actors(&fixture, &client, _directory.path()).await;
+        let (actors, publisher) = Self::start_actors(&fixture, &client, _directory.path()).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
@@ -361,7 +344,6 @@ impl Runtime {
             automation,
             client,
             publisher,
-            fleet_runtime,
             _directory,
         }
     }
@@ -372,7 +354,6 @@ impl Runtime {
             automation,
             client: _,
             publisher,
-            fleet_runtime,
             _directory,
         } = self;
         publisher.shutdown().await;
@@ -380,7 +361,6 @@ impl Runtime {
         fixture.host.consumer.native.lock().unwrap().take();
         drop(actors);
         drop(publisher);
-        fleet_runtime.shutdown().await.unwrap();
         Arc::try_unwrap(automation)
             .unwrap_or_else(|_| panic!("automation actor retained"))
             .into_inner()

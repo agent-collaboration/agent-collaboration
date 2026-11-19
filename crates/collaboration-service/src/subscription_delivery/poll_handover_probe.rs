@@ -17,35 +17,4 @@ pub(in crate::subscription_delivery) struct PollHandoverPause {
 pub(in crate::subscription_delivery) type PollHandoverProbeSlot =
     Arc<std::sync::Mutex<Option<PollHandoverPause>>>;
 
-pub(in crate::subscription_delivery) struct PollHandoverWitness {
-    pub entered: oneshot::Receiver<()>,
-    pub resume: oneshot::Sender<()>,
-}
-
-impl SubscriptionDeliveryService {
-    pub(in crate::subscription_delivery) fn pause_poll_handover_for_test(
-        &self,
-        push: PushId,
-        stage: PollHandoverStage,
-    ) -> PollHandoverWitness {
-        let (entered, observed) = oneshot::channel();
-        let (resume, waiting) = oneshot::channel();
-        assert!(
-            self.inner
-                .poll_handover_probe
-                .lock()
-                .unwrap()
-                .replace(PollHandoverPause {
-                    push,
-                    stage,
-                    entered,
-                    resume: waiting,
-                })
-                .is_none()
-        );
-        PollHandoverWitness {
-            entered: observed,
-            resume,
-        }
-    }
-}
+impl SubscriptionDeliveryService {}

@@ -112,7 +112,7 @@ impl SignInObservation {
 // workerd intentionally caps SQLITE_LIMIT_COMPOUND_SELECT at five terms
 // (cloudflare/workerd src/workerd/util/sqlite.c++, setupSecurity). Each CTE stays below it;
 // the outer three-term SELECT preserves per-row results without a large JSON aggregate.
-// CAST preserves generated JSON's TEXT type through Turso CTE metadata (UW-15).
+// The CAST keeps the generated JSON payload typed TEXT in the CTE result.
 const SNAPSHOT: &str = r#"
 WITH identity_records_and_organization_floor AS (
 SELECT 0 AS row_group,id AS row_id,json_object('kind','identity','row',json_object(

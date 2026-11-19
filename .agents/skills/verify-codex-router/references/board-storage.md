@@ -136,10 +136,8 @@ Keep shared artifacts unchanged.
 
 ## Archive report components and the I1 control
 
-These permanent native entries exercise the surviving report contracts. They
-are component observations; neither establishes a public Host report producer.
-Build only under the caller's granted window, with TMPDIR bound to its private
-cache child:
+These historical native commands used the Tokio `conformance` feature removed
+in C1. They recorded component observations of the report contracts.
 
 ```sh
 cargo test --locked --offline -p collaboration-central-tokio --features conformance --test fleet_storage archive_settlement::final_report_and_archive_completion_roll_back_and_retry_together -- --exact --nocapture

@@ -2,22 +2,6 @@ import type { InventoryRow } from "../schema-audit-types.ts";
 
 export const rows: InventoryRow[] = [
   {
-    file: "crates/collaboration-application-test-support/src/board_context_backend.rs",
-    line: 45,
-    owner: "codex",
-    kind: "schema-mechanism",
-    defines:
-      "stand-in Codex schema bundle {definitions:{v2:{<Name>Params,<Name>Response:{type:object}}}} and fake native endpoint replies l93-110 (send site in the ledger)",
-    usedBy: [
-      {
-        part: "N10",
-      },
-    ],
-    duplicateGroup: "codex-stand-in-schemas",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
     file: "crates/collaboration-application-test-support/src/board_fixture.rs",
     line: 478,
     owner: "mcp",

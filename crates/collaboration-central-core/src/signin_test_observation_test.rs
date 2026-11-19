@@ -5,11 +5,11 @@ use central_storage::{ReadOutcome, SqlValue};
 use fleet_identity_protocol::OrganizationId;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteConnection};
 use sqlx_core::{
     connection::ConnectOptions, executor::Executor, query::query, query_scalar::query_scalar,
     row::Row,
 };
-use sqlx_turso::{Turso, TursoConnection};
 
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000ab01";
 const OTHER_ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000ab02";
@@ -20,49 +20,6 @@ const NOW: i64 = 1_800_000_000_000;
 const TIME: &str = "2027-01-15T08:00:00Z";
 // switchboard@b1c9f6f6: src/organizations/fleet-permission-policy-digest.ts
 const POLICY: &str = "af40ec7fb999c4ef7f9611f322bab013e05666b56cd1d3101fac1e9e001d074a";
-
-#[tokio::test]
-async fn computed_json_text_cast_preserves_the_runtime_text_type_through_a_cte() {
-    use sqlx_core::{type_info::TypeInfo, value::ValueRef};
-    let mut connection = empty_store().await;
-    const DIRECT: &str =
-        "SELECT json_object('value',1) AS payload,typeof(json_object('value',1)) AS runtime_type";
-    const CTE: &str = "WITH payloads AS (SELECT json_object('value',1) AS payload) SELECT payload,typeof(payload) AS runtime_type FROM payloads";
-    const CAST: &str = "WITH payloads AS (SELECT json_object('value',1) AS payload) SELECT CAST(payload AS TEXT) AS payload,typeof(payload) AS runtime_type FROM payloads";
-    for (label, sql) in [("direct", DIRECT), ("cte", CTE), ("cast", CAST)] {
-        let row = query::<Turso>(sql)
-            .fetch_one(&mut connection)
-            .await
-            .unwrap();
-        let runtime_type: String = row.try_get("runtime_type").unwrap();
-        let raw = row.try_get_raw("payload").unwrap();
-        let reported_type = raw.type_info().name().to_owned();
-        let unchecked_text: String = row.try_get_unchecked("payload").unwrap();
-        let typed_text = row.try_get::<String, _>("payload");
-        eprintln!(
-            "computed JSON {label}: runtime={runtime_type}, driver={reported_type}, typed_text={}",
-            typed_text.is_ok()
-        );
-        assert_eq!(runtime_type, "text");
-        assert_eq!(unchecked_text, r#"{"value":1}"#);
-        if label == "cast" {
-            assert_eq!(reported_type, "TEXT");
-            assert_eq!(typed_text.unwrap(), r#"{"value":1}"#);
-        } else if label == "cte" {
-            assert_eq!(
-                reported_type, "BLOB",
-                "UW-15 changed: run the documented CAST removal check"
-            );
-            assert!(
-                typed_text.is_err(),
-                "UW-15 fixed: run the documented CAST removal check"
-            );
-        } else {
-            assert_eq!(reported_type, "TEXT");
-            assert!(typed_text.is_ok());
-        }
-    }
-}
 
 fn organization() -> OrganizationId {
     ORGANIZATION.to_owned().try_into().unwrap()
@@ -76,8 +33,10 @@ fn statement() -> String {
     let claims = URL_SAFE_NO_PAD.encode(br#"{"iat":1800000000,"exp":1800003600}"#);
     format!("{header}.{claims}.signature")
 }
-async fn empty_store() -> TursoConnection {
-    let mut connection = sqlx_turso::TursoConnectOptions::new()
+async fn empty_store() -> SqliteConnection {
+    let mut connection = "sqlite::memory:"
+        .parse::<SqliteConnectOptions>()
+        .unwrap()
         .connect()
         .await
         .unwrap();
@@ -90,8 +49,8 @@ async fn empty_store() -> TursoConnection {
     }
     connection
 }
-async fn stored_snapshot(connection: &mut TursoConnection) -> ReadOutcome {
-    let rows = query::<Turso>(SNAPSHOT)
+async fn stored_snapshot(connection: &mut SqliteConnection) -> ReadOutcome {
+    let rows = query::<Sqlite>(SNAPSHOT)
         .fetch_all(connection)
         .await
         .unwrap();
@@ -103,15 +62,15 @@ async fn stored_snapshot(connection: &mut TursoConnection) -> ReadOutcome {
             .collect(),
     }
 }
-async fn writes(connection: &mut TursoConnection) -> i64 {
-    query_scalar::<Turso, i64>("SELECT total_changes()")
+async fn writes(connection: &mut SqliteConnection) -> i64 {
+    query_scalar::<Sqlite, i64>("SELECT total_changes()")
         .fetch_one(connection)
         .await
         .unwrap()
 }
-async fn stamped_store(records: usize) -> TursoConnection {
+async fn stamped_store(records: usize) -> SqliteConnection {
     let mut connection = empty_store().await;
-    query::<Turso>("INSERT INTO organization_identity VALUES(?,?,?,?)")
+    query::<Sqlite>("INSERT INTO organization_identity VALUES(?,?,?,?)")
         .bind(ORGANIZATION)
         .bind(statement())
         .bind(NOW)
@@ -120,10 +79,10 @@ async fn stamped_store(records: usize) -> TursoConnection {
         .await
         .unwrap();
     for index in 0..records {
-        query::<Turso>("INSERT INTO organization_change_records VALUES(?,?,'organizationProvisioned','signInProvisioning',NULL,NULL,?,?,?)")
+        query::<Sqlite>("INSERT INTO organization_change_records VALUES(?,?,'organizationProvisioned','signInProvisioning',NULL,NULL,?,?,?)")
             .bind(fixture_id(0x1000+index)).bind(format!("request-{index}")).bind(ORGANIZATION).bind(NOW).bind(NOW).execute(&mut connection).await.unwrap();
     }
-    query::<Turso>("INSERT INTO organization_authorization_floors VALUES(?,7,'active',?,0,?,?)")
+    query::<Sqlite>("INSERT INTO organization_authorization_floors VALUES(?,7,'active',?,0,?,?)")
         .bind(ORGANIZATION)
         .bind(POLICY)
         .bind(NOW)
@@ -131,7 +90,7 @@ async fn stamped_store(records: usize) -> TursoConnection {
         .execute(&mut connection)
         .await
         .unwrap();
-    query::<Turso>(
+    query::<Sqlite>(
         "INSERT INTO person_organization_authorization_floors VALUES(?,?,?,4,'active',?,?)",
     )
     .bind(SUBJECT)
@@ -142,7 +101,7 @@ async fn stamped_store(records: usize) -> TursoConnection {
     .execute(&mut connection)
     .await
     .unwrap();
-    query::<Turso>(
+    query::<Sqlite>(
         "INSERT INTO organization_used_requests VALUES(?,?,?,NULL,?,?,?,'thumbprint',?,?)",
     )
     .bind(fixture_id(0x3000))
@@ -156,7 +115,7 @@ async fn stamped_store(records: usize) -> TursoConnection {
     .execute(&mut connection)
     .await
     .unwrap();
-    query::<Turso>("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES(?,'alpha','active',?,?)")
+    query::<Sqlite>("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES(?,'alpha','active',?,?)")
         .bind(fixture_id(0x9000))
         .bind(TIME)
         .bind(TIME)
@@ -300,9 +259,9 @@ async fn malformed_stored_domains_and_foreign_binding_never_become_complete_obse
     );
 }
 
-async fn machine_store() -> TursoConnection {
+async fn machine_store() -> SqliteConnection {
     let mut connection = stamped_store(1).await;
-    query::<Turso>("INSERT INTO machines VALUES(?,?,'Observed machine','enrolled',?,7,?,?)")
+    query::<Sqlite>("INSERT INTO machines VALUES(?,?,'Observed machine','enrolled',?,7,?,?)")
         .bind(fixture_id(0xe000))
         .bind(fixture_id(0xe001))
         .bind(serde_json::to_string(&vec![fixture_id(0x9000)]).unwrap())
@@ -311,7 +270,7 @@ async fn machine_store() -> TursoConnection {
         .execute(&mut connection)
         .await
         .unwrap();
-    query::<Turso>(
+    query::<Sqlite>(
         "INSERT INTO machines VALUES(?,?,'Second observed machine','revoked','[]',0,?,?)",
     )
     .bind(fixture_id(0xe040))
@@ -351,7 +310,7 @@ async fn machine_store() -> TursoConnection {
             Some(TIME),
         ),
     ] {
-        query::<Turso>("INSERT INTO machine_approvals VALUES(?,?,?,'Approval snapshot','[]',?,?,?,?,7,?,?,?,?,?,?)")
+        query::<Sqlite>("INSERT INTO machine_approvals VALUES(?,?,?,'Approval snapshot','[]',?,?,?,?,7,?,?,?,?,?,?)")
             .bind(fixture_id(0xe010 + index)).bind(fixture_id(0xe020 + index)).bind(fixture_id(0xe000))
             .bind(state).bind(reason).bind(PERSON).bind("machine:enroll")
             .bind("2027-01-15T08:10:00+00:00").bind(client).bind(last).bind(ended).bind(created).bind(created)
@@ -432,7 +391,7 @@ async fn corrupt_machine_columns_refuse_instead_of_becoming_complete_observation
 async fn automatic_idle_records_observe_with_exact_origin_validation() {
     // Arrange: the same legitimate origin shape emitted by idle expiry.
     let mut connection = stamped_store(0).await;
-    query::<Turso>("INSERT INTO organization_change_records VALUES(?,?,'machineExpired','automatic',NULL,NULL,?,?,?)")
+    query::<Sqlite>("INSERT INTO organization_change_records VALUES(?,?,'machineExpired','automatic',NULL,NULL,?,?,?)")
         .bind(fixture_id(0xf001)).bind("idle-expiry-record").bind(fixture_id(0xe013)).bind(NOW).bind(NOW)
         .execute(&mut connection).await.unwrap();
     let before = writes(&mut connection).await;
@@ -445,7 +404,7 @@ async fn automatic_idle_records_observe_with_exact_origin_validation() {
         json!("machineExpired")
     );
     assert_eq!(writes(&mut connection).await, before);
-    query::<Turso>("UPDATE organization_change_records SET actor_person_id=?")
+    query::<Sqlite>("UPDATE organization_change_records SET actor_person_id=?")
         .bind(PERSON)
         .execute(&mut connection)
         .await
@@ -466,7 +425,7 @@ async fn approval_order_uses_checked_instants_across_valid_timestamp_forms_and_i
         (0xe012, "2027-01-15T08:00:00.001+00:00"),
         (0xe013, "2027-01-15T08:00:00.001Z"),
     ] {
-        query::<Turso>("UPDATE machine_approvals SET created_at=?,updated_at='2027-01-15T08:00:02Z' WHERE approval_id=?")
+        query::<Sqlite>("UPDATE machine_approvals SET created_at=?,updated_at='2027-01-15T08:00:02Z' WHERE approval_id=?")
             .bind(created).bind(fixture_id(id)).execute(&mut connection).await.unwrap();
     }
     connection

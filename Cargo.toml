@@ -12,7 +12,6 @@ members = [
     "crates/provider-session-machines",
     "crates/router-clock",
     "crates/tailnet-verification-host",
-    "crates/board-central-test-support",
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",
@@ -36,7 +35,6 @@ members = [
     "crates/collaboration-contracts",
     "crates/collaboration-runtime",
     "crates/collaboration-protocol",
-    "crates/collaboration-central-admin-protocol",
     "crates/collaboration-central-core",
     "crates/collaboration-central-cloudflare",
     "crates/collaboration-central-tokio",
@@ -71,7 +69,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.155"
+version = "0.1.156"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false

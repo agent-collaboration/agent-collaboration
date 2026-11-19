@@ -284,11 +284,6 @@ impl PreparedMachineSession {
 }
 
 impl RunningMachineSession {
-    #[cfg(test)]
-    pub(in crate::collaboration_runtime) async fn wait_for_stop_for_test(&self) -> io::Result<()> {
-        await_machine_stop(self.stop.subscribe()).await
-    }
-
     pub(in crate::collaboration_runtime) fn is_expected_refusal_error(error: &io::Error) -> bool {
         expected_terminal_io(error)
     }

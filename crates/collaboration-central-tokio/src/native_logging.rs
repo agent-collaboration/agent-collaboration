@@ -18,13 +18,6 @@ pub(crate) fn observe(observation: CentralObservation) {
         } => {
             tracing::warn!(target:"collaboration_central::engine",kind=kind.0,key=%key.0,class=failure.storage_tag(),count,retired,?workspaces,"central engine item failed")
         }
-        CentralObservation::AccessCheck {
-            route_class,
-            outcome,
-            key_source,
-        } => {
-            tracing::info!(target:"collaboration_central::access",?route_class,?outcome,?key_source,"central Access check")
-        }
         CentralObservation::OrganizationStatementRefused {
             organization,
             refusal,

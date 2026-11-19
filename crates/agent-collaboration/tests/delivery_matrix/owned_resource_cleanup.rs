@@ -1,9 +1,7 @@
 //! One-pass cleanup mutations followed by reads of the existing M2 state owners.
 #[path = "owned_resource_cleanup_readback.rs"]
 pub(super) mod readback;
-use super::owned_resources::{
-    CleanupIntent, MatrixCleanupPlan, MatrixCreationHistory, UnresolvedCreation,
-};
+use super::owned_resources::{CleanupIntent, MatrixCleanupPlan, UnresolvedCreation};
 use collaboration_client::{
     BoardClientError, ClientError, CollaborationClient, ScheduleClientError, WakeClientError,
     board::{
@@ -86,7 +84,6 @@ impl std::error::Error for MatrixCleanupFailure {}
 
 #[derive(Debug)]
 pub(super) struct MatrixCleanupReport {
-    pub(super) history: MatrixCreationHistory,
     pub(super) unresolved: Vec<UnresolvedCreation>,
     pub(super) attempts: Vec<CleanupAttempt>,
 }
@@ -246,7 +243,7 @@ pub(super) async fn cleanup_owned_resources(
     let MatrixCleanupPlan {
         intents,
         unresolved,
-        history,
+        history: _,
     } = plan;
     let mut attempts = Vec::with_capacity(intents.len());
     for intent in intents {
@@ -256,7 +253,6 @@ pub(super) async fn cleanup_owned_resources(
         attempts.push(CleanupAttempt { action, outcome });
     }
     MatrixCleanupReport {
-        history,
         unresolved,
         attempts,
     }

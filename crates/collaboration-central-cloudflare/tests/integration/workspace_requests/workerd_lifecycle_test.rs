@@ -114,69 +114,6 @@ pub(crate) fn require_exited(bridge: u32, workerd: u32) {
 }
 
 #[tokio::test]
-async fn legacy_owner_panic_disposes_real_workerd() {
-    use collaboration_central_conformance::{
-        JwksFixtureServer,
-        workerd_process::{WorkerdProcess, WorkerdSettings},
-    };
-    let keys = JwksFixtureServer::start().await.unwrap();
-    let persistence = tempfile::tempdir().unwrap();
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let settings = WorkerdSettings {
-        node: "node".into(),
-        miniflare: root.join("verification/node_modules/miniflare/dist/src/index.js"),
-        persistence: persistence.path().to_owned(),
-        port,
-        jwks_url: keys.url.clone(),
-        holder_answer_timeout: std::time::Duration::from_secs(2),
-        copy_ack_wait: std::time::Duration::from_secs(2),
-        relay_peer: "019f0000-0000-7000-8000-000000005240"
-            .to_owned()
-            .try_into()
-            .unwrap(),
-    };
-    let process = WorkerdProcess::start(&settings).await.unwrap();
-    let table = Command::new("/bin/ps")
-        .args(["-axo", "pid=,args="])
-        .output()
-        .unwrap();
-    assert!(table.status.success());
-    let pids: Vec<u32> = String::from_utf8(table.stdout)
-        .unwrap()
-        .lines()
-        .filter_map(|line| {
-            let (pid, command) = line.trim().split_once(' ')?;
-            (command.contains("scripts/tooling/run-central-workerd.mjs")
-                && command.contains(persistence.path().to_str().unwrap()))
-            .then(|| pid.parse().unwrap())
-        })
-        .collect();
-    assert_eq!(
-        pids.len(),
-        1,
-        "one exact legacy bridge owns the unique persistence"
-    );
-    let bridge = pids[0];
-    let workerd = workerd_child(bridge);
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-        let _owned = process;
-        panic!("intentional legacy owner panic");
-    }));
-    assert!(panic.is_err());
-    require_exited(bridge, workerd);
-    keys.shutdown().await.unwrap();
-}
-
-#[tokio::test]
 async fn real_bridge_eof_disposes_workerd() {
     let clock = Arc::new(
         router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(

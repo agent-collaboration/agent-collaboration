@@ -1,14 +1,18 @@
-//! Shared helpers: a held clock, a platform over a temporary root, and row readers.
+//! Shared helpers: a held clock, the workspace store calls central makes over a
+//! temporary root, and row readers.
 
-use central_storage::{ReadOutcome, SqlValue, Statement, StoreCall, StoreReply};
-use collaboration_central_core::{CentralPlatform, DeliveryConfig};
-use collaboration_central_tokio::{StoreMigrations, TokioCentralPlatform};
-use runtime_primitives::{Clock, SyncTime};
+use central_storage::{
+    AlarmUpdate, ReadOutcome, SqlValue, Statement, StoreCall, StoreFailure, StoreReply,
+};
+use collaboration_central_core::ClockIds;
+use collaboration_central_tokio::ObjectStorage;
+use runtime_primitives::{Clock, IdSource, SyncTime};
 use sqlx::migrate::Migrator;
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::Duration;
+use tokio::sync::Mutex;
 use workspace_ids::WorkspaceId;
 
 /// The one injected clock: it moves only when a case moves it.
@@ -26,51 +30,81 @@ impl Clock for HeldClock {
         SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
     }
 }
+struct SharedHeldClock(Arc<HeldClock>);
+impl Clock for SharedHeldClock {
+    fn now(&self) -> SyncTime {
+        self.0.now()
+    }
+}
 
 pub fn workspace() -> WorkspaceId {
     WorkspaceId::try_from("019f0000-0000-7000-8000-0000000000aa".to_owned()).unwrap()
 }
 
-/// Workspace stores run `workspace_migrator`; central keeps its production (empty) one.
+/// Central's calls into workspace stores, made exactly as the host's
+/// `TokioWorkspaceStores` makes them (one `ObjectStorage` per workspace, a
+/// batch's alarm update ignored), but with the case's own workspace migrator.
+#[derive(Clone)]
+pub struct WorkspaceStorePlatform {
+    root: PathBuf,
+    migrator: Arc<Migrator>,
+    ids: Arc<ClockIds<SharedHeldClock>>,
+    stores: Arc<Mutex<BTreeMap<WorkspaceId, Arc<ObjectStorage>>>>,
+}
+impl WorkspaceStorePlatform {
+    async fn store(&self, workspace: &WorkspaceId) -> Arc<ObjectStorage> {
+        let mut stores = self.stores.lock().await;
+        stores
+            .entry(workspace.clone())
+            .or_insert_with(|| {
+                Arc::new(ObjectStorage::new(
+                    self.root.join(format!("{workspace}.sqlite")),
+                    self.migrator.clone(),
+                ))
+            })
+            .clone()
+    }
+    pub async fn call_store(
+        &self,
+        workspace: WorkspaceId,
+        call: StoreCall,
+    ) -> Result<StoreReply, StoreFailure> {
+        let store = self.store(&workspace).await;
+        match call {
+            StoreCall::Read(statement) => store.read(statement).await.map(StoreReply::Read),
+            StoreCall::Batch(mut batch) => {
+                batch.alarm = AlarmUpdate::Unchanged;
+                store.run_batch(batch).await.map(StoreReply::Batch)
+            }
+        }
+    }
+    pub fn ids(&self) -> &dyn IdSource {
+        self.ids.as_ref()
+    }
+    pub async fn shutdown(&self) -> Result<(), StoreFailure> {
+        for store in std::mem::take(&mut *self.stores.lock().await).into_values() {
+            store.close().await;
+        }
+        Ok(())
+    }
+}
+
+/// Workspace stores run `workspace_migrator`.
 pub async fn open_platform(
     root: &Path,
     clock: Arc<HeldClock>,
     workspace_migrator: Migrator,
-) -> TokioCentralPlatform {
-    let migrations = StoreMigrations {
-        workspace: Arc::new(workspace_migrator),
-        ..StoreMigrations::production()
-    };
-    TokioCentralPlatform::new_with_migrations(
-        "http://127.0.0.1:9/cdn-cgi/access/certs",
-        clock,
-        |_| {},
-        root,
-        fleet_sync_lease::RegistryConfig {
-            lease: fleet_sync_lease::LeasePolicy {
-                lease_duration: Duration::from_secs(14400),
-                renew_interval: Duration::from_secs(900),
-            },
-            authoritative_receiver: fleet_sync_protocol::ReceiverId::new(
-                uuid::Uuid::parse_str("019f0000-0000-7000-8000-000000000010").unwrap(),
-            )
-            .unwrap(),
-            release_unsent_for: Duration::from_secs(300),
-            move_needs_renewal_within: Some(Duration::from_secs(1800)),
-        },
-        DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::new(
-                uuid::Uuid::parse_str("019f0000-0000-7000-8000-000000000011").unwrap(),
-            )
-            .unwrap(),
-        },
-        migrations,
-    )
-    .await
-    .unwrap()
+) -> WorkspaceStorePlatform {
+    tokio::fs::create_dir_all(root).await.unwrap();
+    WorkspaceStorePlatform {
+        root: root.to_path_buf(),
+        migrator: Arc::new(workspace_migrator),
+        ids: Arc::new(ClockIds::new(SharedHeldClock(clock))),
+        stores: Arc::default(),
+    }
 }
 
-pub async fn read_store(platform: &TokioCentralPlatform, statement: Statement) -> ReadOutcome {
+pub async fn read_store(platform: &WorkspaceStorePlatform, statement: Statement) -> ReadOutcome {
     match platform
         .call_store(workspace(), StoreCall::Read(statement))
         .await

@@ -1,1 +1,0 @@
-INSERT INTO machine_control_project_notices(notice_id,machine_id,position,kind,project_id,epoch,created_at,expires_at,updated_at) VALUES(?1,?2,CAST(?3 AS INTEGER),?4,?5,CAST(?6 AS INTEGER),CAST(?7 AS INTEGER),CAST(?8 AS INTEGER),CAST(?7 AS INTEGER));

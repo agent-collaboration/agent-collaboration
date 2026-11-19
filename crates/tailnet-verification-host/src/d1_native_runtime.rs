@@ -1,6 +1,5 @@
 //! One real native-backed collaboration Host per process, using only D1-owned state.
 use crate::{
-    d1_central_runtime::D1MachineFixture,
     d1_host_lifecycle::{native_config, private_directory, stage_native, write_private},
     d1_host_plan::{
         D1AuthPolicy, D1NativeReadinessPlan, read_private_d1_record, require_service_directory,
@@ -32,6 +31,21 @@ use std::{
     time::Duration,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
+
+/// One machine enrollment record a D1 Host reads to open its board session.
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct D1MachineFixture {
+    pub allocation: PathBuf,
+    pub service_directory: PathBuf,
+    pub service_id: String,
+    pub peer: String,
+    pub receiver: String,
+    pub relay: String,
+    pub endpoint: String,
+    pub assertion: String,
+    pub credential: String,
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

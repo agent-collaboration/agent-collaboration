@@ -25,22 +25,11 @@ serde_json_canonicalizer.workspace = true
 sqlx = { version = "=0.9.0", default-features = false, features = ["macros", "migrate"] }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 schemars.workspace = true
-collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 axum = { workspace = true, features = ["json", "query"] }
 http.workspace = true
-board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
-collaboration-mail-protocol = { version = "0.1.93", path = "../collaboration-mail-protocol" }
-durable-steps.workspace = true
 runtime-primitives.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-lease.workspace = true
-fleet-sync-receiver.workspace = true
-fleet-sync-delivery.workspace = true
-fleet-sync-session.workspace = true
-futures-channel = "0.3.34"
 futures-util.workspace = true
 sqlx-core.workspace = true
-fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
 message-board = { version = "0.1.93", path = "../message-board" }
 chrono = { version = "0.4.45", default-features = false, features = ["serde", "alloc"] }
 serde.workspace = true
@@ -56,18 +45,12 @@ tokio = { version = "1.53.3", default-features = false, features = ["sync"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { version = "=1.26.0", features = ["v7", "js"] }
 
-[build-dependencies]
-fleet-sync-query-gen.workspace = true
-
 [dev-dependencies]
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 sqlx = { workspace = true, features = ["sqlite", "migrate"] }
 ring = "0.17.14"
 jsonschema.workspace = true
-fleet-sync-tokio-runner.workspace = true
 tokio.workspace = true
-tempfile = "3.27.0"
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }
 
 [[test]]
 name = "integration"

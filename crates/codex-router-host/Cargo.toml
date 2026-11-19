@@ -15,7 +15,6 @@ runtime-test-support = [
     "collaboration-service/runtime-test-support",
     "collaboration-runtime/runtime-test-support",
     "collaboration-runtime/test-support",
-    "board-central-test-support/conformance",
 ]
 keychain-test-support = [
     "codex-router-secret-store/keychain-test-guard",
@@ -95,7 +94,6 @@ sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 fleet-sync-writer = { workspace = true, features = ["test-support"] }
-board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
 axum = { workspace = true, features = ["ws"] }
 fleet-sync-service.workspace = true
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }

@@ -39,7 +39,6 @@ mod board_skill_dx_recovery;
 mod board_task_corrections_cli;
 mod board_views_cli;
 mod board_write_uncertainty;
-mod central_cli;
 mod claude_background_cli;
 mod conversation_carriers;
 mod conversation_fault_entry_paths;

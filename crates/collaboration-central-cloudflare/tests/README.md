@@ -5,7 +5,7 @@ requiring `test-support`, and no e2e target. Unit tests stay colocated with thei
 implementation (`src/*_test.rs`).
 
 - `public-template.test.mjs`: the public deployment template keeps its placeholders
-  and binds `FLEET` and `WORKSPACE_STORE` to SQLite Durable Object classes. Run from
+  and binds `WORKSPACE_STORE` to its SQLite Durable Object class. Run from
   the root with `node --test crates/collaboration-central-cloudflare/tests/public-template.test.mjs`.
 - The non-default `test-support` feature compiles the storage boundary's workerd
   case routes (`/test-support/...`), the moved SQLx driver's scenarios
@@ -15,11 +15,9 @@ implementation (`src/*_test.rs`).
   `verification/targets/workerd-central-storage.test.ts`; the production bundle check
   refuses a bundle that carries any of these routes.
 
-The O1 bundle is built with `--features test-support,conformance`. Its actual-object
-clock case calls the real `FleetObject` clock control and `IdSource`, checks held
-and advanced UUIDv7 milliseconds, and fails if the route is absent. The route is
-compiled only when both test features are enabled and is rejected by the production
-bundle marker check.
+The O1 bundle is built with `--features test-support`. That bundle's only fetch
+entry answers these test-support routes and returns `404` for anything else; the
+production Worker has no fetch entry.
 
 ## Modern workspace request integration tests
 
@@ -43,7 +41,7 @@ From the repository root:
 
 ```sh
 pnpm --dir verification install --frozen-lockfile
-worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support
 cargo nextest run -p collaboration-central-cloudflare --features test-support --test integration
 ```
 
@@ -105,15 +103,15 @@ Rust fixture's published keys. Only one configured HTTPS JWKS URL maps to its
 owned loopback fixture; Rust owns signing, key rotation and all business assertions.
 
 ```sh
-worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
-worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --features link,test-support,conformance
-cargo nextest run --locked -p collaboration-central-cloudflare --features test-support,conformance -E 'test(organization_signin::)'
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --features link,test-support
+cargo nextest run --locked -p collaboration-central-cloudflare --features test-support -E 'test(organization_signin::)'
 ```
 
 Cases cover stamp and record atomicity, expiry and predecessor checks, current
 revision floors, signed person reads, fresh proofs, causal races, cold reopen,
-query-derived alarm activation and safe refusal observations. Public-path refusal
-uses the existing `401` edge contract. Unknown private paths return `404`.
+query-derived alarm activation and safe refusal observations. Unknown private
+paths return `404`.
 Setup cases exercise real signed create, non-null lookup, byte-identical replay,
 canonical name collisions, atomic directory/ledger/audit writes and facts-only
 digest reads outside both time bounds.
@@ -141,17 +139,14 @@ connection policy against real workerd. A byte-transparent relay observes upstre
 idle EOF and forces its ordering against one next clock POST. Each call runs once;
 the oracle uses connection events, without sleeps or relaxed deadlines.
 
-`workerd_host::lifecycle_tests` checks real parent SIGKILL and panic, launcher and
-legacy-owner panic, the inherited nextest group and real bridge EOF disposal.
-Build the legacy bundle with `worker-build crates/collaboration-central-cloudflare
---dev --no-opt -- --locked --features conformance-faults` before these cases;
-the Worker CI job already builds it for its legacy scenarios.
+`workerd_host::lifecycle_tests` checks real parent SIGKILL and panic, launcher
+panic, the inherited nextest group and real bridge EOF disposal.
 The bridge observes EOF as disposal; Rust's sole child owner waits and reaps.
 The harness never kills
 only the bridge; nextest bounds the whole test process group if disposal stalls.
 No nested bridge process group escapes nextest's termination.
 
-Standalone modern and legacy bridges remove Miniflare’s unawaited signal hooks at their one constructor and await disposal before signal exit. In-process TypeScript loaders keep their existing multi-runtime policy. `verification/targets/workerd-bridge-lifecycle.test.ts` permanently holds real SIGTERM disposal at an IPC gate, checks retained listener behavior and child exit, and checks cleanup before a missing-hook refusal. See [the pinned upstream workaround](../../../docs/upstream-workarounds/2026-11-14-miniflare-sigterm-unawaited-dispose.md) for scope and removal evidence.
+Standalone bridges remove Miniflare’s unawaited signal hooks at their one constructor and await disposal before signal exit. In-process TypeScript loaders keep their existing multi-runtime policy. `verification/targets/workerd-bridge-lifecycle.test.ts` permanently holds real SIGTERM disposal at an IPC gate, checks retained listener behavior and child exit, and checks cleanup before a missing-hook refusal. See [the pinned upstream workaround](../../../docs/upstream-workarounds/2026-11-14-miniflare-sigterm-unawaited-dispose.md) for scope and removal evidence.
 
 `support/lifecycle-nextest.toml` belongs only to explicit lifecycle negative
 controls. It does not alter normal CI deadlines. The `WORKERD_LIFECYCLE_CHILD`

@@ -33,7 +33,6 @@ const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
 /// A served API that runs one request at a time, with that one held by a wake wait.
 struct SaturatedApi {
-    fleet_runtime: board_central_test_support::FleetTestRuntime,
     served: Arc<ServedCollaborationApi>,
     client: CollaborationClient,
     wakeup_id: Value,
@@ -51,17 +50,17 @@ impl SaturatedApi {
         let directory = tempfile::Builder::new()
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir_in("/tmp")?;
-        let origin = message_board::ActorOrigin {
-            installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())?,
-            machine: message_board::MachineLabel::try_from("overload proof".to_owned())?,
-        };
-        let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
-            directory.path(),
+        // A local, unenrolled machine: the Fleet client has no session and no central.
+        let fleet = collaboration_runtime::FleetClient::new(
+            &message_board_storage::FleetStore::open(
+                &directory
+                    .path()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?,
             Arc::new(native_registry::PendingRegistration),
-            &origin,
-        )
-        .await
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
+            None,
+        );
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
             clock: clock.clone(),
             registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
@@ -121,7 +120,6 @@ impl SaturatedApi {
         .await
         .map_err(|_| "the wake wait never held the only request slot")??;
         Ok(Self {
-            fleet_runtime,
             served,
             client,
             wakeup_id,
@@ -136,10 +134,6 @@ impl SaturatedApi {
         if let Ok(served) = Arc::try_unwrap(self.served) {
             served.stop().await?;
         }
-        self.fleet_runtime
-            .shutdown()
-            .await
-            .map_err(|error| std::io::Error::other(error.to_string()))?;
         Ok(())
     }
 }

@@ -7,7 +7,6 @@ use central_storage::{
     BatchOutcome, RowExpectation, SafeInteger, SqlValue, StatementBatch, StoreCall, StoreFailure,
     StoreReply,
 };
-use collaboration_central_core::CentralPlatform;
 use collaboration_central_core::storage_conformance::{
     FAILING_MIGRATION_FIRST_TABLE, alarm_from_earliest_widget_due, count_owners,
     failing_second_statement_migrator, insert_owner, insert_widget, list_applied_migrations,

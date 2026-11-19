@@ -1,1 +1,0 @@
-INSERT INTO lease_claim_settlement_receipts(receipt_id,operation_id,step_name,attempt_id,project_id,result_kind,stored_epoch,stored_incarnation,stored_change,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,CAST(?10 AS INTEGER),CAST(?10 AS INTEGER));

@@ -3,7 +3,7 @@
 //! directory runs. It is absent while its Host's provider has not loaded the session (a
 //! fresh Host), and present once `conversation_load` loads it. Every load and prompt the
 //! provider receives is appended to a journal in the Host directory.
-use super::{fixture::identity, owned_host::BoardHost};
+use super::fixture::identity;
 use codex_router_test_support::FixtureResult;
 use collaboration_protocol::SessionRef;
 use serde_json::{Value, json};
@@ -67,37 +67,6 @@ impl AcpRecipient {
         })
     }
 
-    /// Makes the recipient present: the Host's provider loads its session. A load
-    /// completion is the signal on which held mail for it is checked again.
-    pub async fn load(&self, host: &BoardHost) -> FixtureResult {
-        host.mcp(
-            "conversation_load",
-            json!({
-                "operationId": identity(),
-                "target": self.target,
-                "workingDirectory": std::env::temp_dir(),
-                "requestedBy": {"humanId": "lead"},
-                "access": "write-restricted",
-            }),
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// Makes the recipient present so that its load is what releases its held mail. First
-    /// the reader finishes a pass with the recipient still absent (a subscriptions read
-    /// answers from a completed reconcile pass), so its held mail is checked and stays
-    /// held; then the provider loads the session. The caller does nothing else that checks
-    /// held mail before it observes the release.
-    pub async fn come_back(&self, host: &BoardHost) -> FixtureResult {
-        host.mcp(
-            "thread_subscriptions",
-            json!({"actor":{"kind":"session","session":self.target}}),
-        )
-        .await?;
-        self.load(host).await
-    }
-
     /// The text of every prompt the provider received for this session, in order.
     pub fn prompts(&self) -> FixtureResult<Vec<String>> {
         let journal = match std::fs::read_to_string(&self.journal) {
@@ -140,20 +109,6 @@ impl AcpRecipient {
             }
             updates.changed().await?;
         }
-    }
-
-    pub async fn expect_marker(&self, marker: &str) -> FixtureResult {
-        self.expect_text(marker).await.map(|_| ())
-    }
-
-    /// Prompts received so far that contain `needle`.
-    pub fn count_matching(&self, needle: &str) -> FixtureResult<u64> {
-        Ok(u64::try_from(
-            self.prompts()?
-                .iter()
-                .filter(|text| text.contains(needle))
-                .count(),
-        )?)
     }
 
     /// Every prompt received so far. The provider journals a prompt before it answers, so

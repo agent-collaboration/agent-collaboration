@@ -1,6 +1,6 @@
 //! A real newer native consumer snapshot is refused before local seed construction.
 use super::*;
-use fleet_sync_protocol::{SnapshotPage, TableName};
+use fleet_sync_protocol::TableName;
 use fleet_sync_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
 use sqlx::{SqlSafeStr, migrate::MigrationType};
 use std::sync::LazyLock;
@@ -204,79 +204,6 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
         .map_err(|_| io::Error::other("future-schema admission retained"))?
         .close()
         .await;
-    proof?;
-    closed?;
-    Ok(())
-}
-
-#[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-async fn claim_schema_too_new_preserves_the_actual_copy_identity_and_supported_version()
--> TestResult {
-    let fixture = Box::pin(ClaimFixture::start()).await?;
-    let proof = async {
-        let project = ProjectId::generate();
-        let source_path = fixture.directory.path().join("future.sqlite");
-        // Capture a genuine current board first; then its own migration owner
-        // advances this historical source to the unsupported schema.
-        project_claim::captured_board_snapshot(&fixture.central, &source_path, &project).await?;
-        let database = DatabaseId::try_from(project.as_str().to_owned())?;
-        let peer = fixture.projects.peer;
-        let source = ReplicatedDatabase::open_with(
-            &source_path,
-            database,
-            FutureBoardSchema::new()?,
-            fleet_sync_lease::LeaseHolder::provisional(
-                database,
-                peer,
-                board_fleet_sync::BOARD_LEASE_POLICY,
-            ),
-            Arc::new(SystemClock),
-            WriterOptions {
-                allow_provisional_writes: true,
-            },
-        )
-        .await?;
-        let mut snapshot = source.snapshot().await?;
-        let manifest = snapshot.manifest().await?;
-        assert_eq!(manifest.schema.version, 999);
-        let mut pages: Vec<SnapshotPage> = Vec::new();
-        let mut cursor = None;
-        loop {
-            let page = snapshot.page(cursor.clone()).await?;
-            cursor = page.next.clone();
-            pages.push(page);
-            if cursor.is_none() {
-                break;
-            }
-        }
-        snapshot.close().await?;
-        source.close().await;
-        fixture
-            .central
-            .import_board_snapshot(pages, manifest.clone())
-            .await?;
-        let supported = board_fleet_sync::BoardProjectSchema::new()?
-            .supported_schemas()
-            .iter()
-            .map(|schema| schema.version)
-            .max();
-        assert!(supported.is_some_and(|version| version < 999));
-        assert_eq!(
-            fixture.claim(&project).await?,
-            ProjectClaimReply::Refused(ProjectClaimRefusal::SchemaTooNew {
-                store: manifest.schema,
-                supported
-            })
-        );
-        assert!(fixture.registry.existing_project(&project).await?.is_none());
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }
-    .await;
-    let closed = fixture.shutdown().await;
     proof?;
     closed?;
     Ok(())

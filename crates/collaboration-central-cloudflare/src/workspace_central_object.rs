@@ -1,5 +1,6 @@
 //! Org-scoped central: shared core over a statement-only DO adapter, no Fleet engine.
 use crate::{
+    object_location::ObjectAddress,
     sign_in_trust::CloudflareSignInTrust,
     statement_store::{self, AlarmPolicy},
     worker_clock::WorkspaceClock,
@@ -8,7 +9,7 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{
-    ClockIds, ObjectAddress, ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
+    ClockIds, ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
 };
 use fleet_identity_protocol::OrganizationId;
 use futures_util::lock::Mutex;
@@ -289,7 +290,7 @@ impl CentralObject {
             Ok(None) | Err(_) => runtime,
         };
         let runtime = Arc::new(
-            runtime.with_sign_in_observer(Arc::new(crate::access_verification::observe_signin)),
+            runtime.with_sign_in_observer(Arc::new(crate::signin_observation::observe_signin)),
         );
         runtime.recompute_alarm().await?;
         *initialized = Some(runtime.clone());

@@ -22,8 +22,9 @@ use std::sync::Arc;
 
 /// Whether a batch's `AlarmUpdate` reaches the object's alarm.
 pub(crate) enum AlarmPolicy {
-    /// Central's own object: `SetFromQuery` sets or clears its one alarm, through
-    /// this handle on the same object's storage.
+    /// The storage cases' object: `SetFromQuery` sets or clears its one alarm,
+    /// through this handle on the same object's storage.
+    #[cfg(feature = "test-support")]
     Apply(worker::Storage),
     Engine(
         worker::Storage,
@@ -190,6 +191,7 @@ async fn run_in_transaction(
         rows_affected.push(affected);
     }
     let (storage, clock) = match policy {
+        #[cfg(feature = "test-support")]
         AlarmPolicy::Apply(storage) => (Some(storage), None),
         AlarmPolicy::Engine(storage, clock, decide) => (Some(storage), Some((clock, decide))),
         AlarmPolicy::Ignore => (None, None),

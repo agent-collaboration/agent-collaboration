@@ -250,22 +250,6 @@ impl NotificationPublisher {
             tokio::task::yield_now().await;
         }
     }
-
-    #[cfg(test)]
-    pub(crate) async fn advance_project_frontier_for_test(
-        &self,
-        project: &ProjectId,
-    ) -> Result<(), BoardError> {
-        self.inner.advance_project_frontier(project).await
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn consume_project_intents(
-        &self,
-        project: &ProjectId,
-    ) -> Result<(), BoardError> {
-        self.inner.consume_project_intents(project).await
-    }
 }
 impl PublisherInner {
     /// Settlement may await another mailbox; publication keeps its own hint state.
