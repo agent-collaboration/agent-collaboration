@@ -1,6 +1,6 @@
 //! The engine's only view of the runtime that hosts it (P3, module direction):
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
-//! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
+//! one direction. The application supplies the runtime and feature adapters.
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::CentralObservation;
@@ -9,7 +9,7 @@ use fleet_runtime::{DueBatchState, TurnGuard};
 use fleet_runtime_ports::CentralStore;
 use std::future::Future;
 
-pub(crate) trait EngineHost: Send + Sync {
+pub trait EngineHost: Send + Sync {
     type Host: CentralStore;
     fn host(&self) -> &Self::Host;
     /// The one injected clock.
@@ -42,10 +42,10 @@ pub(crate) trait EngineHost: Send + Sync {
 
 /// The engine bound to one host. Every engine operation is a method here, so
 /// none is attributed to WorkspaceRuntime.
-pub(crate) struct Engine<'a, R: EngineHost>(pub(crate) &'a R);
+pub struct Engine<'a, R: EngineHost>(pub(crate) &'a R);
 
 impl<'a, R: EngineHost> Engine<'a, R> {
-    pub(crate) fn new(host: &'a R) -> Self {
+    pub fn new(host: &'a R) -> Self {
         Self(host)
     }
     pub(crate) fn host(&self) -> &'a R::Host {

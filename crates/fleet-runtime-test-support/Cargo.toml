@@ -30,6 +30,7 @@ workspace-ids.workspace = true
 workspace-model.workspace = true
 
 [dev-dependencies]
+fleet-engine = { workspace = true, features = ["test-support"] }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 fleet-mail.workspace = true
 fleet-storage-schema.workspace = true

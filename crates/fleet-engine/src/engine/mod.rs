@@ -1,8 +1,10 @@
 pub(crate) mod admin;
+pub(crate) mod admin_records;
 mod alarm_source;
 pub(crate) mod attempt_records;
 pub(crate) mod attempt_statements;
 pub(crate) mod attempt_store;
+mod contract_adapters;
 pub(crate) mod control_gate;
 pub(crate) mod effects;
 pub(crate) mod failures;
@@ -36,3 +38,6 @@ pub(crate) mod receipts;
 pub(crate) mod requests;
 pub(crate) mod source;
 pub(crate) mod store_adapter;
+
+#[cfg(feature = "test-support")]
+mod test_requests;

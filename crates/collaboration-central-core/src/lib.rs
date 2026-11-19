@@ -1,7 +1,6 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
-mod engine;
 #[cfg(feature = "test-support")]
 pub mod engine_owed_probe;
 #[cfg(feature = "test-support")]
@@ -29,7 +28,6 @@ mod workspace_request_gate;
 
 mod central_organization_identity;
 mod central_timers;
-mod guarded_statements;
 mod mail_wiring;
 pub use central_organization_identity::{
     CentralOrganizationIdentity, prepare_central_alarm, read_central_organization,

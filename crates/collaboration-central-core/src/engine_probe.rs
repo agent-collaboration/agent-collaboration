@@ -1,14 +1,11 @@
 //! Test-support entry for the probe machine on a real host (P9). No production
 //! route or table reaches it; the machine itself lives in engine::probe_machine.
-pub use crate::engine::probe_machine::{
-    EngineProbe, ProbeEffect, ProbeEvent, ProbeRefusal, ProbeState,
-};
-pub use crate::engine::{
-    receipts::{EngineReceipt, EngineRefusal},
-    requests::EngineRequestOutcome,
-};
 use central_engine_model::EngineTime;
 pub use central_engine_model::{InstanceKey, ItemFailureClass};
+pub use fleet_engine::test_support::{
+    EngineProbe, EngineReceipt, EngineRefusal, EngineRequestOutcome, ProbeEffect, ProbeEvent,
+    ProbeRefusal, ProbeState,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -34,8 +31,8 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         seed: SeedProbe,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::guarded_statements::exact;
         use fleet_contracts::central_mail_rows::timestamp;
+        use fleet_runtime_ports::guarded_statements::exact;
         use fleet_runtime_ports::guarded_statements::{any, text};
         use fleet_runtime_ports::workspace_decode_error::corrupt;
         if !self.alarm_organization_is_provisioned().await? {
@@ -89,14 +86,8 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
             }
         };
         let actor = self.workspace_access().resolve_identity(&identity).await?;
-        crate::engine::port::Engine::new(self)
-            .request_engine::<EngineProbe, _>(
-                &crate::engine::probe_store::ProbeStore(self),
-                actor,
-                request.request_id,
-                request.key,
-                request.event,
-            )
+        fleet_engine::Engine::new(self)
+            .request_probe(actor, request.request_id, request.key, request.event)
             .await
     }
 }

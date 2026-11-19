@@ -124,7 +124,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                         self.statement_host()
                             .run_batch(StatementBatch {
                                 statements: vec![],
-                                alarm: crate::engine::query_registry::alarm_update(),
+                                alarm: fleet_engine::alarm_update(),
                             })
                             .await?,
                     )
@@ -187,7 +187,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
-                alarm: crate::engine::query_registry::alarm_update(),
+                alarm: fleet_engine::alarm_update(),
             })
             .await?
         {

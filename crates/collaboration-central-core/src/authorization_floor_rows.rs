@@ -135,7 +135,7 @@ pub(crate) fn organization_guard(
     organization: &str,
     floor: &OrganizationFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
-    Ok(crate::guarded_statements::exact(
+    Ok(fleet_runtime_ports::guarded_statements::exact(
         "UPDATE organization_authorization_floors SET id=id WHERE id=? AND minimum_revision=? AND state=? AND permission_policy_digest=? AND request_reject_through_ms=?",
         vec![
             SqlValue::Text(organization.to_owned()),
@@ -151,7 +151,7 @@ pub(crate) fn person_guard(
     person: &str,
     floor: &PersonFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
-    Ok(crate::guarded_statements::exact(
+    Ok(fleet_runtime_ports::guarded_statements::exact(
         "UPDATE person_organization_authorization_floors SET id=id WHERE id=? AND organization_id=? AND person_id=? AND minimum_revision=? AND state=?",
         vec![
             SqlValue::Text(floor.subject_id.clone()),

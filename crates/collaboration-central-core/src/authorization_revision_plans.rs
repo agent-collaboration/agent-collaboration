@@ -4,12 +4,12 @@ use crate::{
         integer, organization_guard, organization_state, person_guard, person_state,
         read_organization_floor, read_person_floor,
     },
-    guarded_statements::exact,
     identity_contract::AuthorizationRevision,
     person_request::floor_delivery::{FloorDelivery, FloorMutation, decide_floor_delivery},
 };
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_runtime_ports::CentralStore;
+use fleet_runtime_ports::guarded_statements::exact;
 use fleet_runtime_ports::guarded_statements::text;
 use workspace_model::Timestamp;
 

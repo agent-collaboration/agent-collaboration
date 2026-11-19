@@ -1,12 +1,8 @@
 //! Test-support entry that runs the owed-reply reducer through `handle` on a
 //! real host (P10, V1). No production route or table reaches it.
-pub use crate::engine::machines::owed_reply::{
-    Event as OwedEvent, Finish as OwedFinish, OwedReply, OwedReplyRefusal,
-    RouterAnswer as OwedAnswer, State as OwedState,
-};
-pub use crate::engine::{
-    receipts::{EngineReceipt, EngineRefusal},
-    requests::EngineRequestOutcome,
+pub use fleet_engine::test_support::{
+    EngineReceipt, EngineRefusal, EngineRequestOutcome, OwedAnswer, OwedEvent, OwedFinish,
+    OwedReply, OwedReplyRefusal, OwedState,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,8 +27,8 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         seed: SeedOwedReply,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::guarded_statements::exact;
         use fleet_contracts::central_mail_rows::timestamp;
+        use fleet_runtime_ports::guarded_statements::exact;
         use fleet_runtime_ports::guarded_statements::{any, text};
         use fleet_runtime_ports::workspace_decode_error::corrupt;
         if !self.alarm_organization_is_provisioned().await? {
@@ -81,14 +77,8 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
             }
         };
         let actor = self.workspace_access().resolve_identity(&identity).await?;
-        crate::engine::port::Engine::new(self)
-            .request_engine::<OwedReply, _>(
-                &crate::engine::owed_reply_store::OwedReplyStore(self),
-                actor,
-                request.request_id,
-                request.key,
-                request.event,
-            )
+        fleet_engine::Engine::new(self)
+            .request_owed_reply(actor, request.request_id, request.key, request.event)
             .await
     }
 }

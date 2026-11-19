@@ -23,7 +23,7 @@ use workspace_model::{Description, ResourceName, Timestamp, WorkspaceId};
 
 const WORKSPACE_ID: &str = "019f0000-0000-7000-8000-000000000001";
 
-async fn runtime()
+pub(super) async fn runtime()
 -> Result<FleetRuntime<InMemoryCentralStore, InMemoryWorkspaceStores>, Box<dyn std::error::Error>> {
     let clock = ManualClock::starting_at(SyncTime::from_unix_millis(1_800_000_000_000));
     let due_batches = Arc::new(DueBatchState::default());

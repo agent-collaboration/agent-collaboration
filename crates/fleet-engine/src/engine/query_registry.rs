@@ -163,7 +163,7 @@ pub(crate) const ALARM_INPUTS: &str = concat!(
     ",9223372036855)),9223372036855) ELSE NULL END AS legacy_due"
 );
 
-pub(crate) fn alarm_update() -> central_storage::AlarmUpdate {
+pub fn alarm_update() -> central_storage::AlarmUpdate {
     central_storage::AlarmUpdate::SetEngineFromQuery {
         query: central_engine_model::next_due_sql(ALARM_INPUTS),
     }

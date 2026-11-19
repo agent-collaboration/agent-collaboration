@@ -2,12 +2,12 @@
 //! only `EngineHost`; this module, outside engine/, implements that port for the
 //! runtime and keeps the runtime's public event entry.
 use crate::WorkspaceRuntime;
-use crate::engine::port::{Engine, EngineHost};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::{
     AlarmNotPublished, CentralObservation, EventCompletion, EventCompletionHook, LegacyUnitOutcome,
 };
+use fleet_engine::{Engine, EngineHost};
 use fleet_runtime::{DueBatchState, TurnGuard};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 

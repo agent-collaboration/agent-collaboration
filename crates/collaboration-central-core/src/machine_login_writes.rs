@@ -1,6 +1,5 @@
 //! Static guarded statements for a pure decision, in its declared atomic order.
 use crate::{
-    guarded_statements::exact,
     identity_contract::EnrollmentRevocationReason,
     machine_login_row_values as values,
     organization_authority::machine_login::{
@@ -9,6 +8,7 @@ use crate::{
     },
 };
 use central_storage::{GuardedStatement, SafeInteger, SqlValue, StoreFailure};
+use fleet_runtime_ports::guarded_statements::exact;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use serde::Serialize;

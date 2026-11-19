@@ -3,13 +3,13 @@
 //! operation ID, so a replay returns it as CreateWorkspace's does.
 use crate::{
     AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
-    engine::admin::{AttemptRefusal, DiscardOutcome},
     organization_admin_contract::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
     },
     person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest},
 };
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
+use fleet_engine::{AttemptRefusal, DiscardOutcome, Engine};
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
@@ -77,9 +77,7 @@ fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, Stor
 
 impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub(crate) async fn engine_health_result(&self) -> Result<EngineAdminPlan, StoreFailure> {
-        let health = crate::engine::port::Engine::new(self)
-            .engine_health()
-            .await?;
+        let health = Engine::new(self).engine_health().await?;
         Ok(EngineAdminPlan::read(
             OrganizationAdminResult::EngineHealth {
                 kinds: health
@@ -104,9 +102,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         after: Option<uuid::Uuid>,
         limit: u16,
     ) -> Result<EngineAdminPlan, StoreFailure> {
-        let (items, next) = crate::engine::port::Engine::new(self)
-            .engine_retired_page(after, limit)
-            .await?;
+        let (items, next) = Engine::new(self).engine_retired_page(after, limit).await?;
         Ok(EngineAdminPlan::read(
             OrganizationAdminResult::EngineRetired {
                 items: items
@@ -203,7 +199,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 cutoff,
             } => (operation, actor, statements, cutoff),
         };
-        let result = match crate::engine::port::Engine::new(self)
+        let result = match Engine::new(self)
             .plan_engine_retry(request.attempt_id)
             .await?
         {
@@ -223,11 +219,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         )?);
         Ok(EngineAdminPlan {
             alarm: match result {
-                OrganizationAdminResult::EngineRetried {} => AlarmUpdate::SetEngineFromQuery {
-                    query: central_engine_model::next_due_sql(
-                        crate::engine::query_registry::ALARM_INPUTS,
-                    ),
-                },
+                OrganizationAdminResult::EngineRetried {} => fleet_engine::alarm_update(),
                 _ => AlarmUpdate::Unchanged,
             },
             result,
@@ -272,7 +264,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         let mut committed = admission.clone();
         committed.extend(statements.clone());
         committed.extend(retain(&OrganizationAdminResult::EngineDiscarded {})?);
-        match crate::engine::port::Engine::new(self)
+        match Engine::new(self)
             .engine_discard(request.attempt_id, committed)
             .await?
         {
@@ -280,11 +272,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 admission.clear();
                 // The re-arm is this event's last step; a failed publication is
                 // observed and the next event re-publishes.
-                let _ = crate::engine::port::Engine::new(self)
-                    .publish_engine_query(central_engine_model::next_due_sql(
-                        crate::engine::query_registry::ALARM_INPUTS,
-                    ))
-                    .await;
+                let _ = Engine::new(self).recompute_alarm(true).await;
                 Ok(EngineAdminPlan {
                     result: OrganizationAdminResult::EngineDiscarded {},
                     statements: vec![],

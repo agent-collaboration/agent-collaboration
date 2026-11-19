@@ -11,3 +11,10 @@ pub fn any(sql: &'static str, args: Vec<SqlValue>) -> GuardedStatement {
         expect: RowExpectation::Any,
     }
 }
+
+pub fn exact(sql: &'static str, args: Vec<SqlValue>) -> GuardedStatement {
+    GuardedStatement {
+        statement: Statement { sql, args },
+        expect: RowExpectation::Exactly(1),
+    }
+}

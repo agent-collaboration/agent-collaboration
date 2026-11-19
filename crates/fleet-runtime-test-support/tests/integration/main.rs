@@ -6,6 +6,7 @@ use fleet_runtime_test_support::{InMemoryCentralStore, InMemoryWorkspaceStores, 
 use sqlx::migrate::Migrator;
 use std::sync::Arc;
 
+mod engine_contracts;
 mod workspace_contracts;
 
 #[tokio::test]

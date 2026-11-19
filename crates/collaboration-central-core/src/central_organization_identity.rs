@@ -41,7 +41,7 @@ pub async fn prepare_central_alarm(
         fleet_contracts::central_mail_rows::applied(
             host.run_batch(central_storage::StatementBatch {
                 statements: vec![],
-                alarm: crate::engine::query_registry::alarm_update(),
+                alarm: fleet_engine::alarm_update(),
             })
             .await?,
         )?;

@@ -108,7 +108,7 @@ fn decode_due(rows: central_storage::ReadOutcome) -> Result<Vec<DueRow>, StoreFa
 impl<R: EngineHost> Engine<'_, R> {
     /// Every event reaches this after its own work. The claim occurs before the
     /// first await; only individual units perform async work, at most eight wide.
-    pub(crate) async fn after_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
+    pub async fn after_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
         let result = self.complete_event().await;
         if let Err(error) = &result {
             self.observe_alarm_not_published(error.failure.clone());
@@ -155,7 +155,23 @@ impl<R: EngineHost> Engine<'_, R> {
         Ok(EventCompletion { work, publication })
     }
 
-    pub(crate) async fn publish_engine_query(
+    /// Re-publishes the existing alarm plan for the observed stamp state.
+    pub async fn recompute_alarm(&self, provisioned: bool) -> Result<(), StoreFailure> {
+        let query = if provisioned {
+            central_engine_model::next_due_sql(query_registry::ALARM_INPUTS)
+        } else {
+            Statement {
+                sql: "SELECT NULL,NULL",
+                args: vec![],
+            }
+        };
+        self.publish_engine_query(query)
+            .await
+            .map(|_| ())
+            .map_err(|error| error.failure)
+    }
+
+    async fn publish_engine_query(
         &self,
         query: Statement,
     ) -> Result<AlarmPublication, AlarmNotPublished> {
@@ -307,11 +323,11 @@ impl<R: EngineHost> Engine<'_, R> {
                 let (done, down) = match kind {
                     #[cfg(feature = "test-support")]
                     DueKind::Probe => {
-                        self.run_machine_unit::<crate::engine_probe::EngineProbe, _>(
+                        self.run_machine_unit::<super::probe_machine::EngineProbe, _>(
                             &super::probe_store::ProbeStore(self.0),
                             row,
                             "engine_probe_items.due_at",
-                            |occurrence| crate::engine_probe::ProbeEvent::Due { occurrence },
+                            |occurrence| super::probe_machine::ProbeEvent::Due { occurrence },
                         )
                         .await
                     }

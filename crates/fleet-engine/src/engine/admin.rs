@@ -1,5 +1,6 @@
 //! The engine side of P8: health and the retired list read from storage only,
 //! retry deletes a retired record, discard runs the machine's Discard event.
+use super::admin_records::{EngineFailureClass, EngineKindName};
 use super::{
     attempt_records::{StoredAttempt, decode_attempt},
     handle::HandleOutcome,
@@ -13,11 +14,10 @@ use super::{
     },
     port::{Engine, EngineHost},
 };
-use crate::guarded_statements::exact;
-use crate::organization_admin_contract::{EngineFailureClass, EngineKindName};
 use central_engine_model::{AttemptState, EngineTime, InstanceKey, Machine};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::guarded_statements::exact;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::column;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
@@ -45,7 +45,7 @@ const READ_RETIRED_PAGE: &str = "SELECT attempt_id,machine_kind,subject_key,stat
 const READ_HEALTH: &str = "SELECT machine_kind,SUM(CASE WHEN state='failing' THEN 1 ELSE 0 END) AS failing,SUM(CASE WHEN state='retired' THEN 1 ELSE 0 END) AS retired,MIN(first_failed_at) AS oldest,(SELECT b.last_failure FROM central_work_attempts b WHERE b.machine_kind=a.machine_kind ORDER BY b.last_failed_at DESC,b.attempt_id DESC LIMIT 1) AS last_failure FROM central_work_attempts a GROUP BY machine_kind";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct KindHealth {
+pub struct KindHealth {
     pub kind: EngineKindName,
     pub failing: u32,
     pub retired: u32,
@@ -53,13 +53,13 @@ pub(crate) struct KindHealth {
     pub last_failure: Option<EngineFailureClass>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct EngineHealthFacts {
+pub struct EngineHealthFacts {
     pub kinds: Vec<KindHealth>,
     pub alarm: Option<EngineTime>,
     pub alarm_missing: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct RetiredItem {
+pub struct RetiredItem {
     pub attempt_id: uuid::Uuid,
     pub kind: EngineKindName,
     pub subject_key: String,
@@ -69,14 +69,14 @@ pub(crate) struct RetiredItem {
     pub last_failure: Option<String>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum AttemptRefusal {
+pub enum AttemptRefusal {
     NotFound,
     NotRetired,
     DiscardUnsupported,
     Stale,
     SubjectUnreadable,
 }
-pub(crate) enum DiscardOutcome {
+pub enum DiscardOutcome {
     /// The subject's Discard transition, the guarded record delete and the
     /// caller's statements committed in one batch.
     Committed,
@@ -148,7 +148,7 @@ impl<M: Machine> EventSource<M> for DiscardSource {
 }
 
 impl<R: EngineHost> Engine<'_, R> {
-    pub(crate) async fn engine_health(&self) -> Result<EngineHealthFacts, StoreFailure> {
+    pub async fn engine_health(&self) -> Result<EngineHealthFacts, StoreFailure> {
         let rows = self
             .host()
             .read(Statement {
@@ -211,7 +211,7 @@ impl<R: EngineHost> Engine<'_, R> {
     }
 
     /// One page ascending by attempt id, `after` exclusive, plus whether more exist.
-    pub(crate) async fn engine_retired_page(
+    pub async fn engine_retired_page(
         &self,
         after: Option<uuid::Uuid>,
         limit: u16,
@@ -303,7 +303,7 @@ impl<R: EngineHost> Engine<'_, R> {
     }
 
     /// Retry is the guarded delete in the caller's batch, which also re-arms.
-    pub(crate) async fn plan_engine_retry(
+    pub async fn plan_engine_retry(
         &self,
         attempt_id: uuid::Uuid,
     ) -> Result<Result<GuardedStatement, AttemptRefusal>, StoreFailure> {
@@ -315,7 +315,7 @@ impl<R: EngineHost> Engine<'_, R> {
 
     /// Discard runs the machine's own Discard event through `handle`; the
     /// caller's statements and the guarded delete commit in that same batch.
-    pub(crate) async fn engine_discard(
+    pub async fn engine_discard(
         &self,
         attempt_id: uuid::Uuid,
         mut statements: Vec<GuardedStatement>,
