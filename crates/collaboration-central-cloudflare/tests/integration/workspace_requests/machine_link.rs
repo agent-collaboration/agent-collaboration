@@ -29,6 +29,47 @@ const WORKSPACE_NAME: &str = "Real hibernation workspace";
 const AREA_NAME: &str = "Area created after actual hibernation";
 
 #[tokio::test]
+async fn worker_keeps_the_link_open_after_an_unknown_ack() -> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = async {
+        let mut link = ConnectedLink::open(&fixture).await?;
+        fixture::send(
+            &mut link.socket,
+            &DataFrame::Ack {
+                message_id: "019f0000-0000-7000-8000-00000000cf39".parse()?,
+                answer: central_link_protocol::DeliveryAnswer::Accepted,
+            },
+        )
+        .await?;
+        let exchange = link
+            .call(WorkspaceRequest {
+                request_id: None,
+                workspace_id: None,
+                operation: WorkspaceOperation::List {
+                    query: workspace_model::ListQuery::Workspaces {
+                        include_archived: false,
+                    },
+                    cursor: workspace_model::ListCursor::start(
+                        workspace_model::ListOrder::OldestFirst,
+                    ),
+                    limit: 10.try_into()?,
+                },
+            })
+            .await?;
+        if !matches!(
+            workspace_reply(&exchange.reply)?.result,
+            WorkspaceResult::Done(_)
+        ) {
+            return Err("the same socket did not answer a workspace read after the Ack".into());
+        }
+        link.close().await
+    }
+    .await;
+    fixture.close().await?;
+    result
+}
+
+#[tokio::test]
 async fn hibernating_socket_restores_live_authority_and_semantic_store() -> Result<()> {
     let destination = std::env::var_os("CODEX_ROUTER_C2_HIBERNATION_RECEIPT").map(PathBuf::from);
     if destination.as_ref().is_some_and(|path| !path.is_absolute()) {

@@ -232,11 +232,10 @@ async fn public_route_requires_upgrade_and_header_token_and_matching_organizatio
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Unsupported application acknowledgements must close the real socket."
+    reason = "The real socket must stay open after an unknown Ack and drain on shutdown."
 )]
 #[tokio::test]
-async fn acknowledgements_are_explicitly_unsupported_and_shutdown_drains_open_links() -> Result<()>
-{
+async fn unknown_ack_keeps_the_link_open_and_shutdown_drains_it() -> Result<()> {
     let fixture = Fixture::new().await?;
     let mut socket = fixture.connect().await?;
     receive(&mut socket).await?;
@@ -246,20 +245,9 @@ async fn acknowledgements_are_explicitly_unsupported_and_shutdown_drains_open_li
             answer: central_link_protocol::DeliveryAnswer::Accepted,
         })?))
         .await?;
-    assert!(matches!(
-        socket.next().await,
-        Some(Ok(Message::Close {
-            code: reqwest_websocket::CloseCode::Unsupported,
-            ..
-        }))
-    ));
-    // Leave a second upgraded socket open: server shutdown must cancel and drain it.
-    let mut open_socket = fixture.connect().await?;
-    receive(&mut open_socket).await?;
+    socket.send(Message::Text("ping".into())).await?;
+    assert!(matches!(socket.next().await, Some(Ok(Message::Text(text))) if text == "pong"));
     fixture.close().await?;
-    assert!(!matches!(
-        open_socket.next().await,
-        Some(Ok(Message::Text(_)))
-    ));
+    assert!(!matches!(socket.next().await, Some(Ok(Message::Text(_)))));
     Ok(())
 }
