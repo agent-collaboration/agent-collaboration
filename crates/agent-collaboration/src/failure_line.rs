@@ -184,7 +184,7 @@ fn rejection_next_step(
         return "close one of these terminals, or run `/branch` in one of them".to_owned();
     }
     if reason == DeliveryRejectionReason::ProviderSessionNotFound {
-        return "create a new conversation".to_owned();
+        return "start a new session with the same setup".to_owned();
     }
     if reason == DeliveryRejectionReason::QueueUnsupported {
         return "resend with --delivery auto".to_owned();

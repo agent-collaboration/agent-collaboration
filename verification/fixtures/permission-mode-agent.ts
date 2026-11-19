@@ -13,6 +13,8 @@
 //     0.81.0 does for a model without auto support.
 //   reject-mode: every mode change is answered with an error.
 //   plain-prompts: record and end prompts without asking for permission.
+//   refuse-prompt: record the prompt and reject its ACP request.
+//   silent-first-restore: leave the first load or resume unanswered.
 //   malformed-mode-reply: the first mode change gets a success with no
 //     configOptions, which a client cannot read; the mode stays and later
 //     changes are answered normally.
@@ -40,6 +42,8 @@ const known = [
   "clamp-auto",
   "reject-mode",
   "plain-prompts",
+  "refuse-prompt",
+  "silent-first-restore",
   "malformed-mode-reply",
   "advertise-close",
   "offer-fast",
@@ -130,6 +134,7 @@ const refuse = (request: Record<string, unknown>, message: string): void => {
 for (;;) {
   const request = await agent.readRequest();
   if (request === undefined) break;
+  if (request.id === undefined) continue;
   switch (request.method) {
     case "session/new": {
       const sessionId = `fixture-session-${observed.sessions.length + 1}`;
@@ -180,6 +185,15 @@ for (;;) {
       // The prompt text is the tool call to ask permission for, as ACP JSON.
       const sessionId = String(field(request, "params", "sessionId"));
       observed.prompts.push(sessionId);
+      if (behaviours.has("refuse-prompt")) {
+        agent.receipt(receipt, observed);
+        agent.send({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32041, message: "prompt response failed" },
+        });
+        break;
+      }
       if (behaviours.has("plain-prompts")) {
         agent.receipt(receipt, observed);
         agent.endTurn(request);
@@ -225,6 +239,7 @@ for (;;) {
       if (behaviours.has("narrow-restore-modes")) narrowedModeCatalogues.add(sessionId);
       if (behaviours.has("restore-fast-on")) currentFast.set(sessionId, "true");
       agent.receipt(receipt, observed);
+      if (behaviours.has("silent-first-restore") && observed.restores.length === 1) break;
       agent.respond(request, { configOptions: configOptions(sessionId) });
       break;
     }

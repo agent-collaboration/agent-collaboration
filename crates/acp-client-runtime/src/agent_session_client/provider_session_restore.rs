@@ -3,13 +3,31 @@
 use super::{
     ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderRuntimeError,
     InteractionPort, LoadSessionRequest, McpServer, PathBuf, PendingSessionAdmission,
-    RestoredProviderSession, SessionEventSink, acp_load_session_error, acp_operation_error,
-    provider_frame_decode_error, publish_pending_session_admission,
+    RestoredProviderSession, SessionEventSink, acp_load_session_error, provider_frame_decode_error,
+    publish_pending_session_admission,
 };
 use agent_client_protocol::schema::v1::{ResumeSessionRequest, SessionNotification, SessionUpdate};
 use agent_client_protocol::{Dispatch, SessionMessage};
 use futures_util::FutureExt as _;
 use session_event_model::{InputId, SessionEvent, StopReason, TurnOutcome};
+use std::{future::Future, time::Duration};
+
+const RESTORE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+
+async fn await_restore_response<T>(
+    clock: &dyn router_clock::RuntimeClock,
+    shutdown: &CancellationToken,
+    request: impl Future<Output = Result<T, agent_client_protocol::Error>>,
+) -> Result<T, ExternalProviderRuntimeError> {
+    // Dropping the SDK's blocking restore future retires its provisional
+    // route and cancels its correlation. This does not settle the peer's effect.
+    tokio::select! {
+        () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
+        result = router_clock::timeout(clock, RESTORE_RESPONSE_TIMEOUT, request) => result
+            .map_err(|_| ExternalProviderRuntimeError::RestoreNoAnswer)?
+            .map_err(acp_load_session_error),
+    }
+}
 
 use crate::provider_item_projection::{ItemProjectionError, ProviderItemProjection};
 use crate::provider_settings_catalog_codec::{
@@ -86,36 +104,54 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                     .mcp_servers(mcp_servers)
                     .additional_directories(folders.additional_directories);
                 request.meta = folders.meta;
-                tokio::select! {
-                    () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                    result = connection.load_session_from(request).block_task().start_session() =>
-                        result.map_err(acp_load_session_error).and_then(|restored| {
-                            let mut session = restored.into_session();
-                            let mut settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
-                            let projection = replay_queued_session_updates(
-                                &mut session,
-                                Arc::clone(&event_sink),
-                                Arc::clone(&behavior),
-                                &mut settings_catalog,
-                            )?;
-                            Ok((session, Some(projection), settings_catalog))
-                        }),
-                }
+                await_restore_response(
+                    clock.as_ref(),
+                    &shutdown,
+                    connection
+                        .load_session_from(request)
+                        .block_task()
+                        .start_session(),
+                )
+                .await
+                .and_then(|restored| {
+                    let mut session = restored.into_session();
+                    let mut settings_catalog = catalog_from_session_response(
+                        &session.response(),
+                        behavior.as_ref(),
+                        &connection_model_reasoning,
+                    );
+                    let projection = replay_queued_session_updates(
+                        &mut session,
+                        Arc::clone(&event_sink),
+                        Arc::clone(&behavior),
+                        &mut settings_catalog,
+                    )?;
+                    Ok((session, Some(projection), settings_catalog))
+                })
             }
             RestoreHistoryMode::WithoutReplay => {
                 let mut request = ResumeSessionRequest::new(provider_session_id.clone(), &cwd)
                     .mcp_servers(mcp_servers)
                     .additional_directories(folders.additional_directories);
                 request.meta = folders.meta;
-                tokio::select! {
-                    () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                    result = connection.resume_session_from(request).block_task().start_session() =>
-                        result.map(|restored| {
-                            let session = restored.into_session();
-                            let settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
-                            (session, None, settings_catalog)
-                        }).map_err(acp_operation_error),
-                }
+                await_restore_response(
+                    clock.as_ref(),
+                    &shutdown,
+                    connection
+                        .resume_session_from(request)
+                        .block_task()
+                        .start_session(),
+                )
+                .await
+                .map(|restored| {
+                    let session = restored.into_session();
+                    let settings_catalog = catalog_from_session_response(
+                        &session.response(),
+                        behavior.as_ref(),
+                        &connection_model_reasoning,
+                    );
+                    (session, None, settings_catalog)
+                })
             }
         },
     };

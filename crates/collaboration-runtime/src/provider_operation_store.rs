@@ -308,7 +308,7 @@ impl ProviderOperationStore {
     ) -> Result<Vec<(OperationId, Option<SessionRef>)>, ProviderOperationStoreError> {
         let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
         let candidates = sqlx::query!(
-            "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id
+            "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
              FROM provider_operations WHERE effect=? ORDER BY operation_id",
             unknown,
         )
@@ -316,6 +316,12 @@ impl ProviderOperationStore {
         .await?;
         let mut unknown_operations = Vec::new();
         for candidate in candidates {
+            if decode_enum::<ProviderOperationStage>(candidate.stage)?
+                == ProviderOperationStage::Terminal
+                && decode_enum::<ProviderOperationKind>(candidate.operation_kind)?.is_restore()
+            {
+                continue;
+            }
             let same_scope = match decode_binding(&candidate.binding_json)? {
                 ConversationBindingIdentity::ExternalProvider { binding: stored } => {
                     stored.endpoint == binding.endpoint
@@ -362,7 +368,7 @@ impl ProviderOperationStore {
     ) -> Result<Vec<OperationId>, ProviderOperationStoreError> {
         let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
         let candidates = sqlx::query!(
-            "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id
+            "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
              FROM provider_operations WHERE effect=? ORDER BY operation_id",
             unknown,
         )
@@ -370,6 +376,12 @@ impl ProviderOperationStore {
         .await?;
         let mut blocking = Vec::new();
         for candidate in candidates {
+            if decode_enum::<ProviderOperationStage>(candidate.stage)?
+                == ProviderOperationStage::Terminal
+                && decode_enum::<ProviderOperationKind>(candidate.operation_kind)?.is_restore()
+            {
+                continue;
+            }
             let stored_binding = decode_binding(&candidate.binding_json)?;
             let same_scope = match stored_binding {
                 ConversationBindingIdentity::ExternalProvider { binding: stored } => {

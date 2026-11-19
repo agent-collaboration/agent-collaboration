@@ -200,6 +200,7 @@ impl ExternalProviderSupervisor {
         let live = Arc::new(LiveOperation::reserving(
             binding.endpoint.clone(),
             known_target.cloned(),
+            operation_kind,
         ));
         let reserved_first = {
             let mut operations = self
@@ -546,8 +547,7 @@ impl super::SupervisorInner {
         let store = &self.store;
         self.uncertainty
             .cell(&binding.endpoint, || async {
-                // Every Unknown row of this binding's generation blocks, as the
-                // durable scan did, reconciled or not.
+                // A locally retired restore keeps its durable uncertainty without holding admission.
                 store
                     .lock()
                     .await

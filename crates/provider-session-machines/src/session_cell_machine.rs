@@ -60,6 +60,8 @@ pub struct SessionCell {
     /// the session (review F1): a close after the claim can't recall a write
     /// already on its way to the agent. Later loads can run while their own optional write is skipped.
     pub restore_mode_write: Option<LoadAttempt>,
+    /// The last locally expired restore may still send session-scoped updates.
+    pub last_unanswered_restore: Option<LoadAttempt>,
 }
 
 impl SessionCell {
@@ -79,6 +81,7 @@ impl SessionCell {
             keep_fast_off: false,
             settings: HashMap::new(),
             restore_mode_write: None,
+            last_unanswered_restore: None,
         }
     }
 
@@ -168,6 +171,9 @@ pub enum SessionCellEvent {
         attempt: LoadAttempt,
     },
     LoadFailed {
+        attempt: LoadAttempt,
+    },
+    LoadUnanswered {
         attempt: LoadAttempt,
     },
     CloseRequested {
@@ -318,6 +324,7 @@ impl EventTag for SessionCellEvent {
             Self::LoadRequested { .. } => "load_requested",
             Self::Loaded { .. } => "loaded",
             Self::LoadFailed { .. } => "load_failed",
+            Self::LoadUnanswered { .. } => "load_unanswered",
             Self::CloseRequested { .. } => "close_requested",
             Self::CloseDone { .. } => "close_done",
             Self::CloseFailed { .. } => "close_failed",
@@ -571,11 +578,14 @@ impl StateMachine for SessionCellMachine {
             V::Loaded { attempt } => {
                 lifecycle_move(cell, SessionLifecycleEvent::Loaded { attempt })
             }
-            V::LoadFailed { attempt } => {
+            V::LoadFailed { attempt } | V::LoadUnanswered { attempt } => {
                 // The failed load's run ends, and with it every message that
                 // waited in its line.
                 let (mut next, mut effects) =
                     lifecycle_move(cell, SessionLifecycleEvent::LoadFailed { attempt })?;
+                if matches!(event, V::LoadUnanswered { .. }) {
+                    next.last_unanswered_restore = Some(attempt);
+                }
                 end_line(&mut next, NotSentReason::LoadFailed, &mut effects);
                 Ok((next, effects))
             }

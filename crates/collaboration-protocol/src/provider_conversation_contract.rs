@@ -488,6 +488,14 @@ pub enum ProviderOperationKind {
     ConversationCancel,
 }
 
+impl ProviderOperationKind {
+    /// A completed load or resume no longer owns local session admission.
+    #[must_use]
+    pub const fn is_restore(self) -> bool {
+        matches!(self, Self::ConversationLoad | Self::ConversationResume)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProviderOperationStage {

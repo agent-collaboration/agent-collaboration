@@ -74,7 +74,7 @@ impl ProviderSessionLoadRejection {
                 correlation_id,
             } => {
                 format!(
-                    "this session never started a turn and did not survive the provider restart; create a new conversation (provider code {code}; reference {})",
+                    "the provider no longer knows this session, so start a new session with the same setup (provider code {code}; reference {})",
                     correlation_id.as_str()
                 )
             }
@@ -83,7 +83,7 @@ impl ProviderSessionLoadRejection {
                 correlation_id,
             } => {
                 format!(
-                    "provider rejected the ACP operation (provider code {code}; reference {})",
+                    "the provider refused to restore this session, so check the provider before retrying (provider code {code}; reference {})",
                     correlation_id.as_str()
                 )
             }
@@ -176,7 +176,11 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
                 },
             }
         }
-        ExternalProviderRuntimeError::AuthenticationRequired {
+        ExternalProviderRuntimeError::RestoreRefused {
+            code,
+            correlation_id,
+        }
+        | ExternalProviderRuntimeError::AuthenticationRequired {
             code,
             correlation_id,
         }
@@ -199,6 +203,14 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
             code,
             correlation_id,
         } => provider_error_unavailable("provider resource was not found", code, correlation_id),
+        ExternalProviderRuntimeError::RestoreFailed {
+            code,
+            correlation_id,
+        } => provider_error_unavailable(
+            "the provider failed while restoring this session, so retry it",
+            code,
+            correlation_id,
+        ),
         ExternalProviderRuntimeError::UnsupportedMethod {
             code,
             correlation_id,

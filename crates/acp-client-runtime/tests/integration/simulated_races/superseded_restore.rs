@@ -27,6 +27,18 @@ async fn closed_session(
     ScriptedLineAgent,
     String,
 ) {
+    closed_session_with_sink(clock, behavior, Arc::new(super::DiscardingSink)).await
+}
+
+async fn closed_session_with_sink(
+    clock: Arc<dyn RuntimeClock>,
+    behavior: Arc<dyn ProviderBehavior>,
+    sink: Arc<dyn acp_client_runtime::SessionEventSink>,
+) -> (
+    Arc<AgentSessionClient<NoInteraction>>,
+    ScriptedLineAgent,
+    String,
+) {
     let (client_end, agent_end) = tokio::io::duplex(64 * 1024);
     let (agent, agent_task) = ScriptedLineAgent::start(agent_end);
     let client = Arc::new(
@@ -34,7 +46,7 @@ async fn closed_session(
             client_end,
             agent_task,
             Arc::new(NoInteraction),
-            Arc::new(super::DiscardingSink),
+            sink,
             behavior,
             clock,
         )
@@ -351,4 +363,184 @@ async fn prompt_restored_session(client: &AgentSessionClient<NoInteraction>, ses
         )
         .await
         .expect("restored input completes");
+}
+
+#[derive(Default)]
+struct RestoreObservations {
+    events: std::sync::Mutex<Vec<session_event_model::SessionEvent>>,
+    retired_entries: std::sync::Mutex<Vec<(String, String)>>,
+}
+
+impl acp_client_runtime::SessionEventSink for RestoreObservations {
+    fn publish_skill_view(
+        &self,
+        _id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
+    fn begin_history_replay(&self, _id: &str) -> acp_client_runtime::HistoryReplayFuture<'_> {
+        Box::pin(std::future::ready(Ok(())))
+    }
+
+    fn publish(
+        &self,
+        _id: &str,
+        event: session_event_model::SessionEvent,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        self.events.lock().expect("events").push(event);
+        Ok(())
+    }
+}
+
+impl acp_client_runtime::QueueEntrySink for RestoreObservations {
+    fn entry_not_sent(&self, _session: &str, operation: &str, reason: &'static str) {
+        self.retired_entries
+            .lock()
+            .expect("queued entries")
+            .push((operation.to_owned(), reason.to_owned()));
+    }
+}
+
+#[tokio::test]
+async fn an_unanswered_load_retires_its_queue_and_allows_a_same_session_retry() {
+    for method in ["session/load", "session/resume"] {
+        let clock = restore_clock();
+        let observations = Arc::new(RestoreObservations::default());
+        let (client, agent, session) = closed_session_with_sink(
+            clock.clone(),
+            Arc::new(crate::test_behavior::TestProviderBehavior),
+            observations.clone(),
+        )
+        .await;
+        client.set_queue_entry_sink(observations.clone());
+        let independent = client
+            .create_session(PathBuf::from("/scenario"))
+            .await
+            .expect("independent session");
+        agent.hold_next_restore_answer();
+        let mut first = Box::pin(restore_without_mode(&client, &session, method));
+        let delay = Duration::from_secs(30);
+        tokio::select! {
+            () = clock.not_due_check_now(ClockInstant::ZERO.after(delay)) => {},
+            result = &mut first => panic!("the unanswered restore ended before the deadline: {result:?}"),
+        }
+        agent.received(method).await;
+        agent
+            .send_replay_chunk(&session, "expired restore replay sentinel")
+            .await;
+        let queued_id = uuid::Uuid::now_v7().to_string();
+        let queued = client
+            .queue_enqueue(&session, &queued_id)
+            .expect("input waits in A's line");
+        prompt_restored_session(&client, &independent).await;
+        assert_eq!(agent.prompt_sessions(), [independent.as_str()]);
+        clock.advance(delay).expect("reach the restore deadline");
+        let failure = first.await.expect_err("A never answered");
+        assert!(
+            matches!(failure, ExternalProviderRuntimeError::RestoreNoAnswer),
+            "{failure:?}"
+        );
+        assert!(failure.to_string().contains("retry this session"));
+        assert_eq!(
+            observations
+                .retired_entries
+                .lock()
+                .expect("queue receipts")
+                .len(),
+            1
+        );
+        assert_eq!(
+            observations.retired_entries.lock().expect("queue receipts")[0].0,
+            queued_id
+        );
+
+        let later = restore_without_mode(&client, &session, method)
+            .await
+            .expect("deliberate same-ID retry succeeds while A is silent");
+        assert!(later.earlier_restore_unanswered);
+        assert!(later.generation.number() > queued.generation.number());
+        prompt_restored_session(&client, &session).await;
+        agent.release_load_answers();
+        agent.held_load_answer_sent().await;
+        let barrier = agent.request_permission(&session).await;
+        assert_ne!(
+            barrier
+                .pointer("/error/code")
+                .and_then(serde_json::Value::as_i64),
+            Some(-32601)
+        );
+        assert_eq!(
+            agent.prompt_sessions(),
+            [independent.as_str(), session.as_str()]
+        );
+        assert!(!observations.events.lock().expect("events").iter().any(|event| matches!(event,
+            session_event_model::SessionEvent::ItemStarted{ item } if item.text.as_deref() == Some("expired restore replay sentinel")
+        )));
+        client.shutdown().await;
+    }
+}
+
+#[tokio::test]
+async fn a_lost_session_nudges_a_new_session_without_starting_one() {
+    for (code, sentence) in [
+        (-32002, "start a new session with the same setup"),
+        (-32041, "the provider refused to restore this session"),
+        (
+            -32603,
+            "the provider failed while restoring this session, so retry it",
+        ),
+    ] {
+        let (client, agent, session) = closed_session(
+            restore_clock(),
+            Arc::new(crate::test_behavior::TestProviderBehavior),
+        )
+        .await;
+        agent.reject_next_restore(code);
+        let failure = client
+            .resume_session_with_setup(
+                session.clone(),
+                PathBuf::from("/scenario"),
+                SessionRestoreSetup::default(),
+            )
+            .await
+            .expect_err("the harness refused restore");
+        assert!(failure.to_string().contains(sentence), "{failure:?}");
+        let seen = agent.methods();
+        assert_eq!(
+            seen.iter()
+                .filter(|method| *method == "session/new")
+                .count(),
+            1
+        );
+        assert!(agent.prompt_sessions().is_empty());
+        let accepted = client
+            .resume_session_with_setup(
+                session.clone(),
+                PathBuf::from("/scenario"),
+                SessionRestoreSetup::default(),
+            )
+            .await
+            .expect("a new deliberate attempt may succeed");
+        assert!(!accepted.earlier_restore_unanswered);
+        prompt_restored_session(&client, &session).await;
+        assert_eq!(agent.prompt_sessions(), [session.as_str()]);
+        client.shutdown().await;
+    }
+}
+
+async fn restore_without_mode(
+    client: &AgentSessionClient<NoInteraction>,
+    session: &str,
+    method: &str,
+) -> Result<RestoredSessionAdmission, ExternalProviderRuntimeError> {
+    let id = session.to_owned();
+    let cwd = PathBuf::from("/scenario");
+    let setup = SessionRestoreSetup::default();
+    if method == "session/resume" {
+        client.resume_session_with_setup(id, cwd, setup).await
+    } else {
+        client.load_session_with_setup(id, cwd, setup).await
+    }
 }

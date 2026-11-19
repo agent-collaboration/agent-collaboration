@@ -41,7 +41,11 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
     let operation = OperationId::generate();
     let (index, live) = index_with(
         &operation,
-        LiveOperation::reserving(endpoint(), Some(session("a"))),
+        LiveOperation::reserving(
+            endpoint(),
+            Some(session("a")),
+            ProviderOperationKind::ConversationPrompt,
+        ),
     );
     live.admitted();
     let before_marker = index.in_flight_on(&endpoint(), Some(&session("a")));
@@ -83,11 +87,15 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
 fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
     // Arrange
     let undone = OperationId::generate();
-    let (index, live) = index_with(&undone, LiveOperation::reserving(endpoint(), None));
+    let (index, live) = index_with(
+        &undone,
+        LiveOperation::reserving(endpoint(), None, ProviderOperationKind::ConversationPrompt),
+    );
     live.admitted();
     live.dispatch_marked();
     let binding_wide = index.in_flight_on(&endpoint(), Some(&session("any")));
-    let dropped = LiveOperation::reserving(endpoint(), None);
+    let dropped =
+        LiveOperation::reserving(endpoint(), None, ProviderOperationKind::ConversationPrompt);
 
     // Act
     live.undispatched();
@@ -114,7 +122,8 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
 #[test]
 fn an_undispatched_operation_settles_not_sent() {
     // Arrange
-    let live = LiveOperation::reserving(endpoint(), None);
+    let live =
+        LiveOperation::reserving(endpoint(), None, ProviderOperationKind::ConversationPrompt);
     live.admitted();
 
     // Act

@@ -2,6 +2,8 @@
 mod deferred_uncertainty_admission_tests;
 #[path = "tests/persistence_overlay_test.rs"]
 mod persistence_overlay_tests;
+#[path = "tests/restore_recovery_test.rs"]
+mod restore_recovery_tests;
 #[path = "tests/steered_input_join_test.rs"]
 mod steered_input_join_tests;
 #[path = "tests/uncertainty_admission_test.rs"]

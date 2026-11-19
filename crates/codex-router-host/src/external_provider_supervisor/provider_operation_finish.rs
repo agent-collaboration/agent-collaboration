@@ -104,12 +104,18 @@ impl SupervisorInner {
                 {
                     // Recorded on the binding's uncertainty cell before this
                     // operation stops counting as live (design note §14.1).
-                    self.record_became_unknown(
-                        &operation_id,
-                        &live,
-                        operation_failure.target.clone(),
-                    )
-                    .await;
+                    if live.is_restore() {
+                        // The local restore has already retired. Its unknown
+                        // provider effect does not bar deliberate recovery.
+                        live.uncertainty_recorded();
+                    } else {
+                        self.record_became_unknown(
+                            &operation_id,
+                            &live,
+                            operation_failure.target.clone(),
+                        )
+                        .await;
+                    }
                     ProviderReconciliationState::Unresolved
                 } else {
                     ProviderReconciliationState::Confirmed

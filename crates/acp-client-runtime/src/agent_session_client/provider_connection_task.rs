@@ -21,6 +21,7 @@ use super::{
     record_permission_refusal, register_provider_session, register_static_provider_session,
     run_create_admission, spawn_external_approval_dispatch,
 };
+use provider_session_machines::session_cell_machine::SessionCellEvent;
 
 impl<P: InteractionPort> AgentSessionClient<P> {
     #[expect(
@@ -532,7 +533,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let mut mode_difference = None;
                                             // The cell moves Loading to Live on a registered restore,
                                             // and back to NotLoaded on a failed one.
-                                            crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
+                                            let earlier_restore_unanswered = session_cells.read(&provider_session_id, |cell| cell.last_unanswered_restore.is_some());
+                                            if matches!(&result, Err(ExternalProviderRuntimeError::RestoreNoAnswer)) {
+                                                let _retired = session_cells.transition(&provider_session_id, SessionCellEvent::LoadUnanswered { attempt }, crate::session_cell_table::EntryEffectRoute::Sink);
+                                                if task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
+                                                    sink_closed.cancel();
+                                                    task_shutdown.cancel();
+                                                }
+                                            } else {
+                                                crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
+                                            }
                                             if result.is_err() {
                                                 known_sessions.forget(&provider_session_id).await;
                                             } else if let Some(report) = report {
@@ -575,7 +585,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 }
                                                 let _result = activation.send(());
                                             }
-                                            let _result = reply.send(result.map(|generation| super::RestoredSessionAdmission { generation, permission_mode, mode_difference }));
+                                            let _result = reply.send(result.map(|generation| super::RestoredSessionAdmission { generation, permission_mode, mode_difference, earlier_restore_unanswered }));
                                         }
                                         PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
                                             // A done close ends NotLoaded and can be loaded again (ACP

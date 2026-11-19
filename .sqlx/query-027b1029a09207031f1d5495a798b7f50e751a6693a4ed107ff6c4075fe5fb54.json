@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id\n             FROM provider_operations WHERE effect=? ORDER BY operation_id",
+  "query": "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id\n             FROM provider_operations WHERE effect=? ORDER BY operation_id",
   "describe": {
     "columns": [
       {
@@ -15,8 +15,30 @@
         }
       },
       {
-        "name": "binding_json",
+        "name": "operation_kind",
         "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "operation_kind"
+          }
+        }
+      },
+      {
+        "name": "stage",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "stage"
+          }
+        }
+      },
+      {
+        "name": "binding_json",
+        "ordinal": 3,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -27,7 +49,7 @@
       },
       {
         "name": "target_service_id",
-        "ordinal": 2,
+        "ordinal": 4,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -38,7 +60,7 @@
       },
       {
         "name": "target_endpoint_id",
-        "ordinal": 3,
+        "ordinal": 5,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -49,7 +71,7 @@
       },
       {
         "name": "target_session_id",
-        "ordinal": 4,
+        "ordinal": 6,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -65,10 +87,12 @@
     "nullable": [
       false,
       false,
+      false,
+      false,
       true,
       true,
       true
     ]
   },
-  "hash": "8c292dc6fc10b7c01b5f59eccb85f0a3127dfb29d84a34b272959c4afa8f5be1"
+  "hash": "027b1029a09207031f1d5495a798b7f50e751a6693a4ed107ff6c4075fe5fb54"
 }

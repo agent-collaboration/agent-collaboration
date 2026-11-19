@@ -251,7 +251,7 @@ async fn scripted_load_not_found_keeps_session_mapping_and_safe_category() -> Te
         check_public_failure(error, &trace, ExpectedPublicFailure {
             code: -32002, kind: FailureKind::ProviderSessionNotFound, stage: FailureStage::Binding,
             effect: ProviderOperationEffect::None,
-            explanation: "this session never started a turn and did not survive the provider restart; create a new conversation",
+            explanation: "the provider no longer knows this session, so start a new session with the same setup",
         }, "authentication_failed")
     }.await;
     finish_wire_case(&runtime, result).await

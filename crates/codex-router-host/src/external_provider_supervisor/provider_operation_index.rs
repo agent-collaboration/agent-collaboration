@@ -9,7 +9,7 @@
 
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationSettlement, EndpointRef, OperationId,
-    SessionRef,
+    ProviderOperationKind, SessionRef,
 };
 use provider_session_machines::operation_record_machine::{
     AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
@@ -45,6 +45,7 @@ pub(super) struct LiveOperation {
     pub(super) changed: Notify,
     /// The binding it runs on; none for an operation a test holds.
     binding: Option<EndpointRef>,
+    kind: Option<ProviderOperationKind>,
     target: StdMutex<Option<SessionRef>>,
     record: StdMutex<OperationRecord>,
 }
@@ -53,17 +54,32 @@ impl LiveOperation {
     /// An operation held live with no binding, as a test does.
     #[cfg(test)]
     pub(super) fn pending() -> Self {
-        Self::new(None, None, OperationRecord::Admitted { queued: false })
+        Self::new(
+            None,
+            None,
+            None,
+            OperationRecord::Admitted { queued: false },
+        )
     }
 
     /// An operation reserved on `binding`, before its durable insert.
-    pub(super) fn reserving(binding: EndpointRef, target: Option<SessionRef>) -> Self {
-        Self::new(Some(binding), target, OperationRecord::Reserving)
+    pub(super) fn reserving(
+        binding: EndpointRef,
+        target: Option<SessionRef>,
+        kind: ProviderOperationKind,
+    ) -> Self {
+        Self::new(
+            Some(binding),
+            target,
+            Some(kind),
+            OperationRecord::Reserving,
+        )
     }
 
     fn new(
         binding: Option<EndpointRef>,
         target: Option<SessionRef>,
+        kind: Option<ProviderOperationKind>,
         record: OperationRecord,
     ) -> Self {
         Self {
@@ -71,6 +87,7 @@ impl LiveOperation {
             published: AtomicBool::new(false),
             changed: Notify::new(),
             binding,
+            kind,
             target: StdMutex::new(target),
             record: StdMutex::new(record),
         }
@@ -97,6 +114,10 @@ impl LiveOperation {
 
     pub(super) fn binding(&self) -> Option<&EndpointRef> {
         self.binding.as_ref()
+    }
+
+    pub(super) fn is_restore(&self) -> bool {
+        self.kind.is_some_and(ProviderOperationKind::is_restore)
     }
 
     pub(super) fn target(&self) -> Option<SessionRef> {

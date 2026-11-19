@@ -227,8 +227,24 @@ pub enum ExternalProviderRuntimeError {
         code: i64,
         correlation_id: ProviderErrorCorrelationId,
     },
-    #[error("provider session was not found (ACP code {code})")]
+    #[error(
+        "the provider no longer knows this session, so start a new session with the same setup (ACP code {code})"
+    )]
     ProviderSessionNotFound {
+        code: i64,
+        correlation_id: ProviderErrorCorrelationId,
+    },
+    #[error("the provider did not answer the restore in time, so retry this session")]
+    RestoreNoAnswer,
+    #[error("the provider failed while restoring this session, so retry it (ACP code {code})")]
+    RestoreFailed {
+        code: i64,
+        correlation_id: ProviderErrorCorrelationId,
+    },
+    #[error(
+        "the provider refused to restore this session, so check the provider before retrying (ACP code {code})"
+    )]
+    RestoreRefused {
         code: i64,
         correlation_id: ProviderErrorCorrelationId,
     },

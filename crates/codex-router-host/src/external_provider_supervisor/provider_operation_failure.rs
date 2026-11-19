@@ -273,7 +273,7 @@ pub(super) fn runtime_failure(
             kind: ConversationOperationFailureKind::ProviderSessionNotFound,
             stage: ConversationOperationFailureStage::Binding,
             effect: ProviderOperationEffect::None,
-            explanation: "this session never started a turn and did not survive the provider restart; create a new conversation",
+            explanation: "the provider no longer knows this session, so start a new session with the same setup",
             operation_id,
             target,
             provider_error: ProviderErrorReference {
@@ -289,6 +289,44 @@ pub(super) fn runtime_failure(
             stage: ConversationOperationFailureStage::Binding,
             effect: ProviderOperationEffect::None,
             explanation: "provider resource was not found",
+            operation_id,
+            target,
+            provider_error: ProviderErrorReference {
+                provider_code: code,
+                correlation_id,
+            },
+        }),
+        ExternalProviderRuntimeError::RestoreNoAnswer => failure(
+            ConversationOperationFailureKind::OutcomeUnknown,
+            ConversationOperationFailureStage::Settlement,
+            ProviderOperationEffect::Unknown,
+            "the provider did not answer the restore in time, so retry this session",
+            operation_id,
+            target,
+        ),
+        ExternalProviderRuntimeError::RestoreFailed {
+            code,
+            correlation_id,
+        } => correlated_provider_failure(CorrelatedProviderFailureProps {
+            kind: ConversationOperationFailureKind::OutcomeUnknown,
+            stage: ConversationOperationFailureStage::Settlement,
+            effect: ProviderOperationEffect::Unknown,
+            explanation: "the provider failed while restoring this session, so retry it",
+            operation_id,
+            target,
+            provider_error: ProviderErrorReference {
+                provider_code: code,
+                correlation_id,
+            },
+        }),
+        ExternalProviderRuntimeError::RestoreRefused {
+            code,
+            correlation_id,
+        } => correlated_provider_failure(CorrelatedProviderFailureProps {
+            kind: ConversationOperationFailureKind::ProviderRejected,
+            stage: ConversationOperationFailureStage::Settlement,
+            effect: ProviderOperationEffect::Unknown,
+            explanation: "the provider refused to restore this session, so check the provider before retrying",
             operation_id,
             target,
             provider_error: ProviderErrorReference {

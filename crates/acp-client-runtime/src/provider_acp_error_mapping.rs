@@ -132,6 +132,9 @@ pub(crate) fn acp_operation_error(
 pub(crate) fn acp_load_session_error(
     error: agent_client_protocol::Error,
 ) -> ExternalProviderRuntimeError {
+    if agent_client_protocol::is_incoming_transport_closed(&error) {
+        return ExternalProviderRuntimeError::TransportFailure;
+    }
     if error.code == ErrorCode::ResourceNotFound {
         let reported_error_kind = ReportedProviderErrorKind::from_error_data(error.data.as_ref());
         let code = i64::from(i32::from(error.code));
@@ -141,7 +144,25 @@ pub(crate) fn acp_load_session_error(
             correlation_id,
         };
     }
-    acp_operation_error(error)
+    if error.code == ErrorCode::InternalError {
+        let reported_error_kind = ReportedProviderErrorKind::from_error_data(error.data.as_ref());
+        let code = i64::from(i32::from(error.code));
+        let correlation_id = log_provider_error(code, &error.message, reported_error_kind);
+        return ExternalProviderRuntimeError::RestoreFailed {
+            code,
+            correlation_id,
+        };
+    }
+    match acp_operation_error(error) {
+        ExternalProviderRuntimeError::ProviderRejected {
+            code,
+            correlation_id,
+        } => ExternalProviderRuntimeError::RestoreRefused {
+            code,
+            correlation_id,
+        },
+        failure => failure,
+    }
 }
 
 fn log_provider_error(

@@ -25,6 +25,10 @@ pub(super) struct ScriptedLineAgent {
     settings_answered: Arc<AtomicUsize>,
     hold_loads: Arc<AtomicBool>,
     loads_released: Arc<tokio::sync::Notify>,
+    hold_next_load: Arc<AtomicBool>,
+    load_released: Arc<AtomicBool>,
+    held_load_answered: Arc<AtomicBool>,
+    restore_error: Arc<Mutex<Option<i32>>>,
     restored_mode: Arc<Mutex<Option<String>>>,
     mode_sets: Arc<Mutex<Vec<String>>>,
     prompt_sessions: Arc<Mutex<Vec<String>>>,
@@ -100,7 +104,45 @@ impl ScriptedLineAgent {
     /// Sends every held load answer, and answers later ones at once.
     pub(super) fn release_load_answers(&self) {
         self.hold_loads.store(false, Ordering::SeqCst);
+        self.load_released.store(true, Ordering::SeqCst);
         self.loads_released.notify_waiters();
+    }
+
+    pub(super) fn hold_next_restore_answer(&self) {
+        self.load_released.store(false, Ordering::SeqCst);
+        self.hold_next_load.store(true, Ordering::SeqCst);
+    }
+
+    pub(super) fn reject_next_restore(&self, code: i32) {
+        *self
+            .restore_error
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(code);
+    }
+
+    pub(super) async fn held_load_answer_sent(&self) {
+        loop {
+            let changed = self.changed.notified();
+            if self.held_load_answered.load(Ordering::SeqCst) {
+                return;
+            }
+            changed.await;
+        }
+    }
+
+    pub(super) async fn send_replay_chunk(&self, session_id: &str, text: &str) {
+        let writer = self
+            .writer
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .expect("the agent is serving");
+        let frame = json!({"jsonrpc":"2.0","method":"session/update","params":{
+            "sessionId":session_id,"update":{
+                "sessionUpdate":"agent_message_chunk","content":{"type":"text","text":text}
+            }
+        }});
+        assert!(write_line(&writer, &frame).await);
     }
 
     /// Every session/load comes back with the session in `mode`.
@@ -210,7 +252,7 @@ impl ScriptedLineAgent {
             let reply = match method {
                 "initialize" => json!({"jsonrpc": "2.0", "id": id, "result": {
                     "protocolVersion": 1,
-                    "agentCapabilities": {"loadSession": true, "sessionCapabilities": {"close": {}}},
+                    "agentCapabilities": {"loadSession": true, "sessionCapabilities": {"close": {}, "resume": {}}},
                     "agentInfo": {"name": "scripted-line-agent", "version": "1"},
                 }}),
                 "session/new" => {
@@ -274,18 +316,45 @@ impl ScriptedLineAgent {
                         .push(session_id.to_owned());
                     json!({"jsonrpc": "2.0", "id": id, "result": {"stopReason": "end_turn"}})
                 }
-                "session/load" => {
+                "session/load" | "session/resume" => {
                     let restored = self
                         .restored_mode
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .clone();
-                    let reply = match restored {
-                        Some(mode) => json!({"jsonrpc": "2.0", "id": id, "result": {
-                            "configOptions": mode_and_effort_options(&mode),
-                        }}),
-                        None => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
+                    let error = self
+                        .restore_error
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take();
+                    let reply = if let Some(code) = error {
+                        json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":"scripted restore failure"}})
+                    } else {
+                        match restored {
+                            Some(mode) => json!({"jsonrpc": "2.0", "id": id, "result": {
+                                "configOptions": mode_and_effort_options(&mode),
+                            }}),
+                            None => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
+                        }
                     };
+                    if self.hold_next_load.swap(false, Ordering::SeqCst) {
+                        let held = self.clone();
+                        let writer = Arc::clone(&writer);
+                        tokio::spawn(async move {
+                            loop {
+                                let released = held.loads_released.notified();
+                                if held.load_released.load(Ordering::SeqCst) {
+                                    break;
+                                }
+                                released.await;
+                            }
+                            if write_line(&writer, &reply).await {
+                                held.held_load_answered.store(true, Ordering::SeqCst);
+                                held.changed.notify_waiters();
+                            }
+                        });
+                        continue;
+                    }
                     if self.hold_loads.load(Ordering::SeqCst) {
                         let held = self.clone();
                         let writer = Arc::clone(&writer);

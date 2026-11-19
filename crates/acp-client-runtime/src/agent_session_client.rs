@@ -267,6 +267,8 @@ pub struct RestoredSessionAdmission {
     pub generation: provider_session_machines::SessionGeneration,
     pub permission_mode: crate::PermissionModeReport,
     pub mode_difference: Option<crate::RestoredModeDifference>,
+    /// An earlier timeout left same-session replay provenance unconfirmed.
+    pub earlier_restore_unanswered: bool,
 }
 
 struct RestoredProviderSession {
