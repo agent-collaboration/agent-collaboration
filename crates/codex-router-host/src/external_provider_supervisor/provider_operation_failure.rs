@@ -163,6 +163,27 @@ pub(super) fn admission_failure(
     )
 }
 
+pub(super) fn restore_operation_failure(
+    operation_id: OperationId,
+    target: SessionRef,
+    error: acp_client_runtime::RestoreFailure,
+) -> ConversationOperationFailure {
+    let reason = (error.phase == acp_client_runtime::RestorePhase::Attempted).then(|| {
+        use crate::provider_acp_session_loading::{closed_restore_reason, load_error_reason};
+        match error.error() {
+            ExternalProviderRuntimeError::SessionReleased => {
+                closed_restore_reason(error.phase).to_owned()
+            }
+            _ => load_error_reason(&error),
+        }
+    });
+    let mut result = runtime_failure(operation_id, Some(target), error.into_error());
+    if let Some(message) = reason.and_then(|reason| NonEmptyText::try_from(reason).ok()) {
+        result.message = message;
+    }
+    result
+}
+
 pub(super) fn runtime_failure(
     operation_id: OperationId,
     target: Option<SessionRef>,

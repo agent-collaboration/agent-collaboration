@@ -14,14 +14,17 @@ use codex_router_host::{
 };
 use collaboration_contracts::{
     AttemptReconciliation, AttemptReconciliationContext, DeliveryPrecondition, LoadPolicy,
-    NOT_LOADED_REASON, RoutePresence, SessionDeliveryRoute, SessionMessageDelivery,
+    NOT_LOADED_REASON, ProviderConversationBackend, RoutePresence, SessionDeliveryRoute,
+    SessionMessageDelivery,
     layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
 };
 use collaboration_protocol::{
-    AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
-    DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText, OperationId,
-    ProviderOperationEffect, ProviderOperationKind, ProviderReconciliationState,
-    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess, SessionRef,
+    AttemptId, CodexGeneration, ConversationLoadRequest, ConversationOperationFailureKind,
+    ConversationOperationWaitRequest, DeliveryClientReceipt, DeliveryCorrelationId,
+    DeliveryOutcome, DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText,
+    OperationId, PositiveSeconds, ProviderOperationEffect, ProviderOperationKind,
+    ProviderOperationStage, ProviderReconciliationState, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, PushId, RouterAccess, SessionRef,
 };
 use collaboration_runtime::{
     EndpointDirectory, ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord,
@@ -696,14 +699,14 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             std::iter::once(target.endpoint.clone()).collect(),
             available_directory(&target, &binding),
             Arc::clone(&supervisor),
-            store,
+            Arc::clone(&store),
             Arc::new(NoLivePeer),
             std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
         );
         let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
 
         let receipt = route
-            .deliver(request(target, "empty restart session"), &evidence)
+            .deliver(request(target.clone(), "empty restart session"), &evidence)
             .await
             .expect("load refusal")
             .into_receipt();
@@ -739,6 +742,64 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
         assert!(matches!(evidence.0.lock().await.as_slice(),
             [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
             if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::NotDispatched));
+
+        let expected_explicit_failure = match error_code {
+            -32601 => Some((
+                ConversationOperationFailureKind::UnsupportedCapability,
+                ProviderOperationEffect::None,
+                "check the provider's restore support before retrying",
+            )),
+            -32602 => Some((
+                ConversationOperationFailureKind::InvalidRequest,
+                ProviderOperationEffect::None,
+                "check the session setup before retrying",
+            )),
+            -32800 => Some((
+                ConversationOperationFailureKind::ProviderRejected,
+                ProviderOperationEffect::Unknown,
+                "retry the restore when ready",
+            )),
+            _ => None,
+        };
+        if let Some((kind, effect, next_step)) = expected_explicit_failure {
+            let id = OperationId::generate();
+            supervisor
+                .load(ConversationLoadRequest {
+                    operation_id: id.clone(),
+                    target: target.clone(),
+                    generation: None,
+                    working_directory: ProviderWorkingDirectory::try_from("/tmp".to_owned())
+                        .expect("cwd"),
+                    requested_by: target.clone().into(),
+                    approver: target.into(),
+                    requested_policy: ProviderRequestedPolicy {
+                        access: RouterAccess::WriteRestricted,
+                    },
+                })
+                .await
+                .expect("explicit load admitted");
+            let failure = supervisor
+                .wait(ConversationOperationWaitRequest {
+                    operation_id: id.clone(),
+                    timeout_seconds: PositiveSeconds::try_from(5).expect("wait budget"),
+                })
+                .await
+                .expect_err("explicit load refused");
+            assert_eq!(failure.kind, kind);
+            assert_eq!(failure.effect, effect);
+            let message = String::from(failure.message);
+            assert!(message.contains(next_step), "{message}");
+            assert_uuid_v7_provider_reference(&message, "ACP code", error_code);
+            let stored = store
+                .lock()
+                .await
+                .inspect(&id)
+                .await
+                .expect("read explicit load")
+                .expect("stored explicit load");
+            assert_eq!(stored.stage, ProviderOperationStage::Terminal);
+            assert_eq!(stored.effect, effect);
+        }
         route.shutdown_queue().await;
         supervisor.shutdown().await.expect("shutdown");
     }

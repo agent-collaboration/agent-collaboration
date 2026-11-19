@@ -7,8 +7,9 @@ use collaboration_contracts::{
 };
 use collaboration_protocol::{
     AttemptId, ChannelDescription, ConversationLoadRequest, ConversationOperationShowRequest,
-    ConversationPromptRequest, DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability,
-    EndpointDescription, MessageContent, MessageDelivery, ObservationTimestamp,
+    ConversationPromptRequest, ConversationResumeRequest, DeliveryCorrelationId, DeliveryOutcome,
+    EndpointAvailability, EndpointDescription, MessageContent, MessageDelivery,
+    ObservationTimestamp,
 };
 use collaboration_runtime::{EndpointDirectory, ProviderSessionEventHub, ProviderSessionRecord};
 use router_clock::{ClockInstant, ManualClock};
@@ -143,6 +144,25 @@ impl RestoreRig {
             approver: self.target.clone().into(),
             requested_policy: policy(),
         }
+    }
+
+    fn resume_request(&self, operation_id: OperationId) -> ConversationResumeRequest {
+        ConversationResumeRequest {
+            operation_id,
+            target: self.target.clone(),
+            generation: Some(generation()),
+            working_directory: self.working_directory(),
+            requested_by: self.target.clone().into(),
+            approver: self.target.clone().into(),
+            requested_policy: policy(),
+        }
+    }
+
+    fn wire_receipt(&self) -> serde_json::Value {
+        serde_json::from_slice(
+            &std::fs::read(self.root.path().join("wire.json")).expect("wire receipt"),
+        )
+        .expect("wire JSON")
     }
 
     async fn assert_loads(&self, host: &ExternalProviderSupervisor) {
@@ -366,6 +386,224 @@ async fn cold_prompt_and_compact_keep_the_post_reply_restore_guidance() {
             "{failure:?}"
         );
         route.shutdown_queue().await;
+        host.shutdown().await.expect("stop Host");
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FailedRestoreActivation {
+    AutoLoad,
+    QueueLoad,
+    ResumeHistory,
+    ResumeActivation,
+}
+
+#[tokio::test]
+async fn a_failed_host_activation_retires_only_its_restore_and_never_sends_the_old_input() {
+    use FailedRestoreActivation::{AutoLoad, QueueLoad, ResumeActivation, ResumeHistory};
+
+    for path in [AutoLoad, QueueLoad, ResumeHistory, ResumeActivation] {
+        let rig = RestoreRig::new();
+        rig.seed_session().await;
+        let host = Arc::new(rig.open_host("restored-in-auto").await);
+        let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+        let sink = runtime.event_sink_for_test().expect("real hub sink");
+        let route = rig.delivery_route(host.clone());
+        let session_id = String::from(rig.target.session_id.clone());
+        let (reached, release) = runtime.pause_next_activation();
+        let restore = async {
+            match path {
+                AutoLoad | QueueLoad => {
+                    let mut input =
+                        auto_message(rig.target.clone(), "do not send", LoadPolicy::MayLoad);
+                    if matches!(path, QueueLoad) {
+                        input.mode = MessageDelivery::Queue;
+                    }
+                    let id =
+                        OperationId::try_from(input.attempt.as_str().to_owned()).expect("input ID");
+                    let delivery = route
+                        .deliver(input, &UnstoredAttemptEvidenceSink)
+                        .await
+                        .expect("delivery receipt");
+                    if matches!(path, QueueLoad) {
+                        assert_eq!(delivery.receipt().outcome, DeliveryOutcome::Queued);
+                        let failure = host
+                            .wait(wait_request(id))
+                            .await
+                            .expect_err("queued input ends unsent");
+                        assert_eq!(failure.effect, ProviderOperationEffect::None);
+                    } else {
+                        assert!(
+                            matches!(
+                                delivery.receipt().outcome,
+                                DeliveryOutcome::NotSubmitted {
+                                    retryable: false,
+                                    ..
+                                }
+                            ),
+                            "{delivery:?}"
+                        );
+                    }
+                }
+                ResumeHistory | ResumeActivation => {
+                    let id = OperationId::generate();
+                    host.resume(rig.resume_request(id.clone()))
+                        .await
+                        .expect("resume admitted");
+                    let failure = host
+                        .wait(wait_request(id))
+                        .await
+                        .expect_err("resume fails at the Host");
+                    assert_eq!(failure.effect, ProviderOperationEffect::Unknown);
+                }
+            }
+        };
+        let fault = async {
+            reached.await.expect("ACP registered the restored actor");
+            assert!(
+                matches!(
+                    runtime.session_activity(session_id.clone()).await,
+                    Ok(crate::ProviderSessionActivity::Idle)
+                ),
+                "{path:?}"
+            );
+            if matches!(path, ResumeHistory) {
+                sink.reject_next_history_invalidation_for_test();
+            } else {
+                sink.reject_next_activation_for_test();
+            }
+            release.send(()).expect("continue activation");
+        };
+        tokio::join!(restore, fault);
+
+        // Queue settlement can run as soon as close withdraws the entry.
+        // Take the same mode turn a retry takes to join the load driver.
+        let mode_turn = runtime
+            .session_setup()
+            .mode_order()
+            .enter(&session_id)
+            .await;
+        drop(mode_turn);
+        assert!(
+            matches!(
+                runtime.session_activity(session_id).await,
+                Ok(crate::ProviderSessionActivity::NotLoaded)
+            ),
+            "{path:?} left its generation live",
+        );
+        let wire = rig.wire_receipt();
+        let expected_method = match path {
+            AutoLoad | QueueLoad => "session/load",
+            ResumeHistory | ResumeActivation => "session/resume",
+        };
+        assert_eq!(wire["restores"].as_array().expect("restores").len(), 1);
+        assert_eq!(wire["restores"][0]["method"], expected_method);
+        assert_eq!(wire["prompts"], serde_json::json!([]), "{path:?}");
+
+        rig.assert_loads(&host).await;
+        let next = auto_message(
+            rig.target.clone(),
+            "only send this new input",
+            LoadPolicy::MayLoad,
+        );
+        let id = OperationId::try_from(next.attempt.as_str().to_owned()).expect("input ID");
+        let sent = route
+            .deliver(next, &UnstoredAttemptEvidenceSink)
+            .await
+            .expect("later input sent");
+        assert_eq!(sent.receipt().outcome, DeliveryOutcome::Started);
+        host.wait(wait_request(id))
+            .await
+            .expect("later input settles");
+        let wire = rig.wire_receipt();
+        assert_eq!(wire["restores"].as_array().expect("restores").len(), 2);
+        assert_eq!(
+            wire["prompts"],
+            serde_json::json!([rig.target.session_id]),
+            "{path:?}"
+        );
+        route.shutdown_queue().await;
+        host.shutdown().await.expect("stop Host");
+    }
+}
+
+#[tokio::test]
+async fn a_stale_restore_activation_failure_leaves_the_newer_run_live() {
+    let rig = RestoreRig::new();
+    let host = rig.open_host("restored-in-auto").await;
+    let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+    let session_id = String::from(rig.target.session_id.clone());
+    let (reached, release) = runtime.pause_next_activation();
+    let earlier = runtime.load_session(session_id.clone(), rig.root.path().to_path_buf());
+    let replacement = async {
+        reached.await.expect("the first ACP actor registered");
+        runtime
+            .release_session(session_id.clone())
+            .await
+            .expect("release the first run");
+        runtime
+            .load_session(session_id.clone(), rig.root.path().to_path_buf())
+            .await
+            .expect("activate the replacement");
+        release.send(()).expect("finish old activation");
+    };
+    let (earlier, ()) = tokio::join!(earlier, replacement);
+
+    assert!(
+        matches!(earlier, Err(ExternalProviderRuntimeError::SessionReleased)),
+        "{earlier:?}"
+    );
+    assert!(matches!(
+        runtime.session_activity(session_id).await,
+        Ok(crate::ProviderSessionActivity::Idle)
+    ));
+    host.shutdown().await.expect("stop Host");
+}
+
+#[tokio::test]
+async fn explicit_restore_reports_recovery_guidance_and_keeps_its_stored_effect() {
+    for resume in [false, true] {
+        let rig = RestoreRig::new();
+        rig.seed_session().await;
+        let host = rig.open_host("restored-in-auto").await;
+        let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+        let sink = runtime.event_sink_for_test().expect("real hub sink");
+        let id = OperationId::generate();
+        let admitted = if resume {
+            sink.reject_next_history_invalidation_for_test();
+            host.resume(rig.resume_request(id.clone())).await
+        } else {
+            sink.reject_next_skill_view_for_test();
+            host.load(rig.load_request(id.clone())).await
+        };
+        admitted.expect("restore operation admitted");
+        let failure = host
+            .wait(wait_request(id.clone()))
+            .await
+            .expect_err("restore projection failed");
+        assert_eq!(
+            failure.kind,
+            collaboration_protocol::ConversationOperationFailureKind::OutcomeUnknown
+        );
+        assert_eq!(failure.effect, ProviderOperationEffect::Unknown);
+        assert_eq!(
+            String::from(failure.message),
+            "the Router could not publish the restored session's replay or settings, so reconnect and retry this session"
+        );
+        let stored = rig
+            .store()
+            .await
+            .inspect(&id)
+            .await
+            .expect("read operation")
+            .expect("stored restore");
+        assert_eq!(stored.stage, ProviderOperationStage::Terminal);
+        assert_eq!(stored.effect, ProviderOperationEffect::Unknown);
+        assert_eq!(
+            stored.reconciliation_state,
+            ProviderReconciliationState::Unresolved
+        );
+        assert_eq!(rig.wire_receipt()["prompts"], serde_json::json!([]));
         host.shutdown().await.expect("stop Host");
     }
 }

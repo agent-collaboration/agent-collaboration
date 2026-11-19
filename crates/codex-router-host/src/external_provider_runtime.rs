@@ -1,6 +1,6 @@
 //! Host composition for the extracted ACP client.
 
-use provider_session_machines::SessionGeneration;
+use provider_session_machines::{SessionGeneration, session_lifecycle_machine::RestoreVia};
 #[cfg(test)]
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -425,16 +425,8 @@ impl ExternalProviderRuntime {
             .client
             .load_session_with_setup(provider_session_id.clone(), cwd, setup)
             .await?;
-        #[cfg(test)]
-        self.pause_before_activation().await;
-        self.publish_active_session(&provider_session_id, Some(restored.generation))
+        self.finish_restore(&provider_session_id, restored, RestoreVia::Load)
             .await
-            .map_err(acp_client_runtime::RestoreFailure::attempted)?;
-        // Kept only once the run's activation was accepted: a run closed
-        // meanwhile never overwrites what show reports (review F3).
-        self.session_setup
-            .record_restored_mode(&provider_session_id, &restored.permission_mode);
-        Ok(())
     }
 
     pub async fn resume_session(
@@ -463,31 +455,57 @@ impl ExternalProviderRuntime {
             .client
             .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
             .await?;
-        let generation = restored.generation;
+        self.finish_restore(&provider_session_id, restored, RestoreVia::Resume)
+            .await
+    }
+
+    async fn finish_restore(
+        &self,
+        provider_session_id: &str,
+        restored: acp_client_runtime::RestoredSessionAdmission,
+        via: RestoreVia,
+    ) -> Result<(), acp_client_runtime::RestoreFailure> {
         #[cfg(test)]
         self.pause_before_activation().await;
-        if let Some(event_sink) = &self.event_sink {
-            let invalidated = event_sink
-                .begin_history_unavailable(&provider_session_id, generation)
-                .await
-                .map_err(|_| {
-                    acp_client_runtime::RestoreFailure::attempted(
-                        ExternalProviderRuntimeError::HistoryReplayUnavailable,
-                    )
-                })?;
-            if invalidated == GenerationPublication::Ended {
-                return Err(acp_client_runtime::RestoreFailure::attempted(
-                    ExternalProviderRuntimeError::SessionReleased,
-                ));
-            }
-        }
-        self.publish_active_session(&provider_session_id, Some(generation))
+        let generation = restored.generation;
+        if let Err(error) = self
+            .activate_restore(provider_session_id, generation, via)
             .await
-            .map_err(acp_client_runtime::RestoreFailure::attempted)?;
+        {
+            if let Err(retirement_error) = self
+                .client
+                .retire_restored_session(provider_session_id.to_owned(), generation)
+                .await
+            {
+                tracing::warn!(provider_session_id, %retirement_error, "failed to retire an unsuccessful restore");
+            }
+            return Err(acp_client_runtime::RestoreFailure::attempted(error));
+        }
         // Kept only once the run's activation was accepted (review F3).
         self.session_setup
-            .record_restored_mode(&provider_session_id, &restored.permission_mode);
+            .record_restored_mode(provider_session_id, &restored.permission_mode);
         Ok(())
+    }
+
+    async fn activate_restore(
+        &self,
+        provider_session_id: &str,
+        generation: SessionGeneration,
+        via: RestoreVia,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        if via == RestoreVia::Resume
+            && let Some(event_sink) = &self.event_sink
+        {
+            let invalidated = event_sink
+                .begin_history_unavailable(provider_session_id, generation)
+                .await
+                .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
+            if invalidated == GenerationPublication::Ended {
+                return Err(ExternalProviderRuntimeError::SessionReleased);
+            }
+        }
+        self.publish_active_session(provider_session_id, Some(generation))
+            .await
     }
 
     /// Publishes the session active in `generation`. A generation closed

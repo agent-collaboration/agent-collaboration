@@ -73,6 +73,10 @@ pub(crate) struct HubSessionEventSink {
     live_observer: Arc<StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>>,
     #[cfg(test)]
     reject_next_skill_view: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    reject_next_activation: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    reject_next_history_invalidation: std::sync::atomic::AtomicBool,
 }
 
 impl HubSessionEventSink {
@@ -88,6 +92,10 @@ impl HubSessionEventSink {
             live_observer: Arc::new(StdMutex::new(None)),
             #[cfg(test)]
             reject_next_skill_view: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            reject_next_activation: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            reject_next_history_invalidation: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -101,6 +109,17 @@ impl HubSessionEventSink {
     pub(crate) fn skill_view_rejection_pending_for_test(&self) -> bool {
         self.reject_next_skill_view
             .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reject_next_activation_for_test(&self) {
+        self.reject_next_activation.store(true, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reject_next_history_invalidation_for_test(&self) {
+        self.reject_next_history_invalidation
+            .store(true, Ordering::SeqCst);
     }
 
     /// Every later live event of every session on this endpoint reaches `observer`.
@@ -256,6 +275,13 @@ impl HubSessionEventSink {
         session_id: &str,
         generation: SessionGeneration,
     ) -> Result<GenerationPublication, HistoryReplayUnavailable> {
+        #[cfg(test)]
+        if self
+            .reject_next_history_invalidation
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(HistoryReplayUnavailable);
+        }
         let session = self.session(session_id)?;
         let (completion, result) = oneshot::channel();
         let published = self
@@ -283,6 +309,10 @@ impl HubSessionEventSink {
         generation: SessionGeneration,
         capabilities: session_event_model::CapabilityReport,
     ) -> Result<GenerationPublication, EventSinkClosed> {
+        #[cfg(test)]
+        if self.reject_next_activation.swap(false, Ordering::SeqCst) {
+            return Err(EventSinkClosed);
+        }
         let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
         let (completion, result) = oneshot::channel();
         let published = self.enqueue_for(

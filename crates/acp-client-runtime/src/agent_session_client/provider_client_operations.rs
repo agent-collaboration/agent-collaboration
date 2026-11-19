@@ -14,6 +14,7 @@ use super::{
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
 use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
 use agent_client_protocol::schema::v1::ContentBlock;
+use provider_session_machines::{SessionGeneration, session_cell_machine::SessionCellEvent};
 
 /// A close the session's cell admitted. Until its Close command enters the
 /// connection queue, dropping the caller settles it as failed, so the cell
@@ -30,11 +31,23 @@ impl PendingCloseAdmissionGuard {
     fn admit(
         cells: &Arc<crate::session_cell_table::SessionCellTable>,
         provider_session_id: &str,
+        generation: Option<SessionGeneration>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let attempt = provider_session_machines::session_lifecycle_machine::CloseAttempt(
             uuid::Uuid::now_v7(),
         );
-        crate::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
+        if let Some(generation) = generation {
+            cells
+                .transition_in_run(
+                    provider_session_id,
+                    generation,
+                    SessionCellEvent::CloseRequested { attempt },
+                    crate::session_cell_table::EntryEffectRoute::Sink,
+                )
+                .map_err(|_| ExternalProviderRuntimeError::SessionReleased)?;
+        } else {
+            crate::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
+        }
         Ok(Self {
             cells: Arc::clone(cells),
             provider_session_id: provider_session_id.to_owned(),
@@ -488,7 +501,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             });
         }
         let mut admission_guard =
-            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id, None)?;
         self.close_session_after_mark(provider_session_id, false, &mut admission_guard)
             .await
     }
@@ -536,7 +549,26 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
         let mut admission_guard =
-            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id, None)?;
+        self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
+            .await
+    }
+
+    /// Releases a failed restore's local run. The close claim is made under
+    /// the cell's lock, so an ended run cannot close a newer run of the ID.
+    pub async fn retire_restored_session(
+        &self,
+        provider_session_id: String,
+        generation: SessionGeneration,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        let Ok(mut admission_guard) = PendingCloseAdmissionGuard::admit(
+            &self.session_cells,
+            &provider_session_id,
+            Some(generation),
+        ) else {
+            // Another close owns retirement, or this generation already ended.
+            return Ok(());
+        };
         self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
             .await
     }
