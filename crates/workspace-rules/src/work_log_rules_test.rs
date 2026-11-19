@@ -22,7 +22,7 @@ fn r8_redaction_clears_body_in_the_mutation_and_keeps_entry() {
     .unwrap();
     assert_eq!(
         plan.batch.statements.first().unwrap().statement.sql,
-        "UPDATE work_log_entries SET body=NULL,redacted=1,updated_at=? WHERE entry_id=?"
+        "UPDATE workspace_work_log_entries SET body=NULL,redacted=1,updated_at=? WHERE entry_id=?"
     );
     assert_eq!(plan.batch.statements.len(), 2);
 }

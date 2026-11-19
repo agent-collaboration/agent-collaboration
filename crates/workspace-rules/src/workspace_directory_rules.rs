@@ -35,7 +35,7 @@ pub fn change_workspace(
             }
             Ok((
                 exact(
-                    "UPDATE workspaces SET name=?,description=?,updated_at=? WHERE workspace_id=? AND state='active'",
+                    "UPDATE directory_workspaces SET name=?,description=?,updated_at=? WHERE workspace_id=? AND state='active'",
                     vec![
                         text(name.as_str()),
                         text(description.as_str()),
@@ -53,7 +53,7 @@ pub fn change_workspace(
         }
         DirectoryChange::Archive => Ok((
             exact(
-                "UPDATE workspaces SET state='archived',updated_at=? WHERE workspace_id=? AND state='active'",
+                "UPDATE directory_workspaces SET state='archived',updated_at=? WHERE workspace_id=? AND state='active'",
                 vec![text(now.to_rfc3339()), text(&current.workspace_id)],
             ),
             Workspace {

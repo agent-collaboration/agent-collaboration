@@ -98,7 +98,7 @@ fn r5_observer_participant_and_left_member_posting() {
             .unwrap()
             .statement
             .sql
-            .starts_with("INSERT INTO posts")
+            .starts_with("INSERT INTO workspace_posts")
     );
     member.state = MembershipState::Left { at: context.now };
     assert!(matches!(
@@ -167,7 +167,7 @@ fn r32_only_creator_adds_or_promotes_and_self_join_selects_role() {
     let insertion = &added.batch.statements.first().unwrap().statement;
     assert_eq!(
         insertion.sql,
-        "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)"
+        "INSERT INTO workspace_thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)"
     );
     assert_eq!(
         insertion.args.iter().take(4).cloned().collect::<Vec<_>>(),
@@ -196,12 +196,12 @@ fn r32_only_creator_adds_or_promotes_and_self_join_selects_role() {
             .unwrap()
             .statement
             .sql
-            .starts_with("UPDATE thread_members SET member_role=")
+            .starts_with("UPDATE workspace_thread_members SET member_role=")
     );
     let mutation = &promoted.batch.statements.first().unwrap().statement;
     assert_eq!(
         mutation.sql,
-        "UPDATE thread_members SET member_role=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL"
+        "UPDATE workspace_thread_members SET member_role=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL"
     );
     assert_eq!(
         mutation.args,
@@ -231,7 +231,7 @@ fn notifications_off_keeps_membership() {
     )
     .unwrap();
     let sql = plan.batch.statements.first().unwrap().statement.sql;
-    assert!(sql.starts_with("UPDATE thread_members SET notifications="));
+    assert!(sql.starts_with("UPDATE workspace_thread_members SET notifications="));
     assert!(!sql.contains("SET left_at"));
 }
 
@@ -260,7 +260,7 @@ fn r32_self_join_promotes_only_the_callers_observer_and_preserves_notifications(
     let mutation = &plan.batch.statements[0].statement;
     assert_eq!(
         mutation.sql,
-        "UPDATE thread_members SET member_role='participant',updated_at=? WHERE thread_member_id=? AND left_at IS NULL"
+        "UPDATE workspace_thread_members SET member_role='participant',updated_at=? WHERE thread_member_id=? AND left_at IS NULL"
     );
     assert_eq!(
         mutation.args[1],
@@ -319,7 +319,13 @@ fn creating_a_thread_writes_the_thread_membership_and_first_post_as_one_batch() 
 
     assert_eq!(
         sql_of(&plan),
-        vec!["threads", "thread_members", "changes", "posts", "changes"]
+        vec![
+            "workspace_threads",
+            "workspace_thread_members",
+            "workspace_changes",
+            "workspace_posts",
+            "workspace_changes"
+        ]
     );
     let statements = &plan.batch.statements;
     let post_change = &statements[4].statement.args;
@@ -418,7 +424,12 @@ fn a_closing_post_is_written_before_the_thread_resolves_in_the_same_batch() {
 
     assert_eq!(
         sql_of(&plan),
-        vec!["posts", "changes", "threads", "changes"]
+        vec![
+            "workspace_posts",
+            "workspace_changes",
+            "workspace_threads",
+            "workspace_changes"
+        ]
     );
     assert_eq!(
         plan.batch.statements[3].statement.args[1],
@@ -480,16 +491,25 @@ fn thread_steps_with_posts_are_atomic_and_deterministic(case: hegel::TestCase) {
 
     assert_eq!(first, second);
     let tables = sql_of(&first);
-    assert_eq!(tables.iter().filter(|table| **table == "posts").count(), 1);
     assert_eq!(
-        tables.iter().filter(|table| **table == "changes").count(),
+        tables
+            .iter()
+            .filter(|table| **table == "workspace_posts")
+            .count(),
+        1
+    );
+    assert_eq!(
+        tables
+            .iter()
+            .filter(|table| **table == "workspace_changes")
+            .count(),
         2
     );
     let post_row = first
         .batch
         .statements
         .iter()
-        .find(|row| row.statement.sql.starts_with("INSERT INTO posts"))
+        .find(|row| row.statement.sql.starts_with("INSERT INTO workspace_posts"))
         .unwrap();
     assert_eq!(
         post_row.statement.args[3],

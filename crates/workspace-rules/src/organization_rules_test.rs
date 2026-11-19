@@ -47,7 +47,7 @@ fn r1_a_b_r3_a_placement_and_project_lead_are_one_plan() {
             .unwrap()
             .statement
             .sql
-            .starts_with("INSERT INTO projects")
+            .starts_with("INSERT INTO workspace_projects")
     );
     assert!(
         plan.batch
@@ -235,7 +235,7 @@ fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_pro
                 name: name("Renamed"),
                 description: None,
             },
-            "UPDATE areas SET name=?",
+            "UPDATE workspace_areas SET name=?",
             None,
         ),
         (
@@ -244,7 +244,7 @@ fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_pro
                 title: name("Renamed"),
                 description: None,
             },
-            "UPDATE projects SET title=?",
+            "UPDATE workspace_projects SET title=?",
             Some(id::<workspace_model::ProjectId>(5)),
         ),
         (
@@ -252,7 +252,7 @@ fn updates_rename_only_their_existing_row_and_file_project_changes_under_the_pro
                 issue_id: id(20),
                 title: workspace_model::IssueTitle::try_from("Renamed".to_owned()).unwrap(),
             },
-            "UPDATE issues SET title=?",
+            "UPDATE workspace_issues SET title=?",
             Some(id::<workspace_model::ProjectId>(5)),
         ),
     ];

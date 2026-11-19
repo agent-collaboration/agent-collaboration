@@ -45,7 +45,7 @@ fn r7_a_c_d_cycles_cross_project_duplicates_and_incoming_blockers() {
     assert!(output.batch.statements.iter().any(|row| {
         row.statement
             .sql
-            .starts_with("INSERT INTO deliverable_dependencies")
+            .starts_with("INSERT INTO workspace_deliverable_dependencies")
     }));
     let mutation = output.batch.statements.first().unwrap();
     assert_eq!(mutation.expect, central_storage::RowExpectation::Exactly(1));
@@ -74,7 +74,7 @@ fn r7_a_c_d_cycles_cross_project_duplicates_and_incoming_blockers() {
     assert_eq!(mutation.expect, central_storage::RowExpectation::Exactly(1));
     assert_eq!(
         mutation.statement.sql,
-        "DELETE FROM deliverable_dependencies WHERE dependency_id=?"
+        "DELETE FROM workspace_deliverable_dependencies WHERE dependency_id=?"
     );
     assert_eq!(
         mutation.statement.args,
@@ -147,7 +147,7 @@ proptest::proptest! {
                 else if from == to || reachable[to][from] {proptest::prop_assert!(matches!(result,Err(RefusalReason::WouldCycle {..})),"cycle must be refused");}
                 else {
                     let plan=result.unwrap();proptest::prop_assert_eq!(plan.batch.statements.len(),2);
-                    proptest::prop_assert_eq!(plan.batch.statements.first().unwrap().statement.sql,"INSERT INTO deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)");
+                    proptest::prop_assert_eq!(plan.batch.statements.first().unwrap().statement.sql,"INSERT INTO workspace_deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)");
                     let mutation=plan.batch.statements.first().unwrap();
                     proptest::prop_assert_eq!(mutation.expect,central_storage::RowExpectation::Exactly(1));
                     proptest::prop_assert_eq!(&mutation.statement.args,&vec![central_storage::SqlValue::Text(dependency_id.to_string()),central_storage::SqlValue::Text(blocking.to_string()),central_storage::SqlValue::Text(blocked.to_string()),central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned()),central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned())]);
@@ -157,7 +157,7 @@ proptest::proptest! {
                 let result=change_dependency(&context,&DependencyCommand::Remove {dependency_id:dependency_id.clone()},DependencyReads {deliverables:&rows,dependencies:&dependencies});
                 if !edges[from][to] {proptest::prop_assert!(matches!(result,Err(RefusalReason::DependencyNotFound {..})),"missing dependency must refuse");continue;}
                 let plan=result.unwrap();
-                if edges[from][to] {let mutation=plan.batch.statements.first().unwrap();proptest::prop_assert_eq!(mutation.statement.sql,"DELETE FROM deliverable_dependencies WHERE dependency_id=?");proptest::prop_assert_eq!(mutation.expect,central_storage::RowExpectation::Exactly(1));proptest::prop_assert_eq!(&mutation.statement.args,&vec![central_storage::SqlValue::Text(dependency_id.to_string())]);}
+                if edges[from][to] {let mutation=plan.batch.statements.first().unwrap();proptest::prop_assert_eq!(mutation.statement.sql,"DELETE FROM workspace_deliverable_dependencies WHERE dependency_id=?");proptest::prop_assert_eq!(mutation.expect,central_storage::RowExpectation::Exactly(1));proptest::prop_assert_eq!(&mutation.statement.args,&vec![central_storage::SqlValue::Text(dependency_id.to_string())]);}
                 edges[from][to]=false;dependencies.retain(|row|row.dependency_id != dependency_id);
             }
             let reachable=transitive_closure(&edges);proptest::prop_assert!((0..6).all(|node|!reachable[node][node]));

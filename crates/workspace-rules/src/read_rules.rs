@@ -33,7 +33,7 @@ pub fn mark_read(
         vec![]
     } else {
         vec![exact(
-            "INSERT INTO read_marks (read_mark_id,actor_identity_id,scope,through_position,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(actor_identity_id,scope) DO UPDATE SET through_position=excluded.through_position,updated_at=excluded.updated_at WHERE read_marks.through_position < excluded.through_position",
+            "INSERT INTO workspace_read_marks (read_mark_id,actor_identity_id,scope,through_position,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(actor_identity_id,scope) DO UPDATE SET through_position=excluded.through_position,updated_at=excluded.updated_at WHERE workspace_read_marks.through_position < excluded.through_position",
             vec![
                 text(read_mark_id),
                 text(&context.actor),

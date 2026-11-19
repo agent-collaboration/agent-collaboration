@@ -136,13 +136,13 @@ fn r2_reference_removal_never_moves_a_project() {
             .unwrap()
             .statement
             .sql
-            .starts_with("DELETE FROM item_references")
+            .starts_with("DELETE FROM workspace_item_references")
     );
     assert!(
         plan.batch
             .statements
             .iter()
-            .all(|row| !row.statement.sql.contains("UPDATE projects"))
+            .all(|row| !row.statement.sql.contains("UPDATE workspace_projects"))
     );
 }
 #[test]

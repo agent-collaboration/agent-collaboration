@@ -40,7 +40,7 @@ fn a_rename_keeps_its_own_canonical_name_and_refuses_another_workspaces() {
         statement
             .statement
             .sql
-            .starts_with("UPDATE workspaces SET name=?")
+            .starts_with("UPDATE directory_workspaces SET name=?")
     );
     assert_eq!(after.name.as_str(), "ALPHA");
     assert_eq!(after.description.as_str(), "Team space");
