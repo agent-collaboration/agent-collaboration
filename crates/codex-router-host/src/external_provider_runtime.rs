@@ -409,6 +409,7 @@ impl ExternalProviderRuntime {
             acp_client_runtime::SessionRestoreSetup::default(),
         )
         .await
+        .map_err(acp_client_runtime::RestoreFailure::into_error)
     }
 
     /// Loads the session, rebuilding the setup its create had (D1 R18), and
@@ -418,7 +419,7 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
         setup: acp_client_runtime::SessionRestoreSetup,
-    ) -> Result<(), ExternalProviderRuntimeError> {
+    ) -> Result<(), acp_client_runtime::RestoreFailure> {
         // The generation the connection admitted this load under (D1 R14).
         let restored = self
             .client
@@ -427,7 +428,8 @@ impl ExternalProviderRuntime {
         #[cfg(test)]
         self.pause_before_activation().await;
         self.publish_active_session(&provider_session_id, Some(restored.generation))
-            .await?;
+            .await
+            .map_err(acp_client_runtime::RestoreFailure::attempted)?;
         // Kept only once the run's activation was accepted: a run closed
         // meanwhile never overwrites what show reports (review F3).
         self.session_setup
@@ -446,6 +448,7 @@ impl ExternalProviderRuntime {
             acp_client_runtime::SessionRestoreSetup::default(),
         )
         .await
+        .map_err(acp_client_runtime::RestoreFailure::into_error)
     }
 
     /// Resumes the session, rebuilding the setup its create had (D1 R18), and
@@ -455,7 +458,7 @@ impl ExternalProviderRuntime {
         provider_session_id: String,
         cwd: PathBuf,
         setup: acp_client_runtime::SessionRestoreSetup,
-    ) -> Result<(), ExternalProviderRuntimeError> {
+    ) -> Result<(), acp_client_runtime::RestoreFailure> {
         let restored = self
             .client
             .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
@@ -467,13 +470,20 @@ impl ExternalProviderRuntime {
             let invalidated = event_sink
                 .begin_history_unavailable(&provider_session_id, generation)
                 .await
-                .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
+                .map_err(|_| {
+                    acp_client_runtime::RestoreFailure::attempted(
+                        ExternalProviderRuntimeError::HistoryReplayUnavailable,
+                    )
+                })?;
             if invalidated == GenerationPublication::Ended {
-                return Err(ExternalProviderRuntimeError::SessionReleased);
+                return Err(acp_client_runtime::RestoreFailure::attempted(
+                    ExternalProviderRuntimeError::SessionReleased,
+                ));
             }
         }
         self.publish_active_session(&provider_session_id, Some(generation))
-            .await?;
+            .await
+            .map_err(acp_client_runtime::RestoreFailure::attempted)?;
         // Kept only once the run's activation was accepted (review F3).
         self.session_setup
             .record_restored_mode(&provider_session_id, &restored.permission_mode);
@@ -644,6 +654,11 @@ impl ExternalProviderRuntime {
 
     pub fn shutdown_failed(&self) -> bool {
         self.client.shutdown_failed()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn event_sink_for_test(&self) -> Option<&HubSessionEventSink> {
+        self.event_sink.as_deref()
     }
 
     #[cfg(test)]

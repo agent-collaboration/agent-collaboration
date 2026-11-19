@@ -591,6 +591,7 @@ fn command_error(error: collaboration_contracts::CommandFailure) -> ThreadMethod
         }
         CommandFailure::SettingsContextChanged => ThreadMethodError::SettingsContextChanged,
         CommandFailure::SettingsUnresolved => ThreadMethodError::SettingsUnresolved,
+        CommandFailure::RestoreFailed { reason } => ThreadMethodError::RestoreFailed { reason },
         CommandFailure::UnauthorizedActor | CommandFailure::ProviderFailure => {
             ThreadMethodError::Unavailable
         }

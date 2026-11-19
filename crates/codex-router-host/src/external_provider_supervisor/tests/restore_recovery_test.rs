@@ -98,6 +98,41 @@ impl RestoreRig {
         .expect("supervisor")
     }
 
+    fn delivery_route(
+        &self,
+        host: Arc<ExternalProviderSupervisor>,
+    ) -> crate::ProviderAcpDeliveryRoute {
+        let directory = EndpointDirectory::new(self.target.endpoint.service_id.clone());
+        let binding = binding();
+        directory
+            .publish(EndpointDescription {
+                endpoint: self.target.endpoint.clone(),
+                label: NonEmptyText::try_from("Cursor fixture".to_owned()).expect("label"),
+                availability: EndpointAvailability::Available {
+                    observed_at: ObservationTimestamp::try_from("2026-11-19T12:00:00Z".to_owned())
+                        .expect("timestamp"),
+                },
+                channels: vec![ChannelDescription::ExternalProvider {
+                    transport: binding.transport,
+                    binding_id: binding.binding_id,
+                    binding_generation: binding.generation.generation,
+                    runtime: binding.runtime,
+                    capabilities: binding.capabilities,
+                    auto_realization: None,
+                }],
+            })
+            .expect("endpoint");
+        crate::ProviderAcpDeliveryRoute::new(
+            self.target.endpoint.service_id.clone(),
+            std::iter::once(self.target.endpoint.clone()).collect(),
+            directory,
+            host.clone(),
+            host.inner.store.clone(),
+            Arc::new(NoLivePeer),
+            self.clock.clone(),
+        )
+    }
+
     fn load_request(&self, operation_id: OperationId) -> ConversationLoadRequest {
         ConversationLoadRequest {
             operation_id,
@@ -166,35 +201,7 @@ async fn a_cold_auto_restore_timeout_finishes_the_input_without_holding_it() {
     let rig = RestoreRig::new();
     rig.seed_session().await;
     let host = Arc::new(rig.open_host("silent-first-restore").await);
-    let directory = EndpointDirectory::new(rig.target.endpoint.service_id.clone());
-    let binding = binding();
-    directory
-        .publish(EndpointDescription {
-            endpoint: rig.target.endpoint.clone(),
-            label: NonEmptyText::try_from("Cursor fixture".to_owned()).expect("label"),
-            availability: EndpointAvailability::Available {
-                observed_at: ObservationTimestamp::try_from("2026-11-19T12:00:00Z".to_owned())
-                    .expect("timestamp"),
-            },
-            channels: vec![ChannelDescription::ExternalProvider {
-                transport: binding.transport,
-                binding_id: binding.binding_id,
-                binding_generation: binding.generation.generation,
-                runtime: binding.runtime,
-                capabilities: binding.capabilities,
-                auto_realization: None,
-            }],
-        })
-        .expect("endpoint");
-    let route = crate::ProviderAcpDeliveryRoute::new(
-        rig.target.endpoint.service_id.clone(),
-        std::iter::once(rig.target.endpoint.clone()).collect(),
-        directory,
-        host.clone(),
-        host.inner.store.clone(),
-        Arc::new(NoLivePeer),
-        rig.clock.clone(),
-    );
+    let route = rig.delivery_route(host.clone());
     let not_loaded = route
         .deliver(
             auto_message(rig.target.clone(), "load forbidden", LoadPolicy::LoadedOnly),
@@ -274,6 +281,93 @@ async fn a_cold_auto_restore_timeout_finishes_the_input_without_holding_it() {
     );
     route.shutdown_queue().await;
     host.shutdown().await.expect("stop Host");
+}
+
+#[tokio::test]
+async fn a_cold_auto_load_with_a_closed_replay_sink_settles_without_holding_input() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = Arc::new(rig.open_host("restored-in-auto").await);
+    let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+    let sink = runtime.event_sink_for_test().expect("real hub sink");
+    sink.reject_next_skill_view_for_test();
+    let route = rig.delivery_route(host.clone());
+
+    let delivery = route
+        .deliver(
+            auto_message(rig.target.clone(), "do not hold me", LoadPolicy::MayLoad),
+            &UnstoredAttemptEvidenceSink,
+        )
+        .await
+        .expect("terminal cold input receipt");
+    assert!(
+        !sink.skill_view_rejection_pending_for_test(),
+        "the successful ACP reply reached its replay publication"
+    );
+    let observed: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(rig.root.path().join("wire.json")).expect("wire receipt"),
+    )
+    .expect("wire JSON");
+    assert_eq!(
+        observed["restores"]
+            .as_array()
+            .expect("restore requests")
+            .len(),
+        1
+    );
+    assert_eq!(
+        observed
+            .pointer("/restores/0/method")
+            .and_then(serde_json::Value::as_str),
+        Some("session/load")
+    );
+    assert_eq!(observed.get("prompts"), Some(&serde_json::json!([])));
+
+    assert!(
+        matches!(
+            delivery.receipt().outcome,
+            DeliveryOutcome::NotSubmitted { ref reason, retryable: false }
+                if reason.contains("replay") && reason.contains("retry this session")
+        ),
+        "a post-reply failure must finish the input with recovery guidance: {delivery:?}"
+    );
+    route.shutdown_queue().await;
+    host.shutdown().await.expect("stop Host");
+}
+
+#[tokio::test]
+async fn cold_prompt_and_compact_keep_the_post_reply_restore_guidance() {
+    for compact in [false, true] {
+        let rig = RestoreRig::new();
+        rig.seed_session().await;
+        let host = Arc::new(rig.open_host("restored-in-auto").await);
+        let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+        let sink = runtime.event_sink_for_test().expect("real hub sink");
+        sink.reject_next_skill_view_for_test();
+        let route = rig.delivery_route(host.clone());
+        let actor = rig.target.clone().into();
+        let input_id = session_event_model::InputId::generate();
+        let result = if compact {
+            route.compact(rig.target.clone(), actor, input_id).await
+        } else {
+            let prompt = session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("do not submit".to_owned())
+                    .expect("prompt content"),
+            ]);
+            route
+                .prompt_contents(rig.target.clone(), actor, input_id, prompt)
+                .await
+        };
+        let failure = result.expect_err("the load's replay publication failed");
+        assert!(!sink.skill_view_rejection_pending_for_test());
+        assert!(
+            matches!(failure, crate::ProviderPromptContentsError::RestoreFailed { ref reason }
+                if reason.contains("replay") && reason.contains("retry this session")),
+            "{failure:?}"
+        );
+        route.shutdown_queue().await;
+        host.shutdown().await.expect("stop Host");
+    }
 }
 
 #[tokio::test]

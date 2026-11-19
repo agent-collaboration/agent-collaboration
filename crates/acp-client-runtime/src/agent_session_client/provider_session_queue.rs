@@ -294,8 +294,9 @@ impl SessionQueueDoor<'_> {
 pub struct SessionLoadStarted {
     pub generation: SessionGeneration,
     completion: tokio::sync::oneshot::Receiver<
-        Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError>,
+        Result<super::RestoredSessionAdmission, crate::RestoreFailure>,
     >,
+    dispatch: crate::provider_restore_failure::RestoreDispatch,
     local_shutdown: tokio_util::sync::CancellationToken,
     sink_closed: tokio_util::sync::CancellationToken,
 }
@@ -303,11 +304,10 @@ pub struct SessionLoadStarted {
 impl SessionLoadStarted {
     /// The load's result: the run is Live, or it failed and the messages
     /// that waited for it ended not sent.
-    pub async fn finished(
-        self,
-    ) -> Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError> {
+    pub async fn finished(self) -> Result<super::RestoredSessionAdmission, crate::RestoreFailure> {
         super::provider_session_restore::complete_restore(
             self.completion,
+            &self.dispatch,
             &self.local_shutdown,
             &self.sink_closed,
         )
@@ -325,14 +325,18 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: std::path::PathBuf,
         setup: crate::SessionRestoreSetup,
-    ) -> Result<SessionLoadStarted, super::ExternalProviderRuntimeError> {
+    ) -> Result<SessionLoadStarted, crate::RestoreFailure> {
+        use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
         if !self.base_capabilities.supports_load {
-            return Err(super::ExternalProviderRuntimeError::UnsupportedCapability {
-                capability: "session/load",
-            });
+            return Err(RestoreFailure::preflight(
+                super::ExternalProviderRuntimeError::UnsupportedCapability {
+                    capability: "session/load",
+                },
+            ));
         }
         let (admitted, generation) = tokio::sync::oneshot::channel();
         let (reply, completion) = tokio::sync::oneshot::channel();
+        let dispatch = RestoreDispatch::default();
         self.commands
             .send(super::ProviderCommand::Restore {
                 provider_session_id,
@@ -340,23 +344,33 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 mode: super::provider_session_restore::RestoreHistoryMode::Replay,
                 setup,
                 admitted: Some(admitted),
+                dispatch: dispatch.clone(),
                 reply,
             })
             .await
-            .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?;
+            .map_err(|_| {
+                RestoreFailure::preflight(super::ExternalProviderRuntimeError::TransportFailure)
+            })?;
         match generation.await {
             Ok(generation) => Ok(SessionLoadStarted {
                 generation,
                 completion,
+                dispatch,
                 local_shutdown: self.local_shutdown.clone(),
                 sink_closed: self.sink_closed.clone(),
             }),
             // Refused before admission: the reply carries why.
-            Err(_) => Err(completion
-                .await
-                .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?
-                .err()
-                .unwrap_or(super::ExternalProviderRuntimeError::TransportFailure)),
+            Err(_) => Err(super::provider_session_restore::complete_restore(
+                completion,
+                &dispatch,
+                &self.local_shutdown,
+                &self.sink_closed,
+            )
+            .await
+            .err()
+            .unwrap_or_else(|| {
+                RestoreFailure::preflight(super::ExternalProviderRuntimeError::TransportFailure)
+            })),
         }
     }
 

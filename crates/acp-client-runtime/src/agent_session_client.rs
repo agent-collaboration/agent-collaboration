@@ -136,9 +136,9 @@ enum ProviderCommand<P: InteractionPort> {
         /// load, before the agent answers it.
         admitted:
             Option<tokio::sync::oneshot::Sender<provider_session_machines::SessionGeneration>>,
-        reply: tokio::sync::oneshot::Sender<
-            Result<RestoredSessionAdmission, ExternalProviderRuntimeError>,
-        >,
+        dispatch: crate::provider_restore_failure::RestoreDispatch,
+        reply:
+            tokio::sync::oneshot::Sender<Result<RestoredSessionAdmission, crate::RestoreFailure>>,
     },
     /// Test support: drops the session's command sender without closing the
     /// session, so its actor ends on its own, as when its channel closes.
@@ -218,12 +218,12 @@ enum PendingSessionAdmission<P: InteractionPort> {
         /// The load attempt the session's cell admitted; a close or another
         /// load since then makes it stale.
         attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
-        result: Box<Result<RestoredProviderSession, ExternalProviderRuntimeError>>,
+        result: Box<Result<RestoredProviderSession, crate::RestoreFailure>>,
+        dispatch: crate::provider_restore_failure::RestoreDispatch,
         /// The session's in-folder roots, granted once the restore registers.
         in_folder: Option<crate::in_folder_allowance::InFolderGrant>,
-        reply: tokio::sync::oneshot::Sender<
-            Result<RestoredSessionAdmission, ExternalProviderRuntimeError>,
-        >,
+        reply:
+            tokio::sync::oneshot::Sender<Result<RestoredSessionAdmission, crate::RestoreFailure>>,
     },
     Close {
         provider_session_id: String,

@@ -477,6 +477,9 @@ fn map_admission_failure(error: ProviderQueueAdmissionError) -> CommandFailure {
 fn map_prompt_failure(error: ProviderPromptContentsError) -> CommandFailure {
     match error {
         ProviderPromptContentsError::Admission(error) => map_admission_failure(error),
+        ProviderPromptContentsError::RestoreFailed { reason } => {
+            CommandFailure::RestoreFailed { reason }
+        }
         ProviderPromptContentsError::Operation(error) => map_operation_failure(*error),
     }
 }

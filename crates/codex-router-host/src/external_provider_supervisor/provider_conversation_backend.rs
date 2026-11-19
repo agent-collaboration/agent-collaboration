@@ -477,7 +477,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
                                 operation_id,
                                 Some(completion_target),
-                                error,
+                                error.into_error(),
                             )),
                         }
                     });

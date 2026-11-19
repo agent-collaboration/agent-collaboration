@@ -10,7 +10,7 @@ use super::NoInteraction;
 use super::scripted_line_agent::{ModeReply, ScriptedLineAgent};
 use acp_client_runtime::{
     AgentSessionClient, ExternalProviderRuntimeError, ProviderBehavior, ProviderTurnInput,
-    RestoredSessionAdmission, SessionRestoreSetup,
+    RestoreFailure, RestoredSessionAdmission, SessionRestoreSetup,
 };
 use router_clock::{ClockInstant, ManualClock, RuntimeClock};
 use std::path::PathBuf;
@@ -86,6 +86,7 @@ async fn load_in_mode(
             },
         )
         .await
+        .map_err(RestoreFailure::into_error)
 }
 
 /// A load of `session` recorded in `mode`, run as its own task.
@@ -105,6 +106,7 @@ fn spawn_load(
             .load_session_with_setup(session, PathBuf::from("/scenario"), setup)
             .await
             .map(|_admitted| ())
+            .map_err(RestoreFailure::into_error)
     })
 }
 
@@ -560,9 +562,10 @@ async fn restore_without_mode(
     let id = session.to_owned();
     let cwd = PathBuf::from("/scenario");
     let setup = SessionRestoreSetup::default();
-    if method == "session/resume" {
+    let result = if method == "session/resume" {
         client.resume_session_with_setup(id, cwd, setup).await
     } else {
         client.load_session_with_setup(id, cwd, setup).await
-    }
+    };
+    result.map_err(RestoreFailure::into_error)
 }

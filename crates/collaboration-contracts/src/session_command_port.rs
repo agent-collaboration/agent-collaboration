@@ -133,6 +133,8 @@ pub enum CommandFailure {
     UnauthorizedActor,
     #[error("provider command failed")]
     ProviderFailure,
+    #[error("{reason}")]
+    RestoreFailed { reason: String },
 }
 
 /// Commands have distinct results and all carry the identity of the caller.

@@ -54,6 +54,7 @@ mod provider_persistence_target;
 mod provider_prompt_content;
 mod provider_prompt_observation;
 mod provider_prompt_result_codec;
+mod provider_restore_failure;
 mod provider_session_actor;
 mod provider_session_runtime_handles;
 mod provider_session_setting_update;
@@ -99,6 +100,7 @@ pub use provider_model_picker::ProviderModelPicker;
 pub use provider_model_reasoning::*;
 pub use provider_persistence_target::ProviderPersistenceTarget;
 pub use provider_prompt_content::ProviderPromptContent;
+pub use provider_restore_failure::{RestoreFailure, RestorePhase};
 pub use provider_session_actor::{ProviderSessionActivity, ProviderSteeringOutcome};
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,

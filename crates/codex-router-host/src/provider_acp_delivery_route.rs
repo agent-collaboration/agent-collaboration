@@ -293,13 +293,13 @@ impl ProviderAcpDeliveryRoute {
             }
             // A close won while the load was in flight: this delivery ends
             // not sent, never held.
-            ProviderSessionLoadOutcome::ClosedWhileLoading => {
+            ProviderSessionLoadOutcome::ClosedWhileLoading { phase } => {
                 return self
                     .finish_known_none(
                         &request,
                         sink,
                         &mut effect,
-                        crate::provider_acp_message_fifo::SESSION_CLOSED,
+                        crate::provider_acp_session_loading::closed_restore_reason(phase),
                         false,
                         UnsentCause::Refused(NativeRefusalCode::Rejection(
                             DeliveryRejectionReason::NotResumable,
@@ -349,33 +349,25 @@ impl ProviderAcpDeliveryRoute {
                     )
                     .await;
             }
-            ProviderSessionLoadOutcome::RestoreFailed { reason } => {
-                return self
-                    .finish_known_none(
-                        &request,
-                        sink,
-                        &mut effect,
-                        reason,
-                        false,
-                        UnsentCause::Refused(NativeRefusalCode::NativeUnavailable),
-                    )
-                    .await;
-            }
-            ProviderSessionLoadOutcome::Unavailable { reason } => {
-                return self
-                    .finish_known_none(
-                        &request,
-                        sink,
-                        &mut effect,
-                        reason,
+            ProviderSessionLoadOutcome::Unavailable { phase, reason } => {
+                use acp_client_runtime::RestorePhase;
+                let (retryable, cause) = match phase {
+                    RestorePhase::Preflight => (
                         true,
                         UnsentCause::Holdable {
                             otherwise: NativeRefusalCode::NativeUnavailable,
                         },
-                    )
+                    ),
+                    RestorePhase::Attempted => (
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::NativeUnavailable),
+                    ),
+                };
+                return self
+                    .finish_known_none(&request, sink, &mut effect, reason, retryable, cause)
                     .await;
             }
-            ProviderSessionLoadOutcome::Rejected { reason } => {
+            ProviderSessionLoadOutcome::Rejected { reason, .. } => {
                 return self.finish_rejected(sink, &mut effect, reason).await;
             }
         }

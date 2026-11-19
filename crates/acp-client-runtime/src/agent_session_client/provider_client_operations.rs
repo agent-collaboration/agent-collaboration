@@ -12,6 +12,7 @@ use super::{
     ProviderSessionActivity, ProviderSteeringOutcome,
 };
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
+use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
 use agent_client_protocol::schema::v1::ContentBlock;
 
 /// A close the session's cell admitted. Until its Close command enters the
@@ -342,6 +343,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         )
         .await
         .map(|_| ())
+        .map_err(RestoreFailure::into_error)
     }
 
     /// Loads the session, rebuilding the setup its create had (D1 R18);
@@ -352,11 +354,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         setup: crate::SessionRestoreSetup,
-    ) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
+    ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
         if !self.base_capabilities.supports_load {
-            return Err(ExternalProviderRuntimeError::UnsupportedCapability {
-                capability: "session/load",
-            });
+            return Err(RestoreFailure::preflight(
+                ExternalProviderRuntimeError::UnsupportedCapability {
+                    capability: "session/load",
+                },
+            ));
         }
         self.restore_session(
             provider_session_id,
@@ -384,6 +388,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         )
         .await
         .map(|_| ())
+        .map_err(RestoreFailure::into_error)
     }
 
     /// Resumes the session, rebuilding the setup its create had (D1 R18);
@@ -394,11 +399,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         setup: crate::SessionRestoreSetup,
-    ) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
+    ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
         if !self.base_capabilities.supports_resume {
-            return Err(ExternalProviderRuntimeError::UnsupportedCapability {
-                capability: "session/resume",
-            });
+            return Err(RestoreFailure::preflight(
+                ExternalProviderRuntimeError::UnsupportedCapability {
+                    capability: "session/resume",
+                },
+            ));
         }
         self.restore_session(
             provider_session_id,
@@ -415,8 +422,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         cwd: PathBuf,
         mode: super::provider_session_restore::RestoreHistoryMode,
         setup: crate::SessionRestoreSetup,
-    ) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
+    ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
         let (reply, result) = tokio::sync::oneshot::channel();
+        let dispatch = RestoreDispatch::default();
         self.commands
             .send(ProviderCommand::Restore {
                 provider_session_id,
@@ -424,12 +432,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 mode,
                 setup,
                 admitted: None,
+                dispatch: dispatch.clone(),
                 reply,
             })
             .await
-            .map_err(|_| self.retired_operation_error())?;
+            .map_err(|_| RestoreFailure::preflight(self.retired_operation_error()))?;
         super::provider_session_restore::complete_restore(
             result,
+            &dispatch,
             &self.local_shutdown,
             &self.sink_closed,
         )

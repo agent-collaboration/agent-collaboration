@@ -247,7 +247,7 @@ async fn rejected_load_preserves_provider_code_without_creating_replacement() {
     .await;
 
     assert!(
-        matches!(&result, ProviderSessionLoadOutcome::Rejected { reason: ProviderSessionLoadRejection::ProviderRejected { code, .. } } if *code == -32001),
+        matches!(&result, ProviderSessionLoadOutcome::Rejected { phase: acp_client_runtime::RestorePhase::Attempted, reason: ProviderSessionLoadRejection::ProviderRejected { code, .. } } if *code == -32001),
         "{result:?}"
     );
     assert_eq!(

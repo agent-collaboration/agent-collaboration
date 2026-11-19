@@ -6,6 +6,7 @@ use super::{
     RestoredProviderSession, SessionEventSink, acp_load_session_error, provider_frame_decode_error,
     publish_pending_session_admission,
 };
+use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
 use agent_client_protocol::schema::v1::{ResumeSessionRequest, SessionNotification, SessionUpdate};
 use agent_client_protocol::{Dispatch, SessionMessage};
 use futures_util::FutureExt as _;
@@ -18,33 +19,48 @@ const RESTORE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 /// An orderly local shutdown retains the ordinary transport failure result.
 pub(super) async fn complete_restore(
     completion: tokio::sync::oneshot::Receiver<
-        Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError>,
+        Result<super::RestoredSessionAdmission, RestoreFailure>,
     >,
+    dispatch: &RestoreDispatch,
     local_shutdown: &CancellationToken,
     sink_closed: &CancellationToken,
-) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
+) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
     match completion.await {
-        Ok(Err(ExternalProviderRuntimeError::RestoreDisconnected)) | Err(_)
-            if local_shutdown.is_cancelled() =>
+        Ok(Err(failure))
+            if matches!(
+                failure.error(),
+                ExternalProviderRuntimeError::RestoreDisconnected
+            ) && local_shutdown.is_cancelled() =>
         {
-            Err(ExternalProviderRuntimeError::TransportFailure)
+            Err(failure.replacing_error(ExternalProviderRuntimeError::TransportFailure))
         }
-        Err(_) if sink_closed.is_cancelled() => Err(ExternalProviderRuntimeError::SinkClosed),
-        Err(_) => Err(ExternalProviderRuntimeError::RestoreDisconnected),
         Ok(outcome) => outcome,
+        Err(_) => Err(dispatch.failure(if local_shutdown.is_cancelled() {
+            ExternalProviderRuntimeError::TransportFailure
+        } else if sink_closed.is_cancelled() {
+            ExternalProviderRuntimeError::SinkClosed
+        } else {
+            ExternalProviderRuntimeError::RestoreDisconnected
+        })),
     }
 }
 
 async fn await_restore_response<T>(
     clock: &dyn router_clock::RuntimeClock,
     shutdown: &CancellationToken,
+    dispatch: &RestoreDispatch,
     request: impl Future<Output = Result<T, agent_client_protocol::Error>>,
 ) -> Result<T, ExternalProviderRuntimeError> {
     // Dropping the SDK's blocking restore future retires its provisional
     // route and cancels its correlation. This does not settle the peer's effect.
     tokio::select! {
+        biased;
         () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::RestoreDisconnected),
-        result = router_clock::timeout(clock, RESTORE_RESPONSE_TIMEOUT, request) => result
+        result = router_clock::timeout(clock, RESTORE_RESPONSE_TIMEOUT, async {
+            // From the SDK handoff onward the request may reach the peer.
+            dispatch.begin_attempt();
+            request.await
+        }) => result
             .map_err(|_| ExternalProviderRuntimeError::RestoreNoAnswer)?
             .map_err(acp_load_session_error),
     }
@@ -83,9 +99,9 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     /// on them for its load attempt (review F1).
     pub(super) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     pub(super) clock: Arc<dyn router_clock::RuntimeClock>,
-    pub(super) reply: tokio::sync::oneshot::Sender<
-        Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError>,
-    >,
+    pub(super) dispatch: RestoreDispatch,
+    pub(super) reply:
+        tokio::sync::oneshot::Sender<Result<super::RestoredSessionAdmission, RestoreFailure>>,
 }
 
 pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdmissionInputs<P>) {
@@ -106,6 +122,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         attempt,
         session_cells,
         clock,
+        dispatch,
         reply,
     } = inputs;
     let replay_started = if mode == RestoreHistoryMode::Replay {
@@ -128,6 +145,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                 await_restore_response(
                     clock.as_ref(),
                     &shutdown,
+                    &dispatch,
                     connection
                         .load_session_from(request)
                         .block_task()
@@ -158,6 +176,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                 await_restore_response(
                     clock.as_ref(),
                     &shutdown,
+                    &dispatch,
                     connection
                         .resume_session_from(request)
                         .block_task()
@@ -205,7 +224,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                 restored_mode,
             })
         }
-        Err(error) => Err(error),
+        Err(error) => Err(dispatch.failure(error)),
     };
     publish_pending_session_admission(
         &admission_tx,
@@ -215,6 +234,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
             attempt,
             provider_session_id,
             result: Box::new(result),
+            dispatch,
             in_folder: folders.in_folder,
             reply,
         },

@@ -94,8 +94,8 @@ impl ExternalProviderRuntime {
         cwd: PathBuf,
         setup: acp_client_runtime::SessionRestoreSetup,
     ) -> Result<
-        futures_util::future::BoxFuture<'static, Result<(), ExternalProviderRuntimeError>>,
-        ExternalProviderRuntimeError,
+        futures_util::future::BoxFuture<'static, Result<(), acp_client_runtime::RestoreFailure>>,
+        acp_client_runtime::RestoreFailure,
     > {
         let started = self
             .client
@@ -106,7 +106,8 @@ impl ExternalProviderRuntime {
             let restored = started.finished().await?;
             runtime
                 .publish_active_session(&provider_session_id, Some(restored.generation))
-                .await?;
+                .await
+                .map_err(acp_client_runtime::RestoreFailure::attempted)?;
             // Kept only once the run's activation was accepted (review F3).
             runtime
                 .session_setup

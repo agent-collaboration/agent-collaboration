@@ -71,6 +71,8 @@ pub(crate) struct HubSessionEventSink {
     catalog_refresh: StdMutex<Option<mpsc::UnboundedSender<String>>>,
     /// Told of every live event after the hub published it; installed after startup.
     live_observer: Arc<StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>>,
+    #[cfg(test)]
+    reject_next_skill_view: std::sync::atomic::AtomicBool,
 }
 
 impl HubSessionEventSink {
@@ -84,7 +86,21 @@ impl HubSessionEventSink {
             not_publishing: Arc::new(StdMutex::new(HashSet::new())),
             catalog_refresh: StdMutex::new(None),
             live_observer: Arc::new(StdMutex::new(None)),
+            #[cfg(test)]
+            reject_next_skill_view: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reject_next_skill_view_for_test(&self) {
+        self.reject_next_skill_view
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn skill_view_rejection_pending_for_test(&self) -> bool {
+        self.reject_next_skill_view
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Every later live event of every session on this endpoint reaches `observer`.
@@ -617,6 +633,13 @@ impl SessionEventSink for HubSessionEventSink {
         generation: SessionGeneration,
         view: session_event_model::SkillView,
     ) -> Result<(), EventSinkClosed> {
+        #[cfg(test)]
+        if self
+            .reject_next_skill_view
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(EventSinkClosed);
+        }
         let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
         self.enqueue_for(
             session_id,

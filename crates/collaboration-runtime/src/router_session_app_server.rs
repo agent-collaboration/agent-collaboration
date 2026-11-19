@@ -174,6 +174,8 @@ enum ThreadMethodError {
     NotFound,
     #[error("provider session unavailable")]
     Unavailable,
+    #[error("{reason}")]
+    RestoreFailed { reason: String },
 }
 
 #[derive(Debug, thiserror::Error)]

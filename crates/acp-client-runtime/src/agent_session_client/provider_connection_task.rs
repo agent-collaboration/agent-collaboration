@@ -21,6 +21,7 @@ use super::{
     record_permission_refusal, register_provider_session, register_static_provider_session,
     run_create_admission, spawn_external_approval_dispatch,
 };
+use crate::RestoreFailure;
 use provider_session_machines::session_cell_machine::SessionCellEvent;
 
 impl<P: InteractionPort> AgentSessionClient<P> {
@@ -494,17 +495,17 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
                                         }
-                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, in_folder, reply } => {
+                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, dispatch, in_folder, reply } => {
                                             // A close since this restore was admitted made its attempt
                                             // stale: the late completion registers nothing, and a fresh
                                             // restore stays possible. Request routing belongs to whatever
                                             // displaced it (the close, or a newer load that tracked the
                                             // ID), so the stale branch leaves it alone (review F2).
                                             if !crate::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
+                                                let _result = reply.send(Err(dispatch.failure(ExternalProviderRuntimeError::SessionReleased)));
                                                 continue;
                                             }
-                                            if matches!(result.as_ref(), Err(ExternalProviderRuntimeError::SinkClosed)) {
+                                            if matches!(result.as_ref(), Err(failure) if matches!(failure.error(), ExternalProviderRuntimeError::SinkClosed)) {
                                                 sink_closed.cancel();
                                                 task_shutdown.cancel();
                                             }
@@ -528,14 +529,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     Arc::clone(&task_frame_observation),
                                                     task_runtime_handles.for_session_generation(generation),
                                                     #[cfg(any(test, feature = "test-observation"))] Arc::clone(&session_test_tool_calls),
-                                                )
+                                                ).map_err(RestoreFailure::attempted)
                                             }).map(|_| generation);
                                             let mut permission_mode = crate::PermissionModeReport::default();
                                             let mut mode_difference = None;
                                             // The cell moves Loading to Live on a registered restore,
                                             // and back to NotLoaded on a failed one.
                                             let earlier_restore_unanswered = session_cells.read(&provider_session_id, |cell| cell.last_unanswered_restore.is_some());
-                                            if matches!(&result, Err(ExternalProviderRuntimeError::RestoreNoAnswer)) {
+                                            if matches!(&result, Err(failure) if matches!(failure.error(), ExternalProviderRuntimeError::RestoreNoAnswer)) {
                                                 let _retired = session_cells.transition(&provider_session_id, SessionCellEvent::LoadUnanswered { attempt }, crate::session_cell_table::EntryEffectRoute::Sink);
                                                 if task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
                                                     sink_closed.cancel();
@@ -560,7 +561,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     ).is_err() {
                                                         sink_closed.cancel();
                                                         task_shutdown.cancel();
-                                                        result = Err(ExternalProviderRuntimeError::SinkClosed);
+                                                        result = Err(RestoreFailure::attempted(ExternalProviderRuntimeError::SinkClosed));
                                                     }
                                                     let _written = task_session_settings.write(&provider_session_id, generation, catalog.clone());
                                                     mode_difference = restored_mode.difference;
@@ -677,7 +678,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 .await;
                                             });
                                         }
-                                        ProviderCommand::Restore { provider_session_id, cwd, mode, setup, admitted, reply } => {
+                                        ProviderCommand::Restore { provider_session_id, cwd, mode, setup, admitted, dispatch, reply } => {
                                             // Only an admitted restore opens a new run; a refused
                                             // one leaves the live run alone (D1 R14).
                                             let attempt = provider_session_machines::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
@@ -688,7 +689,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             let generation = match crate::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, via, attempt) {
                                                 Ok(generation) => generation,
                                                 Err(error) => {
-                                                    let _result = reply.send(Err(error));
+                                                    let _result = reply.send(Err(RestoreFailure::preflight(error)));
                                                     continue;
                                                 }
                                             };
@@ -715,6 +716,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 attempt,
                                                 session_cells: Arc::clone(&session_cells),
                                                 clock: Arc::clone(&clock),
+                                                dispatch,
                                                 reply,
                                             };
                                             admission_tasks.spawn(async move {

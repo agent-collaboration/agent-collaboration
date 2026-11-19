@@ -357,7 +357,7 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
     assert!(
         matches!(
             loaded,
-            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::ClosedWhileLoading
+            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::ClosedWhileLoading { .. }
         ),
         "the load that landed after the close is refused: {loaded:?}"
     );
@@ -561,7 +561,7 @@ async fn a_load_continuation_held_past_a_router_close_publishes_nothing() {
     assert!(
         matches!(
             loaded,
-            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::ClosedWhileLoading
+            crate::provider_acp_session_loading::ProviderSessionLoadOutcome::ClosedWhileLoading { .. }
         ),
         "the load whose continuation outlived the close answers closed: {loaded:?}"
     );

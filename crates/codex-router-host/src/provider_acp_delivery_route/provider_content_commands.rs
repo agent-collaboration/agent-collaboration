@@ -6,6 +6,7 @@ use super::{
     ProviderSessionLoadOutcome, ProviderSteeringOutcome, RouteClaim, SessionRef,
     ensure_provider_session_loaded,
 };
+use acp_client_runtime::RestorePhase;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ProviderQueueAdmissionError {
@@ -37,6 +38,8 @@ pub enum ProviderSteerContentsError {
 pub enum ProviderPromptContentsError {
     #[error(transparent)]
     Admission(#[from] ProviderQueueAdmissionError),
+    #[error("{reason}")]
+    RestoreFailed { reason: String },
     #[error("provider prompt operation failed")]
     Operation(Box<collaboration_protocol::ConversationOperationFailure>),
 }
@@ -130,6 +133,30 @@ impl ProviderAcpDeliveryRoute {
             }
             ProviderSessionLoadOutcome::LiveElsewhere => {
                 return Err(ProviderQueueAdmissionError::LiveElsewhere.into());
+            }
+            ProviderSessionLoadOutcome::Unavailable {
+                phase: RestorePhase::Attempted,
+                reason,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed { reason });
+            }
+            ProviderSessionLoadOutcome::Rejected {
+                phase: RestorePhase::Attempted,
+                reason,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed {
+                    reason: reason.safe_detail(),
+                });
+            }
+            ProviderSessionLoadOutcome::ClosedWhileLoading {
+                phase: RestorePhase::Attempted,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed {
+                    reason: crate::provider_acp_session_loading::closed_restore_reason(
+                        RestorePhase::Attempted,
+                    )
+                    .to_owned(),
+                });
             }
             _ => return Err(ProviderQueueAdmissionError::Unavailable.into()),
         }
