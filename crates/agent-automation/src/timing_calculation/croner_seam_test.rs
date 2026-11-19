@@ -1,18 +1,15 @@
 //! The seam carries an instant across both jiff lines unchanged, on the DST edges.
-use super::{from_croner, next_occurrence, to_croner};
-use croner::parser::{CronParser, Seconds, Year};
+use super::{TimingError, from_croner, next_occurrence, to_croner};
+use chrono::{DateTime, Utc};
 
+#[cfg(test)]
 fn instant(text: &str) -> jiff::Timestamp {
     text.parse().unwrap()
 }
 
-fn daily(expression: &str) -> croner::Cron {
-    CronParser::builder()
-        .seconds(Seconds::Disallowed)
-        .year(Year::Disallowed)
-        .build()
-        .parse(expression)
-        .unwrap()
+#[cfg(test)]
+fn utc_instant(text: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(text).unwrap().to_utc()
 }
 
 #[test]
@@ -37,31 +34,28 @@ fn an_instant_crosses_the_seam_both_ways_unchanged_on_each_dst_edge() {
 fn a_cron_across_the_seam_answers_on_both_dst_edges() {
     // Spring: 02:30 does not exist on March 8; it fires as the gap ends, 03:00 EDT.
     let spring = next_occurrence(
-        &daily("30 2 * * *"),
-        instant("2026-03-08T05:00:00Z"),
+        "30 2 * * *",
+        utc_instant("2026-03-08T05:00:00Z"),
         "America/Toronto",
     );
     // Fall: from inside the first 01:30, the repeated one is not a new day's run.
     let fall = next_occurrence(
-        &daily("30 1 * * *"),
-        instant("2026-11-01T05:30:00Z"),
+        "30 1 * * *",
+        utc_instant("2026-11-01T05:30:00Z"),
         "America/Toronto",
     );
 
-    assert_eq!(spring.unwrap(), instant("2026-03-08T07:00:00Z"));
-    assert_eq!(fall.unwrap(), instant("2026-11-02T06:30:00Z"));
+    assert_eq!(spring.unwrap(), utc_instant("2026-03-08T07:00:00Z"));
+    assert_eq!(fall.unwrap(), utc_instant("2026-11-02T06:30:00Z"));
 }
 
 #[test]
 fn an_unknown_zone_name_is_refused_at_the_seam() {
     let refused = next_occurrence(
-        &daily("0 9 * * *"),
-        instant("2026-03-08T00:00:00Z"),
-        "America/Atlantis",
+        "0 9 * * *",
+        utc_instant("2026-03-08T00:00:00Z"),
+        "Etc/Unknown",
     );
 
-    assert!(matches!(
-        refused,
-        Err(super::super::TimingError::InvalidTimezone)
-    ));
+    assert!(matches!(refused, Err(TimingError::InvalidTimezone)));
 }

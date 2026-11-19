@@ -4,8 +4,8 @@ all-features = true
 [advisories]
 ignore = [
     { id = "RUSTSEC-2026-0459", reason = "Released sqlx-sqlite 0.9.0 caps libsqlite3-sys below 0.38; remove when a released SQLx permits libsqlite3-sys 0.39" },
-    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained (no vulnerability); rmcp, turso_core/turso_ext and worker (workers-rs) depend on it unconditionally, as do our own crates; remove when those holders drop chrono and our crates move to a maintained time crate" },
-    { id = "RUSTSEC-2026-0555", reason = "chrono-tz is unmaintained (no vulnerability); dev-dependency only (agent-session-tui DST grouping tests); not in any shipped binary" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained (no vulnerability); still used by rmcp, turso_core/turso_ext, worker (workers-rs), and workspace callers. Remove when those holders and workspace callers no longer depend on chrono" },
+    { id = "RUSTSEC-2026-0555", reason = "chrono-tz is unmaintained (no vulnerability); dev-dependency only; not in any shipped binary. Its only consumer is agent-session-tui's DST grouping tests" },
 ]
 
 [licenses]

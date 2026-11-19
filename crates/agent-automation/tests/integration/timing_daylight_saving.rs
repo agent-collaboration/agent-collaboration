@@ -4,7 +4,7 @@
 //! (the spring gap); on November 1 local 01:00-02:00 happens twice, first EDT, then
 //! EST (the fall overlap). Elapsed rules count real seconds and never see the zone;
 //! calendar rules follow local time.
-use agent_automation::TimingRule;
+use agent_automation::{TimingError, TimingRule};
 use chrono::{DateTime, Utc};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -37,7 +37,7 @@ fn require_next(
 
 #[test]
 fn a_one_time_instant_is_exact_inside_both_transitions() -> TestResult {
-    // 07:30Z is local 02:30, which does not exist in the spring gap's zone;
+    // 07:30Z is 03:30 EDT, half an hour after the spring gap.
     // 05:30Z is the first local 01:30 of the fall overlap.
     for at in ["2026-03-08T07:30:00Z", "2026-11-01T05:30:00Z"] {
         require_next(
@@ -52,7 +52,7 @@ fn a_one_time_instant_is_exact_inside_both_transitions() -> TestResult {
 }
 
 #[test]
-fn after_and_interval_count_elapsed_seconds_across_both_transitions() -> TestResult {
+fn after_counts_elapsed_seconds_across_the_spring_gap() -> TestResult {
     // Spring: 01:30 EST (06:30Z) plus one hour is 03:30 EDT, 07:30Z.
     require_next(
         &TimingRule::After { seconds: 3_600 },
@@ -60,7 +60,11 @@ fn after_and_interval_count_elapsed_seconds_across_both_transitions() -> TestRes
         None,
         "2026-03-08T07:30:00Z",
         "one hour after crossed the spring gap by a wall-clock hour",
-    )?;
+    )
+}
+
+#[test]
+fn an_interval_counts_elapsed_seconds_in_the_fall_overlap() -> TestResult {
     // Fall: 00:30 EDT (04:30Z); the second hourly tick lands in the repeated hour.
     require_next(
         &TimingRule::Interval { seconds: 3_600 },
@@ -112,7 +116,7 @@ fn a_daily_cron_in_the_fall_overlap_fires_once_at_its_first_occurrence() -> Test
 }
 
 #[test]
-fn an_hourly_cron_steps_through_the_spring_gap_and_the_fall_overlap() -> TestResult {
+fn an_hourly_cron_skips_the_spring_gap() -> TestResult {
     let rule = cron("0 * * * *");
     // Spring: 01:00 EST (06:00Z), then 03:00 EDT (07:00Z); there is no 02:00.
     require_next(
@@ -121,7 +125,12 @@ fn an_hourly_cron_steps_through_the_spring_gap_and_the_fall_overlap() -> TestRes
         Some("2026-03-08T06:00:00Z"),
         "2026-03-08T07:00:00Z",
         "the hourly cron left a hole after the spring gap",
-    )?;
+    )
+}
+
+#[test]
+fn an_hourly_cron_runs_in_both_halves_of_the_fall_overlap() -> TestResult {
+    let rule = cron("0 * * * *");
     // Fall: 01:00 EDT (05:00Z), then 01:00 EST (06:00Z), then 02:00 EST (07:00Z).
     require_next(
         &rule,
@@ -140,16 +149,34 @@ fn an_hourly_cron_steps_through_the_spring_gap_and_the_fall_overlap() -> TestRes
 }
 
 #[test]
-fn an_unknown_zone_is_refused() -> TestResult {
-    let rule = TimingRule::Cron {
-        expression: "0 9 * * *".into(),
-        timezone: "America/Atlantis".into(),
-    };
-    if rule
-        .next_due(instant("2026-03-08T00:00:00Z")?, None)
-        .is_ok()
-    {
-        return Err("an unknown time zone was accepted".into());
+fn cron_accepts_exact_iana_names_and_refuses_unknown_zones() -> TestResult {
+    let anchor = instant("2026-03-08T00:00:00Z")?;
+    for timezone in ["America/Atlantis", "Etc/Unknown", "america/toronto"] {
+        let rule = TimingRule::Cron {
+            expression: "0 9 * * *".into(),
+            timezone: timezone.into(),
+        };
+        if !matches!(
+            rule.next_due(anchor, None),
+            Err(TimingError::InvalidTimezone)
+        ) {
+            return Err(format!("expected invalid timezone for {timezone}").into());
+        }
+    }
+    for (timezone, expected) in [
+        ("Etc/UTC", "2026-03-08T09:00:00Z"),
+        ("Canada/Eastern", "2026-03-08T13:00:00Z"),
+    ] {
+        require_next(
+            &TimingRule::Cron {
+                expression: "0 9 * * *".into(),
+                timezone: timezone.into(),
+            },
+            "2026-03-08T00:00:00Z",
+            None,
+            expected,
+            "a valid IANA alias was not honored",
+        )?;
     }
     Ok(())
 }
@@ -173,7 +200,7 @@ fn any_daily_cron_lands_on_its_local_time_or_the_end_of_the_spring_gap(case: heg
         .expect("a daily cron has a next occurrence")
         .expect("a daily cron never ends");
 
-    assert!(due >= start, "{due} is before {start}");
+    assert!(due > start, "{due} is not after {start}");
     assert!(
         due - start <= chrono::Duration::days(2),
         "{due} is more than two days after {start}"

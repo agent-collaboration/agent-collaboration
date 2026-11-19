@@ -23,7 +23,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
-jiff.workspace = true
 
 [[test]]
 name = "integration"
