@@ -4,7 +4,8 @@ use crate::{ClientError, CollaborationAccess};
 use codex_native_integration::{NativeConnectionError, NativeProtocolConnection};
 use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
-    EndpointAvailability, EndpointId, EndpointRef, ObservationEndReason, SessionId, SessionRef,
+    EndpointAvailability, EndpointId, EndpointRef, HarnessSessionRef, ObservationEndReason,
+    SessionId,
 };
 use serde_json::Value;
 use std::{path::Path, time::Duration};
@@ -19,7 +20,7 @@ pub type ObservationEventSink =
 
 pub struct NativeObservation {
     connection: NativeProtocolConnection,
-    target: SessionRef,
+    target: HarnessSessionRef,
     generation: CodexGeneration,
 }
 
@@ -106,7 +107,7 @@ impl NativeObservation {
         let endpoints = Self::open_endpoints(access).await.map_err(|source| {
             crate::OperationError::before_dispatch("observation-connect", None, source)
         })?;
-        let target = SessionRef {
+        let target = HarnessSessionRef {
             endpoint: EndpointRef {
                 service_id: endpoints.service_id(),
                 endpoint_id,
@@ -119,7 +120,7 @@ impl NativeObservation {
     /// May load the target through native resume; readiness is returned only after attachment.
     pub async fn attach(
         access: &CollaborationAccess,
-        target: SessionRef,
+        target: HarnessSessionRef,
     ) -> Result<Self, ClientError> {
         Self::attach_with_context(access, target)
             .await
@@ -128,7 +129,7 @@ impl NativeObservation {
 
     async fn attach_with_context(
         access: &CollaborationAccess,
-        target: SessionRef,
+        target: HarnessSessionRef,
     ) -> Result<Self, crate::OperationError> {
         let endpoints = Self::open_endpoints(access).await.map_err(|source| {
             crate::OperationError::before_dispatch(
@@ -151,7 +152,7 @@ impl NativeObservation {
     pub(crate) async fn attach_with_endpoints(
         access: &CollaborationAccess,
         endpoints: EndpointDirectoryReader,
-        target: SessionRef,
+        target: HarnessSessionRef,
     ) -> Result<Self, crate::OperationError> {
         let directory = access.directory();
         let before = |source| {
@@ -250,7 +251,7 @@ impl NativeObservation {
         })
     }
     #[must_use]
-    pub fn target(&self) -> &SessionRef {
+    pub fn target(&self) -> &HarnessSessionRef {
         &self.target
     }
     #[must_use]
@@ -400,7 +401,7 @@ mod bounded_observation_tests {
         BoundedObservationRequest, NativeObservation, ObservationEndReason,
         observation_has_continuation_gap, validate_observation_bounds,
     };
-    use collaboration_protocol::{EndpointId, EndpointRef, SessionId, SessionRef, UuidIdentity};
+    use collaboration_protocol::{EndpointId, EndpointRef, HarnessSessionRef, SessionId};
     use tokio_util::sync::CancellationToken;
 
     fn request(
@@ -409,10 +410,10 @@ mod bounded_observation_tests {
         max_bytes: usize,
     ) -> BoundedObservationRequest {
         BoundedObservationRequest {
-            target: SessionRef {
+            target: HarnessSessionRef {
                 endpoint: EndpointRef {
-                    service_id: UuidIdentity::try_from(
-                        "00000000-0000-4000-8000-000000000001".to_owned(),
+                    service_id: workspace_ids::MachineId::try_from(
+                        "00000000-0000-7000-8000-000000000001".to_owned(),
                     )
                     .expect("service UUID"),
                     endpoint_id: EndpointId::try_from("codex-local".to_owned())

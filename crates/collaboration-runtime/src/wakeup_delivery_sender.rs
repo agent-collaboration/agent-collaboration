@@ -11,9 +11,9 @@ use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MachineId, MessageContent,
+    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, HarnessSessionRef, MessageContent,
     MessageDelivery, MessageText, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
-    PushLineInput, PushOrigin, PushRecord, RouterLink, RouterOriginRef, SavedMessage, SessionRef,
+    PushLineInput, PushOrigin, PushRecord, RouterLink, RouterOriginRef, SavedMessage,
     render_push_line,
 };
 use std::sync::Arc;
@@ -115,7 +115,7 @@ impl WakeDeliverySender {
         let delivery_record = store
             .lock()
             .await
-            .read_delivery::<SessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
+            .read_delivery::<HarnessSessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
             .await?;
         let origin = RouterOriginRef::Wake {
             wakeup_id: delivery_record.wakeup_id.clone(),
@@ -133,7 +133,7 @@ impl WakeDeliverySender {
         let claim = store
             .lock()
             .await
-            .claim_delivery::<SessionRef, MessageContent, CodexGeneration>(
+            .claim_delivery::<HarnessSessionRef, MessageContent, CodexGeneration>(
                 &delivery_id,
                 self.clock.now().unix_millis(),
             )
@@ -295,7 +295,7 @@ fn prepared_wake_push(
 ) -> Result<collaboration_contracts::layer_zero::PreparedPush, StorageError> {
     let rendered_line = render_push_line(&PushLineInput {
         link: RouterLink::new(
-            MachineId::from(machine_identity.service_id().clone()),
+            machine_identity.service_id().clone(),
             record.push_id.clone(),
         ),
         machine_label: machine_identity.machine_label().clone(),
@@ -318,13 +318,13 @@ struct WakeEvidenceSink {
     store: Arc<Mutex<AutomationStore>>,
     delivery_id: DeliveryId,
     attempt_id: agent_automation::AttemptId,
-    latest: Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    latest: Mutex<Option<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 }
 
 impl AttemptEvidenceSink for WakeEvidenceSink {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async move {
             let mut latest = self.latest.lock().await;

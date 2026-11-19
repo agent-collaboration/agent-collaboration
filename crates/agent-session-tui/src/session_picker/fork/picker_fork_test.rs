@@ -4,7 +4,7 @@ use agent_session_inventory::sessions::RouterRegistryRead;
 use agent_session_inventory::sessions::SessionActionSelection;
 use agent_session_inventory::sessions::SessionPickerIdentity;
 use agent_session_inventory::source_inventory_request::PickerSourceContext;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde_json::json;
 
 #[test]
@@ -13,13 +13,13 @@ fn review_fork_destination_aliases_use_captured_service_not_display_label() {
     use crate::session_picker::fork::picker_fork_confirmation::ForkConfirmation;
     let mut request = picker_request();
     let registry=agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(&json!({"version":1,"routers":[
-        {"name":"Chosen alias","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"https://fixture.invalid/mcp"}},
-        {"name":"Also same source","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"https://fixture.invalid/alias"}},
-        {"name":"Decorated source","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000002","mcpUrl":"https://fixture.invalid/other"}}
+        {"name":"Chosen alias","connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000001","mcpUrl":"https://fixture.invalid/mcp"}},
+        {"name":"Also same source","connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000001","mcpUrl":"https://fixture.invalid/alias"}},
+        {"name":"Decorated source","connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000002","mcpUrl":"https://fixture.invalid/other"}}
     ]}).to_string()).unwrap();
     let profile = registry.routers[0].clone();
     request.router_registry = RouterRegistryRead::Ready(registry);
-    let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"source-native"},"sessionId":"thread-a"})).unwrap();
+    let target:HarnessSessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"source-native"},"sessionId":"thread-a"})).unwrap();
     let record = &mut request.records[0];
     record.identity = SessionPickerIdentity::HostedCodex(target.clone());
     record.source_context = Some(PickerSourceContext::ConfiguredHosted(profile));
@@ -83,7 +83,7 @@ fn named_request() -> SessionsPickerRequest {
     request.router_registry = RouterRegistryRead::Ready(
         agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(
             r#"{"version":1,"routers":[{"name":"Sunbook","connection":{"kind":"remote",
-            "serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"https://machine.example.invalid/mcp"}}]}"#,
+            "serviceId":"00000000-0000-7000-8000-000000000001","mcpUrl":"https://machine.example.invalid/mcp"}}]}"#,
         ).unwrap(),
     );
     request
@@ -222,7 +222,7 @@ async fn fork_escape_preserves_main_focus_and_query() {
 #[test]
 fn fork_source_survives_refresh_with_equal_native_id_and_changed_metadata() {
     let mut request = picker_request();
-    let target: SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-local"},"sessionId":"thread-a"})).unwrap();
+    let target: HarnessSessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-local"},"sessionId":"thread-a"})).unwrap();
     request.records[0].identity = SessionPickerIdentity::HostedCodex(target.clone());
     request.records[0].model = Some("gpt-6.1-sol".to_owned());
     let mut model = SessionsPickerModel::new(request, 110);
@@ -284,10 +284,10 @@ async fn unqualified_source_fork_displays_source_directory_and_never_falls_back(
 async fn provider_fork_opens_an_explanation_without_a_native_action() {
     let summary = serde_json::from_value(json!({
         "origin":"hostedProvider",
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-one"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-one"},
         "workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},
         "approver":{"kind":"human","humanId":"owner"},
-        "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
+        "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     })).unwrap();
     let mut request = picker_request();
     request.records = vec![SessionPickerRecord::from_provider_summary(

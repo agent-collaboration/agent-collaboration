@@ -1,9 +1,9 @@
 //! ACP session selection and its setup evidence.
 use super::{
     AcpConversation, ClientError, ConversationCreateRequest, ConversationCreateResult,
-    ConversationEvent, SessionRef, SetupUpdateDelivery, Value, json, prepare_project_write_areas,
-    prepare_session_scratch, router_metadata_effort, session_scratch_scope,
-    validate_conversation_create_request, validate_conversation_endpoint,
+    ConversationEvent, HarnessSessionRef, SetupUpdateDelivery, Value, json,
+    prepare_project_write_areas, prepare_session_scratch, router_metadata_effort,
+    session_scratch_scope, validate_conversation_create_request, validate_conversation_endpoint,
 };
 
 impl AcpConversation {
@@ -37,7 +37,7 @@ impl AcpConversation {
         &mut self,
         request: &ConversationCreateRequest,
         emit: &mut impl FnMut(ConversationEvent) -> Result<(), ClientError>,
-    ) -> Result<SessionRef, ClientError> {
+    ) -> Result<HarnessSessionRef, ClientError> {
         self.open_session_with_context(request, emit, SetupUpdateDelivery::StreamToCaller)
             .await
             .map_err(crate::OperationError::into_source)
@@ -48,7 +48,7 @@ impl AcpConversation {
         request: &ConversationCreateRequest,
         emit: &mut impl FnMut(ConversationEvent) -> Result<(), ClientError>,
         setup_updates: SetupUpdateDelivery,
-    ) -> Result<SessionRef, crate::OperationError> {
+    ) -> Result<HarnessSessionRef, crate::OperationError> {
         validate_conversation_create_request(request)
             .map_err(|source| crate::OperationError::before_dispatch("validation", None, source))?;
         // A requested switch retires the previous selection even when setup rejects
@@ -67,7 +67,7 @@ impl AcpConversation {
             ));
         }
         let target = if let Some(id) = &request.session {
-            let target = SessionRef {
+            let target = HarnessSessionRef {
                 endpoint: self.endpoint.clone(),
                 session_id: id.clone(),
             };
@@ -190,7 +190,7 @@ impl AcpConversation {
             self.permission_mode = permission_mode(&result).map_err(|source| {
                 crate::OperationError::after_dispatch(stage, None, None, source)
             })?;
-            SessionRef {
+            HarnessSessionRef {
                 endpoint: self.endpoint.clone(),
                 session_id: result
                     .get("sessionId")

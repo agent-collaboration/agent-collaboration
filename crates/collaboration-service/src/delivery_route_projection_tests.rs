@@ -5,7 +5,9 @@ mod tests {
         WakeupId,
     };
     use automation_storage::DeliveryRecord;
-    use collaboration_protocol::{CodexGeneration, DeliveryRouteEvidence, OperationId, SessionRef};
+    use collaboration_protocol::{
+        CodexGeneration, DeliveryRouteEvidence, HarnessSessionRef, OperationId,
+    };
     use collaboration_protocol::{
         DeliveryClientReceipt, DeliveryEvidence, DeliveryOutcome, DeliveryReceipt,
         SessionReachability,
@@ -13,8 +15,8 @@ mod tests {
     use serde_json::json;
 
     fn inspect_selected(
-        target: SessionRef,
-        attempt: DeliveryAttempt<SessionRef, CodexGeneration>,
+        target: HarnessSessionRef,
+        attempt: DeliveryAttempt<HarnessSessionRef, CodexGeneration>,
         receipt: DeliveryReceipt,
     ) -> Result<collaboration_protocol::DeliveryInspection, Box<dyn std::error::Error>> {
         let record = DeliveryRecord {
@@ -38,8 +40,8 @@ mod tests {
     }
 
     fn inspect_dispatching(
-        target: SessionRef,
-        effects: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        target: HarnessSessionRef,
+        effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> Result<collaboration_protocol::DeliveryInspection, Box<dyn std::error::Error>> {
         let record = DeliveryRecord::<
             _,
@@ -72,8 +74,8 @@ mod tests {
     #[test]
     fn rejected_unselected_attempt_keeps_structured_receipt()
     -> Result<(), Box<dyn std::error::Error>> {
-        let target: SessionRef = serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        let target: HarnessSessionRef = serde_json::from_value(json!({
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "sessionId":"target"
         }))?;
         let receipt: DeliveryReceipt = serde_json::from_value(json!({
@@ -130,14 +132,14 @@ mod tests {
     #[test]
     fn provider_and_peer_attempts_project_through_public_inspection()
     -> Result<(), Box<dyn std::error::Error>> {
-        let service = "00000000-0000-4000-8000-000000000001";
+        let service = "00000000-0000-7000-8000-000000000001";
         let generation: CodexGeneration =
             serde_json::from_value(json!({"serviceEpoch":service,"generation":1}))?;
-        let provider_target: SessionRef = serde_json::from_value(json!({
+        let provider_target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"provider-thread"
         }))?;
         let provider_attempt = AttemptId::generate();
-        let provider_effects: RouteEffectEvidence<SessionRef, CodexGeneration> =
+        let provider_effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration> =
             serde_json::from_value(json!({
                 "kind":"providerAcp","target":provider_target,"generation":generation,
                 "binding":"binding-one","attemptId":provider_attempt,
@@ -180,10 +182,10 @@ mod tests {
             return Err("provider acceptance lost operation identity".into());
         }
 
-        let peer_target: SessionRef = serde_json::from_value(json!({
+        let peer_target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"peer-thread"
         }))?;
-        let peer_effects: RouteEffectEvidence<SessionRef, CodexGeneration> =
+        let peer_effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration> =
             serde_json::from_value(json!({
                 "kind":"claudeCodePeer","sessionId":"peer-thread","processId":42,"write":"written"
             }))?;

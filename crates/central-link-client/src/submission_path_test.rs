@@ -146,7 +146,7 @@ fn workspace_fields(kind: &str, id: &str, text: &str) -> Value {
 }
 
 fn mail_fields(kind: &str, id: &str, text: &str) -> Value {
-    let session = json!({"machineId": id, "endpoint": "codex-local", "sessionId": text});
+    let session = json!({"machineId": id, "sessionId": text});
     match kind {
         "setNoticeCadence" => json!({"cadence": "m25"}),
         "sendMessage" => {

@@ -1,4 +1,4 @@
-use collaboration_client::protocol::{ConversationRecord, SessionRef};
+use collaboration_client::protocol::{ConversationRecord, HarnessSessionRef};
 use collaboration_client::{
     ClientError, ConversationCreatePromptResult, ConversationEnd, OperationEffect,
     OperationFailureKind, operation_failure_from_client_error,
@@ -6,7 +6,7 @@ use collaboration_client::{
 use serde_json::json;
 
 #[expect(clippy::expect_used, reason = "fixed valid test fixture")]
-fn fixture_target(session_id: &str) -> SessionRef {
+fn fixture_target(session_id: &str) -> HarnessSessionRef {
     serde_json::from_value(json!({
         "endpoint":{"serviceId":"00000000-0000-4000-0000-000000000001","endpointId":"codex-local"},
         "sessionId":session_id

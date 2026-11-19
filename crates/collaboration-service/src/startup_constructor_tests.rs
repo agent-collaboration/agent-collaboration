@@ -17,7 +17,7 @@ use fleet_sync_protocol::{DeliveryItem, ItemId, PeerId, Recipient};
 use serde_json::json;
 use std::sync::Arc;
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 
 async fn fixture() -> (
     tempfile::TempDir,

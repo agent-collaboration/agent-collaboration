@@ -2,8 +2,8 @@ use agent_automation::{DurableMessage, FirstFire, WakeRecord};
 use automation_storage::StorageError;
 use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
-    EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, RouterOriginRef,
-    SessionId, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, PushHeaderFacts, PushId, PushKind, PushOrigin,
+    RouterOriginRef, SessionId,
 };
 use serde_json::Value;
 
@@ -16,7 +16,7 @@ pub(super) fn build_test_wake_push_draft<TMessage: DurableMessage>(
     }
     let target_value = serde_json::to_value(wake.definition.message.target())
         .map_err(|_| StorageError::InvalidRecord)?;
-    let target = match serde_json::from_value::<SessionRef>(target_value) {
+    let target = match serde_json::from_value::<HarnessSessionRef>(target_value) {
         Ok(target) => target,
         Err(_) => fixture_target()?,
     };
@@ -52,11 +52,13 @@ pub(super) fn build_test_wake_push_draft<TMessage: DurableMessage>(
     })
 }
 
-fn fixture_target() -> Result<SessionRef, StorageError> {
-    Ok(SessionRef {
+fn fixture_target() -> Result<HarnessSessionRef, StorageError> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())
-                .map_err(|_| StorageError::InvalidRecord)?,
+            service_id: workspace_ids::MachineId::try_from(
+                "00000000-0000-7000-8000-000000000001".to_owned(),
+            )
+            .map_err(|_| StorageError::InvalidRecord)?,
             endpoint_id: EndpointId::try_from("codex-local".to_owned())
                 .map_err(|_| StorageError::InvalidRecord)?,
         },

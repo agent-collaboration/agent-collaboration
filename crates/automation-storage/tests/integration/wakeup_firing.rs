@@ -5,8 +5,8 @@ use agent_automation::{
 use automation_storage::{AutomationStore, StorageError, WakeCreate, WakeEvaluation};
 use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
-    MessageContent, PushHeaderFacts, PushId, PushKind, PushOrigin, RouterOriginRef, SavedMessage,
-    SessionRef,
+    HarnessSessionRef, MessageContent, PushHeaderFacts, PushId, PushKind, PushOrigin,
+    RouterOriginRef, SavedMessage,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -38,7 +38,7 @@ fn saved_message() -> Result<SavedMessage, serde_json::Error> {
     serde_json::from_value(serde_json::json!({
         "target": {
             "endpoint": {
-                "serviceId": "00000000-0000-4000-8000-000000000001",
+                "serviceId": "00000000-0000-7000-8000-000000000001",
                 "endpointId": "codex-local"
             },
             "sessionId": "wake-target"
@@ -233,7 +233,7 @@ async fn owed_wake_push_and_mailbox_commit_atomically_and_recover_after_restart(
     let origin = router_origin_for_fire(&fire);
     let committed_push = owed_push_for_origin(&mut store, &origin).await?;
     let committed_delivery = store
-        .read_delivery::<SessionRef, collaboration_protocol::CodexGeneration, serde_json::Value>(
+        .read_delivery::<HarnessSessionRef, collaboration_protocol::CodexGeneration, serde_json::Value>(
             &delivery_id,
         )
         .await?;

@@ -39,18 +39,19 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     };
     let start = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
-    advance_to(f, start);
+    advance_to(f, start).await;
     created(f.call(46003, post()).await);
     let first =
         chrono::DateTime::from_timestamp((start.timestamp().div_euclid(3300) + 1) * 3300, 0)
             .unwrap();
     dispatch_to(f, first).await;
-    advance_to(f, first + chrono::Duration::minutes(10));
+    advance_to(f, first + chrono::Duration::minutes(10)).await;
     created(f.call(46004, post()).await);
     advance_to(
         f,
         first + chrono::Duration::minutes(30) + chrono::Duration::seconds(20),
-    );
+    )
+    .await;
     assert!(matches!(
         request(
             f,
@@ -89,7 +90,7 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     );
     drop(r);
     dispatch_to(f, due).await;
-    advance_to(f, due + chrono::Duration::minutes(1));
+    advance_to(f, due + chrono::Duration::minutes(1)).await;
     created(f.call(46006, post()).await);
     let next = due + chrono::Duration::minutes(15);
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
@@ -268,10 +269,23 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
             .rows
             .is_empty()
     );
+    // The jump passes the failing drain's next try, so the driver retries it at
+    // once. That retry finishes against the trigger, and moves the next try to
+    // the next mark, before the trigger goes.
+    let drives = r.alarm_completion_count();
+    let failures = r.alarm_failures().len();
     advance_to(
         f,
         now(f) + chrono::Duration::minutes(30) + chrono::Duration::seconds(20),
-    );
+    )
+    .await;
+    tokio::select! {
+        () = r.until_alarm_completed(drives + 1) => {}
+        () = r.until_alarm_failed(failures + 1) => panic!(
+            "the overdue drive failed instead of retrying the drain: {:?}",
+            r.alarm_failures()
+        ),
+    }
     assert!(matches!(
         r.statement_host()
             .run_batch(StatementBatch {
@@ -301,6 +315,15 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     // which succeeds now and clears the record; the window then fires at its slot.
     let retry = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
+    let record = r.statement_host().read(Statement { sql: "SELECT state,next_try_at FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![
+            text("failing"),
+            text(retry.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        ]],
+        "the overdue retry failed against the trigger and waits for the next mark"
+    );
     drop(r);
     if retry < due {
         dispatch_to(f, retry).await;
@@ -326,7 +349,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
     };
     let activity: m::Timestamp = "2030-01-09T12:26:00Z".parse().unwrap();
-    advance_to(f, activity);
+    advance_to(f, activity).await;
     let mut caller = f.caller.clone();
     let mut address = session(&caller);
     address.session_id = "rollback-cadence".to_owned().try_into().unwrap();
@@ -394,7 +417,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     };
     assert_eq!(original_items.as_array().unwrap().len(), 1);
     let rewind: m::Timestamp = "2030-01-09T11:30:00Z".parse().unwrap();
-    f.clock.set_utc(rewind);
+    f.set_utc(rewind).await;
     let prior_alarm = r.statement_host().alarm().map(|time| time.unix_millis());
     let write = |sql| StatementBatch {
         statements: vec![GuardedStatement {

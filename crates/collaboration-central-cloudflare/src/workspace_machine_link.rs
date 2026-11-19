@@ -59,7 +59,7 @@ impl CentralObject {
         self.state.accept_web_socket(&pair.server);
         // Queue before the safety call; only send after its attempt has completed.
         let welcome = DataFrame::Welcome {
-            machine_id: connection.installation_machine_id().clone(),
+            machine_id: connection.machine_id().clone(),
             central_time,
         };
         if let Err(failure) = runtime.recompute_alarm().await {
@@ -98,7 +98,6 @@ impl CentralObject {
                 DataFrame::Welcome { .. }
                 | DataFrame::Reply { .. }
                 | DataFrame::Deliver { .. }
-                | DataFrame::MessageOutcome { .. }
                 | DataFrame::Ack { .. }
                 | DataFrame::MachineTokenRenewal { .. },
             ) => return close(&socket, "unsupported link event"),

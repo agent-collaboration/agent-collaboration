@@ -8,11 +8,11 @@ use crate::push_record_resolver::{
     make_notice_list, resolve_reference,
 };
 use collaboration_protocol::{
-    MachineId, MessageContent, MessageDelivery, MessageReplyResult, MessageSendResult,
+    HarnessSessionRef, MessageContent, MessageDelivery, MessageReplyResult, MessageSendResult,
     PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
     PushRecordHistoryParams, PushRecordListParams, PushRecordListResult, PushRecordShowParams,
     PushRecordShowResult, RouterLink, SessionDisplayNameLookup, SessionMessageReplyParams,
-    SessionMessageReplyResult, SessionMessageSendParams, SessionRef, session_identity,
+    SessionMessageReplyResult, SessionMessageSendParams, session_identity,
 };
 use interaction_storage::{InteractionStore, PushInboxQuery, StorageError};
 use std::sync::Arc;
@@ -166,7 +166,7 @@ impl MessageOperations {
         let PushOrigin::Session(origin) = source.origin.clone() else {
             return Err(MessageFailure::discovery(
                 MessageFailureKind::OwnerReplyUnsupported,
-                "This message has no reply session; use message send --to <SessionRef>",
+                "This message has no reply session; use message send --to <HarnessSessionRef>",
             ));
         };
         if source.target != request.caller {
@@ -376,7 +376,7 @@ impl MessageOperations {
         })
     }
 
-    fn target_identity(&self, target: &SessionRef) -> String {
+    fn target_identity(&self, target: &HarnessSessionRef) -> String {
         let display_name = self.display_names.display_name_for(target).ok().flatten();
         session_identity(target, display_name.as_ref())
     }
@@ -432,7 +432,7 @@ impl MessageOperations {
             ),
             PushDeliveryFailure::DeliveryUnknown(push_id) => {
                 let link = RouterLink::new(
-                    MachineId::from(self.identity.machine_identity().service_id().clone()),
+                    self.identity.machine_identity().service_id().clone(),
                     push_id,
                 );
                 MessageFailure::new(

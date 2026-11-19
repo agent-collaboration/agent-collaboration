@@ -8,7 +8,7 @@ use agent_session_inventory::sessions::source_ssh_protocol::SourceRejection;
 
 pub(crate) fn source_model() -> SessionsPickerModel {
     let mut request = picker_request();
-    request.router_registry = RouterRegistryRead::Ready(RouterConnectionRegistry::parse(r#"{"version":1,"routers":[{"name":"Source fixture","connection":{"kind":"ssh","serviceId":"00000000-0000-4000-8000-000000000001","destination":"fixture-source","executable":"/fixture/agent-sessions","serviceDirectory":"/fixture/service","clientProfile":"router"},"defaultRemoteCwd":"/source/only"}]}"#).unwrap());
+    request.router_registry = RouterRegistryRead::Ready(RouterConnectionRegistry::parse(r#"{"version":1,"routers":[{"name":"Source fixture","connection":{"kind":"ssh","serviceId":"00000000-0000-7000-8000-000000000001","destination":"fixture-source","executable":"/fixture/agent-sessions","serviceDirectory":"/fixture/service","clientProfile":"router"},"defaultRemoteCwd":"/source/only"}]}"#).unwrap());
     SessionsPickerModel::new(request, 120)
 }
 
@@ -163,7 +163,7 @@ fn source_action_resume_and_fork_freeze_full_source_model_and_cwd() {
     let profile = registry.routers.first().unwrap().clone();
     let record = model.request.records.first_mut().unwrap();
     record.identity = agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(
-        collaboration_client::protocol::SessionRef {
+        collaboration_client::protocol::HarnessSessionRef {
             endpoint: collaboration_client::protocol::EndpointRef {
                 service_id: profile.service_id.clone(),
                 endpoint_id: "observed-source".to_owned().try_into().unwrap(),
@@ -316,7 +316,7 @@ fn source_action_default_local_http_and_cross_machine_fork_do_not_prepare() {
     );
     let mut model = source_model();
     let mut request = model.request.clone();
-    request.router_registry = RouterRegistryRead::Ready(RouterConnectionRegistry::parse(r#"{"version":1,"routers":[{"name":"HTTP source","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"https://fixture.invalid/mcp"},"defaultRemoteCwd":"/source/only"}]}"#).unwrap());
+    request.router_registry = RouterRegistryRead::Ready(RouterConnectionRegistry::parse(r#"{"version":1,"routers":[{"name":"HTTP source","connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000001","mcpUrl":"https://fixture.invalid/mcp"},"defaultRemoteCwd":"/source/only"}]}"#).unwrap());
     model = SessionsPickerModel::new(request, 120);
     model.open_new_form();
     let agent_session_inventory::sessions::RouterRegistryRead::Ready(registry) =
@@ -357,7 +357,7 @@ fn source_action_fork_changed_directory_requires_explicit_new_attempt_and_matchi
     };
     let profile = registry.routers.first().unwrap().clone();
     let record = model.request.records.first_mut().unwrap();
-    let target = collaboration_client::protocol::SessionRef {
+    let target = collaboration_client::protocol::HarnessSessionRef {
         endpoint: collaboration_client::protocol::EndpointRef {
             service_id: profile.service_id.clone(),
             endpoint_id: "codex-local".to_owned().try_into().unwrap(),
@@ -450,7 +450,7 @@ fn source_action_fork_reply_cannot_publish_after_popup_was_removed() {
     };
     captured.action =
         agent_session_inventory::sessions::source_ssh_protocol::SourceSessionAction::Fork {
-            target: collaboration_client::protocol::SessionRef {
+            target: collaboration_client::protocol::HarnessSessionRef {
                 endpoint: collaboration_client::protocol::EndpointRef {
                     service_id: captured.profile.service_id.clone(),
                     endpoint_id: "codex-local".to_owned().try_into().unwrap(),

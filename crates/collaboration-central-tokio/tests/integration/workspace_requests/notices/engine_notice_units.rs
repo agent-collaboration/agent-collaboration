@@ -61,7 +61,7 @@ async fn a_failing_drain_arms_its_next_try_on_a_mark_never_its_past_drain_due() 
 
     for pass in 0..3 {
         let now = first + minutes(5 * pass);
-        f.clock.set_utc(now);
+        f.set_utc(now).await;
         runtime.after_event().await.unwrap();
         let found = record(&runtime, DRAINS, "all").await;
         let next_try = now + minutes(5);
@@ -110,7 +110,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
     let failure = next_mark(f.clock.utc_now());
     let cursor = corrupt_drain(&f, failure - chrono::Duration::seconds(1)).await;
     let runtime = runtime(&f).await;
-    f.clock.set_utc(failure);
+    f.set_utc(failure).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         record(&runtime, DRAINS, "all").await[0][..3],
@@ -124,7 +124,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
     let backstop = drain_due(&f).await;
 
     // Two workspace writes start due batches before the next try; a restart between.
-    f.clock.set_utc(failure + minutes(1));
+    f.set_utc(failure + minutes(1)).await;
     created(
         f.call(
             8411,
@@ -144,7 +144,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
     drop(runtime);
     f.reopen().await;
     let runtime = super::super::engine_v2_support::runtime(&f).await;
-    f.clock.set_utc(failure + minutes(2));
+    f.set_utc(failure + minutes(2)).await;
     created(
         f.call(
             8412,
@@ -173,7 +173,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
     );
 
     repair_drain(&f, cursor).await;
-    f.clock.set_utc(failure + minutes(5));
+    f.set_utc(failure + minutes(5)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         runtime.legacy_unit_invocations().drains,
@@ -201,7 +201,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
     // next due batch may start.
     let mark = next_mark(f.clock.utc_now() + minutes(1));
     let at = mark - chrono::Duration::seconds(10);
-    f.clock.set_utc(at);
+    f.set_utc(at).await;
     let cursor = corrupt_drain(&f, at + minutes(60)).await;
     let before = runtime.legacy_unit_invocations();
 
@@ -246,7 +246,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
     // Healthy again, its next try reached, within 30 s of the last batch: the
     // request drain succeeds for its workspace and leaves the unit's record.
     repair_drain(&f, cursor).await;
-    f.clock.set_utc(mark + chrono::Duration::seconds(1));
+    f.set_utc(mark + chrono::Duration::seconds(1)).await;
     let reply = f
         .call(
             8422,

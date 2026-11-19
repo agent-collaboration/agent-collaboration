@@ -7,10 +7,10 @@ use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::UnstoredAttemptEvidenceSink;
 use collaboration_protocol::{
     ApprovalOptionScope, ApprovalRequestRecord, DeliveryCorrelationId, DeliveryOutcome,
-    DeliveryReceipt, EndpointId, EndpointRef, InteractionId, InteractionPresentationId, MachineId,
-    MessageDelivery, MessageText, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin,
-    PushRecord, PushRecordDraft, RouterLink, RouterOriginRef, SessionDisplayNameLookup, SessionId,
-    SessionRef as ProtocolSessionRef, UuidIdentity, render_push_line,
+    DeliveryReceipt, EndpointId, EndpointRef, HarnessSessionRef as ProtocolSessionRef,
+    InteractionId, InteractionPresentationId, MessageDelivery, MessageText, PushHeaderFacts,
+    PushId, PushKind, PushLineInput, PushOrigin, PushRecord, PushRecordDraft, RouterLink,
+    RouterOriginRef, SessionDisplayNameLookup, SessionId, render_push_line,
 };
 use message_board::{Identity, SessionRef};
 use session_event_model::{
@@ -210,7 +210,7 @@ fn prepared_interaction_push(
 ) -> Result<collaboration_contracts::layer_zero::PreparedPush, InteractionHistoryError> {
     let line = render_push_line(&PushLineInput {
         link: RouterLink::new(
-            MachineId::from(push_context.machine_identity.service_id().clone()),
+            push_context.machine_identity.service_id().clone(),
             record.push_id.clone(),
         ),
         machine_label: push_context.machine_identity.machine_label().clone(),
@@ -272,8 +272,10 @@ fn protocol_session_ref(
 ) -> Result<ProtocolSessionRef, InteractionHistoryError> {
     Ok(ProtocolSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from(session.endpoint.service_id.as_str().to_owned())
-                .map_err(|_| InteractionHistoryError::Unavailable)?,
+            service_id: workspace_ids::MachineId::try_from(
+                session.endpoint.service_id.as_str().to_owned(),
+            )
+            .map_err(|_| InteractionHistoryError::Unavailable)?,
             endpoint_id: EndpointId::try_from(session.endpoint.endpoint_id.as_str().to_owned())
                 .map_err(|_| InteractionHistoryError::Unavailable)?,
         },

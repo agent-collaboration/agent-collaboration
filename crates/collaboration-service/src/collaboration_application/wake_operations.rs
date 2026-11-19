@@ -8,10 +8,10 @@ use automation_storage::{
 };
 use collaboration_protocol::{
     AutomationPage, AutomationPageRequest, DeliveryInspection, DeliveryShowRequest,
-    LocalMutationEvidence, LocalMutationState, OperationId, SavedMessage, UuidIdentity,
-    WaitUnavailable, WakeFailure, WakeFailureReason, WakeFailureStage, WakeMutationRequest,
-    WakeMutationResult, WakeNextAction, WakeNotFound, WakeSendRequest, WakeShowRequest,
-    WakeSnapshot, WakeState, WakeWaitOutcome, WakeWaitRequest, WakeWaitResult,
+    LocalMutationEvidence, LocalMutationState, OperationId, SavedMessage, WaitUnavailable,
+    WakeFailure, WakeFailureReason, WakeFailureStage, WakeMutationRequest, WakeMutationResult,
+    WakeNextAction, WakeNotFound, WakeSendRequest, WakeShowRequest, WakeSnapshot, WakeState,
+    WakeWaitOutcome, WakeWaitRequest, WakeWaitResult,
 };
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
@@ -26,7 +26,7 @@ use failure::{invalid_field, storage_reason};
 
 pub struct WakeOperations {
     clock: Arc<dyn router_clock::RuntimeClock>,
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     remote: Option<Arc<crate::MailDeliveryRuntime>>,
     store: Option<Arc<Mutex<AutomationStore>>>,
     /// Concurrent first-fire waits share these permits; a handle without them cannot wait.
@@ -42,7 +42,7 @@ const MAX_WAKE_WAIT_SECONDS: u32 = 1500;
 impl WakeOperations {
     pub fn new(
         clock: Arc<dyn router_clock::RuntimeClock>,
-        service_id: &UuidIdentity,
+        service_id: &workspace_ids::MachineId,
         store: Option<&Arc<Mutex<AutomationStore>>>,
     ) -> Self {
         Self {

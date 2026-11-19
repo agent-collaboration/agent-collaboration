@@ -7,7 +7,7 @@ use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
-    CodexGeneration, EndpointDescription, NonEmptyText, OperationId, SessionRef, UuidIdentity,
+    CodexGeneration, EndpointDescription, HarnessSessionRef, NonEmptyText, OperationId,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::CodexConversationOperationRecorder;
@@ -66,11 +66,12 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     let socket_path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
 
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
     let service_link_id = String::from(service_id.clone());
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"detached-thread"
     }))?;

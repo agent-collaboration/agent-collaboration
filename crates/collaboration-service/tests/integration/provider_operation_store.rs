@@ -1,11 +1,11 @@
 use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{
     CodexGeneration, ConversationBindingIdentity, EndpointId, EndpointRef, GenerationNumber,
-    NonEmptyText, OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
-    ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
+    HarnessSessionRef, NonEmptyText, OperationId, ProviderBindingId, ProviderBindingIdentity,
+    ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
     ProviderCapabilityStatus, ProviderKind, ProviderOperationEffect, ProviderOperationKind,
     ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
-    ProviderRuntimeIdentity, ProviderTransport, SessionId, SessionRef, UuidIdentity,
+    ProviderRuntimeIdentity, ProviderTransport, SessionId, UuidIdentity,
 };
 use collaboration_runtime::CodexConversationOperationRecorder;
 use collaboration_runtime::ProviderOperationAdmission;
@@ -32,7 +32,7 @@ fn open_future_is_send_for_host_composition() {
 fn store_operation_futures_are_send<'a>(
     store: &'a mut ProviderOperationStore,
     operation_id: &'a OperationId,
-    target: &'a SessionRef,
+    target: &'a HarnessSessionRef,
     protected: &'a HashSet<OperationId>,
     admission: ProviderOperationAdmission,
 ) {
@@ -104,7 +104,9 @@ fn operation_id(value: &str) -> TestResult<OperationId> {
 
 fn endpoint() -> TestResult<EndpointRef> {
     Ok(EndpointRef {
-        service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?,
+        service_id: workspace_ids::MachineId::try_from(
+            "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+        )?,
         endpoint_id: EndpointId::try_from("claude-local".to_owned())?,
     })
 }
@@ -140,8 +142,8 @@ fn binding() -> TestResult<ProviderBindingIdentity> {
     })
 }
 
-fn target() -> TestResult<SessionRef> {
-    Ok(SessionRef {
+fn target() -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: endpoint()?,
         session_id: SessionId::try_from("provider-conversation-1".to_owned())?,
     })
@@ -770,7 +772,7 @@ async fn codex_create_recorder_preserves_target_and_uncertain_dispatch() -> Test
         .ok_or("created operation missing")?;
     ensure_eq!(
         created.target,
-        Some(SessionRef {
+        Some(HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id
         })

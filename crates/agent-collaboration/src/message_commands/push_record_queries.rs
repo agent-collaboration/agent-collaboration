@@ -3,7 +3,7 @@ use super::{
     operation_failure_line, report_message_failure, validate_push_reference,
 };
 use collaboration_client::protocol::{
-    PushRecordHistoryParams, PushRecordListParams, PushRecordListResult, SessionRef,
+    HarnessSessionRef, PushRecordHistoryParams, PushRecordListParams, PushRecordListResult,
 };
 use collaboration_client::{
     ClientError, CollaborationClient, OperationEffect, operation_failure_from_client_error,
@@ -17,7 +17,7 @@ use std::{
 enum PushRecordQuery {
     Show { reference: String, human_user: bool },
     Inbox { limit: u32 },
-    History { with: SessionRef, limit: u32 },
+    History { with: HarnessSessionRef, limit: u32 },
 }
 
 enum PushRecordReadResult {
@@ -49,12 +49,12 @@ pub(super) fn run_message_inbox(args: InboxArguments) -> i32 {
 }
 
 pub(super) fn run_message_history(args: HistoryArguments) -> i32 {
-    let with = match serde_json::from_str::<SessionRef>(&args.other_session) {
+    let with = match serde_json::from_str::<HarnessSessionRef>(&args.other_session) {
         Ok(value) => value,
         Err(_) => {
             return report_message_failure(
                 "invalidField",
-                "--with must be compact SessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --with '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'",
+                "--with must be compact HarnessSessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --with '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'",
                 2,
                 args.json,
             );

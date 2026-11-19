@@ -6,13 +6,14 @@ use crate::{
 };
 use agent_automation::TimingRule;
 use central_storage::{ReadOutcome, StoreFailure};
+use workspace_ids::SessionRef;
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::central_mail as mail;
-use workspace_model::{PostText, SessionAddress, Timestamp};
+use workspace_model::{PostText, Timestamp};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct WakeRow {
     pub id: WakeId,
-    pub target: SessionAddress,
+    pub target: SessionRef,
     pub due: Timestamp,
     pub text: PostText,
     pub state: mail::WakeState,
@@ -20,7 +21,7 @@ pub(crate) struct WakeRow {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AutomationRow {
     pub id: AutomationId,
-    pub target: SessionAddress,
+    pub target: SessionRef,
     pub timing: TimingRule,
     pub anchor: Timestamp,
     pub expires_at: Timestamp,

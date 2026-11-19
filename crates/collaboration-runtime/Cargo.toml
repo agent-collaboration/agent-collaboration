@@ -14,6 +14,7 @@ runtime-test-support = ["interaction-storage/runtime-test-support"]
 workspace = true
 
 [dependencies]
+workspace-ids.workspace = true
 router-clock.workspace = true
 central-link-client = { path = "../central-link-client", version = "0.1.154" }
 central-link-protocol.workspace = true

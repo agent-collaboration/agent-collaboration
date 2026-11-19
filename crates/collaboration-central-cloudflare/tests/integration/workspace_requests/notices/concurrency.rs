@@ -100,7 +100,7 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![

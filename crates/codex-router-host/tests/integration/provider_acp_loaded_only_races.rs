@@ -22,8 +22,8 @@ use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, ConversationCloseRequest, ConversationOperationSettlement,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, DeliveryOutcome, EndpointId,
-    MessageDelivery, OperationId, PositiveSeconds, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, RouterAccess, SessionRef,
+    HarnessSessionRef, MessageDelivery, OperationId, PositiveSeconds, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
@@ -43,7 +43,10 @@ use provider_acp_message_fifo_support::{
 struct LivePeer;
 
 impl LiveSessionOwnershipCheck for LivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+    fn check<'a>(
+        &'a self,
+        _target: &'a HarnessSessionRef,
+    ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async { Ok(LiveSessionOwnership::LiveUnsupported) })
     }
 }
@@ -55,7 +58,7 @@ fn no_load_fixture() -> ExternalProviderLaunch {
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn store_with_session_record(
     root: &Path,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> Arc<tokio::sync::Mutex<ProviderOperationStore>> {
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.join("operations.sqlite"))
@@ -94,14 +97,14 @@ fn close_and_load_fixture(close_marker: &Path, load_marker: &Path) -> ExternalPr
 
 struct CloseSessionAtDispatch {
     supervisor: Arc<ExternalProviderSupervisor>,
-    target: SessionRef,
-    evidence: tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    target: HarnessSessionRef,
+    evidence: tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 }
 
 impl AttemptEvidenceSink for CloseSessionAtDispatch {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         let should_close = matches!(
             &evidence,
@@ -352,13 +355,13 @@ async fn loaded_only_preserves_live_elsewhere_reason_after_can_load_claim() {
 
 struct RemoveSessionRecordAtDispatch {
     database_path: PathBuf,
-    target: SessionRef,
+    target: HarnessSessionRef,
 }
 
 impl AttemptEvidenceSink for RemoveSessionRecordAtDispatch {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         let should_remove = matches!(
             &evidence,

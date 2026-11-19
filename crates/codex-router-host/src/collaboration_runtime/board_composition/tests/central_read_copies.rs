@@ -121,7 +121,7 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
     let retained_before = durable_file_hashes(&retained)?;
     let upgrades = runtime.central.auth.upgrades.load(Ordering::SeqCst);
     let application = (ApplicationFixture::new(
-        "550e8400-e29b-41d4-a716-446655440000",
+        "550e8400-e29b-71d4-a716-446655440000",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(runtime.admission.clone()))

@@ -3,8 +3,8 @@
 use automation_storage::AutomationStore;
 use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
-    MachineId, PushKind, PushLineInput, PushOrigin, PushRecord, RouterLink, SessionRef,
-    UuidIdentity, render_push_line,
+    HarnessSessionRef, PushKind, PushLineInput, PushOrigin, PushRecord, RouterLink,
+    render_push_line,
 };
 
 use collaboration_runtime::ServiceInteractionBroker;
@@ -25,7 +25,7 @@ pub(super) struct ApprovalPushFixture {
 impl ApprovalPushFixture {
     pub(super) async fn compose(
         directory: &Path,
-        service_id: &UuidIdentity,
+        service_id: &workspace_ids::MachineId,
         broker: &Arc<ServiceInteractionBroker>,
     ) -> TestResult<Self> {
         let legacy_path = directory.join("approval-pushes.sqlite");
@@ -45,14 +45,14 @@ impl ApprovalPushFixture {
     pub(super) async fn captured_approval(
         &self,
         delivered_line: &str,
-        approver: &SessionRef,
+        approver: &HarnessSessionRef,
     ) -> TestResult<PushRecord> {
         let link_text = delivered_line
             .split_whitespace()
             .last()
             .ok_or("approval push omitted its Router link")?;
         let link = RouterLink::parse(link_text)?;
-        if link.machine_id() != &MachineId::from(self.machine_identity.service_id().clone()) {
+        if link.machine_id() != &self.machine_identity.service_id().clone() {
             return Err("approval push link belongs to another service".into());
         }
         let record = self

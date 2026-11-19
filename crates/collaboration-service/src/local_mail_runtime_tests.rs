@@ -400,7 +400,7 @@ async fn sender_mismatch_refuses_only_the_local_control_and_delivers_the_origina
         .fixture
         .owner
         .remember_installation_peer(&interaction_storage::InstallationPeerBinding {
-            service_id: "00000000-0000-4000-8000-000000000002"
+            service_id: "00000000-0000-7000-8000-000000000002"
                 .to_owned()
                 .try_into()
                 .unwrap(),
@@ -416,7 +416,7 @@ async fn sender_mismatch_refuses_only_the_local_control_and_delivers_the_origina
     let mismatched = DeliveryCancel::<RouterDeliveryTypes>::new(
         cancel,
         collaboration_mail_protocol::MailSender::HumanUser {
-            installation: "00000000-0000-4000-8000-000000000002"
+            installation: "00000000-0000-7000-8000-000000000002"
                 .to_owned()
                 .try_into()
                 .unwrap(),

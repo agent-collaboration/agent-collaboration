@@ -7,7 +7,7 @@ async fn handed_off_role_intent_delivers_to_the_frozen_recipient_after_holders_c
     let owner = human("board-owner");
     let stream = WorkstreamId::generate();
     let replacement: Identity = serde_json::from_value(json!({"kind":"session","session":{
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"replacement-reviewer"
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"replacement-reviewer"
     }})).unwrap();
     for operation in [
         json!({"kind":"roleGrant","subject":{"kind":"project","subject":fixture.project},"role":"lead","holder":owner,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}),

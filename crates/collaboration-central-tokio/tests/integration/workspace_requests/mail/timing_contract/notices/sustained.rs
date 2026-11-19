@@ -5,7 +5,7 @@ pub(super) async fn exercise_continued_activity(
     f: &Fixture,
     threads: &[(m::WorkspaceId, m::ThreadId)],
 ) {
-    advance_to(f, "2030-01-01T02:01:00Z".parse().unwrap());
+    advance_to(f, "2030-01-01T02:01:00Z".parse().unwrap()).await;
     let mut recipients = Vec::new();
     for (index, cadence) in [
         m::NoticeCadence::M15,
@@ -109,7 +109,7 @@ pub(super) async fn exercise_continued_activity(
         if alarm.is_some_and(|alarm| alarm <= at.timestamp_millis()) {
             dispatch_to(f, at).await;
         } else {
-            advance_to(f, at);
+            advance_to(f, at).await;
         }
         if minute < 110 {
             let (workspace, thread) = sources[usize::try_from(minute).unwrap() % sources.len()];

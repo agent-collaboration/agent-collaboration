@@ -47,7 +47,7 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
             peer: PeerId::new(durable_steps::Uuid::now_v7())?,
             address: SessionRef {
                 endpoint: SessionEndpointRef {
-                    service_id: "00000000-0000-4000-8000-000000000099"
+                    service_id: "00000000-0000-7000-8000-000000000099"
                         .to_owned()
                         .try_into()?,
                     endpoint_id: "codex-local".to_owned().try_into()?,

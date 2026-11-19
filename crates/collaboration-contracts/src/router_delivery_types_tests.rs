@@ -17,7 +17,7 @@ fn shared_and_router_items_and_cancels_have_identical_wire_bytes_and_digests() -
     let recipient = Recipient {
         peer: PeerId::new(uuid::Uuid::now_v7())?,
         address: serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"wire-identity-recipient"
         }))?,
     };
@@ -152,7 +152,7 @@ fn local_observation_wrapper_bound_is_measured_and_enforced_by_the_sdk() {
 #[test]
 fn maximal_escaped_provider_context_fits_the_declared_observation_allowance() {
     let route: collaboration_protocol::ProviderAcpRouteEvidence = serde_json::from_value(json!({
-        "target": { "endpoint": { "serviceId": "00000000-0000-4000-8000-000000000001", "endpointId": "a".repeat(64) }, "sessionId": "\u{1}".repeat(4096) },
+        "target": { "endpoint": { "serviceId": "00000000-0000-7000-8000-000000000001", "endpointId": "a".repeat(64) }, "sessionId": "\u{1}".repeat(4096) },
         "generation": { "serviceEpoch": "00000000-0000-4000-8000-000000000002", "generation": 9_007_199_254_740_991_u64 },
         "binding": "\u{1}".repeat(256),
         "attemptId": uuid::Uuid::now_v7().to_string(),

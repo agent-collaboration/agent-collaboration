@@ -275,7 +275,7 @@ impl EngineOrg {
             .await
             .unwrap()
     }
-    pub fn target(&self) -> m::SessionAddress {
+    pub fn target(&self) -> workspace_ids::SessionRef {
         let m::Caller::Session(address) = &self.caller.caller else {
             panic!("session caller")
         };

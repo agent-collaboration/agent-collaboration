@@ -18,8 +18,8 @@ use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequ
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
-    DeliveryRejectionReason, EndpointId, EndpointRef, MessageDelivery, MessageText, PushId,
-    SessionId, SessionReachability, SessionRef, UuidIdentity,
+    DeliveryRejectionReason, EndpointId, EndpointRef, HarnessSessionRef, MessageDelivery,
+    MessageText, PushId, SessionId, SessionReachability,
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::{Value, json};
@@ -28,13 +28,13 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path, sync::Arc};
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 struct RecordedPeerEvidence(
-    tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 );
 
 impl AttemptEvidenceSink for RecordedPeerEvidence {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async move {
             self.0.lock().await.push(evidence);
@@ -44,11 +44,13 @@ impl AttemptEvidenceSink for RecordedPeerEvidence {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn target() -> SessionRef {
-    SessionRef {
+fn target() -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service ID"),
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )
+            .expect("service ID"),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),
         },
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session ID"),
@@ -164,7 +166,7 @@ async fn prepared_push_reaches_peer_route_as_the_exact_router_line() {
         let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
             .expect("UUIDv7 push id");
         let line = MessageText::try_from(format!(
-            "✉️ Main · \"S1 is green\" · router://00000000-0000-4000-8000-000000000001/push/{}",
+            "✉️ Main · \"S1 is green\" · router://00000000-0000-7000-8000-000000000001/push/{}",
             push_id.as_str()
         ))
         .expect("push line");
@@ -546,7 +548,7 @@ struct PauseAtDispatching {
 impl AttemptEvidenceSink for PauseAtDispatching {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async move {
             let RouteEffectEvidence::ClaudeCodePeer(peer) = evidence else {

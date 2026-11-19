@@ -303,7 +303,7 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
         "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             text(serde_json::to_string(&vec![operation])?),
-            text(MACHINE),
+            text(INSTALLATION),
         ],
     )
     .await?;

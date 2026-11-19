@@ -154,7 +154,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
     ));
-    seed_enrollment(&host, &first, id::<m::WorkspaceId>(3), "[]", FIXTURE_NOW).await;
+    seed_enrollment(&host, &first, "[]", FIXTURE_NOW).await;
     let workspace = create_workspace(&host, &first).await;
     let mut second = first.clone();
     second.organization_id =
@@ -176,7 +176,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::MachineRevoked)
     ));
-    seed_enrollment(&host, &second, id::<m::WorkspaceId>(3), "[]", FIXTURE_NOW).await;
+    seed_enrollment(&host, &second, "[]", FIXTURE_NOW).await;
     assert!(matches!(
         call(
             &host,

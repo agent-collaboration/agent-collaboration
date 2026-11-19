@@ -11,7 +11,7 @@ use serde_json::json;
 async fn foreign_local_repositories_are_refused_on_every_request_that_names_one()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
-    let foreign = json!({"kind":"local","serviceId":"00000000-0000-4000-8000-000000000099","commonDirectory":"/work/repo"});
+    let foreign = json!({"kind":"local","serviceId":"00000000-0000-7000-8000-000000000099","commonDirectory":"/work/repo"});
     let before = fixture
         .api
         .call("workspace_show", json!({"workspaceId":fixture.workspace}))
@@ -55,7 +55,7 @@ async fn workspace_repository_filter_matches_typed_locator_fields() -> Result<()
     let fixture = BoardFixture::start().await?;
     let repositories = [
         json!({"normalizedOrigin":"github.com/example/project","kind":"origin"}),
-        json!({"commonDirectory":"/work/project/.git","kind":"local","serviceId":"00000000-0000-4000-8000-000000000001"}),
+        json!({"commonDirectory":"/work/project/.git","kind":"local","serviceId":"00000000-0000-7000-8000-000000000001"}),
     ];
     for repository in &repositories {
         let mut request = fixture.header();

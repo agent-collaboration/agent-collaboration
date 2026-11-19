@@ -13,7 +13,7 @@ use collaboration_client::protocol::ProviderKind;
 use collaboration_client::protocol::ProviderSessionSummary;
 
 fn provider_summary(origin: &str, id: &str, endpoint: &str) -> ProviderSessionSummary {
-    let target = serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":endpoint},"sessionId":id});
+    let target = serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":endpoint},"sessionId":id});
     let value = if origin == "claudeCodeInteractive" {
         serde_json::json!({"origin":origin,"target":target,"workingDirectory":"/repo/project-a","updatedAt":3,"startedAt":1,"name":id,"status":"idle","statusUpdatedAt":3,"kind":"interactive","entrypoint":"cli"})
     } else {

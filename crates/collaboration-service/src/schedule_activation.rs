@@ -5,14 +5,14 @@ use collaboration_contracts::ScheduleCapability;
 use collaboration_contracts::ScheduleDestination;
 use collaboration_contracts::ScheduleSupport;
 use collaboration_contracts::ScheduledRunExecution;
-use collaboration_protocol::{EndpointRef, SessionRef, UuidIdentity};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 pub(crate) struct ActivationRequest<'a> {
-    pub definition: &'a ScheduleDefinition<SessionRef, EndpointRef>,
+    pub definition: &'a ScheduleDefinition<HarnessSessionRef, EndpointRef>,
     pub schedule_id: Option<&'a ScheduleId>,
     pub operation_id: &'a OperationId,
-    pub service_id: &'a UuidIdentity,
+    pub service_id: &'a workspace_ids::MachineId,
     pub execution: Option<&'a Arc<dyn ScheduledRunExecution>>,
 }
 pub(crate) async fn validate(

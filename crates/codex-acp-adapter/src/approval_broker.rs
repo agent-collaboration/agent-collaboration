@@ -1,5 +1,5 @@
 //! Provider-neutral routing boundary for client-exposed native approvals.
-use collaboration_protocol::{CodexGeneration, RouterAccess, SessionRef};
+use collaboration_protocol::{CodexGeneration, HarnessSessionRef, RouterAccess};
 use serde_json::Value;
 use std::{future::Future, pin::Pin};
 
@@ -7,8 +7,8 @@ use std::{future::Future, pin::Pin};
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApprovalRoute {
     pub thread_id: String,
-    pub created_by: SessionRef,
-    pub approver: SessionRef,
+    pub created_by: HarnessSessionRef,
+    pub approver: HarnessSessionRef,
     pub access: RouterAccess,
     pub scratch_path: String,
     pub root_message_id: Option<String>,

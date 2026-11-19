@@ -17,9 +17,9 @@ use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
-    DeliveryRejectionReason, DestinationPreparation, EndpointRef, MachineId, PushDeliveryState,
-    PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, PushRecord, RouterLink,
-    RouterOriginRef, RunExecution, SessionReachability, SessionRef, render_push_line,
+    DeliveryRejectionReason, DestinationPreparation, EndpointRef, HarnessSessionRef,
+    PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, PushRecord,
+    RouterLink, RouterOriginRef, RunExecution, SessionReachability, render_push_line,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -43,7 +43,7 @@ pub(crate) fn worker_timeout_checkpoint(stage: &str) {
 }
 
 type StoredRun = agent_automation::RunRecord<
-    SessionRef,
+    HarnessSessionRef,
     EndpointRef,
     CodexGeneration,
     crate::stored_run_receipt::StoredRunReceipt,
@@ -108,7 +108,7 @@ impl ScheduledRunWorker {
             .store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
             .await?;
         if record.phase == RunPhase::Preparing {
             let origin = schedule_run_origin_reference(&record.schedule_id, &record.run_id);
@@ -291,7 +291,7 @@ impl ScheduledRunWorker {
                 self.store
                     .lock()
                     .await
-                    .retain_run_uncertainty::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                    .retain_run_uncertainty::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                         RunUncertainty { run_id: id, effects: native },
                     )
                     .await?;
@@ -327,7 +327,7 @@ impl ScheduledRunWorker {
         ) {
             Ok(text) => text,
             Err(_) => {
-                self.store.lock().await.fail_run_preparation::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                self.store.lock().await.fail_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                     automation_storage::RunPreparationFailure {
                         run_id: id,
                         effects: selected_evidence,
@@ -455,8 +455,8 @@ impl ScheduledRunWorker {
         &self,
         run_id: &RunId,
         schedule_id: &agent_automation::ScheduleId,
-        target: &SessionRef,
-        inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
+        target: &HarnessSessionRef,
+        inputs: &agent_automation::CapturedRunInputs<HarnessSessionRef, EndpointRef>,
     ) -> Result<SchedulePushPreparation, StorageError> {
         let origin_router_ref = schedule_run_origin_reference(schedule_id, run_id);
         let encoded_origin_reference = origin_router_ref
@@ -530,7 +530,7 @@ impl ScheduledRunWorker {
     ) -> Result<collaboration_contracts::layer_zero::PreparedPush, StorageError> {
         let line = render_push_line(&PushLineInput {
             link: RouterLink::new(
-                MachineId::from(self.machine_identity.service_id().clone()),
+                self.machine_identity.service_id().clone(),
                 record.push_id.clone(),
             ),
             machine_label: self.machine_identity.machine_label().clone(),
@@ -633,7 +633,7 @@ impl ScheduledRunWorker {
     async fn prepare_target(
         &self,
         record: StoredRun,
-        inputs: agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
+        inputs: agent_automation::CapturedRunInputs<HarnessSessionRef, EndpointRef>,
         text: String,
     ) -> Result<StepProgress, StorageError> {
         let destination = preparation_destination(&inputs)?;
@@ -675,11 +675,11 @@ impl ScheduledRunWorker {
                 if let RouteEffectEvidence::CodexAppServer(native) = &evidence
                     && route_preparation_unknown(&evidence)
                 {
-                    self.store.lock().await.retain_run_uncertainty::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                    self.store.lock().await.retain_run_uncertainty::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                         RunUncertainty { run_id: record.run_id, effects: native.clone() },
                     ).await?;
                 } else {
-                    self.store.lock().await.fail_run_preparation::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                    self.store.lock().await.fail_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                         automation_storage::RunPreparationFailure {
                             run_id: record.run_id,
                             effects: evidence,
@@ -702,7 +702,9 @@ fn schedule_run_origin_reference(schedule_id: &ScheduleId, run_id: &RunId) -> Ro
     }
 }
 
-fn route_submission_rejected(evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> bool {
+fn route_submission_rejected(
+    evidence: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
+) -> bool {
     matches!(evidence,
         RouteEffectEvidence::CodexAppServer(native)
             if native.submission == agent_automation::SubmissionEffect::Rejected
@@ -713,7 +715,7 @@ fn route_submission_rejected(evidence: &RouteEffectEvidence<SessionRef, CodexGen
 }
 
 fn recovered_schedule_push_outcome(
-    evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>,
+    evidence: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> (PushDeliveryState, DeliveryReceipt) {
     let (state, outcome, reachability) = match evidence {
         RouteEffectEvidence::CodexAppServer(native)
@@ -759,14 +761,18 @@ fn recovered_schedule_push_outcome(
     )
 }
 
-fn route_preparation_unknown(evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> bool {
+fn route_preparation_unknown(
+    evidence: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
+) -> bool {
     matches!(evidence,
         RouteEffectEvidence::CodexAppServer(native)
             if native.allocation == PreparationEffect::Unknown
                 || native.resume == PreparationEffect::Unknown)
 }
 
-fn route_target(evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> Option<SessionRef> {
+fn route_target(
+    evidence: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
+) -> Option<HarnessSessionRef> {
     match evidence {
         RouteEffectEvidence::CodexAppServer(native) => native.target.clone(),
         RouteEffectEvidence::ProviderAcp(provider) => Some(provider.target.clone()),
@@ -775,8 +781,8 @@ fn route_target(evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> 
 }
 
 fn captured_target(
-    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
-) -> Option<SessionRef> {
+    inputs: &agent_automation::CapturedRunInputs<HarnessSessionRef, EndpointRef>,
+) -> Option<HarnessSessionRef> {
     match &inputs.execution_configuration.destination {
         ExecutionDestination::OwnedThread { target, .. } => Some(target.clone()),
         _ => None,
@@ -784,7 +790,7 @@ fn captured_target(
 }
 
 fn preparation_destination(
-    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
+    inputs: &agent_automation::CapturedRunInputs<HarnessSessionRef, EndpointRef>,
 ) -> Result<DestinationPreparation, StorageError> {
     match &inputs.execution_configuration.destination {
         ExecutionDestination::Unprepared | ExecutionDestination::FreshEachRunUnprepared => {
@@ -801,10 +807,10 @@ fn preparation_destination(
     }
 }
 fn render_instructions(
-    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
+    inputs: &agent_automation::CapturedRunInputs<HarnessSessionRef, EndpointRef>,
     schedule_id: &str,
     run_id: &str,
-    target: Option<&SessionRef>,
+    target: Option<&HarnessSessionRef>,
 ) -> Result<String, StorageError> {
     let mut text = format!(
         "Agent communication\nSelf-declared sender: local scheduled automation {schedule_id}\nIntended recipient: {}\nRun: {run_id}\n\n{}",
@@ -843,7 +849,7 @@ mod scheduled_instruction_title_tests {
 
     #[test]
     fn scheduled_push_title_comes_from_the_header_not_preview_text() {
-        let line = "🗓 Router schedule 123 @test · run 456 · \"Review the weekly summary.\" · router://00000000-0000-4000-8000-000000000001/push/018f47d2-24d5-7a68-b9ec-6f759c394599";
+        let line = "🗓 Router schedule 123 @test · run 456 · \"Review the weekly summary.\" · router://00000000-0000-7000-8000-000000000001/push/018f47d2-24d5-7a68-b9ec-6f759c394599";
         let header = parse_push_line_header(line).expect("scheduled push header");
 
         assert_eq!(header.kind, PushKind::ScheduleRun);

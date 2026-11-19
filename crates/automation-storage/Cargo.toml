@@ -29,6 +29,7 @@ message-board = { path = "../message-board", version = "0.1.58" }
 sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118" }
 
 [dev-dependencies]
+workspace-ids.workspace = true
 tempfile = "3.27.0"
 sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118", features = ["test-support"] }
 

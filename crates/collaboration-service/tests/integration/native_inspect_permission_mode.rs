@@ -9,8 +9,8 @@
 
 use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{
-    CodexGeneration, CodexPermissionModeReport, EndpointDescription, NonEmptyText, OperationId,
-    ProviderModeReason, RouterAccess, SessionId, SessionRef,
+    CodexGeneration, CodexPermissionModeReport, EndpointDescription, HarnessSessionRef,
+    NonEmptyText, OperationId, ProviderModeReason, RouterAccess, SessionId,
 };
 use collaboration_runtime::{
     CodexConversationOperationRecorder, NativeControlBackend, NativeGenerationGate,
@@ -24,7 +24,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::served_api;
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
 fn schemas() -> (codex_native_integration::NativeSchemaBundle, String) {
@@ -59,7 +59,7 @@ fn schemas() -> (codex_native_integration::NativeSchemaBundle, String) {
     (bundle, digest)
 }
 
-fn session(id: &str) -> SessionRef {
+fn session(id: &str) -> HarnessSessionRef {
     serde_json::from_value(json!({
         "endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":id
     }))

@@ -3,9 +3,7 @@ use super::*;
 use collaboration_mail_protocol::{
     FollowDeliveryPolicy, NotificationBody, RecordPointer, RootRange,
 };
-use collaboration_protocol::{
-    MachineId, MachineLabel, PushLineInput, RouterLink, render_push_line,
-};
+use collaboration_protocol::{MachineLabel, PushLineInput, RouterLink, render_push_line};
 use fleet_sync_protocol::{ItemId, PeerId, Recipient};
 use message_board::{
     BatchTiming, FeedCursor, Identity, PendingRootNotice, SubscriptionBatch,
@@ -26,7 +24,7 @@ fn follow_item(
     mode: SubscriptionMode,
 ) -> DeliveryItem<RouterDeliveryTypes> {
     let target: message_board::SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"recipient-without-project"
     }))
     .unwrap();
@@ -107,7 +105,7 @@ fn recipient_renders_frozen_counts_and_resolution_without_project_access() {
         let draft = received_mail_push(&item, Utc::now()).unwrap().unwrap();
         let line = render_push_line(&PushLineInput {
             link: RouterLink::new(
-                MachineId::from(draft.target.endpoint.service_id.clone()),
+                draft.target.endpoint.service_id.clone(),
                 draft.push_id.clone(),
             ),
             machine_label: MachineLabel::try_from("Recipient".to_owned()).unwrap(),
@@ -240,7 +238,7 @@ fn recipient_keeps_the_frozen_sender_label_in_the_direct_message_header() {
     let template = follow_item(false, [1, 1], SubscriptionMode::Deliver);
     let item = DeliveryItem::<RouterDeliveryTypes>::new(
         template.id(),
-        serde_json::from_value(json!({"kind":"session","endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"claude-local"},"sessionId":"sender-session"})).unwrap(),
+        serde_json::from_value(json!({"kind":"session","endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"claude-local"},"sessionId":"sender-session"})).unwrap(),
         template.recipient().clone(),None,
         serde_json::from_value(json!({"kind":"message","text":"frozen text","delivery":"queue","guard":null,"senderDisplayName":"🐒 Frozen sender","replyTo":null})).unwrap(),
     ).unwrap();
@@ -262,7 +260,7 @@ fn send_producer_copies_the_exact_label_through_shared_wire_and_recipient_projec
         push_id: template.id().as_uuid().to_string().try_into().unwrap(),
         kind: PushKind::DirectMessage,
         origin: PushOrigin::Session(serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"claude-local"},
             "sessionId":"sender-session"
         })).unwrap()),
         origin_router_ref:None,
@@ -273,7 +271,7 @@ fn send_producer_copies_the_exact_label_through_shared_wire_and_recipient_projec
         header_facts:PushHeaderFacts::DirectMessage {sender_display_name:Some("🐒 Frozen producer".to_owned().try_into().unwrap())},
         body:Some("The producer's exact text".to_owned()),activity:None,created_at:Utc::now(),
     };
-    let installation = "00000000-0000-4000-8000-000000000002"
+    let installation = "00000000-0000-7000-8000-000000000002"
         .to_owned()
         .try_into()
         .unwrap();

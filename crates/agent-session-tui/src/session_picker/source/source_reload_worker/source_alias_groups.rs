@@ -69,7 +69,7 @@ impl SourceAliasGroups {
 
     pub(crate) fn take_settled_qualifications(
         qualified: &mut Vec<QualifiedSourceRead>,
-        pending: &BTreeMap<collaboration_client::protocol::UuidIdentity, usize>,
+        pending: &BTreeMap<workspace_ids::MachineId, usize>,
     ) -> Vec<QualifiedSourceRead> {
         let mut ready = Vec::new();
         let mut retained = Vec::new();

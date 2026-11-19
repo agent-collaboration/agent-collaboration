@@ -25,12 +25,12 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("public-observation-{}.sqlite", std::process::id()));
         let scope: ObservationScope = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},
         "observerId":"00000000-0000-4000-8000-000000000003"
     }))
     .unwrap_or_else(|error| panic!("scope: {error}"));
-        let journal = ObservationJournal::open(&path, scope.endpoint.service_id.clone())
+        let journal = ObservationJournal::open(&path, scope.observer_id.clone())
             .await
             .unwrap_or_else(|error| panic!("open: {error}"));
         let initial_position = collaboration_protocol::JournalPosition {
@@ -183,7 +183,7 @@ mod tests {
             .unwrap_or_else(|_| panic!("store shared"))
             .close()
             .await;
-        let journal = ObservationJournal::open(&path, scope.endpoint.service_id.clone())
+        let journal = ObservationJournal::open(&path, scope.observer_id.clone())
             .await
             .unwrap_or_else(|error| panic!("reopen: {error}"));
         let store = Arc::new(LifecycleStore::new(journal));
@@ -229,7 +229,7 @@ mod tests {
         store: Arc<LifecycleStore>,
     ) -> (CollaborationClient, crate::served_api::ServedApi) {
         let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-7000-8000-000000000001", "00000000-0000-4000-8000-000000000002",
     ).unwrap_or_else(|error| panic!("identity: {error}"))
     .with_endpoints(vec![serde_json::from_value(json!({"endpoint":scope.endpoint,"label":"Fixture Codex","availability":{"state":"unprobed"},
         "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]}))

@@ -1,15 +1,15 @@
 //! Resolves local push links, applies reported-caller access rules, and expands stored ranges.
 use collaboration_contracts::RouterIdentity;
 use collaboration_protocol::{
-    MachineId, PushActivityRangeRead, PushId, PushKind, PushLineInput, PushOrigin, PushRecord,
-    PushRecordNotice, RouterLink, SessionRef, render_push_line,
+    HarnessSessionRef, PushActivityRangeRead, PushId, PushKind, PushLineInput, PushOrigin,
+    PushRecord, PushRecordNotice, RouterLink, render_push_line,
 };
 use message_board::{FeedContent, FeedPosition, Placement, Record};
 use message_board_storage::{FeedPageBounds, FeedPageDirection};
 
 pub(crate) fn link_for(record: &PushRecord, identity: &RouterIdentity) -> String {
     RouterLink::new(
-        MachineId::from(identity.machine_identity().service_id().clone()),
+        identity.machine_identity().service_id().clone(),
         record.push_id.clone(),
     )
     .to_string()
@@ -21,7 +21,7 @@ pub(crate) fn line_for(
 ) -> Result<String, collaboration_protocol::PushLineError> {
     render_push_line(&PushLineInput {
         link: RouterLink::new(
-            MachineId::from(identity.machine_identity().service_id().clone()),
+            identity.machine_identity().service_id().clone(),
             record.push_id.clone(),
         ),
         machine_label: identity.machine_identity().machine_label().clone(),
@@ -48,7 +48,7 @@ pub(crate) fn resolve_reference(
     Ok(link.push_id().clone())
 }
 
-pub(crate) fn can_read(record: &PushRecord, caller: &SessionRef) -> bool {
+pub(crate) fn can_read(record: &PushRecord, caller: &HarnessSessionRef) -> bool {
     if &record.target == caller {
         return true;
     }
@@ -56,7 +56,7 @@ pub(crate) fn can_read(record: &PushRecord, caller: &SessionRef) -> bool {
         && matches!(&record.origin, PushOrigin::Session(origin) if origin == caller)
 }
 
-pub(crate) fn caller_is_local(caller: &SessionRef, identity: &RouterIdentity) -> bool {
+pub(crate) fn caller_is_local(caller: &HarnessSessionRef, identity: &RouterIdentity) -> bool {
     caller.endpoint.service_id == *identity.service_id()
 }
 

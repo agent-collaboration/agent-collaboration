@@ -20,7 +20,7 @@ impl WakeFixture {
         }
         let mut value = serde_json::json!({
             "wakeupId":self.id(),"changeId":"01900000-0000-7000-8000-000000000002",
-            "message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"legacy-fixture"},"content":{"kind":"humanUser","text":"kept"},"delivery":"queue"},
+            "message":{"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"legacy-fixture"},"content":{"kind":"humanUser","text":"kept"},"delivery":"queue"},
             "timing":{"kind":"at","at":"1970-01-01T00:00:00.114Z"},"anchorAtMs":112,"expiresAtMs":115,"createdAtMs":116
         });
         if let Some(object) = value.as_object_mut().filter(|_| upgraded) {

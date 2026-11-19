@@ -6,7 +6,7 @@ use crate::outbox_deadline::{DepartureAtDeadline, end_reason, expires_at_ms};
 use crate::outbox_storage::{OutboxFuture, OutboxStorage};
 use crate::outbox_store::{
     ANSWERED_RETENTION_MILLIS, ClaimedBatch, NewOutboxItem, OutboxInsert, OutboxStoreError,
-    StoredOutboxWrite, payload_content_digest,
+    StoredOutboxWrite, payload_content_digest, with_send_time,
 };
 use central_link_client::{
     EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
@@ -22,7 +22,10 @@ use workspace_model::{Caller, RequestId};
 enum RowState {
     InOutbox,
     SentAnswerLost,
+    /// First attempt on the wire (claimed from InOutbox).
     Sent,
+    /// A replay on the wire (claimed from SentAnswerLost).
+    Resent,
     Answered(ReplyPayload),
     Refused(LinkAdmissionRefusal),
     /// Past its deadline (outbox_deadline), its text gone.
@@ -49,7 +52,7 @@ impl Row {
             RowState::InOutbox | RowState::SentAnswerLost => RequestStatus::InOutbox {
                 flush_at: self.flush_at,
             },
-            RowState::Sent => RequestStatus::Sent,
+            RowState::Sent | RowState::Resent => RequestStatus::Sent,
             RowState::Answered(reply) => RequestStatus::Answered(reply.clone()),
             RowState::Refused(reason) => RequestStatus::Refused(*reason),
             RowState::Ended(reason) => RequestStatus::Cancelled { reason: *reason },
@@ -89,7 +92,7 @@ fn unsent(state: &RowState) -> bool {
 }
 
 fn sent(state: &RowState) -> bool {
-    matches!(state, RowState::Sent)
+    matches!(state, RowState::Sent | RowState::Resent)
 }
 
 fn content(
@@ -131,7 +134,7 @@ impl OutboxStorage for MemoryOutbox {
                 });
             }
             let target = content(&item.request, &item.payload)?.target;
-            let expires_at = expires_at_ms(&target, now.unix_millis());
+            let expires_at = expires_at_ms(now.unix_millis());
             self.rows.insert(
                 item.request.clone(),
                 Row {
@@ -190,7 +193,7 @@ impl OutboxStorage for MemoryOutbox {
                     };
                     let state = match &row.state {
                         RowState::InOutbox => PendingWriteState::Unsent { body: body()? },
-                        RowState::SentAnswerLost | RowState::Sent => {
+                        RowState::SentAnswerLost | RowState::Sent | RowState::Resent => {
                             PendingWriteState::SentAnswerLost { body: body()? }
                         }
                         RowState::Answered(reply) => PendingWriteState::Answered(reply.clone()),
@@ -240,6 +243,7 @@ impl OutboxStorage for MemoryOutbox {
                         RowState::InOutbox
                         | RowState::SentAnswerLost
                         | RowState::Sent
+                        | RowState::Resent
                         | RowState::Ended(_) => {
                             return None;
                         }
@@ -351,7 +355,11 @@ impl OutboxStorage for MemoryOutbox {
             let mut writes = Vec::with_capacity(requests.len());
             for request in requests {
                 let row = self.expect_state(request, unsent, "in the outbox")?;
-                row.state = RowState::Sent;
+                row.state = if matches!(row.state, RowState::InOutbox) {
+                    RowState::Sent
+                } else {
+                    RowState::Resent
+                };
                 row.updated_at = now.unix_millis();
                 let payload = row
                     .payload
@@ -363,7 +371,7 @@ impl OutboxStorage for MemoryOutbox {
                 writes.push(StoredOutboxWrite {
                     request: request.clone(),
                     caller: row.caller.clone(),
-                    payload,
+                    payload: with_send_time(payload, row.created_at)?,
                 });
             }
             Ok(writes)
@@ -396,7 +404,11 @@ impl OutboxStorage for MemoryOutbox {
     ) -> OutboxFuture<'call, ()> {
         Box::pin(async move {
             let row = self.expect_state(request, sent, "sent")?;
-            row.state = RowState::InOutbox;
+            row.state = if matches!(row.state, RowState::Sent) {
+                RowState::InOutbox
+            } else {
+                RowState::SentAnswerLost
+            };
             row.updated_at = now.unix_millis();
             Ok(())
         })
@@ -448,6 +460,7 @@ impl MemoryOutbox {
                 RowState::InOutbox => DepartureAtDeadline::NeverLeft,
                 RowState::SentAnswerLost
                 | RowState::Sent
+                | RowState::Resent
                 | RowState::Answered(_)
                 | RowState::Refused(_)
                 | RowState::Ended(_) => DepartureAtDeadline::MayHaveArrived,
@@ -465,7 +478,7 @@ fn end_row(
     departure: DepartureAtDeadline,
     now: SyncTime,
 ) -> EndedWrite {
-    let reason = end_reason(&row.target, departure);
+    let reason = end_reason(departure);
     row.state = RowState::Ended(reason);
     row.payload = None;
     row.updated_at = now.unix_millis();

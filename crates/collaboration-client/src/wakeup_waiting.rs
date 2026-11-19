@@ -3,8 +3,8 @@
 use crate::api_connection::ToolAnswer;
 use crate::{ClientError, CollaborationClient, WakeClientError};
 use collaboration_protocol::{
-    FireReceipt, UuidIdentity, WakeFailure, WakeFailureReason, WakeShowRequest, WakeSnapshot,
-    WakeState, WakeWaitOutcome, WakeWaitRequest, WakeWaitResult, WakeupId,
+    FireReceipt, WakeFailure, WakeFailureReason, WakeShowRequest, WakeSnapshot, WakeState,
+    WakeWaitOutcome, WakeWaitRequest, WakeWaitResult, WakeupId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -164,7 +164,7 @@ impl WakeWaitError {
 pub struct WakeWaitConnection {
     client: CollaborationClient,
     wakeup_id: WakeupId,
-    owner_service: collaboration_protocol::UuidIdentity,
+    owner_service: workspace_ids::MachineId,
     start: WakeWaitStart,
 }
 
@@ -367,10 +367,18 @@ fn wait_failure(id: &WakeupId, mut failure: Value) -> WakeWaitError {
     }
 }
 
-fn cursor_sequence(cursor: &str, service_id: &UuidIdentity) -> Result<i64, ClientError> {
-    let (version, service, collection, sequence, at): (u8, UuidIdentity, String, i64, i64) =
-        serde_json::from_str(cursor)
-            .map_err(|_| ClientError::Protocol("invalid wake event cursor"))?;
+fn cursor_sequence(
+    cursor: &str,
+    service_id: &workspace_ids::MachineId,
+) -> Result<i64, ClientError> {
+    let (version, service, collection, sequence, at): (
+        u8,
+        workspace_ids::MachineId,
+        String,
+        i64,
+        i64,
+    ) = serde_json::from_str(cursor)
+        .map_err(|_| ClientError::Protocol("invalid wake event cursor"))?;
     if version != 1
         || &service != service_id
         || collection != "automation-events"

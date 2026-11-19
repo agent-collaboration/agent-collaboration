@@ -73,13 +73,6 @@
         }
       ]
     },
-    "InstallationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 36
-    },
     "MachineEnrollment": {
       "oneOf": [
         {
@@ -101,11 +94,11 @@
             "enrollmentId": {
               "$ref": "#/$defs/EnrollmentId"
             },
-            "installation": {
-              "$ref": "#/$defs/InstallationId"
-            },
             "machineClientId": {
               "$ref": "#/$defs/ClientId"
+            },
+            "machineId": {
+              "$ref": "#/$defs/MachineId"
             },
             "state": {
               "const": "enrolled",
@@ -115,7 +108,7 @@
           "required": [
             "state",
             "enrollmentId",
-            "installation",
+            "machineId",
             "authorizedBy",
             "machineClientId"
           ],
@@ -140,11 +133,11 @@
             "enrollmentId": {
               "$ref": "#/$defs/EnrollmentId"
             },
-            "installation": {
-              "$ref": "#/$defs/InstallationId"
-            },
             "machineClientId": {
               "$ref": "#/$defs/ClientId"
+            },
+            "machineId": {
+              "$ref": "#/$defs/MachineId"
             },
             "reason": {
               "$ref": "#/$defs/EnrollmentRevocationReason"
@@ -157,7 +150,7 @@
           "required": [
             "state",
             "enrollmentId",
-            "installation",
+            "machineId",
             "authorizedBy",
             "machineClientId",
             "reason"
@@ -183,11 +176,11 @@
             "enrollmentId": {
               "$ref": "#/$defs/EnrollmentId"
             },
-            "installation": {
-              "$ref": "#/$defs/InstallationId"
-            },
             "machineClientId": {
               "$ref": "#/$defs/ClientId"
+            },
+            "machineId": {
+              "$ref": "#/$defs/MachineId"
             },
             "state": {
               "const": "expired",
@@ -197,13 +190,18 @@
           "required": [
             "state",
             "enrollmentId",
-            "installation",
+            "machineId",
             "authorizedBy",
             "machineClientId"
           ],
           "type": "object"
         }
       ]
+    },
+    "MachineId": {
+      "description": "The Router install's durable identity, shared with central.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
     },
     "MachineLabel": {
       "allOf": [
@@ -340,11 +338,11 @@
         "enrollment": {
           "$ref": "#/$defs/MachineEnrollment"
         },
-        "installation": {
-          "$ref": "#/$defs/InstallationId"
-        },
         "label": {
           "$ref": "#/$defs/MachineLabel"
+        },
+        "machineId": {
+          "$ref": "#/$defs/MachineId"
         },
         "organizationId": {
           "$ref": "#/$defs/OrganizationId"
@@ -362,7 +360,7 @@
       },
       "required": [
         "result",
-        "installation",
+        "machineId",
         "organizationId",
         "label",
         "enrollment",

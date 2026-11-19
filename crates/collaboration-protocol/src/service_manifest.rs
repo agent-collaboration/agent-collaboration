@@ -60,7 +60,7 @@ pub struct ServiceManifest {
     #[serde(deserialize_with = "read_version")]
     #[schemars(range(min = 3, max = 3))]
     pub version: u8,
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub service_epoch: UuidIdentity,
     pub machine_label: MachineLabel,
     /// The running Host's release version; clients warn when theirs differs.
@@ -91,7 +91,7 @@ mod tests {
     fn manifest(version: u8, router_proxy_endpoint: Option<&str>) -> serde_json::Value {
         let mut value = json!({
             "version":version,
-            "serviceId":"00000000-0000-4000-8000-000000000001",
+            "serviceId":"00000000-0000-7000-8000-000000000001",
             "serviceEpoch":"00000000-0000-4000-8000-000000000002",
             "machineLabel":"test-machine",
             "serviceVersion":"0.1.40",
@@ -120,7 +120,7 @@ mod tests {
     fn a_version_two_manifest_is_refused_by_its_shape_too() {
         let version_two = json!({
             "version":2,
-            "serviceId":"00000000-0000-4000-8000-000000000001",
+            "serviceId":"00000000-0000-7000-8000-000000000001",
             "machineLabel":"test-machine",
             "serviceEpoch":"00000000-0000-4000-8000-000000000002",
             "control":{"transport":"unixJsonLines","path":"control.sock"},

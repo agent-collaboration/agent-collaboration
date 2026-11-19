@@ -9,7 +9,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 struct ObservedRequest {
     payload: serde_json::Value,
@@ -78,7 +78,7 @@ impl ReadinessHttpFixture {
             verify(
                 backend,
                 &proxy_authority(8443),
-                &UuidIdentity::try_from(SERVICE.to_owned()).expect("service"),
+                &workspace_ids::MachineId::try_from(SERVICE.to_owned()).expect("service"),
                 &UuidIdentity::try_from(EPOCH.to_owned()).expect("epoch"),
             )
             .await
@@ -333,7 +333,7 @@ async fn actual_mcp_readiness(
     let result = verify(
         address,
         requested,
-        &UuidIdentity::try_from(SERVICE.to_owned()).expect("service"),
+        &workspace_ids::MachineId::try_from(SERVICE.to_owned()).expect("service"),
         &UuidIdentity::try_from(EPOCH.to_owned()).expect("epoch"),
     )
     .await;
@@ -380,7 +380,7 @@ async fn health_rejects_zero_port_and_non_loopback_targets_before_requesting() {
         let error = verify(
             backend.parse().expect("socket"),
             &proxy_authority(8443),
-            &UuidIdentity::try_from(SERVICE.to_owned()).expect("service"),
+            &workspace_ids::MachineId::try_from(SERVICE.to_owned()).expect("service"),
             &UuidIdentity::try_from(EPOCH.to_owned()).expect("epoch"),
         )
         .await

@@ -1,6 +1,6 @@
 //! Model-driven CLI collaboration; the harness observes but never forwards the answer.
 use codex_native_integration::NativeProtocolConnection;
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use serde_json::Value;
 use std::{error::Error, path::Path, time::Duration};
 
@@ -10,8 +10,8 @@ fn quote(value: &str) -> String {
 pub fn initial_task(
     executable: &Path,
     directory: &Path,
-    first: &SessionRef,
-    second: &SessionRef,
+    first: &HarnessSessionRef,
+    second: &HarnessSessionRef,
     denied: &mut DeniedTargets,
 ) -> Result<String, Box<dyn Error>> {
     let executable = quote(executable.to_str().ok_or("CLI path not UTF-8")?);

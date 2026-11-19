@@ -412,7 +412,7 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
     });
     gate.activate(
         serde_json::from_value(
-            json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+            json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
         )
         .unwrap(),
         backend_path.clone(),
@@ -424,8 +424,8 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
         "cwd":"/tmp","mcpServers":[],"_meta":{"codexRouter":{
             "operationId":operation_id,"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write",
             "scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":scratch,
-            "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},
-            "approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
+            "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},
+            "approver":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
         }}
     }});
     write

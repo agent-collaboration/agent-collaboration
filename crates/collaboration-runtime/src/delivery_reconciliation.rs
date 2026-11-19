@@ -8,8 +8,8 @@ use collaboration_contracts::AttemptReconciliation;
 use collaboration_contracts::AttemptReconciliationContext;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryClientReceipt, DeliveryOutcome, MessageDelivery, NativeSendAcceptance,
-    PushKind, PushOrigin, RouterOriginRef, SessionReachability, SessionRef,
+    CodexGeneration, DeliveryClientReceipt, DeliveryOutcome, HarnessSessionRef, MessageDelivery,
+    NativeSendAcceptance, PushKind, PushOrigin, RouterOriginRef, SessionReachability,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -18,7 +18,7 @@ pub async fn reconcile(
     store: &Arc<Mutex<AutomationStore>>,
     interactions: &interaction_storage::InteractionStore,
     delivery: &dyn SessionMessageDelivery,
-    record: DeliveryRecord<SessionRef, CodexGeneration, StoredDeliveryReceipt>,
+    record: DeliveryRecord<HarnessSessionRef, CodexGeneration, StoredDeliveryReceipt>,
 ) -> Result<(), StorageError> {
     if record.status != DeliveryStatus::Uncertain {
         return Ok(());
@@ -118,7 +118,7 @@ pub async fn reconcile(
 }
 
 fn apply_accepted_evidence(
-    evidence: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
+    evidence: &mut RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     receipt: &collaboration_protocol::DeliveryReceipt,
 ) -> bool {
     match (evidence, &receipt.outcome, &receipt.client) {

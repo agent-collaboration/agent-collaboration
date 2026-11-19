@@ -7,8 +7,8 @@ use serde_json::{json, to_value};
 #[test]
 fn permission_differences_are_optional_closed_and_path_free() {
     // Arrange: a receipt and creation outcome written before difference reporting.
-    let target = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread"});
-    let old = json!({"target":target,"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},"inputKind":"agent","representation":"declaredAgentText","clientUserMessageId":"push","resumeEffect":"accepted","acceptance":{"kind":"queueAccepted","submissionId":"submission"}});
+    let target = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread"});
+    let old = json!({"target":target,"generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},"inputKind":"agent","representation":"declaredAgentText","clientUserMessageId":"push","resumeEffect":"accepted","acceptance":{"kind":"queueAccepted","submissionId":"submission"}});
     let created = json!({"kind":"created","operationId":"01900000-0000-7000-8000-000000000001","target":target});
     // Act/assert: old bytes decode and stay unchanged; new reports use only field classes.
     let decoded: collaboration_protocol::NativeSendReceipt =
@@ -132,7 +132,7 @@ fn native_failure_is_optional_for_old_receipts_and_rejects_invalid_facts() {
 
     let failure = json!({
         "operation":"thread/resume", "stage":"resume", "cause":"invalidResumeResponse",
-        "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+        "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
         "resume":"accepted", "submission":"notDispatched"
     });
     let mut receipt = json!({"reason":"localRejection","nextAction":"inspectTarget","clientCode":null,"detail":"Recorded resume response failed validation","nativeFailure":failure});

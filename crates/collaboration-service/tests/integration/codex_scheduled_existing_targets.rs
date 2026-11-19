@@ -6,8 +6,8 @@ use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::ScheduledRunPayload;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    CodexGeneration, MachineId, MachineLabel, PushHeaderFacts, PushId, PushKind, PushLineInput,
-    PushOrigin, RouterLink, SessionRef, render_push_line,
+    CodexGeneration, HarnessSessionRef, MachineLabel, PushHeaderFacts, PushId, PushKind,
+    PushLineInput, PushOrigin, RouterLink, render_push_line,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -15,6 +15,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
+use workspace_ids::MachineId;
 
 #[tokio::test]
 async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
@@ -30,8 +31,8 @@ async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let socket_path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
-    let target: SessionRef = serde_json::from_value(json!({
+    let service_id = "00000000-0000-7000-8000-000000000001";
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"materialized-thread"
     }))?;
     let generation: CodexGeneration = serde_json::from_value(json!({
@@ -144,7 +145,7 @@ async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
     impl RunEvidenceSink for EvidenceSink {
         fn record(
             &self,
-            _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+            _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
             Box::pin(async {
                 Ok(RunEvidenceDisposition::Recorded {

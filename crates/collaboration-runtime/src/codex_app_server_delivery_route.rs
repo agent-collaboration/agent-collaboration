@@ -22,15 +22,15 @@ use collaboration_contracts::RoutePresence;
 use collaboration_contracts::RouteUnavailableReason;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_protocol::{
-    ChannelDescription, DeliveryCorrelationId, DeliveryRejectionReason, MachineId, MessageDelivery,
-    NativeSendAcceptance, RouterLink, SessionReachability, SessionRef, UuidIdentity,
+    ChannelDescription, DeliveryCorrelationId, DeliveryRejectionReason, HarnessSessionRef,
+    MessageDelivery, NativeSendAcceptance, RouterLink, SessionReachability,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
 
 pub struct CodexAppServerDeliveryRoute {
     clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     endpoints: EndpointDirectory,
     backend: NativeControlBackend,
     holder: std::sync::Arc<crate::UnmaterializedThreadHolder>,
@@ -38,7 +38,7 @@ pub struct CodexAppServerDeliveryRoute {
 }
 
 struct NativeRouteDeliveryRequest {
-    target: SessionRef,
+    target: HarnessSessionRef,
     body: NativeMessageBody,
     mode: MessageDelivery,
     load_policy: LoadPolicy,
@@ -51,7 +51,7 @@ impl CodexAppServerDeliveryRoute {
     #[must_use]
     pub fn new(
         clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         endpoints: EndpointDirectory,
         backend: NativeControlBackend,
         holder: std::sync::Arc<crate::UnmaterializedThreadHolder>,
@@ -290,7 +290,7 @@ impl CodexAppServerDeliveryRoute {
         Ok(receipt)
     }
 
-    async fn inspect_thread_presence(&self, target: &SessionRef) -> RoutePresence {
+    async fn inspect_thread_presence(&self, target: &HarnessSessionRef) -> RoutePresence {
         if target.endpoint != self.backend.endpoint {
             return RoutePresence::NotMine;
         }
@@ -412,7 +412,7 @@ impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
 
     fn claim(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         let claim = if target.endpoint != self.backend.endpoint {
             collaboration_contracts::NativeRouteClaim::not_mine()
@@ -433,7 +433,7 @@ impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
         Box::pin(async move { Ok(claim) })
     }
 
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence> {
         let target = target.clone();
         Box::pin(async move { Ok(self.inspect_thread_presence(&target).await) })
     }
@@ -446,8 +446,7 @@ impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
         Box::pin(async move {
             let push_id = &request.payload.push_id;
             let expected_link =
-                RouterLink::new(MachineId::from(self.service_id.clone()), push_id.clone())
-                    .to_string();
+                RouterLink::new(self.service_id.clone(), push_id.clone()).to_string();
             let line_has_expected_link =
                 prepared_line_has_expected_link(request.payload.line.as_str(), &expected_link);
             if request.correlation.as_str() != push_id.as_str() || !line_has_expected_link {

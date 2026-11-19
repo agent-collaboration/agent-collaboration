@@ -92,11 +92,14 @@ impl From<SessionId> for String {
 )]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EndpointRef {
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub endpoint_id: EndpointId,
 }
 
 /// A conversation scoped to the endpoint that interprets its opaque ID.
+///
+/// The Router retrofit deletes this transitional shape after its last caller
+/// switches to local harness lookup or the endpoint-free workspace session address.
 ///
 /// The `session_id` value is owned and interpreted by the referenced endpoint;
 /// it is not a Router-wide, computer-wide, process, or connection identity.
@@ -104,7 +107,8 @@ pub struct EndpointRef {
     schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize,
 )]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SessionRef {
+#[schemars(rename = "SessionRef")]
+pub struct HarnessSessionRef {
     pub endpoint: EndpointRef,
     pub session_id: SessionId,
 }

@@ -20,7 +20,7 @@ use tokio_tungstenite::{
 async fn event_for_another_thread_during_read_triggers_its_own_reconciliation() {
     // Arrange: thread a changes while the observer waits for thread b's read.
     let path = std::env::temp_dir().join(format!("native-reread-{}.sqlite", std::process::id()));
-    let scope: ObservationScope = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},"observerId":"00000000-0000-4000-8000-000000000003"})).unwrap_or_else(|error| panic!("scope: {error}"));
+    let scope: ObservationScope = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},"observerId":"00000000-0000-4000-8000-000000000003"})).unwrap_or_else(|error| panic!("scope: {error}"));
     let journal = ObservationJournal::open(&path, scope.observer_id.clone())
         .await
         .unwrap_or_else(|error| panic!("journal: {error}"));

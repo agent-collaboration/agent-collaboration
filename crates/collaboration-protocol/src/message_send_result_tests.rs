@@ -2,9 +2,9 @@ use super::*;
 use schemars::generate::SchemaSettings;
 use serde_json::{Value, json};
 
-const LOCAL_SEND: &str = r#"{"pushId":"01900000-0000-7000-8000-000000000001","link":"router://00000000-0000-4000-8000-000000000001/push/01900000-0000-7000-8000-000000000001","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"recipient"},"targetIdentity":"recipient label","deliveryState":"delivered","receipt":{"outcome":{"kind":"peerMessageWritten"},"reachability":null,"client":null}}"#;
-const LOCAL_REPLY: &str = r#"{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"recipient"},"targetIdentity":"recipient label","pushId":"01900000-0000-7000-8000-000000000001","link":"router://00000000-0000-4000-8000-000000000001/push/01900000-0000-7000-8000-000000000001","deliveryState":"delivered","receipt":{"outcome":{"kind":"peerMessageWritten"},"reachability":null,"client":null}}"#;
-const QUEUED: &str = r#"{"queued":{"item":"01900000-0000-7000-8000-000000000002","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-local"},"sessionId":"remote-recipient"},"targetIdentity":"remote label"}}"#;
+const LOCAL_SEND: &str = r#"{"pushId":"01900000-0000-7000-8000-000000000001","link":"router://00000000-0000-7000-8000-000000000001/push/01900000-0000-7000-8000-000000000001","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"recipient"},"targetIdentity":"recipient label","deliveryState":"delivered","receipt":{"outcome":{"kind":"peerMessageWritten"},"reachability":null,"client":null}}"#;
+const LOCAL_REPLY: &str = r#"{"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"recipient"},"targetIdentity":"recipient label","pushId":"01900000-0000-7000-8000-000000000001","link":"router://00000000-0000-7000-8000-000000000001/push/01900000-0000-7000-8000-000000000001","deliveryState":"delivered","receipt":{"outcome":{"kind":"peerMessageWritten"},"reachability":null,"client":null}}"#;
+const QUEUED: &str = r#"{"queued":{"item":"01900000-0000-7000-8000-000000000002","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-local"},"sessionId":"remote-recipient"},"targetIdentity":"remote label"}}"#;
 
 #[test]
 fn shared_catalog_keeps_both_local_receipt_schemas_under_distinct_result_names() {

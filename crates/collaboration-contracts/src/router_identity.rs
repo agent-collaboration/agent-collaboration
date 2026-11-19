@@ -5,14 +5,14 @@ use fleet_sync_protocol::PeerId;
 
 #[derive(Clone, Debug)]
 pub struct RouterIdentity {
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     service_epoch: UuidIdentity,
     installation_peer: Option<PeerId>,
     machine_identity: MachineIdentity,
 }
 impl RouterIdentity {
     pub fn new(
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         service_epoch: UuidIdentity,
         installation_peer: Option<PeerId>,
         machine_identity: MachineIdentity,
@@ -28,7 +28,7 @@ impl RouterIdentity {
         })
     }
     #[must_use]
-    pub fn service_id(&self) -> &UuidIdentity {
+    pub fn service_id(&self) -> &workspace_ids::MachineId {
         &self.service_id
     }
     #[must_use]
@@ -60,17 +60,25 @@ mod tests {
 
     #[test]
     fn router_identity_rejects_a_machine_from_another_service() {
-        let service: UuidIdentity = "00000000-0000-4000-8000-000000000001"
+        let service: workspace_ids::MachineId = "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .expect("service");
-        let other: UuidIdentity = "00000000-0000-4000-8000-000000000002"
+        let other: workspace_ids::MachineId = "00000000-0000-7000-8000-000000000002"
             .to_owned()
             .try_into()
             .expect("other service");
         let machine = MachineIdentity::new(other, Some("Other machine")).expect("machine");
 
-        let result = RouterIdentity::new(service.clone(), service, None, machine);
+        let result = RouterIdentity::new(
+            service,
+            "00000000-0000-7000-8000-000000000003"
+                .to_owned()
+                .try_into()
+                .expect("epoch"),
+            None,
+            machine,
+        );
 
         assert_eq!(
             result.expect_err("different service"),
@@ -80,11 +88,11 @@ mod tests {
 
     #[test]
     fn cloned_router_identity_preserves_validated_installation_facts() {
-        let service: UuidIdentity = "00000000-0000-4000-8000-000000000001"
+        let service: workspace_ids::MachineId = "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .expect("service");
-        let epoch: UuidIdentity = "00000000-0000-4000-8000-000000000002"
+        let epoch: UuidIdentity = "00000000-0000-7000-8000-000000000002"
             .to_owned()
             .try_into()
             .expect("epoch");

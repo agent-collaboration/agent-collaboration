@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT request_id AS \"request_id!\", caller_json, payload_json, item_state,\n                          flush_at_ms, outcome_json\n                   FROM outbox_items\n                   WHERE request_id = ? AND item_state = ? AND expires_at_ms <= ?",
+  "query": "SELECT request_id AS \"request_id!\", caller_json, payload_json, item_state,\n                          flush_at_ms, outcome_json\n                   FROM outbox_items\n                   WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms <= ?",
   "describe": {
     "columns": [
       {
@@ -71,7 +71,7 @@
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 4
     },
     "nullable": [
       false,
@@ -82,5 +82,5 @@
       true
     ]
   },
-  "hash": "f9f63690d83a6adfb6d9909689aae00c31c244d7d01d0e6f4e3e03a0a481aa36"
+  "hash": "b982a5f40e07ce3f44b940dc676765c74cf546c07b914eaf041cb641bfae46dd"
 }

@@ -137,7 +137,7 @@ async fn serve_link(
     central_time: workspace_model::Timestamp,
 ) {
     let welcome = LinkFrame::Data(DataFrame::Welcome {
-        machine_id: connection.installation_machine_id().clone(),
+        machine_id: connection.machine_id().clone(),
         central_time,
     });
     // Keep Welcome queued locally until its safety attempt finishes, so observing it is a barrier.

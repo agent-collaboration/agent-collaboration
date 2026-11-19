@@ -140,7 +140,7 @@ impl PrivatePeerRegistry {
     }
     async fn start(&self) -> ProofResult<Option<PeerFixture>> {
         let endpoint: EndpointRef = serde_json::from_value(json!({
-            "serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"codex-local",
+            "serviceId":"00000000-0000-7000-8000-000000000001", "endpointId":"codex-local",
         }))?;
         let peer = PeerFixture::start_in_registry(&self.registry, &endpoint).await?;
         if let Err(error) = self.require_created() {
@@ -197,7 +197,7 @@ async fn exchange_peer(owner: &mut Option<PeerFixture>, socket: &Path) -> ProofR
     let peer = owner.as_mut().ok_or("actual peer resource missing")?;
     if serde_json::to_value(&peer.target)?
         != json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "sessionId":"fixture-session",
         })
     {

@@ -437,14 +437,14 @@ async fn a_remote_reply_link_survives_shared_wire_native_receipt_and_owning_reop
     reply.origin = collaboration_protocol::PushOrigin::Session(
         serde_json::from_value(serde_json::json!({
             "endpoint": {
-                "serviceId": "00000000-0000-4000-8000-000000000002",
+                "serviceId": "00000000-0000-7000-8000-000000000002",
                 "endpointId": "codex-local"
             },
             "sessionId": "reply-sender"
         }))
         .unwrap(),
     );
-    let sender: message_board::ServiceId = "00000000-0000-4000-8000-000000000002"
+    let sender: message_board::ServiceId = "00000000-0000-7000-8000-000000000002"
         .to_owned()
         .try_into()
         .unwrap();

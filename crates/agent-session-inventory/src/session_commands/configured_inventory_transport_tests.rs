@@ -19,7 +19,7 @@ fn profile_for_address(address: &str) -> RouterConnectionProfile {
     let mut registry = RouterConnectionRegistry::parse(
         &serde_json::json!({"version":1,"routers":[{
             "name":"TLS boundary fixture","connection":{
-                "kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001",
+                "kind":"remote","serviceId":"00000000-0000-7000-8000-000000000001",
                 "mcpUrl":address
             }
         }]})
@@ -78,7 +78,7 @@ async fn http_source_redirect_cannot_upgrade_or_contact_https_destination() {
 #[tokio::test]
 async fn https_source_preserves_certificate_verification_and_trusted_api_reads() {
     let source =
-        SourceApiFixture::start("00000000-0000-4000-8000-000000000001", "fixture-model").await;
+        SourceApiFixture::start("00000000-0000-7000-8000-000000000001", "fixture-model").await;
     let PickerSourceContext::ConfiguredHosted(source_profile) =
         source.request("TLS source").source_context
     else {

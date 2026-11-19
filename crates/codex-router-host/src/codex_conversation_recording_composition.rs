@@ -1,6 +1,6 @@
 //! Host composition for durable Codex ACP conversation creation.
 use codex_acp_adapter::ConversationOperationRecorder;
-use collaboration_protocol::{EndpointId, EndpointRef, NonEmptyText, UuidIdentity};
+use collaboration_protocol::{EndpointId, EndpointRef, NonEmptyText};
 use collaboration_runtime::CodexConversationOperationRecorder;
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::UnavailableConversationOperationRecorder;
@@ -9,7 +9,7 @@ use std::{io, path::Path, sync::Arc};
 pub(crate) fn recording_for_store(
     store: Option<&Arc<tokio::sync::Mutex<ProviderOperationStore>>>,
     directory: &Path,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
 ) -> io::Result<Option<Arc<CodexConversationOperationRecorder>>> {
     store
         .map(|store| {

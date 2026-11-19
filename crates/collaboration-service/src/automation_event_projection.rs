@@ -2,14 +2,13 @@
 use automation_storage::{AutomationStore, EventPosition, StorageError, StoredAutomationEvent};
 use collaboration_protocol::{
     AutomationEvent, AutomationEventDetails, AutomationEventSubject, AutomationEventSubjectKind,
-    UuidIdentity,
 };
 use serde_json::Value;
 
 pub(crate) async fn project(
     store: &mut AutomationStore,
     event: StoredAutomationEvent,
-    service: &UuidIdentity,
+    service: &workspace_ids::MachineId,
 ) -> Result<AutomationEvent, StorageError> {
     let subject_kind: AutomationEventSubjectKind =
         decode(Value::String(event.subject_kind.clone()))?;

@@ -37,7 +37,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     let runtime = runtime(&f).await;
     raw(
         &runtime,
-        "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             text(serde_json::to_string(&[&f.workspace, &late]).unwrap()),
             text(f.caller.caller().machine_id()),
@@ -63,10 +63,15 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
 
     // Due drain A drains the fixture workspace and is held after its success,
     // before it clears the record it observed (none).
+    // The native alarm driver would also find this work due; park it before its
+    // drive guard so only this case's direct engine calls take the pauses.
+    let _native_driver = runtime
+        .pause_points()
+        .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, DRAINS);
-    f.clock.set_utc(at);
+    f.set_utc(at).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }

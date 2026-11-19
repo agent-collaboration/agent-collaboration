@@ -141,7 +141,7 @@ impl Fixture {
         Ok(reqwest::Client::builder().no_proxy().build()?)
     }
 
-    pub fn token_for_installation(&self, installation: &str) -> Result<String> {
+    pub fn token_for_installation(&self, machine_id: &str) -> Result<String> {
         let encoded = self.token.split('.').nth(1).ok_or("fixture token claims")?;
         let mut claims: serde_json::Value =
             serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded)?)?;
@@ -150,7 +150,7 @@ impl Fixture {
                 .get_mut("principal")
                 .ok_or("fixture machine principal")?,
             "installation_id",
-            json!(installation),
+            json!(machine_id),
         )?;
         signed::sign(
             &json!({"alg":"EdDSA","typ":"at+jwt","kid":"stamp-a"}),

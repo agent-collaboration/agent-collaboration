@@ -79,7 +79,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
             .map(|value| value.unix_millis());
         assert_eq!(prior_alarm, Some(due.timestamp_millis()));
         execute(&fixture, corrupt_sql, vec![]).await;
-        fixture.clock.set_utc(due);
+        fixture.set_utc(due).await;
         // Isolation (moved-tests table): the corrupt timer is recorded Failing, the
         // alarm still re-arms, and it lands on the next mark.
         runtime.after_event().await.unwrap();
@@ -157,7 +157,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         .map(|value| value.unix_millis());
     assert_eq!(prior_alarm, Some(due.timestamp_millis()));
     execute(&fixture, "CREATE TRIGGER reject_wake_finish BEFORE UPDATE ON wakes BEGIN SELECT RAISE(ABORT,'reject wake finish'); END", vec![]).await;
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     // Isolation: only the failing timer's batch rolls back; the event succeeds.
     runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(&wake_id)] }).await.unwrap();
@@ -177,7 +177,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         "the rejected wake retries at the next mark through its record"
     );
     execute(&fixture, "DROP TRIGGER reject_wake_finish", vec![]).await;
-    fixture.clock.set_utc(due + chrono::Duration::minutes(5));
+    fixture.set_utc(due + chrono::Duration::minutes(5)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(runtime.after_event().await.unwrap().work.wakes_fired, 0);
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(wake_id)] }).await.unwrap();

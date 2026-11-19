@@ -93,7 +93,7 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
         ))
         .await;
     let callbacks = runtime.alarm_completion_count();
-    fixture.clock.advance(Duration::from_secs(300)).unwrap();
+    fixture.advance(Duration::from_secs(300)).await;
     runtime.until_alarm_completed(callbacks + 1).await;
     assert_eq!(
         runtime
@@ -152,7 +152,7 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
             .unwrap(),
         central_storage::BatchOutcome::Applied { .. }
     ));
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
 
     runtime.recompute_alarm().await.unwrap();
 
@@ -202,7 +202,7 @@ async fn request_event_runs_due_work_inside_the_fifty_second_horizon() {
     else {
         panic!("wake refused")
     };
-    fixture.clock.set_utc(due - chrono::Duration::seconds(2));
+    fixture.set_utc(due - chrono::Duration::seconds(2)).await;
 
     let answer = fixture
         .host

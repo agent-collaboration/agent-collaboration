@@ -62,7 +62,7 @@ impl ProjectNotificationFixture {
             Some(harness.requests.clone()),
         ));
         let machine = MachineIdentity::new(
-            "00000000-0000-4000-8000-000000000001"
+            "00000000-0000-7000-8000-000000000001"
                 .to_owned()
                 .try_into()?,
             Some("notice fixture"),
@@ -74,7 +74,7 @@ impl ProjectNotificationFixture {
             identity: machine,
         })?);
         let identity = ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission.clone())

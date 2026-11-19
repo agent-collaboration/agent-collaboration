@@ -7,17 +7,16 @@ use super::{
     ConversationOperationWaitOutput, ConversationOperationWaitRequest,
     ConversationOperationWaitResult, ConversationOutputUnavailableReason,
     ConversationPromptRequest, ConversationResumeRequest, Duration, EndpointRef,
-    ExternalProviderRuntimeError, ExternalProviderSupervisor, OperationId, PathBuf,
-    PreparedOperation, ProviderBindingIdentity, ProviderConversationBackend,
+    ExternalProviderRuntimeError, ExternalProviderSupervisor, HarnessSessionRef, OperationId,
+    PathBuf, PreparedOperation, ProviderBindingIdentity, ProviderConversationBackend,
     ProviderConversationFuture, ProviderOperationCompletion, ProviderOperationEffect,
     ProviderOperationKind, ProviderOperationStage, ProviderPromptContentsRequest,
     ProviderReconciliationState, ProviderSessionInspectFuture, ProviderSessionInspectRequest,
     ProviderSettingsAcceptRequest, ProviderSettingsFuture, ProviderSettingsSetRequest, SessionId,
-    SessionRef, admitted_submission, effective_settings, existing_submission, failure,
-    invalid_setting_failure, now_ms, provider_applied_setting, provider_failed_setting,
-    provider_session_inspection, provider_session_lifecycle, provider_session_record,
-    provider_settings_control, retain_operation, runtime_failure, snapshot_failure,
-    snapshot_from_record, unavailable_failure,
+    admitted_submission, effective_settings, existing_submission, failure, invalid_setting_failure,
+    now_ms, provider_applied_setting, provider_failed_setting, provider_session_inspection,
+    provider_session_lifecycle, provider_session_record, provider_settings_control,
+    retain_operation, runtime_failure, snapshot_failure, snapshot_from_record, unavailable_failure,
 };
 
 impl ProviderConversationBackend for ExternalProviderSupervisor {
@@ -137,7 +136,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 let catalog = runtime.settings_catalog(&created.provider_session_id).await;
                                 match SessionId::try_from(created.provider_session_id) {
                                     Ok(session_id) => {
-                                        let target = SessionRef {
+                                        let target = HarnessSessionRef {
                                             endpoint,
                                             session_id,
                                         };
@@ -187,7 +186,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 let catalog = runtime.settings_catalog(&provider_session_id).await;
                                 match SessionId::try_from(provider_session_id) {
                                 Ok(session_id) => {
-                                    let target = SessionRef { endpoint, session_id };
+                                    let target = HarnessSessionRef { endpoint, session_id };
                                     if let Some(catalog) = catalog {
                                         completion_inner.record_settings_catalog(target.clone(), catalog).await;
                                     }
@@ -227,7 +226,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             }) => {
                                 let target = SessionId::try_from(provider_session_id)
                                     .ok()
-                                    .map(|session_id| SessionRef { endpoint, session_id });
+                                    .map(|session_id| HarnessSessionRef { endpoint, session_id });
                                 let failure = invalid_setting_failure(
                                     operation_id,
                                     target.clone(),

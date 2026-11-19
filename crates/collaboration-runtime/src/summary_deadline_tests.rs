@@ -31,14 +31,14 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
     std::fs::create_dir(&directory)?;
     let path = directory.join("automation.sqlite");
     let store = AutomationStore::open(&path).await?;
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let summary_endpoint: EndpointRef =
         serde_json::from_value(json!({"serviceId":service,"endpointId":"codex-local"}))?;
-    let native_target: SessionRef = serde_json::from_value(json!({
+    let native_target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service,"endpointId":"codex-local"},
         "sessionId":"native-worker"
     }))?;
-    let summary_target = SessionRef {
+    let summary_target = HarnessSessionRef {
         endpoint: summary_endpoint.clone(),
         session_id: "summary-worker".to_owned().try_into()?,
     };
@@ -189,7 +189,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
     let blocked = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await
         .map_err(|error| format!("unavailable source read: {error}"))?;
     if blocked.phase != RunPhase::SummaryBlocked
@@ -226,9 +226,9 @@ async fn exercise_timeout_connection(fail_connection: bool) -> TestResult<()> {
     let path = directory.join("automation.sqlite");
     let store = AutomationStore::open(&path).await?;
     let endpoint: EndpointRef = serde_json::from_value(
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"}),
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"}),
     )?;
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint.clone(),
         session_id: "summary-thread".to_owned().try_into()?,
     };
@@ -442,7 +442,8 @@ async fn exercise_timeout_connection(fail_connection: bool) -> TestResult<()> {
             .bind(run_id.as_str())
             .fetch_one(&mut inspection)
             .await?;
-    let persisted: SummaryAttempt<SessionRef, CodexGeneration> = serde_json::from_str(&text)?;
+    let persisted: SummaryAttempt<HarnessSessionRef, CodexGeneration> =
+        serde_json::from_str(&text)?;
     let expected = if fail_connection {
         SummaryPhase::Running
     } else {

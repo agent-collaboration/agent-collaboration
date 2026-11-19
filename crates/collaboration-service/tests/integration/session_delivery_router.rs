@@ -16,8 +16,8 @@ use collaboration_contracts::TargetPresenceProbe;
 use collaboration_contracts::layer_zero;
 use collaboration_protocol::DeliveryReceipt;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MessageDelivery, MessageText, PushId,
-    SessionReachability, SessionRef,
+    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, HarnessSessionRef, MessageDelivery,
+    MessageText, PushId, SessionReachability,
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use std::sync::{
@@ -39,11 +39,11 @@ impl SessionDeliveryRoute for FakeRoute {
     }
     fn claim(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         Box::pin(async { Ok(scripted_claim(self.claim.clone())) })
     }
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
+    fn presence(&self, _: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence> {
         let presence = self.presence.clone();
         Box::pin(async move { Ok(presence) })
     }
@@ -108,15 +108,15 @@ struct NoopEvidenceSink;
 impl AttemptEvidenceSink for NoopEvidenceSink {
     fn record(
         &self,
-        _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
 }
 
-fn target() -> Result<SessionRef, Box<dyn std::error::Error>> {
+fn target() -> Result<HarnessSessionRef, Box<dyn std::error::Error>> {
     Ok(serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"session-one"
     }))?)
 }

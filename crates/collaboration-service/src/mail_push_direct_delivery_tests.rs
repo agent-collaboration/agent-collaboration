@@ -13,7 +13,7 @@ struct Wakeable;
 impl TargetPresenceProbe for Wakeable {
     fn presence(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'_, TargetPresence> {
         Box::pin(async { Ok(TargetPresence::Wakeable) })
     }

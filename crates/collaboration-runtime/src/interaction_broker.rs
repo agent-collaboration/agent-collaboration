@@ -9,8 +9,8 @@ use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecideResult, ApprovalDecision, ApprovalDetailedListResult,
     ApprovalDetailedRecord, ApprovalListResult, ApprovalOfferedOption, ApprovalOptionEffect,
     ApprovalOptionScope, ApprovalOptionView, ApprovalOptionViewScope, ApprovalPresentation,
-    ApprovalRequestRecord, ApprovalState, DeliveryOutcome, EndpointRef, OperationId, SessionRef,
-    UuidIdentity,
+    ApprovalRequestRecord, ApprovalState, DeliveryOutcome, EndpointRef, HarnessSessionRef,
+    OperationId,
 };
 use serde_json::Value;
 #[cfg(test)]
@@ -157,7 +157,7 @@ fn native_approval_refusal_diagnostic(
 }
 
 pub struct ServiceInteractionBroker {
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     backend: NativeControlBackend,
     session_delivery: OnceLock<Arc<dyn SessionMessageDelivery>>,
     display_names: OnceLock<crate::SessionDisplayNameCache>,
@@ -215,7 +215,7 @@ pub struct TypedApprovalSelection {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypedApprovalLegacyContext {
     pub operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: collaboration_protocol::CodexGeneration,
     pub requested_by: collaboration_protocol::ProviderIdentity,
 }
@@ -279,7 +279,7 @@ impl ServiceInteractionBroker {
     }
 
     pub async fn load(
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         backend: NativeControlBackend,
         interaction_store: Arc<interaction_storage::InteractionStore>,
     ) -> Result<Arc<Self>, ApprovalBrokerError> {
@@ -610,14 +610,16 @@ impl Drop for CancellationMarker {
 }
 
 fn board_session_ref(
-    session: &SessionRef,
+    session: &HarnessSessionRef,
 ) -> Result<message_board::SessionRef, ApprovalDecisionError> {
     let encoded =
         serde_json::to_value(session).map_err(|_| ApprovalDecisionError::Code("unavailable"))?;
     serde_json::from_value(encoded).map_err(|_| ApprovalDecisionError::Code("unavailable"))
 }
 
-fn board_identity(session: &SessionRef) -> Result<message_board::Identity, ApprovalDecisionError> {
+fn board_identity(
+    session: &HarnessSessionRef,
+) -> Result<message_board::Identity, ApprovalDecisionError> {
     Ok(message_board::Identity::Session {
         session: board_session_ref(session)?,
     })

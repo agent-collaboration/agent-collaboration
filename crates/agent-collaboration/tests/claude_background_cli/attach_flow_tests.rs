@@ -26,7 +26,7 @@ fn background_new_command(
         ["--model", "haiku", "--name", "literal --bg value"].map(std::ffi::OsString::from);
     let request = json!({
         "serviceDirectory":fixture.root.path().join("router/agent-communication"),
-        "expectedService":"00000000-0000-4000-8000-000000000001",
+        "expectedService":"00000000-0000-7000-8000-000000000001",
         "operation":{"kind":"nativeClaude","serviceEpoch":"00000000-0000-4000-8000-000000000002",
             "action":{"kind":"new","directory":fixture.working_directory,"arguments":arguments}}
     });
@@ -150,12 +150,12 @@ fn serve_job(
     )?;
     fs::set_permissions(&reader, fs::Permissions::from_mode(0o700))?;
     let endpoint = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "label":"Native Claude", "channels":[],
         "availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"}
     }))?;
     let application = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_endpoints(vec![endpoint])?
@@ -316,9 +316,9 @@ async fn local_claude_background_resume_rejects_a_now_running_job_before_startin
         let api = serve_job(&fixture, state).unwrap();
         let request = json!({
             "serviceDirectory":fixture.root.path().join("router/agent-communication"),
-            "expectedService":"00000000-0000-4000-8000-000000000001",
+            "expectedService":"00000000-0000-7000-8000-000000000001",
             "operation":{"kind":"nativeClaude","serviceEpoch":"00000000-0000-4000-8000-000000000002",
-                "action":{"kind":"resume","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":SESSION},
+                "action":{"kind":"resume","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":SESSION},
                     "directory":fixture.working_directory,"arguments":[]}}
         });
         let output = attach_command(&fixture)

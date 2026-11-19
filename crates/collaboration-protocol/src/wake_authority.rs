@@ -1,5 +1,5 @@
 //! Declared wake creators are a confusion guard, not authenticated identities.
-use crate::SessionRef;
+use crate::HarnessSessionRef;
 use agent_automation::WakeupId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum WakeCreator {
-    Session(SessionRef),
+    Session(HarnessSessionRef),
     Owner {},
     Router {},
     Unrecorded {},

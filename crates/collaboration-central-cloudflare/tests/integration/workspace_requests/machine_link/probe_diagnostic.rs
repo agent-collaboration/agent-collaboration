@@ -88,16 +88,14 @@ fn validate_attachment(attachment: &AttachmentSnapshot) -> Result<(), Diagnostic
                 && id.to_string() == value
         })
     };
-    if attachment.machine_id.get_version_num() != 7
-        || attachment.machine_id.get_variant() != uuid::Variant::RFC4122
-        || [
-            attachment.organization_id.as_str(),
-            attachment.installation_id.as_str(),
-            attachment.enrollment_id.as_str(),
-            attachment.client_id.as_str(),
-        ]
-        .iter()
-        .any(|value| !canonical_v7(value))
+    if [
+        attachment.organization_id.as_str(),
+        attachment.machine_id.as_str(),
+        attachment.enrollment_id.as_str(),
+        attachment.client_id.as_str(),
+    ]
+    .iter()
+    .any(|value| !canonical_v7(value))
         || !(0..=SafeInteger::MAX.get()).contains(&attachment.effective_expires_at.0)
     {
         return Err(DiagnosticRefusal);

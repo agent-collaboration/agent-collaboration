@@ -5,9 +5,9 @@ use collaboration_client::{
     ConversationActor, ConversationClient, ConversationCreateInput,
     protocol::{
         ConversationCreateOutcome, DestinationPreparation, EndpointRef, ExecutionDestination,
-        InstructionCreateParams, OperationId, PushRecordListParams, PushRecordShowParams,
-        RouterAccess, RunListRequest, ScheduleCreateRequest, ScheduleDefinition,
-        ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest, WakeupId,
+        HarnessSessionRef, InstructionCreateParams, OperationId, PushRecordListParams,
+        PushRecordShowParams, RouterAccess, RunListRequest, ScheduleCreateRequest,
+        ScheduleDefinition, ScheduleEnableRequest, SchedulePrepareRequest, TimingRequest, WakeupId,
     },
 };
 use collaboration_protocol::{
@@ -29,9 +29,9 @@ struct ConversationFixtureSettings {
 
 async fn create_conversation_fixture(
     proof: &ProofContext,
-    creator: &SessionRef,
+    creator: &HarnessSessionRef,
     settings: ConversationFixtureSettings,
-) -> ProofResult<SessionRef> {
+) -> ProofResult<HarnessSessionRef> {
     let endpoint = settings.endpoint.clone();
     let conversation = ConversationClient::connect(
         &collaboration_client::CollaborationAccess::api(&proof.service_directory),
@@ -68,8 +68,8 @@ async fn create_conversation_fixture(
 
 pub(super) async fn create_provider_session(
     proof: &mut ProofContext,
-    creator: &SessionRef,
-) -> ProofResult<SessionRef> {
+    creator: &HarnessSessionRef,
+) -> ProofResult<HarnessSessionRef> {
     let provider = proof
         .client
         .list_endpoints()
@@ -94,8 +94,8 @@ pub(super) async fn create_provider_session(
 
 pub(super) async fn cli_send(
     proof: &ProofContext,
-    sender: Option<&SessionRef>,
-    target: &SessionRef,
+    sender: Option<&HarnessSessionRef>,
+    target: &HarnessSessionRef,
     body: &str,
     human_user: bool,
 ) -> ProofResult<Value> {
@@ -124,7 +124,7 @@ pub(super) async fn cli_send(
 
 pub(super) async fn cli_reply(
     proof: &ProofContext,
-    caller: &SessionRef,
+    caller: &HarnessSessionRef,
     reference: &str,
     text: &str,
 ) -> ProofResult<Value> {
@@ -175,7 +175,7 @@ pub(super) async fn assert_message_reply_without_reference_is_rejected(
 )]
 pub(super) async fn cli_show(
     proof: &ProofContext,
-    caller: &SessionRef,
+    caller: &HarnessSessionRef,
     reference: &str,
 ) -> ProofResult<Value> {
     let output = run_cli(
@@ -203,7 +203,7 @@ pub(super) async fn cli_show(
 
 pub(super) async fn run_cli(
     proof: &ProofContext,
-    caller: Option<&SessionRef>,
+    caller: Option<&HarnessSessionRef>,
     arguments: Vec<String>,
 ) -> ProofResult<std::process::Output> {
     let mut command = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
@@ -237,7 +237,10 @@ pub(super) fn successful_cli_result(
     Ok(response)
 }
 
-pub(super) fn set_caller_identity(command: &mut Command, caller: &SessionRef) -> ProofResult<()> {
+pub(super) fn set_caller_identity(
+    command: &mut Command,
+    caller: &HarnessSessionRef,
+) -> ProofResult<()> {
     command
         .env_remove("CODEX_THREAD_ID")
         .env_remove("CLAUDE_CODE_SESSION_ID")
@@ -262,7 +265,7 @@ pub(super) fn receipt_push_id(receipt: &Value) -> ProofResult<String> {
 
 pub(super) async fn dm_notice_and_show(
     proof: &mut ProofContext,
-    recipient: &SessionRef,
+    recipient: &HarnessSessionRef,
     push_id: &str,
 ) -> ProofResult<(PushRecordShowResult, String)> {
     let inbox = proof
@@ -355,7 +358,7 @@ pub(super) fn user_message_text(item: &Value) -> ProofResult<String> {
 
 pub(super) async fn wait_for_codex_input(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     marker: &str,
     timeout: Duration,
 ) -> ProofResult<Value> {
@@ -384,8 +387,8 @@ pub(super) async fn wait_for_codex_input(
 
 pub(super) async fn cli_wake_send(
     proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     body: &str,
     resources: &mut OwnedMatrixResources,
 ) -> ProofResult<Value> {
@@ -453,7 +456,7 @@ fn retain_created_wake(
 
 pub(super) async fn create_existing_session_schedule(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     body: &str,
     resources: &mut OwnedMatrixResources,
 ) -> ProofResult<agent_automation::ScheduleId> {
@@ -554,7 +557,7 @@ pub(super) async fn wait_for_schedule_push(
 )]
 pub(super) async fn wait_for_acp_input(
     receipt_path: &Path,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     marker: &str,
     timeout: Duration,
 ) -> ProofResult<String> {

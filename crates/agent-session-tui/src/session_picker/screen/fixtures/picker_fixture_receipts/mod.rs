@@ -7,7 +7,7 @@ use agent_session_inventory::sessions::SessionPickerIdentity;
 use agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode;
 use agent_session_inventory::sessions::source_client_action::SessionClientEffect;
 use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeClaudeAction;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde::Serialize;
 use std::fs;
 use std::io;
@@ -22,13 +22,13 @@ enum PickerIdentityReadback<'a> {
         session_id: &'a str,
     },
     HostedCodex {
-        target: &'a SessionRef,
+        target: &'a HarnessSessionRef,
     },
     HostedProvider {
-        target: &'a SessionRef,
+        target: &'a HarnessSessionRef,
     },
     NativeClaude {
-        target: &'a SessionRef,
+        target: &'a HarnessSessionRef,
     },
 }
 impl<'a> From<&'a SessionPickerIdentity> for PickerIdentityReadback<'a> {
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn outcome_serialization_preserves_same_id_source_variants_and_the_actual_action() {
-        let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"shared-opaque-id"})).unwrap();
+        let target:HarnessSessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"shared-opaque-id"})).unwrap();
         for (kind, identity) in [
             (
                 "hostedCodex",

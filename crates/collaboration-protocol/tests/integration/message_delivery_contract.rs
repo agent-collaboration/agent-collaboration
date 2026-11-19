@@ -2,7 +2,7 @@ use collaboration_protocol::SessionMessageSendParams;
 use serde_json::{Value, json};
 
 fn request() -> Value {
-    let id = "00000000-0000-4000-8000-000000000001";
+    let id = "00000000-0000-7000-8000-000000000001";
     let target =
         json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"receiver"});
     json!({"target":target,"generationGuard":{"serviceEpoch":id,"generation":1},
@@ -42,7 +42,7 @@ fn message_result_schema_preserves_closed_rejection_diagnostics() {
     let validator = jsonschema::validator_for(&schema).unwrap();
     let mut response = json!({
         "pushId":"01900000-0000-7000-8000-000000000003",
-        "link":"router://00000000-0000-4000-8000-000000000001/push/01900000-0000-7000-8000-000000000003",
+        "link":"router://00000000-0000-7000-8000-000000000001/push/01900000-0000-7000-8000-000000000003",
         "target":request()["target"],
         "targetIdentity":"fixture",
         "deliveryState":"rejected",

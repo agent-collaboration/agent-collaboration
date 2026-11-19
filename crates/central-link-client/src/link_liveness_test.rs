@@ -123,7 +123,7 @@ fn frames_before_welcome_are_protocol_errors() {
     let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
         panic!("connect")
     };
-    let delivery = LinkFrame::Data(DataFrame::Deliver { message: Box::new(serde_json::from_value(serde_json::json!({"messageId":"01890f2e-7b4c-7cc0-98c4-000000000009","sender":{"kind":"central"},"target":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"})).unwrap()), send_id: "01890f2e-7b4c-7cc0-98c4-00000000000a".to_owned().try_into().unwrap() });
+    let delivery = LinkFrame::Data(DataFrame::Deliver { message: Box::new(serde_json::from_value(serde_json::json!({"messageId":"01890f2e-7b4c-7cc0-98c4-000000000009","sender":{"kind":"central"},"target":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"})).unwrap())});
     for frame in [
         LinkFrame::Pong,
         reply("01890f2e-7b4c-7cc0-98c4-000000000009".parse().unwrap()),

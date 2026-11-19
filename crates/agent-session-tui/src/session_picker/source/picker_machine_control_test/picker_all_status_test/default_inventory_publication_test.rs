@@ -12,7 +12,7 @@ fn rejected_default_catalogue_invalidates_provider_state_and_native_coverage_eve
     use crate::session_picker::screen::picker_model::SessionsPickerModel;
     use agent_session_inventory::picker_runtime_status::NativeLiveCoverage;
     use agent_session_inventory::picker_runtime_status::NativeLiveReadState;
-    let summary=serde_json::from_value(json!({"origin":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"remembered-managed"},"workingDirectory":"/source/saved","updatedAt":2,"state":"running","requestedPolicy":{"access":"write-restricted"},"approver":{"humanId":"saved-approver"},"createdBy":{"humanId":"creator"}})).unwrap();
+    let summary=serde_json::from_value(json!({"origin":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"remembered-managed"},"workingDirectory":"/source/saved","updatedAt":2,"state":"running","requestedPolicy":{"access":"write-restricted"},"approver":{"humanId":"saved-approver"},"createdBy":{"humanId":"creator"}})).unwrap();
     let mut row = SessionPickerRecord::from_provider_summary(&summary, "Remembered Cursor");
     row.runtime_status = PickerRuntimeStatus::Unknown;
     let identity = row.identity.clone();
@@ -23,7 +23,7 @@ fn rejected_default_catalogue_invalidates_provider_state_and_native_coverage_eve
     model.native_live_coverage = vec![NativeLiveCoverage {
         view: agent_session_inventory::picker_runtime_status::NativeCatalogueView::Loaded,
         endpoint: serde_json::from_value(
-            json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"}),
+            json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"}),
         )
         .unwrap(),
         service_epoch: "00000000-0000-4000-8000-000000000002"
@@ -76,7 +76,7 @@ async fn default_host_invalid_inventory_is_rejected_and_remembered_rows_are_unkn
         let home = tempfile::tempdir().unwrap();
         create_stored_catalog(home.path()).await;
         let mut api = FakeCollaborationApi::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
         .unwrap();

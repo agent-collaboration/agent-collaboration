@@ -5,7 +5,7 @@
 //! provider receives is appended to a journal in the Host directory.
 use super::{fixture::identity, owned_host::BoardHost};
 use codex_router_test_support::FixtureResult;
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use serde_json::{Value, json};
 use std::{
     os::unix::fs::OpenOptionsExt as _,
@@ -14,7 +14,7 @@ use std::{
 use tokio::{io::AsyncReadExt, net::UnixListener, sync::watch, task::JoinHandle};
 
 pub struct AcpRecipient {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     journal: PathBuf,
     journal_updates: watch::Receiver<u64>,
     journal_notices: JoinHandle<()>,

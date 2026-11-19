@@ -27,7 +27,7 @@ async fn exercise_package(fresh: bool) -> Result<(), Box<dyn std::error::Error>>
         automation_storage::AutomationStore::open(&path).await?,
     ));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
@@ -41,7 +41,7 @@ async fn exercise_package(fresh: bool) -> Result<(), Box<dyn std::error::Error>>
         })
         .await?;
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"source-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"source-local"});
     let destination = if fresh {
         json!({"kind":"freshEachRun","endpoint":endpoint,"cwd":"/source-workspace"})
     } else {
@@ -93,7 +93,7 @@ async fn exercise_package(fresh: bool) -> Result<(), Box<dyn std::error::Error>>
         let mut definition = imported.definition.clone();
         definition.destination = collaboration_protocol::ExecutionDestination::FreshEachRun {
             endpoint: serde_json::from_value(
-                json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"destination-local"}),
+                json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"destination-local"}),
             )?,
             cwd: "/destination-workspace".into(),
         };

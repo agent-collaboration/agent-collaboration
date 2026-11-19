@@ -14,7 +14,7 @@ async fn client_opens_advertised_native_websocket_without_protocol_initializatio
         .create(&root)
         .unwrap_or_else(|error| panic!("directory: {error}"));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|error| panic!("identity: {error}"));
@@ -42,7 +42,7 @@ async fn client_opens_advertised_native_websocket_without_protocol_initializatio
             .await
             .unwrap_or_else(|error| panic!("send: {error}"));
     });
-    let endpoint=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"label":"fixture","availability":{"state":"available","observedAt":"2026-09-13T12:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap_or_else(|error|panic!("endpoint: {error}"));
+    let endpoint=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"label":"fixture","availability":{"state":"available","observedAt":"2026-09-13T12:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap_or_else(|error|panic!("endpoint: {error}"));
     let identity = identity
         .with_endpoints(vec![endpoint])
         .unwrap_or_else(|error| panic!("register: {error}"));
@@ -94,13 +94,13 @@ async fn client_rejects_unavailable_and_escaped_native_endpoints_without_connect
             .unwrap_or_else(|error| panic!("directory: {error}"));
     }
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000011",
+        "00000000-0000-7000-8000-000000000011",
         "00000000-0000-4000-8000-000000000012",
     )
     .unwrap_or_else(|error| panic!("identity: {error}"));
     let endpoint_directory = identity.endpoint_directory();
     let unavailable = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000011","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000011","endpointId":"codex-local"},
         "label":"fixture",
         "availability":{"state":"unavailable","observedAt":"2026-09-13T12:00:00Z","reason":"fixture offline"},
         "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]
@@ -134,7 +134,7 @@ async fn client_rejects_unavailable_and_escaped_native_endpoints_without_connect
     endpoint_directory
         .publish(
             serde_json::from_value(serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000011","endpointId":"codex-local"},
+                "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000011","endpointId":"codex-local"},
                 "label":"fixture",
                 "availability":{"state":"available","observedAt":"2026-09-13T12:01:00Z"},
                 "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]

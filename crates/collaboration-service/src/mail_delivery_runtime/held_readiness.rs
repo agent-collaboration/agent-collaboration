@@ -11,7 +11,7 @@ impl MailDeliveryRuntime {
 
     pub(crate) async fn held_mail_ids_for_target(
         &self,
-        target: &collaboration_protocol::SessionRef,
+        target: &collaboration_protocol::HarnessSessionRef,
     ) -> Result<Vec<collaboration_protocol::PushId>, StoreError> {
         self.owner
             .held_mail_push_ids(target)

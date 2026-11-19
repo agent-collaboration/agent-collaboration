@@ -26,7 +26,7 @@ pub(crate) enum CursorCreationAvailability {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewClientSourceCapabilities {
-    pub(crate) service_id: UuidIdentity,
+    pub(crate) service_id: workspace_ids::MachineId,
     pub(crate) service_epoch: UuidIdentity,
     pub(crate) native_claude: SourceNativeLaunchAvailability,
     pub(crate) cursor: CursorCreationAvailability,
@@ -59,7 +59,7 @@ pub struct SessionClientPorts {
 }
 
 pub fn qualify_capabilities(
-    expected: &UuidIdentity,
+    expected: &workspace_ids::MachineId,
     inventory: EndpointInventory,
     native_claude: SourceNativeLaunchAvailability,
 ) -> Result<NewClientSourceCapabilities, SourceReadError> {

@@ -7,7 +7,7 @@
 //! session loads through the provider supervisor, whose completions are a signal. While
 //! lifecycle observation is unavailable, each observation retry is a signal.
 use collaboration_protocol::{
-    JournalPosition, LifecycleChange, LifecycleSubject, NativeThreadStatus, SessionRef,
+    HarnessSessionRef, JournalPosition, LifecycleChange, LifecycleSubject, NativeThreadStatus,
 };
 use message_board::BoardError;
 use std::sync::Arc;
@@ -167,7 +167,7 @@ impl HeldMailWatch {
 
     /// Takes every signal since the last call and reports whether the reader owes its
     /// held mail for `target` another presence check.
-    pub(super) async fn take_owed_check(&mut self, target: &SessionRef) -> bool {
+    pub(super) async fn take_owed_check(&mut self, target: &HarnessSessionRef) -> bool {
         // The signal that woke the wait is already marked seen; any other is checked and
         // marked seen in one call, so no signal lands between the two.
         let woken_by = self.woken_by.take();
@@ -198,7 +198,7 @@ impl HeldMailWatch {
     /// Without a position to read after (none was recorded, or the journal cannot be read
     /// from it, such as history expired past it) the reader cannot tell whether its target
     /// loaded, so it owes one check, and that check records a fresh position.
-    async fn target_loaded_since_position(&mut self, target: &SessionRef) -> bool {
+    async fn target_loaded_since_position(&mut self, target: &HarnessSessionRef) -> bool {
         let Some((journal, _)) = &self.journal else {
             return false;
         };

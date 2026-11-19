@@ -3,8 +3,8 @@ use super::{provider_prompt_contains, spawn_provider_prompt, wait_for_prompt_tex
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     ApprovalDecideParams, ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, ConversationPromptRequest, MessageContent, MessageText,
-    OperationId, PositiveSeconds, SessionRef,
+    ConversationOperationWaitRequest, ConversationPromptRequest, HarnessSessionRef, MessageContent,
+    MessageText, OperationId, PositiveSeconds,
 };
 use serde_json::json;
 use std::path::Path;
@@ -17,8 +17,8 @@ use std::path::Path;
 #[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 pub(crate) async fn prompt_and_approve_from_peer_provider(
     client: &CollaborationClient,
-    requester: SessionRef,
-    approver: SessionRef,
+    requester: HarnessSessionRef,
+    approver: HarnessSessionRef,
     approver_prompt_log: &Path,
 ) -> collaboration_protocol::PushRecordShowResult {
     let inventory = client.list_endpoints().await.expect("catalog");

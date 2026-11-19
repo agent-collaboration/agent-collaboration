@@ -3,8 +3,8 @@
 use agent_automation::{OccurrenceId, RunId, ScheduleId, WakeupId};
 use chrono::{Duration, Utc};
 use collaboration_protocol::{
-    EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, RouterOriginRef,
-    SessionId, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, PushHeaderFacts, PushId, PushKind, PushOrigin,
+    RouterOriginRef, SessionId,
 };
 use interaction_storage::{InteractionStore, PushRecordDraft, StorageError};
 use sqlx::Connection;
@@ -36,11 +36,13 @@ impl Drop for TestDatabase {
     clippy::expect_used,
     reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
 )]
-fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
-    SessionRef {
+fn session(endpoint_id: &str, session_id: &str) -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
-                .expect("service UUID"),
+            service_id: workspace_ids::MachineId::try_from(
+                "018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned(),
+            )
+            .expect("service UUID"),
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("endpoint id"),
         },
         session_id: SessionId::try_from(session_id.to_owned()).expect("session id"),
@@ -49,7 +51,7 @@ fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
 
 fn push_draft(
     push_id: PushId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     origin: PushOrigin,
     body: &str,
     created_at: chrono::DateTime<Utc>,
@@ -86,7 +88,7 @@ fn push_id() -> PushId {
 )]
 fn wake_push_draft(
     push_id: PushId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     wakeup_id: WakeupId,
     occurrence_id: OccurrenceId,
 ) -> PushRecordDraft {
@@ -118,7 +120,7 @@ fn wake_push_draft(
 )]
 fn schedule_run_push_draft(
     push_id: PushId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     schedule_id: ScheduleId,
     run_id: RunId,
 ) -> PushRecordDraft {

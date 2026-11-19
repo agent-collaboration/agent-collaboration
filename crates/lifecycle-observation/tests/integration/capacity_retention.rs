@@ -43,7 +43,7 @@ mod tests {
         ));
         let retained = journal.read_after(1, 100).await.unwrap();
         assert_eq!(retained.len(), 2);
-        let address = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":"old"})).unwrap();
+        let address = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":"old"})).unwrap();
         assert!(
             journal.address_entry(&address).await.unwrap().is_some(),
             "checkpoint must retain the expired record's address"
@@ -79,7 +79,7 @@ mod tests {
     }
 
     fn identity() -> UuidIdentity {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap()
@@ -92,8 +92,8 @@ mod tests {
     fn observation(thread: &str) -> LifecycleObservation {
         serde_json::from_value(json!({
             "observedAt":"2026-09-06T12:00:00Z","source":"inventoryRead",
-            "scope":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},
-            "subject":{"kind":"thread","address":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":thread}},
+            "scope":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},
+            "subject":{"kind":"thread","address":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":thread}},
             "change":{"kind":"threadDiscovered"}
         })).unwrap()
     }

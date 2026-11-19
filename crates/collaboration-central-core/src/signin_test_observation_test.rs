@@ -302,25 +302,21 @@ async fn malformed_stored_domains_and_foreign_binding_never_become_complete_obse
 
 async fn machine_store() -> TursoConnection {
     let mut connection = stamped_store(1).await;
-    query::<Turso>("INSERT INTO machines VALUES(?,?,'Observed machine','enrolled',?,7,?,?)")
+    query::<Turso>("INSERT INTO machines VALUES(?,'Observed machine','enrolled',?,7,?,?)")
         .bind(fixture_id(0xe000))
-        .bind(fixture_id(0xe001))
         .bind(serde_json::to_string(&vec![fixture_id(0x9000)]).unwrap())
         .bind(TIME)
         .bind(TIME)
         .execute(&mut connection)
         .await
         .unwrap();
-    query::<Turso>(
-        "INSERT INTO machines VALUES(?,?,'Second observed machine','revoked','[]',0,?,?)",
-    )
-    .bind(fixture_id(0xe040))
-    .bind(fixture_id(0xe041))
-    .bind(TIME)
-    .bind(TIME)
-    .execute(&mut connection)
-    .await
-    .unwrap();
+    query::<Turso>("INSERT INTO machines VALUES(?,'Second observed machine','revoked','[]',0,?,?)")
+        .bind(fixture_id(0xe040))
+        .bind(TIME)
+        .bind(TIME)
+        .execute(&mut connection)
+        .await
+        .unwrap();
     // Insert reverse identifiers and creation times so ID order is the wrong oracle.
     for (index, created, state, reason, client, last, ended) in [
         (
@@ -375,10 +371,10 @@ async fn machine_snapshot_exports_checked_lifecycle_fields_in_creation_order() {
     assert_eq!(
         Value::Array(machines),
         json!([{
-            "machineId":fixture_id(0xe000),"installationId":fixture_id(0xe001),
+            "machineId":fixture_id(0xe000),
             "state":"enrolled","allowedWorkspaces":[fixture_id(0x9000)],"enrollmentGeneration":7
         },{
-            "machineId":fixture_id(0xe040),"installationId":fixture_id(0xe041),
+            "machineId":fixture_id(0xe040),
             "state":"revoked","allowedWorkspaces":[],"enrollmentGeneration":0
         }])
     );

@@ -17,9 +17,9 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
 
 use collaboration_protocol::{
-    CodexGeneration, DeliveryOutcome, DeliveryReceipt, MachineId, OperationId, PushDeliveryState,
-    PushHeaderFacts, PushKind, PushLineInput, PushOrigin, PushRecord, PushRecordShowParams,
-    RouterLink, RouterOriginRef, SavedMessage, SessionReachability, SessionRef, UuidIdentity,
+    CodexGeneration, DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, OperationId,
+    PushDeliveryState, PushHeaderFacts, PushKind, PushLineInput, PushOrigin, PushRecord,
+    PushRecordShowParams, RouterLink, RouterOriginRef, SavedMessage, SessionReachability,
     render_push_line,
 };
 use serde_json::json;
@@ -27,7 +27,7 @@ use std::{error::Error, sync::Arc};
 use tokio::sync::Mutex;
 
 type TestResult<TValue = ()> = Result<TValue, Box<dyn Error + Send + Sync>>;
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 const INTERVAL_SECONDS: u32 = 600;
 const WAKE_BODY: &str = "Report the same durable wake's new firing";
 
@@ -103,7 +103,7 @@ impl SessionMessageDelivery for StoredWakeRoute {
 
 async fn require_expired_link(
     application: &CollaborationApplication,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     link: &str,
 ) -> TestResult {
     let result = application
@@ -164,7 +164,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.path().join("automation.sqlite")).await?,
     ));
-    let service_id = UuidIdentity::try_from(SERVICE_ID.to_owned())?;
+    let service_id = workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?;
     let interactions = Arc::new(
         interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
     );
@@ -232,11 +232,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         old_push.created_at < now.checked_sub_months(chrono::Months::new(2)).unwrap(),
         "production firing timestamp must make the first delivered push strictly older than two calendar months",
     )?;
-    let old_link = RouterLink::new(
-        MachineId::from(service_id.clone()),
-        old_push.push_id.clone(),
-    )
-    .to_string();
+    let old_link = RouterLink::new(service_id.clone(), old_push.push_id.clone()).to_string();
     let (fresh_push, fresh_occurrence) =
         evaluate_and_dispatch(&store, &sender, &wakeup_id, anchor_ms + 2 * interval_ms).await?;
     ensure(
@@ -248,7 +244,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
             && fresh_push.header_facts == PushHeaderFacts::Wake,
         "U66 / MS-10: the same bounded wake creates fresh pushes within its lifetime",
     )?;
-    let fresh_link = RouterLink::new(MachineId::from(service_id), fresh_push.push_id.clone());
+    let fresh_link = RouterLink::new(service_id, fresh_push.push_id.clone());
     let shown = application
         .messages()
         .push_show(PushRecordShowParams {

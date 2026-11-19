@@ -35,7 +35,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![f.workspace.clone(), other.clone()])

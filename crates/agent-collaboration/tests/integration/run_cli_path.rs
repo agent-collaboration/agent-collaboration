@@ -9,7 +9,9 @@ use automation_storage::{
     ScheduleCreate,
 };
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
-use collaboration_client::protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
+use collaboration_client::protocol::{
+    CodexGeneration, EndpointRef, HarnessSessionRef, NativeSendReceipt,
+};
 use serde_json::{Value, json};
 use std::os::unix::fs::DirBuilderExt;
 #[tokio::test]
@@ -21,8 +23,8 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
     let run_due_at_ms = schedule_created_at_ms + 1_000;
     let run_completed_at_ms = schedule_created_at_ms + 2_000;
     let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
-    let target: SessionRef = serde_json::from_value(
-        json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"}),
+    let target: HarnessSessionRef = serde_json::from_value(
+        json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"}),
     )?;
     let generation: CodexGeneration = serde_json::from_value(
         json!({"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1}),
@@ -35,7 +37,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -54,11 +56,11 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         })
         .await?;
     let run = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, run_due_at_ms)
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, run_due_at_ms)
         .await?
         .ok_or("missing fixture run")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, run_due_at_ms)
+        .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, run_due_at_ms)
         .await?;
     let mut effects = NativeEffectEvidence {
         permission_differences: Vec::new(),
@@ -75,7 +77,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
     let mut prepared = effects.clone();
     prepared.submission = SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run.clone(),
                 effects: prepared.into(),
@@ -106,7 +108,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         })
         .await?;
     store
-        .complete_run_settlement::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .complete_run_settlement::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("fixture-turn".into()),

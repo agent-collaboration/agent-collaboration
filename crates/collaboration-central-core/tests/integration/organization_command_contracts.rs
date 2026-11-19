@@ -37,7 +37,7 @@ fn machine_lookup_wire_contract() {
     contract_artifacts::assert_contract::<MachineLookup>(
         "MachineLookup",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","installation":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","machineId":"019a3dce-2000-7000-8000-000000000002"}),
         ],
         false,
     );
@@ -114,7 +114,7 @@ fn allow_machine_wire_contract() {
     contract_artifacts::assert_contract::<AllowMachine>(
         "AllowMachine",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","installation":"019a3dce-2000-7000-8000-000000000002","workspaceId":"019a3dce-2000-7000-8000-000000000001"}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","machineId":"019a3dce-2000-7000-8000-000000000002","workspaceId":"019a3dce-2000-7000-8000-000000000001"}),
         ],
         false,
     );
@@ -125,7 +125,7 @@ fn withdraw_machine_allowance_wire_contract() {
     contract_artifacts::assert_contract::<WithdrawMachineAllowance>(
         "WithdrawMachineAllowance",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","installation":"019a3dce-2000-7000-8000-000000000002","workspaceId":"019a3dce-2000-7000-8000-000000000001"}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","machineId":"019a3dce-2000-7000-8000-000000000002","workspaceId":"019a3dce-2000-7000-8000-000000000001"}),
         ],
         false,
     );
@@ -136,7 +136,7 @@ fn revoke_machine_enrollment_wire_contract() {
     contract_artifacts::assert_contract::<RevokeMachineEnrollment>(
         "RevokeMachineEnrollment",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","installation":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","machineId":"019a3dce-2000-7000-8000-000000000002"}),
         ],
         false,
     );
@@ -190,8 +190,8 @@ fn machine_allowance_wire_contract() {
     contract_artifacts::assert_contract::<MachineAllowance>(
         "MachineAllowance",
         vec![
-            json!({"installation":"019a3dce-2000-7000-8000-000000000001","workspaceId":"019a3dce-2000-7000-8000-000000000002","state":"active"}),
-            json!({"installation":"019a3dce-2000-7000-8000-000000000001","workspaceId":"019a3dce-2000-7000-8000-000000000002","state":"withdrawn"}),
+            json!({"machineId":"019a3dce-2000-7000-8000-000000000001","workspaceId":"019a3dce-2000-7000-8000-000000000002","state":"active"}),
+            json!({"machineId":"019a3dce-2000-7000-8000-000000000001","workspaceId":"019a3dce-2000-7000-8000-000000000002","state":"withdrawn"}),
         ],
         false,
     );

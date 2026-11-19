@@ -361,14 +361,7 @@ async fn provisioning_does_not_rewrite_existing_workspace_machine_or_enrollment_
         "019f0000-0000-7000-8000-00000000d234".to_owned(),
         NOW_SECONDS,
     );
-    super::super::support::seed_enrollment(
-        &f.host,
-        &caller,
-        "019f0000-0000-7000-8000-00000000d232",
-        "[]",
-        NOW_SECONDS,
-    )
-    .await;
+    super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
     assert!(
         f.read("SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'")
             .await

@@ -566,8 +566,8 @@ impl ProviderSessionEventHub {
 
 fn to_stored_session(
     session: &SessionRef,
-) -> Result<collaboration_protocol::SessionRef, SessionEventHubError> {
-    Ok(collaboration_protocol::SessionRef {
+) -> Result<collaboration_protocol::HarnessSessionRef, SessionEventHubError> {
+    Ok(collaboration_protocol::HarnessSessionRef {
         endpoint: to_stored_endpoint(&session.endpoint)?,
         session_id: collaboration_protocol::SessionId::try_from(
             session.session_id.as_str().to_owned(),
@@ -580,10 +580,8 @@ fn to_stored_endpoint(
     endpoint: &SessionEndpointRef,
 ) -> Result<collaboration_protocol::EndpointRef, SessionEventHubError> {
     Ok(collaboration_protocol::EndpointRef {
-        service_id: collaboration_protocol::UuidIdentity::try_from(
-            endpoint.service_id.as_str().to_owned(),
-        )
-        .map_err(|_| SessionEventHubError::Unavailable)?,
+        service_id: workspace_ids::MachineId::try_from(endpoint.service_id.as_str().to_owned())
+            .map_err(|_| SessionEventHubError::Unavailable)?,
         endpoint_id: collaboration_protocol::EndpointId::try_from(
             endpoint.endpoint_id.as_str().to_owned(),
         )
@@ -592,7 +590,7 @@ fn to_stored_endpoint(
 }
 
 fn from_stored_session(
-    session: &collaboration_protocol::SessionRef,
+    session: &collaboration_protocol::HarnessSessionRef,
 ) -> Result<SessionRef, SessionEventHubError> {
     Ok(SessionRef {
         endpoint: SessionEndpointRef {

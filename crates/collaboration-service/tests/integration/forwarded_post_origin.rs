@@ -17,7 +17,7 @@ async fn forwarded_posts_keep_the_declared_actor_and_original_per_observation_or
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000002".to_owned())?,
         machine: MachineLabel::try_from("fixture enrolled sender".to_owned())?,
     };
-    let remote_actor = json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000003","endpointId":"codex-local"},"sessionId":"declared-session"}});
+    let remote_actor = json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000003","endpointId":"codex-local"},"sessionId":"declared-session"}});
     accepted(&fixture.api.call("role_grant",fixture.request(&project,json!({"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"advisor","holder":remote_actor,"model":"fixture-model","lineage":"fixture-lineage","expectedRevision":1,"ownerGrant":null}))).await?);
     let actors = [fixture.actor.clone(), remote_actor];
     for actor in actors {

@@ -8,6 +8,39 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
  {
     let f = Fixture::new().await;
     let runtime = f.host.central(&f.caller.organization_id).await;
+    let schema = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT name, pk FROM pragma_table_info('machines') WHERE name IN ('machine_id', 'installation_id') ORDER BY cid",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        schema.rows,
+        vec![vec![
+            text("machine_id"),
+            central_storage::SqlValue::Integer(central_storage::SafeInteger::new(1).unwrap())
+        ]]
+    );
+    let link = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT \"table\", \"to\" FROM pragma_foreign_key_list('messages') WHERE \"from\"='target_machine_id'",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(link.rows, vec![vec![text("machines"), text("machine_id")]]);
+    let legacy = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert!(legacy.rows.is_empty());
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("Must not be written"),
         description: "Test description".to_owned().try_into().unwrap(),
@@ -49,10 +82,10 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
     );
     let edits = [
         (
-            "UPDATE machines SET state='revoked' WHERE installation_id=?",
+            "UPDATE machines SET state='revoked' WHERE machine_id=?",
             text(f.caller.caller.machine_id()),
             m::RefusalReason::MachineRevoked,
-            "UPDATE machines SET state='enrolled' WHERE installation_id=?",
+            "UPDATE machines SET state='enrolled' WHERE machine_id=?",
         ),
         (
             "UPDATE workspaces SET state='archived' WHERE workspace_id=?",
@@ -61,10 +94,10 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
             "UPDATE workspaces SET state='active' WHERE workspace_id=?",
         ),
         (
-            "UPDATE machines SET allowed_workspaces='[]' WHERE installation_id=?",
+            "UPDATE machines SET allowed_workspaces='[]' WHERE machine_id=?",
             text(f.caller.caller.machine_id()),
             m::RefusalReason::WorkspaceNotAllowed,
-            "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+            "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         ),
     ];
     for (index, (sql, key, refusal, restore)) in edits.into_iter().enumerate() {

@@ -1,8 +1,8 @@
 //! Native activity keeps exact range holes while its header counts distinct threads.
 use collaboration_protocol::{
-    MachineId, MachineLabel, PushActivityRange, PushActivitySnapshot, PushDeliveryState,
+    HarnessSessionRef, MachineLabel, PushActivityRange, PushActivitySnapshot, PushDeliveryState,
     PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, PushRecord, PushRecordDraft,
-    RouterLink, RouterOriginRef, SessionRef, render_push_line,
+    RouterLink, RouterOriginRef, render_push_line,
 };
 use serde_json::json;
 
@@ -25,8 +25,8 @@ fn activity_range(thread: u64, from: u64, through: u64) -> PushActivityRange {
     reason = "Invalid test fixtures must fail the test immediately."
 )] // This helper only constructs the permanent protocol fixtures.
 fn draft(ranges: Vec<PushActivityRange>, root_count: u8) -> PushRecordDraft {
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"legacy-recipient"
     }))
     .unwrap();
@@ -75,10 +75,7 @@ fn legacy_single_range_stored_shape_still_decodes_and_renders_the_same_line() {
         PushRecord::from_storage_parts(decoded, PushDeliveryState::Pending, None, None, None, None)
             .unwrap();
     let line = render_push_line(&PushLineInput {
-        link: RouterLink::new(
-            MachineId::from(record.target.endpoint.service_id),
-            record.push_id,
-        ),
+        link: RouterLink::new(record.target.endpoint.service_id, record.push_id),
         machine_label: MachineLabel::try_from("Legacy".to_owned()).unwrap(),
         origin: record.origin,
         header_facts: record.header_facts,
@@ -87,7 +84,7 @@ fn legacy_single_range_stored_shape_still_decodes_and_renders_the_same_line() {
     .unwrap();
     assert_eq!(
         line,
-        "🧵 Router: new thread activity @Legacy · 1 thread · 7 messages · router://00000000-0000-4000-8000-000000000001/push/01900000-0000-7000-8000-000000000200"
+        "🧵 Router: new thread activity @Legacy · 1 thread · 7 messages · router://00000000-0000-7000-8000-000000000001/push/01900000-0000-7000-8000-000000000200"
     );
 }
 

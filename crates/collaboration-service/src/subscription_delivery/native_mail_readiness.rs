@@ -1,6 +1,6 @@
 //! Volatile reader prompts bridge native outcomes to the existing readiness loop.
 use super::{
-    BoardError, ReaderReconcilePurpose, ReaderScanScope, ServiceHandleLifetime, SessionRef,
+    BoardError, HarnessSessionRef, ReaderReconcilePurpose, ReaderScanScope, ServiceHandleLifetime,
     SubscriptionDeliveryService, reader_for_target,
 };
 
@@ -51,7 +51,7 @@ impl SubscriptionDeliveryService {
         Ok(())
     }
 
-    pub(crate) fn prompt_native_mail_outcome(&self, target: SessionRef) {
+    pub(crate) fn prompt_native_mail_outcome(&self, target: HarnessSessionRef) {
         if self.inner.shutdown.is_cancelled() || self.inner.native_mail.get().is_none() {
             return;
         }

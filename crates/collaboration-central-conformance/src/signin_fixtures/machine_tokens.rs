@@ -5,7 +5,7 @@ pub const MACHINE_AUDIENCE: &str = "https://central.example.invalid/machine";
 
 pub fn machine_token(
     organization: &str,
-    installation: &str,
+    machine_id: &str,
     enrollment: &str,
     now_seconds: i64,
     grant_expires_at: i64,
@@ -15,7 +15,7 @@ pub fn machine_token(
         &json!({"iss":ISSUER,"aud":MACHINE_AUDIENCE,"iat":now_seconds,
             "exp":now_seconds+3600,"client_id":enrollment,"azp":enrollment,
             "organization_id":organization,"grant_expires_at":grant_expires_at,
-            "principal":{"kind":"machine","installation_id":installation,"enrollment_id":enrollment}}),
+            "principal":{"kind":"machine","installation_id":machine_id,"enrollment_id":enrollment}}),
         7,
     )
 }

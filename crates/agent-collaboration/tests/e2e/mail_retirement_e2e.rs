@@ -7,7 +7,7 @@ mod readback;
 #[path = "../mail_retirement/wake_and_capacity.rs"]
 mod wake_and_capacity;
 use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
-use collaboration_client::protocol::{EndpointRef, SessionRef};
+use collaboration_client::protocol::{EndpointRef, HarnessSessionRef};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::json;
 
@@ -33,7 +33,7 @@ async fn delivered_direct_mail_keeps_terminal_custody_and_replay_after_host_rest
         let endpoint: EndpointRef = serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
         let peer = wake_and_capacity::start_peer(fixture, &endpoint).await?;
         run_scenario(peer, async |peer: &mut PeerFixture| {
-            let sender: SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":sender_host.service_id()?,"endpointId":"codex-local"},"sessionId":"retirement-sender"}))?;
+            let sender: HarnessSessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":sender_host.service_id()?,"endpointId":"codex-local"},"sessionId":"retirement-sender"}))?;
             let item = fixture::identity();
             let request = json!({"itemId":item,"target":peer.target,"message":{"kind":"agent","sender":sender,"text":"retirement direct marker"},"delivery":"auto"});
             let queued = wake_and_capacity::call(sender_host.host()?,"message_send",request.clone()).await?;

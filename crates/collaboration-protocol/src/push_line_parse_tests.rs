@@ -1,8 +1,9 @@
 use super::parse_push_line;
 use crate::{
-    MachineId, MachineLabel, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin,
-    RouterLink, parse_push_line_header, render_push_line,
+    MachineLabel, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, RouterLink,
+    parse_push_line_header, render_push_line,
 };
+use workspace_ids::MachineId;
 
 const SERVICE: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 const PUSH: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";

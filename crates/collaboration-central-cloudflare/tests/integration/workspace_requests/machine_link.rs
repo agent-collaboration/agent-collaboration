@@ -153,7 +153,7 @@ async fn hibernation_journey(fixture: &Fixture) -> Result<HibernationReceipt> {
     Ok(HibernationReceipt {
         kind: "c2Hibernation",
         organization: fixture.organization.clone(),
-        installation_id: INSTALLATION.parse()?,
+        machine_id: INSTALLATION.parse()?,
         welcome,
         baseline_request: baseline.request,
         baseline_reply: baseline.reply,
@@ -190,7 +190,7 @@ async fn baseline(
             central_time,
         } if machine_id.as_str() == INSTALLATION
             && central_time.timestamp_millis() == fixture.clock.now().unix_millis() => {}
-        _ => return Err("Welcome must expose the installation and one injected clock".into()),
+        _ => return Err("Welcome must expose the machine_id and one injected clock".into()),
     }
     fixture.host.c2_witness(WitnessPhase::Baseline).await?;
     let exchange = link
@@ -272,7 +272,7 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
         signed::NOW_SECONDS,
         signed::NOW_SECONDS + 600,
     )?;
-    // A well-formed installation with no machine row is refused.
+    // A well-formed machine_id with no machine row is refused.
     let unknown_installation = signed::machine_token(
         ORGANIZATION,
         "019f0000-0000-7000-8000-00000000cf0f",
@@ -396,7 +396,7 @@ async fn denied_journey(fixture: &Fixture, change: AuthorityChange) -> Result<()
                         operation_id: "019f0000-0000-7000-8000-00000000cf30"
                             .to_owned()
                             .try_into()?,
-                        installation: INSTALLATION.to_owned().try_into()?,
+                        machine_id: INSTALLATION.to_owned().try_into()?,
                         enrollment_id: fixture.enrollment.clone(),
                     },
                 )

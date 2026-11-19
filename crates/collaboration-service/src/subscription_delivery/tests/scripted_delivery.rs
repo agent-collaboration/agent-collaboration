@@ -11,13 +11,13 @@ impl collaboration_contracts::SessionDeliveryRoute for PreparedRecordingRoute {
     }
     fn claim(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
     fn presence(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::RoutePresence> {
         Box::pin(async { Ok(collaboration_contracts::RoutePresence::Running) })
     }

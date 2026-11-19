@@ -4,7 +4,6 @@ use collaboration_client::CollaborationClient;
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
-use collaboration_protocol::UuidIdentity;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
 
@@ -19,8 +18,8 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000011";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000012";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000011";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000012";
 
 #[derive(Clone)]
 struct TestMcpClient;
@@ -107,7 +106,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: MachineIdentity::new(
-                    UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service"),
+                    workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service"),
                     Some("mcp-subscription-test"),
                 )
                 .expect("machine"),
@@ -128,7 +127,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
     let delivery_router = Arc::new(SessionDeliveryRouter::new(Vec::new()));
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = delivery_router;
-    let service_id = UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service id");
+    let service_id = workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service id");
     let subscription_service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
         board_availability: BoardAvailability::Available(Arc::new(Mutex::new(
             admission.subscription_window_store(interactions.clone()),

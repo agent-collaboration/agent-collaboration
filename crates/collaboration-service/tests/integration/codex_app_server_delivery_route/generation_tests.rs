@@ -3,8 +3,9 @@ use super::*;
 #[tokio::test]
 async fn stale_strict_generation_stops_before_evidence_or_native_io()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"thread-one"
     }))?;
@@ -89,13 +90,11 @@ async fn exercise_prepared_push_route(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let root = tempfile::tempdir()?;
     let socket_path = root.path().join("native.sock");
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
     let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())?;
     let mismatched_push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458e".to_owned())?;
-    let link = collaboration_protocol::RouterLink::new(
-        collaboration_protocol::MachineId::from(service_id.clone()),
-        push_id.clone(),
-    );
+    let link = collaboration_protocol::RouterLink::new(service_id.clone(), push_id.clone());
     let line: MessageText =
         collaboration_protocol::render_push_line(&collaboration_protocol::PushLineInput {
             link: link.clone(),
@@ -138,7 +137,7 @@ async fn exercise_prepared_push_route(
             );
         }
     }
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"thread-one"
     }))?;
@@ -495,7 +494,7 @@ async fn exercise_prepared_push_route(
         return Err("push id mismatch reconciled as accepted".into());
     }
 
-    let mismatched_target: SessionRef = serde_json::from_value(json!({
+    let mismatched_target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"different-thread"
     }))?;
@@ -543,8 +542,9 @@ async fn retiring_during_thread_read_returns_retryable_unavailable()
     let root = tempfile::tempdir()?;
     let socket_path = root.path().join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"thread-one"
     }))?;
@@ -675,8 +675,9 @@ async fn malformed_prepared_push_suffixes_stop_before_evidence_or_native_io()
     let root = tempfile::tempdir()?;
     let socket_path = root.path().join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"thread-one"
     }))?;
     let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())?;

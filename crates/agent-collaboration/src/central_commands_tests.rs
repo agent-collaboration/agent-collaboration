@@ -3,7 +3,7 @@
 use super::*;
 use serde_json::{Value, json};
 const PROJECT: &str = "019f0000-0000-7000-8000-000000005881";
-const INSTALLATION: &str = "550e8400-e29b-41d4-a716-446655440583";
+const INSTALLATION: &str = "550e8400-e29b-71d4-a716-446655440583";
 fn parse(arguments: &[&str]) -> Result<CentralArguments, clap::Error> {
     CentralArguments::try_parse_from(std::iter::once("central").chain(arguments.iter().copied()))
 }

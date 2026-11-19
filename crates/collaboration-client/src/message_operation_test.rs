@@ -1,12 +1,12 @@
 use super::{MessageSendError, MessageSendRequest, PublicMessageContent};
 use crate::scripted_api::{ScriptedApi, ScriptedCalls};
 use crate::{ClientError, CollaborationClient};
-use collaboration_protocol::{CodexGeneration, MessageDelivery, SessionRef};
+use collaboration_protocol::{CodexGeneration, HarnessSessionRef, MessageDelivery};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 const PUSH_ID: &str = "019f0000-0000-7000-8000-000000000101";
 const OTHER_PUSH_ID: &str = "019f0000-0000-7000-8000-000000000102";
 
@@ -76,7 +76,7 @@ async fn strict_generation_guard_reaches_the_service_and_reports_known_none() {
         ));
     });
     let request: MessageSendRequest = serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"target"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"target"},
         "message":{"kind":"humanUser","text":"hello"},"delivery":"auto",
         "generationGuard":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1}
     }))
@@ -299,7 +299,7 @@ fn fixture_request(
     generation_guard: Option<collaboration_protocol::CodexGeneration>,
 ) -> MessageSendRequest {
     serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"target"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"target"},
         "message":{"kind":"humanUser","text":"hello"},"delivery":"auto",
         "generationGuard":generation_guard
     }))
@@ -318,7 +318,7 @@ async fn client_with_send_result(
     (api, client, peer)
 }
 
-fn push_result(target: &SessionRef, push_id: &str, link_push_id: &str) -> Value {
+fn push_result(target: &HarnessSessionRef, push_id: &str, link_push_id: &str) -> Value {
     json!({
         "pushId":push_id,
         "link":format!("router://{SERVICE_ID}/push/{link_push_id}"),
@@ -334,8 +334,8 @@ fn push_result(target: &SessionRef, push_id: &str, link_push_id: &str) -> Value 
 }
 
 fn native_push_result(
-    target: &SessionRef,
-    native_target: &SessionRef,
+    target: &HarnessSessionRef,
+    native_target: &HarnessSessionRef,
     generation: &CodexGeneration,
     push_id: &str,
     client_user_message_id: &str,
@@ -377,7 +377,7 @@ fn generation(generation: u64) -> CodexGeneration {
     .expect("Codex generation")
 }
 
-fn session_ref(session_id: &str) -> SessionRef {
+fn session_ref(session_id: &str) -> HarnessSessionRef {
     serde_json::from_value(json!({
         "endpoint":{"serviceId":SERVICE_ID,"endpointId":"codex-local"},
         "sessionId":session_id

@@ -9,7 +9,7 @@ use agent_session_inventory::sessions::router_connection_registry::RouterConnect
 
 #[test]
 fn default_rows_are_not_promoted_into_configured_alias_labels() {
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let first = source("First", service);
     let second = source("Alias", service);
     let bound = endpoint(service, "native-one");
@@ -29,7 +29,7 @@ fn default_rows_are_not_promoted_into_configured_alias_labels() {
 
 #[test]
 fn matching_endpoints_at_conflicting_epochs_never_produce_an_alias_label() {
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let first = source("First", service);
     let second = source("Alias", service);
     let bound = endpoint(service, "native-one");
@@ -80,7 +80,7 @@ fn snapshot(
             "cli",
         );
         row.identity =
-            SessionPickerIdentity::HostedCodex(collaboration_client::protocol::SessionRef {
+            SessionPickerIdentity::HostedCodex(collaboration_client::protocol::HarnessSessionRef {
                 endpoint: endpoint.clone(),
                 session_id: "shared-id".to_owned().try_into().unwrap(),
             });
@@ -97,7 +97,7 @@ fn snapshot(
 
 #[test]
 fn empty_first_alias_names_all_rows_without_changing_the_observed_route_or_single_choice() {
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let first = source("First machine", service);
     let second = source("Second alias", service);
     let endpoint = endpoint(service, "source-native");
@@ -125,7 +125,7 @@ fn empty_first_alias_names_all_rows_without_changing_the_observed_route_or_singl
 
 #[test]
 fn aliases_group_only_full_qualified_endpoints_and_duplicate_ids_stay_distinct() {
-    let first_service = "00000000-0000-4000-8000-000000000001";
+    let first_service = "00000000-0000-7000-8000-000000000001";
     let other_service = "00000000-0000-4000-8000-000000000002";
     let first = source("First", first_service);
     let alias = source("Alias", first_service);
@@ -168,7 +168,7 @@ fn aliases_group_only_full_qualified_endpoints_and_duplicate_ids_stay_distinct()
 
 #[test]
 fn missing_foreign_and_row_mismatched_bindings_cannot_qualify_even_empty_snapshots() {
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let source = source("Expected machine", service);
     let empty = observed_records(vec![]);
     let endpoint = endpoint(service, "native-one");

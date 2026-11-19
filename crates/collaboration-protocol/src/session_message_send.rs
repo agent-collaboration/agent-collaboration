@@ -1,5 +1,5 @@
 //! One public message request carries caller intent without selecting a client.
-use crate::{CodexGeneration, MessageContent, MessageDelivery, SessionRef};
+use crate::{CodexGeneration, HarnessSessionRef, MessageContent, MessageDelivery};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +9,7 @@ pub struct SessionMessageSendParams {
     /// A supplied identity enables replay; omission creates a new item at admission.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_id: Option<crate::MailItemId>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub message: MessageContent,
     #[serde(default)]
     pub mode: MessageDelivery,

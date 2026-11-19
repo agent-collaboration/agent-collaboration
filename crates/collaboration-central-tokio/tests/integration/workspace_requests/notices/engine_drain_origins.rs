@@ -103,7 +103,7 @@ async fn case() -> Case {
     Case { fixture, wake, at }
 }
 async fn run(case: &Case) {
-    case.fixture.clock.set_utc(case.at);
+    case.fixture.set_utc(case.at).await;
     runtime(&case.fixture).await.after_event().await.unwrap();
 }
 async fn fault(f: &Fixture, workspace: &m::WorkspaceId, kind: EngineCommitFaultKind) {
@@ -183,8 +183,8 @@ async fn central_down_on_the_drain_batch_records_nothing_and_rearms() {
     assert_eq!(drain_row(f, &f.workspace).await, before, "nothing drained");
     let rearm = alarm_ms(&runtime).expect("the re-arm is attempted and published");
     assert!(rearm > case.at.timestamp_millis());
-    f.clock
-        .set_utc(chrono::DateTime::from_timestamp_millis(rearm).unwrap());
+    f.set_utc(chrono::DateTime::from_timestamp_millis(rearm).unwrap())
+        .await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         drain_row(f, &f.workspace).await[1],

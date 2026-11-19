@@ -136,7 +136,7 @@ async fn closed_and_unloaded_sessions_admit_fresh_history_replay() {
             .await
             .expect("store");
         let hub = ProviderSessionEventHub::new(Arc::new(Mutex::new(store)));
-        let session: SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"restorable"})).expect("session");
+        let session: SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"restorable"})).expect("session");
         hub.publish(
             session.clone(),
             SessionEvent::StateChanged {
@@ -209,7 +209,7 @@ async fn assert_active_replay_preserves_state(state: session_event_model::Sessio
         .await
         .expect("store");
     let hub = ProviderSessionEventHub::new(Arc::new(Mutex::new(store)));
-    let session: SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"active"})).expect("session");
+    let session: SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"active"})).expect("session");
     hub.publish(
         session.clone(),
         SessionEvent::StateChanged {
@@ -268,12 +268,12 @@ async fn locked_attach_on_one_session_does_not_stall_another_publish() {
         .expect("store");
     let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
     let first: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"first"
     }))
     .expect("first session");
     let second: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"second"
     }))
     .expect("second session");

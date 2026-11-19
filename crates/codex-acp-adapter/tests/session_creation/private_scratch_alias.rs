@@ -189,7 +189,7 @@ async fn assert_private_scratch_binding(
     )]))?;
     let schemas = Arc::new(NativePayloadSchemas::from_bundle(&bundle)?);
     let generation: collaboration_protocol::CodexGeneration = serde_json::from_value(
-        json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+        json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
     )?;
     let (client, server) = tokio::net::UnixStream::pair()?;
     let connection = NativeProtocolConnection::from_websocket(
@@ -243,8 +243,8 @@ async fn assert_private_scratch_binding(
         params: json!({"cwd":"/work/project","mcpServers":[],"_meta":{"codexRouter":{
             "model":"gpt-6-luna","effort":"medium","access":"write-restricted",
             "scratchScope":scratch.scope,"scratchPath":scratch.logical_path,
-            "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"codex-local"},"sessionId":"creator"},
-            "approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"codex-local"},"sessionId":"creator"}
+            "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001", "endpointId":"codex-local"},"sessionId":"creator"},
+            "approver":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001", "endpointId":"codex-local"},"sessionId":"creator"}
         }}}),
         approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
     }).await;

@@ -7,8 +7,9 @@ use collaboration_central_conformance::{ConformanceResult as Result, signin_fixt
 use collaboration_central_core::ENGINE_ALARM_INPUTS;
 use reqwest_websocket::WebSocket;
 use std::sync::Arc;
+use workspace_ids::SessionRef;
 use workspace_model::{
-    Caller, SessionAddress, WorkspaceAnswer, WorkspaceOperation, WorkspaceRequest, WorkspaceResult,
+    Caller, WorkspaceAnswer, WorkspaceOperation, WorkspaceRequest, WorkspaceResult,
     central_mail::{
         CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
     },
@@ -38,9 +39,8 @@ async fn call(
 }
 
 async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
-    let target = SessionAddress {
+    let target = SessionRef {
         machine_id: INSTALLATION.parse()?,
-        endpoint: "codex-local".to_owned().try_into()?,
         session_id: "019f0000-0000-7000-8000-00000000cf07"
             .to_owned()
             .try_into()?,
@@ -240,9 +240,8 @@ async fn unavailable_alarm_publication_still_delivers_welcome_and_reports_typed_
 }
 
 async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) -> Result<()> {
-    let target = SessionAddress {
+    let target = SessionRef {
         machine_id: INSTALLATION.parse()?,
-        endpoint: "codex-local".to_owned().try_into()?,
         session_id: "019f0000-0000-7000-8000-00000000cf07"
             .to_owned()
             .try_into()?,

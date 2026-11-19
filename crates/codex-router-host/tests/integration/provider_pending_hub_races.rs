@@ -9,10 +9,11 @@ use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
     ConversationCancelRequest, ConversationCreateRequest, ConversationOperationSettlement,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, ConversationPromptRequest,
-    EndpointAvailability, EndpointId, EndpointRef, MessageContent, MessageText, NativeSessionScope,
-    NativeSessionSource, NativeSessionView, ObservationEventNotification, OperationId,
-    PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy, ProviderSessionListParams,
-    ProviderSessionState, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
+    EndpointAvailability, EndpointId, EndpointRef, HarnessSessionRef, MessageContent, MessageText,
+    NativeSessionScope, NativeSessionSource, NativeSessionView, ObservationEventNotification,
+    OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
+    ProviderSessionListParams, ProviderSessionState, ProviderWorkingDirectory, RouterAccess,
+    SessionId,
 };
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
@@ -66,7 +67,12 @@ async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
 async fn create_session(
     client: &CollaborationClient,
     root: &Path,
-) -> TestResult<(SessionRef, SessionRef, ProviderIdentity, CodexGeneration)> {
+) -> TestResult<(
+    HarnessSessionRef,
+    HarnessSessionRef,
+    ProviderIdentity,
+    CodexGeneration,
+)> {
     let inventory = client.list_endpoints().await?;
     let provider = inventory
         .endpoints
@@ -86,7 +92,7 @@ async fn create_session(
             _ => None,
         })
         .ok_or("provider generation missing")?;
-    let actor = SessionRef {
+    let actor = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: provider.endpoint.service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
@@ -136,8 +142,8 @@ type PromptTask = tokio::task::JoinHandle<
 /// Prompts in the background: the prompt stays pending on its approval while the test acts.
 fn prompt(
     client: &CollaborationClient,
-    target: &SessionRef,
-    actor: &SessionRef,
+    target: &HarnessSessionRef,
+    actor: &HarnessSessionRef,
     approver: &ProviderIdentity,
     generation: &CodexGeneration,
 ) -> TestResult<(OperationId, PromptTask)> {
@@ -168,7 +174,7 @@ struct HubEventFollow {
 }
 
 impl HubEventFollow {
-    fn new(client: &CollaborationClient, target: &SessionRef) -> Self {
+    fn new(client: &CollaborationClient, target: &HarnessSessionRef) -> Self {
         let client = client.clone();
         let target = target.clone();
         let (observed, events) = tokio::sync::mpsc::unbounded_channel();
@@ -295,7 +301,7 @@ fn assert_interaction_settles_before_turn_end(events: &[Value]) -> TestResult {
 
 async fn listed_state(
     client: &CollaborationClient,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> TestResult<ProviderSessionState> {
     let listing = client
         .list_provider_sessions(ProviderSessionListParams {
@@ -324,7 +330,7 @@ async fn listed_state(
 
 async fn wait_for_retired_endpoint(
     client: &CollaborationClient,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> TestResult {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {

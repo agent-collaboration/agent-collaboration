@@ -4,7 +4,7 @@ use collaboration_protocol::ProviderSettingName;
 
 #[test]
 fn replay_failure_mapping_preserves_pre_and_post_dispatch_provenance() {
-    let target: SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"known"})).expect("target");
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"known"})).expect("target");
     for (error, kind, stage, effect) in [
         (
             ExternalProviderRuntimeError::HistoryReplayAdmissionFailed,

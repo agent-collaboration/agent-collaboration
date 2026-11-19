@@ -7,8 +7,8 @@ use serde_json::{Value, json};
 
 fn native_receipt() -> Result<NativeSendReceipt, Box<dyn std::error::Error>> {
     Ok(serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread-one"},
-        "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread-one"},
+        "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
         "inputKind":"humanUser",
         "representation":"humanUserText",
         "clientUserMessageId":"caller-correlation",
@@ -94,8 +94,8 @@ fn inspection_evidence_round_trips_each_selected_route() -> Result<(), Box<dyn s
     });
     let provider = json!({
         "kind":"providerAcp","bindingId":"binding-one",
-        "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"thread-one"},
+        "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"thread-one"},
         "operationId":OperationId::generate(),"submission":"dispatching"
     });
     let peer = json!({"kind":"claudeCodePeer","sessionId":"peer-one","write":"written"});

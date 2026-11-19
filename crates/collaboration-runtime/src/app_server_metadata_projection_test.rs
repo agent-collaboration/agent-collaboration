@@ -54,7 +54,7 @@ fn display_items() -> Vec<SessionItem> {
 
 fn target() -> SessionRef {
     serde_json::from_value(
-        json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001",
+        json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001",
         "endpointId":"claude-local"},"sessionId":"metadata-session"}),
     )
     .expect("session")

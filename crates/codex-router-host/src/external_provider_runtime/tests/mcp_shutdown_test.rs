@@ -29,10 +29,9 @@ async fn observe_mcp_fixture(
 #[cfg(unix)]
 #[tokio::test]
 async fn decoded_mcp_success_split_before_completed_status_is_accepted() {
-    let expected_service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
-    let expected_identity =
-        collaboration_protocol::UuidIdentity::try_from(expected_service_id.to_owned())
-            .expect("expected identity");
+    let expected_service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
+    let expected_identity = workspace_ids::MachineId::try_from(expected_service_id.to_owned())
+        .expect("expected identity");
     let (tool_calls, prompt_outcome) = observe_mcp_fixture(
         Some(serde_json::json!({"success":true})),
         expected_service_id,
@@ -61,10 +60,9 @@ async fn decoded_mcp_success_split_before_completed_status_is_accepted() {
 #[cfg(unix)]
 #[tokio::test]
 async fn completed_mcp_non_success_outcomes_are_not_accepted() {
-    let expected_service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
-    let expected_identity =
-        collaboration_protocol::UuidIdentity::try_from(expected_service_id.to_owned())
-            .expect("expected identity");
+    let expected_service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
+    let expected_identity = workspace_ids::MachineId::try_from(expected_service_id.to_owned())
+        .expect("expected identity");
     for raw_output in [
         Some(serde_json::json!({"error":"failed"})),
         Some(serde_json::json!({"success":true,"error":"failed"})),
@@ -86,10 +84,9 @@ async fn completed_mcp_non_success_outcomes_are_not_accepted() {
 #[cfg(unix)]
 #[tokio::test]
 async fn completed_mcp_success_with_wrong_returned_service_is_not_accepted() {
-    let expected_identity = collaboration_protocol::UuidIdentity::try_from(
-        "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned(),
-    )
-    .expect("expected identity");
+    let expected_identity =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())
+            .expect("expected identity");
     let (tool_calls, prompt_outcome) = observe_mcp_fixture(
         Some(serde_json::json!({"success":true})),
         "2ff962c5-7fa3-4c18-a5ca-1bbe8db09e81",
@@ -106,10 +103,9 @@ async fn completed_mcp_success_with_wrong_returned_service_is_not_accepted() {
 #[cfg(unix)]
 #[tokio::test]
 async fn completed_mcp_success_accepts_one_bounded_owned_identity_in_presentation() {
-    let expected_service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
-    let expected_identity =
-        collaboration_protocol::UuidIdentity::try_from(expected_service_id.to_owned())
-            .expect("expected identity");
+    let expected_service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
+    let expected_identity = workspace_ids::MachineId::try_from(expected_service_id.to_owned())
+        .expect("expected identity");
     for response in [
         expected_service_id.to_owned(),
         format!("`{expected_service_id}`"),
@@ -127,13 +123,12 @@ async fn completed_mcp_success_accepts_one_bounded_owned_identity_in_presentatio
 
 #[test]
 fn echoed_router_marker_without_typed_tool_event_is_not_native_execution() {
-    let expected_identity = collaboration_protocol::UuidIdentity::try_from(
-        "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned(),
-    )
-    .expect("expected identity");
+    let expected_identity =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())
+            .expect("expected identity");
     assert!(!accepts_native_router_result(
         &[],
-        "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89",
+        "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89",
         &expected_identity
     ));
 }

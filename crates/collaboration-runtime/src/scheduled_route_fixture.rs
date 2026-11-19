@@ -13,7 +13,7 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::{RunObservationContext, ScheduledRunExecution};
 use collaboration_protocol::RunExecution;
-use collaboration_protocol::{CodexGeneration, EndpointRef, PushId, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef, PushId};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -73,7 +73,7 @@ pub enum FakeSettlementPlan {
 
 pub struct FakeScheduledExecution {
     pub kind: FakeRouteKind,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub interactions: Arc<interaction_storage::InteractionStore>,
     pub observed_push_ids: Arc<std::sync::Mutex<Vec<PushId>>>,
     /// Every call to `submit_run`, counted before any check: the native witness. The
@@ -90,7 +90,8 @@ pub struct FakeScheduledExecution {
 impl FakeScheduledExecution {
     fn prepared_evidence(
         &self,
-    ) -> Result<RouteEffectEvidence<SessionRef, CodexGeneration>, DeliveryContractError> {
+    ) -> Result<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>, DeliveryContractError>
+    {
         Ok(match self.kind {
             FakeRouteKind::Provider => {
                 RouteEffectEvidence::ProviderAcp(ProviderAcpEffectEvidence {
@@ -155,7 +156,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
     fn initial_evidence(
         &self,
         _: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, RouteEffectEvidence<SessionRef, CodexGeneration>> {
+    ) -> DeliveryFuture<'_, RouteEffectEvidence<HarnessSessionRef, CodexGeneration>> {
         Box::pin(async move {
             let mut evidence = self.prepared_evidence()?;
             match &mut evidence {
@@ -195,7 +196,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
 
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         _declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {

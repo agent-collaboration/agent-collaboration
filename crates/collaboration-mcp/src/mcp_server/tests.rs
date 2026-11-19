@@ -6,7 +6,7 @@ use collaboration_protocol::{ConversationCreateOutcome, OperationId};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
-const FIXTURE_SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const FIXTURE_SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 const FIXTURE_PUSH_ID: &str = "018f1f12-3456-7abc-8def-0123456789ab";
 
 fn fixture_session(endpoint_id: &str, session_id: &str) -> Value {

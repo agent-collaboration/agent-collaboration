@@ -77,7 +77,7 @@ fn wake_failure_round_trip_retains_field_guidance() -> Result<(), Box<dyn std::e
 #[test]
 fn lifecycle_response_carries_dispatched_effects_and_discarded_ids()
 -> Result<(), Box<dyn std::error::Error>> {
-    let value = json!({"deliveryId":"019f0000-0000-7000-8000-000000000001","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"B"},"mode":"queue","source":{"kind":"wake","wakeupId":"019f0000-0000-7000-8000-000000000002","occurrenceId":"019f0000-0000-7000-8000-000000000003"},"eligibleAt":"2026-09-08T00:00:00.000Z","expiresAt":null,"disposition":"pending","evidence":{"kind":"notDispatched"}});
+    let value = json!({"deliveryId":"019f0000-0000-7000-8000-000000000001","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"B"},"mode":"queue","source":{"kind":"wake","wakeupId":"019f0000-0000-7000-8000-000000000002","occurrenceId":"019f0000-0000-7000-8000-000000000003"},"eligibleAt":"2026-09-08T00:00:00.000Z","expiresAt":null,"disposition":"pending","evidence":{"kind":"notDispatched"}});
     let parsed: collaboration_protocol::DeliveryInspection = serde_json::from_value(value.clone())?;
     if serde_json::to_value(parsed)? != value {
         return Err("delivery inspection lost fields".into());

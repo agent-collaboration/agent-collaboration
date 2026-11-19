@@ -26,7 +26,7 @@ use workspace_model::{
 #[tokio::test]
 async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and_mail_replies()
 -> Result<()> {
-    // Arrange: the client knows only its installation and issued bearer token.
+    // Arrange: the client knows only its machine_id and issued bearer token.
     let fixture = Fixture::new().await?;
     let mut client = LinkClient::new(INSTALLATION.parse()?, fixture.clock.clone());
     let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
@@ -34,7 +34,7 @@ async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and
     };
     let mut socket = fixture.connect().await?;
 
-    // Act / Assert: a private central row key must never become the public identity.
+    // Act / Assert: Welcome and storage must use the same Router machine id.
     let welcome = receive(&mut socket).await?;
     assert_eq!(
         welcome,
@@ -52,13 +52,13 @@ async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and
     let rows = runtime
         .statement_host()
         .read(central_storage::Statement {
-            sql: "SELECT machine_id FROM machines WHERE installation_id=?",
+            sql: "SELECT machine_id FROM machines WHERE machine_id=?",
             args: vec![central_storage::SqlValue::Text(INSTALLATION.into())],
         })
         .await?;
     assert!(
-        matches!(rows.rows.as_slice(), [row] if matches!(row.as_slice(), [central_storage::SqlValue::Text(id)] if id != INSTALLATION)),
-        "fixture must keep private row and public installation distinct"
+        matches!(rows.rows.as_slice(), [row] if matches!(row.as_slice(), [central_storage::SqlValue::Text(id)] if id == INSTALLATION)),
+        "owning row must use the Router machine id"
     );
     send(&mut socket, &LinkFrame::Ping).await?;
     assert_eq!(receive(&mut socket).await?, LinkFrame::Pong);
@@ -218,7 +218,7 @@ async fn public_route_requires_upgrade_and_header_token_and_matching_organizatio
             .bearer_auth("bad-token"),
         client
             .get(fixture.url(signed::ORGANIZATION))
-            // A well-formed installation with no machine row is refused.
+            // A well-formed machine_id with no machine row is refused.
             .bearer_auth(fixture.token_for_installation("019f0000-0000-7000-8000-00000000ce0f")?),
         client
             .get(fixture.url(OTHER_ORG))
@@ -243,9 +243,6 @@ async fn acknowledgements_are_explicitly_unsupported_and_shutdown_drains_open_li
     socket
         .send(Message::Text(serde_json::to_string(&DataFrame::Ack {
             message_id: "019f0000-0000-7000-8000-00000000ce30".parse()?,
-            send_id: "019f0000-0000-7000-8000-00000000ce31"
-                .to_owned()
-                .try_into()?,
             answer: central_link_protocol::DeliveryAnswer::Accepted,
         })?))
         .await?;

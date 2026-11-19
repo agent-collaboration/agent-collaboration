@@ -21,7 +21,7 @@ async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result
         .unwrap()
 }
 
-fn wake(target: workspace_model::SessionAddress, due_at: workspace_model::Timestamp) -> Operation {
+fn wake(target: workspace_ids::SessionRef, due_at: workspace_model::Timestamp) -> Operation {
     Operation::SetWake {
         target,
         due_at,
@@ -98,7 +98,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
         .await,
         Result::Refused(Refusal::WakeNotFound { wake_id: missing })
     );
-    fixture.clock.set_utc(due);
+    fixture.set_utc(due).await;
     runtime.after_event().await.unwrap();
     assert_eq!(runtime.after_event().await.unwrap().work.wakes_fired, 0);
     assert_eq!(
@@ -151,7 +151,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
             workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
-            serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
+            serde_json::from_str::<workspace_ids::SessionRef>(address).unwrap(),
             target
         );
         let workspace_model::central_mail::MessageBody::Wake {
@@ -197,7 +197,7 @@ async fn native_driver_fires_after_manual_clock_advance() {
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
-    fixture.clock.advance(Duration::from_secs(300)).unwrap();
+    fixture.advance(Duration::from_secs(300)).await;
     held.until_held().await;
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state, (SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(id)] }).await.unwrap();
     assert_eq!(
@@ -268,7 +268,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
-    fixture.clock.advance(Duration::from_secs(300)).unwrap();
+    fixture.advance(Duration::from_secs(300)).await;
     held.until_held().await;
     let rows = reopened.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
     assert_eq!(

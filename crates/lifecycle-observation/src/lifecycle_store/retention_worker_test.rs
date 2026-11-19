@@ -71,7 +71,7 @@ fn seconds(text: &str) -> i64 {
 }
 
 const ENDPOINT: &str =
-    r#"{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"}"#;
+    r#"{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"}"#;
 
 /// An observation with no thread, so expiry checkpoints no address for it.
 fn backend_observation() -> LifecycleObservation {
@@ -112,7 +112,7 @@ impl Journal {
         let path = directory.path().join("session-registry.sqlite");
         let journal = ObservationJournal::open(
             &path,
-            "00000000-0000-4000-8000-000000000001"
+            "00000000-0000-7000-8000-000000000001"
                 .to_owned()
                 .try_into()
                 .unwrap(),

@@ -100,7 +100,7 @@ async fn pending_rejected_schedule_push_survives_two_months_and_reuses_its_id() 
             .lock()
             .await
             .read_run::<
-                SessionRef,
+                HarnessSessionRef,
                 EndpointRef,
                 CodexGeneration,
                 collaboration_runtime::stored_run_receipt::StoredRunReceipt,
@@ -130,7 +130,7 @@ async fn pending_rejected_schedule_push_survives_two_months_and_reuses_its_id() 
     let run = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await?;
     if run.phase != RunPhase::Executing {
         return Err("run retry did not proceed after its old push expired".into());

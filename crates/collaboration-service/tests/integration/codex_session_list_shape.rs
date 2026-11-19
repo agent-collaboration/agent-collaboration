@@ -8,7 +8,7 @@ use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000031";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000031";
 /// Published only when the catalog recorded them.
 const OPTIONAL_SESSION_FIELDS: [&str; 2] = ["model", "reasoningEffort"];
 const SESSION_FIELDS: [&str; 10] = [

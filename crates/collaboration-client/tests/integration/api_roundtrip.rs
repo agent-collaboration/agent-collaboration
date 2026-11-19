@@ -8,7 +8,7 @@ async fn client_discovers_over_the_real_api_socket() {
     // Arrange: no backend process; only the owned public service boundary.
     let root = private_directory().unwrap_or_else(|error| panic!("directory: {error}"));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|error| panic!("identity: {error}"));
@@ -26,7 +26,7 @@ async fn client_discovers_over_the_real_api_socket() {
     // Assert
     assert!(inventory.endpoints.is_empty());
     assert_eq!(inventory.service_epoch, client.identity().service_epoch);
-    let endpoint = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"label":"Debug Codex","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":null,"generation":null}]});
+    let endpoint = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"label":"Debug Codex","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":null,"generation":null}]});
     directory
         .publish(
             serde_json::from_value(endpoint.clone())
@@ -52,7 +52,7 @@ async fn client_discovers_over_the_real_api_socket() {
 #[tokio::test]
 async fn real_service_snapshot_folds_prior_publications() {
     // Arrange: actual service publication and directory sequence assignment.
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let endpoint_description = |label: &str| -> collaboration_protocol::EndpointDescription {
         serde_json::from_value(json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},

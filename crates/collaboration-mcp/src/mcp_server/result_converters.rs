@@ -31,7 +31,7 @@ pub(crate) fn structured_tool_error(value: serde_json::Value) -> CallToolResult 
 
 pub(super) fn operation_error_result(
     failure: collaboration_protocol::AdapterOperationFailure,
-    target: Option<collaboration_protocol::SessionRef>,
+    target: Option<collaboration_protocol::HarnessSessionRef>,
     turn_id: Option<collaboration_protocol::NonEmptyText>,
 ) -> CallToolResult {
     serde_json::to_value(failure)
@@ -49,7 +49,7 @@ pub(super) fn operation_error_result(
 pub(super) fn failure_naming(
     failure: &collaboration_protocol::AdapterOperationFailure,
     field: &str,
-    session: Option<collaboration_protocol::SessionRef>,
+    session: Option<collaboration_protocol::HarnessSessionRef>,
 ) -> CallToolResult {
     serde_json::to_value(failure)
         .map(|mut value| {

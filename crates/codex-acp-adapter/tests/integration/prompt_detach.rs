@@ -228,7 +228,7 @@ async fn frontend_eof_detaches_active_turn_and_reconnect_is_busy_until_native_id
 
     let schemas = fixture_schemas();
     let generation: collaboration_protocol::CodexGeneration = serde_json::from_value(
-        json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+        json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
     )
     .unwrap();
     let holder = Arc::new(TestBindingHolder::default());
@@ -286,7 +286,7 @@ async fn frontend_eof_detaches_active_turn_and_reconnect_is_busy_until_native_id
         .get("result")
         .is_some()
     );
-    let created = call(&mut read, &mut write, "new", "session/new", json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"operationId":collaboration_protocol::OperationId::generate(),"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}})).await;
+    let created = call(&mut read, &mut write, "new", "session/new", json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"operationId":collaboration_protocol::OperationId::generate(),"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}})).await;
     assert_eq!(created["result"]["sessionId"], "thread-a");
     write.write_all(format!("{}\n", json!({"jsonrpc":"2.0","id":"prompt","method":"session/prompt","params":{"sessionId":"thread-a","prompt":[{"type":"text","text":"work"}],"_meta":{"codexRouter":{"effort":"medium"}}}})).as_bytes()).await.unwrap();
     turn_started_rx.await.unwrap();
@@ -407,7 +407,7 @@ async fn native_callback_after_prompt_command_eof_interrupts_active_turn() {
     );
     let mut catalog = AcpSchemaCatalog::load().unwrap();
     let generation: collaboration_protocol::CodexGeneration = serde_json::from_value(
-        json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+        json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
     )
     .unwrap();
     let session = AcpSessionBinding::load_existing(
@@ -518,7 +518,7 @@ async fn native_callback_after_frontend_eof_interrupts_turn_and_finishes_actor()
 
     let schemas = fixture_schemas();
     let generation: collaboration_protocol::CodexGeneration = serde_json::from_value(
-        json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+        json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
     )
     .unwrap();
     let inputs = AcpConnectionInputs {
@@ -631,7 +631,7 @@ async fn session_load_without_native_thread_status_fails_closed() {
 
     let schemas = fixture_schemas();
     let generation: collaboration_protocol::CodexGeneration = serde_json::from_value(
-        json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+        json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
     )
     .unwrap();
     let holder = Arc::new(TestBindingHolder::default());

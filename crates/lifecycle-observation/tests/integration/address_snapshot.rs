@@ -7,12 +7,12 @@ async fn captured_addresses_do_not_change_when_journal_advances() {
         "/tmp/address-snapshot-{}.sqlite",
         std::process::id()
     ));
-    let id = "00000000-0000-4000-8000-000000000001"
+    let id = "00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()
         .unwrap_or_else(|e| panic!("id: {e}"));
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"});
     let observation = |thread| {
         serde_json::from_value::<LifecycleObservation>(json!({"observedAt":"2026-09-05T12:00:00Z","source":"inventoryRead","scope":{"endpoint":endpoint,"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},"subject":{"kind":"thread","address":{"endpoint":endpoint,"nativeThreadId":thread}},"change":{"kind":"threadDiscovered"}})).unwrap_or_else(|e|panic!("observation: {e}"))
     };

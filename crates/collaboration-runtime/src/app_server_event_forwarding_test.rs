@@ -5,7 +5,7 @@ use session_event_model::SessionItemKind;
 // item starts establish identity; only deltas feed live message/reasoning text.
 fn assert_live_delta_text(kind: SessionItemKind, initial: &str, updates: &[&str], expected: &str) {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001",
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001",
         "endpointId":"claude-local"},"sessionId":"stream-delta-session"
     }))
     .expect("session");
@@ -130,7 +130,7 @@ fn initial_text_delta_handles_empty_single_and_unchanged_chunks() {
 )]
 fn lost_turn_completion_has_a_typed_error_message() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
     let lost = render_turn_event(
@@ -162,7 +162,7 @@ fn lost_turn_completion_has_a_typed_error_message() -> Result<(), Box<dyn std::e
 )]
 fn item_completion_without_an_active_turn_is_not_sent() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
@@ -201,7 +201,7 @@ fn item_completion_without_an_active_turn_is_not_sent() -> Result<(), Box<dyn st
 )]
 fn reasoning_update_streams_summary_text_delta() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
@@ -253,7 +253,7 @@ fn reasoning_update_streams_summary_text_delta() -> Result<(), Box<dyn std::erro
 fn snapshot_includes_the_running_turn_and_its_latest_items()
 -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
     let snapshot = vec![
@@ -300,7 +300,7 @@ fn snapshot_includes_the_running_turn_and_its_latest_items()
 )]
 fn plan_item_projects_only_one_plan_surface() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
@@ -374,7 +374,7 @@ fn plan_item_projects_only_one_plan_surface() -> Result<(), Box<dyn std::error::
 )]
 fn item_lifecycle_uses_typed_v2_notifications() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;

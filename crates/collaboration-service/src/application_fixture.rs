@@ -14,7 +14,7 @@ pub struct ApplicationFixture {
     pub(crate) subscription_presence:
         Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
     pub(crate) runtime_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-    pub(crate) service_id: UuidIdentity,
+    pub(crate) service_id: workspace_ids::MachineId,
     pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
     pub(crate) fleet_link: board_fleet_sync::FleetLinkObservation,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
@@ -385,8 +385,8 @@ impl ApplicationFixture {
     }
 
     pub fn new(service_id: &str, service_epoch: &str) -> Result<Self, String> {
-        let service_id =
-            UuidIdentity::try_from(service_id.to_owned()).map_err(|error| error.to_string())?;
+        let service_id = workspace_ids::MachineId::try_from(service_id.to_owned())
+            .map_err(|error| error.to_string())?;
         let machine_identity =
             collaboration_contracts::MachineIdentity::new(service_id.clone(), None)
                 .map_err(|error| error.to_string())?;

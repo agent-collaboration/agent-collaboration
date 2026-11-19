@@ -8,7 +8,7 @@ use workspace_model::central_mail::{
     CentralMailRequest, CentralMailResult as Result,
 };
 
-fn wake(target: workspace_model::SessionAddress, due_at: workspace_model::Timestamp) -> Operation {
+fn wake(target: workspace_ids::SessionRef, due_at: workspace_model::Timestamp) -> Operation {
     Operation::SetWake {
         target,
         due_at,

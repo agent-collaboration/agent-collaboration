@@ -85,7 +85,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     );
 
     // One minute before the mark is outside the batch's 50 s look-ahead.
-    fixture.clock.set_utc(mark - chrono::Duration::minutes(1));
+    fixture.set_utc(mark - chrono::Duration::minutes(1)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         stored("SELECT state FROM messages WHERE message_id=?").await[0][0],
@@ -93,7 +93,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         "never cancelled before its mark"
     );
 
-    fixture.clock.set_utc(mark);
+    fixture.set_utc(mark).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         stored("SELECT state FROM messages WHERE message_id=?").await[0][0],
@@ -116,8 +116,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         MessageSender::Central
     );
     assert_eq!(
-        serde_json::from_str::<workspace_model::SessionAddress>(row_text(&notice[1]).unwrap())
-            .unwrap(),
+        serde_json::from_str::<workspace_ids::SessionRef>(row_text(&notice[1]).unwrap()).unwrap(),
         sender
     );
     assert_eq!(
@@ -140,7 +139,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         "the outcome message is queued with no cancel of its own"
     );
 
-    fixture.clock.set_utc(mark + chrono::Duration::minutes(30));
+    fixture.set_utc(mark + chrono::Duration::minutes(30)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         runtime.statement_host().published_alarm().unwrap(),

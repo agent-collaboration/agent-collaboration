@@ -101,7 +101,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
         "A set its +5 s backstop"
     );
     let start = f.clock.utc_now();
-    f.clock.set_utc(start + chrono::Duration::seconds(31));
+    f.set_utc(start + chrono::Duration::seconds(31)).await;
 
     // Unrelated request B claims the due batch and completes while A is held.
     let reply = f

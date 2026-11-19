@@ -1,7 +1,7 @@
 //! Bind a read inventory to its manifest-derived service, independently of native launch eligibility.
 use collaboration_client::protocol::{
     ChannelDescription, CodexGeneration, EndpointAvailability, EndpointInventory, EndpointRef,
-    NativeSessionView, UuidIdentity,
+    NativeSessionView,
 };
 use std::collections::BTreeSet;
 
@@ -41,7 +41,7 @@ pub struct NativeInventoryBinding {
 pub fn bind_native_inventory(
     inventory: &EndpointInventory,
     router_identity: &collaboration_client::RouterIdentity,
-    expected_service: &UuidIdentity,
+    expected_service: &workspace_ids::MachineId,
     selector: NativeEndpointSelector,
     view: NativeSessionView,
 ) -> Result<NativeInventoryBinding, NativeBindingRejection> {

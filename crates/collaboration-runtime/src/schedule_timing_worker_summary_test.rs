@@ -5,7 +5,7 @@ use super::{BASE_MS, SchedulerFixture, TestResult, advance, at, settled, wait_un
 use agent_automation::{
     CessationEvidence, PreparationEffect, RunId, SubmissionEffect, SummaryAttempt, SummaryPhase,
 };
-use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef};
 use futures_util::{SinkExt as _, StreamExt as _};
 use router_clock::ClockInstant;
 use runtime_primitives::{Clock, SyncTime};
@@ -14,7 +14,7 @@ use sqlx::Connection as _;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const SUMMARY_SECONDS: u64 = 60;
 
 /// One request the fake app-server answered, with the wall time it arrived.
@@ -137,7 +137,7 @@ fn native_schemas() -> TestResult<Arc<codex_native_integration::NativePayloadSch
 impl SchedulerFixture {
     /// Seeds a Run whose summary turn runs on `summary-thread` until base + 60 s.
     async fn seed_running_summary(&self) -> TestResult<RunId> {
-        let target: SessionRef = serde_json::from_value(json!({
+        let target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},
             "sessionId":"summary-thread"
         }))?;
@@ -219,7 +219,7 @@ impl SchedulerFixture {
             .store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(run)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(run)
             .await?
             .summary_attempt
             .map(|attempt| attempt.phase))

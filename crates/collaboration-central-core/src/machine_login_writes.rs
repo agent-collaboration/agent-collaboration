@@ -31,7 +31,7 @@ pub(crate) fn statements(
     if !changes.is_empty()
         && let Some(before) = &machine
     {
-        statements.push(exact("UPDATE machines SET machine_id=machine_id WHERE machine_id=? AND installation_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)", vec![text(before.id),text(before.installation.as_str()),generation(before.generation.get())?,text(machine_state(before.state)),text(before.label.as_str()),encode(&before.allowed_workspaces,"machines.allowed_workspaces")?]));
+        statements.push(exact("UPDATE machines SET machine_id=machine_id WHERE machine_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)", vec![text(before.machine_id.as_str()),generation(before.generation.get())?,text(machine_state(before.state)),text(before.label.as_str()),encode(&before.allowed_workspaces,"machines.allowed_workspaces")?]));
     }
     for change in changes {
         match change {
@@ -43,10 +43,7 @@ pub(crate) fn statements(
                 let owner = machine
                     .as_ref()
                     .ok_or_else(|| corrupt("machine_approvals.machine_id"))?;
-                if owner.id != next.machine_id
-                    || owner.installation != next.installation
-                    || owner.generation != next.base_generation
-                {
+                if owner.machine_id != next.machine_id || owner.generation != next.base_generation {
                     return Err(corrupt("machine_approvals.machine_id"));
                 }
                 statements.push(insert_enrollment(next, &at)?);
@@ -100,8 +97,6 @@ fn put_machine(
     next: &MachineRow,
     at: &str,
 ) -> Result<GuardedStatement, StoreFailure> {
-    values::private_id(&next.id.to_string(), "machines.machine_id")?;
-    values::private_id(next.installation.as_str(), "machines.installation_id")?;
     let allowed = encode(&next.allowed_workspaces, "machines.allowed_workspaces")?;
     match before {
         None => {
@@ -109,10 +104,9 @@ fn put_machine(
                 return Err(corrupt("machines.enrollment_generation"));
             }
             Ok(exact(
-                "INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO machines(machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
                 vec![
-                    text(next.id),
-                    text(next.installation.as_str()),
+                    text(next.machine_id.as_str()),
                     text(next.label.as_str()),
                     text(machine_state(next.state)),
                     allowed,
@@ -123,7 +117,7 @@ fn put_machine(
             ))
         }
         Some(before) => {
-            if before.id != next.id || before.installation != next.installation {
+            if before.machine_id != next.machine_id {
                 return Err(corrupt("machines.machine_id"));
             }
             if next.generation != before.generation
@@ -132,15 +126,14 @@ fn put_machine(
                 return Err(corrupt("machines.enrollment_generation"));
             }
             Ok(exact(
-                "UPDATE machines SET label=?,state=?,allowed_workspaces=?,enrollment_generation=?,updated_at=? WHERE machine_id=? AND installation_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)",
+                "UPDATE machines SET label=?,state=?,allowed_workspaces=?,enrollment_generation=?,updated_at=? WHERE machine_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)",
                 vec![
                     text(next.label.as_str()),
                     text(machine_state(next.state)),
                     allowed,
                     generation(next.generation.get())?,
                     text(at),
-                    text(before.id),
-                    text(before.installation.as_str()),
+                    text(before.machine_id.as_str()),
                     generation(before.generation.get())?,
                     text(machine_state(before.state)),
                     text(before.label.as_str()),
@@ -232,7 +225,7 @@ fn insert_enrollment(next: &StoredEnrollment, at: &str) -> Result<GuardedStateme
         vec![
             text(next.id.as_str()),
             text(next.request_id.as_str()),
-            text(next.machine_id),
+            text(next.machine_id.as_str()),
             text(next.label.as_str()),
             encode(
                 &next.allowed_workspaces,
@@ -266,7 +259,6 @@ fn replace_enrollment(
 ) -> Result<GuardedStatement, StoreFailure> {
     if before.id != next.id
         || before.machine_id != next.machine_id
-        || before.installation != next.installation
         || before.request_id != next.request_id
         || before.approved_by != next.approved_by
         || before.label != next.label
@@ -295,7 +287,7 @@ fn replace_enrollment(
             nullable(new.ended_at),
             text(at),
             text(before.id.as_str()),
-            text(before.machine_id),
+            text(before.machine_id.as_str()),
             text(old.state),
             nullable(old.reason),
             nullable(old.client),

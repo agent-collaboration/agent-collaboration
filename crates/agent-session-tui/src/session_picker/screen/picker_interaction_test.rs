@@ -22,10 +22,10 @@ async fn assert_provider_details_notice(width: usize, height: usize) {
     let summary: collaboration_client::protocol::ProviderSessionSummary =
         serde_json::from_value(serde_json::json!({
             "origin":"hostedProvider",
-            "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-one"},
+            "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-one"},
             "workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},
             "approver":{"kind":"human","humanId":"owner"},
-            "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
+            "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
         }))
         .expect("provider summary");
     let mut request = picker_request();

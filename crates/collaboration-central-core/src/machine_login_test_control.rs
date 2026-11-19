@@ -4,8 +4,9 @@ use crate::organization_authority::machine_login::{self, EnrollmentQuery};
 use crate::person_request::AdminOperationId;
 use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_storage::StoreFailure;
-use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_identity_protocol::EnrollmentId;
 use serde::{Deserialize, Serialize};
+use workspace_ids::MachineId;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(
@@ -18,7 +19,7 @@ pub enum MachineLoginControl {
     Revoke {
         person_id: PersonId,
         operation_id: AdminOperationId,
-        installation: InstallationId,
+        machine_id: MachineId,
         enrollment_id: EnrollmentId,
     },
 }
@@ -33,11 +34,11 @@ pub async fn machine_login_control<H: ObjectHost, S: WorkspaceStoreCalls>(
         MachineLoginControl::Revoke {
             person_id,
             operation_id,
-            installation,
+            machine_id,
             enrollment_id,
         } => {
             let query = EnrollmentQuery {
-                installation: Some(installation),
+                machine_id: Some(machine_id),
                 enrollment: Some(enrollment_id.clone()),
                 ..EnrollmentQuery::default()
             };

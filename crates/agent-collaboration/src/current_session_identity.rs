@@ -3,7 +3,7 @@
 //! Each supported harness exports its conversation ID into tool processes. The shared
 //! MCP server never sees that environment, so the CLI is the only place Router can
 //! learn "who am I" without the caller declaring it by hand.
-use collaboration_client::protocol::{EndpointRef, SessionRef, UuidIdentity};
+use collaboration_client::protocol::{EndpointRef, HarnessSessionRef};
 use std::ffi::OsString;
 
 /// One harness whose tool environment names the current conversation.
@@ -56,7 +56,7 @@ impl std::fmt::Display for CurrentSessionIdentityError {
             ),
             Self::Ambiguous { variables } => write!(
                 formatter,
-                "current session identity is ambiguous: {} are set together; pass an explicit SessionRef",
+                "current session identity is ambiguous: {} are set together; pass an explicit HarnessSessionRef",
                 variables.join(" and ")
             ),
             Self::NotUnicode { variable } => {
@@ -111,8 +111,11 @@ pub(crate) fn resolve_harness_session_identity(
 
 impl HarnessSessionIdentity {
     /// Binds the harness session to the Router service that owns its endpoint.
-    pub(crate) fn session_ref(&self, service_id: &UuidIdentity) -> Result<SessionRef, String> {
-        Ok(SessionRef {
+    pub(crate) fn session_ref(
+        &self,
+        service_id: &workspace_ids::MachineId,
+    ) -> Result<HarnessSessionRef, String> {
+        Ok(HarnessSessionRef {
             endpoint: EndpointRef {
                 service_id: service_id.clone(),
                 endpoint_id: self

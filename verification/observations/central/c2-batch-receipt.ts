@@ -72,10 +72,10 @@ function assertBatchFrames(receipt: C2BatchReceipt): void {
   assert.ok(originalCaller.kind === "session", "batch journey uses an ordinary session caller");
   assert.equal(
     originalCaller.value.machineId,
-    receipt.installationId,
-    "batch caller uses installation",
+    receipt.machineId,
+    "batch caller uses the Router machine ID",
   );
-  assert.equal(receipt.welcome.machineId, receipt.installationId, "Welcome uses installation");
+  assert.equal(receipt.welcome.machineId, receipt.machineId, "Welcome uses the Router machine ID");
   const correlations: string[] = [receipt.baselineRequest.request.correlationId];
   const writeIds: string[] = [];
   for (const [index, member] of receipt.batchRequest.requests.entries()) {

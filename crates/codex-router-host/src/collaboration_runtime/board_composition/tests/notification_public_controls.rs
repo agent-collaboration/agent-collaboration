@@ -9,7 +9,7 @@ use std::os::unix::fs::PermissionsExt;
 use tokio::time::timeout;
 
 fn session(id: &str) -> Value {
-    json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":id})
+    json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":id})
 }
 fn request(project: &ProjectId, actor: Value, operation: Value) -> Value {
     json!({"projectId":project,"requestId":RequestId::generate(),"protocolVersion":1,

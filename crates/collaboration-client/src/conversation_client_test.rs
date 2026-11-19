@@ -14,10 +14,10 @@ fn provider_prompt_and_load_settlements_keep_exact_operation_and_client_evidence
         ConversationOperationResult, ConversationSettlementDetail, ConversationStopReason,
         ProviderLoadOutput, ProviderPromptOutput,
     };
-    use collaboration_protocol::{ConversationOperationWaitResult, OperationId, SessionRef};
+    use collaboration_protocol::{ConversationOperationWaitResult, HarnessSessionRef, OperationId};
 
     let operation_id = OperationId::generate();
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"019f0000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"provider-thread"
     }))
@@ -199,7 +199,7 @@ fn typed_human_create_is_provider_only_and_legacy_session_json_remains_valid() {
         "sessionId":"caller"
     });
     input.created_by = serde_json::from_value(session.clone())
-        .unwrap_or_else(|error| panic!("legacy SessionRef create actor: {error}"));
+        .unwrap_or_else(|error| panic!("legacy HarnessSessionRef create actor: {error}"));
     assert!(matches!(
         codex_create_actors(&input),
         Err(ConversationClientError::UnsupportedInput { field: "approver", fix, .. })
@@ -207,7 +207,7 @@ fn typed_human_create_is_provider_only_and_legacy_session_json_remains_valid() {
     ));
     input.approver = Some(
         serde_json::from_value(session)
-            .unwrap_or_else(|error| panic!("legacy SessionRef approver: {error}")),
+            .unwrap_or_else(|error| panic!("legacy HarnessSessionRef approver: {error}")),
     );
     assert!(codex_create_actors(&input).is_ok());
 }
@@ -276,7 +276,7 @@ impl ScriptedProviderRouter {
 }
 
 impl crate::LocalCollaboration for ScriptedProviderRouter {
-    fn service_id(&self) -> collaboration_protocol::UuidIdentity {
+    fn service_id(&self) -> workspace_ids::MachineId {
         "019f0000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()

@@ -155,7 +155,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
     };
     // Keep the newly admitted interval's first mark ahead of the driver while corrupting rows.
-    advance_to(f, now(f) + chrono::Duration::seconds(1));
+    advance_to(f, now(f) + chrono::Duration::seconds(1)).await;
     let interval = request(
         f,
         &f.caller,

@@ -30,7 +30,7 @@ mod tests {
             .mode(0o700)
             .create(&root)
             .unwrap();
-        let id = "00000000-0000-4000-8000-000000000001";
+        let id = "00000000-0000-7000-8000-000000000001";
         let endpoint = serde_json::from_value(json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"label":"ACP bridge fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]})).unwrap();
         let identity = ApplicationFixture::new(id, id)
             .unwrap()

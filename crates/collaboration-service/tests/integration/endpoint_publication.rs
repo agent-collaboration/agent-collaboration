@@ -1,4 +1,4 @@
-use collaboration_protocol::{EndpointDescription, UuidIdentity};
+use collaboration_protocol::EndpointDescription;
 use collaboration_runtime::EndpointDirectory;
 use serde_json::json;
 
@@ -11,10 +11,11 @@ fn codex_endpoint(service_id: &str) -> Result<EndpointDescription, serde_json::E
 #[test]
 fn the_inventory_counts_every_publication_and_holds_the_latest_description() {
     // Arrange
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())
-        .unwrap_or_else(|e| panic!("id: {e}"));
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
+            .unwrap_or_else(|e| panic!("id: {e}"));
     let directory = EndpointDirectory::new(service_id);
-    let endpoint = codex_endpoint("00000000-0000-4000-8000-000000000001")
+    let endpoint = codex_endpoint("00000000-0000-7000-8000-000000000001")
         .unwrap_or_else(|e| panic!("endpoint: {e}"));
     let reader = directory
         .subscribe()

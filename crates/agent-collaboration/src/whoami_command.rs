@@ -1,8 +1,8 @@
-//! Prints the caller's own SessionRef so agents can pass it to MCP tools as `from`/`actor`.
+//! Prints the caller's own HarnessSessionRef so agents can pass it to MCP tools as `from`/`actor`.
 use crate::current_session_identity::{HarnessSessionIdentity, read_harness_session_identity};
 use crate::endpoint_commands::{report_failure, resolve_directory, result_envelope};
 use clap::Parser;
-use collaboration_client::{ClientError, CollaborationClient, protocol::SessionRef};
+use collaboration_client::{ClientError, CollaborationClient, protocol::HarnessSessionRef};
 use serde_json::json;
 use std::{
     ffi::OsString,
@@ -20,7 +20,7 @@ struct WhoamiArguments {
 }
 
 struct ResolvedCurrentSession {
-    session: SessionRef,
+    session: HarnessSessionRef,
     endpoint_registered: bool,
     machine_id: String,
     peer_id: String,

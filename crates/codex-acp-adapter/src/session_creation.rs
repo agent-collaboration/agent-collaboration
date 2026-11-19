@@ -88,8 +88,8 @@ struct RouterModelChoice<'a> {
     effort: Option<&'a str>,
     fork_thread_id: Option<&'a str>,
     access: RouterAccess,
-    created_by: collaboration_protocol::SessionRef,
-    approver: collaboration_protocol::SessionRef,
+    created_by: collaboration_protocol::HarnessSessionRef,
+    approver: collaboration_protocol::HarnessSessionRef,
     scratch_path: &'a str,
     root_message_id: Option<&'a str>,
     /// The permission mode the caller asked for: only `auto` (or none) for Codex.

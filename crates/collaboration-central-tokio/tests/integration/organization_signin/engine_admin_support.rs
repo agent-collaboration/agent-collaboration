@@ -75,7 +75,7 @@ impl EngineOrg {
                 "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                 vec![
                     text(serde_json::to_string(&vec![engine.workspace.clone()]).unwrap()),
-                    text(MACHINE),
+                    text(INSTALLATION),
                 ],
             )
             .await
@@ -85,8 +85,8 @@ impl EngineOrg {
     pub fn now(&self) -> Time {
         self.f.clock.utc_now()
     }
-    pub fn set(&self, at: Time) {
-        self.f.clock.set_utc(at);
+    pub async fn set(&self, at: Time) {
+        self.f.clock.set_utc(at).await;
     }
     /// A fresh UUIDv7 for requests and operation IDs at the held time.
     pub fn fresh(&self) -> String {
@@ -242,7 +242,7 @@ impl EngineOrg {
             .await
             .unwrap()
     }
-    pub fn target(&self) -> m::SessionAddress {
+    pub fn target(&self) -> workspace_ids::SessionRef {
         let m::Caller::Session(address) = self.caller.caller() else {
             panic!("session caller")
         };

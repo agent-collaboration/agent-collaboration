@@ -1,10 +1,11 @@
 //! Stored push identities and the one-line Router delivery format.
 
-use crate::{SessionDisplayName, SessionRef, UuidIdentity};
+use crate::{HarnessSessionRef, SessionDisplayName, UuidIdentity};
 use agent_automation::{RunId, ScheduleId};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt};
+use workspace_ids::MachineId;
 
 pub const MAX_PUSH_LINE_BYTES: usize = 1024;
 pub const MAX_MACHINE_LABEL_SCALARS: usize = 120;
@@ -67,38 +68,6 @@ impl JsonSchema for MachineLabel {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct MachineId(String);
-
-impl TryFrom<String> for MachineId {
-    type Error = PushIdError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        UuidIdentity::try_from(value.clone()).map_err(|_| PushIdError::MachineId)?;
-        Ok(Self(value))
-    }
-}
-
-impl From<UuidIdentity> for MachineId {
-    fn from(value: UuidIdentity) -> Self {
-        Self(String::from(value))
-    }
-}
-
-impl From<MachineId> for String {
-    fn from(value: MachineId) -> Self {
-        value.0
-    }
-}
-
-impl MachineId {
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash, JsonSchema, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct PushId(String);
@@ -153,7 +122,7 @@ impl RouterLink {
             return Err(PushIdError::Link);
         }
         Ok(Self {
-            machine_id: MachineId::try_from(machine_id.to_owned())?,
+            machine_id: machine_id.parse().map_err(|_| PushIdError::MachineId)?,
             push_id: PushId::try_from(push_id.to_owned())?,
         })
     }
@@ -196,7 +165,7 @@ pub enum PushKind {
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PushOrigin {
-    Session(SessionRef),
+    Session(HarnessSessionRef),
     OwnerUnverified,
     Router(PushKind),
 }
@@ -224,11 +193,11 @@ pub enum PushHeaderFacts {
         run_id: RunId,
     },
     Approval {
-        requester: SessionRef,
+        requester: HarnessSessionRef,
         requester_display_name: Option<SessionDisplayName>,
     },
     Question {
-        requester: SessionRef,
+        requester: HarnessSessionRef,
         requester_display_name: Option<SessionDisplayName>,
     },
     SubscriptionActivity {

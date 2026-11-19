@@ -4,7 +4,7 @@ use crate::{
     LiveSessionOwnership, LiveSessionOwnershipCheck, ProviderSessionActivity,
 };
 use collaboration_contracts::LoadPolicy;
-use collaboration_protocol::{DeliveryCorrelationId, SessionRef};
+use collaboration_protocol::{DeliveryCorrelationId, HarnessSessionRef};
 use collaboration_runtime::ProviderOperationStore;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -84,7 +84,7 @@ pub(crate) async fn ensure_provider_session_loaded(
     supervisor: &ExternalProviderSupervisor,
     store: &Arc<Mutex<ProviderOperationStore>>,
     ownership: &dyn LiveSessionOwnershipCheck,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     load_policy: LoadPolicy,
 ) -> ProviderSessionLoadOutcome {
     let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
@@ -191,7 +191,7 @@ pub(crate) async fn inspect_provider_session_loadability(
     runtime: &ExternalProviderRuntime,
     store: &Arc<Mutex<ProviderOperationStore>>,
     ownership: &dyn LiveSessionOwnershipCheck,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> ProviderSessionLoadability {
     let provider_session_id = String::from(target.session_id.clone());
     match runtime.session_activity(provider_session_id.clone()).await {

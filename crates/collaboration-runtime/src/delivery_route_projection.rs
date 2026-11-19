@@ -1,7 +1,7 @@
 //! Convert persisted route evidence to the public inspection shape.
 use agent_automation::RouteEffectEvidence;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryRouteEvidence, OperationId, ProviderBindingId, SessionRef,
+    CodexGeneration, DeliveryRouteEvidence, HarnessSessionRef, OperationId, ProviderBindingId,
 };
 
 #[expect(
@@ -9,7 +9,7 @@ use collaboration_protocol::{
     reason = "The extraction preserves the existing projection error boundary."
 )]
 pub fn project(
-    evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>,
+    evidence: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> Result<DeliveryRouteEvidence, ()> {
     match evidence {
         RouteEffectEvidence::CodexAppServer(native) => Ok(DeliveryRouteEvidence::CodexAppServer(

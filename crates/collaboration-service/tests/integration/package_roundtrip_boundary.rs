@@ -1,7 +1,7 @@
 //! Export must reserve import-envelope space, not just fit its own response.
 use crate::served_api;
 use automation_storage::AutomationStore;
-use collaboration_protocol::{EndpointRef, OperationId, ScheduleShowRequest, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef, OperationId, ScheduleShowRequest};
 use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::sync::Arc;
@@ -19,7 +19,7 @@ async fn export_rejects_package_that_fits_response_but_not_import()
         .await?;
     let schedule = store
         .create_schedule(
-            &automation_storage::ScheduleCreate::<SessionRef, EndpointRef> {
+            &automation_storage::ScheduleCreate::<HarnessSessionRef, EndpointRef> {
                 operation_id: OperationId::generate(),
                 definition: agent_automation::ScheduleDefinition {
                     instruction_id: instruction.instruction_id.clone(),
@@ -36,7 +36,7 @@ async fn export_rejects_package_that_fits_response_but_not_import()
         )
         .await?;
     let package = store
-        .export_schedule::<SessionRef, EndpointRef>(&schedule.schedule_id)
+        .export_schedule::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id)
         .await?;
     let encoded = agent_automation::encode_schedule_package(&package, usize::MAX)?;
     let response_size =
@@ -54,7 +54,7 @@ async fn export_rejects_package_that_fits_response_but_not_import()
         .await?;
     let store = Arc::new(tokio::sync::Mutex::new(store));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?

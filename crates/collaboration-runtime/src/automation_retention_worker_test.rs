@@ -7,8 +7,8 @@ use super::{AutomationRetentionWorker, native_retention_faults};
 use automation_storage::AutomationStore;
 use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
-    EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, SessionId, SessionRef,
-    UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, PushHeaderFacts, PushId, PushKind, PushOrigin,
+    SessionId,
 };
 use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::sync::Arc;
@@ -213,11 +213,13 @@ async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
         .expect("automation store should close");
 }
 
-fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
-    SessionRef {
+fn session(endpoint_id: &str, session_id: &str) -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
-                .expect("service id"),
+            service_id: workspace_ids::MachineId::try_from(
+                "018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned(),
+            )
+            .expect("service id"),
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("endpoint id"),
         },
         session_id: SessionId::try_from(session_id.to_owned()).expect("session id"),

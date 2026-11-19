@@ -18,7 +18,7 @@ async fn oversized_repository_locators_return_field_and_numeric_bound() -> Resul
             "repository.normalizedOrigin",
         ),
         (
-            json!({"kind":"local","serviceId":"00000000-0000-4000-8000-000000000001","commonDirectory":format!("/{}","x".repeat(500_000))}),
+            json!({"kind":"local","serviceId":"00000000-0000-7000-8000-000000000001","commonDirectory":format!("/{}","x".repeat(500_000))}),
             "repository.commonDirectory",
         ),
     ] {
@@ -63,7 +63,7 @@ async fn oversized_repository_locators_return_field_and_numeric_bound() -> Resul
                 workspace_id: fixture.workspace.clone(),
                 repository: RepositoryRef::Local {
                     service_id: ServiceId::try_from(
-                        "00000000-0000-4000-8000-000000000001".to_owned(),
+                        "00000000-0000-7000-8000-000000000001".to_owned(),
                     )?,
                     common_directory: CommonDirectory::try_from(format!(
                         "/{marker}{}",

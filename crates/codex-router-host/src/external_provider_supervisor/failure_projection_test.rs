@@ -86,7 +86,7 @@ async fn unknown_agent_stop_reason_settles_with_typed_value() {
             .submit_delivery_prompt_contents(prepared_prompt_request(PreparedPromptFixture {
                 operation_id: operation_id.clone(),
                 input_id: session_event_model::InputId::generate(),
-                target: SessionRef {
+                target: HarnessSessionRef {
                     endpoint: endpoint(),
                     session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
                 },

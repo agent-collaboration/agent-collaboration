@@ -16,11 +16,11 @@ use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId,
     DeliveryOutcome, EndpointAvailability, EndpointDescription, EndpointId, EndpointRef,
-    GenerationNumber, MessageDelivery, MessageText, NonEmptyText, ObservationTimestamp,
-    ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities, ProviderCapability,
-    ProviderCapabilityEvidence, ProviderCapabilityName, ProviderCapabilityStatus, ProviderKind,
-    ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
-    PushId, RouterAccess, SessionId, SessionRef, UuidIdentity,
+    GenerationNumber, HarnessSessionRef, MessageDelivery, MessageText, NonEmptyText,
+    ObservationTimestamp, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
+    ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
+    ProviderCapabilityStatus, ProviderKind, ProviderRequestedPolicy, ProviderRuntimeIdentity,
+    ProviderTransport, ProviderWorkingDirectory, PushId, RouterAccess, SessionId, UuidIdentity,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
@@ -34,16 +34,21 @@ use tokio::io::AsyncReadExt as _;
 
 struct NoLivePeer;
 impl LiveSessionOwnershipCheck for NoLivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+    fn check<'a>(
+        &'a self,
+        _target: &'a HarnessSessionRef,
+    ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
     }
 }
 
-struct RecordedEvidence(tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
+struct RecordedEvidence(
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
+);
 impl AttemptEvidenceSink for RecordedEvidence {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async move {
             self.0.lock().await.push(evidence);
@@ -71,9 +76,10 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
         let root = tempfile::tempdir().expect("fixture root");
         let event_socket = root.path().join("queue-event.sock");
         let listener = tokio::net::UnixListener::bind(&event_socket).expect("event listener");
-        let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-            .expect("service");
-        let target = SessionRef {
+        let service_id =
+            workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())
+                .expect("service");
+        let target = HarnessSessionRef {
             endpoint: EndpointRef {
                 service_id: service_id.clone(),
                 endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("endpoint"),

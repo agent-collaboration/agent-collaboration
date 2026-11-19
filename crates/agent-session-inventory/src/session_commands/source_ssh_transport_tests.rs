@@ -6,7 +6,7 @@ fn ssh_profile() -> RouterConnectionProfile {
     RouterConnectionRegistry::parse(
         &json!({"version":1,"routers":[{
             "name":"Source", "connection":{"kind":"ssh",
-                "serviceId":"00000000-0000-4000-8000-000000000001",
+                "serviceId":"00000000-0000-7000-8000-000000000001",
                 "destination":"source.example.invalid", "executable":"/bin/echo",
                 "serviceDirectory":"/private/source's root", "clientProfile":"routerDebug"},
             "defaultRemoteCwd":"/source-only/project"
@@ -106,7 +106,7 @@ fn source_ssh_command_uses_fixed_entrypoint_strict_trust_and_one_json_argument()
 
 #[test]
 fn source_ssh_protocol_rejects_unknown_fields_and_unvalidated_paths() {
-    let request = json!({"serviceDirectory":"/private/source", "expectedService":"00000000-0000-4000-8000-000000000001", "operation":{"kind":"prepare", "action":{"kind":"new", "directory":"/source-only"},"clientProfile":"routerDebug"}});
+    let request = json!({"serviceDirectory":"/private/source", "expectedService":"00000000-0000-7000-8000-000000000001", "operation":{"kind":"prepare", "action":{"kind":"new", "directory":"/source-only"},"clientProfile":"routerDebug"}});
     assert!(serde_json::from_value::<SourceRequest>(request.clone()).is_ok());
     for bad_path in ["relative", "/source\ncommand"] {
         let mut changed = request.clone();
@@ -127,7 +127,7 @@ fn source_ssh_protocol_rejects_unknown_fields_and_unvalidated_paths() {
 #[test]
 fn source_ssh_cross_service_action_is_rejected_before_transport() {
     let profile = ssh_profile();
-    let target = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000009","endpointId":"codex-local"},"sessionId":"00000000-0000-4000-8000-000000000002"})).unwrap();
+    let target = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000009","endpointId":"codex-local"},"sessionId":"00000000-0000-4000-8000-000000000002"})).unwrap();
     let action = SourceSessionAction::Fork {
         target,
         stored_model: Default::default(),

@@ -25,9 +25,8 @@ async fn prepare(f: &Fixture) -> TestResult<(m::Timestamp, Value)> {
     // Existing owning fixture writes establish local machine/credential facts.
     // No timer is planted: the real admitted APIs create the session and wake.
     f.seed_machine().await?;
-    let target = m::SessionAddress {
+    let target = workspace_ids::SessionRef {
         machine_id: INSTALLATION.to_owned().try_into()?,
-        endpoint: "codex-local".to_owned().try_into()?,
         session_id: "private-digest-alarm-recovery".to_owned().try_into()?,
     };
     let caller = f.machine_caller("private-digest-alarm-recovery").await?;

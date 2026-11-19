@@ -1,10 +1,11 @@
 use crate::{
-    CorrelationId, DeliveryAnswer, LinkRequest, LinkRequestBatch, MachineTokenText, MessageOutcome,
-    ProtocolError, ReplyPayload, SendId, TokenRenewalResult,
+    CorrelationId, DeliveryAnswer, LinkRequest, LinkRequestBatch, MachineTokenText, ProtocolError,
+    ReplyPayload, TokenRenewalResult,
 };
 use serde::{Deserialize, Serialize};
-use workspace_ids::{MessageId, RequestId};
-use workspace_model::{MachineId, Timestamp, central_mail::MessageRecord};
+use workspace_ids::MachineId;
+use workspace_ids::MessageId;
+use workspace_model::{Timestamp, central_mail::MessageRecord};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameDirection {
@@ -42,23 +43,16 @@ pub enum DataFrame {
         correlation_id: CorrelationId,
         result: Box<ReplyPayload>,
     },
-    /// Central to the recipient's Router: one send of a direct message.
+    /// Central to the recipient's Router: a queued direct message, pushed at
+    /// once when it is accepted and again on reconnect while inside its window.
     Deliver {
         message: Box<MessageRecord>,
-        send_id: SendId,
     },
-    /// The recipient's Router to central: its answer to one send, batched on
-    /// its minute flush (owner, record:218).
+    /// The recipient's Router to central: its answer to a delivered message,
+    /// sent on its minute flush (owner, record:218).
     Ack {
         message_id: MessageId,
-        send_id: SendId,
         answer: DeliveryAnswer,
-    },
-    /// Central to the sender's Router: how a direct message it sent ended.
-    MessageOutcome {
-        request_id: RequestId,
-        message_id: MessageId,
-        outcome: MessageOutcome,
     },
     /// Router to central: a fresh machine token for the open connection.
     RenewMachineToken {
@@ -85,7 +79,6 @@ impl LinkFrame {
                 DataFrame::Welcome { .. }
                 | DataFrame::Reply { .. }
                 | DataFrame::Deliver { .. }
-                | DataFrame::MessageOutcome { .. }
                 | DataFrame::MachineTokenRenewal { .. } => direction == FrameDirection::ToRouter,
             },
         };

@@ -7,7 +7,7 @@ use serde_json::json;
 
 #[test]
 fn legacy_decision_actor_and_list_request_remain_readable() {
-    let service = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let old_actor = json!({
         "endpoint":{"serviceId":service,"endpointId":"codex-local"},
         "sessionId":"approver"
@@ -28,7 +28,7 @@ fn legacy_decision_actor_and_list_request_remain_readable() {
 #[test]
 fn detailed_refusal_reason_is_additive_to_the_existing_wire_shape() {
     let old_row = json!({
-        "requestId":"old", "requester":{"endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"codex-local"},"sessionId":"requester"},
+        "requestId":"old", "requester":{"endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"codex-local"},"sessionId":"requester"},
         "approver":{"kind":"human","humanId":"owner"},
         "state":"cancelled", "title":null, "description":null, "options":[]
     });
@@ -39,7 +39,7 @@ fn detailed_refusal_reason_is_additive_to_the_existing_wire_shape() {
         old_row
     );
     let refused: ApprovalDetailedRecord = serde_json::from_value(json!({
-        "requestId":"new", "requester":{"endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"codex-local"},"sessionId":"requester"},
+        "requestId":"new", "requester":{"endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"codex-local"},"sessionId":"requester"},
         "approver":{"kind":"human","humanId":"owner"},
         "state":"refused", "reason":"permission options contain a duplicate identifier",
         "title":"Run command", "description":null, "options":[]

@@ -90,12 +90,12 @@ pub struct SetSessionSettingCommand {
 pub enum CommandFailure {
     #[error("new session settings are invalid")]
     InvalidCreateSetting {
-        target: Option<collaboration_protocol::SessionRef>,
+        target: Option<collaboration_protocol::HarnessSessionRef>,
         detail: Box<collaboration_protocol::InvalidProviderSetting>,
     },
     #[error("session was created without all requested settings")]
     CreatedWithoutSettings {
-        target: Box<collaboration_protocol::SessionRef>,
+        target: Box<collaboration_protocol::HarnessSessionRef>,
         applied: Vec<collaboration_protocol::AppliedProviderSetting>,
         failed: Vec<collaboration_protocol::FailedProviderSetting>,
         not_applied: Vec<collaboration_protocol::NotAppliedProviderSetting>,

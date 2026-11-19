@@ -12,8 +12,8 @@ mod scripted_provider_backend;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 use scripted_provider_backend::{ScriptedAnswer, ScriptedProviderBackend, ScriptedStep};
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000002";
 const ENDPOINT_ID: &str = "claude-fixture";
 const CREATE_OPERATION: &str = "019c6e27-e55b-73d1-87d8-4e01f1f75101";
 const PROMPT_OPERATION: &str = "019c6e27-e55b-73d1-87d8-4e01f1f75102";
@@ -331,8 +331,8 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
     };
     use collaboration_client::CollaborationClient;
     use collaboration_client::protocol::{
-        ChannelDescription, CodexGeneration, EndpointId, EndpointRef, OperationId, SessionId,
-        SessionRef,
+        ChannelDescription, CodexGeneration, EndpointId, EndpointRef, HarnessSessionRef,
+        OperationId, SessionId,
     };
 
     let executable = std::env::var_os("CODEX_ROUTER_TEST_EXTERNAL_ACP_EXECUTABLE")
@@ -395,7 +395,7 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
         service_epoch: inventory.service_epoch,
         generation: generation_number,
     };
-    let actor = SessionRef {
+    let actor = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: provider.endpoint.service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("actor endpoint"),

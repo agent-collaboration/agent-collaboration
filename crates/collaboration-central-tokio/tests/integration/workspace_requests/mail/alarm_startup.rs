@@ -23,7 +23,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
 -> ConformanceResult<()> {
     for bad_first in [false, true] {
         let root = tempfile::tempdir()?;
-        let clock = Arc::new(HeldClock::starting_at(
+        let clock = Arc::new(router_clock::GatedClock::starting_at(
             runtime_primitives::SyncTime::from_unix_millis(1_794_571_200_000),
         )?);
         let keys = signed::SignInKeys::start().await?;
@@ -197,48 +197,4 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         reopened.close().await;
     }
     Ok(())
-}
-
-/// Provisions one organization on the shared host, enrolls the fixture machine
-/// and admits a session caller with a signed machine token.
-async fn admitted_organization(
-    host: &TokioWorkspaceHost,
-    organization: &fleet_identity_protocol::OrganizationId,
-    clock: &HeldClock,
-) -> ConformanceResult<collaboration_central_core::WorkspaceCaller> {
-    use runtime_primitives::Clock;
-    let now = clock.now().unix_millis().div_euclid(1000);
-    let runtime = host.central(organization).await?;
-    runtime
-        .provision_organization(
-            &collaboration_central_core::identity_contract::ProvisionOrganization {
-                organization_id: organization.clone(),
-                organization_statement: signed::stamp(organization.as_str(), now - 3600)?
-                    .try_into()?,
-            },
-        )
-        .await?;
-    seed_machine_for(host, organization, &id(2), 3, 4, now).await;
-    let token = signed::machine_token(
-        organization.as_str(),
-        &id::<m::MachineId>(2).to_string(),
-        &id::<m::WorkspaceId>(4).to_string(),
-        now,
-        now + 600,
-    )?;
-    let connection = runtime
-        .admit_machine_connection(&token)
-        .await?
-        .map_err(|_| "fixture machine admission refused")?;
-    let caller = collaboration_central_core::WorkspaceCaller::new(
-        connection,
-        m::Caller::Session(m::SessionAddress {
-            machine_id: id(2),
-            endpoint: "codex-local".to_owned().try_into()?,
-            session_id: "test-session".to_owned().try_into()?,
-        }),
-    )
-    .map_err(|_| "fixture session caller refused")?;
-    create_workspace(host, &caller).await;
-    Ok(caller)
 }

@@ -190,7 +190,7 @@ async fn native_peer_job_corroboration_and_equal_managed_identity_survive_page_b
             .is_err()
     );
     let foreign: collaboration_protocol::EndpointRef = serde_json::from_value(
-        json!({"serviceId":"00000000-0000-4000-8000-000000000099","endpointId":"claude-local"}),
+        json!({"serviceId":"00000000-0000-7000-8000-000000000099","endpointId":"claude-local"}),
     )
     .unwrap();
     let mut wrong_source = request;

@@ -38,7 +38,7 @@ impl SubscriptionFixture {
         ));
         let registry = crate::test_project_runtime::registry(directory.path(), clock.clone())?;
         let origin = ActorOrigin {
-            installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+            installation: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             machine: MachineLabel::try_from("subscription proof".to_owned())?,
         };
         let (requests, fleet_runtime) =
@@ -55,14 +55,14 @@ impl SubscriptionFixture {
                 Some(requests),
             )),
             identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
+                workspace_ids::MachineId::try_from(
+                    "00000000-0000-7000-8000-000000000001".to_owned(),
                 )?,
                 Some("subscription proof"),
             )?,
         })?);
         let application = (ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission.clone())
@@ -353,7 +353,7 @@ impl SubscriptionFixture {
             Arc::new(InteractionStore::open(_directory.path().join("progress.sqlite")).await?);
         let windows = admission.subscription_window_store(interactions.clone());
         let application = (ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission.clone())
@@ -425,7 +425,7 @@ pub fn session(name: &str) -> Result<Identity, TestError> {
     Ok(Identity::Session {
         session: SessionRef {
             endpoint: SessionEndpointRef {
-                service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+                service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
                 endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
             },
             session_id: SessionId::try_from(name.to_owned())?,

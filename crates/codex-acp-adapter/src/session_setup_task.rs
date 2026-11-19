@@ -294,7 +294,7 @@ mod tests {
     async fn existing_binding_load_reports_permissions_and_skips_history_replay_capacity() {
         let schemas = native_schemas();
         let generation: CodexGeneration = serde_json::from_value(
-            json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+            json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
         )
         .unwrap_or_else(|error| panic!("generation: {error}"));
         let (client, server) = tokio::net::UnixStream::pair().unwrap();
@@ -351,7 +351,7 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("initial load: {error}"));
         assert!(initial_history.is_empty());
-        let actor: collaboration_protocol::SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap();
+        let actor: collaboration_protocol::HarnessSessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap();
         // Fixture: this existing binding has a recorded Router profile; native omits it.
         binding.access_route = Some(crate::ApprovalRoute {
             thread_id: "thread-a".into(),

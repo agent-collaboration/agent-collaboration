@@ -9,8 +9,8 @@ use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000301";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000302";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000301";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000302";
 const CALLER_SESSION_ID: &str = "served-command-caller";
 const UNKNOWN_PUSH_ID: &str = "019f0000-0000-7000-8000-000000000999";
 
@@ -31,7 +31,7 @@ impl ServedFixture {
         let directory = tempfile::tempdir_in("/tmp").expect("service directory");
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private service directory");
-        let service_id: collaboration_protocol::UuidIdentity =
+        let service_id: workspace_ids::MachineId =
             SERVICE_ID.to_owned().try_into().expect("service ID");
         let endpoint: collaboration_protocol::EndpointRef =
             serde_json::from_value(codex_endpoint()).expect("endpoint");

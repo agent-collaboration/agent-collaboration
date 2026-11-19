@@ -611,7 +611,7 @@ impl RemoteRuntime {
     }
     pub async fn queued_for_session(
         &self,
-        session: &workspace_model::SessionAddress,
+        session: &workspace_ids::SessionRef,
     ) -> Result<workspace_model::central_mail::SessionQueue, StoreFailure> {
         self.apply_clock().await;
         self.control("queue", session).await?

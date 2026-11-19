@@ -94,7 +94,7 @@ async fn new_form_qualified_cursor_choice_changes_only_the_client_draft() {
     use crate::session_picker::new_session::new_session_client_inventory::NewClientSourceCapabilities;
     use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeLaunchAvailability;
     let binding:collaboration_client::protocol::ProviderBindingIdentity=serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"actual-cursor"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"actual-cursor"},
         "bindingId":"cursor-binding","runtime":{"provider":"cursor","runtimeName":"fixture"},"transport":"stdioAcp",
         "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":7},
         "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]

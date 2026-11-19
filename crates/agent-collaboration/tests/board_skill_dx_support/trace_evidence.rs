@@ -1,5 +1,5 @@
 use crate::proof_context::ProofResult;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, io::Write, os::unix::fs::OpenOptionsExt, path::Path};
@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, io::Write, os::unix::fs::OpenOptionsExt, path::
 #[serde(rename_all = "camelCase")]
 pub(super) struct OperatorTrace {
     role: &'static str,
-    session: SessionRef,
+    session: HarnessSessionRef,
     turns: Vec<Value>,
 }
 
@@ -23,7 +23,7 @@ pub(super) struct RefusalCorrectionTrace {
 }
 
 impl OperatorTrace {
-    pub(super) fn new(role: &'static str, session: SessionRef, turns: Vec<Value>) -> Self {
+    pub(super) fn new(role: &'static str, session: HarnessSessionRef, turns: Vec<Value>) -> Self {
         Self {
             role,
             session,

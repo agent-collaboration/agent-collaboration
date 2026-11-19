@@ -27,7 +27,7 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let origin = ActorOrigin {
-        installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+        installation: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("MCP proof".to_owned())?,
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
@@ -49,14 +49,12 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             Some("MCP proof"),
         )?,
     })?);
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission);

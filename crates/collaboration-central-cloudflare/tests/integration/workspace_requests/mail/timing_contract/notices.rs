@@ -50,7 +50,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![

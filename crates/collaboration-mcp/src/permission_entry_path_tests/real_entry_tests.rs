@@ -54,7 +54,7 @@ async fn cli_command_entry_authorizes_real_broker_permission_by_actor_target_and
             .is_some_and(|text| text.contains("Requested permissions:"))
     );
 
-    let wrong_actor: SessionRef = serde_json::from_value(json!({
+    let wrong_actor: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":fixture.approver.endpoint,"sessionId":"wrong-approver"
     }))
     .expect("wrong actor");
@@ -271,7 +271,7 @@ async fn streamable_http_entry_authorizes_real_broker_permission_by_actor_target
             .any(|option| option["optionId"] == "native-decline")
     );
 
-    let wrong_actor: SessionRef = serde_json::from_value(json!({
+    let wrong_actor: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":fixture.approver.endpoint,"sessionId":"wrong-approver"
     }))
     .expect("wrong actor");
@@ -405,7 +405,7 @@ async fn stateless_http_create_reports_discovery_failure_without_creation_uncert
     let endpoint = json!({"serviceId":SERVICE_ID,"endpointId":"codex-local"});
     let local_identity = json!({"endpoint":endpoint,"sessionId":"mcp-caller"});
     let foreign_identity = json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000099","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000099","endpointId":"codex-local"},
         "sessionId":"foreign-caller"
     });
     for (id, created_by, approver) in [
@@ -431,7 +431,7 @@ async fn stateless_http_create_reports_discovery_failure_without_creation_uncert
             assert!(
                 response["result"]["content"][0]["text"]
                     .as_str()
-                    .is_some_and(|message| message.contains("expected struct SessionRef")),
+                    .is_some_and(|message| message.contains("expected struct HarnessSessionRef")),
                 "{response}"
             );
             let refusal = &response["result"]["structuredContent"];

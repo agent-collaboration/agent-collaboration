@@ -13,11 +13,11 @@ use collaboration_protocol::{
     ConversationOperationSubmission, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationOperationWaitResult,
     ConversationOutputUnavailableReason, ConversationPromptRequest, ConversationResumeRequest,
-    EndpointAvailability, EndpointRef, NonEmptyText, OperationId, ProviderIdentity,
-    ProviderInspectFailure, ProviderInspectFailureKind, ProviderOperationEffect,
+    EndpointAvailability, EndpointRef, HarnessSessionRef, NonEmptyText, OperationId,
+    ProviderIdentity, ProviderInspectFailure, ProviderInspectFailureKind, ProviderOperationEffect,
     ProviderOperationStage, ProviderReconciliationState, ProviderSessionInspectRequest,
     ProviderSessionInspectResult, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsFailureKind, ProviderSettingsResult, ProviderSettingsSetRequest, SessionRef,
+    ProviderSettingsFailureKind, ProviderSettingsResult, ProviderSettingsSetRequest,
 };
 
 /// Conversation operations over the Host's provider backend and Codex operation records.
@@ -317,7 +317,7 @@ impl ConversationOperations {
     fn unavailable_provider(
         &self,
         operation_id: OperationId,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         endpoint: &EndpointRef,
     ) -> ConversationFailure {
         let availability = self.provider_unavailability(endpoint).ok().flatten();
@@ -467,7 +467,7 @@ impl ConversationOperations {
 struct SubmissionCheck<'request> {
     operation_id: &'request OperationId,
     /// The session the operation acts on; `None` when it creates one.
-    target: Option<&'request SessionRef>,
+    target: Option<&'request HarnessSessionRef>,
     endpoint: &'request EndpointRef,
     actors: [&'request ProviderIdentity; 2],
     expected_generation: Option<&'request CodexGeneration>,
@@ -594,7 +594,7 @@ enum LocalFailure {
 fn local_failure(
     failure: LocalFailure,
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
 ) -> ConversationFailure {
     let (kind, stage, message) = match failure {
         LocalFailure::InvalidIdentity => (
@@ -643,7 +643,7 @@ fn codex_snapshot(
         .map_err(|_| ConversationFailure::InvalidStoredOperation)
 }
 
-fn settings_unavailable(target: SessionRef) -> ProviderSettingsFailure {
+fn settings_unavailable(target: HarnessSessionRef) -> ProviderSettingsFailure {
     ProviderSettingsFailure {
         kind: ProviderSettingsFailureKind::Unavailable,
         stage: None,

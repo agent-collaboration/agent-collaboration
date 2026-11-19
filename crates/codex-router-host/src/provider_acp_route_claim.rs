@@ -5,14 +5,14 @@ use collaboration_contracts::NativeRouteClaim;
 use collaboration_contracts::ProviderConversationBackend;
 use collaboration_contracts::RouteUnavailableReason;
 use collaboration_contracts::UnsentCause;
-use collaboration_protocol::{EndpointAvailability, EndpointRef, SessionRef, UuidIdentity};
+use collaboration_protocol::{EndpointAvailability, EndpointRef, HarnessSessionRef};
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
 pub(crate) struct ProviderAcpRouteClaim {
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     provider_endpoints: HashSet<EndpointRef>,
     directory: EndpointDirectory,
     supervisor: Arc<ExternalProviderSupervisor>,
@@ -21,7 +21,7 @@ pub(crate) struct ProviderAcpRouteClaim {
 
 impl ProviderAcpRouteClaim {
     pub(crate) fn new(
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         provider_endpoints: HashSet<EndpointRef>,
         directory: EndpointDirectory,
         supervisor: Arc<ExternalProviderSupervisor>,
@@ -36,7 +36,7 @@ impl ProviderAcpRouteClaim {
         }
     }
 
-    pub(crate) async fn claim(&self, target: &SessionRef) -> NativeRouteClaim {
+    pub(crate) async fn claim(&self, target: &HarnessSessionRef) -> NativeRouteClaim {
         if !self.serves(target) {
             return NativeRouteClaim::not_mine();
         }
@@ -137,7 +137,7 @@ impl ProviderAcpRouteClaim {
         }
     }
 
-    pub(crate) fn serves(&self, target: &SessionRef) -> bool {
+    pub(crate) fn serves(&self, target: &HarnessSessionRef) -> bool {
         target.endpoint.service_id == self.service_id
             && self.provider_endpoints.contains(&target.endpoint)
     }
@@ -167,8 +167,8 @@ mod tests {
     use crate::ExternalProviderSupervisor;
     use collaboration_contracts::RouteClaim;
     use collaboration_protocol::{
-        EndpointAvailability, EndpointDescription, EndpointId, EndpointRef, NonEmptyText,
-        ObservationTimestamp, SessionId, SessionRef, UuidIdentity,
+        EndpointAvailability, EndpointDescription, EndpointId, EndpointRef, HarnessSessionRef,
+        NonEmptyText, ObservationTimestamp, SessionId,
     };
     use collaboration_runtime::EndpointDirectory;
     use collaboration_runtime::ProviderOperationStore;
@@ -182,8 +182,9 @@ mod tests {
                 .await
                 .expect("provider store"),
         ));
-        let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-            .expect("service ID");
+        let service_id =
+            workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())
+                .expect("service ID");
         let endpoint = EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),
@@ -216,7 +217,7 @@ mod tests {
             supervisor,
             store,
         );
-        let target = SessionRef {
+        let target = HarnessSessionRef {
             endpoint,
             session_id: SessionId::try_from("fixture-session".to_owned()).expect("session ID"),
         };
@@ -227,7 +228,7 @@ mod tests {
             matches!(result, RouteClaim::Unavailable { retryable: false, reason }
             if reason.reason == "disabled in providers.json" && reason.fix.contains("enable Claude"))
         );
-        let codex_target = SessionRef {
+        let codex_target = HarnessSessionRef {
             endpoint: EndpointRef {
                 service_id: target.endpoint.service_id.clone(),
                 endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("endpoint ID"),

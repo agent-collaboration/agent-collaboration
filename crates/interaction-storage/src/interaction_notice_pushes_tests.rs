@@ -6,8 +6,8 @@ use collaboration_protocol::{
 };
 
 fn notice_draft() -> PushRecordDraft {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"approval-owner-recipient"
     }))
     .unwrap();

@@ -10,11 +10,7 @@ fn number(value: i64) -> SqlValue {
 fn approval() -> ReadOutcome {
     let fields = [
         ("approval_id", text("019a3dce-2000-7000-8000-000000000001")),
-        ("machine_id", text("019a3dce-2000-7000-8000-000000000002")),
-        (
-            "installation_id",
-            text("019a3dce-2000-7000-8000-000000000003"),
-        ),
+        ("machine_id", text("019a3dce-2000-7000-8000-000000000003")),
         ("request_id", text("019a3dce-2000-7000-8000-000000000004")),
         (
             "approved_by_person_id",

@@ -402,7 +402,7 @@ async fn a_renewal_after_live_revocation_is_refused_as_enrollment_not_active() -
             operation_id: "019f0000-0000-7000-8000-00000000c321"
                 .to_owned()
                 .try_into()?,
-            installation: INSTALLATION.to_owned().try_into()?,
+            machine_id: INSTALLATION.to_owned().try_into()?,
             enrollment_id: connection.enrollment_id().clone(),
         },
     )

@@ -49,7 +49,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
         .unwrap()
         .rows;
     let later = start + chrono::Duration::seconds(45);
-    fixture.clock.set_utc(later);
+    fixture.set_utc(later).await;
     assert_eq!(
         fixture
             .host

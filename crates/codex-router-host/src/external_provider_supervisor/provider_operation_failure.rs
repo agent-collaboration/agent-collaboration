@@ -4,9 +4,9 @@ use super::{failure, failure_with_provider_code};
 use crate::ExternalProviderRuntimeError;
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
-    ConversationOperationFailureStage, DeliveryCorrelationId, InvalidProviderSetting,
-    InvalidSettingSessionDisposition, NonEmptyText, OperationId, ProviderOperationEffect,
-    SessionRef,
+    ConversationOperationFailureStage, DeliveryCorrelationId, HarnessSessionRef,
+    InvalidProviderSetting, InvalidSettingSessionDisposition, NonEmptyText, OperationId,
+    ProviderOperationEffect,
 };
 
 const MAX_ADVERTISED_CHOICES: usize = 32;
@@ -25,13 +25,13 @@ struct CorrelatedProviderFailureProps {
     effect: ProviderOperationEffect,
     explanation: &'static str,
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     provider_error: ProviderErrorReference,
 }
 
 pub(super) fn invalid_setting_failure(
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     setting: acp_client_runtime::ProviderSettingKind,
     value: String,
     advertised: Vec<String>,
@@ -132,7 +132,7 @@ fn format_bounded_advertised_values(advertised: &[String]) -> String {
 
 pub(super) fn prompt_runtime_failure(
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     error: ExternalProviderRuntimeError,
 ) -> ConversationOperationFailure {
     if matches!(error, ExternalProviderRuntimeError::TransportFailure) {
@@ -151,7 +151,7 @@ pub(super) fn prompt_runtime_failure(
 pub(super) fn admission_failure(
     operation_id: OperationId,
     message: &'static str,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
 ) -> ConversationOperationFailure {
     failure(
         ConversationOperationFailureKind::Unavailable,
@@ -165,7 +165,7 @@ pub(super) fn admission_failure(
 
 pub(super) fn runtime_failure(
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     error: ExternalProviderRuntimeError,
 ) -> ConversationOperationFailure {
     match error {

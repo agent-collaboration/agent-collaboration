@@ -146,7 +146,7 @@ mod submission_epochs;
 fn native_item_and_push() -> (DeliveryItem<BoardDeliveryTypes>, PushRecordDraft) {
     let id = uuid::Uuid::now_v7();
     let target = json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"atomic-recipient"
     });
     let item = DeliveryItem::<BoardDeliveryTypes>::new(

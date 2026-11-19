@@ -86,19 +86,16 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
 #[tokio::test]
 async fn person_create_records_checked_origin_without_machine_rights() {
     let f = ready().await;
-    let machine = "019f0000-0000-7000-8000-00000000d751";
     let caller = super::super::super::support::machine_caller(
         f.org.clone(),
-        workspace_model::Caller::Session(workspace_model::SessionAddress {
+        workspace_model::Caller::Session(workspace_ids::SessionRef {
             machine_id: "019f0000-0000-7000-8000-00000000d752".parse().unwrap(),
-            endpoint: "codex-local".to_owned().try_into().unwrap(),
             session_id: "setup-origin-machine".to_owned().try_into().unwrap(),
         }),
         "019f0000-0000-7000-8000-00000000d753".to_owned(),
         NOW_SECONDS,
     );
-    super::super::super::support::seed_enrollment(&f.host, &caller, machine, "[]", NOW_SECONDS)
-        .await;
+    super::super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
     let before = f.read("SELECT * FROM machines ORDER BY machine_id").await;
     let approvals = f
         .read("SELECT * FROM machine_approvals ORDER BY approval_id")
@@ -140,7 +137,7 @@ async fn person_create_records_checked_origin_without_machine_rights() {
         "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             SqlValue::Text(serde_json::to_string(&vec![&operation]).unwrap()),
-            SqlValue::Text(machine.into()),
+            SqlValue::Text(caller.caller.machine_id().to_string()),
         ],
     )
     .await;
@@ -155,19 +152,16 @@ async fn person_create_records_checked_origin_without_machine_rights() {
 #[tokio::test]
 async fn generic_create_trims_names_defaults_description_and_shares_name_uniqueness() {
     let f = ready().await;
-    let machine = "019f0000-0000-7000-8000-00000000d761";
     let caller = super::super::super::support::machine_caller(
         f.org.clone(),
-        workspace_model::Caller::Session(workspace_model::SessionAddress {
+        workspace_model::Caller::Session(workspace_ids::SessionRef {
             machine_id: "019f0000-0000-7000-8000-00000000d762".parse().unwrap(),
-            endpoint: "codex-local".to_owned().try_into().unwrap(),
             session_id: "generic-setup".to_owned().try_into().unwrap(),
         }),
         "019f0000-0000-7000-8000-00000000d763".to_owned(),
         NOW_SECONDS,
     );
-    super::super::super::support::seed_enrollment(&f.host, &caller, machine, "[]", NOW_SECONDS)
-        .await;
+    super::super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
     let request = |serial, name: &str| workspace_model::WorkspaceRequest {
         request_id: Some(operation(serial).try_into().unwrap()),
         workspace_id: None,

@@ -14,7 +14,7 @@ async fn skipped_one_shot_cli_wait_reports_no_firing() -> Result<(), Box<dyn std
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"fixture"});
     let message: SavedMessage = serde_json::from_value(json!({

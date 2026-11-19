@@ -4,7 +4,7 @@ use super::registered_route_project::{
     RegisteredRouteProject, assert_board_accepted, settled_creation,
 };
 use collaboration_client::CollaborationClient;
-use collaboration_protocol::{SessionRef, ThreadSubscribeRequest};
+use collaboration_protocol::{HarnessSessionRef, ThreadSubscribeRequest};
 use message_board::{
     Identity, ParticipantRole, PostId, PostReferences, PostText, ProtocolVersion, RequestId,
     SubscriptionMode, SubscriptionPolicyPatch, SubscriptionScope, SubscriptionTimingPatch,
@@ -15,7 +15,7 @@ use serde_json::json;
 /// `when_idle` is the readers' idle policy; `None` keeps the board default.
 pub(super) async fn post_thread_activity_for_sessions<const READERS: usize>(
     client: &CollaborationClient,
-    readers: [SessionRef; READERS],
+    readers: [HarnessSessionRef; READERS],
     when_idle: Option<WhenIdle>,
     inputs: RegisteredRouteProject,
 ) {

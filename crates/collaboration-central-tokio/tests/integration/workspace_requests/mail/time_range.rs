@@ -7,7 +7,7 @@ use workspace_model::central_mail::{
     CentralMailRequest, CentralMailResult as Result,
 };
 
-fn wake(target: workspace_model::SessionAddress, due_at: workspace_model::Timestamp) -> Operation {
+fn wake(target: workspace_ids::SessionRef, due_at: workspace_model::Timestamp) -> Operation {
     Operation::SetWake {
         target,
         due_at,
@@ -237,7 +237,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
     // Embedded setup allowance: the fixture's setup claimed the due batch at T0.
-    fixture.clock.set_utc(due - chrono::Duration::seconds(270));
+    fixture.set_utc(due - chrono::Duration::seconds(270)).await;
     // Isolation: that wake fails alone as CorruptRow (due_at); the alarm re-arms
     // on the next mark.
     runtime.after_event().await.unwrap();

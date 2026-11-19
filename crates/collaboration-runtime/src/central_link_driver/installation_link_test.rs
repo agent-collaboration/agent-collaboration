@@ -16,19 +16,18 @@ async fn an_unconfigured_link_reports_not_enrolled_and_keeps_outbox_writes_waiti
             .await
             .unwrap(),
     ));
-    let installation = fleet_sync_protocol::PeerId::new(uuid_v7(77).parse().unwrap()).unwrap();
+    let machine_id = uuid_v7(77).parse().unwrap();
     let tasks = TaskTracker::new();
     let stop = CancellationToken::new();
 
     let calls = start_installation_link(
-        &installation,
+        &machine_id,
         clock_at(MARK - 20_000),
         store,
         None,
         &tasks,
         stop.clone(),
-    )
-    .expect("a UUIDv7 peer is a machine id");
+    );
     let status = calls.link_status().await;
     let immediate = calls.submit(caller(), list_areas()).await;
     let queued = calls.submit(caller(), thread_post(&uuid_v7(78))).await;

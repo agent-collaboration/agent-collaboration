@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 fn wire(operation: serde_json::Value, request_id: serde_json::Value) -> serde_json::Value {
-    json!({"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001", "caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"session-1"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":request_id,"operation":operation}}})
+    json!({"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001", "caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"session-1"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":request_id,"operation":operation}}})
 }
 
 #[test]

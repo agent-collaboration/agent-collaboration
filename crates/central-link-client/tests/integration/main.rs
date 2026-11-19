@@ -24,7 +24,7 @@ fn protocol_stub_correlates_out_of_order_replies_and_preserves_durable_retry_id(
             decode_text(welcome, FrameDirection::ToRouter).unwrap(),
         )
         .unwrap();
-    let caller: Caller = serde_json::from_str(r#"{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"}}"#).unwrap();
+    let caller: Caller = serde_json::from_str(r#"{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}}"#).unwrap();
     let payload = RequestPayload::Workspace(WorkspaceRequest {
         request_id: Some("01890f2e-7b4c-7cc0-98c4-000000000004".parse().unwrap()),
         workspace_id: Some("01890f2e-7b4c-7cc0-98c4-000000000003".parse().unwrap()),

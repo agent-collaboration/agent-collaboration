@@ -25,11 +25,9 @@ pub(crate) fn machine(rows: &ReadOutcome, row: &[SqlValue]) -> Result<MachineRow
     let generation = values::nonnegative_integer(rows, row, "enrollment_generation")
         .map_err(|_| corrupt("machines.enrollment_generation"))?;
     Ok(MachineRow {
-        id: values::private_id(string(rows, row, "machine_id")?, "machines.machine_id")?,
-        installation: values::identifier(
-            string(rows, row, "installation_id")?,
-            "machines.installation_id",
-        )?,
+        machine_id: string(rows, row, "machine_id")?
+            .parse()
+            .map_err(|_| corrupt("machines.machine_id"))?,
         label: label(string(rows, row, "label")?, "machines.label")?,
         allowed_workspaces: json(
             string(rows, row, "allowed_workspaces")?,
@@ -111,14 +109,9 @@ pub(crate) fn enrollment(
             string(rows, row, "approval_id")?,
             "machine_approvals.approval_id",
         )?,
-        machine_id: values::private_id(
-            string(rows, row, "machine_id")?,
-            "machine_approvals.machine_id",
-        )?,
-        installation: values::identifier(
-            string(rows, row, "installation_id")?,
-            "machines.installation_id",
-        )?,
+        machine_id: string(rows, row, "machine_id")?
+            .parse()
+            .map_err(|_| corrupt("machine_approvals.machine_id"))?,
         request_id: values::identifier(
             string(rows, row, "request_id")?,
             "machine_approvals.request_id",

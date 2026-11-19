@@ -211,7 +211,7 @@ impl WakePass {
                         .lock()
                         .await
                         .read_delivery::<
-                            collaboration_protocol::SessionRef,
+                            collaboration_protocol::HarnessSessionRef,
                             collaboration_protocol::CodexGeneration,
                             serde_json::Value,
                         >(&observed.1)

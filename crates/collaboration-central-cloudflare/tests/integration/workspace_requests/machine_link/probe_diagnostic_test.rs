@@ -8,7 +8,6 @@ fn valid_input() -> Value {
     let attachment = json!({
         "organizationId":"019f0000-0000-7000-8000-00000000df02",
         "machineId":"019f0000-0000-7000-8000-00000000df03",
-        "installationId":"019f0000-0000-7000-8000-00000000df04",
         "enrollmentId":"019f0000-0000-7000-8000-00000000df05",
         "clientId":"019f0000-0000-7000-8000-00000000df06","effectiveExpiresAt":1_900_000_600,
     });
@@ -134,13 +133,7 @@ fn malformed_witness_ids_and_sequences_do_not_survive_reserialization() {
 
 #[test]
 fn malformed_or_incomplete_attachment_identity_is_rejected() {
-    for field in [
-        "organizationId",
-        "machineId",
-        "installationId",
-        "enrollmentId",
-        "clientId",
-    ] {
+    for field in ["organizationId", "machineId", "enrollmentId", "clientId"] {
         let pointer = format!("/events/1/event/attachments/0/{field}");
         assert!(
             parsed_result(&[replaced(
@@ -150,6 +143,10 @@ fn malformed_or_incomplete_attachment_identity_is_rejected() {
             .is_none()
         );
     }
+    let mut retired = valid_input();
+    retired["events"][2]["event"]["attachment"]["installationId"] =
+        json!("019f0000-0000-7000-8000-00000000df04");
+    assert!(parsed_result(&[line(&retired)]).is_none());
     let mut missing = valid_input();
     if let Some(attachment) = missing
         .pointer_mut("/events/2/event/attachment")

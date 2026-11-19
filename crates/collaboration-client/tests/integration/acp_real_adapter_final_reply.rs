@@ -9,7 +9,7 @@ use collaboration_client::{
     PublicPromptContent,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_protocol::{EndpointId, MessageText, SessionRef};
+use collaboration_protocol::{EndpointId, HarnessSessionRef, MessageText};
 use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -169,7 +169,7 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
         .mode(0o700)
         .create(&root)
         .unwrap();
-    let service_id = "00000000-0000-4000-8000-000000000021";
+    let service_id = "00000000-0000-7000-8000-000000000021";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let identity = ApplicationFixture::new(service_id, service_id)
         .unwrap()
@@ -321,7 +321,7 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
         .unwrap();
     });
 
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":endpoint,
         "sessionId":"long-thread"
     }))
@@ -346,17 +346,18 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
     let mut conversation = AcpConversation::connect(&CollaborationAccess::api(&root), endpoint_id)
         .await
         .unwrap();
-    let prompt_request = |target: SessionRef, text: &str| ExistingConversationPromptRequest {
-        target,
-        cwd: std::path::PathBuf::from("/work"),
-        prompt: ConversationPromptRequest {
-            message: PublicPromptContent::HumanUser {
-                text: MessageText::try_from(text.to_owned()).unwrap(),
+    let prompt_request =
+        |target: HarnessSessionRef, text: &str| ExistingConversationPromptRequest {
+            target,
+            cwd: std::path::PathBuf::from("/work"),
+            prompt: ConversationPromptRequest {
+                message: PublicPromptContent::HumanUser {
+                    text: MessageText::try_from(text.to_owned()).unwrap(),
+                },
+                effort: None,
+                timeout_seconds: 30,
             },
-            effort: None,
-            timeout_seconds: 30,
-        },
-    };
+        };
     for (prompt_text, expected_reply) in [
         ("summarize this long turn", "the selected final reply"),
         (

@@ -125,7 +125,9 @@ impl ReplacementFixture {
             Box::pin(ArchiveOwner::start(
                 &self.directory.path().join("second"),
                 MachineIdentity::new(
-                    UuidIdentity::try_from(self.second_origin.installation.as_str().to_owned())?,
+                    workspace_ids::MachineId::try_from(
+                        self.second_origin.installation.as_str().to_owned(),
+                    )?,
                     Some("archive replacement successor"),
                 )?,
                 enrollment.session_inputs()?,

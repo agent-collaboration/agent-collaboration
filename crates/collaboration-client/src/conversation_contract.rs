@@ -2,7 +2,7 @@
 
 use crate::ClientError;
 use collaboration_protocol::{
-    EndpointRef, MessageContent, OperationId, SessionId, SessionRef, UuidIdentity,
+    EndpointRef, HarnessSessionRef, MessageContent, OperationId, SessionId, UuidIdentity,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,14 +10,14 @@ use serde_json::Value;
 use std::time::Duration;
 
 pub enum ConversationEvent {
-    SessionReady(SessionRef),
+    SessionReady(HarnessSessionRef),
     SessionUpdate {
-        target: SessionRef,
+        target: HarnessSessionRef,
         update: Value,
     },
-    PermissionRequired(SessionRef),
+    PermissionRequired(HarnessSessionRef),
     PromptResult {
-        target: SessionRef,
+        target: HarnessSessionRef,
         end: ConversationEnd,
         result: Value,
     },
@@ -36,8 +36,8 @@ pub struct ConversationCreateRequest {
     /// and on fork, where the source thread's effort is inherited.
     pub effort: Option<String>,
     pub access: Option<String>,
-    pub created_by: Option<SessionRef>,
-    pub approver: Option<SessionRef>,
+    pub created_by: Option<HarnessSessionRef>,
+    pub approver: Option<HarnessSessionRef>,
     pub root_message_id: Option<UuidIdentity>,
     /// The permission mode asked for; Codex accepts only `auto` or none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,7 +47,7 @@ pub struct ConversationCreateRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationCreateResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub permission_differences: Vec<collaboration_protocol::PermissionDifference>,
 }
@@ -79,7 +79,7 @@ impl ConversationPromptRequest {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum PublicPromptContent {
     Agent {
-        sender: SessionRef,
+        sender: HarnessSessionRef,
         text: collaboration_protocol::MessageText,
     },
     HumanUser {
@@ -109,7 +109,7 @@ pub enum ConversationEnd {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExistingConversationPromptRequest {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub cwd: std::path::PathBuf,
     pub prompt: ConversationPromptRequest,
 }
@@ -117,7 +117,7 @@ pub struct ExistingConversationPromptRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExistingConversationPromptResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub end: ConversationEnd,
     pub output: crate::ProviderPromptOutput,
     pub permission_required: bool,
@@ -134,7 +134,7 @@ pub struct ConversationCreatePromptRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationCreatePromptResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub end: ConversationEnd,
     pub output: crate::ProviderPromptOutput,
     pub permission_required: bool,

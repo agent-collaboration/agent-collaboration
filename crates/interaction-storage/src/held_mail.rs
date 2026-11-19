@@ -1,12 +1,12 @@
 //! Native held-mail discovery for the reader readiness coordinator.
 use crate::{InteractionStore, StorageError, push_record_rows};
-use collaboration_protocol::{PushId, PushRecord, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, PushId, PushRecord};
 
 impl InteractionStore {
     /// Readiness needs unscheduled Held identities; the SDK owns scheduled backoff retries.
     pub async fn held_mail_push_ids(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushId>, StorageError> {
         let mut connection = self.writer.lock().await;
         let service_id = String::from(target.endpoint.service_id.clone());
@@ -21,7 +21,7 @@ impl InteractionStore {
             .collect()
     }
 
-    pub async fn held_mail_targets(&self) -> Result<Vec<SessionRef>, StorageError> {
+    pub async fn held_mail_targets(&self) -> Result<Vec<HarnessSessionRef>, StorageError> {
         let mut connection = self.writer.lock().await;
         let rows = sqlx_turso::query!(
             "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' ORDER BY target_service_id,target_endpoint_id,target_session_id"
@@ -33,7 +33,7 @@ impl InteractionStore {
 
     pub async fn list_held_mail_push_records(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushRecord>, StorageError> {
         let mut connection = self.writer.lock().await;
         let service_id = String::from(target.endpoint.service_id.clone());

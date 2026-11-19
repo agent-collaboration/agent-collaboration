@@ -1,5 +1,5 @@
-//! Step 9 B (Lead A, 2026-11-18): central keeps decisions for 24 hours, so a
-//! write must never be replayed past its deadline. Central commits a write,
+//! Step 9 B (Lead A, 2026-11-18): a write must never be replayed past its
+//! deadline, 15 minutes for every outbox write (owner, 2026-11-18). Central commits a write,
 //! its answer is lost, the Router stops, and it starts again after the
 //! deadline: the write ends with its agent told, and central never sees it a
 //! second time.
@@ -106,20 +106,16 @@ async fn committed_then_lost_then_restarted_after(
 }
 
 #[tokio::test]
-async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_24_hours() {
+async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes() {
     let id = uuid_v7(40);
-    let (status, ended, received) = committed_then_lost_then_restarted_after(
-        thread_post(&id),
-        &id,
-        24 * 60 * 60 * 1000 + 60_000,
-    )
-    .await;
+    let (status, ended, received) =
+        committed_then_lost_then_restarted_after(thread_post(&id), &id, 16 * 60 * 1000).await;
 
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
         status,
         RequestStatus::Cancelled {
-            reason: OutboxCancellation::GaveUpAfter24Hours
+            reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );
     assert_eq!(
@@ -127,7 +123,7 @@ async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_24_hours()
             .iter()
             .map(|write| (write.request_id.as_str().to_owned(), write.reason))
             .collect::<Vec<_>>(),
-        vec![(id, OutboxCancellation::GaveUpAfter24Hours)],
+        vec![(id, OutboxCancellation::NotConfirmedWithin15Minutes)],
         "the agent is told once"
     );
 }
@@ -156,9 +152,63 @@ async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minute
 async fn a_write_restarted_before_its_deadline_is_resent_under_the_same_id() {
     let id = uuid_v7(42);
     let (status, ended, received) =
-        committed_then_lost_then_restarted_after(thread_post(&id), &id, 60 * 60 * 1000).await;
+        committed_then_lost_then_restarted_after(thread_post(&id), &id, 10 * 60 * 1000).await;
 
     assert_eq!(received, 2, "inside the window the replay goes out again");
     assert_eq!(status, RequestStatus::Answered(reply()));
     assert!(ended.is_empty());
+}
+
+/// A post stored while central was unreachable, never sent, and the Router
+/// restarted after 15 minutes: it ends NotSent, its agent told, and central
+/// never sees it.
+#[tokio::test]
+async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
+    let database_root = tempfile::tempdir().unwrap();
+    let database = database_root.path().join("machine_local.sqlite");
+    let id = uuid_v7(43);
+
+    let first = Harness::start_with_store(
+        tempfile::tempdir().unwrap(),
+        clock_at(MARK - 20_000),
+        reopened(&database).await,
+    );
+    // Central never answers the connection: the write only waits.
+    first.calls.submit(caller(), thread_post(&id)).await;
+    first.stop().await;
+
+    let mut second = Harness::start_with_store(
+        tempfile::tempdir().unwrap(),
+        clock_at(MARK - 20_000 + 16 * 60 * 1000),
+        reopened(&database).await,
+    );
+    let mut central = second.connected().await;
+    let mut received = 0;
+    for _ in 0..3 {
+        advance_to_next_mark(&second);
+        for batch in batches_now(&second, &mut central).await {
+            received += batch.len();
+        }
+    }
+    let status = second
+        .calls
+        .request_status(caller(), id.parse().unwrap())
+        .await;
+    let ended = second.outcomes.1.lock().unwrap().clone();
+    second.stop().await;
+
+    assert_eq!(received, 0, "an overdue write is never sent");
+    assert_eq!(
+        status,
+        RequestStatus::Cancelled {
+            reason: OutboxCancellation::NotSentWithin15Minutes
+        }
+    );
+    assert_eq!(
+        ended
+            .iter()
+            .map(|write| (write.request_id.as_str().to_owned(), write.reason))
+            .collect::<Vec<_>>(),
+        vec![(id, OutboxCancellation::NotSentWithin15Minutes)]
+    );
 }

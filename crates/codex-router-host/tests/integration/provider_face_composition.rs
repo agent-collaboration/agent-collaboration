@@ -3,7 +3,7 @@ use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
     ExternalProviderStartup,
 };
-use collaboration_protocol::{EndpointId, EndpointRef, SessionId, SessionRef};
+use collaboration_protocol::{EndpointId, EndpointRef, HarnessSessionRef, SessionId};
 use std::os::unix::fs::PermissionsExt as _;
 
 #[expect(
@@ -337,14 +337,14 @@ async fn app_server_socket_creates_and_prompts_with_the_owner_identity() {
     .await
     .expect("idle cancel deadline");
     assert_eq!(idle_cancel["error"]["code"], -32000);
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint"),
         },
         session_id: SessionId::try_from("tui-provider-session".to_owned()).expect("session"),
     };
-    let other_agent = SessionRef {
+    let other_agent = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("actor endpoint"),

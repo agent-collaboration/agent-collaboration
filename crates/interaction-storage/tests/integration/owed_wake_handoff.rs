@@ -2,8 +2,8 @@
 use agent_automation::{ExpiryRule, FirstFire, OperationId, TimingRule, WakeRecord};
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
 use collaboration_protocol::{
-    CodexGeneration, MessageContent, PushHeaderFacts, PushId, PushKind, PushOrigin,
-    PushRecordDraft, RouterOriginRef, SavedMessage, SessionRef, WakeCreator,
+    CodexGeneration, HarnessSessionRef, MessageContent, PushHeaderFacts, PushId, PushKind,
+    PushOrigin, PushRecordDraft, RouterOriginRef, SavedMessage, WakeCreator,
 };
 use interaction_storage::{InteractionStore, StorageError};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -135,7 +135,7 @@ async fn cold_handoff_after_fire_and_after_admission_preserves_one_push_and_clai
         return Err("committed handoff retained its owed row".into());
     }
     let claim = automation
-        .claim_delivery::<SessionRef, MessageContent, CodexGeneration>(&delivery_id, 1_000)
+        .claim_delivery::<HarnessSessionRef, MessageContent, CodexGeneration>(&delivery_id, 1_000)
         .await?
         .ok_or("wake claim missing after handoff")?;
     if claim.mode != "queue"

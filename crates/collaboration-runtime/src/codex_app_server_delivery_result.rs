@@ -8,7 +8,7 @@ use collaboration_contracts::UnsentCause;
 use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
     AcceptedResumeEffect, CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryRejection,
-    DeliveryRejectionReason, NativeSendAcceptance, SessionReachability, SessionRef,
+    DeliveryRejectionReason, HarnessSessionRef, NativeSendAcceptance, SessionReachability,
 };
 use serde_json::{Value, json};
 pub(super) fn not_submitted(
@@ -20,10 +20,10 @@ pub(super) fn not_submitted(
         .with_reachability(SessionReachability::CodexAppServer)
 }
 pub fn interpret_native_response(
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     response: crate::native_message_dispatch::NativeMessageOutcome,
     held_idle_submission: bool,
-    effects: &mut NativeEffectEvidence<SessionRef, CodexGeneration>,
+    effects: &mut NativeEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> NativeDeliveryResult {
     let disposition = match &response {
         crate::native_message_dispatch::NativeMessageOutcome::Accepted(_) => None,

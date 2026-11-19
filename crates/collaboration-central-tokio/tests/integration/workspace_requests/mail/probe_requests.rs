@@ -125,7 +125,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
         .request_probe(&fixture.caller, first.clone())
         .await
         .unwrap();
-    fixture.clock.set_utc(start + chrono::Duration::hours(24));
+    fixture.set_utc(start + chrono::Duration::hours(24)).await;
     fixture.refresh_caller().await;
     assert_eq!(
         runtime.request_probe(&fixture.caller, first).await.unwrap(),
@@ -149,8 +149,8 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
         }
     );
     fixture
-        .clock
-        .set_utc(start + chrono::Duration::hours(24) + chrono::Duration::milliseconds(1));
+        .set_utc(start + chrono::Duration::hours(24) + chrono::Duration::milliseconds(1))
+        .await;
     fixture.refresh_caller().await;
 
     let answer = runtime

@@ -35,9 +35,9 @@ async fn retired_wakes(
             .await;
         wakes.push(wake);
     }
-    engine.set(first);
+    engine.set(first).await;
     engine.after_event().await;
-    engine.set(first + minutes(5));
+    engine.set(first + minutes(5)).await;
     engine.after_event().await;
     for wake in &wakes {
         assert_eq!(
@@ -60,7 +60,7 @@ async fn health_lists_every_kind_and_the_retired_list_pages_in_attempt_order() {
             vec![text(&failing)],
         )
         .await;
-    engine.set(failing_due);
+    engine.set(failing_due).await;
     engine.after_event().await;
 
     let health = engine.health().await;
@@ -220,7 +220,7 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
         "a replay with the same operation ID returns the stored answer"
     );
     assert_eq!(engine.wake_messages(&wakes[0]).await, 0, "not worked yet");
-    engine.set(floor);
+    engine.set(floor).await;
     engine.after_event().await;
     assert_eq!(
         engine.wake_messages(&wakes[0]).await,
@@ -251,7 +251,9 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
             vec![original_target.clone(), text(&wakes[2])],
         )
         .await;
-    engine.set(engine.now() + chrono::Duration::seconds(60));
+    engine
+        .set(engine.now() + chrono::Duration::seconds(60))
+        .await;
     assert_eq!(
         engine.retry(&third).await,
         json!({"result":"engineRetried"})
@@ -279,7 +281,7 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
             vec![text(&failing)],
         )
         .await;
-    engine.set(due);
+    engine.set(due).await;
     engine.after_event().await;
     let failing_attempt = engine.attempt_id("wake_timer", &failing).await;
     assert_eq!(engine.retry(&failing_attempt).await, refused("notRetired"));
@@ -295,9 +297,9 @@ async fn retired_automation(engine: &EngineOrg) -> (String, String) {
     let first = next_mark(engine.now());
     let automation = engine.automation(first, "rejected").await;
     engine.raw(REJECT_AUTOMATION, vec![]).await;
-    engine.set(first);
+    engine.set(first).await;
     engine.after_event().await;
-    engine.set(first + minutes(5));
+    engine.set(first + minutes(5)).await;
     engine.after_event().await;
     engine.raw("DROP TRIGGER automation_reject", vec![]).await;
     assert_eq!(
@@ -376,7 +378,7 @@ async fn discard_runs_the_finishing_transition_and_refuses_unsupported_and_stale
     let due = next_mark(engine.now());
     let failing = engine.automation(due, "failing").await;
     engine.raw(REJECT_AUTOMATION, vec![]).await;
-    engine.set(due);
+    engine.set(due).await;
     engine.after_event().await;
     engine.raw("DROP TRIGGER automation_reject", vec![]).await;
     let failing_attempt = engine.attempt_id("automation_timer", &failing).await;
@@ -454,9 +456,9 @@ async fn retired_with(engine: &EngineOrg, corruption: &Corruption) -> (&'static 
         ),
     };
     engine.raw(sql, vec![text(&subject)]).await;
-    engine.set(first);
+    engine.set(first).await;
     engine.after_event().await;
-    engine.set(first + minutes(5));
+    engine.set(first + minutes(5)).await;
     engine.after_event().await;
     assert_eq!(
         engine.record(kind, &subject).await[0][..2],

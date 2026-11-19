@@ -1,13 +1,13 @@
 //! Immediate, actor-bound provider Session setting changes.
 
-use crate::{EffectiveProviderSettings, ProviderIdentity, ProviderSettingName, SessionRef};
+use crate::{EffectiveProviderSettings, HarnessSessionRef, ProviderIdentity, ProviderSettingName};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSettingsSetRequest {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub actor: ProviderIdentity,
     pub setting: ProviderSettingName,
     pub value: String,
@@ -16,14 +16,14 @@ pub struct ProviderSettingsSetRequest {
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSettingsAcceptRequest {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub actor: ProviderIdentity,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSettingsResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub effective_settings: EffectiveProviderSettings,
 }
 
@@ -47,7 +47,7 @@ pub struct ProviderSettingsFailure {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<crate::ConversationOperationFailureStage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setting: Option<ProviderSettingName>,

@@ -28,7 +28,7 @@ use collaboration_contracts::SettlementEvidence;
 use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, DestinationPreparation,
-    EndpointRef, ScheduleFailureKind, SessionRef,
+    EndpointRef, HarnessSessionRef, ScheduleFailureKind,
 };
 use serde_json::{Value, json};
 
@@ -42,7 +42,7 @@ pub struct CodexAppServerScheduledRuns {
 fn native_effects_into_automation(
     effects: collaboration_protocol::NativeEffectEvidence,
 ) -> Result<
-    NativeEffectEvidence<SessionRef, collaboration_protocol::CodexGeneration>,
+    NativeEffectEvidence<HarnessSessionRef, collaboration_protocol::CodexGeneration>,
     DeliveryContractError,
 > {
     serde_json::from_value(
@@ -112,7 +112,7 @@ impl CodexAppServerScheduledRuns {
         match prepared {
             Ok((target, effects)) => {
                 let evidence: NativeEffectEvidence<
-                    SessionRef,
+                    HarnessSessionRef,
                     collaboration_protocol::CodexGeneration,
                 > = serde_json::from_value(
                     serde_json::to_value(effects)
@@ -128,7 +128,7 @@ impl CodexAppServerScheduledRuns {
             }
             Err(failure) => {
                 let evidence: NativeEffectEvidence<
-                    SessionRef,
+                    HarnessSessionRef,
                     collaboration_protocol::CodexGeneration,
                 > = serde_json::from_value(
                     serde_json::to_value(failure.effects)
@@ -343,8 +343,10 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
     fn initial_evidence(
         &self,
         destination: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, RouteEffectEvidence<SessionRef, collaboration_protocol::CodexGeneration>>
-    {
+    ) -> DeliveryFuture<
+        '_,
+        RouteEffectEvidence<HarnessSessionRef, collaboration_protocol::CodexGeneration>,
+    > {
         let destination = destination.clone();
         Box::pin(async move {
             let preparation = match destination {
@@ -427,7 +429,7 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
 
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {

@@ -6,9 +6,9 @@ use crate::identity_contract::{
 use crate::organization_authority::OrganizationChangeRecord;
 use crate::workspace_decode_error::corrupt;
 use central_storage::StoreFailure;
-use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use message_board::{MachineLabel, WorkspaceId};
-use uuid::Uuid;
+use workspace_ids::MachineId;
 
 /// A generation is an exact cross-host SQL integer; exhaustion never wraps.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -43,8 +43,7 @@ pub(crate) enum MachineState {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct MachineRow {
-    pub id: Uuid,
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub label: MachineLabel,
     pub allowed_workspaces: Vec<WorkspaceId>,
     pub generation: EnrollmentGeneration,
@@ -71,8 +70,7 @@ pub(crate) enum StoredEnrollmentState {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StoredEnrollment {
     pub id: EnrollmentId,
-    pub machine_id: Uuid,
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub request_id: DeviceLoginRequestId,
     pub approved_by: PersonId,
     pub label: MachineLabel,
@@ -100,7 +98,7 @@ impl StoredEnrollment {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EnrollmentQuery {
-    pub installation: Option<InstallationId>,
+    pub machine_id: Option<MachineId>,
     pub request: Option<DeviceLoginRequestId>,
     pub enrollment: Option<EnrollmentId>,
     pub workspaces: Vec<WorkspaceId>,

@@ -15,6 +15,7 @@ test-support = ["sqlite-storage-maintenance/test-support"]
 workspace = true
 
 [dependencies]
+workspace-ids.workspace = true
 chrono.workspace = true
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.96" }

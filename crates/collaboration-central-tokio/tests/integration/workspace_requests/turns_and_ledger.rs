@@ -283,9 +283,8 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         args: vec![text(id::<m::RequestId>(361))],
     };
     let first_ledger = runtime.statement_host().read(ledger_query()).await.unwrap();
-    f.clock
-        .advance(std::time::Duration::from_millis(86_400_001))
-        .unwrap();
+    f.advance(std::time::Duration::from_millis(86_400_001))
+        .await;
     f.caller = f.fresh_caller(&f.caller).await;
     let next = f.call(360, area).await;
     assert!(matches!(

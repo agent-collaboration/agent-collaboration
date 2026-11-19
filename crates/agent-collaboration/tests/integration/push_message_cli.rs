@@ -5,14 +5,14 @@ use std::{error::Error, ffi::OsString, time::Duration};
 use agent_session_inventory::test_support::fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000002";
 const CALLER_SESSION_ID: &str = "push-cli-caller";
 const SENDER_SESSION_ID: &str = "push-cli-sender";
 const TARGET_SESSION_ID: &str = "push-cli-target";
 const PUSH_ID: &str = "019f0000-0000-7000-8000-000000000101";
 const PUSH_LINK: &str =
-    "router://00000000-0000-4000-8000-000000000001/push/019f0000-0000-7000-8000-000000000101";
+    "router://00000000-0000-7000-8000-000000000001/push/019f0000-0000-7000-8000-000000000101";
 const NOTICE_LINE: &str =
     "💬 Agent → You: hello router://host/push/019f0000-0000-7000-8000-000000000101";
 
@@ -111,7 +111,7 @@ async fn message_send_reports_the_stored_push_and_uses_the_harness_sender() {
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--text".into(),
             "hello recipient".into(),
@@ -153,7 +153,7 @@ async fn held_message_send_prints_the_delivery_condition_and_exits_zero() {
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--text".into(),
             "hello recipient".into(),
@@ -192,7 +192,7 @@ async fn rejected_message_send_prints_one_actionable_line_and_exit_four() {
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--text".into(),
             "hello recipient".into(),
@@ -231,7 +231,7 @@ async fn claude_queue_rejection_recommends_auto_and_exits_four() {
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--delivery".into(),
             "queue".into(),
@@ -276,7 +276,7 @@ async fn ambiguous_peer_rejection_lists_claims_and_the_branch_next_step() {
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--text".into(),
             "hello recipient".into(),
@@ -311,7 +311,7 @@ async fn unknown_message_send_points_to_show_before_retrying_and_exits_five() {
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--text".into(),
             "hello recipient".into(),
@@ -352,7 +352,7 @@ async fn stored_message_send_outcome_unknown_keeps_the_push_link_and_exits_five(
             "send".into(),
             "--to".into(),
             serde_json::to_string(&target)
-                .expect("serialize target SessionRef")
+                .expect("serialize target HarnessSessionRef")
                 .into(),
             "--text".into(),
             "hello recipient".into(),
@@ -383,7 +383,7 @@ fn invalid_message_target_prints_one_line_with_a_session_ref_example() {
     assert!(output.stdout.is_empty());
     let message = String::from_utf8(output.stderr).expect("CLI stderr is UTF-8");
     assert_eq!(message.lines().count(), 1);
-    assert!(message.starts_with("error: --to must be compact SessionRef JSON"));
+    assert!(message.starts_with("error: --to must be compact HarnessSessionRef JSON"));
     assert!(message.contains("serviceId"));
     assert!(message.contains("sessionId"));
     assert!(message.ends_with(" — correct the named argument and try again\n"));
@@ -439,7 +439,7 @@ async fn message_history_uses_the_explicit_session_and_returns_notice_records() 
             "history".into(),
             "--with".into(),
             serde_json::to_string(&other_session)
-                .expect("serialize requested SessionRef")
+                .expect("serialize requested HarnessSessionRef")
                 .into(),
             "--json".into(),
         ],
@@ -588,7 +588,7 @@ fn message_history_rejects_an_invalid_session_reference_with_field_guidance() {
     assert_eq!(
         response.pointer("/error/constraint"),
         Some(&json!(
-            "--with must be compact SessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --with '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'"
+            "--with must be compact HarnessSessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --with '{\"endpoint\":{\"serviceId\":\"00000000-0000-7000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'"
         ))
     );
     assert_eq!(

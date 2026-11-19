@@ -4,8 +4,8 @@ use crate::{
     operation_failure_from_client_error,
 };
 use collaboration_protocol::{
-    CodexGeneration, MessageContent, MessageDelivery, MessageReplyResult, MessageSendResult,
-    MessageText, SessionMessageReplyParams, SessionMessageSendParams, SessionRef,
+    CodexGeneration, HarnessSessionRef, MessageContent, MessageDelivery, MessageReplyResult,
+    MessageSendResult, MessageText, SessionMessageReplyParams, SessionMessageSendParams,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub struct MessageSendRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_id: Option<collaboration_protocol::MailItemId>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub message: PublicMessageContent,
     #[serde(default)]
     pub delivery: MessageDelivery,
@@ -25,7 +25,7 @@ pub struct MessageSendRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MessageReplyRequest {
-    pub caller: SessionRef,
+    pub caller: HarnessSessionRef,
     pub reference: String,
     pub text: MessageText,
 }
@@ -36,7 +36,7 @@ pub enum MessageSendError {
     Preparation(Box<ClientError>),
     #[error("{source}")]
     Submission {
-        target: SessionRef,
+        target: HarnessSessionRef,
         #[source]
         source: Box<ClientError>,
     },
@@ -48,7 +48,7 @@ pub enum MessageReplyError {
     Preparation(Box<ClientError>),
     #[error("{source}")]
     Submission {
-        caller: SessionRef,
+        caller: HarnessSessionRef,
         #[source]
         source: Box<ClientError>,
     },
@@ -56,7 +56,9 @@ pub enum MessageReplyError {
 
 impl MessageReplyError {
     #[must_use]
-    pub fn into_operation_failure_and_caller(self) -> (OperationFailure, Option<SessionRef>) {
+    pub fn into_operation_failure_and_caller(
+        self,
+    ) -> (OperationFailure, Option<HarnessSessionRef>) {
         match self {
             Self::Preparation(error) => (
                 operation_failure_from_client_error(*error, OperationEffect::None),
@@ -74,7 +76,9 @@ impl MessageReplyError {
 
 impl MessageSendError {
     #[must_use]
-    pub fn into_operation_failure_and_target(self) -> (OperationFailure, Option<SessionRef>) {
+    pub fn into_operation_failure_and_target(
+        self,
+    ) -> (OperationFailure, Option<HarnessSessionRef>) {
         match self {
             Self::Preparation(error) => (
                 operation_failure_from_client_error(*error, OperationEffect::None),
@@ -94,7 +98,7 @@ impl MessageSendError {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum PublicMessageContent {
     Agent {
-        sender: SessionRef,
+        sender: HarnessSessionRef,
         text: collaboration_protocol::MessageText,
     },
     HumanUser {

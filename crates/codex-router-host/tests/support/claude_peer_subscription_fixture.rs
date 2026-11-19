@@ -16,8 +16,8 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
-    EndpointId as PeerEndpointId, EndpointRef, PushId, PushRecord, RouterOriginRef, SessionRef,
-    UuidIdentity,
+    EndpointId as PeerEndpointId, EndpointRef, HarnessSessionRef, PushId, PushRecord,
+    RouterOriginRef,
 };
 use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
@@ -62,7 +62,7 @@ pub const PEER_TOKEN: &str = "0123456789abcdef0123456789abcdef";
 pub const PRESENCE_RECHECK: Duration = Duration::from_secs(30);
 pub const OWNER_EVENT_TIMEOUT: Duration = Duration::from_secs(5);
 
-const SERVICE_ID: &str = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+const SERVICE_ID: &str = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
 const ENDPOINT_ID: &str = "claude-local";
 
 pub struct PeerMessageFrames {
@@ -76,7 +76,7 @@ pub struct ClaudePeerSubscriptionFixture {
     _directory: tempfile::TempDir,
     registry_directory: PathBuf,
     socket_path: PathBuf,
-    target: SessionRef,
+    target: HarnessSessionRef,
     reader: Identity,
     writer: Identity,
     thread_id: ThreadId,
@@ -123,7 +123,7 @@ impl ClaudePeerSubscriptionFixture {
             registry: project_registry.clone(),
             fleet: fleet.clone(),
             identity: MachineIdentity::new(
-                UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+                workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
                 Some("claude-peer-resume-fixture"),
             )?,
         })?);
@@ -227,7 +227,7 @@ impl ClaudePeerSubscriptionFixture {
         })
     }
 
-    pub fn target(&self) -> &SessionRef {
+    pub fn target(&self) -> &HarnessSessionRef {
         &self.target
     }
 
@@ -424,10 +424,10 @@ impl ClaudePeerSubscriptionFixture {
     }
 }
 
-fn peer_target() -> ProofResult<SessionRef> {
-    Ok(SessionRef {
+fn peer_target() -> ProofResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+            service_id: workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
             endpoint_id: PeerEndpointId::try_from(ENDPOINT_ID.to_owned())?,
         },
         session_id: collaboration_protocol::SessionId::try_from(SESSION_ID.to_owned())?,

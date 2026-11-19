@@ -252,7 +252,7 @@ async fn clients_organizations_unknown_ids_and_two_machine_logins_remain_isolate
         "foreign org lookup rewrote the original organization"
     );
     assert_eq!(
-        f.rows("SELECT enrollment_generation FROM machines ORDER BY installation_id")
+        f.rows("SELECT enrollment_generation FROM machines ORDER BY machine_id")
             .await?,
         vec![vec![number(1)], vec![number(1)]]
     );

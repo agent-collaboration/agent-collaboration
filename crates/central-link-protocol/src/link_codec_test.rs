@@ -37,7 +37,7 @@ fn heartbeat_is_exact_unquoted_text_and_old_nonce_json_is_rejected() {
 }
 
 #[test]
-fn welcome_reply_deliver_ack_and_message_outcome_are_closed_and_directional() {
+fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
     let id = "01890f2e-7b4c-7cc0-98c4-000000000001";
     let fixtures = [
         (
@@ -50,15 +50,15 @@ fn welcome_reply_deliver_ack_and_message_outcome_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToRouter,
-            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"endpoint":"codex","sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"},"sendId":id}),
+            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
         ),
         (
             FrameDirection::ToCentral,
-            json!({"kind":"ack","messageId":id,"sendId":id,"answer":"accepted"}),
+            json!({"kind":"ack","messageId":id,"answer":{"kind":"accepted"}}),
         ),
         (
-            FrameDirection::ToRouter,
-            json!({"kind":"messageOutcome","requestId":id,"messageId":id,"outcome":{"kind":"cancelled","reason":"notDeliveredWithin15Minutes"}}),
+            FrameDirection::ToCentral,
+            json!({"kind":"ack","messageId":id,"answer":{"kind":"refused","reason":"recipientRefused"}}),
         ),
     ];
     for (direction, fixture) in fixtures {
@@ -82,9 +82,12 @@ fn welcome_reply_deliver_ack_and_message_outcome_are_closed_and_directional() {
         json!({"kind":"unknown"}),
         json!({"kind":"ack"}),
         json!({"kind":"ack","messageId":"bad"}),
-        // An Ack must name the send it answers and say how.
+        // An Ack must say how it answers; there is no per-send id, no
+        // "refused for good" without a reason, and no outcome frame.
         json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001"}),
-        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","sendId":"01890f2e-7b4c-7cc0-98c4-000000000001"}),
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","sendId":"01890f2e-7b4c-7cc0-98c4-000000000001","answer":{"kind":"accepted"}}),
+        json!({"kind":"ack","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","answer":"refusedForGood"}),
+        json!({"kind":"messageOutcome","requestId":"01890f2e-7b4c-7cc0-98c4-000000000001","messageId":"01890f2e-7b4c-7cc0-98c4-000000000001","outcome":{"kind":"deliveredAfterAll"}}),
     ] {
         assert!(decode_text(&fixture.to_string(), FrameDirection::ToCentral).is_err());
     }
@@ -96,7 +99,7 @@ fn mail_request_and_reply_reuse_the_existing_contract_without_wire_coercion() {
     let fixtures = [
         (
             FrameDirection::ToCentral,
-            json!({"kind":"request","request":{"correlationId":id,"caller":{"kind":"session","value":{"machineId":id,"endpoint":"codex","sessionId":"s"}},"payload":{"kind":"mail","request":{"requestId":"01890f2e-7b4c-7cc0-98c4-000000000002","operation":{"kind":"setNoticeCadence","cadence":"m25"}}}}}),
+            json!({"kind":"request","request":{"correlationId":id,"caller":{"kind":"session","value":{"machineId":id,"sessionId":"s"}},"payload":{"kind":"mail","request":{"requestId":"01890f2e-7b4c-7cc0-98c4-000000000002","operation":{"kind":"setNoticeCadence","cadence":"m25"}}}}}),
         ),
         (
             FrameDirection::ToRouter,
@@ -115,7 +118,7 @@ fn mail_request_and_reply_reuse_the_existing_contract_without_wire_coercion() {
 
 #[test]
 fn batch_of_writes_round_trips_raw_json() {
-    let fixture = json!({"kind":"batch","requests":[{"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001","caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}}]});
+    let fixture = json!({"kind":"batch","requests":[{"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001","caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}}]});
     let frame = decode_text(&fixture.to_string(), FrameDirection::ToCentral).unwrap();
     let encoded = encode_text(&frame, FrameDirection::ToCentral).unwrap();
     assert_eq!(
@@ -125,7 +128,7 @@ fn batch_of_writes_round_trips_raw_json() {
 }
 
 fn batch_member(number: usize) -> serde_json::Value {
-    json!({"correlationId":format!("01890f2e-7b4c-7cc0-98c4-{number:012x}"),"caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}})
+    json!({"correlationId":format!("01890f2e-7b4c-7cc0-98c4-{number:012x}"),"caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}})
 }
 
 #[test]

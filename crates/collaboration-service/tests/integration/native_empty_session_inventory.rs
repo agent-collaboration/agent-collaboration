@@ -1,7 +1,7 @@
 use crate::served_api;
 use collaboration_protocol::{
-    CodexGeneration, NativeSessionListParams, NativeSessionObservation, NativeSessionScope,
-    NativeSessionSource, NativeSessionView, SessionRef,
+    CodexGeneration, HarnessSessionRef, NativeSessionListParams, NativeSessionObservation,
+    NativeSessionScope, NativeSessionSource, NativeSessionView,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -16,14 +16,14 @@ async fn runtime_inventory_filters_unmaterialized_threads_and_keeps_rows_on_turn
     let temporary = tempfile::tempdir().expect("isolated inventory directory");
     let backend_path = temporary.path().join("backend.sock");
     let listener = tokio::net::UnixListener::bind(&backend_path).expect("backend socket");
-    let service_id = "00000000-0000-4000-8000-000000000001";
-    let service_epoch = "00000000-0000-4000-8000-000000000002";
+    let service_id = "00000000-0000-7000-8000-000000000001";
+    let service_epoch = "00000000-0000-7000-8000-000000000002";
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch":service_epoch,
         "generation":1
     }))
     .expect("generation");
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"empty-thread"
     }))

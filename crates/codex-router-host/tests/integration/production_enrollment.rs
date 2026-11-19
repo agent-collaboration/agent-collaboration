@@ -191,7 +191,7 @@ fn write_private_enrollment(root: &Path) -> TestResult<PathBuf> {
     };
     let router_root = root.join("router");
     let store = codex_router_host::open_fleet_enrollment_store(&router_root)?;
-    let installation = "550e8400-e29b-41d4-a716-446655440000";
+    let installation = "550e8400-e29b-71d4-a716-446655440000";
     let generation = uuid::Uuid::now_v7().to_string();
     let access = FleetSecretKey::new(
         FleetSecretKind::AccessClientSecret,

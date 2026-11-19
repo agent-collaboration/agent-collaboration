@@ -25,7 +25,7 @@ fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalPro
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn save_direct_message(
     store: &InteractionStore,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     mode: MessageDelivery,
 ) -> PushId {
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push");

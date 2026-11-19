@@ -9,8 +9,8 @@ use codex_router_host::{
 };
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryRejectionReason, EndpointId, EndpointRef, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
+    DeliveryOutcome, DeliveryRejectionReason, EndpointId, EndpointRef, HarnessSessionRef,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
@@ -121,14 +121,14 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         service_id: runtime.service_id().clone(),
         endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("Cursor endpoint"),
     };
-    let actor = SessionRef {
+    let actor = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("actor endpoint"),
         },
         session_id: SessionId::try_from("route-test-actor".to_owned()).expect("actor session"),
     };
-    let unloaded = SessionRef {
+    let unloaded = HarnessSessionRef {
         endpoint: claude_endpoint.clone(),
         session_id: SessionId::try_from("recorded-unloaded".to_owned()).expect("session"),
     };
@@ -210,7 +210,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     // DM sends use LoadedOnly; loading is an explicit conversation operation.
     load_provider_target(
         &client,
-        SessionRef {
+        HarnessSessionRef {
             endpoint: claude_endpoint.clone(),
             session_id: SessionId::try_from("recorded-unloaded".to_owned()).expect("session"),
         },
@@ -219,7 +219,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     )
     .await;
     let loaded = client
-        .send_message(message(SessionRef {
+        .send_message(message(HarnessSessionRef {
             endpoint: claude_endpoint.clone(),
             session_id: SessionId::try_from("recorded-unloaded".to_owned()).expect("session"),
         }))
@@ -368,7 +368,7 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
     let client = CollaborationClient::connect(root.path(), "host-permission-proof", "1")
         .await
         .expect("collaboration API client");
-    let actor = SessionRef {
+    let actor = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("actor endpoint"),

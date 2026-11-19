@@ -71,7 +71,7 @@ async fn image_input_reports_unreadable_and_oversized_files()
 
 fn test_session() -> Result<message_board::SessionRef, serde_json::Error> {
     serde_json::from_value(
-        json!({"endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},"sessionId":"target"}),
+        json!({"endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},"sessionId":"target"}),
     )
 }
 

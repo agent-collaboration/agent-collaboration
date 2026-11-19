@@ -1,6 +1,6 @@
 use crate::proof_context::{ProofContext, ProofResult};
 use collaboration_client::protocol::{
-    NativeSessionListParams, NativeSessionSummary, NativeSessionView, SessionRef,
+    HarnessSessionRef, NativeSessionListParams, NativeSessionSummary, NativeSessionView,
 };
 use std::{path::Path, time::Duration};
 
@@ -34,7 +34,7 @@ pub(super) async fn list_all(
 
 pub(super) async fn wait_until_stored(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> ProofResult<Vec<NativeSessionSummary>> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     let mut interval = tokio::time::interval(Duration::from_secs(1));
@@ -53,7 +53,7 @@ pub(super) async fn wait_until_stored(
 pub(super) fn require_single_session_at_cwd(
     sessions: &[NativeSessionSummary],
     cwd: &Path,
-    expected: &SessionRef,
+    expected: &HarnessSessionRef,
 ) -> ProofResult<()> {
     let expected_cwd = cwd.to_string_lossy();
     let matches = sessions

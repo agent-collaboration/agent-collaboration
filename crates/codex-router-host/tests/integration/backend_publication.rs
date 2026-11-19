@@ -7,7 +7,7 @@ use collaboration_runtime::EndpointDirectory;
 #[tokio::test]
 async fn replacement_clears_advertised_generation_before_new_readiness() {
     let endpoint: EndpointRef = serde_json::from_str(
-        r#"{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"}"#,
+        r#"{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"}"#,
     )
     .unwrap_or_else(|e| panic!("endpoint: {e}"));
     let directory = EndpointDirectory::new(endpoint.service_id.clone());

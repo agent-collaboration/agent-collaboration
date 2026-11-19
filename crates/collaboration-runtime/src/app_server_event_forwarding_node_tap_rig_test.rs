@@ -17,7 +17,7 @@ pub(crate) struct Rig {
 
 pub(crate) fn tap_session() -> SessionRef {
     serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001",
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001",
         "endpointId":"claude-local"},"sessionId":"tap-session"
     }))
     .expect("session")

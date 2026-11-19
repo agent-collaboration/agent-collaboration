@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 
 async fn run_cli(
     directory: &Path,
@@ -66,8 +66,7 @@ async fn shed_commands_report_an_overload_to_retry() {
                 .expect("native registry"),
             fleet: Arc::new(fleet),
             identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
-                    .expect("service fixture"),
+                workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service fixture"),
                 Some("overload proof"),
             )
             .expect("identity fixture"),

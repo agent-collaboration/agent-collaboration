@@ -9,13 +9,13 @@ async fn lifecycle_disposition_is_committed_with_journal_and_survives_reopen() {
         std::process::id()
     ));
     let id = || {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap_or_else(|e| panic!("id: {e}"))
     };
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"});
     let address = json!({"endpoint":endpoint,"nativeThreadId":"t"});
     let mut journal = ObservationJournal::open(&path, id())
         .await

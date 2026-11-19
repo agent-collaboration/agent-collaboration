@@ -4,8 +4,8 @@ use collaboration_contracts::DeliveryPrecondition;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    AttemptId, DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
-    MessageText, PushId, PushKind, PushLineInput, PushRecord, RouterLink, SessionRef,
+    AttemptId, DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, HarnessSessionRef,
+    MessageDelivery, MessageText, PushId, PushKind, PushLineInput, PushRecord, RouterLink,
     render_push_line,
 };
 use message_board::BoardError;
@@ -13,7 +13,7 @@ use message_board::BoardError;
 impl SubscriptionPushStore {
     pub(super) async fn restore_direct_messages(
         &self,
-    ) -> Result<Vec<SessionRef>, interaction_storage::StorageError> {
+    ) -> Result<Vec<HarnessSessionRef>, interaction_storage::StorageError> {
         let store = &self.store;
         store
             .settle_interrupted_pushes(self.clock.utc_now())
@@ -23,7 +23,7 @@ impl SubscriptionPushStore {
 
     pub(super) async fn direct_messages(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushRecord>, BoardError> {
         self.store
             .list_unsent_direct_messages(target)
@@ -102,10 +102,7 @@ impl SubscriptionPushStore {
             _ => return Err(BoardError::board_unavailable()),
         };
         let line = render_push_line(&PushLineInput {
-            link: RouterLink::new(
-                MachineId::from(self.machine.service_id().clone()),
-                record.push_id.clone(),
-            ),
+            link: RouterLink::new(self.machine.service_id().clone(), record.push_id.clone()),
             machine_label: self.machine.machine_label().clone(),
             origin: record.origin.clone(),
             header_facts: record.header_facts.clone(),

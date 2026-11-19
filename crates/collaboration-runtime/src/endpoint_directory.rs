@@ -1,5 +1,5 @@
 //! Atomic endpoint snapshots: the Host publishes endpoints and readers take the inventory.
-use collaboration_protocol::{EndpointDescription, EndpointRef, UuidIdentity};
+use collaboration_protocol::{EndpointDescription, EndpointRef};
 use std::collections::BTreeMap;
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -9,7 +9,7 @@ pub struct EndpointDirectory {
     state: Arc<Mutex<DirectoryState>>,
 }
 struct DirectoryState {
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     endpoints: BTreeMap<EndpointRef, EndpointDescription>,
     /// Counts every publication across the Host, independent of any subscriber.
     publications: u64,
@@ -63,7 +63,7 @@ impl EndpointDirectory {
     }
 
     #[must_use]
-    pub fn new(service_id: UuidIdentity) -> Self {
+    pub fn new(service_id: workspace_ids::MachineId) -> Self {
         Self {
             state: Arc::new(Mutex::new(DirectoryState {
                 service_id,

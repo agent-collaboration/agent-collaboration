@@ -5,7 +5,7 @@ use agent_automation::{
     ScheduleDefinition, TimingRule,
 };
 use automation_storage::{AutomationStore, RunDispatchIntent, ScheduleCreate};
-use collaboration_protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef, NativeSendReceipt};
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_service::ApplicationFixture;
@@ -55,10 +55,10 @@ async fn exercise(
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(
+    let target: HarnessSessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"recorded-thread"}),
     )?;
     let instruction = store
@@ -69,7 +69,7 @@ async fn exercise(
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -88,19 +88,20 @@ async fn exercise(
         })
         .await?;
     let run_id = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("run missing")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
+        .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60001)
         .await?;
-    let mut effects: NativeEffectEvidence<SessionRef, CodexGeneration> = serde_json::from_value(
-        json!({"target":target,"generation":generation,"clientUserMessageId":run_id,"nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"dispatching","cessation":"unconfirmed"}),
-    )?;
+    let mut effects: NativeEffectEvidence<HarnessSessionRef, CodexGeneration> =
+        serde_json::from_value(
+            json!({"target":target,"generation":generation,"clientUserMessageId":run_id,"nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"dispatching","cessation":"unconfirmed"}),
+        )?;
     let mut prepared = effects.clone();
     prepared.submission = agent_automation::SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run_id.clone(),
                 effects: prepared.into(),
@@ -131,7 +132,7 @@ async fn exercise(
         })
         .await?;
     store
-        .retain_run_uncertainty::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .retain_run_uncertainty::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunUncertainty {
                 run_id: run_id.clone(),
                 effects,
@@ -259,7 +260,7 @@ async fn exercise(
     let stored = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?;
     if !completed && stored.phase != agent_automation::RunPhase::Uncertain {
         return Err("reconciliation released or interrupted unresolved work".into());

@@ -1,7 +1,7 @@
 //! Explicit fresh/fork/adopt selectors; only fresh destinations use the discovered local service ID.
 use clap::Args;
 use collaboration_client::protocol::{
-    DestinationPreparation, EndpointId, EndpointRef, NonEmptyText, SessionRef, UuidIdentity,
+    DestinationPreparation, EndpointId, EndpointRef, HarnessSessionRef, NonEmptyText,
 };
 #[derive(Args)]
 pub(crate) struct PreparationArguments {
@@ -12,10 +12,10 @@ pub(crate) struct PreparationArguments {
     /// Create a fresh native thread; preparation does not activate the schedule.
     #[arg(long,required_unless_present_any=["existing","fork_from"],conflicts_with_all=["existing","fork_from"])]
     fresh: bool,
-    /// Explicitly adopt an existing exact SessionRef JSON address.
+    /// Explicitly adopt an existing exact HarnessSessionRef JSON address.
     #[arg(long, conflicts_with = "fork_from")]
     existing: Option<String>,
-    /// Fork this exact SessionRef JSON address through the specified completed turn.
+    /// Fork this exact HarnessSessionRef JSON address through the specified completed turn.
     #[arg(long, requires = "through_turn")]
     fork_from: Option<String>,
     #[arg(long, requires = "fork_from")]
@@ -34,7 +34,7 @@ pub(crate) enum PreparedDestination {
     Exact(DestinationPreparation),
 }
 impl PreparedDestination {
-    pub(crate) fn resolve(self, service_id: UuidIdentity) -> DestinationPreparation {
+    pub(crate) fn resolve(self, service_id: workspace_ids::MachineId) -> DestinationPreparation {
         match self {
             Self::Fresh { endpoint_id, cwd } => DestinationPreparation::Fresh {
                 endpoint: EndpointRef {
@@ -53,8 +53,8 @@ impl PreparationArguments {
             return Err("--cwd must be an absolute workspace path".into());
         }
         if let Some(existing) = &self.existing {
-            let target: SessionRef = serde_json::from_str(existing)
-                .map_err(|_| "--existing requires exact SessionRef JSON from discovery")?;
+            let target: HarnessSessionRef = serde_json::from_str(existing)
+                .map_err(|_| "--existing requires exact HarnessSessionRef JSON from discovery")?;
             return Ok(PreparedDestination::Exact(
                 DestinationPreparation::Existing {
                     target,
@@ -63,8 +63,8 @@ impl PreparationArguments {
             ));
         }
         if let Some(source) = &self.fork_from {
-            let source: SessionRef = serde_json::from_str(source)
-                .map_err(|_| "--fork-from requires exact SessionRef JSON")?;
+            let source: HarnessSessionRef = serde_json::from_str(source)
+                .map_err(|_| "--fork-from requires exact HarnessSessionRef JSON")?;
             let through_turn_id: NonEmptyText = self
                 .through_turn
                 .clone()

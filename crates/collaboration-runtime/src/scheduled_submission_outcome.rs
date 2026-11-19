@@ -1,16 +1,16 @@
 //! Persist each submitted run outcome and its owed push settlement in automation.
 use super::{
-    CodexGeneration, DeliveryOutcome, DeliveryReceipt, EndpointRef, PushDeliveryState,
-    RouteEffectEvidence, RunExecution, RunId, RunSubmission, RunSubmissionOutcome,
-    RunSubmissionResult, SchedulePushSettlementContext, ScheduleRunPushUpdate, ScheduledRunWorker,
-    SessionRef, StorageError,
+    CodexGeneration, DeliveryOutcome, DeliveryReceipt, EndpointRef, HarnessSessionRef,
+    PushDeliveryState, RouteEffectEvidence, RunExecution, RunId, RunSubmission,
+    RunSubmissionOutcome, RunSubmissionResult, SchedulePushSettlementContext,
+    ScheduleRunPushUpdate, ScheduledRunWorker, StorageError,
 };
 
 impl ScheduledRunWorker {
     pub(super) async fn persist_submission(
         &self,
         id: RunId,
-        effects: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         submission: RunSubmission,
         schedule_push: SchedulePushSettlementContext,
     ) -> Result<(), StorageError> {

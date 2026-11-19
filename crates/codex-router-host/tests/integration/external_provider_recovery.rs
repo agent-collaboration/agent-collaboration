@@ -6,13 +6,13 @@ use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationCreateRequest,
     ConversationLoadRequest, ConversationOperationReconcileRequest,
-    ConversationOperationShowRequest, EndpointId, EndpointRef, GenerationNumber, NonEmptyText,
-    OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
+    ConversationOperationShowRequest, EndpointId, EndpointRef, GenerationNumber, HarnessSessionRef,
+    NonEmptyText, OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
     ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
     ProviderCapabilityStatus, ProviderKind, ProviderOperationEffect, ProviderOperationKind,
     ProviderOperationStage, ProviderReconciliationState, ProviderRequestedPolicy,
     ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory, RouterAccess, SessionId,
-    SessionRef, UuidIdentity,
+    UuidIdentity,
 };
 use collaboration_runtime::ProviderOperationAdmission;
 use collaboration_runtime::ProviderOperationStore;
@@ -51,7 +51,9 @@ macro_rules! ensure_eq {
 
 fn endpoint() -> TestResult<EndpointRef> {
     Ok(EndpointRef {
-        service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?,
+        service_id: workspace_ids::MachineId::try_from(
+            "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+        )?,
         endpoint_id: EndpointId::try_from("claude-local".to_owned())?,
     })
 }
@@ -97,15 +99,15 @@ fn restarted_binding() -> TestResult<ProviderBindingIdentity> {
     Ok(restarted)
 }
 
-fn requester() -> TestResult<SessionRef> {
-    Ok(SessionRef {
+fn requester() -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: endpoint()?,
         session_id: SessionId::try_from("recovery-requester".to_owned())?,
     })
 }
 
-fn target() -> TestResult<SessionRef> {
-    Ok(SessionRef {
+fn target() -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: endpoint()?,
         session_id: SessionId::try_from("known-provider-session".to_owned())?,
     })
@@ -358,7 +360,10 @@ async fn crash_after_load_dispatch_retains_known_target_and_never_replays() -> T
 }
 
 #[cfg(unix)]
-async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>) -> TestResult {
+async fn verify_dispatched_crash(
+    mode: &str,
+    expected_target: Option<HarnessSessionRef>,
+) -> TestResult {
     let root = tempfile::tempdir()?;
     let database_path = root.path().join("provider-operations.sqlite");
     let dispatch_log = root.path().join("dispatch.log");

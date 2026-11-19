@@ -126,7 +126,7 @@ impl CollaborationClient {
         let representation = MessageRepresentation::DeclaredAgentText;
         let delivery_receipt = &receipt.receipt;
         let expected_link = collaboration_protocol::RouterLink::new(
-            collaboration_protocol::MachineId::from(self.identity().service_id.clone()),
+            self.identity().service_id.clone(),
             receipt.push_id.clone(),
         )
         .to_string();
