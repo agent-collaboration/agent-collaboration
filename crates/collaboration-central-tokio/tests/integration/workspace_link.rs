@@ -2,6 +2,7 @@
 mod alarm_rearm;
 mod authority_races;
 mod batch_contract;
+mod delivery;
 mod fixture;
 mod link_support;
 mod renewal_contract;

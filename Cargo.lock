@@ -8172,6 +8172,8 @@ version = "0.1.154"
 dependencies = [
  "agent-automation",
  "chrono",
+ "collaboration-mail-protocol",
+ "message-board",
  "schemars 1.2.2",
  "serde",
  "serde_json",

@@ -18,7 +18,7 @@ impl SenderBinding<ServiceScope<'_>, board_sync_protocol::BoardDeliveryTypes> fo
             MailSender::Session(session) => &session.endpoint.service_id,
             MailSender::HumanUser { installation } => installation,
         };
-        if service.as_str() == "00000000-0000-7000-8000-000000000001" {
+        if *service == self.installation {
             return Ok(Submitter::Machine(self.peer));
         }
         match self

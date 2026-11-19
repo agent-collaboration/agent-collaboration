@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 #[path = "native_partition_fixture.rs"]
 pub mod native_partitions;
 
-pub(crate) const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+pub(crate) const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
 #[derive(Clone, Copy)]

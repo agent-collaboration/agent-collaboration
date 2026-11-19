@@ -317,7 +317,7 @@ impl LinkDriver {
                 correlation_id,
                 result,
             } => self.renewal_answered(&correlation_id, &result),
-            ClientEvent::Deliver { message } => self.receive_delivery(message).await,
+            ClientEvent::Deliver { message, sender: _ } => self.receive_delivery(message).await,
             ClientEvent::Pong | ClientEvent::LateReply { .. } => {}
         }
     }

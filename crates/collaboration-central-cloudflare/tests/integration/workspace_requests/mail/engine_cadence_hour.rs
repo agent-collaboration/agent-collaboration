@@ -131,8 +131,8 @@ async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once(
     );
     assert_eq!(
         alarm_ms(&runtime).await,
-        None,
-        "the alarm reads back NULL once nothing is pending"
+        ms(at(start, 15, 0, 0) + chrono::Duration::hours(24)),
+        "the first pending alarm is the notice's expiry"
     );
     fixture.host.close().await;
 }

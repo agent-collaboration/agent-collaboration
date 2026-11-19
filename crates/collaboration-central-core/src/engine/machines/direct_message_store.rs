@@ -7,7 +7,7 @@ use crate::{
     central_mail_rows::{insert_message, timestamp},
     direct_message_rows::{
         DIRECT_MESSAGE_COLUMNS, DirectMessageStatus, decode_direct_message, decode_sender_session,
-        refusal_text,
+        failure_text,
     },
     engine::{
         attempt_statements::guarded_attempt_sql,
@@ -85,7 +85,7 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
         next: &direct::State,
     ) -> Result<GuardedStatement, StoreFailure> {
         let failure = match next {
-            direct::State::Failed(reason) => text(refusal_text(*reason)?),
+            direct::State::Failed(reason) => text(failure_text(*reason)?),
             direct::State::Queued(_) | direct::State::Cancelled(_) | direct::State::Delivered => {
                 SqlValue::Null
             }
@@ -116,5 +116,11 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
     }
     fn failure_sql(&self) -> &'static str {
         DIRECT_MESSAGE_FAILURE
+    }
+
+    fn mail_ready(&self, effect: &direct::Effect) -> Option<crate::MailDeliveryReady> {
+        match effect {
+            direct::Effect::TellSender(notice) => Some(notice.into()),
+        }
     }
 }

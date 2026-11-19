@@ -19,7 +19,7 @@ pub(crate) enum DirectMessageStatus {
     Queued,
     Delivered,
     Cancelled,
-    Failed(mail::MessageRefusal),
+    Failed(mail::MessageFailureReason),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,6 +100,10 @@ pub(crate) fn decode_direct_message(
 
 /// The stored `failure_reason` text for a refusal.
 pub(crate) fn refusal_text(reason: mail::MessageRefusal) -> Result<String, StoreFailure> {
+    failure_text(reason.into())
+}
+
+pub(crate) fn failure_text(reason: mail::MessageFailureReason) -> Result<String, StoreFailure> {
     match serde_json::to_value(reason) {
         Ok(serde_json::Value::String(text)) => Ok(text),
         _ => Err(corrupt("mail_messages.failure_reason")),

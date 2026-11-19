@@ -15,8 +15,8 @@ use central_link_protocol::{
     RequestStatusAnswer, TokenRenewalRefusal, TokenRenewalResult, decode_text, encode_text,
 };
 use collaboration_central_core::{
-    MailAckIgnored, MailAckSettlement, ValidatedMachineConnection, WorkspaceCaller,
-    WorkspaceRuntime,
+    MailAckIgnored, MailAckSettlement, ValidatedMachineConnection, WELCOME_PAGE_SIZE,
+    WelcomeDeliveryPage, WindowedDeliveryDecision, WorkspaceCaller, WorkspaceRuntime,
 };
 use fleet_identity_protocol::OrganizationId;
 use std::sync::Arc;
@@ -150,11 +150,34 @@ async fn serve_link(
     if !send_frame(&mut socket, &state.stop, &welcome).await {
         return;
     }
+    let mut registration = state.host.push_registry.register(
+        connection.organization_id().clone(),
+        connection.machine_id().clone(),
+    );
+    if !send_welcome_backlog(
+        &mut socket,
+        &state,
+        &registration.replaced,
+        &runtime,
+        &connection,
+    )
+    .await
+    {
+        return;
+    }
     loop {
         let message = tokio::select! {
             biased;
             () = state.stop.cancelled() => return,
+            () = registration.replaced.cancelled() => return,
             message = socket.recv() => message,
+            ready = registration.receiver.recv() => {
+                let Some(message_id) = ready else { return; };
+                if !offer_windowed_delivery(&mut socket, &state, &registration.replaced, &runtime, &connection, &message_id).await {
+                    return;
+                }
+                continue;
+            }
         };
         let Some(Ok(message)) = message else {
             return;
@@ -335,6 +358,85 @@ async fn serve_link(
                 return;
             }
         }
+    }
+}
+
+async fn send_welcome_backlog(
+    socket: &mut WebSocket,
+    state: &LinkState,
+    replaced: &CancellationToken,
+    runtime: &Runtime,
+    connection: &ValidatedMachineConnection,
+) -> bool {
+    let attachment = connection.attachment();
+    let mut cursor = None;
+    loop {
+        let page = tokio::select! {
+            biased;
+            () = state.stop.cancelled() => return false,
+            () = replaced.cancelled() => return false,
+            page = runtime.windowed_welcome_page(&attachment, cursor.as_ref()) => page,
+        };
+        let Ok(WelcomeDeliveryPage::Ready(rows)) = page else {
+            return false;
+        };
+        cursor = rows
+            .last()
+            .map(collaboration_central_core::WindowedDelivery::cursor);
+        let count = rows.len();
+        for row in rows {
+            if !offer_windowed_delivery(
+                socket,
+                state,
+                replaced,
+                runtime,
+                connection,
+                &row.message.message_id,
+            )
+            .await
+            {
+                return false;
+            }
+        }
+        if count < WELCOME_PAGE_SIZE {
+            return true;
+        }
+    }
+}
+
+async fn offer_windowed_delivery(
+    socket: &mut WebSocket,
+    state: &LinkState,
+    replaced: &CancellationToken,
+    runtime: &Runtime,
+    connection: &ValidatedMachineConnection,
+    message_id: &workspace_ids::MessageId,
+) -> bool {
+    let attachment = connection.attachment();
+    let decision = tokio::select! {
+        biased;
+        () = state.stop.cancelled() => return false,
+        () = replaced.cancelled() => return false,
+        decision = runtime.prepare_windowed_delivery(&attachment, message_id) => decision,
+    };
+    let delivery = match decision {
+        Ok(WindowedDeliveryDecision::Ready(delivery)) => delivery,
+        Ok(WindowedDeliveryDecision::Ineligible | WindowedDeliveryDecision::SenderUnresolved) => {
+            return true;
+        }
+        Ok(WindowedDeliveryDecision::AuthorityLapsed) | Err(_) => return false,
+    };
+    if state.host.current_time().unix_millis() >= delivery.expires_at.timestamp_millis() {
+        return true;
+    }
+    let frame = LinkFrame::Data(DataFrame::Deliver {
+        message: delivery.message,
+        sender: delivery.sender,
+    });
+    tokio::select! {
+        biased;
+        () = replaced.cancelled() => false,
+        sent = send_frame(socket, &state.stop, &frame) => sent,
     }
 }
 

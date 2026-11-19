@@ -75,6 +75,7 @@ async fn the_late_delivery_outcome_recovers_acceptance_and_notifies_the_sink_onc
         }
     );
     let deliver = LinkFrame::Data(DataFrame::Deliver {
+        sender: workspace_model::ResolvedSender::Central {},
         message: Box::new(
             serde_json::from_value(serde_json::json!({
                 "messageId": notice_id,

@@ -11,7 +11,7 @@ use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
 use workspace_ids::MachineId;
 use workspace_model::{
-    Caller, MessageId,
+    Caller, MessageId, ResolvedSender,
     central_mail::{DeliveryAnswer, MessageRecord},
 };
 
@@ -88,6 +88,7 @@ pub enum ClientEvent {
     /// A message central delivered to this Router (2c); repeats are safe.
     Deliver {
         message: MessageRecord,
+        sender: ResolvedSender,
     },
     /// Central's answer to a RenewMachineToken the Host sent.
     TokenRenewal {
@@ -298,9 +299,10 @@ impl LinkClient {
                 }),
                 ReplyDisposition::AlreadyResolved => Ok(ClientEvent::LateReply { correlation_id }),
             },
-            LinkFrame::Data(DataFrame::Deliver { message }) => {
-                Ok(ClientEvent::Deliver { message: *message })
-            }
+            LinkFrame::Data(DataFrame::Deliver { message, sender }) => Ok(ClientEvent::Deliver {
+                message: *message,
+                sender,
+            }),
             LinkFrame::Data(DataFrame::RequestStatusReply {
                 correlation_id,
                 result,

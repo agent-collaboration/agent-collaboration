@@ -580,7 +580,8 @@ impl<R: EngineHost> Engine<'_, R> {
         observed: &ObservedControl,
         subject: &EngineSubject,
     ) -> Result<usize, LegacyUnitOutcome> {
-        let (mut statements, count) = self.0.plan_due_windows(now).await?;
+        let (mut statements, deliveries) = self.0.plan_due_windows(now).await?;
+        let count = deliveries.len();
         match observed {
             ObservedControl::Absent => {}
             ObservedControl::Present(guard) => statements.push(
@@ -603,6 +604,9 @@ impl<R: EngineHost> Engine<'_, R> {
                 })
                 .await,
         )?;
+        for delivery in deliveries {
+            self.0.offer_mail(delivery);
+        }
         #[cfg(feature = "test-support")]
         if count > 0 {
             self.pauses()

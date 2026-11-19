@@ -480,7 +480,7 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
         f.post(REVISIONS, &request).await,
         (200, json!({"acknowledgedRevision":4}))
     );
-    assert_eq!(f.read("SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM signin_authorization_floors o,person_organization_authorization_floors p").await.rows,vec![vec![SqlValue::Integer(3.try_into().unwrap()),SqlValue::Text("active".into()),SqlValue::Integer(4.try_into().unwrap()),SqlValue::Text(signed::OWNER_SUBJECT.into())]]);
+    assert_eq!(f.read("SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM signin_authorization_floors o,signin_person_authorization_floors p").await.rows,vec![vec![SqlValue::Integer(3.try_into().unwrap()),SqlValue::Text("active".into()),SqlValue::Integer(4.try_into().unwrap()),SqlValue::Text(signed::OWNER_SUBJECT.into())]]);
     let person_before = f
         .read("SELECT * FROM signin_person_authorization_floors ORDER BY id")
         .await;

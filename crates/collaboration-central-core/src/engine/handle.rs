@@ -199,6 +199,12 @@ impl<R: EngineHost> Engine<'_, R> {
                 .await
             {
                 Ok(()) => {
+                    for delivery in effects
+                        .iter()
+                        .filter_map(|effect| adapter.mail_ready(effect))
+                    {
+                        self.0.offer_mail(delivery);
+                    }
                     #[cfg(feature = "test-support")]
                     self.pauses()
                         .reached_engine(crate::PausePoint::AfterEngineCommit, &key.0)

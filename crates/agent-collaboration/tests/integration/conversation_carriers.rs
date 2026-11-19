@@ -8,7 +8,7 @@ use serde_json::json;
 #[expect(clippy::expect_used, reason = "fixed valid test fixture")]
 fn fixture_target(session_id: &str) -> HarnessSessionRef {
     serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-0000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":session_id
     }))
     .expect("valid fixture target")

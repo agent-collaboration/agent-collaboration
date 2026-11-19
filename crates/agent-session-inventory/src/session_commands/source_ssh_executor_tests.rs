@@ -200,7 +200,7 @@ async fn source_native_prepare_reads_actual_api_source_directory_and_rejects_wro
         "Prepare cannot attach native work"
     );
     let mut wrong = fixture.request.clone();
-    wrong.expected_service = "00000000-0000-4000-8000-000000000023"
+    wrong.expected_service = "00000000-0000-7000-8000-000000000023"
         .to_owned()
         .try_into()
         .unwrap();

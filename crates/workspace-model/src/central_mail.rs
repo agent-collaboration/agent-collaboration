@@ -278,19 +278,36 @@ pub enum MessageCancellation {
     NotDeliveredWithin15Minutes,
 }
 
-/// How the recipient Router hands a direct message to its session: its own
-/// choice, queued for the next turn, or steered into the running turn.
+/// The terminal failure stored by central for a direct message.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageFailureReason {
+    UnknownSession,
+    AmbiguousSession,
+    SenderUnresolved,
+}
+
+impl From<MessageRefusal> for MessageFailureReason {
+    fn from(refusal: MessageRefusal) -> Self {
+        match refusal {
+            MessageRefusal::UnknownSession => Self::UnknownSession,
+            MessageRefusal::AmbiguousSession => Self::AmbiguousSession,
+        }
+    }
+}
+
 /// The sender's view of a direct message's delivery.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MessageStatus {
     Queued {},
     Delivered {},
-    Failed { reason: MessageRefusal },
+    Failed { reason: MessageFailureReason },
     Cancelled { reason: MessageCancellation },
     NotFound {},
 }
 
+/// How the recipient Router hands a direct message to its session.
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema,
 )]

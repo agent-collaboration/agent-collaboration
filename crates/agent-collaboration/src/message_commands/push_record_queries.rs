@@ -54,7 +54,7 @@ pub(super) fn run_message_history(args: HistoryArguments) -> i32 {
         Err(_) => {
             return report_message_failure(
                 "invalidField",
-                "--with must be compact HarnessSessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --with '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'",
+                "--with must be compact HarnessSessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --with '{\"endpoint\":{\"serviceId\":\"00000000-0000-7000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'",
                 2,
                 args.json,
             );

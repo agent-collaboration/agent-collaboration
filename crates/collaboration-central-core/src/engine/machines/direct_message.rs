@@ -32,7 +32,7 @@ pub(crate) enum State {
     /// Not final: an Ack that was stuck can still arrive and deliver it.
     Cancelled(DirectMessageSubject),
     Delivered,
-    Failed(mail::MessageRefusal),
+    Failed(mail::MessageFailureReason),
 }
 
 impl StateTag for State {
@@ -151,7 +151,7 @@ impl Machine for DirectMessage {
             (State::Queued(subject), Event::Ack(mail::DeliveryAnswer::Refused { reason })) => {
                 let effects =
                     tell_sender(subject, mail::MessageOutcome::Refused { reason }, context)?;
-                Ok((State::Failed(reason), effects))
+                Ok((State::Failed(reason.into()), effects))
             }
             (State::Cancelled(subject), Event::Ack(mail::DeliveryAnswer::Accepted)) => {
                 let effects =

@@ -5,7 +5,7 @@ use super::*;
 async fn invalid_source_binding_cannot_reach_runtime_session_reads() {
     let mut foreign = inventory();
     foreign["endpoints"][0]["endpoint"]["serviceId"] =
-        json!("00000000-0000-4000-8000-000000000003");
+        json!("00000000-0000-7000-8000-000000000003");
     let mut duplicate = inventory();
     let repeated = duplicate["endpoints"][0].clone();
     duplicate["endpoints"]

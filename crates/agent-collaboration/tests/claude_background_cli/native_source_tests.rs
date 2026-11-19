@@ -119,7 +119,7 @@ async fn source_native_wrong_service_or_epoch_rejects_before_health_or_native_ch
     for (field, value, reason) in [
         (
             "/expectedService",
-            "00000000-0000-4000-8000-000000000009",
+            "00000000-0000-7000-8000-000000000009",
             "wrongService",
         ),
         (

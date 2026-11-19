@@ -92,12 +92,12 @@ fn unknown_control_tags_are_rejected_with_raw_evidence_and_guard_values() {
         set(&mut outcome, field, text("damaged-control-tag"));
         let stored = decode_attempt(&outcome).unwrap().unwrap();
         let error = stored.record.unwrap_err();
-        assert_eq!(error.column, format!("central_work_attempts.{field}"));
+        assert_eq!(error.column, format!("engine_work_attempts.{field}"));
         assert_eq!(error.raw_value, "damaged-control-tag");
         assert_eq!(
             error.failure_class(),
             ItemFailureClass::CorruptRow {
-                column: format!("central_work_attempts.{field}"),
+                column: format!("engine_work_attempts.{field}"),
                 raw_value: Some("damaged-control-tag".into())
             }
         );
@@ -128,7 +128,7 @@ fn invalid_keys_counts_times_and_variant_fields_never_default() {
             .unwrap()
             .record
             .unwrap_err();
-        assert_eq!(error.column, format!("central_work_attempts.{field}"));
+        assert_eq!(error.column, format!("engine_work_attempts.{field}"));
     }
 }
 

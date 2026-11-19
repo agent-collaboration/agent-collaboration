@@ -302,7 +302,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     );
     f.set_utc(later_due).await;
     f.workspace_execute(
-        "ALTER TABLE outage_changes RENAME TO changes",
+        "ALTER TABLE outage_changes RENAME TO workspace_changes",
         vec![],
         RowExpectation::Any,
     )
@@ -324,7 +324,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     );
     assert_eq!(
         r.statement_host().alarm().map(|time| time.unix_millis()),
-        None
+        Some((later_due + chrono::Duration::hours(24)).timestamp_millis())
     );
     f.host.close().await;
 }

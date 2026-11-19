@@ -204,6 +204,7 @@ pub struct CentralObject {
     runtime: Mutex<Option<Arc<OrgRuntime>>>,
     clock: WorkspaceClock,
     due_batches: Arc<collaboration_central_core::DueBatchState>,
+    mail_pushes: Arc<std::sync::Mutex<Vec<collaboration_central_core::MailDeliveryReady>>>,
     #[cfg(feature = "test-support")]
     controls: workspace_cases::Controls,
     #[cfg(feature = "test-support")]
@@ -287,8 +288,16 @@ impl CentralObject {
             // returns the closed InvalidConfiguration refusal for core to observe.
             Ok(None) | Err(_) => runtime,
         };
+        let mail_pushes = self.mail_pushes.clone();
         let runtime = Arc::new(
-            runtime.with_sign_in_observer(Arc::new(crate::access_verification::observe_signin)),
+            runtime
+                .with_sign_in_observer(Arc::new(crate::access_verification::observe_signin))
+                .with_mail_delivery_observer(Arc::new(move |message| {
+                    mail_pushes
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(message);
+                })),
         );
         runtime.recompute_alarm().await?;
         *initialized = Some(runtime.clone());
@@ -329,6 +338,7 @@ impl DurableObject for CentralObject {
             runtime: Mutex::new(None),
             clock: WorkspaceClock::default(),
             due_batches: Arc::new(collaboration_central_core::DueBatchState::default()),
+            mail_pushes: Default::default(),
             #[cfg(feature = "test-support")]
             controls: workspace_cases::Controls::default(),
             #[cfg(feature = "test-support")]
@@ -386,9 +396,10 @@ impl DurableObject for CentralObject {
                 }
             };
             use tower_service::Service;
-            let response = collaboration_central_core::organization_signin_router(runtime)
+            let response = collaboration_central_core::organization_signin_router(runtime.clone())
                 .call(http::Request::from_parts(parts, body))
                 .await?;
+            self.flush_ready_mail(&runtime).await;
             return response.try_into();
         }
         if let Some(path_organization) = crate::workspace_link_entry::organization(&request.path())
@@ -438,10 +449,9 @@ impl DurableObject for CentralObject {
                 }
                 Err(AlarmFailure::Platform(error)) => return Err(error),
             };
-            runtime
-                .after_event()
-                .await
-                .map_err(|error| worker::Error::RustError(error.to_string()))?;
+            let result = runtime.after_event().await;
+            self.flush_ready_mail(&runtime).await;
+            result.map_err(|error| worker::Error::RustError(error.to_string()))?;
             Response::ok("alarm applied")
         }
     }

@@ -9,6 +9,8 @@ autotests = false
 [dependencies]
 schemars = { workspace = true, features = ["chrono04"] }
 agent-automation = { path = "../agent-automation", version = "0.1.153" }
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.154" }
+message-board = { path = "../message-board", version = "0.1.154" }
 workspace-ids.workspace = true
 serde.workspace = true
 serde_json.workspace = true

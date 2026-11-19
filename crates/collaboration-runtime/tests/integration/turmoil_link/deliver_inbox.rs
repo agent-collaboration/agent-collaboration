@@ -185,6 +185,7 @@ async fn serve_delivery(
         if send(
             &mut socket,
             &LinkFrame::Data(DataFrame::Deliver {
+                sender: workspace_model::ResolvedSender::Central {},
                 message: Box::new(message.clone()),
             }),
         )

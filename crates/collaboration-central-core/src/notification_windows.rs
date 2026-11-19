@@ -160,9 +160,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub(crate) async fn plan_due_windows(
         &self,
         now: Timestamp,
-    ) -> Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome> {
+    ) -> Result<(Vec<GuardedStatement>, Vec<crate::MailDeliveryReady>), LegacyUnitOutcome> {
         let mut statements = Vec::new();
-        let mut count = 0;
+        let mut deliveries = Vec::new();
         for window in self
             .notification_windows()
             .await?
@@ -188,11 +188,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     now,
                 )?;
                 statements.push(central_mail_store::insert_message(&message)?);
-                count += 1;
+                deliveries.push((&message).into());
             }
             statements.extend(delete_window(&window.id));
         }
-        Ok((statements, count))
+        Ok((statements, deliveries))
     }
     pub(crate) async fn cancel_queued_notices(
         &self,

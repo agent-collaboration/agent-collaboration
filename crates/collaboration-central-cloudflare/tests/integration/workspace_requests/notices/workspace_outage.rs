@@ -306,7 +306,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     );
     f.caller = super::super::support::fresh_auth(&f.host, &f.caller);
     f.workspace_execute(
-        "ALTER TABLE outage_changes RENAME TO changes",
+        "ALTER TABLE outage_changes RENAME TO workspace_changes",
         vec![],
         RowExpectation::Any,
     )
@@ -330,7 +330,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         r.control::<Option<i64>>("raw-alarm-time", &())
             .await
             .unwrap(),
-        None
+        Some((later_due + chrono::Duration::hours(24)).timestamp_millis())
     );
     f.host.close().await;
 }

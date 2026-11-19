@@ -696,9 +696,9 @@ pub(super) async fn alarm_with_receipt(object: &CentralObject) -> Result<Respons
             return Ok(None);
         };
         organization = Some(org);
-        runtime
-            .after_event()
-            .await
+        let result = runtime.after_event().await;
+        object.flush_ready_mail(&runtime).await;
+        result
             .map(Some)
             .map_err(|error| AlarmFailure::Store(error.failure))
     }

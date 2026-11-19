@@ -98,6 +98,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             return Ok(Result::Refused(reason));
         }
         let actor = self.resolve_identity(&identity).await?;
+        let mut delivery_ready = None;
         let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
             &request.operation
         {
@@ -160,6 +161,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     None,
                     now,
                 )?;
+                delivery_ready = Some(crate::MailDeliveryReady::from(&message));
                 Ok((
                     vec![crate::central_mail_rows::insert_message_due(
                         &message,
@@ -207,6 +209,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Err(StoreFailure::AnswerLost) => return Ok(Result::OutcomeUnknown),
             Err(StoreFailure::Unavailable) => return Ok(Result::CentralUnavailable),
             Err(error) => return Err(error),
+        }
+        if let Some(delivery) = delivery_ready {
+            (self.mail_delivery_ready)(delivery);
         }
         #[cfg(feature = "test-support")]
         if self.take_lost_reply(&request.request_id) {
