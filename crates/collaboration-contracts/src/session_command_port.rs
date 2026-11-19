@@ -50,6 +50,15 @@ pub struct QueueInputCommand {
     pub actor: Identity,
 }
 
+/// How a queued input left its session's line (D1 R14).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum QueuedInputOutcome {
+    /// The real turn that started with this input.
+    Started { turn_id: String },
+    /// It was never sent, and why.
+    NotSent { reason: String },
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueuedSessionInput {
     pub input_id: String,
@@ -124,6 +133,8 @@ pub enum CommandFailure {
     UnauthorizedActor,
     #[error("provider command failed")]
     ProviderFailure,
+    #[error("{reason}")]
+    RestoreFailed { reason: String },
 }
 
 /// Commands have distinct results and all carry the identity of the caller.
@@ -138,6 +149,15 @@ pub trait SessionCommandPort: Send + Sync {
     fn compact(&self, command: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle>;
     fn steer(&self, command: SteerSessionCommand) -> CommandFuture<'_, SessionSteerOutcome>;
     fn queue_add(&self, command: QueueInputCommand) -> CommandFuture<'_, QueuedSessionInput>;
+    /// Waits until a queued input starts a turn or leaves its line unsent.
+    /// Started comes only from the real TurnStarted carrying the input ID.
+    fn queue_outcome(
+        &self,
+        _target: SessionRef,
+        _input_id: session_event_model::InputId,
+    ) -> CommandFuture<'_, QueuedInputOutcome> {
+        Box::pin(async { Err(CommandFailure::Unsupported) })
+    }
     fn queue_list(
         &self,
         command: SessionTargetCommand,

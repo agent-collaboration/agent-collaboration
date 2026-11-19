@@ -58,6 +58,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -78,6 +79,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let contents = || {
         vec![
@@ -184,6 +186,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -204,6 +207,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let idle_cancel = route
         .cancel_active_turn(target.clone(), target.clone().into())
@@ -215,6 +219,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
     let prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),

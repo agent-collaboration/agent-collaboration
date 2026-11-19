@@ -14,10 +14,8 @@ use session_event_model::{
 };
 use tokio_util::sync::CancellationToken;
 
-use super::{
-    ActiveApprovalContext,
-    provider_cursor_plan_items::{CursorPlanDefinition, CursorPlanItems, CursorTodo},
-};
+use super::ActiveApprovalContext;
+use crate::provider_cursor_plan_items::{CursorPlanDefinition, CursorPlanItems, CursorTodo};
 use crate::{
     ApprovalPortOutcome, InteractionPort, SessionEventSink,
     provider_connection_activity::ProviderConnectionActivity,
@@ -147,16 +145,21 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
                 return Ok(Handled::Yes);
             }
         };
-        let Some(session_id) = self.tool_registry.resolve_session(&plan.tool_call_id) else {
+        let Some(crate::provider_connection_activity::ToolCallOwner {
+            session_id,
+            generation,
+        }) = self.tool_registry.resolve_session(&plan.tool_call_id)
+        else {
             tracing::warn!("unresolved Cursor create_plan request");
             responder.respond(json!({"outcome":"cancelled"}))?;
             return Ok(Handled::Yes);
         };
-        let context = self
-            .approval_contexts
-            .lock()
-            .ok()
-            .and_then(|contexts| contexts.get(&session_id).cloned());
+        let context = self.approval_contexts.lock().ok().and_then(|contexts| {
+            contexts
+                .get(&session_id)
+                .filter(|context| context.generation == generation)
+                .cloned()
+        });
         let Some(context) = context else {
             tracing::warn!("Cursor create_plan has no active Turn context");
             responder.respond(json!({"outcome":"cancelled"}))?;
@@ -179,9 +182,14 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         } else {
             SessionEvent::ItemStarted { item }
         };
-        if self.event_sink.publish(&session_id, event).is_err() {
+        // In the run the plan arrived in (D1 R14).
+        // In the run that announced the tool call (review F4).
+        let publication = self.event_sink.publish_in(&session_id, generation, event);
+        if publication.is_err() {
             self.sink_closed.cancel();
             self.shutdown.cancel();
+        }
+        if !matches!(publication, Ok(crate::GenerationPublication::Published)) {
             responder.respond(json!({"outcome":"cancelled"}))?;
             return Ok(Handled::Yes);
         }

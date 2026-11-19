@@ -146,6 +146,10 @@ pub enum ProviderOperationAdmissionResult {
 pub struct ProviderOperationStore {
     pub(crate) connection: SqliteConnection,
     commits: CommitSignal,
+    /// Test support (StoreFault, design note §11.8): the next terminal write
+    /// of this operation fails without touching its row.
+    #[cfg(any(test, feature = "test-support"))]
+    terminal_write_fault: Option<OperationId>,
 }
 
 /// Runs one write statement as a one-statement transaction through
@@ -210,6 +214,8 @@ impl ProviderOperationStore {
         Ok(Self {
             connection,
             commits: CommitSignal::new(),
+            #[cfg(any(test, feature = "test-support"))]
+            terminal_write_fault: None,
         })
     }
 
@@ -292,6 +298,69 @@ impl ProviderOperationStore {
         .transpose()
     }
 
+    /// Every operation on `binding` whose durable effect is Unknown, with its
+    /// target (none for a binding-wide row), for seeding the binding's
+    /// uncertainty at start (D1 state machines, design note §14.1). The same
+    /// statement as `blocking_uncertain_operation_ids`, unfiltered by target.
+    pub async fn unknown_operations(
+        &mut self,
+        binding: &ProviderBindingIdentity,
+    ) -> Result<Vec<(OperationId, Option<SessionRef>)>, ProviderOperationStoreError> {
+        let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
+        let candidates = sqlx::query!(
+            "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
+             FROM provider_operations WHERE effect=? ORDER BY operation_id",
+            unknown,
+        )
+        .fetch_all(&mut self.connection)
+        .await?;
+        let mut unknown_operations = Vec::new();
+        for candidate in candidates {
+            if decode_enum::<ProviderOperationStage>(candidate.stage)?
+                == ProviderOperationStage::Terminal
+                && decode_enum::<ProviderOperationKind>(candidate.operation_kind)?.is_restore()
+            {
+                continue;
+            }
+            let same_scope = match decode_binding(&candidate.binding_json)? {
+                ConversationBindingIdentity::ExternalProvider { binding: stored } => {
+                    stored.endpoint == binding.endpoint
+                        && stored.runtime.provider == binding.runtime.provider
+                        && stored.generation == binding.generation
+                }
+                ConversationBindingIdentity::CodexAcp { .. } => false,
+            };
+            if !same_scope {
+                continue;
+            }
+            let target = match (
+                candidate.target_service_id,
+                candidate.target_endpoint_id,
+                candidate.target_session_id,
+            ) {
+                (None, None, None) => None,
+                (Some(service_id), Some(endpoint_id), Some(session_id)) => Some(SessionRef {
+                    endpoint: collaboration_protocol::EndpointRef {
+                        service_id: service_id
+                            .try_into()
+                            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                        endpoint_id: collaboration_protocol::EndpointId::try_from(endpoint_id)
+                            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                    },
+                    session_id: collaboration_protocol::SessionId::try_from(session_id)
+                        .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                }),
+                _ => return Err(ProviderOperationStoreError::InvalidRecord),
+            };
+            unknown_operations.push((
+                OperationId::try_from(candidate.operation_id)
+                    .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                target,
+            ));
+        }
+        Ok(unknown_operations)
+    }
+
     pub async fn blocking_uncertain_operation_ids(
         &mut self,
         binding: &ProviderBindingIdentity,
@@ -299,7 +368,7 @@ impl ProviderOperationStore {
     ) -> Result<Vec<OperationId>, ProviderOperationStoreError> {
         let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
         let candidates = sqlx::query!(
-            "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id
+            "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
              FROM provider_operations WHERE effect=? ORDER BY operation_id",
             unknown,
         )
@@ -307,6 +376,12 @@ impl ProviderOperationStore {
         .await?;
         let mut blocking = Vec::new();
         for candidate in candidates {
+            if decode_enum::<ProviderOperationStage>(candidate.stage)?
+                == ProviderOperationStage::Terminal
+                && decode_enum::<ProviderOperationKind>(candidate.operation_kind)?.is_restore()
+            {
+                continue;
+            }
             let stored_binding = decode_binding(&candidate.binding_json)?;
             let same_scope = match stored_binding {
                 ConversationBindingIdentity::ExternalProvider { binding: stored } => {
@@ -368,6 +443,33 @@ impl ProviderOperationStore {
         .await
     }
 
+    /// Returns a row marked for dispatch to Admitted with no effect when the
+    /// send was refused before anything reached the agent: a steer the agent
+    /// answered promptRequired, or a prompt the runtime refused because a
+    /// turn was running (D1 R12, R14). Never for a send that may have left.
+    pub async fn unmark_undispatched(
+        &mut self,
+        operation_id: &OperationId,
+        updated_at_ms: i64,
+    ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        let result = sqlx::query!(
+            "UPDATE provider_operations
+             SET stage=?,effect=?,dispatched_at_ms=NULL,updated_at_ms=MAX(updated_at_ms,admitted_at_ms,?)
+             WHERE operation_id=? AND stage=?",
+             encode_enum(ProviderOperationStage::Admitted)?,
+             encode_enum(ProviderOperationEffect::None)?, updated_at_ms,
+             operation_id.as_str(), encode_enum(ProviderOperationStage::MayHaveDispatched)?,
+        )
+        .execute_as_transaction(self)
+        .await?;
+        self.transition_result(operation_id, result.rows_affected(), |record| {
+            record.stage == ProviderOperationStage::Admitted
+                && record.effect == ProviderOperationEffect::None
+                && record.dispatched_at_ms.is_none()
+        })
+        .await
+    }
+
     pub async fn record_target(
         &mut self,
         operation_id: &OperationId,
@@ -404,6 +506,13 @@ impl ProviderOperationStore {
         terminal_stop_reason: Option<ProviderPromptStopReason>,
         terminal_at_ms: i64,
     ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if self.terminal_write_fault.as_ref() == Some(operation_id) {
+            self.terminal_write_fault = None;
+            return Err(ProviderOperationStoreError::Database(
+                sqlx::Error::Protocol("injected terminal write failure".to_owned()),
+            ));
+        }
         let encoded_stop_reason = terminal_stop_reason.as_ref().map(encode_enum).transpose()?;
         let result = sqlx::query!(
             "UPDATE provider_operations
@@ -716,6 +825,15 @@ async fn validate_schema(
         Ok(())
     } else {
         Err(ProviderOperationStoreError::InvalidRecord)
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ProviderOperationStore {
+    /// StoreFault (design note §11.8): the next terminal write of
+    /// `operation_id` fails and leaves its row as it was.
+    pub fn fail_next_terminal_write_of(&mut self, operation_id: &OperationId) {
+        self.terminal_write_fault = Some(operation_id.clone());
     }
 }
 

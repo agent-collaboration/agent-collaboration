@@ -184,7 +184,7 @@ export type SessionCreationPreparationResult =
   | { readonly kind: "prepared"; readonly params: unknown }
   | {
       readonly kind: "unsupported";
-      readonly reason: "MalformedMetadata" | "UnsupportedSdkOptions";
+      readonly reason: "MalformedMetadata" | "UnsupportedSdkOptions" | "MissingWorkRootBoundary";
     };
 
 export function decorateSessionMethods(

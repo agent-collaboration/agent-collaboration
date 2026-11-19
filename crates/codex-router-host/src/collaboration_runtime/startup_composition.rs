@@ -240,12 +240,20 @@ impl CollaborationRuntime {
                 .directory
                 .parent()
                 .map(codex_native_integration::router_scratch_root),
+            Some(inputs.directory.join("hooks")),
+            std::sync::Arc::clone(&worker_clock),
         )
         .await?;
         let provider_face_endpoints = startup.endpoints.clone();
         let provider_retirements = startup.retirements;
         let external_provider_supervisor = startup.supervisor;
         let provider_session_hub = startup.hub;
+        let provider_cache_warm = crate::provider_cache_warm::compose_provider_cache_warm(
+            startup.cache_warm,
+            external_provider_supervisor.as_ref(),
+            provider_store.as_ref(),
+            worker_clock.clone(),
+        );
         let provider_endpoints = startup
             .endpoints
             .iter()
@@ -667,6 +675,7 @@ impl CollaborationRuntime {
                     std::sync::Arc::clone(delivery),
                     std::sync::Arc::clone(hub),
                     std::sync::Arc::clone(store),
+                    std::sync::Arc::clone(&worker_clock),
                 ));
             let events: std::sync::Arc<dyn collaboration_contracts::SessionEventHub> =
                 std::sync::Arc::clone(hub) as _;
@@ -893,6 +902,7 @@ impl CollaborationRuntime {
             provider_store,
             automation_store,
             external_provider_supervisor,
+            provider_cache_warm,
             provider_delivery_route,
             provider_retention: None,
             open_scratch_scopes,

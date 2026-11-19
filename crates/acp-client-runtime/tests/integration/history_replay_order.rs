@@ -136,7 +136,8 @@ fn fixture_launch(marker: &std::path::Path) -> ExternalProviderLaunch {
 }
 
 /// A live update after load addresses the Item established by replay, rather
-/// than starting a second Item with the same provider tool-call ID.
+/// than starting a second Item with the same provider tool-call ID. A later
+/// turn must ignore updates and callbacks for that retired replay ID.
 #[tokio::test]
 async fn live_update_continues_replayed_item_projection() {
     let root = tempfile::tempdir().expect("fixture root");
@@ -165,7 +166,6 @@ async fn live_update_continues_replayed_item_projection() {
         .expect("history loads");
     let catalog = client
         .settings_catalog("fixture-session")
-        .await
         .expect("loaded catalog");
     assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
     tokio::time::timeout(
@@ -186,6 +186,21 @@ async fn live_update_continues_replayed_item_projection() {
     .await
     .expect("prompt settles")
     .expect("prompt succeeds");
+    client
+        .submit_with_approval_dispatch_for_input(
+            "fixture-session".to_owned(),
+            session_event_model::InputId::generate(),
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Next turn".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
+            (),
+            None,
+        )
+        .await
+        .expect("next prompt succeeds");
     client.shutdown().await;
     let events = events.lock().expect("events");
     let relevant = events
@@ -202,11 +217,14 @@ async fn live_update_continues_replayed_item_projection() {
             relevant.as_slice(),
             [
                 SessionEvent::ItemStarted { .. },
-                SessionEvent::ItemUpdated { .. }
-            ]
+                SessionEvent::ItemUpdated { item }
+            ] if item.text.as_deref() == Some("Tool finished")
         ),
         "replayed tool events: {relevant:?}"
     );
+    assert!(!events.iter().any(|event| matches!(event, SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+        if item.text.as_deref().is_some_and(|text| text.contains("retired replay todo sentinel"))
+    )), "the retired tool callback fell back to the next live turn");
 }
 
 /// Oracle: ACP v1 session/load replays updates before its response
@@ -235,7 +253,6 @@ async fn history_replay_reset_precedes_session_load() {
         .await;
     let catalog = client
         .settings_catalog("fixture-session")
-        .await
         .expect("loaded session catalog");
     client.shutdown().await;
 

@@ -1,13 +1,32 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
+mod provider_line_runtime;
+mod provider_queued_send;
+pub(crate) use provider_queued_send::{QueuedSend, QueuedSendStep};
+mod provider_operation_admission;
+pub(crate) use provider_line_runtime::ProviderLineRuntime;
+mod provider_operation_index;
+#[cfg(test)]
+pub(crate) use provider_operation_index::HeldResult;
+use provider_operation_index::{LiveOperation, LiveOperations, UncertaintyCells};
+mod provider_prompt_send;
+mod provider_queued_api_prompt;
+pub(crate) use provider_queued_api_prompt::{AdmittedApiPrompt, unadmitted_queued_failure};
 mod provider_operation_failure;
+mod provider_operation_finish;
 mod provider_prompt_contents;
-pub use provider_prompt_contents::ProviderPromptContentsRequest;
+pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
+pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
 mod provider_conversation_backend;
+mod provider_full_access_guard;
 mod provider_session_inspection;
 mod provider_session_lifecycle;
 mod provider_session_scratch;
 mod provider_settings_control;
+#[cfg(any(test, feature = "test-support"))]
+mod supervisor_named_points;
+#[cfg(test)]
+mod supervisor_test_pauses;
 use provider_operation_failure::{
     admission_failure, invalid_setting_failure, prompt_runtime_failure, runtime_failure,
 };
@@ -33,9 +52,8 @@ use collaboration_protocol::{
     ConversationOperationWaitResult, ConversationOutputUnavailableReason,
     ConversationPromptRequest, ConversationResumeRequest, EndpointRef, NonEmptyText, OperationId,
     ProviderBindingIdentity, ProviderIdentity, ProviderOperationEffect, ProviderOperationKind,
-    ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
-    ProviderSessionInspectRequest, ProviderSettingsAcceptRequest, ProviderSettingsSetRequest,
-    SessionId, SessionRef,
+    ProviderOperationStage, ProviderReconciliationState, ProviderSessionInspectRequest,
+    ProviderSettingsAcceptRequest, ProviderSettingsSetRequest, SessionId, SessionRef,
 };
 use collaboration_runtime::ProviderOperationAdmission;
 use collaboration_runtime::ProviderOperationAdmissionResult;
@@ -43,28 +61,18 @@ use collaboration_runtime::ProviderOperationRecord;
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_service::conversation_operation_snapshot as snapshot_from_record;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::{
-        Arc, Mutex as StdMutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex as StdMutex, atomic::Ordering},
     time::Duration,
 };
-use tokio::sync::{Mutex, Notify, mpsc};
+use tokio::sync::{Mutex, mpsc};
 
 const MAX_RETAINED_SETTLEMENTS: usize = 256;
 
 pub struct ExternalProviderBinding {
     pub identity: ProviderBindingIdentity,
     pub runtime: ExternalProviderRuntime,
-}
-
-/// What a session was asked to run in and why its actual mode differs.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct RequestedModeRecord {
-    requested_mode: Option<String>,
-    mode_reason: Option<collaboration_protocol::ProviderModeReason>,
 }
 
 #[derive(Clone)]
@@ -76,6 +84,9 @@ struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
+    /// Each binding's unknown outcomes: the one place admission asks
+    /// whether an earlier send's outcome is unknown (design note §14.1).
+    uncertainty: UncertaintyCells,
     /// Moves each time a live operation publishes its result, so schedulers and
     /// provider retention wake on an ACP completion that writes no row.
     completions: tokio::sync::watch::Sender<u64>,
@@ -86,17 +97,49 @@ struct SupervisorInner {
     scratch_root: Option<PathBuf>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
-    /// The mode each session created here was asked for, and why its actual
-    /// mode differs (R3). In memory: after a Host restart show reports only the
-    /// agent's actual mode.
-    requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
+    /// The session line API prompts wait in when the agent can't steer (D1
+    /// R12), given once the delivery route is composed. Weak: the line holds
+    /// this supervisor.
+    message_fifo: std::sync::OnceLock<
+        std::sync::Weak<crate::provider_acp_message_fifo::ProviderAcpMessageFifo>,
+    >,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next queued API dispatch right after it claims its entry.
+    #[cfg(test)]
+    dispatch_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next admitted dispatch after its submission is spawned and
+    /// before its dispatch observation is awaited.
+    #[cfg(test)]
+    observation_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next steer after its injection reply, before it reads the
+    /// joined turn's approver.
+    #[cfg(test)]
+    steer_reply_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next steer with its approver records pinned, before its
+    /// injection is sent.
+    #[cfg(test)]
+    steer_injection_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses the next API send routed to the line, after its admission and
+    /// before it enters the line.
+    #[cfg(test)]
+    queue_enqueue_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses one operation after its result is visible and waiters are notified.
+    #[cfg(test)]
+    result_published_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
+    /// Pauses one operation's settlement before its terminal write: its
+    /// outcome is known, nothing is stored yet, and its turn is still held.
+    #[cfg(any(test, feature = "test-support"))]
+    terminal_write_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
+    /// Pauses one explicit mode change after the agent applied it and before
+    /// its record is written (Lead V6b).
+    #[cfg(any(test, feature = "test-support"))]
+    explicit_mode_record_test_pause: StdMutex<Option<(SessionRef, String, AdmissionTestPause)>>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 struct AdmissionTestPause {
     entered: tokio::sync::oneshot::Sender<()>,
     release: tokio::sync::oneshot::Receiver<()>,
@@ -107,45 +150,42 @@ struct RuntimeBinding {
     runtime: Arc<ExternalProviderRuntime>,
 }
 
-#[derive(Default)]
-struct LiveOperations {
-    operations: HashMap<OperationId, Arc<LiveOperation>>,
-    terminal_order: VecDeque<OperationId>,
-}
-
-struct LiveOperation {
-    result: Mutex<Option<Result<ConversationOperationSettlement, ConversationOperationFailure>>>,
-    /// Set once the result is published. Retention reads it without the result lock, which
-    /// a reader of the result may be holding.
-    published: AtomicBool,
-    changed: Notify,
-}
-
-/// A held operation's result, for a test that locks it as a reader would.
-#[cfg(test)]
-pub(crate) struct HeldResult(Arc<LiveOperation>);
-
-#[cfg(test)]
-impl HeldResult {
-    /// Takes the result lock now, without waiting, or `None` when it is taken.
-    pub(crate) fn try_hold(&self) -> Option<impl Sized + '_> {
-        self.0.result.try_lock().ok()
-    }
-}
-
-impl LiveOperation {
-    fn pending() -> Self {
-        Self {
-            result: Mutex::new(None),
-            published: AtomicBool::new(false),
-            changed: Notify::new(),
-        }
-    }
-}
-
 impl ExternalProviderSupervisor {
     pub(crate) fn queued_operation_registry(&self) -> &ProviderQueueOperationRegistry {
         &self.inner.queued_operations
+    }
+
+    /// Sets the work-roots rule sessions on `endpoint` start with (D1 R18);
+    /// the binding's runtime keeps it, so every path that restores one of its
+    /// sessions rebuilds the same roots.
+    pub(crate) fn set_work_roots(
+        &self,
+        endpoint: &EndpointRef,
+        work_roots: crate::provider_work_roots::ProviderWorkRoots,
+    ) {
+        if let Some(runtime) = self.runtime_for(endpoint) {
+            runtime.session_setup().set_work_roots(work_roots);
+        }
+    }
+
+    fn work_roots_for(
+        &self,
+        endpoint: &EndpointRef,
+    ) -> crate::provider_work_roots::ProviderWorkRoots {
+        self.runtime_for(endpoint)
+            .map(|runtime| runtime.session_setup().work_roots())
+            .unwrap_or_default()
+    }
+
+    /// The provider a binding runs, for checks made before anything reaches it.
+    fn provider_kind_for(
+        &self,
+        endpoint: &EndpointRef,
+    ) -> Option<collaboration_protocol::ProviderKind> {
+        self.inner
+            .bindings
+            .get(endpoint)
+            .map(|entry| entry.identity.runtime.provider)
     }
 
     pub(crate) fn runtime_for(
@@ -164,6 +204,26 @@ impl ExternalProviderSupervisor {
         self.inner
             .completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    /// Records `operation_id` as an unknown outcome on its binding's
+    /// uncertainty cell, as its live owner or the start-up seed would.
+    #[cfg(test)]
+    pub(crate) async fn record_unknown_for_test(
+        &self,
+        operation_id: &OperationId,
+        binding: &ProviderBindingIdentity,
+        target: Option<SessionRef>,
+    ) {
+        if let Ok(cell) = self.inner.binding_uncertainty(binding).await {
+            let _recorded = provider_operation_index::apply_uncertainty(
+                &cell,
+                provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
+                    operation: operation_id.clone(),
+                    target,
+                },
+            );
+        }
     }
 
     /// Holds `operation_id` live, as admitting it to a provider does.
@@ -208,9 +268,39 @@ impl ExternalProviderSupervisor {
         };
         let result = Err(unavailable_failure(operation_id.clone(), None));
         self.inner
-            .publish_result(operation_id.clone(), &live, result)
+            .publish_result(
+                operation_id.clone(),
+                &live,
+                result,
+                provider_operation_finish::Retention::Settled,
+            )
             .await;
         true
+    }
+
+    /// Whether the operation reached its terminal outcome: its live cell
+    /// answers while the live index holds it, its durable row after that.
+    pub(crate) async fn operation_reached_terminal(&self, operation_id: &OperationId) -> bool {
+        let live = self
+            .inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned();
+        if let Some(live) = live {
+            return live.published.load(Ordering::Acquire);
+        }
+        self.inner
+            .store
+            .lock()
+            .await
+            .inspect(operation_id)
+            .await
+            .ok()
+            .flatten()
+            .is_some_and(|record| record.stage == ProviderOperationStage::Terminal)
     }
 
     /// A receiver that wakes after each live operation publishes its result. Subscribe
@@ -261,7 +351,7 @@ impl ExternalProviderSupervisor {
             let task_endpoint = endpoint.clone();
             catalog_tasks.push(tokio::spawn(async move {
                 while let Some(session_id) = refresh_receiver.recv().await {
-                    let Some(catalog) = task_runtime.settings_catalog(&session_id).await else {
+                    let Some(catalog) = task_runtime.settings_catalog(&session_id) else {
                         continue;
                     };
                     let Ok(session_id) = SessionId::try_from(session_id) else {
@@ -287,18 +377,47 @@ impl ExternalProviderSupervisor {
                 bindings: runtimes,
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
+                uncertainty: UncertaintyCells::default(),
+                message_fifo: std::sync::OnceLock::new(),
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
                 scratch_root,
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
-                requested_modes: Mutex::new(HashMap::new()),
                 catalog_tasks: Mutex::new(catalog_tasks),
                 started_at_ms: now_ms(),
                 #[cfg(test)]
                 admission_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                dispatch_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                observation_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                steer_reply_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                steer_injection_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                queue_enqueue_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                result_published_test_pause: StdMutex::new(None),
+                #[cfg(any(test, feature = "test-support"))]
+                terminal_write_test_pause: StdMutex::new(None),
+                #[cfg(any(test, feature = "test-support"))]
+                explicit_mode_record_test_pause: StdMutex::new(None),
             }),
+        })
+    }
+
+    /// Tells `observer` of every live event of every session on `endpoint`.
+    pub(crate) fn install_live_event_observer(
+        &self,
+        endpoint: &EndpointRef,
+        observer: Arc<dyn crate::provider_session_event_sink::LiveSessionEventObserver>,
+    ) -> bool {
+        self.inner.bindings.get(endpoint).is_some_and(|binding| {
+            binding.runtime.install_live_event_observer(observer);
+            true
         })
     }
 
@@ -359,110 +478,14 @@ impl ExternalProviderSupervisor {
         binding: ProviderBindingIdentity,
         known_target: Option<&SessionRef>,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
-        let admitted_at_ms = now_ms();
-        let failure_target = known_target.cloned();
-        let mut store = self.inner.store.lock().await;
-        #[cfg(test)]
-        let admission_test_pause = {
-            self.inner
-                .admission_test_pause
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .take()
-        };
-        #[cfg(test)]
-        if let Some(pause) = admission_test_pause {
-            let _result = pause.entered.send(());
-            let _result = pause.release.await;
-        }
-        if let Some(record) = store.inspect(&operation_id).await.map_err(|_| {
-            admission_failure(
-                operation_id.clone(),
-                "provider operation admission could not be inspected",
-                failure_target.clone(),
-            )
-        })? {
-            return Ok(PreparedOperation::Existing(
-                snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(operation_id, message))?,
-            ));
-        }
-        if operation_kind != ProviderOperationKind::ConversationCancel {
-            let blocking = store
-                .blocking_uncertain_operation_ids(&binding, known_target)
-                .await
-                .map_err(|_| unavailable_failure(operation_id.clone(), failure_target.clone()))?;
-            if !blocking.is_empty() {
-                let ids = blocking
-                    .iter()
-                    .map(OperationId::as_str)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(failure(
-                    ConversationOperationFailureKind::Busy,
-                    ConversationOperationFailureStage::Validation,
-                    ProviderOperationEffect::None,
-                    &format!("provider binding has unresolved operations: {ids}"),
-                    operation_id,
-                    failure_target,
-                ));
-            }
-        }
-        let admission = store
-            .admit(ProviderOperationAdmission {
-                operation_id: operation_id.clone(),
-                operation_kind,
-                binding: ConversationBindingIdentity::ExternalProvider { binding },
-                admitted_at_ms,
-            })
-            .await
-            .map_err(|_| {
-                admission_failure(
-                    operation_id.clone(),
-                    "provider operation admission could not be persisted",
-                    failure_target.clone(),
-                )
-            })?;
-        match admission {
-            ProviderOperationAdmissionResult::Existing(record) => Ok(PreparedOperation::Existing(
-                snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(operation_id, message))?,
-            )),
-            ProviderOperationAdmissionResult::Admitted(_) => {
-                if let Some(target) = known_target {
-                    store
-                        .record_target(&operation_id, target, now_ms())
-                        .await
-                        .map_err(|_| {
-                            admission_failure(
-                                operation_id.clone(),
-                                "provider operation target could not be persisted",
-                                failure_target.clone(),
-                            )
-                        })?;
-                }
-                let record = store
-                    .mark_may_have_dispatched(&operation_id, now_ms())
-                    .await
-                    .map_err(|_| {
-                        admission_failure(
-                            operation_id.clone(),
-                            "provider dispatch marker could not be persisted",
-                            failure_target,
-                        )
-                    })?;
-                let snapshot = snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(operation_id.clone(), message))?;
-                let live = Arc::new(LiveOperation::pending());
-                self.inner
-                    .live_operations
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .operations
-                    .insert(operation_id, Arc::clone(&live));
-                Ok(PreparedOperation::Admitted { snapshot, live })
-            }
-        }
+        self.admit_operation(
+            operation_id,
+            operation_kind,
+            binding,
+            known_target,
+            provider_operation_admission::DispatchMark::AtAdmission,
+        )
+        .await
     }
 
     fn spawn_operation<F>(&self, operation_id: OperationId, live: Arc<LiveOperation>, operation: F)
@@ -473,6 +496,31 @@ impl ExternalProviderSupervisor {
         tokio::spawn(async move {
             let completion = operation.await;
             inner.finish(operation_id, live, completion).await;
+        });
+    }
+
+    /// Like `spawn_operation` for a prompt: its session's turn ends only
+    /// once the operation's settlement is recorded, so the session's line
+    /// commits nothing that would see it unresolved (design note §13.1).
+    fn spawn_prompt_operation<F>(
+        &self,
+        operation_id: OperationId,
+        live: Arc<LiveOperation>,
+        operation: F,
+    ) where
+        F: std::future::Future<
+                Output = (
+                    ProviderOperationCompletion,
+                    Option<acp_client_runtime::ProviderTurnEnd>,
+                ),
+            > + Send
+            + 'static,
+    {
+        let inner = Arc::clone(&self.inner);
+        tokio::spawn(async move {
+            let (completion, turn_end) = operation.await;
+            inner.finish(operation_id, live, completion).await;
+            drop(turn_end);
         });
     }
 
@@ -496,7 +544,7 @@ impl ExternalProviderSupervisor {
                     ConversationOperationFailureKind::NotFound,
                     ConversationOperationFailureStage::Settlement,
                     ProviderOperationEffect::None,
-                    "provider operation was not found",
+                    "the Router has no record of this operation ID",
                     operation_id.clone(),
                     None,
                 )
@@ -564,131 +612,56 @@ impl SupervisorInner {
         self.settings_catalogs.lock().await.insert(target, catalog);
     }
 
-    async fn record_requested_mode(&self, target: SessionRef, record: RequestedModeRecord) {
-        self.requested_modes.lock().await.insert(target, record);
-    }
-
-    async fn finish(
-        &self,
-        operation_id: OperationId,
-        live: Arc<LiveOperation>,
-        completion: ProviderOperationCompletion,
-    ) {
-        let result = match completion {
-            ProviderOperationCompletion::Success {
-                settlement,
-                target,
-                session_record,
-            } => {
-                let terminal_stop_reason = match &settlement {
-                    // The durable summary column is an old closed string enum.
-                    // Keep a future value in the live settlement without writing
-                    // an unreadable value into rollback-visible storage.
-                    ConversationOperationSettlement::PromptCompleted {
-                        stop_reason: ProviderPromptStopReason::Unknown(_),
-                        ..
-                    } => None,
-                    ConversationOperationSettlement::PromptCompleted { stop_reason, .. } => {
-                        Some(stop_reason.clone())
-                    }
-                    _ => None,
-                };
-                let mut store = self.store.lock().await;
-                if crate::provider_operation_settlement::persist_provider_success(
-                    &mut store,
-                    &operation_id,
-                    target.as_ref(),
-                    session_record.as_deref(),
-                    terminal_stop_reason,
-                )
-                .await
-                .is_err()
-                {
-                    Err(applied_storage_failure(operation_id.clone(), target))
-                } else {
-                    Ok(settlement)
-                }
-            }
-            ProviderOperationCompletion::Failure(operation_failure) => {
-                let reconciliation = if operation_failure.effect == ProviderOperationEffect::Unknown
-                {
-                    ProviderReconciliationState::Unresolved
-                } else {
-                    ProviderReconciliationState::Confirmed
-                };
-                let mut store = self.store.lock().await;
-                let target = operation_failure.target.clone();
-                let target_record_failed =
-                    if operation_failure.effect == ProviderOperationEffect::Applied {
-                        match target.as_ref() {
-                            Some(target) => store
-                                .record_target(&operation_id, target, now_ms())
-                                .await
-                                .is_err(),
-                            None => false,
-                        }
-                    } else {
-                        false
-                    };
-                if target_record_failed {
-                    Err(applied_storage_failure(operation_id.clone(), target))
-                } else {
-                    let _ = store
-                        .record_terminal(
-                            &operation_id,
-                            operation_failure.effect,
-                            reconciliation,
-                            None,
-                            now_ms(),
-                        )
-                        .await;
-                    Err(operation_failure)
-                }
-            }
-            ProviderOperationCompletion::FailureWithSession {
-                failure,
-                session_record,
-            } => {
-                let mut store = self.store.lock().await;
-                if store
-                    .settle_session_operation(&operation_id, &session_record)
-                    .await
-                    .is_err()
-                {
-                    Err(applied_storage_failure(
-                        operation_id.clone(),
-                        Some(session_record.target.clone()),
-                    ))
-                } else {
-                    Err(failure)
-                }
-            }
-        };
-        self.publish_result(operation_id, &live, result).await;
-    }
-
-    /// Publishes a live operation's result. Its protection from retention ends here, with
-    /// no store write, so the completion signal moves only after the result is set.
+    /// Registers the settlement for retention before making it visible to waiters.
     async fn publish_result(
         &self,
         operation_id: OperationId,
         live: &LiveOperation,
         result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
+        retention: provider_operation_finish::Retention,
     ) {
-        *live.result.lock().await = Some(result);
-        live.published.store(true, Ordering::Release);
+        #[cfg(test)]
+        let publication_pause = self
+            .result_published_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_if(|(selected, _)| *selected == operation_id)
+            .map(|(_, pause)| pause);
+        // Waiters can read the result slot directly before a wake, so the
+        // slot stays locked until the retention index and result agree.
+        let mut result_slot = live.result.lock().await;
+        {
+            let mut operations = self
+                .live_operations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let order = match retention {
+                provider_operation_finish::Retention::Settled => &mut operations.terminal_order,
+                provider_operation_finish::Retention::PersistenceFailed => {
+                    &mut operations.persistence_failed_order
+                }
+            };
+            order.push_back(operation_id);
+            let mut expired_operations = Vec::new();
+            while order.len() > MAX_RETAINED_SETTLEMENTS {
+                if let Some(expired) = order.pop_front() {
+                    expired_operations.push(expired);
+                }
+            }
+            for expired in expired_operations {
+                operations.operations.remove(&expired);
+            }
+            *result_slot = Some(result);
+            live.published.store(true, Ordering::Release);
+        }
+        drop(result_slot);
         live.changed.notify_waiters();
         self.completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));
-        let mut operations = self
-            .live_operations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        operations.terminal_order.push_back(operation_id);
-        while operations.terminal_order.len() > MAX_RETAINED_SETTLEMENTS {
-            if let Some(expired) = operations.terminal_order.pop_front() {
-                operations.operations.remove(&expired);
-            }
+        #[cfg(test)]
+        if let Some(pause) = publication_pause {
+            let _entered = pause.entered.send(());
+            let _released = pause.release.await;
         }
     }
 }
@@ -751,20 +724,6 @@ fn unavailable_failure(
         ConversationOperationFailureStage::Settlement,
         ProviderOperationEffect::None,
         "provider operation metadata is unavailable",
-        operation_id,
-        target,
-    )
-}
-
-fn applied_storage_failure(
-    operation_id: OperationId,
-    target: Option<SessionRef>,
-) -> ConversationOperationFailure {
-    failure(
-        ConversationOperationFailureKind::Unavailable,
-        ConversationOperationFailureStage::Settlement,
-        ProviderOperationEffect::Applied,
-        "provider settlement could not be persisted after the operation applied",
         operation_id,
         target,
     )

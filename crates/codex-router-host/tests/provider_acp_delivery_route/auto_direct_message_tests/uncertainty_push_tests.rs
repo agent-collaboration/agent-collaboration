@@ -33,6 +33,7 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("saved provider session");
@@ -77,6 +78,7 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
         supervisor.clone(),
         store.clone(),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let router = Arc::new(SessionDeliveryRouter::new(vec![route.clone()]));
     let pushes = Arc::new(

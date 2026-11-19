@@ -1,5 +1,6 @@
 use super::*;
 use agent_client_protocol::schema::v1::{SessionConfigSelectOption, SessionMode, SessionModeState};
+use provider_session_machines::ProviderSettingKind;
 
 /// Oracle: ACP v1 session config options use semantic categories when
 /// present, and their response after each set is the complete current set

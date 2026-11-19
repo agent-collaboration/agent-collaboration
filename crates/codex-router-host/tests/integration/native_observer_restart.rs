@@ -15,8 +15,7 @@ use tokio::{
 use tokio_tungstenite::tungstenite::Message;
 use tracing_subscriber::layer::SubscriberExt as _;
 
-#[path = "../support/host_clock_control.rs"]
-mod host_clock_control;
+use crate::host_clock_control;
 
 /// The warning an observer that never restored coverage logs once per run of failures.
 const NEVER_RECOVERED: &str = "native lifecycle observation failed before restoring coverage";

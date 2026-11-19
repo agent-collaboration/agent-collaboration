@@ -71,7 +71,10 @@ impl ProviderBehavior for ScriptedBehavior {
     fn initialization_authentication(&self) -> crate::ProviderInitializationAuthentication {
         crate::ProviderInitializationAuthentication::NotRequested
     }
-    fn can_reuse_setting_confirmation(&self, _: crate::ProviderSettingKind) -> bool {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
         true
     }
     fn model_metadata_source(&self) -> crate::ModelMetadataSource {

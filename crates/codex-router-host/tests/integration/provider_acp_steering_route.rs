@@ -155,6 +155,7 @@ async fn prepared_route(
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -194,6 +195,7 @@ async fn prepared_route(
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     (route, supervisor, target, generation)
 }
@@ -350,6 +352,7 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
     let running_operation = OperationId::generate();
     supervisor
         .prompt(ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: running_operation.clone(),
             target: target.clone(),

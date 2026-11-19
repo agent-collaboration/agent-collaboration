@@ -436,8 +436,14 @@ mod settings_projection_tests;
 #[path = "../external_provider_supervisor/lifecycle_tests.rs"]
 mod lifecycle_tests;
 
+#[path = "../external_provider_supervisor/supervisor_shutdown_tests.rs"]
+mod supervisor_shutdown_tests;
+
 #[path = "../external_provider_supervisor/initialization_authentication_test.rs"]
 mod initialization_authentication_tests;
 
 #[path = "../external_provider_supervisor/cursor_settings_tests.rs"]
 mod cursor_settings_tests;
+
+#[path = "../external_provider_supervisor/start_mode_tests.rs"]
+mod start_mode_tests;

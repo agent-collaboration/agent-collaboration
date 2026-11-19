@@ -2,8 +2,8 @@
 
 use crate::selected_skill_content::{selected_text, token_ranges};
 use acp_client_runtime::{
-    PreparedCompact, ProviderBehavior, ProviderCommand, ProviderError, ProviderFacts,
-    ProviderUpdate,
+    PermissionRequestAction, PreparedCompact, ProviderBehavior, ProviderCommand, ProviderError,
+    ProviderFacts, ProviderUpdate, StatedPermissionTarget,
 };
 use session_event_model::{
     PromptContent, ProviderSkill, ProviderSkillScope, ProviderSubmission, SkillInvocationName,
@@ -23,10 +23,10 @@ impl ProviderBehavior for CursorAcpBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        kind: acp_client_runtime::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         // Cursor's shared model manager lets another Session change model/effort.
-        kind == acp_client_runtime::ProviderSettingKind::Mode
+        kind == provider_session_machines::ProviderSettingKind::Mode
     }
     fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
         acp_client_runtime::ModelMetadataSource::ConnectionRequest {
@@ -38,6 +38,13 @@ impl ProviderBehavior for CursorAcpBehavior {
         value: &serde_json::Value,
     ) -> acp_client_runtime::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_cursor_models(value)
+    }
+    fn stated_permission_target(
+        &self,
+        action: PermissionRequestAction,
+        title: &str,
+    ) -> Option<StatedPermissionTarget> {
+        cursor_stated_permission_target(action, title)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
         // Auto-review is not honoured over ACP (E1), so agent mode asks first and
@@ -190,6 +197,31 @@ fn classify_command(
         return Ok(None);
     }
     Err(SkillRowErrorReason::UnrecognizedMetadata)
+}
+
+/// Cursor names the target of a permission request only in its title
+/// (`formatOperation` in Cursor 2026.10.22's ACP client): ``Delete `<path>```,
+/// ``Read `<path>``` or ``Edit `<path>``` for a file, and the command in
+/// backticks for a shell request, with any backtick inside escaped. A title
+/// with another backtick inside is not read for certain, so it asks.
+fn cursor_stated_permission_target(
+    action: PermissionRequestAction,
+    title: &str,
+) -> Option<StatedPermissionTarget> {
+    let quoted = |text: &str| {
+        text.strip_prefix('`')
+            .and_then(|rest| rest.strip_suffix('`'))
+            .filter(|inner| !inner.is_empty() && !inner.contains('`'))
+            .map(str::to_owned)
+    };
+    match action {
+        PermissionRequestAction::FileAccess => ["Delete ", "Read ", "Edit "]
+            .iter()
+            .find_map(|verb| title.strip_prefix(verb))
+            .and_then(quoted)
+            .map(|path| StatedPermissionTarget::File(path.into())),
+        PermissionRequestAction::ShellCommand => quoted(title).map(StatedPermissionTarget::Command),
+    }
 }
 
 #[cfg(test)]

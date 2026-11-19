@@ -152,7 +152,6 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
     );
     let catalog = client
         .settings_catalog(&session_id)
-        .await
         .expect("catalog remains available");
     assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
     assert_eq!(catalog.effective_settings().model.as_deref(), Some("b"));

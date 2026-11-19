@@ -64,6 +64,29 @@ if (request !== undefined) {
       status: "completed",
     });
     agent.endTurn(prompt);
+    // The one-turn wire baseline ends here. A second prompt exercises the retired tool ID.
+    const nextPrompt = await agent.readRequest();
+    if (nextPrompt !== undefined) {
+      assert.equal(nextPrompt.method, "session/prompt");
+      agent.update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "replayed-tool",
+        title: "Late replay tool update",
+        status: "completed",
+      });
+      agent.send({
+        jsonrpc: "2.0",
+        id: "late-replay-todo",
+        method: "cursor/update_todos",
+        params: {
+          toolCallId: "replayed-tool",
+          todos: [{ id: "late", content: "retired replay todo sentinel", status: "pending" }],
+          merge: false,
+        },
+      });
+      assert.equal((await agent.read()).id, "late-replay-todo");
+      agent.endTurn(nextPrompt);
+    }
   }
 }
 await agent.drain();

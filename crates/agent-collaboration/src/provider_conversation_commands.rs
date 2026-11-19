@@ -65,7 +65,8 @@ fn report_typed_failure(failure: &ConversationOperationFailure, json_output: boo
         | ConversationOperationFailureKind::NotFound
         | ConversationOperationFailureKind::StaleGeneration
         | ConversationOperationFailureKind::ProviderSessionNotFound
-        | ConversationOperationFailureKind::ProviderRejected => 4,
+        | ConversationOperationFailureKind::ProviderRejected
+        | ConversationOperationFailureKind::CannotSteer => 4,
         ConversationOperationFailureKind::OutcomeUnknown => 5,
     };
     let rendered = if json_output {

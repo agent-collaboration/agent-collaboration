@@ -32,7 +32,12 @@ pub(super) async fn inspect(
         .capability_report(&session_id)
         .await
         .to_session_model();
-    let catalog = runtime.settings_catalog(&session_id).await;
+    let catalog = runtime.settings_catalog(&session_id);
+    // A lost mode answer leaves the catalog's old mode; show never claims it.
+    let mode_unconfirmed = runtime.setting_outcome_unknown(
+        &session_id,
+        provider_session_machines::ProviderSettingKind::Mode,
+    );
     if let Some(catalog) = &catalog {
         supervisor
             .inner
@@ -50,13 +55,17 @@ pub(super) async fn inspect(
             .cloned(),
     };
     let requested_mode = supervisor
-        .inner
-        .requested_modes
-        .lock()
-        .await
-        .get(&target)
-        .cloned()
+        .runtime_for(&target.endpoint)
+        .map(|runtime| {
+            runtime
+                .session_setup()
+                .requested_mode(&String::from(target.session_id.clone()))
+        })
         .unwrap_or_default();
+    // Fast from the catalog this Host holds; absent when it holds none (D1 R11).
+    let fast = catalog.as_ref().map(|catalog| {
+        crate::provider_operation_settlement::provider_fast_state(catalog.fast_observed())
+    });
     let state = if let Some(hub) = supervisor.inner.hub.as_ref() {
         let hub_target = serde_json::to_value(&target)
             .ok()
@@ -85,16 +94,22 @@ pub(super) async fn inspect(
         state: state_tag(state),
         capabilities,
         history,
-        settings_catalog: catalog.map(catalog_view),
+        settings_catalog: catalog.map(|catalog| catalog_view(catalog, mode_unconfirmed)),
         requested_mode: requested_mode.requested_mode,
         mode_reason: requested_mode.mode_reason,
+        fast,
     })
 }
 
 fn catalog_view(
     catalog: acp_client_runtime::ProviderSettingsCatalog,
+    mode_unconfirmed: bool,
 ) -> ProviderSettingsCatalogView {
-    let current_mode = catalog.effective_settings().mode;
+    let current_mode = if mode_unconfirmed {
+        None
+    } else {
+        catalog.effective_settings().mode
+    };
     ProviderSettingsCatalogView {
         current_mode,
         modes: catalog.modes.into_iter().map(choice_view).collect(),
@@ -181,7 +196,7 @@ impl ExternalProviderSupervisor {
             .runtime_for(&target.endpoint)
             .ok_or(SessionModelCatalogError::Unavailable)?;
         let session_id = String::from(target.session_id.clone());
-        let catalog = match runtime.settings_catalog(&session_id).await {
+        let catalog = match runtime.settings_catalog(&session_id) {
             Some(catalog) => catalog,
             None => self
                 .inner

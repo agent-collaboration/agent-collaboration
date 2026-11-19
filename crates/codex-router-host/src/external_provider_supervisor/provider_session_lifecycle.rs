@@ -1,5 +1,6 @@
 //! Durable provider resume and close operations.
 
+use super::provider_operation_admission::DispatchMark;
 use super::{
     Arc, ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSettlement, ConversationOperationSubmission, ExternalProviderSupervisor,
@@ -59,11 +60,38 @@ pub(super) fn resume(
                 let completion_target = target.clone();
                 let completion_inner = Arc::clone(&backend.inner);
                 backend.spawn_operation(operation_id.clone(), live, async move {
+                    let cwd = PathBuf::from(String::from(working_directory.clone()));
+                    // One mode operation at a time per session: the record read and the mode
+                    // the restore puts back wait for any explicit change still recording,
+                    // and a change waits for the restore (review F3).
+                    let _mode_turn = runtime
+                        .session_setup()
+                        .mode_order()
+                        .enter(&provider_session_id)
+                        .await;
+                    // The setup its create had, rebuilt from its record (D1 R18; Decision 3).
+                    let setup = match crate::provider_session_setup::recorded_restore_setup(
+                        &completion_inner.store,
+                        runtime.session_setup(),
+                        &completion_target,
+                        &cwd,
+                    )
+                    .await
+                    {
+                        Ok(setup) => setup,
+                        Err(_) => {
+                            return ProviderOperationCompletion::Failure(failure(
+                                ConversationOperationFailureKind::Unavailable,
+                                ConversationOperationFailureStage::Dispatch,
+                                ProviderOperationEffect::None,
+                                "the session's record could not be read",
+                                operation_id,
+                                Some(completion_target),
+                            ));
+                        }
+                    };
                     match runtime
-                        .resume_session(
-                            provider_session_id.clone(),
-                            PathBuf::from(String::from(working_directory.clone())),
-                        )
+                        .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
                         .await
                     {
                         Ok(()) => {
@@ -73,13 +101,14 @@ pub(super) fn resume(
                                 .lock()
                                 .await
                                 .insert(completion_target.clone());
-                            if let Some(catalog) =
-                                runtime.settings_catalog(&provider_session_id).await
-                            {
+                            if let Some(catalog) = runtime.settings_catalog(&provider_session_id) {
                                 let effective = catalog.effective_settings();
                                 observed.mode = effective.mode;
                                 observed.model = effective.model;
                                 observed.effort = effective.effort;
+                                observed.fast = effective
+                                    .fast
+                                    .map(crate::provider_operation_settlement::provider_fast_state);
                                 completion_inner
                                     .record_settings_catalog(completion_target.clone(), catalog)
                                     .await;
@@ -91,19 +120,22 @@ pub(super) fn resume(
                                     history: ProviderHistoryAvailability::HistoryUnavailable,
                                 },
                                 target: Some(completion_target.clone()),
+                                // A resume writes none of the resume inputs, so
+                                // the ones its create recorded stay (Decision 3).
                                 session_record: Some(Box::new(provider_session_record(
                                     completion_target,
                                     working_directory,
                                     requested_policy,
                                     created_by,
                                     approver,
+                                    collaboration_runtime::ProviderSessionResumeInputs::default(),
                                 ))),
                             }
                         }
                         Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
                             operation_id,
                             Some(completion_target),
-                            error,
+                            error.into_error(),
                         )),
                     }
                 });
@@ -128,38 +160,49 @@ pub(super) fn close(
             Some(target.clone()),
         )?;
         let provider_session_id = String::from(target.session_id.clone());
-        if !runtime
+        // An agent with no session/close is closed by the Router itself: the
+        // same interrupt, then a release here (owner: "close should just
+        // interrupt the agent and close", every agent).
+        let agent_closes = runtime
             .capability_report(&provider_session_id)
             .await
-            .supports_close
-        {
-            return Err(failure(
-                ConversationOperationFailureKind::UnsupportedCapability,
-                ConversationOperationFailureStage::Binding,
-                ProviderOperationEffect::None,
-                "provider runtime does not advertise conversation close",
-                request.operation_id,
-                Some(target),
-            ));
-        }
+            .supports_close;
+        // Close interrupts a running turn (D1 R14): the live turn's row
+        // doesn't refuse it; an earlier outcome that is unknown and no longer
+        // live still does.
         let prepared = backend
-            .prepare_operation(
+            .admit_operation(
                 request.operation_id.clone(),
                 ProviderOperationKind::ConversationClose,
                 binding,
                 Some(&target),
+                DispatchMark::Deferred,
             )
             .await?;
         match prepared {
             PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
-            PreparedOperation::Admitted { snapshot, live } => {
+            PreparedOperation::Admitted { live, .. } => {
                 let operation_id = request.operation_id.clone();
+                let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
+                // The close's admission on the session's cell ends every
+                // waiting message not sent before the interrupt, so none
+                // starts as the running turn ends. A Router-side close (the
+                // agent offers no session/close) ends NotLoaded like any
+                // close, and the session can be loaded again.
                 let completion_target = target.clone();
+                // The runtime interrupts a running turn, waits for idle, then
+                // closes, or only releases the session when the agent can't.
                 backend.spawn_operation(operation_id.clone(), live, async move {
-                    match runtime.close_session(provider_session_id).await {
+                    let closed = if agent_closes {
+                        runtime.close_session(provider_session_id).await
+                    } else {
+                        runtime.release_session(provider_session_id).await
+                    };
+                    match closed {
                         Ok(()) => ProviderOperationCompletion::Success {
                             settlement: ConversationOperationSettlement::Closed {
                                 target: completion_target.clone(),
+                                router_closed: !agent_closes,
                             },
                             target: Some(completion_target),
                             session_record: None,

@@ -200,7 +200,7 @@ async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime_and_broker() 
         json!({
             "operationId":create_id,"endpoint":provider.endpoint,"generation":generation,
             "workingDirectory":root.path(),"access":"write-restricted",
-            "createdBy":human,"approver":approver,"timeoutSeconds":5
+            "createdBy":human,"approver":approver,"mode":"auto","timeoutSeconds":5
         }),
     )
     .await?;
@@ -405,7 +405,7 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
         let endpoint = json!({"serviceId":runtime.service_id(),"endpointId":"cursor-local"});
         let created = tool(&http,&url,"conversation_create",json!({
         "operationId":OperationId::generate(),"endpoint":endpoint,"workingDirectory":root.path(),
-        "access":"write-restricted","createdBy":{"kind":"human","humanId":"fixture-operator"},
+        "access":"write-restricted","createdBy":{"kind":"human","humanId":"fixture-operator"},"mode":"auto",
         "approver":{"kind":"human","humanId":"independent-approver"},"timeoutSeconds":5
     })).await?;
         check_eq!(created["result"]["isError"], false, "{created}");

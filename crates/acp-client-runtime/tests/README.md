@@ -11,6 +11,12 @@ lifecycle and transport, prompt boundaries and output, settings and history
 ordering, permissions, questions, cancellation, input and idle events. Library
 unit tests remain colocated.
 
+`integration/simulated_races.rs` holds the client-level race scenarios on Turmoil's
+deterministic runtime (design note §11.8): the real client over a duplex pair to
+the in-process `simulated_races/scripted_line_agent.rs`. They use the crate's
+`test-support` feature (the in-process transport and the named-point hook, which
+they forward to Turmoil's barriers); Turmoil is a dev-dependency only.
+
 Case expansions and fixture data retain their existing directories. The aggregate declares the shared provider-behavior helper once, and
 `acp_wire_capture.rs`, which records a fixture agent's complete stdio capture (written by
 `verification/fixtures/acp-stdio.ts` when given `wireCapture`) as raw wire frames on N6 tap cases;

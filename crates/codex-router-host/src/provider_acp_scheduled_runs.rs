@@ -254,6 +254,14 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
                             uncertain: false,
                         })
                     }
+                    ProviderSessionLoadOutcome::ClosedWhileLoading { .. } => {
+                        SchedulePreparationOutcome::Failed(SchedulePreparationFailure {
+                            kind: ScheduleFailureKind::ResourceNotFound,
+                            explanation: "Provider session is closed".into(),
+                            evidence,
+                            uncertain: false,
+                        })
+                    }
                     ProviderSessionLoadOutcome::MissingRecord => {
                         SchedulePreparationOutcome::Failed(SchedulePreparationFailure {
                             kind: ScheduleFailureKind::ResourceNotFound,
@@ -270,7 +278,7 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
                             uncertain: false,
                         })
                     }
-                    ProviderSessionLoadOutcome::Unavailable { reason } => {
+                    ProviderSessionLoadOutcome::Unavailable { reason, .. } => {
                         SchedulePreparationOutcome::Failed(SchedulePreparationFailure {
                             kind: ScheduleFailureKind::OutcomeUnknown,
                             explanation: reason,
@@ -278,7 +286,7 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
                             uncertain: true,
                         })
                     }
-                    ProviderSessionLoadOutcome::Rejected { reason } => {
+                    ProviderSessionLoadOutcome::Rejected { reason, .. } => {
                         SchedulePreparationOutcome::Failed(SchedulePreparationFailure {
                             kind: if matches!(&reason, crate::provider_acp_session_loading::ProviderSessionLoadRejection::SessionNotFound { .. }) {
                                 ScheduleFailureKind::ResourceNotFound

@@ -22,22 +22,30 @@ mod explicit_router_restart;
 mod external_provider_runtime;
 mod provider_acp_delivery_route;
 mod provider_acp_message_fifo;
+#[cfg(feature = "test-support")]
+pub use provider_acp_message_fifo::QUEUE_RETRY_DELAY;
 mod provider_acp_route_claim;
 mod provider_queue_operation_registry;
 mod provider_session_command_port;
+mod provider_session_mode_order;
+mod provider_session_setup;
+mod provider_work_roots;
 pub use provider_queue_operation_registry::{ProviderQueueCancellationError, ProviderQueuedInput};
 pub use provider_session_command_port::HostSessionCommandPort;
+mod provider_cache_warm;
 mod provider_model_catalog;
 mod provider_session_event_sink;
 pub use provider_acp_delivery_route::{
     ProviderAcpDeliveryRoute, ProviderCancelActiveTurnError, ProviderPromptContentsError,
     ProviderQueueAdmissionError, ProviderSteerContentsError,
 };
+mod external_provider_approval_context;
 mod provider_acp_scheduled_runs;
 mod provider_acp_session_loading;
+pub use external_provider_approval_context::ExternalProviderApprovalContext;
 pub use external_provider_runtime::{
-    ExternalProviderAdmission, ExternalProviderApprovalContext, ExternalProviderLaunch,
-    ExternalProviderPromptOutcome, ExternalProviderRuntime, ExternalProviderRuntimeError,
+    ExternalProviderAdmission, ExternalProviderLaunch, ExternalProviderPromptOutcome,
+    ExternalProviderRuntime, ExternalProviderRuntimeError,
 };
 mod external_provider_supervisor;
 pub use external_provider_supervisor::{
@@ -84,7 +92,9 @@ mod owner_identity_resolution;
 mod process_group_child;
 mod provider_settings_section;
 mod router_credential_migration;
-pub use provider_settings_section::{ProviderConfigurationEntries, ProviderConfigurationEntry};
+pub use provider_settings_section::{
+    CacheWarmSetting, ProviderConfigurationEntries, ProviderConfigurationEntry,
+};
 mod router_settings;
 pub use router_settings::{
     ROUTER_SETTINGS_FILE_NAME, RouterSettingsError, RouterSettingsSection,
@@ -94,8 +104,10 @@ mod provider_startup_composition;
 pub use provider_startup_composition::ExternalProviderStartup;
 mod provider_operation_settlement;
 pub use acp_client_runtime::ProviderSessionActivity;
-pub type ProviderSteeringOutcome =
-    acp_client_runtime::ProviderSteeringOutcome<collaboration_protocol::OperationId>;
+pub type ProviderSteeringOutcome = acp_client_runtime::ProviderSteeringOutcome<
+    collaboration_protocol::OperationId,
+    external_provider_approval_context::ExternalProviderApprovalContext,
+>;
 mod router_compatibility;
 mod router_executable_observation;
 mod session_message_route_composition;

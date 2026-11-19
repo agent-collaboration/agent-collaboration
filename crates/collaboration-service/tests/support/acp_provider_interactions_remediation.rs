@@ -266,13 +266,18 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
     Ok(())
 }
 
-/// Busy is decided from the hub before the command port can submit an input.
+/// Oracle: D1 spec R12 and Change 4 "The Router's ACP socket does the same":
+/// a `session/prompt` for a session in a turn is steered into that turn,
+/// never refused as busy and never sent as a second prompt, and it is
+/// answered when the turn ends. (Reclassified from
+/// `busy_acp_prompt_does_not_reach_provider_command_port`, which asserted the
+/// -32000 busy refusal R12 replaces.)
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
-async fn busy_acp_prompt_does_not_reach_provider_command_port() -> TestResult {
+async fn busy_acp_prompt_is_steered_into_the_running_turn() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let provider = Arc::new(ScriptedProviderBackend::new()?);
@@ -310,13 +315,48 @@ async fn busy_acp_prompt_does_not_reach_provider_command_port() -> TestResult {
         &mut writer,
         json!({"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{
             "sessionId":provider.session.session_id.as_str(),
-            "prompt":[{"type":"text","text":"must not submit"}]
+            "prompt":[{"type":"text","text":"steer me"}]
         }}),
     )
     .await?;
-    let rejected = next_frame(&mut lines).await?;
-    assert_eq!(rejected["id"], 3);
-    assert_eq!(rejected["error"]["code"], -32000);
+    // Either the route steers, or it answers early; an early answer to this
+    // prompt is the busy refusal R12 replaces.
+    loop {
+        let steered = async {
+            while provider.steered_by.lock().expect("steer lock").is_empty() {
+                tokio::task::yield_now().await;
+            }
+        };
+        tokio::select! {
+            () = steered => break,
+            frame = next_frame(&mut lines) => {
+                let frame = frame?;
+                assert_ne!(frame.get("id"), Some(&json!(3)), "answered before the turn ended: {frame}");
+            }
+        }
+    }
+    let _sent = provider.events.send(HubEvent {
+        sequence: 10,
+        event: SessionEvent::TurnEnded {
+            turn_id: "turn-1".into(),
+            outcome: session_event_model::TurnOutcome::Ended {
+                stop_reason: session_event_model::StopReason::EndTurn,
+                local_cause: None,
+            },
+        },
+    });
+    let answered = loop {
+        let frame = next_frame(&mut lines).await?;
+        if frame.get("id") == Some(&json!(3)) {
+            break frame;
+        }
+    };
+    assert!(
+        answered.get("error").is_none(),
+        "never refused as busy: {answered}"
+    );
+    assert_eq!(answered["result"]["stopReason"], "end_turn");
+    assert_eq!(provider.steered_by.lock().expect("steer lock").len(), 1);
     assert!(provider.prompted_by.lock().expect("prompt lock").is_empty());
     stop.cancel();
     serving.await??;

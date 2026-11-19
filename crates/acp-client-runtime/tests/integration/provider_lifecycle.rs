@@ -231,14 +231,21 @@ async fn close_admission_rejects_a_new_prompt_before_close_command_is_processed(
         None,
     );
     tokio::pin!(second_prompt);
-    assert!(futures_util::poll!(second_prompt.as_mut()).is_pending());
-    let (close_result, prompt_result) = tokio::join!(&mut close, &mut second_prompt);
+    // The closing session's cell refuses the prompt at once, while the
+    // close is still on its way to the agent.
+    let prompt_result = futures_util::poll!(second_prompt.as_mut());
+    let close_result = close.await;
     client.shutdown().await;
     assert!(close_result.is_ok(), "close result: {close_result:?}");
-    assert!(matches!(
-        prompt_result,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::LocalBusy)
-    ));
+    assert!(
+        matches!(
+            prompt_result,
+            std::task::Poll::Ready(Err(
+                acp_client_runtime::ExternalProviderRuntimeError::LocalBusy { .. }
+            ))
+        ),
+        "the prompt is refused before the close completes: {prompt_result:?}"
+    );
     let seen: Vec<String> =
         serde_json::from_slice(&std::fs::read(receipt).expect("receipt")).expect("receipt JSON");
     assert_eq!(seen, ["list", "resume", "prompt", "close"]);
@@ -398,7 +405,7 @@ async fn dropped_close_waiter_keeps_mark_until_submitted_close_settles() {
         .await;
     assert!(matches!(
         blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::LocalBusy)
+        Err(acp_client_runtime::ExternalProviderRuntimeError::LocalBusy { .. })
     ));
     tokio::task::spawn_blocking(move || {
         use std::io::Write;

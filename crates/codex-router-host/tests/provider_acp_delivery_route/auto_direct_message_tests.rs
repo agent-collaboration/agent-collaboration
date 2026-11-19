@@ -86,6 +86,7 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("saved unloaded provider session");
@@ -106,6 +107,7 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
         supervisor.clone(),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     assert_eq!(
         route

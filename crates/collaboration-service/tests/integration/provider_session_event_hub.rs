@@ -389,6 +389,7 @@ async fn sessions_use_durable_inventory_with_live_state_overlay() -> TestResult 
             created_by: stored_target.clone().into(),
             approver: stored_target.into(),
             updated_at_ms: 3_000,
+            resume: Default::default(),
         })
         .await?;
     let hub = ProviderSessionEventHub::new(Arc::new(Mutex::new(store)));
@@ -510,6 +511,7 @@ async fn sessions_inventory_preserves_human_approver_after_restart() -> TestResu
             created_by: human.clone(),
             approver: human,
             updated_at_ms: 3_000,
+            resume: Default::default(),
         })
         .await?;
     store.close().await?;

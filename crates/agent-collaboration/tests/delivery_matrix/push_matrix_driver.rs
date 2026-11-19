@@ -41,6 +41,7 @@ async fn create_conversation_fixture(
     match conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint,
                 working_directory: proof.workspace.clone(),
@@ -51,6 +52,7 @@ async fn create_conversation_fixture(
                 model: settings.model,
                 mode: None,
                 effort: settings.effort,
+                fast: None,
                 fork: None,
                 root_message_id: None,
             },

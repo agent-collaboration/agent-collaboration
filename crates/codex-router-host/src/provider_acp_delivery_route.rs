@@ -55,7 +55,7 @@ pub struct ProviderAcpDeliveryRoute {
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
-    queue: ProviderAcpMessageFifo,
+    queue: Arc<ProviderAcpMessageFifo>,
     session_locks: StdMutex<HashMap<SessionRef, Arc<Mutex<()>>>>,
 }
 
@@ -70,9 +70,7 @@ impl ProviderAcpDeliveryRoute {
         session: &SessionRef,
         input_id: &session_event_model::InputId,
     ) -> Result<(), crate::ProviderQueueCancellationError> {
-        self.supervisor
-            .queued_operation_registry()
-            .cancel(session, input_id)
+        self.queue.cancel_queued(session, input_id)
     }
 
     #[must_use]
@@ -83,6 +81,7 @@ impl ProviderAcpDeliveryRoute {
         supervisor: Arc<ExternalProviderSupervisor>,
         store: Arc<Mutex<ProviderOperationStore>>,
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let claim = ProviderAcpRouteClaim::new(
             service_id.clone(),
@@ -91,11 +90,14 @@ impl ProviderAcpDeliveryRoute {
             Arc::clone(&supervisor),
             Arc::clone(&store),
         );
-        let queue = ProviderAcpMessageFifo::new(
+        let queue = Arc::new(ProviderAcpMessageFifo::new(
             Arc::clone(&supervisor),
             Arc::clone(&store),
             Arc::clone(&ownership),
-        );
+            clock,
+        ));
+        // API prompts to a session that can't steer wait in this same line (D1 R12).
+        supervisor.attach_message_fifo(&queue);
         Self {
             service_id,
             claim,
@@ -214,7 +216,7 @@ impl ProviderAcpDeliveryRoute {
             ));
         };
         let provider_session_id = String::from(request.target.session_id.clone());
-        if runtime.settings_unresolved(&provider_session_id).await {
+        if runtime.settings_unresolved(&provider_session_id) {
             return Ok(Self::rejected(
                 DeliveryRejectionReason::SettingsUnresolved,
                 "settingsUnresolved: set requested settings or accept current values before prompt, steer or queue",
@@ -289,6 +291,22 @@ impl ProviderAcpDeliveryRoute {
                     )
                     .await;
             }
+            // A close won while the load was in flight: this delivery ends
+            // not sent, never held.
+            ProviderSessionLoadOutcome::ClosedWhileLoading { phase } => {
+                return self
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        crate::provider_acp_session_loading::closed_restore_reason(phase),
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::Rejection(
+                            DeliveryRejectionReason::NotResumable,
+                        )),
+                    )
+                    .await;
+            }
             ProviderSessionLoadOutcome::UnsupportedLoad => {
                 return self
                     .finish_known_none(
@@ -331,21 +349,25 @@ impl ProviderAcpDeliveryRoute {
                     )
                     .await;
             }
-            ProviderSessionLoadOutcome::Unavailable { reason } => {
-                return self
-                    .finish_known_none(
-                        &request,
-                        sink,
-                        &mut effect,
-                        reason,
+            ProviderSessionLoadOutcome::Unavailable { phase, reason } => {
+                use acp_client_runtime::RestorePhase;
+                let (retryable, cause) = match phase {
+                    RestorePhase::Preflight => (
                         true,
                         UnsentCause::Holdable {
                             otherwise: NativeRefusalCode::NativeUnavailable,
                         },
-                    )
+                    ),
+                    RestorePhase::Attempted => (
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::NativeUnavailable),
+                    ),
+                };
+                return self
+                    .finish_known_none(&request, sink, &mut effect, reason, retryable, cause)
                     .await;
             }
-            ProviderSessionLoadOutcome::Rejected { reason } => {
+            ProviderSessionLoadOutcome::Rejected { reason, .. } => {
                 return self.finish_rejected(sink, &mut effect, reason).await;
             }
         }
@@ -375,6 +397,7 @@ impl ProviderAcpDeliveryRoute {
             {
                 Ok(ProviderSteeringOutcome::Injected {
                     running_operation_id: Some(running),
+                    ..
                 }) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {
@@ -387,6 +410,7 @@ impl ProviderAcpDeliveryRoute {
                 }
                 Ok(ProviderSteeringOutcome::Injected {
                     running_operation_id: None,
+                    ..
                 }) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {

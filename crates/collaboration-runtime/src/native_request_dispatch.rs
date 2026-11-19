@@ -292,6 +292,7 @@ fn native_error_response(id: Value, error: &ThreadMethodError) -> Value {
         | ThreadMethodError::ImageUnsupportedType => -32602,
         ThreadMethodError::NotFound => -32002,
         ThreadMethodError::Unavailable
+        | ThreadMethodError::RestoreFailed { .. }
         | ThreadMethodError::Unsupported
         | ThreadMethodError::UnavailableThreadOrdering { .. }
         | ThreadMethodError::SettingsUnresolved

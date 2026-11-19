@@ -11,7 +11,10 @@ impl ProviderBehavior for LiteralBehavior {
     fn initialization_authentication(&self) -> super::ProviderInitializationAuthentication {
         super::ProviderInitializationAuthentication::NotRequested
     }
-    fn can_reuse_setting_confirmation(&self, _kind: crate::ProviderSettingKind) -> bool {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _kind: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
         false
     }
     fn model_metadata_source(&self) -> crate::ModelMetadataSource {

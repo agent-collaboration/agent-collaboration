@@ -169,16 +169,21 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
                 return Ok(Handled::Yes);
             }
         };
-        let Some(session_id) = self.tool_registry.resolve_session(&cursor.tool_call_id) else {
+        let Some(crate::provider_connection_activity::ToolCallOwner {
+            session_id,
+            generation,
+        }) = self.tool_registry.resolve_session(&cursor.tool_call_id)
+        else {
             tracing::warn!("unresolved Cursor question request");
             responder.respond(json!({"outcome":{"outcome":"cancelled"}}))?;
             return Ok(Handled::Yes);
         };
-        let context = self
-            .approval_contexts
-            .lock()
-            .ok()
-            .and_then(|contexts| contexts.get(&session_id).cloned());
+        let context = self.approval_contexts.lock().ok().and_then(|contexts| {
+            contexts
+                .get(&session_id)
+                .filter(|context| context.generation == generation)
+                .cloned()
+        });
         let Some(context) = context else {
             tracing::warn!("Cursor question has no active Turn context");
             responder.respond(json!({"outcome":{"outcome":"cancelled"}}))?;

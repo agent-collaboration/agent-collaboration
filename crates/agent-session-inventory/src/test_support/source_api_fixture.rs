@@ -154,6 +154,7 @@ impl SourceApiFixture {
                     created_by: owner.clone().into(),
                     approver: owner.into(),
                     updated_at_ms: 2000,
+                    resume: Default::default(),
                 })
                 .await
                 .unwrap();

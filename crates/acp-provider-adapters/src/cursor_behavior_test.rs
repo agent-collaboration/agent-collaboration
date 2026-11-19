@@ -134,3 +134,42 @@ fn cursor_refuses_unaddressable_and_multi_text_selections() {
     }
     assert_eq!(CursorAcpBehavior.compact(), Err(ProviderError::Unsupported));
 }
+
+/// Oracle: L6 and Cursor 2026.10.22's `formatOperation` — the title is read
+/// only in the exact shapes Cursor writes; anything ambiguous reads nothing,
+/// so the request asks.
+#[test]
+fn cursor_titles_are_read_only_in_their_exact_shapes() {
+    use acp_client_runtime::{PermissionRequestAction, StatedPermissionTarget};
+    let behavior = super::CursorAcpBehavior;
+    let file = PermissionRequestAction::FileAccess;
+    let shell = PermissionRequestAction::ShellCommand;
+    let path = |text: &str| Some(StatedPermissionTarget::File(text.into()));
+    let cases = [
+        (file, "Delete `/s/a.txt`", path("/s/a.txt")),
+        (file, "Read `/s/a b.txt`", path("/s/a b.txt")),
+        (file, "Edit `/s/a.txt`", path("/s/a.txt")),
+        (file, "Write /s/a.txt", None),
+        (file, "Delete `/s/a` `/t/b`", None),
+        (file, "Delete ``", None),
+        (file, "Delete /s/a.txt", None),
+        (file, "`rm /s/a.txt`", None),
+        (
+            shell,
+            "`rm /s/a.txt`",
+            Some(StatedPermissionTarget::Command("rm /s/a.txt".into())),
+        ),
+        (shell, "`echo \\`id\\``", None),
+        (shell, "rm /s/a.txt", None),
+        (shell, "Delete `/s/a.txt`", None),
+    ];
+    for (action, title, expected) in cases {
+        assert_eq!(
+            acp_client_runtime::ProviderBehavior::stated_permission_target(
+                &behavior, action, title
+            ),
+            expected,
+            "{title}"
+        );
+    }
+}

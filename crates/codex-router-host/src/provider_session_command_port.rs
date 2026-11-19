@@ -44,6 +44,8 @@ pub struct HostSessionCommandPort {
     delivery: Arc<ProviderAcpDeliveryRoute>,
     hub: Arc<ProviderSessionEventHub>,
     store: Arc<Mutex<ProviderOperationStore>>,
+    /// The Host's one injected clock; the turn-start deadline reads it.
+    clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 impl HostSessionCommandPort {
@@ -53,12 +55,14 @@ impl HostSessionCommandPort {
         delivery: Arc<ProviderAcpDeliveryRoute>,
         hub: Arc<ProviderSessionEventHub>,
         store: Arc<Mutex<ProviderOperationStore>>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         Self {
             supervisor,
             delivery,
             hub,
             store,
+            clock,
         }
     }
 
@@ -84,6 +88,7 @@ impl SessionCommandPort for HostSessionCommandPort {
         Box::pin(async move {
             let operation_id = OperationId::generate();
             let request = ConversationCreateRequest {
+                work_roots: Vec::new(),
                 operation_id: operation_id.clone(),
                 endpoint: protocol_endpoint(&command.endpoint)?,
                 generation: None,
@@ -95,6 +100,8 @@ impl SessionCommandPort for HostSessionCommandPort {
                     mode: command.settings.mode,
                     model: command.settings.model,
                     effort: command.settings.effort,
+                    // These doors carry no fast, so the default (off) applies.
+                    fast: None,
                 }),
             };
             self.supervisor
@@ -183,9 +190,14 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .prompt_contents(target, actor, input_id.clone(), command.submission)
                 .await
                 .map_err(map_prompt_failure)?;
-            let turn_id =
-                wait_for_turn_start(self.hub.as_ref(), command.target, attachment, input_id)
-                    .await?;
+            let turn_id = wait_for_turn_start(
+                self.clock.as_ref(),
+                self.hub.as_ref(),
+                command.target,
+                attachment,
+                input_id,
+            )
+            .await?;
             Ok(SessionTurnHandle { turn_id })
         })
     }
@@ -206,9 +218,14 @@ impl SessionCommandPort for HostSessionCommandPort {
                 )
                 .await
                 .map_err(map_prompt_failure)?;
-            let turn_id =
-                wait_for_turn_start(self.hub.as_ref(), command.target, attachment, input_id)
-                    .await?;
+            let turn_id = wait_for_turn_start(
+                self.clock.as_ref(),
+                self.hub.as_ref(),
+                command.target,
+                attachment,
+                input_id,
+            )
+            .await?;
             Ok(SessionTurnHandle { turn_id })
         })
     }
@@ -236,6 +253,7 @@ impl SessionCommandPort for HostSessionCommandPort {
                 }),
                 ProviderSteeringOutcome::StartedNewTurn => {
                     let turn_id = wait_for_turn_start(
+                        self.clock.as_ref(),
                         self.hub.as_ref(),
                         command.target,
                         attachment,
@@ -264,6 +282,31 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .await
                 .map_err(map_admission_failure)?;
             Ok(queued_input(queued))
+        })
+    }
+
+    fn queue_outcome(
+        &self,
+        target: message_board::SessionRef,
+        input_id: session_event_model::InputId,
+    ) -> CommandFuture<'_, collaboration_contracts::QueuedInputOutcome> {
+        Box::pin(async move {
+            let attachment = self
+                .hub
+                .attach(target.clone())
+                .await
+                .map_err(|_| CommandFailure::SessionNotFound)?;
+            let protocol_target = protocol_session(&target)?;
+            let registry = self.supervisor.queued_operation_registry();
+            queued_input_outcome(
+                self.hub.as_ref(),
+                registry,
+                target,
+                &protocol_target,
+                attachment,
+                input_id,
+            )
+            .await
         })
     }
 
@@ -434,6 +477,9 @@ fn map_admission_failure(error: ProviderQueueAdmissionError) -> CommandFailure {
 fn map_prompt_failure(error: ProviderPromptContentsError) -> CommandFailure {
     match error {
         ProviderPromptContentsError::Admission(error) => map_admission_failure(error),
+        ProviderPromptContentsError::RestoreFailed { reason } => {
+            CommandFailure::RestoreFailed { reason }
+        }
         ProviderPromptContentsError::Operation(error) => map_operation_failure(*error),
     }
 }
@@ -454,12 +500,19 @@ fn map_runtime_failure(error: ExternalProviderRuntimeError) -> CommandFailure {
             acp_client_runtime::ProviderError::Unsupported
             | acp_client_runtime::ProviderError::SourceUnavailable,
         ) => CommandFailure::Unsupported,
-        ExternalProviderRuntimeError::LocalBusy => CommandFailure::Busy,
+        ExternalProviderRuntimeError::LocalBusy { .. } => CommandFailure::Busy,
+        // An agent that can't steer: a busy ACP prompt queues instead (D1 R12).
+        ExternalProviderRuntimeError::UnsupportedSteering => {
+            CommandFailure::UnsupportedOperation { operation: "steer" }
+        }
         ExternalProviderRuntimeError::LocalNotFound
+        | ExternalProviderRuntimeError::SessionReleased
         | ExternalProviderRuntimeError::ProviderSessionNotFound { .. } => {
             CommandFailure::SessionNotFound
         }
-        ExternalProviderRuntimeError::SettingsUnresolved => CommandFailure::SettingsUnresolved,
+        ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
+            CommandFailure::SettingsUnresolved
+        }
         ExternalProviderRuntimeError::UnsupportedContent { content_type } => {
             CommandFailure::UnsupportedContent(content_type)
         }
@@ -519,7 +572,83 @@ async fn wait_for_settlement(
     }
 }
 
+/// A queued input's outcome, however long it waits in the line (D1 R12,
+/// R14): Started when the turn carrying its input ID starts, or NotSent with
+/// the reason the line records, which outranks "no turn started". No deadline
+/// applies: waiting in the line is not a dispatch that failed to start.
+async fn queued_input_outcome(
+    hub: &ProviderSessionEventHub,
+    registry: &crate::provider_queue_operation_registry::ProviderQueueOperationRegistry,
+    session: message_board::SessionRef,
+    protocol_target: &SessionRef,
+    attachment: SessionEventAttachment,
+    input_id: InputId,
+) -> Result<collaboration_contracts::QueuedInputOutcome, CommandFailure> {
+    tokio::select! {
+        biased;
+        reason = registry.wait_not_sent(protocol_target, &input_id) => {
+            Ok(collaboration_contracts::QueuedInputOutcome::NotSent { reason })
+        }
+        started = wait_for_queued_turn_start(hub, session, attachment, input_id.clone()) => {
+            Ok(collaboration_contracts::QueuedInputOutcome::Started { turn_id: started? })
+        }
+    }
+}
+
+/// The turn a queued input starts, with no deadline. A lagged receiver
+/// re-reads the session's history; a closed one waits for the line's
+/// not-sent reason instead of failing.
+async fn wait_for_queued_turn_start(
+    hub: &ProviderSessionEventHub,
+    session: message_board::SessionRef,
+    mut attachment: SessionEventAttachment,
+    input_id: InputId,
+) -> Result<String, CommandFailure> {
+    loop {
+        if let Some(turn_id) = attachment
+            .snapshot
+            .iter()
+            .find_map(|event| match &event.event {
+                SessionEvent::TurnStarted {
+                    turn_id,
+                    input_id: observed,
+                } if observed == &input_id => Some(turn_id.clone()),
+                _ => None,
+            })
+        {
+            return Ok(turn_id);
+        }
+        loop {
+            match attachment.receiver.recv().await {
+                Ok(event) => {
+                    if let SessionEvent::TurnStarted {
+                        turn_id,
+                        input_id: observed,
+                    } = &event.event
+                        && observed == &input_id
+                    {
+                        return Ok(turn_id.clone());
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    attachment = hub
+                        .attach(session.clone())
+                        .await
+                        .map_err(|_| CommandFailure::ProviderFailure)?;
+                    break;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    std::future::pending::<()>().await;
+                }
+            }
+        }
+    }
+}
+
+/// The turn a dispatched input starts, within the start deadline on the
+/// injected clock.
 async fn wait_for_turn_start(
+    clock: &dyn router_clock::RuntimeClock,
     hub: &ProviderSessionEventHub,
     session: message_board::SessionRef,
     mut attachment: SessionEventAttachment,
@@ -535,7 +664,7 @@ async fn wait_for_turn_start(
             return Ok(turn_id.clone());
         }
     }
-    let started = tokio::time::timeout(TURN_START_DEADLINE, async {
+    let started = router_clock::timeout(clock, TURN_START_DEADLINE, async {
         loop {
             match attachment.receiver.recv().await {
                 Ok(event) => {
@@ -589,6 +718,10 @@ fn active_turn_id(attachment: &SessionEventAttachment) -> Option<&str> {
             _ => current,
         })
 }
+
+#[cfg(test)]
+#[path = "provider_session_command_port_test.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "provider_session_command_port_node_tap_test.rs"]

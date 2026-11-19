@@ -2,8 +2,9 @@
 
 use acp_client_runtime::{
     AppliedProviderSetting, EffectiveProviderSettings, ExternalProviderCreatedSession,
-    ProviderSettingKind, RequestedProviderSettings,
+    RequestedProviderSettings,
 };
+use provider_session_machines::ProviderSettingKind;
 
 /// Oracle: specification R14 reports the effective settings and every applied
 /// selection separately from a partially failed create.
@@ -13,11 +14,13 @@ fn provider_create_settings_have_typed_request_and_result() {
         mode: Some("ask".to_owned()),
         model: Some("model-a".to_owned()),
         effort: Some("high".to_owned()),
+        ..Default::default()
     };
     let effective = EffectiveProviderSettings {
         mode: requested.mode,
         model: requested.model,
         effort: requested.effort,
+        ..Default::default()
     };
     let created = ExternalProviderCreatedSession {
         provider_session_id: "session-a".to_owned(),

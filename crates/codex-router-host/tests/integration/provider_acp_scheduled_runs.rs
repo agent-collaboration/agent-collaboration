@@ -249,6 +249,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -288,6 +289,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let router = SessionDeliveryRouter::new(vec![route.clone() as Arc<dyn SessionDeliveryRoute>]);
     let preparation = RecordedPreparationIntent(tokio::sync::Mutex::new(Vec::new()));
@@ -432,6 +434,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
     let active_id = OperationId::generate();
     supervisor
         .prompt(ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: active_id.clone(),
             target: target.clone(),
@@ -562,6 +565,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         Arc::clone(&restarted_supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let restarted_router =
         SessionDeliveryRouter::new(vec![restarted_route as Arc<dyn SessionDeliveryRoute>]);
@@ -721,6 +725,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
     for _ in 0..256 {
         let operation_id = OperationId::generate();
         let prompt = collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: operation_id.clone(),
             target: target.clone(),

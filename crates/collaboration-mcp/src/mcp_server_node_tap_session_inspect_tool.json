@@ -359,6 +359,17 @@
                 "type": "null"
               }
             ]
+          },
+          "fast": {
+            "description": "What the agent last reported for its fast option; absent when the\nRouter hasn't observed this session's settings since it started.",
+            "anyOf": [
+              {
+                "$ref": "#/$defs/FastState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": {
@@ -444,6 +455,23 @@
             "description": "Setting the auto realization failed; the agent kept its own mode.",
             "type": "string",
             "const": "autoNotApplied"
+          }
+        ]
+      },
+      "FastState": {
+        "description": "What the agent last reported for its fast option.",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "off",
+              "on"
+            ]
+          },
+          {
+            "description": "The agent offers no fast option.",
+            "type": "string",
+            "const": "none"
           }
         ]
       },

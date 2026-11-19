@@ -55,6 +55,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -75,10 +76,12 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),
@@ -207,6 +210,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -227,12 +231,14 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
     let first_operation_id = collaboration_protocol::OperationId::generate();
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: first_operation_id,
             target: target.clone(),
@@ -442,6 +448,7 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -462,6 +469,7 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let mut first_request = request(target.clone(), "first load failure");
@@ -531,13 +539,13 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
     })
     .await
     .expect("both permanent item failures are recorded");
-    assert_eq!(
-        std::fs::read_to_string(load_marker)
-            .expect("load marker")
-            .lines()
-            .count(),
-        2
-    );
+    // One door load serves every message that joins the line while it
+    // runs; a message that arrives after it failed starts its own.
+    let loads = std::fs::read_to_string(load_marker)
+        .expect("load marker")
+        .lines()
+        .count();
+    assert!((1..=2).contains(&loads), "loads: {loads}");
 
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
@@ -577,6 +585,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -593,6 +602,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
     let active_prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),
@@ -623,6 +633,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let mut first_request = request(target.clone(), "first queued prompt");
@@ -778,6 +789,7 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -798,10 +810,12 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             target: target.clone(),
@@ -858,11 +872,15 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
         )
         .await
         .expect("retired queue item remains inspectable");
-        assert!(matches!(
-            snapshot.queue_state,
-            Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
-                if reason == "providerRetired"
-        ));
+        assert!(
+            matches!(
+                &snapshot.queue_state,
+                Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
+                    if reason == "provider connection closed"
+            ),
+            "{:?}",
+            snapshot.queue_state
+        );
     }
     let _ = first;
     route.shutdown_queue().await;

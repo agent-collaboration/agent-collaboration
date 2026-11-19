@@ -98,6 +98,24 @@ pub async fn serve_acp_router_connection<
     stream: TStream,
     routes: Vec<Box<dyn AcpSessionRoute>>,
 ) -> io::Result<()> {
+    serve_acp_router_connection_until(stream, routes, tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+/// Serves one ACP connection until it closes or `stop` is cancelled. When
+/// `stop` ends it, the connection closes and every route task is joined, not
+/// aborted, before this returns; every route given here must end on its closed
+/// token. What a route then does with its own tasks is the route's: a provider
+/// route joins its prompt and observer tasks, while the lazy Codex route aborts
+/// its inner generation task without awaiting it. Any other end aborts the
+/// routes, as `serve_acp_router_connection` always has.
+pub async fn serve_acp_router_connection_until<
+    TStream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+>(
+    stream: TStream,
+    routes: Vec<Box<dyn AcpSessionRoute>>,
+    stop: tokio_util::sync::CancellationToken,
+) -> io::Result<()> {
     let (wire, mut connection) = acp_connection_channels();
     let closed = connection.closed.clone();
     let transport = tokio::spawn(run_acp_transport(stream, wire));
@@ -116,6 +134,7 @@ pub async fn serve_acp_router_connection<
         loop {
             tokio::select! {
                 _ = connection.closed.cancelled() => break Ok(()),
+                _ = stop.cancelled() => break Ok(()),
                 completed = route_tasks.join_next(), if !route_tasks.is_empty() => {
                     let Some(Ok(())) = completed else {
                         break Err(io::Error::other("ACP Session route task failed"));
@@ -280,8 +299,17 @@ pub async fn serve_acp_router_connection<
         }
     }.await;
     closed.cancel();
-    route_tasks.abort_all();
-    while route_tasks.join_next().await.is_some() {}
+    if stop.is_cancelled() {
+        // Stopped by the caller: every route ends on the connection's closed
+        // token and is joined here, not aborted. A provider route joins its
+        // prompt and observer tasks first; the lazy Codex route aborts its
+        // inner generation task without awaiting it. Aborting a route from
+        // outside would drop the provider route's tasks unjoined.
+        while route_tasks.join_next().await.is_some() {}
+    } else {
+        route_tasks.abort_all();
+        while route_tasks.join_next().await.is_some() {}
+    }
     let transport_result = transport
         .await
         .map_err(|_| io::Error::other("ACP transport task failed"))?;

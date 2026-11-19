@@ -103,7 +103,7 @@ fn observation_lines(
             },
             SourceProviderActionResult::ManagedLoad {result}=>lines.push(match result.as_ref() {
                 ConversationOperationResult::Completed {target,..}=>format!("Loaded session {}",String::from(target.session_id.clone())),
-                ConversationOperationResult::Pending {..}=>"Load is pending. Check the retained operation.".to_owned(),
+                ConversationOperationResult::Pending {..} | ConversationOperationResult::Queued {..}=>"Load is pending. Check the retained operation.".to_owned(),
                 ConversationOperationResult::Running {..}=>"Load outcome is uncertain. Check the retained operation.".to_owned(),
             }),
             SourceProviderActionResult::ManagedResume {result}=>lines.push(format!("Resume stage: {:?}; effect: {:?}",result.operation.stage,result.operation.effect)),

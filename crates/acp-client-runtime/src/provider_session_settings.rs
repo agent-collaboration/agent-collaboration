@@ -1,18 +1,51 @@
 //! Typed provider Session settings at the ACP client boundary.
 use crate::provider_setting_choice::ProviderSettingChoice;
+use provider_session_machines::ProviderSettingKind;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RequestedProviderSettings {
     pub mode: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub fast: FastRequest,
 }
 
 impl RequestedProviderSettings {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.mode.is_none() && self.model.is_none() && self.effort.is_none()
+        self.mode.is_none()
+            && self.model.is_none()
+            && self.effort.is_none()
+            && self.fast == FastRequest::Leave
     }
+}
+
+/// What a request asks of the agent's fast option, and where it came from
+/// (D1 spec R7, R10). The Router never turns fast on.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FastRequest {
+    /// Don't touch fast: `--fast auto`, and every setter that isn't about fast.
+    #[default]
+    Leave,
+    /// The create default: turn fast off when the agent offers it; a no-op
+    /// when it doesn't.
+    OffIfOffered,
+    /// An explicit fast off: with no fast option it's an invalid setting.
+    Off,
+}
+
+/// A select option's vendor-provided ID for turning fast off.
+pub(crate) fn is_fast_off_select_value(value: &str) -> bool {
+    matches!(value, "false" | "off")
+}
+
+/// What the agent last reported for its fast option.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FastObserved {
+    Off,
+    On,
+    /// The agent offers no fast option.
+    NoOption,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -20,30 +53,14 @@ pub struct EffectiveProviderSettings {
     pub mode: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub fast: Option<FastObserved>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ProviderSettingKind {
-    Mode,
-    Model,
-    Effort,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum UnresolvedSettingCause {
-    DefiniteFailure,
-    OutcomeUnknown,
-}
-
-impl ProviderSettingKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Mode => "mode",
-            Self::Model => "model",
-            Self::Effort => "effort",
-        }
-    }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderSettingApplication {
+    pub effective_settings: EffectiveProviderSettings,
+    /// The requested mode confirmed by this application without a fallback.
+    pub confirmed_requested_mode: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -96,9 +113,17 @@ pub struct ProviderConfigOption {
 
 /// Last options advertised by a provider Session. The Host supervisor may keep
 /// this snapshot after the Session unloads for model/list and settings inspect.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ProviderModeObservation {
+    #[default]
+    FromCatalogue,
+    Unconfirmed,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ProviderSettingsCatalog {
     pub current_mode: Option<String>,
+    pub mode_observation: ProviderModeObservation,
     pub modes: Vec<ProviderSettingChoice>,
     pub config_options: Vec<ProviderConfigOption>,
     pub model_reasoning: crate::ModelReasoningMetadata,
@@ -119,6 +144,10 @@ impl ProviderSettingsCatalog {
             config: self
                 .config_options
                 .iter()
+                .filter(|option| {
+                    option.category != Some(ProviderSettingKind::Mode)
+                        || self.mode_observation != ProviderModeObservation::Unconfirmed
+                })
                 .map(|option| ConfigValue {
                     id: option.id.clone(),
                     value: match &option.current_value {
@@ -200,9 +229,38 @@ impl ProviderSettingsCatalog {
                 })
         };
         EffectiveProviderSettings {
-            mode: selected(ProviderSettingKind::Mode).or_else(|| self.current_mode.clone()),
+            mode: match self.mode_observation {
+                ProviderModeObservation::FromCatalogue => {
+                    selected(ProviderSettingKind::Mode).or_else(|| self.current_mode.clone())
+                }
+                ProviderModeObservation::Unconfirmed => None,
+            },
             model: selected(ProviderSettingKind::Model),
             effort: selected(ProviderSettingKind::Effort),
+            fast: Some(self.fast_observed()),
+        }
+    }
+
+    /// Whether this catalog offers a fast option at all.
+    #[must_use]
+    pub fn offers_fast(&self) -> bool {
+        self.config_option(ProviderSettingKind::Fast).is_some()
+    }
+
+    /// Reads the vendor's off identifier or a boolean false as off.
+    #[must_use]
+    pub fn fast_observed(&self) -> FastObserved {
+        match self.config_option(ProviderSettingKind::Fast) {
+            None => FastObserved::NoOption,
+            Some(option) => match &option.current_value {
+                ProviderConfigValue::Select(value) if is_fast_off_select_value(value) => {
+                    FastObserved::Off
+                }
+                ProviderConfigValue::Boolean(false) => FastObserved::Off,
+                ProviderConfigValue::Select(_) | ProviderConfigValue::Boolean(true) => {
+                    FastObserved::On
+                }
+            },
         }
     }
 }

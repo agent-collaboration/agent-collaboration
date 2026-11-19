@@ -1,3 +1,11 @@
+#[path = "tests/deferred_uncertainty_admission_test.rs"]
+mod deferred_uncertainty_admission_tests;
+#[path = "tests/persistence_overlay_test.rs"]
+mod persistence_overlay_tests;
+#[path = "tests/restore_recovery_test.rs"]
+mod restore_recovery_tests;
+#[path = "tests/steered_input_join_test.rs"]
+mod steered_input_join_tests;
 #[path = "tests/uncertainty_admission_test.rs"]
 mod uncertainty_admission_tests;
 use super::*;
@@ -253,9 +261,15 @@ async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
         .await
         .expect("delivery prompt admission");
 
+    // Nothing was sent, and the refusal says why (D1 M8); every delivery
+    // consumer handles it as not submitted.
     assert_eq!(
         dispatch,
-        provider_delivery_submission::ProviderPromptDispatch::NotSubmitted
+        provider_delivery_submission::ProviderPromptDispatch::Refused(
+            acp_client_runtime::ProviderDispatchRefusal::NotLoaded {
+                answer: "session is not loaded; load it or resume it".to_owned()
+            }
+        )
     );
     backend.shutdown().await.expect("shutdown");
 }
@@ -284,6 +298,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         Arc::clone(&hub),
         hub_endpoint,
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("fixture initializes");
@@ -305,6 +320,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         Arc::clone(&backend),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let target = SessionRef {
         endpoint: endpoint(),
@@ -313,8 +329,15 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     let mut queued_input_ids = Vec::new();
     let mut expected_lines = Vec::new();
     for text in ["first", "second"] {
-        let permit = queue.reserve(&target).expect("queue capacity");
         let operation_id = OperationId::generate();
+        let permit = queue
+            .reserve(
+                &target,
+                &operation_id,
+                collaboration_contracts::LoadPolicy::MayLoad,
+            )
+            .await
+            .expect("queue capacity");
         let input_id = session_event_model::InputId::generate();
         queued_input_ids.push(input_id.clone());
         let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
@@ -349,7 +372,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         permit.send(
             crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
                 request: contents,
-                load_policy: collaboration_contracts::LoadPolicy::MayLoad,
+                admitted: None,
             },
         );
     }
@@ -434,6 +457,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         Arc::clone(&backend),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let queued_id = OperationId::generate();
     let queued_input = session_event_model::InputId::generate();
@@ -466,12 +490,20 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
             acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
         },
     );
-    queue.reserve(&target).expect("queue capacity").send(
-        crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-            request: queued_contents,
-            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
-        },
-    );
+    queue
+        .reserve(
+            &target,
+            &queued_id,
+            collaboration_contracts::LoadPolicy::MayLoad,
+        )
+        .await
+        .expect("queue capacity")
+        .send(
+            crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
+                request: queued_contents,
+                admitted: None,
+            },
+        );
 
     queue.shutdown().await;
 
@@ -490,7 +522,8 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
 #[tokio::test]
 async fn provider_retirement_settles_queued_input_without_resubmission() {
     // Specification R5: queued Inputs of a lost Session become notSubmitted
-    // with providerRetired and are never sent to a successor connection.
+    // "provider connection closed" and are never sent to a successor
+    // connection.
     let root = tempfile::tempdir().expect("temporary root");
     let runtime = ExternalProviderRuntime::initialize(
         pending_prompt_fixture(),
@@ -537,10 +570,18 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         Arc::clone(&backend),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let queued_id = OperationId::generate();
     let queued_input_id = session_event_model::InputId::generate();
-    let permit = queue.reserve(&target).expect("queue capacity");
+    let permit = queue
+        .reserve(
+            &target,
+            &queued_id,
+            collaboration_contracts::LoadPolicy::MayLoad,
+        )
+        .await
+        .expect("queue capacity");
     let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
         .expect("UUIDv7 push id");
     let queued_line = MessageText::try_from(format!(
@@ -572,7 +613,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     permit.send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
-            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
+            admitted: None,
         },
     );
     backend
@@ -580,9 +621,14 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         .expect("provider runtime")
         .shutdown()
         .await;
-    tokio::time::timeout(Duration::from_secs(5), queue.wait_for_workers())
-        .await
-        .expect("queued operation worker settles after provider retirement");
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        backend
+            .queued_operation_registry()
+            .wait_for_not_submitted(&queued_id),
+    )
+    .await
+    .expect("the queued input settles after provider retirement");
     let snapshot = backend
         .queued_operation_registry()
         .snapshot(&queued_id)
@@ -592,7 +638,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     assert!(matches!(
         snapshot.queue_state,
         Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
-            if reason == "providerRetired"
+            if reason == "provider connection closed"
     ));
     queue.shutdown().await;
     backend.shutdown().await.expect("supervisor shutdown");
@@ -635,7 +681,11 @@ async fn concurrent_admission_precedes_reconcile_live_state_check() {
     let create_task = tokio::spawn(async move {
         create_backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_operation_id,
                 endpoint: endpoint(),
                 generation: Some(generation()),
@@ -698,7 +748,9 @@ fn typed_runtime_failure_mapping_never_classifies_provider_text() {
         assert_eq!(failure.provider_code, Some(-32603));
     }
     for error in [
-        ExternalProviderRuntimeError::LocalBusy,
+        ExternalProviderRuntimeError::LocalBusy {
+            answer: "a turn is running; queue the message or cancel the turn".to_owned(),
+        },
         ExternalProviderRuntimeError::LocalNotFound,
         ExternalProviderRuntimeError::LocalCancelTargetMismatch,
         ExternalProviderRuntimeError::AuthenticationRequired {

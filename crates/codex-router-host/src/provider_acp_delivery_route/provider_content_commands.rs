@@ -6,6 +6,7 @@ use super::{
     ProviderSessionLoadOutcome, ProviderSteeringOutcome, RouteClaim, SessionRef,
     ensure_provider_session_loaded,
 };
+use acp_client_runtime::RestorePhase;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ProviderQueueAdmissionError {
@@ -37,6 +38,8 @@ pub enum ProviderSteerContentsError {
 pub enum ProviderPromptContentsError {
     #[error(transparent)]
     Admission(#[from] ProviderQueueAdmissionError),
+    #[error("{reason}")]
+    RestoreFailed { reason: String },
     #[error("provider prompt operation failed")]
     Operation(Box<collaboration_protocol::ConversationOperationFailure>),
 }
@@ -131,16 +134,37 @@ impl ProviderAcpDeliveryRoute {
             ProviderSessionLoadOutcome::LiveElsewhere => {
                 return Err(ProviderQueueAdmissionError::LiveElsewhere.into());
             }
+            ProviderSessionLoadOutcome::Unavailable {
+                phase: RestorePhase::Attempted,
+                reason,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed { reason });
+            }
+            ProviderSessionLoadOutcome::Rejected {
+                phase: RestorePhase::Attempted,
+                reason,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed {
+                    reason: reason.safe_detail(),
+                });
+            }
+            ProviderSessionLoadOutcome::ClosedWhileLoading {
+                phase: RestorePhase::Attempted,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed {
+                    reason: crate::provider_acp_session_loading::closed_restore_reason(
+                        RestorePhase::Attempted,
+                    )
+                    .to_owned(),
+                });
+            }
             _ => return Err(ProviderQueueAdmissionError::Unavailable.into()),
         }
         let runtime = self
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
-        {
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
         let capabilities = runtime
@@ -159,6 +183,7 @@ impl ProviderAcpDeliveryRoute {
                 requested_by: actor,
                 approver: record.approver,
                 input,
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             })
             .await
             .map_err(|failure| ProviderPromptContentsError::Operation(Box::new(failure)))
@@ -203,10 +228,7 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
-        {
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
         let capabilities = runtime
@@ -268,10 +290,7 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
-        {
+        if runtime.settings_unresolved(&String::from(target.session_id.clone())) {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved);
         }
         let capabilities = runtime
@@ -284,11 +303,20 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .binding(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
+        let operation_id = OperationId::generate();
         let permit = self
             .queue
-            .reserve(&target)
-            .map_err(|_| ProviderQueueAdmissionError::Busy)?;
-        let operation_id = OperationId::generate();
+            .reserve(&target, &operation_id, LoadPolicy::MayLoad)
+            .await
+            .map_err(|refusal| match refusal {
+                crate::provider_acp_message_fifo::QueueDoorRefusal::Busy(_) => {
+                    ProviderQueueAdmissionError::Busy
+                }
+                crate::provider_acp_message_fifo::QueueDoorRefusal::NotLoaded(_)
+                | crate::provider_acp_message_fifo::QueueDoorRefusal::Refused(_) => {
+                    ProviderQueueAdmissionError::Unavailable
+                }
+            })?;
         let input_id = session_event_model::InputId::generate();
         let queued = self
             .supervisor
@@ -308,8 +336,9 @@ impl ProviderAcpDeliveryRoute {
                 requested_by: actor,
                 approver: record.approver,
                 input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             },
-            load_policy: LoadPolicy::MayLoad,
+            admitted: None,
         });
         Ok(queued)
     }

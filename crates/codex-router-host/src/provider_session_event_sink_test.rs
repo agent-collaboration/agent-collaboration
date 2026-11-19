@@ -445,10 +445,6 @@ async fn closing_session_releases_backlog_and_publication_tracking() {
         endpoint_id: EndpointId::try_from("fixture-provider".to_owned()).expect("endpoint"),
     };
     let sink = HubSessionEventSink::new(hub, endpoint);
-    sink.backlog_warned
-        .lock()
-        .expect("backlog lock")
-        .insert("session-one".to_owned());
     sink.publish(
         "session-one",
         SessionEvent::StateChanged {
@@ -456,23 +452,88 @@ async fn closing_session_releases_backlog_and_publication_tracking() {
         },
     )
     .expect("close event queued");
+    // The run's Closed ends the session's queue, and its backlog warning with it.
+    let queue_open_after_close = sink
+        .queues
+        .lock()
+        .expect("queue lock")
+        .as_ref()
+        .is_some_and(|queues| queues.open.contains_key("session-one"));
     sink.not_publishing
         .lock()
         .expect("publication lock")
         .insert("session-one".to_owned());
     sink.shutdown().await.expect("close event drained");
-    assert!(
-        !sink
-            .backlog_warned
-            .lock()
-            .expect("backlog lock")
-            .contains("session-one")
-    );
+    assert!(!queue_open_after_close);
     assert!(
         !sink
             .not_publishing
             .lock()
             .expect("publication lock")
             .contains("session-one")
+    );
+}
+
+/// Rounds of yielding that let every task made ready run to its next wait;
+/// a count of rounds on the test's one runtime, never time.
+const QUIESCENCE_ROUNDS: usize = 1_000;
+
+/// Oracle: design note §11.7 (M5) and Lead D-b, "A held at its hub
+/// publication: B completes fully" (wrong build: one consumer for every
+/// session): session A's history is held while a publication for A waits.
+/// Driven until no task is ready, session B's history replay has begun;
+/// once A is released, A's publication lands.
+#[tokio::test]
+async fn a_session_held_at_its_hub_publication_never_holds_up_another() {
+    // Arrange
+    let root = tempfile::tempdir().expect("temporary store");
+    let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+        .await
+        .expect("provider store");
+    let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
+    let endpoint = SessionEndpointRef {
+        service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
+            .expect("service"),
+        endpoint_id: EndpointId::try_from("fixture-provider".to_owned()).expect("endpoint"),
+    };
+    let held_session = SessionRef {
+        endpoint: endpoint.clone(),
+        session_id: SessionId::try_from("session-a".to_owned()).expect("session"),
+    };
+    let sink = HubSessionEventSink::new(Arc::clone(&hub), endpoint);
+    let held = hub.hold_history_for_test(held_session.clone()).await;
+    sink.publish(
+        "session-a",
+        SessionEvent::StateChanged {
+            state: session_event_model::SessionState::Idle,
+        },
+    )
+    .expect("A's publication is queued");
+
+    // Act
+    let mut other = Box::pin(sink.begin_history_replay("session-b"));
+    let mut completed_while_held = futures_util::FutureExt::now_or_never(other.as_mut());
+    for _ in 0..QUIESCENCE_ROUNDS {
+        if completed_while_held.is_some() {
+            break;
+        }
+        tokio::task::yield_now().await;
+        completed_while_held = futures_util::FutureExt::now_or_never(other.as_mut());
+    }
+    let answered_while_held = completed_while_held.is_some();
+    drop(held);
+    let other = match completed_while_held {
+        Some(completed) => completed,
+        None => other.await,
+    };
+    sink.shutdown().await.expect("drain");
+    let held_state = hub.state(held_session).await;
+
+    // Assert
+    assert!(answered_while_held, "B did not complete while A was held");
+    assert!(other.is_ok(), "{other:?}");
+    assert!(
+        matches!(&held_state, Ok(session_event_model::SessionState::Idle)),
+        "A's publication landed once released: {held_state:?}"
     );
 }

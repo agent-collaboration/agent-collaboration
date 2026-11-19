@@ -65,6 +65,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             created_by: creator.clone().into(),
             approver: creator.clone().into(),
             updated_at_ms: 1_790_162_500_000,
+            resume: Default::default(),
         })
         .await
         .expect("record session");
@@ -92,6 +93,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             created_by: creator.clone().into(),
             approver: creator.clone().into(),
             updated_at_ms: 1_790_162_300_000,
+            resume: Default::default(),
         })
         .await
         .expect("Cursor provider record");
@@ -110,6 +112,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             created_by: creator.clone().into(),
             approver: creator.clone().into(),
             updated_at_ms: 1_790_162_400_000,
+            resume: Default::default(),
         })
         .await
         .expect("record older session");

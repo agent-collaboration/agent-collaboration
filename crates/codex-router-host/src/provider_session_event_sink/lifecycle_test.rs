@@ -1,13 +1,14 @@
 //! Host lifecycle publication is ordered with replay and visible on return.
 
 use crate::{ExternalProviderLaunch, ExternalProviderRuntime};
-use acp_client_runtime::{ProviderPersistenceTarget, ProviderSettingKind};
+use acp_client_runtime::ProviderPersistenceTarget;
 use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
 use collaboration_runtime::ProviderSessionRecord;
 use message_board::{EndpointId, ServiceId, SessionEndpointRef, SessionId, SessionRef};
+use provider_session_machines::ProviderSettingKind;
 use session_event_model::{SessionEvent, SessionState};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -81,6 +82,7 @@ async fn closed_session_loads_real_history_through_the_host_hub() {
             Arc::clone(&hub),
             endpoint.clone(),
             Arc::new(acp_provider_adapters::StandardAcpBehavior),
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         ),
     )
     .await
@@ -241,6 +243,7 @@ async fn fixture_with_script(script: &str, arguments: &[&str]) -> Fixture {
         Arc::clone(&hub),
         endpoint,
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("runtime");
@@ -266,6 +269,7 @@ async fn record_session(store: &Arc<Mutex<ProviderOperationStore>>, session: &Se
             created_by: owner.clone().into(),
             approver: owner.into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");

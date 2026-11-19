@@ -35,6 +35,10 @@ pub struct ProviderSessionInspectResult {
     /// Why the actual mode differs from the requested one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode_reason: Option<crate::ProviderModeReason>,
+    /// The agent's fast option from the catalog this Host holds; absent when
+    /// it holds none, for example after a restart before the session loads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<crate::FastState>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]

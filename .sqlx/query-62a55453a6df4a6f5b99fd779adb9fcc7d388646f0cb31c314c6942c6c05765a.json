@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_session_records\n             SET requested_mode=?, updated_at_ms=MAX(updated_at_ms,?)\n             WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "62a55453a6df4a6f5b99fd779adb9fcc7d388646f0cb31c314c6942c6c05765a"
+}

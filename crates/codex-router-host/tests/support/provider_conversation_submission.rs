@@ -50,6 +50,11 @@ pub(crate) async fn submit_provider_create(
         (settings.model, settings.mode, settings.effort)
     });
     let input = ConversationCreateInput {
+        work_roots: request
+            .work_roots
+            .iter()
+            .map(|root| PathBuf::from(String::from(root.clone())))
+            .collect(),
         operation_id: request.operation_id,
         endpoint: request.endpoint.clone(),
         working_directory: PathBuf::from(String::from(request.working_directory)),
@@ -60,6 +65,7 @@ pub(crate) async fn submit_provider_create(
         model,
         mode,
         effort,
+        fast: None,
         fork: None,
         root_message_id: None,
     };
@@ -97,6 +103,7 @@ fn prompt_input(
         .and_then(serde_json::from_value)
         .map_err(|_| ConversationClientError::InvalidInput("prompt content is not public"))?;
     Ok(ConversationPromptInput {
+        delivery: collaboration_protocol::MessageDelivery::Auto,
         operation_id: Some(request.operation_id),
         target: request.target,
         working_directory: None,

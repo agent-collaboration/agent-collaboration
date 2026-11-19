@@ -1,5 +1,6 @@
 use crate::engine_context::{Context, EngineTime};
 use serde::{Serialize, de::DeserializeOwned};
+use state_machine_core::{EventTag, RefusalTag, StateTag, Transition, TransitionError};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct MachineKind(pub &'static str);
@@ -7,37 +8,6 @@ pub struct MachineKind(pub &'static str);
 /// The raw stored key is retained even when its contents are corrupt.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct InstanceKey(pub String);
-
-pub trait StateTag {
-    fn state_tag(&self) -> &'static str;
-    fn is_terminal(&self) -> bool;
-}
-
-pub trait EventTag {
-    fn event_tag(&self) -> &'static str;
-}
-
-pub trait RefusalTag {
-    fn refusal_tag(&self) -> &'static str;
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub enum TransitionError<E> {
-    NotAllowed {
-        state: &'static str,
-        event: &'static str,
-    },
-    Domain(E),
-    Stale,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Transition {
-    pub from: &'static str,
-    pub event: &'static str,
-    pub to: &'static str,
-    pub terminal: bool,
-}
 
 pub type TransitionResult<M> = Result<
     (<M as Machine>::State, Vec<<M as Machine>::Effect>),

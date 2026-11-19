@@ -14,6 +14,16 @@ pub(crate) enum DeliveryChoice {
     Queue,
     Steer,
 }
+impl DeliveryChoice {
+    pub(crate) const fn message_delivery(self) -> MessageDelivery {
+        match self {
+            Self::Auto => MessageDelivery::Auto,
+            Self::Queue => MessageDelivery::Queue,
+            Self::Steer => MessageDelivery::Steer,
+        }
+    }
+}
+
 #[derive(Args)]
 pub(crate) struct SendArguments {
     #[command(flatten)]
@@ -183,11 +193,7 @@ fn prepare_message_input(
         PreparedMessage {
             target,
             content,
-            delivery: match options.delivery {
-                DeliveryChoice::Auto => MessageDelivery::Auto,
-                DeliveryChoice::Queue => MessageDelivery::Queue,
-                DeliveryChoice::Steer => MessageDelivery::Steer,
-            },
+            delivery: options.delivery.message_delivery(),
             generation_guard,
         },
     ))

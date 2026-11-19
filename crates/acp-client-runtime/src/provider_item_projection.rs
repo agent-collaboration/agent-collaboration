@@ -8,7 +8,8 @@ use agent_client_protocol::schema::v1::{
 };
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind, ToolCallStatus};
 
-use crate::{EventSinkClosed, SessionEventSink, agent_session_client::MAX_PROMPT_OUTPUT_BYTES};
+use crate::provider_client_contract::MAX_PROMPT_OUTPUT_BYTES;
+use crate::{EventSinkClosed, SessionEventSink};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ItemProjectionError {
@@ -343,6 +344,10 @@ impl ProviderItemProjection {
         self.active_text = None;
         self.tool_order.clear();
         self.plan_item = None;
+    }
+
+    pub(crate) fn has_tool_item(&self, tool_id: &str) -> bool {
+        self.tool_items.contains_key(tool_id)
     }
 
     pub(crate) fn finish_text(&mut self) -> Result<(), ItemProjectionError> {

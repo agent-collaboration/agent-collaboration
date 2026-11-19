@@ -173,3 +173,16 @@ pub(super) fn request(target: SessionRef, text: &str) -> DeliveryRequest {
         attempt: AttemptId::generate(),
     }
 }
+
+/// How many requests named `method` a reactive fixture's wire receipt holds.
+pub(super) fn recorded_requests(receipt: &Path, method: &str) -> usize {
+    std::fs::read(receipt)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<serde_json::Value>>(&bytes).ok())
+        .map_or(0, |requests| {
+            requests
+                .iter()
+                .filter(|request| request["method"] == method)
+                .count()
+        })
+}

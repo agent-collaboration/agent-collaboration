@@ -33,6 +33,7 @@ async fn inventory_uses_first_user_message_and_existing_session_title() {
             created_by: owner.clone(),
             approver: owner,
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("inventory");

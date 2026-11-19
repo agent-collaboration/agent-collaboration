@@ -26,6 +26,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             interaction_port,
             event_sink,
             behavior,
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         )
         .await
     }
@@ -44,10 +45,15 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             interaction_port,
             event_sink,
             behavior,
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         )
         .await
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The ACP connection's inputs include the Host clock."
+    )]
     pub async fn initialize_with_mcp_http(
         launch: ExternalProviderLaunch,
         model_picker: crate::ProviderModelPicker,
@@ -56,6 +62,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
         behavior: Arc<dyn crate::ProviderBehavior>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         Self::initialize_with_timeout_and_mcp_servers(
             launch,
@@ -65,6 +72,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             interaction_port,
             event_sink,
             behavior,
+            clock,
         )
         .await
     }
@@ -85,6 +93,36 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             interaction_port,
             event_sink,
             behavior,
+            Arc::new(router_clock::SystemRuntimeClock::new()),
+        )
+        .await
+    }
+}
+
+impl<P: InteractionPort> AgentSessionClient<P> {
+    /// A connection to an in-process agent, for scenario tests (design note
+    /// §11.8): the same connection as `initialize`, over the client's end of
+    /// a duplex pair, with `agent` serving the other end, instead of a
+    /// process's stdio. Test support only.
+    #[cfg(feature = "test-support")]
+    pub async fn initialize_in_process(
+        connection: tokio::io::DuplexStream,
+        agent: tokio::task::JoinHandle<()>,
+        interaction_port: Arc<P>,
+        event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
+        Self::initialize_over_transport(
+            super::provider_transport::ProviderTransport::in_process(connection, agent),
+            crate::ProviderPersistenceTarget::Unspecified,
+            crate::ProviderModelPicker::Standard,
+            INITIALIZE_TIMEOUT,
+            Vec::new(),
+            interaction_port,
+            event_sink,
+            behavior,
+            clock,
         )
         .await
     }

@@ -1,15 +1,17 @@
 //! Bounded ACP prompt output and settlement observation.
-use crate::agent_session_client::{
+use crate::provider_acp_error_mapping::acp_operation_error;
+use crate::provider_client_contract::{
     ExternalProviderPromptOutcome, ExternalProviderRuntimeError, MAX_PROMPT_OUTPUT_BYTES,
-    ProviderFrameObservation, acp_operation_error, provider_frame_decode_error,
+    provider_frame_decode_error,
 };
 #[cfg(any(test, feature = "test-observation"))]
-use crate::agent_session_client::{
+use crate::provider_client_contract::{
     ExternalProviderToolCall, ExternalProviderToolOutcome, classify_mcp_tool_outcome,
 };
+use crate::provider_frame_observation::ProviderFrameObservation;
 use crate::provider_item_projection::{ItemProjectionError, ProviderItemProjection};
 use crate::provider_prompt_result_codec::{decode_prompt_result, decode_typed_stop_reason};
-use crate::provider_session_actor::ProviderSessionRuntimeHandles;
+use crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles;
 use crate::provider_settings_catalog_codec::apply_settings_update;
 use crate::provider_update_kind::{
     has_unknown_informational_value, is_known_update_kind, is_session_update_notification,
@@ -153,8 +155,10 @@ pub(crate) async fn observe_idle_session_update(
                 tracing::warn!("malformed idle ACP session update");
                 return Ok(());
             };
+            if !accept_tool_update(&parsed.update, item_projection, runtime_handles, session_id) {
+                return Ok(());
+            }
             update_live_settings(&parsed.update, runtime_handles, session_id)
-                .await
                 .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
             item_projection
                 .observe(&parsed.update, update)
@@ -164,6 +168,24 @@ pub(crate) async fn observe_idle_session_update(
     }
 }
 
+fn accept_tool_update(
+    update: &SessionUpdate,
+    projection: &ProviderItemProjection,
+    handles: &ProviderSessionRuntimeHandles,
+    session_id: &str,
+) -> bool {
+    let SessionUpdate::ToolCallUpdate(update) = update else {
+        return true;
+    };
+    let tool_id = update.tool_call_id.0.as_ref();
+    handles.tool_registry.may_project_tool_update(
+        session_id,
+        tool_id,
+        handles.run_generation,
+        projection.has_tool_item(tool_id),
+    )
+}
+
 fn projection_error(error: ItemProjectionError) -> ExternalProviderRuntimeError {
     match error {
         ItemProjectionError::OutputLimit => ExternalProviderRuntimeError::PromptOutputLimitExceeded,
@@ -171,7 +193,7 @@ fn projection_error(error: ItemProjectionError) -> ExternalProviderRuntimeError 
     }
 }
 
-async fn update_live_settings(
+fn update_live_settings(
     update: &SessionUpdate,
     handles: &ProviderSessionRuntimeHandles,
     session_id: &str,
@@ -181,11 +203,19 @@ async fn update_live_settings(
         SessionUpdate::ConfigOptionUpdate(_) => Some(false),
         _ => None,
     };
+    // Only the run these handles serve writes its own catalog and report: an
+    // ended run's late update changes nothing (design note §11.3; Lead V3).
     let catalog = if capability_change.is_some() {
-        let mut catalogs = handles.session_settings.write().await;
-        let catalog = catalogs.entry(session_id.to_owned()).or_default();
-        apply_settings_update(catalog, update, handles.behavior.as_ref());
-        Some(catalog.clone())
+        let mut updated = None;
+        let _written =
+            handles
+                .session_settings
+                .write_with(session_id, handles.run_generation, |entry| {
+                    let catalog = entry.get_or_insert_with(crate::ProviderSettingsCatalog::default);
+                    apply_settings_update(catalog, update, handles.behavior.as_ref());
+                    updated = Some(catalog.clone());
+                });
+        updated
     } else {
         None
     };
@@ -198,18 +228,21 @@ async fn update_live_settings(
         )?;
     }
     if let Some(modes_update) = capability_change {
-        let capabilities = {
-            let mut reports = handles.session_capabilities.write().await;
-            reports.get_mut(session_id).map(|report| {
-                let flag = if modes_update {
-                    &mut report.supports_modes
-                } else {
-                    &mut report.supports_config_options
-                };
-                *flag = true;
-                report.to_session_model()
-            })
-        };
+        let mut capabilities = None;
+        let _written =
+            handles
+                .session_capabilities
+                .write_with(session_id, handles.run_generation, |entry| {
+                    if let Some(report) = entry {
+                        let flag = if modes_update {
+                            &mut report.supports_modes
+                        } else {
+                            &mut report.supports_config_options
+                        };
+                        *flag = true;
+                        capabilities = Some(report.to_session_model());
+                    }
+                });
         if let Some(capabilities) = capabilities {
             handles.event_sink.publish(
                 session_id,
@@ -283,12 +316,19 @@ async fn record_prompt_update(
             let mut sink_closed = false;
             let handled = MatchDispatch::new(dispatch)
                 .if_notification(async |notification: SessionNotification| {
+                    if !accept_tool_update(
+                        &notification.update,
+                        session_context.item_projection,
+                        session_context.runtime_handles,
+                        session_context.session_id,
+                    ) {
+                        return Ok(());
+                    }
                     if update_live_settings(
                         &notification.update,
                         session_context.runtime_handles,
                         session_context.session_id,
                     )
-                    .await
                     .is_err()
                     {
                         sink_closed = true;
@@ -405,3 +445,7 @@ async fn record_prompt_update(
     }
     Ok(None)
 }
+
+#[cfg(test)]
+#[path = "provider_prompt_observation_test.rs"]
+mod tests;

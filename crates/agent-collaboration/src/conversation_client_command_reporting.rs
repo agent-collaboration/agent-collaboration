@@ -257,7 +257,8 @@ pub(super) fn report_create_operation_failure(
         | ConversationOperationFailureKind::NotFound
         | ConversationOperationFailureKind::StaleGeneration
         | ConversationOperationFailureKind::ProviderSessionNotFound
-        | ConversationOperationFailureKind::ProviderRejected => 4,
+        | ConversationOperationFailureKind::ProviderRejected
+        | ConversationOperationFailureKind::CannotSteer => 4,
         ConversationOperationFailureKind::OutcomeUnknown => 5,
     };
     if json_output {
@@ -411,7 +412,8 @@ pub(super) fn operation_result_exit(outcome: &ConversationOperationResult) -> i3
             Some(ConversationStopReason::Cancelled) => 130,
             _ => 0,
         },
-        ConversationOperationResult::Pending { .. } => 0,
+        ConversationOperationResult::Pending { .. }
+        | ConversationOperationResult::Queued { .. } => 0,
         ConversationOperationResult::Running { .. } => 0,
     }
 }

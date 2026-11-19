@@ -140,7 +140,7 @@ fn provider_session_not_found_failure_has_typed_guidance_and_code() {
     assert_eq!(
         String::from(failure.message),
         format!(
-            "this session never started a turn and did not survive the provider restart; create a new conversation (provider code -32002; reference {correlation_reference})"
+            "the provider no longer knows this session, so start a new session with the same setup (provider code -32002; reference {correlation_reference})"
         )
     );
 }

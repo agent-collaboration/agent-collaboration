@@ -13,18 +13,28 @@ pub(super) fn configured_provider_startups(
 ) -> Result<Vec<ExternalProviderStartup>, HostCommandError> {
     let configuration = load_or_create_provider_settings(router_root);
     match configuration {
-        Ok(configuration) => Ok(vec![
-            configured_provider(
-                ProviderKind::ClaudeCode,
-                configuration.claude(),
-                explicit_launches,
-            )?,
-            configured_provider(
-                ProviderKind::Cursor,
-                configuration.cursor(),
-                explicit_launches,
-            )?,
-        ]),
+        Ok(configuration) => {
+            // The work roots sessions started in auto use (D1 R18), expanded
+            // under this Host's home and system temp folder.
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let work_roots = configuration.work_roots(&home, &std::env::temp_dir());
+            Ok(vec![
+                configured_provider(
+                    ProviderKind::ClaudeCode,
+                    configuration.claude(),
+                    explicit_launches,
+                )?
+                .with_work_roots(&work_roots),
+                configured_provider(
+                    ProviderKind::Cursor,
+                    configuration.cursor(),
+                    explicit_launches,
+                )?
+                .with_work_roots(&work_roots),
+            ])
+        }
         Err(error) => {
             let reason = error.to_string();
             let fix = format!(
@@ -48,7 +58,10 @@ fn configured_provider(
         .iter()
         .find(|binding| binding.provider() == provider)
     {
-        return Ok(ExternalProviderStartup::Launch(explicit.clone()));
+        return Ok(ExternalProviderStartup::Launch(with_entry_cache_warm(
+            explicit.clone(),
+            entry,
+        )));
     }
     if !entry.enabled {
         return unavailable(
@@ -73,7 +86,21 @@ fn configured_provider(
         }
     }
     .map_err(|error| HostCommandError::RouterRoot(error.to_owned()))?;
-    Ok(ExternalProviderStartup::Launch(binding))
+    Ok(ExternalProviderStartup::Launch(with_entry_cache_warm(
+        binding, entry,
+    )))
+}
+
+/// Carries the Claude entry's cache-warm setting, or its default, to the Host
+/// with the startup. Only Claude keeps a prompt cache warm.
+fn with_entry_cache_warm(
+    binding: ExternalProviderLaunchBinding,
+    entry: &ProviderConfigurationEntry,
+) -> ExternalProviderLaunchBinding {
+    match binding.provider() {
+        ProviderKind::ClaudeCode => binding.with_cache_warm(entry.effective_cache_warm()),
+        ProviderKind::Cursor => binding,
+    }
 }
 
 fn unavailable(
@@ -213,6 +240,46 @@ mod tests {
         assert_eq!(
             claude.launch.executable,
             PathBuf::from("/configured/claude-agent-acp")
+        );
+    }
+
+    #[test]
+    fn claude_startup_carries_the_cache_warm_setting_and_cursor_carries_none() {
+        let root = tempfile::tempdir().expect("router root");
+        let bytes = br#"{"providers": {"version":1,"providers":{"claude":{"enabled":true,"executable":null,"arguments":[],"cacheWarm":{"enabled":true,"everyMinutes":30,"forHours":2}},"cursor":{"enabled":true,"executable":null,"arguments":["acp"]}}}}"#;
+        std::fs::write(root.path().join("settings.jsonc"), bytes).expect("settings");
+
+        let startups = configured_provider_startups(root.path(), &[]).expect("providers");
+
+        let ExternalProviderStartup::Launch(claude) = &startups[0] else {
+            panic!("Claude should launch")
+        };
+        assert_eq!(
+            claude.cache_warm,
+            Some(codex_router_host::CacheWarmSetting {
+                enabled: true,
+                every_minutes: 30,
+                for_hours: 2,
+            })
+        );
+        let ExternalProviderStartup::Launch(cursor) = &startups[1] else {
+            panic!("Cursor should launch")
+        };
+        assert_eq!(cursor.cache_warm, None);
+    }
+
+    #[test]
+    fn claude_without_the_setting_carries_the_default_on_55_and_8() {
+        let root = tempfile::tempdir().expect("router root");
+
+        let startups = configured_provider_startups(root.path(), &[]).expect("defaults");
+
+        let ExternalProviderStartup::Launch(claude) = &startups[0] else {
+            panic!("Claude should launch")
+        };
+        assert_eq!(
+            claude.cache_warm,
+            Some(codex_router_host::CacheWarmSetting::default())
         );
     }
 }

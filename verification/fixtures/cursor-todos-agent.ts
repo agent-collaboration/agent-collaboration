@@ -10,7 +10,40 @@ async function requireResponse(id: string, result: unknown): Promise<void> {
   assert.equal(response.id, id);
   assert.deepEqual(response.result, result);
 }
-if (scenario === "single") {
+if (scenario === "late") {
+  // Turn one announces a tool call and ends. A late continuation arrives
+  // before the todo callback, with both still naming the ended call.
+  await agent.newSession("late-session");
+  const first = await agent.read("session/prompt");
+  agent.update(
+    {
+      sessionUpdate: "tool_call",
+      toolCallId: "early-tool",
+      title: "Update plan",
+      kind: "other",
+      status: "pending",
+    },
+    "late-session",
+  );
+  agent.endTurn(first);
+  const second = await agent.read("session/prompt");
+  agent.update(
+    { sessionUpdate: "tool_call_update", toolCallId: "early-tool", status: "completed" },
+    "late-session",
+  );
+  agent.send({
+    jsonrpc: "2.0",
+    id: "late-todo",
+    method: "cursor/update_todos",
+    params: {
+      toolCallId: "early-tool",
+      todos: [{ id: "late", content: "Late task", status: "pending" }],
+      merge: false,
+    },
+  });
+  await requireResponse("late-todo", {});
+  agent.endTurn(second);
+} else if (scenario === "single") {
   await agent.newSession("only-session");
   const prompt = await agent.read("session/prompt");
   agent.send({

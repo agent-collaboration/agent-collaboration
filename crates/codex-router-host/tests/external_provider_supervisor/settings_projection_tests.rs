@@ -27,8 +27,18 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         operation(
             backend
                 .create(ConversationCreateRequest {
+                    work_roots: Vec::new(),
                     settings: Some(ProviderRequestedSettings {
-                        mode: (!mode.starts_with("invalid")).then(|| "ask".to_owned()),
+                        // No auto realization here, so auto plans no mode change
+                        // and the invalid model stays the first setting.
+                        mode: Some(
+                            if mode.starts_with("invalid") {
+                                "auto"
+                            } else {
+                                "ask"
+                            }
+                            .to_owned(),
+                        ),
                         model: Some(
                             if mode.starts_with("invalid") {
                                 "wrong"
@@ -38,6 +48,7 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
                             .to_owned(),
                         ),
                         effort: None,
+                        ..Default::default()
                     }),
                     operation_id: operation_id.clone(),
                     endpoint: provider_endpoint.clone(),

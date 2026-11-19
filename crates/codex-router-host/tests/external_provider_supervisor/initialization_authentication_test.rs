@@ -49,7 +49,7 @@ async fn initialization_authentication_precedes_models_and_is_once_per_connectio
                 .set_setting(
                     session_id.clone(),
                     acp_client_runtime::ProviderSettingRequest {
-                        kind: acp_client_runtime::ProviderSettingKind::Effort,
+                        kind: provider_session_machines::ProviderSettingKind::Effort,
                         value: "high".to_owned(),
                         intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                         expected_model: None,

@@ -240,16 +240,17 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
             .expect("non-single-Text prompt");
     }
     let wire_before_rejection = fixture.wire_prompts();
-    fixture.client.settings_unresolved.write().await.insert(
-        fixture.session_id.clone(),
-        std::collections::HashMap::from([(
-            crate::ProviderSettingKind::Mode,
-            crate::provider_session_settings::UnresolvedSettingCause::DefiniteFailure,
-        )]),
+    super::hold_setting_at_create(
+        &fixture.client.session_cells,
+        &fixture.session_id,
+        provider_session_machines::ProviderSettingKind::Mode,
+        provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown,
     );
+    // The refusal names the held setting's state and its steps (D1 M8).
     assert!(matches!(
-        fixture.prompt(vec![text_block("rejected settings")]).await,
-        Err(ExternalProviderRuntimeError::SettingsUnresolved)
+        fixture.prompt(vec![text_block("unknown setting outcome")]).await,
+        Err(ExternalProviderRuntimeError::SettingsUnresolved { answer })
+            if answer == "a setting change's outcome is unknown; set a value explicitly"
     ));
     let audio =
         serde_json::from_value(json!({"type":"audio","mimeType":"audio/wav","data":"aGVsbG8="}))

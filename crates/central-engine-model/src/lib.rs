@@ -14,3 +14,7 @@ pub use engine_context::*;
 pub use machine::*;
 pub use next_alarm::*;
 pub use transition_check::*;
+// The shared state-machine vocabulary, under the names central code uses.
+pub use state_machine_core::{
+    EventTag, RefusalTag, StateTag, Transition, TransitionCheckError, TransitionError,
+};

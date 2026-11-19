@@ -3,13 +3,68 @@
 use super::{
     ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderRuntimeError,
     InteractionPort, LoadSessionRequest, McpServer, PathBuf, PendingSessionAdmission,
-    RestoredProviderSession, SessionEventSink, acp_load_session_error, acp_operation_error,
-    provider_frame_decode_error, publish_pending_session_admission,
+    RestoredProviderSession, SessionEventSink, acp_load_session_error, provider_frame_decode_error,
+    publish_pending_session_admission,
 };
+use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
 use agent_client_protocol::schema::v1::{ResumeSessionRequest, SessionNotification, SessionUpdate};
 use agent_client_protocol::{Dispatch, SessionMessage};
 use futures_util::FutureExt as _;
 use session_event_model::{InputId, SessionEvent, StopReason, TurnOutcome};
+use std::{future::Future, time::Duration};
+
+const RESTORE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Both restore entry points may lose their reply when the connection stops.
+/// An orderly local shutdown retains the ordinary transport failure result.
+pub(super) async fn complete_restore(
+    completion: tokio::sync::oneshot::Receiver<
+        Result<super::RestoredSessionAdmission, RestoreFailure>,
+    >,
+    dispatch: &RestoreDispatch,
+    local_shutdown: &CancellationToken,
+    sink_closed: &CancellationToken,
+) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
+    match completion.await {
+        Ok(Err(failure))
+            if matches!(
+                failure.error(),
+                ExternalProviderRuntimeError::RestoreDisconnected
+            ) && local_shutdown.is_cancelled() =>
+        {
+            Err(failure.replacing_error(ExternalProviderRuntimeError::TransportFailure))
+        }
+        Ok(outcome) => outcome,
+        Err(_) => Err(dispatch.failure(if local_shutdown.is_cancelled() {
+            ExternalProviderRuntimeError::TransportFailure
+        } else if sink_closed.is_cancelled() {
+            ExternalProviderRuntimeError::SinkClosed
+        } else {
+            ExternalProviderRuntimeError::RestoreDisconnected
+        })),
+    }
+}
+
+async fn await_restore_response<T>(
+    clock: &dyn router_clock::RuntimeClock,
+    shutdown: &CancellationToken,
+    dispatch: &RestoreDispatch,
+    request: impl Future<Output = Result<T, agent_client_protocol::Error>>,
+) -> Result<T, ExternalProviderRuntimeError> {
+    // Dropping the SDK's blocking restore future retires its provisional
+    // route and cancels its correlation. This does not settle the peer's effect.
+    tokio::select! {
+        biased;
+        () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::RestoreDisconnected),
+        result = router_clock::timeout(clock, RESTORE_RESPONSE_TIMEOUT, async {
+            // From the SDK handoff onward the request may reach the peer.
+            dispatch.begin_attempt();
+            request.await
+        }) => result
+            .map_err(|_| ExternalProviderRuntimeError::RestoreNoAnswer)?
+            .map_err(acp_load_session_error),
+    }
+}
 
 use crate::provider_item_projection::{ItemProjectionError, ProviderItemProjection};
 use crate::provider_settings_catalog_codec::{
@@ -29,12 +84,24 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) cwd: PathBuf,
     pub(super) mode: RestoreHistoryMode,
     pub(super) mcp_servers: Vec<McpServer>,
+    /// The session's folders and provider metadata, rebuilt as its create
+    /// sent them (D1 R18; owner Decision 3).
+    pub(super) folders: crate::session_start_folders::SessionStartFolders,
+    pub(super) requested_mode: Option<String>,
     pub(super) shutdown: CancellationToken,
     pub(super) event_sink: Arc<dyn SessionEventSink>,
     pub(super) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(super) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
-    pub(super) reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
+    pub(super) generation: provider_session_machines::SessionGeneration,
+    pub(super) attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
+    /// The connection's session cells: the restore's mode write is claimed
+    /// on them for its load attempt (review F1).
+    pub(super) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
+    pub(super) clock: Arc<dyn router_clock::RuntimeClock>,
+    pub(super) dispatch: RestoreDispatch,
+    pub(super) reply:
+        tokio::sync::oneshot::Sender<Result<super::RestoredSessionAdmission, RestoreFailure>>,
 }
 
 pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdmissionInputs<P>) {
@@ -44,11 +111,18 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         cwd,
         mode,
         mcp_servers,
+        folders,
+        requested_mode,
         shutdown,
         event_sink,
         behavior,
         connection_model_reasoning,
         admission_tx,
+        generation,
+        attempt,
+        session_cells,
+        clock,
+        dispatch,
         reply,
     } = inputs;
     let replay_started = if mode == RestoreHistoryMode::Replay {
@@ -64,49 +138,104 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         Err(error) => Err(error),
         Ok(()) => match mode {
             RestoreHistoryMode::Replay => {
-                let request = LoadSessionRequest::new(provider_session_id.clone(), &cwd)
-                    .mcp_servers(mcp_servers);
-                tokio::select! {
-                    () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                    result = connection.load_session_from(request).block_task().start_session() =>
-                        result.map_err(acp_load_session_error).and_then(|restored| {
-                            let mut session = restored.into_session();
-                            let mut settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
-                            let projection = replay_queued_session_updates(
-                                &mut session,
-                                Arc::clone(&event_sink),
-                                Arc::clone(&behavior),
-                                &mut settings_catalog,
-                            )?;
-                            Ok(RestoredProviderSession {
-                                session,
-                                item_projection: Some(projection),
-                                settings_catalog,
-                            })
-                        }),
-                }
+                let mut request = LoadSessionRequest::new(provider_session_id.clone(), &cwd)
+                    .mcp_servers(mcp_servers)
+                    .additional_directories(folders.additional_directories);
+                request.meta = folders.meta;
+                await_restore_response(
+                    clock.as_ref(),
+                    &shutdown,
+                    &dispatch,
+                    connection
+                        .load_session_from(request)
+                        .block_task()
+                        .start_session(),
+                )
+                .await
+                .and_then(|restored| {
+                    let mut session = restored.into_session();
+                    let mut settings_catalog = catalog_from_session_response(
+                        &session.response(),
+                        behavior.as_ref(),
+                        &connection_model_reasoning,
+                    );
+                    let projection = replay_queued_session_updates(
+                        &mut session,
+                        Arc::clone(&event_sink),
+                        Arc::clone(&behavior),
+                        &mut settings_catalog,
+                    )?;
+                    Ok((session, Some(projection), settings_catalog))
+                })
             }
             RestoreHistoryMode::WithoutReplay => {
-                let request = ResumeSessionRequest::new(provider_session_id.clone(), &cwd)
-                    .mcp_servers(mcp_servers);
-                tokio::select! {
-                    () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                    result = connection.resume_session_from(request).block_task().start_session() =>
-                        result.map(|restored| {
-                            let session = restored.into_session();
-                            let settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
-                            RestoredProviderSession { session, item_projection: None, settings_catalog }
-                        }).map_err(acp_operation_error),
-                }
+                let mut request = ResumeSessionRequest::new(provider_session_id.clone(), &cwd)
+                    .mcp_servers(mcp_servers)
+                    .additional_directories(folders.additional_directories);
+                request.meta = folders.meta;
+                await_restore_response(
+                    clock.as_ref(),
+                    &shutdown,
+                    &dispatch,
+                    connection
+                        .resume_session_from(request)
+                        .block_task()
+                        .start_session(),
+                )
+                .await
+                .map(|restored| {
+                    let session = restored.into_session();
+                    let settings_catalog = catalog_from_session_response(
+                        &session.response(),
+                        behavior.as_ref(),
+                        &connection_model_reasoning,
+                    );
+                    (session, None, settings_catalog)
+                })
             }
         },
+    };
+    // The agent may restore the session in another mode: put back the mode
+    // its record names before the session is registered (V6).
+    let result = match result {
+        Ok((session, item_projection, mut settings_catalog)) => {
+            let restored_mode = crate::provider_setting_application::reapply_recorded_mode(
+                &session,
+                requested_mode.as_deref(),
+                &mut settings_catalog,
+                behavior.as_ref(),
+                session_cells.read(&provider_session_id, |cell| {
+                    cell.restore_mode_write.is_some()
+                }),
+                || {
+                    crate::session_cell_bookkeeping::claim_restore_mode_write(
+                        &session_cells,
+                        &provider_session_id,
+                        attempt,
+                    )
+                },
+                clock.as_ref(),
+            )
+            .await;
+            Ok(RestoredProviderSession {
+                session,
+                item_projection,
+                settings_catalog,
+                restored_mode,
+            })
+        }
+        Err(error) => Err(dispatch.failure(error)),
     };
     publish_pending_session_admission(
         &admission_tx,
         &shutdown,
         PendingSessionAdmission::Restore {
+            generation,
+            attempt,
             provider_session_id,
             result: Box::new(result),
+            dispatch,
+            in_folder: folders.in_folder,
             reply,
         },
     )

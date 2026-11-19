@@ -85,6 +85,7 @@ async fn provider_router(
                 created_by: owner.clone().into(),
                 approver: owner.clone().into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("session record");

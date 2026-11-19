@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
-    ProviderAcpDeliveryRoute, ProviderSessionActivity,
+    ProviderAcpDeliveryRoute,
 };
 use agent_automation::RouteEffectEvidence;
 use collaboration_contracts::AttemptEvidenceSink;
@@ -30,7 +30,7 @@ use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
 use std::sync::Arc;
 
-struct NoLivePeer;
+pub(super) struct NoLivePeer;
 
 impl LiveSessionOwnershipCheck for NoLivePeer {
     fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
@@ -38,7 +38,7 @@ impl LiveSessionOwnershipCheck for NoLivePeer {
     }
 }
 
-fn target() -> SessionRef {
+pub(super) fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
             service_id: "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89"
@@ -51,7 +51,7 @@ fn target() -> SessionRef {
     }
 }
 
-fn binding(target: &SessionRef) -> ProviderBindingIdentity {
+pub(super) fn binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("fifo-binding".to_owned()).expect("binding ID"),
@@ -98,8 +98,12 @@ fn close_and_load_fixture(
     )
 }
 
+/// Oracle: the accepted door rule (a message that may not load the session
+/// is refused at the line's door with the session's state, M8): after a
+/// close, a LoadedOnly message is refused "session is not loaded; load it or
+/// resume it", and nothing loads the session.
 #[tokio::test]
-async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drain() {
+async fn a_loaded_only_message_after_a_close_is_refused_at_the_door_without_a_load() {
     let root = tempfile::tempdir().expect("fixture root");
     let close_marker = root.path().join("close-marker.txt");
     let load_marker = root.path().join("load-marker.txt");
@@ -138,6 +142,7 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -152,91 +157,38 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
         .expect("supervisor"),
     );
 
-    let operation_id = OperationId::generate();
-    let input_id = session_event_model::InputId::generate();
-    let prompt = MessageText::try_from("held batch".to_owned()).expect("prompt line");
-    let contents =
-        crate::external_provider_supervisor::ProviderPromptContentsRequest::from_prepared_push(
-            operation_id.clone(),
-            input_id.clone(),
-            target.clone(),
-            target.clone().into(),
-            target.clone().into(),
-            &prompt,
-        )
-        .expect("prepared prompt contents");
-    supervisor
-        .queued_operation_registry()
-        .record_queued_contents(
-            operation_id.clone(),
-            target.clone(),
-            binding.clone(),
-            input_id.clone(),
-            match &contents.input {
-                acp_client_runtime::ProviderTurnInput::Prompt(submission) => &submission.content,
-                acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
-            },
-        );
-    let (sender, receiver) = mpsc::channel(1);
-    sender
-        .send(ProviderQueuedPrompt::Contents {
-            request: contents,
-            load_policy: LoadPolicy::LoadedOnly,
-        })
-        .await
-        .expect("accepted queue item");
-    drop(sender);
-
+    let queue = ProviderAcpMessageFifo::new(
+        Arc::clone(&supervisor),
+        Arc::clone(&store),
+        Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+    );
     supervisor
         .runtime_for(&target.endpoint)
         .expect("provider runtime")
         .close_session(String::from(target.session_id.clone()))
         .await
         .expect("ConversationClose unloads provider session");
-    assert_eq!(
-        supervisor
-            .runtime_for(&target.endpoint)
-            .expect("provider runtime")
-            .session_activity(String::from(target.session_id.clone()))
-            .await
-            .expect("session activity"),
-        ProviderSessionActivity::NotLoaded
-    );
 
-    let worker = tokio::spawn(run_provider_message_fifo(
-        target.clone(),
-        receiver,
-        Arc::clone(&supervisor),
-        Arc::clone(&store),
-        Arc::new(NoLivePeer),
-        CancellationToken::new(),
-        Arc::new(tokio::sync::Notify::new()),
-    ));
-    tokio::time::timeout(std::time::Duration::from_secs(2), worker)
+    // Act
+    let refused = queue
+        .reserve(&target, &OperationId::generate(), LoadPolicy::LoadedOnly)
         .await
-        .expect("FIFO worker drains accepted item")
-        .expect("FIFO worker completes");
+        .err();
 
-    let snapshot = supervisor
-        .show(ConversationOperationShowRequest { operation_id })
-        .await
-        .expect("queued operation snapshot");
+    // Assert
     assert_eq!(
-        snapshot.queue_state,
-        Some(
-            collaboration_protocol::ConversationOperationQueueState::NotSubmitted {
-                reason: NOT_LOADED_REASON.to_owned(),
-            }
-        )
+        refused,
+        Some(QueueDoorRefusal::NotLoaded(
+            "session is not loaded; load it or resume it".to_owned()
+        ))
     );
-    assert!(
-        close_marker.exists(),
-        "fixture close must complete before FIFO drain"
-    );
+    assert!(close_marker.exists(), "the close reached the agent");
     assert!(
         !load_marker.exists(),
-        "LoadedOnly FIFO must not call session/load"
+        "a LoadedOnly message must not call session/load"
     );
+    queue.shutdown().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
 }
 
@@ -276,7 +228,7 @@ impl AttemptEvidenceSink for CloseDuringQueueAcceptance {
             if !matches!(
                 closed.output,
                 ConversationOperationWaitOutput::Available {
-                    settlement: ConversationOperationSettlement::Closed { target: closed_target },
+                    settlement: ConversationOperationSettlement::Closed { target: closed_target, router_closed: false },
                 } if closed_target == target
             ) {
                 return Err(DeliveryContractError::ClientOperation);
@@ -286,6 +238,11 @@ impl AttemptEvidenceSink for CloseDuringQueueAcceptance {
     }
 }
 
+/// Oracle: D1 R14 (a message in the line when its session closed ends not
+/// sent, "session closed"), on the session cell's line: a LoadedOnly
+/// delivery admitted into the line, whose session closes before its payload
+/// arrives, ends not sent with the close's reason, and nothing loads the
+/// session.
 #[tokio::test]
 async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submission() {
     let root = tempfile::tempdir().expect("fixture root");
@@ -326,6 +283,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -365,6 +323,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let attempt_id = agent_automation::AttemptId::generate();
     let operation_id =
@@ -417,7 +376,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
     assert_eq!(
         queue_state,
         ConversationOperationQueueState::NotSubmitted {
-            reason: collaboration_contracts::NOT_LOADED_REASON.to_owned(),
+            reason: SESSION_CLOSED.to_owned(),
         }
     );
     assert!(
@@ -472,6 +431,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         Arc::clone(&hub),
         hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::CursorAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("provider");
@@ -494,6 +454,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record session");
@@ -552,6 +513,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
     let held_operation = OperationId::generate();
     supervisor
         .prompt(collaboration_protocol::ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             operation_id: held_operation.clone(),
             input_id: None,
             target: target.clone(),
@@ -564,8 +526,12 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         })
         .await
         .expect("held prompt dispatched");
-    let queue =
-        ProviderAcpMessageFifo::new(supervisor.clone(), store.clone(), Arc::new(NoLivePeer));
+    let queue = ProviderAcpMessageFifo::new(
+        supervisor.clone(),
+        store.clone(),
+        Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+    );
     let queued_operation = OperationId::generate();
     let input_id = InputId::generate();
     let submission = selected();
@@ -579,7 +545,8 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
             &submission.content,
         );
     queue
-        .reserve(&target)
+        .reserve(&target, &queued_operation, LoadPolicy::MayLoad)
+        .await
         .expect("queue capacity")
         .send(ProviderQueuedPrompt::Contents {
             request: crate::external_provider_supervisor::ProviderPromptContentsRequest {
@@ -589,8 +556,9 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
                 requested_by: target.clone().into(),
                 approver: target.clone().into(),
                 input: acp_client_runtime::ProviderTurnInput::Prompt(submission),
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             },
-            load_policy: LoadPolicy::MayLoad,
+            admitted: None,
         });
     tokio::time::timeout(
         std::time::Duration::from_secs(3),
@@ -604,14 +572,23 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .cancel_active_prompt("session-1".into())
         .await
         .expect("release held turn, emitting skill removal before its terminal");
-    tokio::time::timeout(
+    // The refused entry stays recorded not sent with its reason (D1 R14),
+    // rather than being cleared as if it ran.
+    let not_sent = tokio::time::timeout(
         std::time::Duration::from_secs(3),
         supervisor
             .queued_operation_registry()
-            .wait_for_cleared(&queued_operation),
+            .wait_for_not_submitted(&queued_operation),
     )
     .await
     .expect("queued actor refusal settles");
+    assert!(
+        matches!(
+            &not_sent,
+            ConversationOperationQueueState::NotSubmitted { reason } if !reason.is_empty()
+        ),
+        "{not_sent:?}"
+    );
     let rejected = supervisor
         .wait(ConversationOperationWaitRequest {
             operation_id: queued_operation.clone(),
@@ -634,7 +611,10 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .await
         .expect("stored result")
         .expect("admitted queued operation");
-    assert_eq!(stored.stage, ProviderOperationStage::Terminal);
+    assert_eq!(
+        stored.stage,
+        collaboration_protocol::ProviderOperationStage::Terminal
+    );
     let wire = std::fs::read_to_string(&receipt)
         .expect("wire receipt")
         .lines()
@@ -652,4 +632,201 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .shutdown()
         .await
         .expect("owned provider shutdown");
+}
+
+/// How many requests with `method` the Cursor fixture recorded in `receipt`.
+pub(super) fn recorded_requests(receipt: &std::path::Path, method: &str) -> usize {
+    std::fs::read(receipt)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<serde_json::Value>>(&bytes).ok())
+        .map_or(0, |requests| {
+            requests
+                .iter()
+                .filter(|request| request["method"] == method)
+                .count()
+        })
+}
+
+/// Oracle: D1 spec R14 and V27 — "close while queued: every undispatched ID
+/// becomes not sent with the reason, and no later load or prompt reaches the
+/// agent", with the worker holding a head and more buffered. The turn is held
+/// with no operation row; the close's admission on the session's cell ends
+/// the line before the running turn is interrupted.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn close_while_queued_marks_head_and_buffer_not_sent() {
+    // Arrange: a turn held on the runtime, then three API prompts queued
+    // behind it; the worker holds the first at its idle wait.
+    let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("wire.json");
+    let mut target = target();
+    target.session_id = SessionId::try_from("reactive-session-1".to_owned()).expect("session ID");
+    let binding = binding(&target);
+    let runtime = ExternalProviderRuntime::initialize(
+        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+            "cursor-settings-agent.ts",
+            vec![
+                "reactive".to_owned(),
+                receipt.display().to_string(),
+                "hold-first-prompt-open".to_owned(),
+            ],
+        ),
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
+    runtime
+        .create_session(root.path().to_owned())
+        .await
+        .expect("session/new");
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+            .await
+            .expect("store"),
+    ));
+    store
+        .lock()
+        .await
+        .record_session(&ProviderSessionRecord {
+            target: target.clone(),
+            working_directory: ProviderWorkingDirectory::try_from(
+                root.path().display().to_string(),
+            )
+            .expect("working directory"),
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
+            updated_at_ms: 1,
+            resume: Default::default(),
+        })
+        .await
+        .expect("session record");
+    let supervisor = Arc::new(
+        ExternalProviderSupervisor::new(
+            vec![ExternalProviderBinding {
+                identity: binding.clone(),
+                runtime,
+            }],
+            Arc::clone(&store),
+        )
+        .expect("supervisor"),
+    );
+    let queue = Arc::new(ProviderAcpMessageFifo::new(
+        Arc::clone(&supervisor),
+        Arc::clone(&store),
+        Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+    ));
+    supervisor.attach_message_fifo(&queue);
+    let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
+    let held_context = crate::ExternalProviderApprovalContext {
+        requester: target.clone().into(),
+        approver: target.clone().into(),
+        target: target.clone(),
+        operation_id: OperationId::generate(),
+        binding_generation: binding.generation.clone(),
+        binding_retirement: runtime.retirement(),
+    };
+    let held = tokio::spawn(async move {
+        runtime
+            .prompt_with_approval_context(
+                "reactive-session-1".to_owned(),
+                "first".to_owned(),
+                held_context,
+            )
+            .await
+    });
+    while recorded_requests(&receipt, "session/prompt") < 1 {
+        tokio::task::yield_now().await;
+    }
+    let mut queued = Vec::new();
+    for text in ["queued-0", "queued-1", "queued-2"] {
+        let operation_id = OperationId::generate();
+        supervisor
+            .prompt(collaboration_protocol::ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Queue,
+                operation_id: operation_id.clone(),
+                input_id: None,
+                target: target.clone(),
+                generation: None,
+                requested_by: target.clone().into(),
+                approver: target.clone().into(),
+                prompt: collaboration_protocol::MessageContent::HumanUser {
+                    text: MessageText::try_from(text.to_owned()).expect("prompt"),
+                },
+            })
+            .await
+            .expect("queued behind the held turn");
+        queued.push(operation_id);
+    }
+    queue.wait_started.notified().await;
+    let mut shown_before = Vec::new();
+    for operation_id in &queued {
+        shown_before.push(
+            supervisor
+                .show(ConversationOperationShowRequest {
+                    operation_id: operation_id.clone(),
+                })
+                .await
+                .expect("queued on record")
+                .queue_state,
+        );
+    }
+
+    // Act: the session closes (an agent without session/close: the Router
+    // releases it), ending its line before it interrupts the held turn.
+    let releasing = tokio::spawn({
+        let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
+        async move {
+            runtime
+                .release_session("reactive-session-1".to_owned())
+                .await
+        }
+    });
+    let mut settled = Vec::new();
+    for operation_id in &queued {
+        settled.push(
+            supervisor
+                .wait(ConversationOperationWaitRequest {
+                    operation_id: operation_id.clone(),
+                    timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+                })
+                .await,
+        );
+    }
+    let released = releasing.await.expect("release task");
+    let held = held.await.expect("held turn task");
+    queue.shutdown().await;
+    let prompts = recorded_requests(&receipt, "session/prompt");
+    let loads = recorded_requests(&receipt, "session/load");
+    let stopped = supervisor.shutdown().await;
+
+    // Assert: every undispatched ID, the held head included, is not sent
+    // with the reason, and nothing more reached the agent.
+    assert!(
+        shown_before
+            .iter()
+            .all(|state| state == &Some(ConversationOperationQueueState::RouterQueued)),
+        "{shown_before:?}"
+    );
+    for waited in &settled {
+        let failure = waited
+            .as_ref()
+            .err()
+            .unwrap_or_else(|| panic!("a waiting ID ends not sent: {waited:?}"));
+        assert_eq!(
+            String::from(failure.message.clone()),
+            "not sent: session closed"
+        );
+        assert_eq!(
+            failure.effect,
+            collaboration_protocol::ProviderOperationEffect::None
+        );
+    }
+    assert!(released.is_ok(), "the session is released: {released:?}");
+    assert!(held.is_ok(), "the held turn ran to its end: {held:?}");
+    assert_eq!(prompts, 1, "no queued prompt reached the agent");
+    assert_eq!(loads, 0, "no later load reached the agent");
+    stopped.expect("supervisor shutdown without an operation-drain timeout");
 }

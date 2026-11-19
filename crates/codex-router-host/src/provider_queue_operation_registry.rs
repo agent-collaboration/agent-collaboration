@@ -12,14 +12,13 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-#[cfg(test)]
 use tokio::sync::Notify;
 
 #[derive(Default)]
 pub(crate) struct ProviderQueueOperationRegistry {
     operations: Mutex<HashMap<OperationId, QueuedProviderOperation>>,
     next_sequence: AtomicU64,
-    #[cfg(test)]
+    /// Wakes whoever waits on a queued input's outcome (D1 R14).
     changed: Notify,
 }
 
@@ -137,18 +136,20 @@ impl ProviderQueueOperationRegistry {
             .collect()
     }
 
+    /// Cancels a waiting entry; returns its operation ID. An entry already
+    /// started can't be cancelled, so a cancel and a dispatch never both win.
     pub(crate) fn cancel(
         &self,
         target: &SessionRef,
         input_id: &session_event_model::InputId,
-    ) -> Result<(), ProviderQueueCancellationError> {
+    ) -> Result<OperationId, ProviderQueueCancellationError> {
         let mut operations = self
             .operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let operation = operations
-            .values_mut()
-            .find(|operation| &operation.target == target && &operation.input_id == input_id)
+        let (operation_id, operation) = operations
+            .iter_mut()
+            .find(|(_, operation)| &operation.target == target && &operation.input_id == input_id)
             .ok_or(ProviderQueueCancellationError::NotQueued)?;
         if operation.started || operation.state != ConversationOperationQueueState::RouterQueued {
             return Err(ProviderQueueCancellationError::NotQueued);
@@ -157,7 +158,23 @@ impl ProviderQueueOperationRegistry {
             reason: "queueCancelled".into(),
         };
         operation.terminal_at_ms = Some(now_ms());
-        Ok(())
+        // A caller waiting on this input's outcome learns it was not sent now.
+        self.changed.notify_waiters();
+        Ok(operation_id.clone())
+    }
+
+    /// The operation of a waiting entry, without changing it.
+    pub(crate) fn queued_operation_id(
+        &self,
+        target: &SessionRef,
+        input_id: &session_event_model::InputId,
+    ) -> Option<OperationId> {
+        self.operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .find(|(_, operation)| &operation.target == target && &operation.input_id == input_id)
+            .map(|(operation_id, _)| operation_id.clone())
     }
 
     pub(crate) fn try_start(&self, operation_id: &OperationId) -> bool {
@@ -186,8 +203,7 @@ impl ProviderQueueOperationRegistry {
                 reason: reason.into(),
             };
             operation.terminal_at_ms = Some(now_ms());
-            #[cfg(test)]
-            self.changed.notify_one();
+            self.changed.notify_waiters();
         }
     }
 
@@ -215,21 +231,31 @@ impl ProviderQueueOperationRegistry {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(operation_id);
-        #[cfg(test)]
-        self.changed.notify_one();
+        self.changed.notify_waiters();
     }
 
-    #[cfg(test)]
-    pub(crate) async fn wait_for_cleared(&self, operation_id: &OperationId) {
+    /// The reason a session's queued input was not sent, once it wasn't.
+    pub(crate) async fn wait_not_sent(
+        &self,
+        target: &SessionRef,
+        input_id: &session_event_model::InputId,
+    ) -> String {
         loop {
             let changed = self.changed.notified();
-            if !self
+            let reason = self
                 .operations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .contains_key(operation_id)
-            {
-                return;
+                .values()
+                .find(|operation| &operation.target == target && &operation.input_id == input_id)
+                .and_then(|operation| match &operation.state {
+                    ConversationOperationQueueState::NotSubmitted { reason } => {
+                        Some(reason.clone())
+                    }
+                    ConversationOperationQueueState::RouterQueued => None,
+                });
+            if let Some(reason) = reason {
+                return reason;
             }
             changed.await;
         }

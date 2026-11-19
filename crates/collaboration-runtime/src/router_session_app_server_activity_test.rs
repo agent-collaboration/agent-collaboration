@@ -53,6 +53,7 @@ async fn latest_observed_activity_moves_ahead_of_newer_stored_sessions_with_cons
                 created_by: owner.clone(),
                 approver: owner.clone(),
                 updated_at_ms,
+                resume: Default::default(),
             })
             .await?;
     }

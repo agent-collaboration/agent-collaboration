@@ -57,6 +57,39 @@ pub(super) async fn apply(
     expected_model: Option<String>,
 ) -> Result<ProviderSettingsResult, SettingControlFailure> {
     let record = authorized_session(supervisor, &request.target, &request.actor).await?;
+    // One check for every caller, before anything reaches the agent (D1 R7).
+    if request.setting == ProviderSettingName::Fast
+        && !matches!(request.value.as_str(), "off" | "auto")
+    {
+        return Err(ProviderSettingsFailure {
+            kind: ProviderSettingsFailureKind::InvalidSetting,
+            stage: None,
+            target: Some(request.target.clone()),
+            message: "fast accepts off or auto".into(),
+            setting: Some(ProviderSettingName::Fast),
+            value: Some(request.value.clone()),
+            advertised: vec!["off".into(), "auto".into()],
+        }
+        .into());
+    }
+    if request.setting == ProviderSettingName::Mode
+        && supervisor
+            .provider_kind_for(&request.target.endpoint)
+            .is_some_and(|provider| {
+                super::provider_full_access_guard::is_full_access_mode(provider, &request.value)
+            })
+    {
+        return Err(ProviderSettingsFailure {
+            kind: ProviderSettingsFailureKind::InvalidSetting,
+            stage: None,
+            target: Some(request.target.clone()),
+            message: super::provider_full_access_guard::FULL_ACCESS_REFUSAL.into(),
+            setting: Some(ProviderSettingName::Mode),
+            value: Some(request.value.clone()),
+            advertised: Vec::new(),
+        }
+        .into());
+    }
     if request.value.trim().is_empty() {
         return Err(failure(
             ProviderSettingsFailureKind::InvalidSetting,
@@ -75,13 +108,60 @@ pub(super) async fn apply(
             )
         })?;
     let kind = match request.setting {
-        ProviderSettingName::Mode => acp_client_runtime::ProviderSettingKind::Mode,
-        ProviderSettingName::Model => acp_client_runtime::ProviderSettingKind::Model,
-        ProviderSettingName::Effort => acp_client_runtime::ProviderSettingKind::Effort,
+        ProviderSettingName::Mode => provider_session_machines::ProviderSettingKind::Mode,
+        ProviderSettingName::Model => provider_session_machines::ProviderSettingKind::Model,
+        ProviderSettingName::Effort => provider_session_machines::ProviderSettingKind::Effort,
+        ProviderSettingName::Fast => provider_session_machines::ProviderSettingKind::Fast,
     };
+    let records_mode = kind == provider_session_machines::ProviderSettingKind::Mode
+        && intent == session_event_model::SettingApplicationIntent::ExplicitChange;
+    let mode_order =
+        records_mode.then(|| std::sync::Arc::clone(runtime.session_setup().mode_order()));
+    let applying = apply_and_record(
+        supervisor.clone(),
+        runtime,
+        request.clone(),
+        kind,
+        intent,
+        expected_model,
+        records_mode,
+    );
+    let observed = if let Some(mode_order) = mode_order {
+        // Dropping the caller while it waits sends nothing. After taking the
+        // turn, apply and record run together even when the caller stops waiting.
+        mode_order
+            .settle_mode_change(&String::from(request.target.session_id.clone()), applying)
+            .await
+            .map_err(|_| {
+                SettingControlFailure::Provider(Box::new(failure(
+                    ProviderSettingsFailureKind::Unavailable,
+                    &request.target,
+                    "the mode change ended before it settled",
+                )))
+            })??
+    } else {
+        applying.await?
+    };
+    Ok(result(request.target, record, observed))
+}
+
+/// Applies the change and, for an explicit mode change, records it, all
+/// inside the session's mode turn: the turn is taken before the command
+/// reaches the actor and held until the record is written, so the record
+/// ends at the last change the agent applied (V6b).
+async fn apply_and_record(
+    supervisor: ExternalProviderSupervisor,
+    runtime: std::sync::Arc<crate::ExternalProviderRuntime>,
+    request: ProviderSettingsSetRequest,
+    kind: provider_session_machines::ProviderSettingKind,
+    intent: session_event_model::SettingApplicationIntent,
+    expected_model: Option<String>,
+    records_mode: bool,
+) -> Result<acp_client_runtime::EffectiveProviderSettings, SettingControlFailure> {
+    let session_id = String::from(request.target.session_id.clone());
     let observed = runtime
-        .set_setting(
-            String::from(request.target.session_id.clone()),
+        .apply_setting(
+            session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
                 kind,
                 value: request.value.clone(),
@@ -94,21 +174,90 @@ pub(super) async fn apply(
             ExternalProviderRuntimeError::SettingsContextChanged => {
                 SettingControlFailure::ContextChanged(request.target.clone())
             }
-            ExternalProviderRuntimeError::SettingsUnresolved => {
+            ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
                 SettingControlFailure::Unresolved(request.target.clone())
             }
             other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
         })?;
-    if let Some(catalog) = runtime
-        .settings_catalog(&String::from(request.target.session_id.clone()))
-        .await
-    {
+    if let Some(catalog) = runtime.settings_catalog(&session_id) {
         supervisor
             .inner
             .record_settings_catalog(request.target.clone(), catalog)
             .await;
     }
-    Ok(result(request.target, record, observed))
+    if records_mode && let Some(confirmed_mode) = observed.confirmed_requested_mode {
+        #[cfg(any(test, feature = "test-support"))]
+        hold_before_mode_record(&supervisor, &request.target, &confirmed_mode).await;
+        record_explicit_mode(&supervisor, &runtime, &request.target, &confirmed_mode).await?;
+    }
+    Ok(observed.effective_settings)
+}
+
+/// A test holds this change here, applied and not yet recorded (V6b).
+#[cfg(any(test, feature = "test-support"))]
+async fn hold_before_mode_record(
+    supervisor: &ExternalProviderSupervisor,
+    target: &SessionRef,
+    value: &str,
+) {
+    let pause = {
+        let mut pause = supervisor
+            .inner
+            .explicit_mode_record_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match pause.take() {
+            Some((held, held_value, pause)) if &held == target && held_value == value => {
+                Some(pause)
+            }
+            other => {
+                *pause = other;
+                None
+            }
+        }
+    };
+    if let Some(pause) = pause {
+        let _entered = pause.entered.send(());
+        let _released = pause.release.await;
+    }
+}
+
+/// Keeps the session's record current after an explicit mode change the
+/// agent applied: a restore puts back the mode the session runs now, never
+/// the one its create asked for (V6; owner Decision 3; Lead ruling). A
+/// refused or unknown change never reaches here, so it leaves the record.
+async fn record_explicit_mode(
+    supervisor: &ExternalProviderSupervisor,
+    runtime: &crate::ExternalProviderRuntime,
+    target: &SessionRef,
+    value: &str,
+) -> Result<(), SettingControlFailure> {
+    let requested = acp_client_runtime::RequestedPermissionMode::from_request(Some(value));
+    let Some(requested_mode) = requested.requested_name() else {
+        return Ok(());
+    };
+    supervisor
+        .inner
+        .store
+        .lock()
+        .await
+        .record_session_mode(target, requested_mode, super::now_ms())
+        .await
+        .map_err(|_| {
+            failure(
+                ProviderSettingsFailureKind::Unavailable,
+                target,
+                "the mode was applied, but the provider Session inventory is unavailable",
+            )
+        })?;
+    runtime.session_setup().record_requested_mode(
+        &String::from(target.session_id.clone()),
+        crate::provider_session_setup::RequestedModeRecord {
+            requested_mode: Some(requested_mode.to_owned()),
+            mode_reason: None,
+        },
+    );
+    Ok(())
 }
 
 #[expect(
@@ -131,7 +280,6 @@ pub(super) async fn accept(
         })?;
     let observed = runtime
         .accept_session_settings(String::from(request.target.session_id.clone()))
-        .await
         .map_err(|error| plain_error(&request.target, error))?;
     Ok(result(request.target, record, observed))
 }
@@ -186,6 +334,9 @@ fn result(
     effective.mode = observed.mode;
     effective.model = observed.model;
     effective.effort = observed.effort;
+    effective.fast = observed
+        .fast
+        .map(crate::provider_operation_settlement::provider_fast_state);
     ProviderSettingsResult {
         target,
         effective_settings: effective,
@@ -197,36 +348,51 @@ fn setting_error(
     error: ExternalProviderRuntimeError,
 ) -> ProviderSettingsFailure {
     match error {
-        ExternalProviderRuntimeError::InvalidSetting { advertised, .. } => {
+        // Setting and value come from the runtime error, so a fast failure
+        // after a model change says fast and off (D1 R9).
+        ExternalProviderRuntimeError::InvalidSetting {
+            setting,
+            value,
+            advertised,
+            ..
+        } => ProviderSettingsFailure {
+            kind: ProviderSettingsFailureKind::InvalidSetting,
+            stage: None,
+            target: Some(request.target.clone()),
+            message: "setting value requires an unambiguous advertised provider option".into(),
+            setting: Some(crate::provider_operation_settlement::provider_setting_name(
+                setting,
+            )),
+            value: Some(value),
+            advertised,
+        },
+        ExternalProviderRuntimeError::SettingFailed { setting, value, .. } => {
             ProviderSettingsFailure {
-                kind: ProviderSettingsFailureKind::InvalidSetting,
+                kind: ProviderSettingsFailureKind::ProviderRejected,
                 stage: None,
                 target: Some(request.target.clone()),
-                message: "setting value requires an unambiguous advertised provider option".into(),
-                setting: Some(request.setting),
-                value: Some(request.value.clone()),
-                advertised,
+                message: "provider rejected the setting; current reported values remain effective"
+                    .into(),
+                setting: Some(crate::provider_operation_settlement::provider_setting_name(
+                    setting,
+                )),
+                value: Some(value),
+                advertised: Vec::new(),
             }
         }
-        ExternalProviderRuntimeError::SettingFailed { .. } => ProviderSettingsFailure {
-            kind: ProviderSettingsFailureKind::ProviderRejected,
-            stage: None,
-            target: Some(request.target.clone()),
-            message: "provider rejected the setting; current reported values remain effective"
-                .into(),
-            setting: Some(request.setting),
-            value: Some(request.value.clone()),
-            advertised: Vec::new(),
-        },
-        ExternalProviderRuntimeError::SettingOutcomeUnknown { .. } => ProviderSettingsFailure {
-            kind: ProviderSettingsFailureKind::OutcomeUnknown,
-            stage: None,
-            target: Some(request.target.clone()),
-            message: "provider setting outcome is unknown; Session remains gated".into(),
-            setting: Some(request.setting),
-            value: Some(request.value.clone()),
-            advertised: Vec::new(),
-        },
+        ExternalProviderRuntimeError::SettingOutcomeUnknown { setting, value, .. } => {
+            ProviderSettingsFailure {
+                kind: ProviderSettingsFailureKind::OutcomeUnknown,
+                stage: None,
+                target: Some(request.target.clone()),
+                message: "provider setting outcome is unknown; Session remains gated".into(),
+                setting: Some(crate::provider_operation_settlement::provider_setting_name(
+                    setting,
+                )),
+                value: Some(value),
+                advertised: Vec::new(),
+            }
+        }
         other => {
             let mut failure = plain_error(&request.target, other);
             if failure.kind == ProviderSettingsFailureKind::OutcomeUnknown {
@@ -242,11 +408,13 @@ fn plain_error(
     target: &SessionRef,
     error: ExternalProviderRuntimeError,
 ) -> ProviderSettingsFailure {
+    let busy_answer;
     let (kind, message) = match error {
-        ExternalProviderRuntimeError::LocalBusy => (
-            ProviderSettingsFailureKind::Busy,
-            "provider Session has running work",
-        ),
+        // The session's answer names its state and the valid next steps (D1 M8).
+        ExternalProviderRuntimeError::LocalBusy { answer } => {
+            busy_answer = answer;
+            (ProviderSettingsFailureKind::Busy, busy_answer.as_str())
+        }
         ExternalProviderRuntimeError::LocalNotFound => (
             ProviderSettingsFailureKind::NotFound,
             "provider Session is not loaded",

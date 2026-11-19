@@ -119,6 +119,7 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
         conversation
             .prompt(
                 ConversationPromptInput {
+                    delivery: collaboration_protocol::MessageDelivery::Auto,
                     operation_id: Some(OperationId::generate()),
                     target: target_for_prompt,
                     working_directory: None,
@@ -209,6 +210,7 @@ async fn create_provider_session(
     match conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint,
                 working_directory: proof.workspace.clone(),
@@ -219,6 +221,7 @@ async fn create_provider_session(
                 model: None,
                 mode: None,
                 effort: None,
+                fast: None,
                 fork: None,
                 root_message_id: None,
             },
@@ -260,6 +263,7 @@ async fn deliver_pending_approval(
         conversation
             .prompt(
                 ConversationPromptInput {
+                    delivery: collaboration_protocol::MessageDelivery::Auto,
                     operation_id: Some(OperationId::generate()),
                     target: requester_for_prompt,
                     working_directory: None,

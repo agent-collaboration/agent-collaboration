@@ -1,5 +1,7 @@
 //! Provider route decisions before any client effect.
 
+mod restored_mode_delivery;
+
 use crate::provider_fixture_launch;
 
 use agent_automation::{
@@ -74,6 +76,7 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -94,6 +97,7 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
@@ -150,6 +154,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -171,6 +176,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let router = SessionDeliveryRouter::new(vec![route.clone()]);
     let first_evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
@@ -308,6 +314,7 @@ async fn router_queued_reconciliation_uses_only_the_operation_store() {
         supervisor,
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let attempt = AttemptId::generate();
     let operation_id =
@@ -409,6 +416,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -429,6 +437,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     assert_eq!(
         route.presence(&target).await.expect("provider presence"),
@@ -538,6 +547,7 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -558,6 +568,7 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     assert!(matches!(
         route.presence(&target).await.expect("provider presence"),
@@ -599,21 +610,21 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             -32002,
             "rejected",
             Some("providerSessionNotFound"),
-            "this session never started a turn and did not survive the provider restart; create a new conversation",
+            "the provider no longer knows this session, so start a new session with the same setup",
             "provider code",
         ),
         (
             -32600,
             "rejected",
             Some("providerRejected"),
-            "provider rejected the ACP operation",
+            "the provider refused to restore this session, so check the provider before retrying",
             "provider code",
         ),
         (
             -32000,
             "rejected",
             Some("providerRejected"),
-            "provider rejected the ACP operation",
+            "the provider refused to restore this session, so check the provider before retrying",
             "provider code",
         ),
         (
@@ -666,6 +677,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
                 created_by: (target.clone()).into(),
                 approver: (target.clone()).into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("session record");
@@ -686,6 +698,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             Arc::clone(&supervisor),
             store,
             Arc::new(NoLivePeer),
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
         );
         let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
 
@@ -708,7 +721,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             );
             assert_uuid_v7_provider_reference(detail, code_label, error_code);
         } else {
-            assert_eq!(outcome["retryable"], true);
+            assert_eq!(outcome["retryable"], false);
             let reason = outcome["reason"].as_str().expect("not-submitted reason");
             assert!(reason.starts_with(expected_explanation), "{reason}");
             assert!(

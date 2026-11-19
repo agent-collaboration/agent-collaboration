@@ -12,17 +12,37 @@ use super::{
     ProviderSessionActivity, ProviderSteeringOutcome,
 };
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
+use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
 use agent_client_protocol::schema::v1::ContentBlock;
 
-/// Until the Close command enters the connection queue, dropping its caller
-/// must release the admission mark. The connection task clears it afterward.
+/// A close the session's cell admitted. Until its Close command enters the
+/// connection queue, dropping the caller settles it as failed, so the cell
+/// returns to where it started; the connection settles it afterward.
 struct PendingCloseAdmissionGuard {
-    marks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    cells: Arc<crate::session_cell_table::SessionCellTable>,
     provider_session_id: String,
+    attempt: provider_session_machines::session_lifecycle_machine::CloseAttempt,
     submitted: bool,
 }
 
 impl PendingCloseAdmissionGuard {
+    /// Admits the close on the session's cell: Live or Loading to Closing.
+    fn admit(
+        cells: &Arc<crate::session_cell_table::SessionCellTable>,
+        provider_session_id: &str,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
+        let attempt = provider_session_machines::session_lifecycle_machine::CloseAttempt(
+            uuid::Uuid::now_v7(),
+        );
+        crate::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
+        Ok(Self {
+            cells: Arc::clone(cells),
+            provider_session_id: provider_session_id.to_owned(),
+            attempt,
+            submitted: false,
+        })
+    }
+
     fn transfer_to_connection(&mut self) {
         self.submitted = true;
     }
@@ -31,10 +51,12 @@ impl PendingCloseAdmissionGuard {
 impl Drop for PendingCloseAdmissionGuard {
     fn drop(&mut self) {
         if !self.submitted {
-            self.marks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .remove(&self.provider_session_id);
+            crate::session_cell_bookkeeping::settle_close(
+                &self.cells,
+                &self.provider_session_id,
+                self.attempt,
+                false,
+            );
         }
     }
 }
@@ -56,50 +78,65 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     pub async fn capability_report(&self, provider_session_id: &str) -> ProviderCapabilityReport {
         let report = self
             .session_capabilities
-            .read()
-            .await
-            .get(provider_session_id)
-            .cloned()
+            .read(provider_session_id)
             .unwrap_or_else(|| self.base_capabilities.clone());
         report.with_auth_status(self.auth_status.read().await.clone())
     }
 
-    pub async fn settings_catalog(
+    pub fn settings_catalog(
         &self,
         provider_session_id: &str,
     ) -> Option<crate::ProviderSettingsCatalog> {
-        self.session_settings
-            .read()
-            .await
-            .get(provider_session_id)
-            .cloned()
+        self.session_settings.read(provider_session_id)
     }
 
-    pub async fn settings_unresolved(&self, provider_session_id: &str) -> bool {
-        self.settings_unresolved
-            .read()
-            .await
-            .contains_key(provider_session_id)
+    /// A setting holds the session's prompts: refused where refusals hold, or
+    /// its outcome unknown.
+    pub fn settings_unresolved(&self, provider_session_id: &str) -> bool {
+        super::settings_held(&self.session_cells, provider_session_id)
     }
 
-    pub async fn accept_session_settings(
+    /// True while this setting's last change has an unknown outcome, so a
+    /// reader never reports the catalog's old value as confirmed (D1 R2).
+    pub fn setting_outcome_unknown(
+        &self,
+        provider_session_id: &str,
+        kind: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
+        crate::session_cell_bookkeeping::setting_outcome_unknown(
+            &self.session_cells,
+            provider_session_id,
+            kind,
+        )
+    }
+
+    pub fn accept_session_settings(
         &self,
         provider_session_id: String,
     ) -> Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        if self.settings_unresolved.read().await.get(&provider_session_id).is_some_and(|kinds| kinds.values().any(|cause| *cause == crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown)) {
-            return Err(ExternalProviderRuntimeError::SettingsOutcomeUncertain);
-        }
         let catalog = self
             .session_settings
-            .read()
-            .await
-            .get(&provider_session_id)
-            .cloned()
+            .read(&provider_session_id)
             .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
-        self.settings_unresolved
-            .write()
-            .await
-            .remove(&provider_session_id);
+        // One session-cell event across kinds: refused while any outcome is
+        // unknown; an in-flight change is left alone, as today.
+        let accepted = crate::session_cell_bookkeeping::accept_settings(
+            &self.session_cells,
+            &provider_session_id,
+        )?;
+        if accepted.contains(&provider_session_machines::ProviderSettingKind::Fast) {
+            // The caller accepted a refused fast as it stands (D1 R8, R9).
+            let run = crate::SessionRuns::current_generation(
+                self.session_cells.as_ref(),
+                &provider_session_id,
+            );
+            crate::session_cell_bookkeeping::set_keep_fast_off_in_run(
+                &self.session_cells,
+                &provider_session_id,
+                run,
+                false,
+            );
+        }
         Ok(catalog.effective_settings())
     }
 
@@ -108,6 +145,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         request: crate::ProviderSettingRequest,
     ) -> Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError> {
+        self.apply_setting(provider_session_id, request)
+            .await
+            .map(|application| application.effective_settings)
+    }
+
+    pub async fn apply_setting(
+        &self,
+        provider_session_id: String,
+        request: crate::ProviderSettingRequest,
+    ) -> Result<crate::ProviderSettingApplication, ExternalProviderRuntimeError> {
         let uncertain_session_id = provider_session_id.clone();
         let uncertain_value = request.value.clone();
         let kind = request.kind;
@@ -123,15 +170,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         match result.await {
             Ok(result) => result,
             Err(_) => {
-                self.settings_unresolved
-                    .write()
-                    .await
-                    .entry(uncertain_session_id.clone())
-                    .or_default()
-                    .insert(
-                        kind,
-                        crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown,
-                    );
+                // The reply never came back: the change's outcome is unknown.
+                // The run that admitted it recorded its Lost (Lead V4).
                 Err(ExternalProviderRuntimeError::SettingOutcomeUnknown {
                     provider_session_id: uncertain_session_id,
                     setting: kind,
@@ -230,17 +270,60 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         scratch_folder: Option<PathBuf>,
         settings: crate::RequestedProviderSettings,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_session_with_work_roots(
+            cwd,
+            scratch_folder,
+            settings,
+            crate::SessionWorkRoots::default(),
+        )
+        .await
+    }
+
+    /// Creates a session that also works in the Router's work roots (D1 R18).
+    pub async fn create_session_with_work_roots(
+        &self,
+        cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
+        settings: crate::RequestedProviderSettings,
+        work_roots: crate::SessionWorkRoots,
+    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_session_admitted(cwd, scratch_folder, settings, work_roots)
+            .await
+            .0
+    }
+
+    /// Creates a session; answers its outcome and, when the connection
+    /// admitted it (even without its settings), the generation it was
+    /// admitted under, which the caller's own publications for it carry.
+    pub async fn create_session_admitted(
+        &self,
+        cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
+        settings: crate::RequestedProviderSettings,
+        work_roots: crate::SessionWorkRoots,
+    ) -> (
+        Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
+        Option<provider_session_machines::SessionGeneration>,
+    ) {
         let (reply, result) = tokio::sync::oneshot::channel();
-        self.commands
+        if self
+            .commands
             .send(ProviderCommand::Create {
                 cwd,
                 scratch_folder,
+                work_roots,
                 settings,
                 reply,
             })
             .await
-            .map_err(|_| self.retired_operation_error())?;
-        result.await.map_err(|_| self.retired_operation_error())?
+            .is_err()
+        {
+            return (Err(self.retired_operation_error()), None);
+        }
+        match result.await {
+            Ok(super::CreateAdmissionReply { result, generation }) => (result, generation),
+            Err(_) => (Err(self.retired_operation_error()), None),
+        }
     }
 
     pub async fn load_session(
@@ -253,10 +336,37 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/load",
             });
         }
+        self.load_session_with_setup(
+            provider_session_id,
+            cwd,
+            crate::SessionRestoreSetup::default(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RestoreFailure::into_error)
+    }
+
+    /// Loads the session, rebuilding the setup its create had (D1 R18);
+    /// answers the generation the connection admitted it under, which the
+    /// caller's own publications for this run carry, and its mode report.
+    pub async fn load_session_with_setup(
+        &self,
+        provider_session_id: String,
+        cwd: PathBuf,
+        setup: crate::SessionRestoreSetup,
+    ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
+        if !self.base_capabilities.supports_load {
+            return Err(RestoreFailure::preflight(
+                ExternalProviderRuntimeError::UnsupportedCapability {
+                    capability: "session/load",
+                },
+            ));
+        }
         self.restore_session(
             provider_session_id,
             cwd,
             super::provider_session_restore::RestoreHistoryMode::Replay,
+            setup,
         )
         .await
     }
@@ -271,10 +381,37 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/resume",
             });
         }
+        self.resume_session_with_setup(
+            provider_session_id,
+            cwd,
+            crate::SessionRestoreSetup::default(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RestoreFailure::into_error)
+    }
+
+    /// Resumes the session, rebuilding the setup its create had (D1 R18);
+    /// answers the generation the connection admitted it under and its mode
+    /// report.
+    pub async fn resume_session_with_setup(
+        &self,
+        provider_session_id: String,
+        cwd: PathBuf,
+        setup: crate::SessionRestoreSetup,
+    ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
+        if !self.base_capabilities.supports_resume {
+            return Err(RestoreFailure::preflight(
+                ExternalProviderRuntimeError::UnsupportedCapability {
+                    capability: "session/resume",
+                },
+            ));
+        }
         self.restore_session(
             provider_session_id,
             cwd,
             super::provider_session_restore::RestoreHistoryMode::WithoutReplay,
+            setup,
         )
         .await
     }
@@ -284,18 +421,44 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: super::provider_session_restore::RestoreHistoryMode,
-    ) -> Result<(), ExternalProviderRuntimeError> {
+        setup: crate::SessionRestoreSetup,
+    ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
         let (reply, result) = tokio::sync::oneshot::channel();
+        let dispatch = RestoreDispatch::default();
         self.commands
             .send(ProviderCommand::Restore {
                 provider_session_id,
                 cwd,
                 mode,
+                setup,
+                admitted: None,
+                dispatch: dispatch.clone(),
                 reply,
             })
             .await
-            .map_err(|_| self.retired_operation_error())?;
-        result.await.map_err(|_| self.retired_operation_error())?
+            .map_err(|_| RestoreFailure::preflight(self.retired_operation_error()))?;
+        super::provider_session_restore::complete_restore(
+            result,
+            &dispatch,
+            &self.local_shutdown,
+            &self.sink_closed,
+        )
+        .await
+    }
+
+    /// Test support: ends the session's actor the way an actor ends on its
+    /// own (its command channel closes), without closing the session.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn end_session_actor(
+        &self,
+        provider_session_id: String,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        self.commands
+            .send(ProviderCommand::EndActor {
+                provider_session_id,
+            })
+            .await
+            .map_err(|_| self.retired_operation_error())
     }
 
     pub async fn list_sessions(
@@ -324,26 +487,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 capability: "session/close",
             });
         }
-        if !self
-            .pending_close_marks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(provider_session_id.clone())
-        {
-            return Err(ExternalProviderRuntimeError::LocalBusy);
-        }
-        let mut admission_guard = PendingCloseAdmissionGuard {
-            marks: Arc::clone(&self.pending_close_marks),
-            provider_session_id: provider_session_id.clone(),
-            submitted: false,
-        };
-        self.close_session_after_mark(provider_session_id, &mut admission_guard)
+        let mut admission_guard =
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
+        self.close_session_after_mark(provider_session_id, false, &mut admission_guard)
             .await
     }
 
     async fn close_session_after_mark(
         &self,
         provider_session_id: String,
+        release_only: bool,
         admission_guard: &mut PendingCloseAdmissionGuard,
     ) -> Result<(), ExternalProviderRuntimeError> {
         if self.session_activity(provider_session_id.clone()).await?
@@ -355,16 +508,37 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             }
             self.wait_session_idle(provider_session_id.clone()).await?;
         }
+        // A close that found a turn running frees the session only once that
+        // turn's end is recorded on the cell (design note §12.1, EndingTurn).
+        tokio::select! {
+            () = self.shutdown.cancelled() => return Err(self.retired_operation_error()),
+            () = crate::session_cell_bookkeeping::wait_for_close_turn(&self.session_cells, &provider_session_id) => {}
+        }
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Close {
                 provider_session_id,
+                attempt: admission_guard.attempt,
+                release_only,
                 reply,
             })
             .await
             .map_err(|_| self.retired_operation_error())?;
         admission_guard.transfer_to_connection();
         result.await.map_err(|_| self.retired_operation_error())?
+    }
+
+    /// Closes a session on an agent that offers no session/close (D1 R14):
+    /// interrupts a running turn, waits for idle, then releases the session
+    /// here. The agent keeps no close of its own.
+    pub async fn release_session(
+        &self,
+        provider_session_id: String,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        let mut admission_guard =
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
+        self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
+            .await
     }
 
     /// Steer with the same validated Session vocabulary used for prompts.
@@ -374,7 +548,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         input_id: InputId,
         submission: session_event_model::ProviderSubmission,
-    ) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+    ) -> Result<ProviderSteeringOutcome<P::OperationId, P::Context>, ExternalProviderRuntimeError>
+    {
         if !submission.selected.is_empty() {
             return Err(ExternalProviderRuntimeError::Behavior(
                 crate::ProviderError::Unsupported,
@@ -393,7 +568,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         input_id: InputId,
         blocks: Vec<ContentBlock>,
-    ) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+    ) -> Result<ProviderSteeringOutcome<P::OperationId, P::Context>, ExternalProviderRuntimeError>
+    {
         if !self.admission.supports_steering {
             return Err(ExternalProviderRuntimeError::UnsupportedSteering);
         }
@@ -459,6 +635,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     }
 
     pub async fn shutdown(&self) {
+        self.local_shutdown.cancel();
         self.retirement.cancel();
         self.shutdown.cancel();
         if let Some(task) = self.task.lock().await.take()

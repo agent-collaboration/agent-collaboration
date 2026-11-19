@@ -156,6 +156,7 @@ impl ProviderAcpScheduledRuns {
                             .map_err(|_| DeliveryContractError::ClientOperation)?,
                     ]),
                 ),
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             },
             _ => return Err(DeliveryContractError::InvalidEvidence),
         };

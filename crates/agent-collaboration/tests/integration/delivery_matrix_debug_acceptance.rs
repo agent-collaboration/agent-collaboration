@@ -402,6 +402,7 @@ async fn create_empty_conversation(
     let created = conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint: proof.endpoint.clone(),
                 working_directory: proof.workspace.clone(),
@@ -412,6 +413,7 @@ async fn create_empty_conversation(
                 model: Some("gpt-5.6-luna".to_owned()),
                 mode: None,
                 effort: Some("low".to_owned()),
+                fast: None,
                 fork: None,
                 root_message_id: None,
             },

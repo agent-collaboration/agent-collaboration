@@ -1,6 +1,6 @@
 //! ACP v1 initialization and the injected provider's required authentication.
 
-use super::provider_client_contract::{
+use crate::provider_client_contract::{
     ExternalProviderRuntimeError, sanitized_acp_error, sanitized_initialization_error,
 };
 

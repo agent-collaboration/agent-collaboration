@@ -250,6 +250,22 @@ impl ProviderSessionEventHub {
         }
     }
 
+    /// Test support: holds `session`'s history lock until the returned guard
+    /// drops, as a slow publication for that session would (M5 scenarios).
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn hold_history_for_test(&self, session: SessionRef) -> HeldSessionHistory {
+        let history = self
+            .histories
+            .lock()
+            .await
+            .entry(session)
+            .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
+            .clone();
+        HeldSessionHistory {
+            _held: history.lock_owned().await,
+        }
+    }
+
     /// Publishing and attach share the lock for this Session only.
     pub async fn publish(
         &self,
@@ -614,6 +630,12 @@ fn from_stored_session(
 pub enum HubReceiveError {
     #[error("resyncRequired")]
     ResyncRequired,
+}
+
+/// Test support: one session's history lock, held until dropped.
+#[cfg(any(test, feature = "test-support"))]
+pub struct HeldSessionHistory {
+    _held: tokio::sync::OwnedMutexGuard<SessionHistory>,
 }
 
 pub async fn receive_hub_event(

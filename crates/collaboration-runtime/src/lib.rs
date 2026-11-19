@@ -43,8 +43,10 @@ pub use provider_operation_store::{
 };
 mod delivery_acceptance_effect;
 pub mod delivery_route_projection;
+#[cfg(any(test, feature = "test-support"))]
+pub use provider_session_event_hub::HeldSessionHistory;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
-pub use provider_session_record::ProviderSessionRecord;
+pub use provider_session_record::{ProviderSessionRecord, ProviderSessionResumeInputs};
 mod app_server_event_forwarding;
 mod app_server_item_metadata;
 mod app_server_item_translation;
@@ -69,6 +71,10 @@ mod native_skill_reference;
 mod provider_acp_content_translation;
 mod provider_acp_event_projection;
 mod provider_acp_interaction;
+/// The Router-level mode every agent accepts for "work on your own"; doors
+/// whose protocol carries no mode ask for it by name (D1 spec R1).
+pub(crate) const AUTO_SESSION_MODE: &str = "auto";
+mod provider_acp_busy_prompt;
 mod provider_acp_session_route;
 mod router_session_app_server;
 pub mod schedule_preparation_evidence_sink;

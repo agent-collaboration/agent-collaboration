@@ -1,6 +1,6 @@
 //! Capture the connection-scoped Claude auth update without private fields.
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
 use session_event_model::session_profile_codec::decode_connection_auth_status;
@@ -12,7 +12,7 @@ use crate::{ProviderCapabilityReport, SessionEventSink};
 
 pub(super) struct ProviderAuthStatusHandler {
     auth_status: Arc<RwLock<ProviderAuthStatus>>,
-    session_capabilities: Arc<RwLock<HashMap<String, ProviderCapabilityReport>>>,
+    session_capabilities: Arc<crate::run_owned_state::RunOwnedMap<ProviderCapabilityReport>>,
     event_sink: Arc<dyn SessionEventSink>,
     shutdown: CancellationToken,
     sink_closed: CancellationToken,
@@ -21,7 +21,7 @@ pub(super) struct ProviderAuthStatusHandler {
 impl ProviderAuthStatusHandler {
     pub(super) fn new(
         auth_status: Arc<RwLock<ProviderAuthStatus>>,
-        session_capabilities: Arc<RwLock<HashMap<String, ProviderCapabilityReport>>>,
+        session_capabilities: Arc<crate::run_owned_state::RunOwnedMap<ProviderCapabilityReport>>,
         event_sink: Arc<dyn SessionEventSink>,
         shutdown: CancellationToken,
         sink_closed: CancellationToken,
@@ -62,16 +62,14 @@ impl HandleDispatchFrom<Agent> for ProviderAuthStatusHandler {
             }
         };
         *self.auth_status.write().await = status.clone();
-        let reports = {
-            let mut capabilities = self.session_capabilities.write().await;
-            capabilities
-                .iter_mut()
-                .map(|(session_id, report)| {
-                    report.auth_status = status.clone();
-                    (session_id.clone(), report.to_session_model())
-                })
-                .collect::<Vec<_>>()
-        };
+        // Connection-wide: the agent's auth status belongs to the connection,
+        // so it reaches every session's report, whatever its run.
+        let mut reports = Vec::new();
+        self.session_capabilities
+            .update_every(|session_id, report| {
+                report.auth_status = status.clone();
+                reports.push((session_id.to_owned(), report.to_session_model()));
+            });
         for (session_id, capabilities) in reports {
             if self
                 .event_sink

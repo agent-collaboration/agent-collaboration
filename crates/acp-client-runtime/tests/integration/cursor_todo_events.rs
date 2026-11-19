@@ -237,3 +237,75 @@ async fn a_single_running_turn_routes_an_unobserved_cursor_todo() {
                 && item.text.as_deref().is_some_and(|text| text.contains("Fallback task"))))
     );
 }
+
+/// Sends one plain prompt on `session_id` and waits for its turn to end.
+#[expect(
+    clippy::expect_used,
+    reason = "A prompt the fixture cannot run must fail its test at once."
+)]
+async fn prompt_turn(client: &AgentSessionClient<NoopInteractionPort>, session_id: &str) {
+    client
+        .submit_with_approval_dispatch_for_input(
+            session_id.to_owned(),
+            session_event_model::InputId::generate(),
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Go".to_owned()).expect("text prompt"),
+                ]),
+            ),
+            (),
+            None,
+        )
+        .await
+        .expect("prompt ends");
+}
+
+/// Oracle: review F4 and the Lead's ruling (option b): a todo update that
+/// names a tool call announced in an ended turn is dropped, never attributed
+/// to the turn running now, even after a late tool_call_update names it.
+#[tokio::test]
+async fn a_late_cursor_todo_for_an_ended_turns_tool_call_is_dropped() {
+    // Arrange
+    let root = tempfile::tempdir().expect("fixture root");
+    let sink = Arc::new(CaptureEventSink::default());
+    let client = AgentSessionClient::initialize(
+        ExternalProviderLaunch {
+            executable: PathBuf::from("node"),
+            arguments: vec![SINGLE_RUNNING_TODO.to_owned(), "late".to_owned()],
+            environment: Vec::new(),
+            persistence_target: ProviderPersistenceTarget::Unspecified,
+        },
+        Arc::new(NoopInteractionPort),
+        sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+    )
+    .await
+    .expect("fixture initializes");
+    let session_id = client
+        .create_session(root.path().to_path_buf())
+        .await
+        .expect("session opens");
+
+    // Act: turn one announces the tool call; turn two gets its late update.
+    prompt_turn(&client, &session_id).await;
+    prompt_turn(&client, &session_id).await;
+    client.shutdown().await;
+
+    // Assert
+    let events = sink.0.lock().expect("event sink");
+    let attributed = events.iter().any(|(_, event)| {
+        matches!(event, SessionEvent::ItemStarted { item }
+                if item.text.as_deref().is_some_and(|text| text.contains("Late task")))
+    });
+    assert!(
+        !attributed,
+        "the ended turn's todo update was attributed to the running turn"
+    );
+    let first_call_starts = events.iter().filter(|(_, event)| {
+        matches!(event, SessionEvent::ItemStarted { item } if item.item_id == "early-tool")
+    }).count();
+    assert_eq!(
+        first_call_starts, 1,
+        "the late continuation cannot start another tool item"
+    );
+}

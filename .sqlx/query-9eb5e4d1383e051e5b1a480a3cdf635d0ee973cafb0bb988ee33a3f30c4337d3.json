@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_session_records (\n                target_service_id,target_endpoint_id,target_session_id,\n                working_directory,requested_policy_json,created_by_json,approver_json,updated_at_ms,\n                requested_mode,work_roots_json,scratch_folder\n            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)\n            ON CONFLICT(target_service_id,target_endpoint_id,target_session_id) DO UPDATE SET\n                working_directory=excluded.working_directory,\n                requested_policy_json=excluded.requested_policy_json,\n                approver_json=excluded.approver_json,\n                updated_at_ms=excluded.updated_at_ms,\n                requested_mode=COALESCE(excluded.requested_mode,provider_session_records.requested_mode),\n                work_roots_json=COALESCE(excluded.work_roots_json,provider_session_records.work_roots_json),\n                scratch_folder=COALESCE(excluded.scratch_folder,provider_session_records.scratch_folder)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "9eb5e4d1383e051e5b1a480a3cdf635d0ee973cafb0bb988ee33a3f30c4337d3"
+}

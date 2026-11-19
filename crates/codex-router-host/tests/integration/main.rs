@@ -1,6 +1,8 @@
 //! Original test roots retain their case namespaces.
 
 use collaboration_application_test_support::board_fixture;
+#[path = "../support/host_clock_control.rs"]
+mod host_clock_control;
 #[path = "../support/host_replacement_cleanup.rs"]
 mod host_replacement_cleanup;
 #[path = "../support/operator_client.rs"]
@@ -47,19 +49,32 @@ mod native_observer_restart;
 mod operator_transport_contract;
 mod process_lifecycle;
 mod production_enrollment;
+mod provider_acp_busy_prompt;
 mod provider_acp_delivery_route;
 mod provider_acp_loaded_only_races;
 mod provider_acp_message_fifo;
 mod provider_acp_queue_route;
 mod provider_acp_scheduled_runs;
 mod provider_acp_steering_route;
+mod provider_cache_warm;
 mod provider_content_commands;
 mod provider_endpoint_routing_structure;
 mod provider_face_composition;
+mod provider_full_access_refusal;
 mod provider_native_models;
 mod provider_native_skills;
 mod provider_pending_hub_races;
+mod provider_persistence_overlay;
+mod provider_queue_settlement;
+mod provider_queued_api_lifecycle;
+mod provider_resumed_work_roots;
+mod provider_router_close;
+mod provider_send_approvers;
+mod provider_send_behaviour;
+mod provider_send_races;
+mod provider_session_command_port;
 mod provider_startup_isolation;
+mod provider_work_roots;
 mod remote_wake;
 mod router_executable_status;
 mod router_settings;
