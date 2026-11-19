@@ -3,6 +3,7 @@ use crate::{
     AppServerChild, BackendSchemaEvidence, CollaborationRuntime, CollaborationRuntimeInputs,
     HostConfig, HostInstance, RemoteControlServerName,
 };
+use collaboration_runtime::ConfiguredCentralLink;
 use std::{io, path::PathBuf};
 
 pub(super) struct CollaborationLifecycle {
@@ -14,6 +15,7 @@ pub(super) struct CollaborationLifecycle {
     backend_socket: PathBuf,
     mcp_bind: std::net::SocketAddr,
     remote_access: Option<crate::RemoteAccess>,
+    central_link: Option<ConfiguredCentralLink>,
     router_proxy_endpoint: std::net::SocketAddr,
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
     provider_operation_retention_days: Option<std::num::NonZeroU32>,
@@ -40,6 +42,7 @@ impl CollaborationLifecycle {
         child: &AppServerChild,
         remote_control_server_name: Option<RemoteControlServerName>,
         router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
+        central_link: Option<ConfiguredCentralLink>,
     ) -> io::Result<Option<Self>> {
         let Some(directory) = config.collaboration_directory() else {
             return Ok(None);
@@ -75,6 +78,7 @@ impl CollaborationLifecycle {
             backend_socket: config.app_server_socket().to_owned(),
             mcp_bind: config.mcp_bind(),
             remote_access: config.remote_access(),
+            central_link,
             router_proxy_endpoint: config.router_endpoint(),
             external_provider_startups,
             provider_operation_retention_days: config.provider_operation_retention_days(),
@@ -174,6 +178,7 @@ impl CollaborationLifecycle {
                         remote_control_server_name: self.remote_control_server_name.clone(),
                         owner_human_id: self.owner_human_id.clone(),
                     },
+                    central_link: self.central_link.clone(),
                     router_proxy_endpoint: self.router_proxy_endpoint,
                     remote_access: self.remote_access,
                 },

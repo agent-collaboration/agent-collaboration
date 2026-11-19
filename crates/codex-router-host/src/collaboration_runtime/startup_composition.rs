@@ -27,6 +27,7 @@ impl CollaborationRuntime {
             None,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -47,6 +48,7 @@ impl CollaborationRuntime {
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
             Some(host_inputs.enrollment_reset_directory),
+            host_inputs.central_link,
         ))
         .await
     }
@@ -58,6 +60,7 @@ impl CollaborationRuntime {
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
         enrollment_reset_directory: Option<std::path::PathBuf>,
+        configured_central_link: Option<collaboration_runtime::ConfiguredCentralLink>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
@@ -786,18 +789,6 @@ impl CollaborationRuntime {
         )
         .await
         .map_err(io::Error::other)?;
-        // Link admission still waits for B3 to supply a machine token.
-        let central_link_tasks = tokio_util::task::TaskTracker::new();
-        let central_link = collaboration_runtime::open_machine_link(
-            &inputs.directory,
-            machine_identity.service_id(),
-            worker_clock.clone(),
-            None,
-            Some(inbox),
-            &central_link_tasks,
-            shutdown.clone(),
-        )
-        .await;
         if let Some(service) = &subscription_delivery
             && let Err(error) = service.start().await
         {
@@ -898,6 +889,18 @@ impl CollaborationRuntime {
                     .await
             })
         });
+        // From here the runtime owns link shutdown, including exposure failure.
+        let central_link_tasks = tokio_util::task::TaskTracker::new();
+        let central_link = collaboration_runtime::open_machine_link(
+            &inputs.directory,
+            &machine_id,
+            worker_clock.clone(),
+            configured_central_link,
+            Some(inbox),
+            &central_link_tasks,
+            shutdown.clone(),
+        )
+        .await;
         let mut runtime = Self {
             clock: worker_clock,
             fleet_link,

@@ -1,6 +1,6 @@
 //! Starts the Router's central link with the same machine id used by the Host.
-//! Until the Router has a token source, immediate calls report not enrolled
-//! and outbox writes wait in the local store.
+//! A Router without a configured token source reports not enrolled and
+//! holds outbox writes in the local store.
 use super::{
     CentralLinkParts, LinkSocket, LinkTransport, LinkTransportError, MachineFlushJitter,
     MachineTokenSource, RouterLinkCalls, TokenAvailability, TransportFuture,
@@ -15,6 +15,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use workspace_ids::MachineId;
 
 /// A link the Host has configured: B3's token source and the link transport.
+#[derive(Clone)]
 pub struct ConfiguredCentralLink {
     pub tokens: Arc<dyn MachineTokenSource>,
     pub transport: Arc<dyn LinkTransport>,

@@ -1500,6 +1500,7 @@ dependencies = [
  "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
+ "central-link-protocol",
  "chrono",
  "claude-code-peer-messaging",
  "codex-acp-adapter",

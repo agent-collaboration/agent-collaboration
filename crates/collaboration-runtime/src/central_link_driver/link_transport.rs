@@ -65,8 +65,7 @@ pub enum TokenAvailability {
 }
 
 /// The Router's machine token, supplied by the sign-in machine-login lane (B3).
-/// Stand-in: until B3's Router token source lands, the Host configures none
-/// and the link reports not enrolled while outbox writes wait.
+/// An unconfigured Host reports not enrolled while outbox writes wait.
 pub trait MachineTokenSource: Send + Sync {
     /// The current state, read without waiting.
     fn availability(&self) -> TokenAvailability;

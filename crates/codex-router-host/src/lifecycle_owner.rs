@@ -1,5 +1,6 @@
 //! Single lifecycle-owner task and foreground event loop.
 
+use collaboration_runtime::ConfiguredCentralLink;
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -233,6 +234,7 @@ impl HostRuntime {
             instance,
             startup_started_at,
             None,
+            None,
         ))
         .await
     }
@@ -253,6 +255,7 @@ impl HostRuntime {
             update_inputs,
             instance,
             startup_started_at,
+            None,
             None,
         ))
         .await
@@ -289,6 +292,28 @@ impl HostRuntime {
             instance,
             tokio::time::Instant::now(),
             progress,
+            None,
+        ))
+        .await
+    }
+
+    /// Starts the acquired Host with the caller's central transport and token source.
+    pub async fn run_acquired_with_central_link(
+        config: HostConfig,
+        child_launch_plans: ManagedChildLaunchPlans,
+        update_inputs: ManagedUpdateInputs,
+        instance: HostInstance,
+        progress: Option<HostProgressCallback<'_>>,
+        central_link: ConfiguredCentralLink,
+    ) -> Result<HostExit, HostError> {
+        Box::pin(Self::run_owned(
+            config,
+            child_launch_plans,
+            update_inputs,
+            instance,
+            tokio::time::Instant::now(),
+            progress,
+            Some(central_link),
         ))
         .await
     }
@@ -300,6 +325,7 @@ impl HostRuntime {
         instance: HostInstance,
         startup_started_at: tokio::time::Instant,
         progress: Option<HostProgressCallback<'_>>,
+        central_link: Option<ConfiguredCentralLink>,
     ) -> Result<HostExit, HostError> {
         let running_version = std::env::var("CODEX_ROUTER_DEBUG_RUNNING_VERSION")
             .ok()
@@ -372,6 +398,7 @@ impl HostRuntime {
             &app_server,
             readiness.remote_control_server_name().cloned(),
             router_executable_check,
+            central_link,
         )
         .await
         {

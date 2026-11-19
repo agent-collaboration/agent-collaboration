@@ -33,6 +33,7 @@ pub struct CollaborationRuntimeInputs {
 pub(crate) struct HostCollaborationInputs {
     pub enrollment_reset_directory: PathBuf,
     pub collaboration_runtime: CollaborationRuntimeInputs,
+    pub central_link: Option<collaboration_runtime::ConfiguredCentralLink>,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,
 }

@@ -108,6 +108,7 @@ async fn host_startup_publishes_the_configured_router_proxy_port() {
             enrollment_reset_directory: root.path().to_owned(),
             remote_access: None,
             collaboration_runtime: runtime_inputs(root.path()),
+            central_link: None,
             router_proxy_endpoint,
         },
         Vec::new(),
@@ -122,6 +123,9 @@ async fn host_startup_publishes_the_configured_router_proxy_port() {
 
     assert_eq!(manifest.router_proxy_endpoint, Some(router_proxy_endpoint));
 }
+
+#[path = "host_manifest_publication_tests/central_link_test.rs"]
+mod central_link_test;
 
 #[tokio::test]
 async fn direct_runtime_publication_omits_the_host_router_proxy_endpoint() {
