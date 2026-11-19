@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ItemKind {
     Workspace,
@@ -46,7 +46,9 @@ impl ItemKind {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(
     tag = "kind",
     content = "id",
@@ -115,7 +117,7 @@ impl ItemRef {
 }
 
 /// Issues and areas cannot own references or external links.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "id",
@@ -142,7 +144,7 @@ impl From<ReferenceSource> for ItemRef {
         }
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Reference {
     pub reference_id: ReferenceId,
@@ -153,7 +155,7 @@ pub struct Reference {
 
 /// Relations, the workspace itself, memberships and role assignments have identity
 /// for reads and paging, but cannot be reference targets.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "ItemRef", into = "ItemRef")]
 pub struct ReferenceTarget(ItemRef);
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -193,7 +195,7 @@ impl ReferenceTarget {
         self.0.kind_and_id()
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExternalLink {
     pub link_id: LinkId,

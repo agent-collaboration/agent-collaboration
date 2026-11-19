@@ -111,7 +111,7 @@ impl CentralRecipientLookup for CentralRecipientDirectory {
                 RecipientMatch::Unknown => {
                     tracing::debug!("central inbox refused unknown local session");
                     DeliveryAnswer::Refused {
-                        reason: MessageRefusal::RecipientRefused,
+                        reason: MessageRefusal::UnknownSession,
                     }
                 }
                 RecipientMatch::Ambiguous => {
@@ -119,7 +119,7 @@ impl CentralRecipientLookup for CentralRecipientDirectory {
                         "central inbox refused a session present on multiple endpoints"
                     );
                     DeliveryAnswer::Refused {
-                        reason: MessageRefusal::RecipientRefused,
+                        reason: MessageRefusal::AmbiguousSession,
                     }
                 }
             };

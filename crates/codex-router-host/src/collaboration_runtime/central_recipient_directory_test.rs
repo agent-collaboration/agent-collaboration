@@ -102,7 +102,7 @@ async fn endpoint_free_admission_refuses_when_two_local_catalogs_match_the_same_
     assert_eq!(
         lookup.answer(&address).await.unwrap(),
         DeliveryAnswer::Refused {
-            reason: MessageRefusal::RecipientRefused,
+            reason: MessageRefusal::AmbiguousSession,
         }
     );
 }

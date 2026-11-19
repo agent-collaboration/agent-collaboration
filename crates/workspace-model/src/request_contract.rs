@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use workspace_ids::SessionRef;
 
 /// A session's thread notices share one cadence across all workspaces.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 pub enum NoticeCadence {
     #[default]
     #[serde(rename = "m15")]
@@ -279,7 +281,7 @@ impl WorkspaceOperation {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -340,7 +342,7 @@ pub enum WorkspaceAnswer {
         through: ChangePosition,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "answer",
@@ -359,7 +361,7 @@ pub enum WorkspaceResult {
     OutcomeUnknown,
     CentralUnavailable,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ActorView {
     pub actor_identity_id: ActorIdentityId,
@@ -373,7 +375,7 @@ impl From<ActorIdentity> for ActorView {
         }
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceReply {
     pub result: WorkspaceResult,

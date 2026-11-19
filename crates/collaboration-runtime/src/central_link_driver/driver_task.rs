@@ -16,7 +16,7 @@ use central_link_client::{
 };
 use central_link_protocol::{
     CorrelationId, DataFrame, FrameDirection, LinkFrame, LinkRequest, MachineTokenText,
-    RequestPayload, decode_text, encode_text,
+    RequestPayload, RequestScope, decode_text, encode_text,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use runtime_primitives::SyncTime;
@@ -29,6 +29,7 @@ use workspace_model::{Caller, RequestId};
 /// An immediate call waiting for central's reply.
 struct ImmediateCall {
     request: Option<RequestId>,
+    scope: RequestScope,
     reply: oneshot::Sender<Submission>,
 }
 
@@ -335,6 +336,7 @@ impl LinkDriver {
                     }
                     (CallFailure::OutcomeUnknown { request_id }, _) => Submission::Uncertain {
                         request: request_id,
+                        scope: immediate.scope,
                     },
                 };
                 let _ = immediate.reply.send(submission);
@@ -473,12 +475,18 @@ impl LinkDriver {
                 RequestStatus::Answered(reply) => Submission::Answered(reply),
                 RequestStatus::Sent
                 | RequestStatus::NotFound
-                | RequestStatus::StatusUnavailable => Submission::Uncertain { request },
+                | RequestStatus::StatusUnavailable => Submission::Uncertain {
+                    request,
+                    scope: item.payload.request_scope(),
+                },
                 RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict) => {
                     Submission::Refused(SubmitRefusal::RequestIdConflict)
                 }
                 RequestStatus::Refused(_) | RequestStatus::Cancelled { .. } => {
-                    Submission::Uncertain { request }
+                    Submission::Uncertain {
+                        request,
+                        scope: item.payload.request_scope(),
+                    }
                 }
             },
             Ok(OutboxInsert::ConflictingContent) => {
@@ -495,7 +503,10 @@ impl LinkDriver {
                 tracing::warn!(%error, "outbox: storing a write failed");
                 self.refresh_outbox_deadline().await;
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
-                Submission::Uncertain { request }
+                Submission::Uncertain {
+                    request,
+                    scope: item.payload.request_scope(),
+                }
             }
         })
     }
@@ -512,6 +523,7 @@ impl LinkDriver {
             return;
         }
         let request = payload.write_request_id().cloned();
+        let scope = payload.request_scope();
         let frame = match self.client.begin_request(caller, payload) {
             Ok(frame) => frame,
             Err(_) => {
@@ -523,8 +535,14 @@ impl LinkDriver {
             let _ = reply.send(Submission::Refused(SubmitRefusal::CentralUnavailable));
             return;
         };
-        self.immediate
-            .insert(correlation, ImmediateCall { request, reply });
+        self.immediate.insert(
+            correlation,
+            ImmediateCall {
+                request,
+                scope,
+                reply,
+            },
+        );
         if !self.send(&frame).await {
             self.socket_closed().await;
         }

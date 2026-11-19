@@ -60,7 +60,7 @@ pub enum CentralMailOperation {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -91,7 +91,7 @@ pub enum CentralMailAnswer {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -107,7 +107,7 @@ pub enum CentralMailResult {
     CentralUnavailable,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -146,7 +146,7 @@ pub enum CentralMailRefusal {
     },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TimingRequirement {
     FiveMinuteGrid,
@@ -213,10 +213,13 @@ pub enum MessageOutcome {
 }
 
 /// Why the recipient refused a message.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageRefusal {
-    RecipientRefused,
+    /// The receiving Router has no harness that owns this session.
+    UnknownSession,
+    /// More than one local harness claims the same provider session id.
+    AmbiguousSession,
 }
 
 /// The recipient Router's answer to a delivered message: into its inbox, or
@@ -234,7 +237,7 @@ pub enum DeliveryAnswer {
     Refused { reason: MessageRefusal },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageCancellation {
     NotDeliveredWithin15Minutes,
@@ -242,6 +245,16 @@ pub enum MessageCancellation {
 
 /// How the recipient Router hands a direct message to its session: its own
 /// choice, queued for the next turn, or steered into the running turn.
+/// The sender's view of a direct message's delivery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum MessageStatus {
+    Queued,
+    Delivered,
+    Failed { reason: MessageRefusal },
+    Cancelled { reason: MessageCancellation },
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageDelivery {
@@ -332,7 +345,7 @@ pub enum WakeState {
     Disabled,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AutomationState {
     Active,

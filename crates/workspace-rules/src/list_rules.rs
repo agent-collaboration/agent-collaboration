@@ -66,7 +66,9 @@ pub fn list_answer(
 ) -> Result<WorkspaceAnswer, RefusalReason> {
     if matches!(
         query,
-        ListQuery::Workspaces { .. } | ListQuery::SearchWorkspaces { .. }
+        ListQuery::Workspaces { .. }
+            | ListQuery::SearchWorkspaces { .. }
+            | ListQuery::MessageStatus { .. }
     ) {
         return Err(RefusalReason::InvalidInput {
             field: "query".to_owned(),
@@ -120,7 +122,9 @@ fn deliverable_in_project(
 
 fn selects(query: &ListQuery, item: &ItemView, reads: &ListReads<'_>) -> bool {
     match query {
-        ListQuery::Workspaces { .. } | ListQuery::SearchWorkspaces { .. } => false,
+        ListQuery::Workspaces { .. }
+        | ListQuery::SearchWorkspaces { .. }
+        | ListQuery::MessageStatus { .. } => false,
         ListQuery::Areas { include_archived } => {
             matches!(item, ItemView::Area(row) if *include_archived || row.state == AreaState::Open)
         }

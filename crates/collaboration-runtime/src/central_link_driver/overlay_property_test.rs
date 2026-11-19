@@ -223,9 +223,10 @@ impl OverlayModel {
                 Some(FaultKind::BeforeCall),
                 Some(Submission::Refused(central_link_client::SubmitRefusal::OutboxUnavailable)),
             ) => assert!(!held, "a definite refusal holds no row"),
-            (Some(FaultKind::AfterCommit), Some(Submission::Uncertain { request })) => {
+            (Some(FaultKind::AfterCommit), Some(Submission::Uncertain { request, scope })) => {
                 assert!(held, "the answer was lost after the write committed");
                 assert_eq!(request.as_str(), id);
+                assert_eq!(scope, thread_post(&id).request_scope());
             }
             other => panic!("unexpected submission {other:?}"),
         }

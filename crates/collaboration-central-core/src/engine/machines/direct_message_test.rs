@@ -19,7 +19,7 @@ fn subject(sender_session: Option<SessionRef>) -> DirectMessageSubject {
 }
 
 const REFUSED: mail::DeliveryAnswer = mail::DeliveryAnswer::Refused {
-    reason: mail::MessageRefusal::RecipientRefused,
+    reason: mail::MessageRefusal::UnknownSession,
 };
 
 fn outcomes(effects: &[Effect]) -> Vec<mail::MessageOutcome> {
@@ -132,7 +132,7 @@ fn every_direct_message_state_event_pair_matches_the_declared_edges() {
         State::Queued(subject(Some(session("sender")))),
         State::Cancelled(subject(Some(session("sender")))),
         State::Delivered,
-        State::Failed(mail::MessageRefusal::RecipientRefused),
+        State::Failed(mail::MessageRefusal::UnknownSession),
     ];
     let cases = states.into_iter().flat_map(|state| {
         [
@@ -191,14 +191,11 @@ fn a_refusal_fails_the_message_with_its_reason_and_a_moved_mark_is_stale() {
         &mut context(3, &mut ReplayIds),
     )
     .unwrap();
-    assert_eq!(
-        failed,
-        State::Failed(mail::MessageRefusal::RecipientRefused)
-    );
+    assert_eq!(failed, State::Failed(mail::MessageRefusal::UnknownSession));
     assert_eq!(
         outcomes(&effects),
         vec![mail::MessageOutcome::Refused {
-            reason: mail::MessageRefusal::RecipientRefused
+            reason: mail::MessageRefusal::UnknownSession
         }]
     );
     assert!(matches!(

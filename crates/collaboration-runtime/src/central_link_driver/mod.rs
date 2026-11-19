@@ -207,7 +207,10 @@ impl LinkCalls for RouterLinkCalls {
             {
                 return Submission::Refused(SubmitRefusal::OutboxUnavailable);
             }
-            answer.await.unwrap_or(Submission::Uncertain { request })
+            answer.await.unwrap_or(Submission::Uncertain {
+                request,
+                scope: central_link_protocol::RequestScope::Organization,
+            })
         })
     }
 

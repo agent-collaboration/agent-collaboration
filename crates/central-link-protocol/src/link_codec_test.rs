@@ -58,7 +58,7 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToCentral,
-            json!({"kind":"ack","messageId":id,"answer":{"kind":"refused","reason":"recipientRefused"}}),
+            json!({"kind":"ack","messageId":id,"answer":{"kind":"refused","reason":"unknownSession"}}),
         ),
     ];
     for (direction, fixture) in fixtures {

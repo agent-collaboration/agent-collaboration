@@ -133,10 +133,13 @@ async fn an_immediate_write_whose_answer_is_lost_is_uncertain_and_shows_sent() {
     calls.set_central(FakeCentral::AnswerLost);
     let id = uuid_v7(3);
 
+    let expected_scope =
+        central_link_protocol::RequestScope::Workspace(uuid_v7(201).parse().unwrap());
+
     let submission = calls.submit(session_caller(1), create_thread(&id)).await;
 
     assert!(
-        matches!(&submission, Submission::Uncertain { request } if *request == request_id(&id)),
+        matches!(&submission, Submission::Uncertain { request, scope } if *request == request_id(&id) && *scope == expected_scope),
         "{submission:?}"
     );
     assert_eq!(

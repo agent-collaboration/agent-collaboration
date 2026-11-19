@@ -195,7 +195,7 @@ fn answer(index: u8) -> DeliveryAnswer {
         DeliveryAnswer::Accepted
     } else {
         DeliveryAnswer::Refused {
-            reason: MessageRefusal::RecipientRefused,
+            reason: MessageRefusal::UnknownSession,
         }
     }
 }

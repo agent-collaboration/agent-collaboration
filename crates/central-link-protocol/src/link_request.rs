@@ -1,8 +1,8 @@
-use crate::ProtocolError;
+use crate::{ProtocolError, RequestScope};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
-use workspace_model::{Caller, RequestId, WorkspaceReply, WorkspaceRequest};
+use workspace_model::{Caller, RequestId, WorkspaceOperation, WorkspaceReply, WorkspaceRequest};
 
 pub const MAX_LINK_REQUEST_BATCH_SIZE: usize = 64;
 
@@ -103,6 +103,23 @@ impl RequestPayload {
         }
     }
 
+    /// The store that can log a write, determined from its original payload.
+    #[must_use]
+    pub fn request_scope(&self) -> RequestScope {
+        match self {
+            Self::Mail(_) => RequestScope::Organization,
+            Self::Workspace(request) => match request.operation {
+                WorkspaceOperation::CreateWorkspace { .. }
+                | WorkspaceOperation::UpdateWorkspace { .. }
+                | WorkspaceOperation::ArchiveWorkspace => RequestScope::Organization,
+                _ => request
+                    .workspace_id
+                    .clone()
+                    .map_or(RequestScope::Organization, RequestScope::Workspace),
+            },
+        }
+    }
+
     fn validate(&self) -> Result<(), ProtocolError> {
         if let Self::Workspace(request) = self
             && request.operation.is_write() != request.request_id.is_some()
@@ -113,7 +130,7 @@ impl RequestPayload {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "reply",

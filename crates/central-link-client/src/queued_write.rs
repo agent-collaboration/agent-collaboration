@@ -1,6 +1,6 @@
 //! The write as accepted by the Router. Only the outbox claim adds send time.
 use crate::{OutboxWriteContent, OutboxWriteTarget};
-use central_link_protocol::RequestPayload;
+use central_link_protocol::{RequestPayload, RequestScope};
 use serde::{Deserialize, Serialize};
 use workspace_ids::SessionRef;
 use workspace_model::{
@@ -35,6 +35,16 @@ impl QueuedWrite {
         match self {
             Self::Workspace(request) => request.request_id.as_ref(),
             Self::SendMessage(request) => Some(&request.request_id),
+        }
+    }
+
+    pub fn request_scope(&self) -> RequestScope {
+        match self {
+            Self::Workspace(request) => request
+                .workspace_id
+                .clone()
+                .map_or(RequestScope::Organization, RequestScope::Workspace),
+            Self::SendMessage(_) => RequestScope::Organization,
         }
     }
 

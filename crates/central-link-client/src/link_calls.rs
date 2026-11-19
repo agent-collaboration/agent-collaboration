@@ -1,7 +1,7 @@
 //! The seam between Router tools and the link (frozen 2026-11-17, see
 //! `docs/specs/2026-11-17-link-and-router-retrofit/seam.html`). A tool submits a
 //! caller's payload; the operation's kind, never the caller, picks the path.
-use central_link_protocol::{ProtocolError, ReplyPayload, RequestPayload};
+use central_link_protocol::{ProtocolError, ReplyPayload, RequestPayload, RequestScope};
 use runtime_primitives::SyncTime;
 use std::{future::Future, pin::Pin};
 use workspace_model::{Caller, RequestId};
@@ -42,7 +42,10 @@ pub enum Submission {
     Refused(SubmitRefusal),
     /// Immediate kinds: sent, answer lost; it may have applied. Reconcile with
     /// `request_status` or resubmit the same id; never retry with a new id.
-    Uncertain { request: RequestId },
+    Uncertain {
+        request: RequestId,
+        scope: RequestScope,
+    },
     /// Reads only, no id: the read frame left and the answer was lost.
     /// A read changes nothing, so reading again is safe.
     ReadAnswerLost,

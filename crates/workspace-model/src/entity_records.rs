@@ -12,7 +12,7 @@ pub type Timestamp = DateTime<Utc>;
 
 macro_rules! closed_states {
     ($name:ident { $($variant:ident),+ }) => {
-        #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
         #[serde(rename_all = "camelCase")]
         pub enum $name { $($variant),+ }
     };
@@ -40,7 +40,7 @@ closed_states!(MemberRole {
 });
 closed_states!(NotificationSetting { On, Off });
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "role",
@@ -52,13 +52,13 @@ pub enum RoleName {
     Deliverable(DeliverableRole),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum AssignmentState {
     Active,
     Ended { at: Timestamp },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MembershipState {
     Joined,
@@ -67,7 +67,7 @@ pub enum MembershipState {
 
 macro_rules! records {
     ($($name:ident { $($field:ident: $value:ty),* $(,)? }),+ $(,)?) => {$ (
-        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
         pub struct $name { $(pub $field: $value),* }
     )+};
@@ -92,7 +92,7 @@ records! {
     ReadMark { read_mark_id: ReadMarkId, actor_identity_id: ActorIdentityId, scope: ReadScope, through_position: ChangePosition }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -122,7 +122,7 @@ impl Identity {
         }
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "body",
@@ -133,7 +133,7 @@ pub enum WorkLogBody {
     Visible(TrailText),
     Redacted,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -153,7 +153,7 @@ pub enum Addressee {
         role: DeliverableRole,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReadScope {
     /// One inbox mark per area and per project, so reading one scope never
@@ -170,7 +170,7 @@ pub enum ReadScope {
 }
 
 /// A subject exists only for events about a holder/member; there is no nullable bag.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",

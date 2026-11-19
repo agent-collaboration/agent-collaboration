@@ -146,7 +146,7 @@ fn ack_is_a_connected_id_keyed_frame_without_a_pending_call() {
     let message_id: workspace_model::MessageId =
         "01890f2e-7b4c-7cc0-98c4-000000000009".parse().unwrap();
     let answer = DeliveryAnswer::Refused {
-        reason: MessageRefusal::RecipientRefused,
+        reason: MessageRefusal::UnknownSession,
     };
     assert_eq!(
         client.acknowledge_delivery(message_id.clone(), answer),
