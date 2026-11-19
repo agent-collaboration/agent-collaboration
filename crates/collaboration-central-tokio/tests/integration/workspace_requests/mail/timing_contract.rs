@@ -11,15 +11,53 @@ use workspace_model::central_mail::{
 fn now(f: &Fixture) -> m::Timestamp {
     f.clock.utc_now()
 }
-fn advance_to(f: &Fixture, at: m::Timestamp) {
+async fn advance_to(f: &Fixture, at: m::Timestamp) {
     let delta = at - now(f);
-    f.clock.advance(delta.to_std().unwrap()).unwrap();
+    f.advance(delta.to_std().unwrap()).await;
 }
+/// Advances to `at` and waits for the host's driver to complete that alarm.
+/// The move holds the clock's gate: it waits for every held drive, so a drive
+/// from an earlier clock position cannot finish after the move and pass for
+/// this alarm, and the alarm and counts it reads cannot change under it.
+/// Instead of waiting forever it fails loudly when the driver reports a failed
+/// drive (its retry is the next mark, which this manual clock never reaches)
+/// or re-checks its published alarm and finds it not due at `at`.
 async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let failures = r.alarm_failures().len();
+    let held = f.clock.hold_move().await;
+    assert_eq!(
+        r.alarm_failures().len(),
+        failures,
+        "a drive held across the dispatch to {at} failed: {:?}",
+        r.alarm_failures()
+    );
+    let published = r.statement_host().alarm();
     let count = r.alarm_completion_count();
-    advance_to(f, at);
-    r.until_alarm_completed(count + 1).await;
+    held.advance((at - now(f)).to_std().unwrap()).unwrap();
+    drop(held);
+    let not_due = async {
+        match published {
+            Some(alarm) if alarm.unix_millis() > at.timestamp_millis() => {
+                f.clock
+                    .not_due_check_now(f.clock.wall_deadline(alarm))
+                    .await;
+            }
+            _ => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        () = r.until_alarm_completed(count + 1) => {}
+        () = r.until_alarm_failed(failures + 1) => panic!(
+            "the alarm driver failed at {at} instead of completing: {:?}; published alarm {published:?}; due batch {:?}",
+            r.alarm_failures(),
+            r.due_batch_snapshot()
+        ),
+        () = not_due => panic!(
+            "the published alarm {published:?} is after the dispatch time {at}; due batch {:?}",
+            r.due_batch_snapshot()
+        ),
+    }
     assert_eq!(r.alarm_completion_count(), count + 1);
 }
 async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: Op) -> Result {
@@ -77,7 +115,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     );
     let mark = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
-    advance_to(f, mark);
+    advance_to(f, mark).await;
     for (index, due) in [
         mark + chrono::Duration::seconds(60),
         mark + chrono::Duration::nanoseconds(1),
@@ -168,7 +206,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         request(f, &f.caller, 40021, Op::CancelWake { wake_id }).await,
         Result::Done(_)
     ));
-    advance_to(f, mark + chrono::Duration::seconds(143));
+    advance_to(f, mark + chrono::Duration::seconds(143)).await;
     let interval = request(
         f,
         &f.caller,
@@ -266,7 +304,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     ));
     let mut direct_ids = Vec::new();
     for index in 0..3 {
-        advance_to(f, first + chrono::Duration::seconds(index * 10 + 1));
+        advance_to(f, first + chrono::Duration::seconds(index * 10 + 1)).await;
         let sent = request(
             f,
             &f.caller,
@@ -306,7 +344,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     let immediate = r.queued_for_session(&target).await.unwrap();
     assert_eq!(immediate.messages.len(), 4);
     let direct_mark = first + chrono::Duration::minutes(1);
-    advance_to(f, direct_mark);
+    advance_to(f, direct_mark).await;
     let queue = r.queued_for_session(&target).await.unwrap();
     let mut expected_ids = vec![before_direct.messages[0].message_id.clone()];
     expected_ids.extend(direct_ids.clone());
@@ -419,11 +457,13 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     review_corrections::exercise_shorter_cadence(f).await;
     review_corrections::exercise_non_utc_and_terminal_rows(f).await;
     review_corrections::exercise_late_drain(f).await;
+    in_flight_drive::exercise_dispatch_settles_an_in_flight_drive(f).await;
+    in_flight_drive::exercise_a_clock_move_settles_an_in_flight_drive(f).await;
     review_corrections::exercise_cadence_change_after_clock_rollback(f).await;
 }
 
 async fn exercise_expiry(f: &mut Fixture) {
-    advance_to(f, now(f) + chrono::Duration::seconds(1));
+    advance_to(f, now(f) + chrono::Duration::seconds(1)).await;
     let admission = now(f);
     let result = request(
         f,
@@ -498,3 +538,5 @@ mod stored_validation;
 mod review_corrections;
 
 mod admission_refusals;
+
+mod in_flight_drive;

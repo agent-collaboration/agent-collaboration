@@ -21,4 +21,5 @@ mod setup;
 
 mod engine_admin;
 mod engine_admin_support;
+mod engine_failing_retry;
 mod engine_unit_revival;

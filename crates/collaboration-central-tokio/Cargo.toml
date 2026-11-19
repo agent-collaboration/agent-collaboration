@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-test-support = ["collaboration-central-core/test-support", "conformance", "collaboration-central-conformance/client", "dep:board-sync-protocol", "dep:reqwest-websocket"]
+test-support = ["collaboration-central-core/test-support", "router-clock/test-support", "conformance", "collaboration-central-conformance/client", "dep:board-sync-protocol", "dep:reqwest-websocket"]
 conformance = ["collaboration-central-core/conformance", "dep:collaboration-central-conformance", "dep:sqlx-core"]
 
 [dependencies]
@@ -73,6 +73,7 @@ sqlx-core.workspace = true
 tempfile = "3.27.0"
 tracing-subscriber.workspace = true
 turso_parser = { version = "=0.8.1", features = ["serde"] }
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 
 [[example]]
 name = "step_scope_workerd"

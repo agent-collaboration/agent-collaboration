@@ -72,7 +72,8 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
         "B has never been named before the clock moves"
     );
     f.clock
-        .advance(Duration::from_secs(MOVE_SECONDS.try_into()?))?;
+        .advance(Duration::from_secs(MOVE_SECONDS.try_into()?))
+        .await?;
     let moved = (signed::NOW_SECONDS + MOVE_SECONDS) * 1000;
     assert!(!b_file.exists(), "advancing the clock must not open B");
     let later = signed::first_statement(B, signed::NOW_SECONDS, MOVE_SECONDS)?;
@@ -134,9 +135,11 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
         vec![vec![number(moved)?, number(moved)?]]
     );
     assert_eq!(f.digest(A).await?.status, 200);
-    f.clock.advance(Duration::from_secs(
-        (expiry - (signed::NOW_SECONDS + MOVE_SECONDS)).try_into()?,
-    ))?;
+    f.clock
+        .advance(Duration::from_secs(
+            (expiry - (signed::NOW_SECONDS + MOVE_SECONDS)).try_into()?,
+        ))
+        .await?;
     let facts = f.digest(A).await?;
     assert_eq!(
         facts.status, 200,
@@ -185,7 +188,7 @@ async fn cold_expired_valid_stamp_refuses_and_an_unaffected_organization_stays_r
         (200, 200)
     );
     let before = f.snapshot().await?;
-    f.clock.advance(Duration::from_secs(2))?;
+    f.clock.advance(Duration::from_secs(2)).await?;
     f.reopen().await?;
     let facts = f.digest(A).await?;
     assert_eq!(

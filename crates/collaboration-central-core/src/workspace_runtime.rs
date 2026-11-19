@@ -41,6 +41,9 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) central_turn: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-support")]
     pub(crate) completed_alarms: tokio::sync::watch::Sender<u64>,
+    /// Test-support record of every alarm drive that failed, in order.
+    #[cfg(feature = "test-support")]
+    failed_alarms: tokio::sync::watch::Sender<Vec<String>>,
     #[cfg(feature = "test-support")]
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
@@ -72,6 +75,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             central_turn: tokio::sync::Mutex::new(()),
             #[cfg(feature = "test-support")]
             completed_alarms: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            failed_alarms: tokio::sync::watch::channel(Vec::new()).0,
             #[cfg(feature = "test-support")]
             legacy_invocations: Default::default(),
             signin_authority: Default::default(),
@@ -123,6 +128,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn due_unit_starts(&self) -> Vec<crate::DueUnitStart> {
         self.due_batches.unit_starts()
     }
+    /// Test-support record of every claimed due-batch start, one per batch.
+    #[cfg(feature = "test-support")]
+    pub fn due_batch_starts(&self) -> Vec<i64> {
+        self.due_batches.claimed_starts()
+    }
     #[cfg(feature = "test-support")]
     pub fn legacy_unit_invocations(&self) -> LegacyUnitInvocations {
         *self
@@ -152,6 +162,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub async fn until_alarm_completed(&self, count: u64) {
         let mut completed = self.completed_alarms.subscribe();
         let _ = completed.wait_for(|current| *current >= count).await;
+    }
+    /// The host's alarm driver reports a failed drive (it retries at the next mark).
+    #[cfg(feature = "test-support")]
+    pub fn mark_alarm_failed(&self, failure: String) {
+        self.failed_alarms
+            .send_modify(|failures| failures.push(failure));
+    }
+    #[cfg(feature = "test-support")]
+    pub fn alarm_failures(&self) -> Vec<String> {
+        self.failed_alarms.borrow().clone()
+    }
+    #[cfg(feature = "test-support")]
+    pub async fn until_alarm_failed(&self, count: usize) {
+        let mut failed = self.failed_alarms.subscribe();
+        let _ = failed.wait_for(|failures| failures.len() >= count).await;
     }
     pub(crate) async fn take_central_turn(&self) -> tokio::sync::MutexGuard<'_, ()> {
         #[cfg(not(feature = "test-support"))]

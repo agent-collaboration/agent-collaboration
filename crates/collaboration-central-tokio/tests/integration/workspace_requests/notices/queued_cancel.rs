@@ -44,7 +44,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     f.clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(900)))
         .await;
-    f.clock.advance(Duration::from_secs(900)).unwrap();
+    f.advance(Duration::from_secs(900)).await;
     fired.until_held().await;
     let rows = runtime.statement_host().read(Statement {
         sql: "SELECT message_id,state,sender,body FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",

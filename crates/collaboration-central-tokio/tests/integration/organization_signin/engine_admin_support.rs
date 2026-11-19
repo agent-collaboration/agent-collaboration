@@ -92,8 +92,8 @@ impl EngineOrg {
     pub fn now(&self) -> Time {
         self.f.clock.utc_now()
     }
-    pub fn set(&self, at: Time) {
-        self.f.clock.set_utc(at);
+    pub async fn set(&self, at: Time) {
+        self.f.clock.set_utc(at).await;
     }
     /// A fresh UUIDv7 for requests and operation IDs at the held time.
     pub fn fresh(&self) -> String {
@@ -235,7 +235,7 @@ impl EngineOrg {
         })
         .await;
     }
-    async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
+    pub async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
         self.f
             .host
             .request_central(

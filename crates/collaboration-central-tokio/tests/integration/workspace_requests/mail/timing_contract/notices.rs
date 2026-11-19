@@ -26,7 +26,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         central_storage::BatchOutcome::Applied { .. }
     ));
     drop(runtime);
-    advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap());
+    advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap()).await;
     let mut recipients = Vec::new();
     for (index, (cadence, seconds)) in [
         (m::NoticeCadence::M15, 900_i64),
@@ -158,7 +158,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         advance_to(
             f,
             start + chrono::Duration::seconds(i64::try_from(index).unwrap() * 10),
-        );
+        )
+        .await;
         let item = created(
             call(
                 &f.host,
@@ -210,10 +211,24 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     let safety_mark = now(f) + chrono::Duration::seconds(5);
     let callbacks = r.alarm_completion_count();
     assert!(r.statement_host().alarm().unwrap().unix_millis() > safety_mark.timestamp_millis());
-    f.clock
-        .not_due_check_now(f.clock.wall_deadline(r.statement_host().alarm().unwrap()))
-        .await;
-    advance_to(f, safety_mark);
+    // A failed drive parks the driver on its next-mark retry, so it would never
+    // check this alarm; fail loudly with its error instead of waiting forever.
+    let failures = r.alarm_failures().len();
+    tokio::select! {
+        () = f
+            .clock
+            .not_due_check_now(f.clock.wall_deadline(r.statement_host().alarm().unwrap())) => {}
+        () = r.until_alarm_failed(failures + 1) => panic!(
+            "the alarm driver failed instead of checking its alarm: {:?}",
+            r.alarm_failures()
+        ),
+    }
+    assert!(
+        r.alarm_failures().is_empty(),
+        "earlier failed drives: {:?}",
+        r.alarm_failures()
+    );
+    advance_to(f, safety_mark).await;
     assert_eq!(r.alarm_completion_count(), callbacks);
     drop(r);
     f.reopen().await;
@@ -256,7 +271,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         assert_eq!(batch.messages[0].created_at, due);
     }
     // Change M15 to M55 while a second complete cohort is pending, then reopen.
-    advance_to(f, now(f) + chrono::Duration::seconds(1));
+    advance_to(f, now(f) + chrono::Duration::seconds(1)).await;
     let mut second_posts = Vec::new();
     for (index, (workspace, thread)) in threads.iter().enumerate() {
         let post = created(

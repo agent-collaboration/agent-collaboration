@@ -8,7 +8,6 @@ use collaboration_central_tokio::TokioWorkspaceHost;
 use std::sync::Arc;
 use workspace_model as m;
 
-pub(super) use router_clock::ManualClock as HeldClock;
 pub(super) fn id<T: std::str::FromStr>(value: u32) -> T
 where
     T::Err: std::fmt::Debug,
@@ -120,14 +119,14 @@ pub(super) struct Fixture {
     pub host: TokioWorkspaceHost,
     pub caller: WorkspaceCaller,
     pub workspace: m::WorkspaceId,
-    pub clock: Arc<HeldClock>,
+    pub clock: Arc<router_clock::GatedClock>,
     pub root: tempfile::TempDir,
 }
 impl Fixture {
     pub async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let clock = Arc::new(
-            HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
                 1_794_571_200_000,
             ))
             .unwrap(),
@@ -145,6 +144,27 @@ impl Fixture {
             clock,
             root,
         }
+    }
+    /// Moves the clock forward once every held alarm drive has finished; no
+    /// drive starts during the move (the clock's gate).
+    pub async fn advance(&self, step: std::time::Duration) {
+        self.clock.advance(step).await.unwrap();
+    }
+    /// Moves the clock to `at` under the same gate.
+    pub async fn advance_to(&self, at: runtime_primitives::SyncTime) {
+        self.clock.advance_to(at).await.unwrap();
+    }
+    /// Sets the wall clock under the same gate.
+    pub async fn set_utc(&self, utc: chrono::DateTime<chrono::Utc>) {
+        self.clock.set_utc(utc).await;
+    }
+    /// The one deliberate overlap (mail/engine_failure_overlap).
+    pub fn set_utc_while_a_batch_is_held(&self, utc: chrono::DateTime<chrono::Utc>) {
+        self.clock.set_utc_while_a_batch_is_held(utc);
+    }
+    /// The same clock, read-only, for a runtime a case builds itself.
+    pub fn shared_for_runtime(&self) -> Arc<dyn router_clock::RuntimeClock> {
+        self.clock.clone()
     }
     pub async fn call(&self, request: u32, operation: m::WorkspaceOperation) -> m::WorkspaceReply {
         call(

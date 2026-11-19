@@ -129,7 +129,7 @@ async fn eight_held_units_fill_the_fan_out_and_no_ninth_starts() {
         .collect();
     driver_settled(&fixture, &runtime).await;
     let before = runtime.legacy_unit_invocations();
-    fixture.clock.set_utc(at(start, 5, 0, 0));
+    fixture.set_utc(at(start, 5, 0, 0)).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }

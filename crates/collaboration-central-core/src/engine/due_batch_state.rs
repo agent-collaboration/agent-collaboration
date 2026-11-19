@@ -33,6 +33,9 @@ pub struct DueBatchState {
     claim_waiting: tokio::sync::watch::Sender<usize>,
     #[cfg(feature = "test-support")]
     unit_starts: Mutex<Vec<DueUnitStart>>,
+    /// One entry per claimed batch, so two batches at one millisecond stay two.
+    #[cfg(feature = "test-support")]
+    claimed_starts: Mutex<Vec<i64>>,
 }
 
 impl Default for DueBatchState {
@@ -44,6 +47,8 @@ impl Default for DueBatchState {
             claim_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             unit_starts: Mutex::new(Vec::new()),
+            #[cfg(feature = "test-support")]
+            claimed_starts: Mutex::new(Vec::new()),
         }
     }
 }
@@ -100,7 +105,14 @@ impl DueBatchState {
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
-                Ok(_) => return Ok(true),
+                Ok(_) => {
+                    #[cfg(feature = "test-support")]
+                    self.claimed_starts
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .push(now_unix_millis);
+                    return Ok(true);
+                }
                 Err(actual) => prior = actual,
             }
         }
@@ -178,6 +190,15 @@ impl DueBatchState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(start);
+    }
+
+    /// The start time of every due batch this object claimed, in claim order.
+    #[cfg(feature = "test-support")]
+    pub fn claimed_starts(&self) -> Vec<i64> {
+        self.claimed_starts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// Every unit started by this object's due batches, in start order.
