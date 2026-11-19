@@ -154,7 +154,59 @@ impl ProviderConnectionActivity {
                     .or_default()
                     .insert(tool_id.to_owned());
             }
-            matches!(effect, ToolOwnershipEffect::ForwardFrame { .. })
+            matches!(
+                effect,
+                ToolOwnershipEffect::ForwardFrame { .. } | ToolOwnershipEffect::CheckRetainedItem
+            )
+        })
+    }
+
+    pub(crate) fn may_project_tool_update(
+        &self,
+        session_id: &str,
+        tool_id: &str,
+        generation: SessionGeneration,
+        item_exists: bool,
+    ) -> bool {
+        self.session_cells.read(session_id, |cell| {
+            let state = self.lock_state();
+            let owner = state.tool_owners.get(tool_id)
+                .and_then(|owners| owners.get(session_id))
+                .copied();
+            // A deferred frame must be checked where the item can be read.
+            if !matches!(owner, Some(ToolOwnership::Retired { .. })) {
+                return true;
+            }
+            let Some(phase) = state.phase(session_id, &cell.lifecycle) else {
+                return false;
+            };
+            let (_, effect) = reduce_tool_ownership(
+                owner,
+                ToolOwnershipEvent::ProjectRetiredUpdate { phase, item_exists },
+            );
+            matches!(effect, ToolOwnershipEffect::ContinueRetainedItem { generation: owner } if owner == generation)
+        })
+    }
+
+    pub(crate) fn allows_session_permission(&self, session_id: &str, tool_id: &str) -> bool {
+        self.session_cells.read(session_id, |cell| {
+            let state = self.lock_state();
+            // Permission requests already name a session, so an unobserved
+            // ID uses the existing explicit-session approval path.
+            let Some(owner) = state
+                .tool_owners
+                .get(tool_id)
+                .and_then(|owners| owners.get(session_id))
+                .copied()
+            else {
+                return true;
+            };
+            let Some(phase) = state.phase(session_id, &cell.lifecycle) else {
+                return false;
+            };
+            let (_, effect) =
+                reduce_tool_ownership(Some(owner), ToolOwnershipEvent::Callback { phase });
+            matches!(effect, ToolOwnershipEffect::ResolveOwner { .. })
         })
     }
 

@@ -155,6 +155,9 @@ pub(crate) async fn observe_idle_session_update(
                 tracing::warn!("malformed idle ACP session update");
                 return Ok(());
             };
+            if !accept_tool_update(&parsed.update, item_projection, runtime_handles, session_id) {
+                return Ok(());
+            }
             update_live_settings(&parsed.update, runtime_handles, session_id)
                 .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
             item_projection
@@ -163,6 +166,24 @@ pub(crate) async fn observe_idle_session_update(
         }
         Dispatch::Notification(_) | Dispatch::Response(_, _) => Ok(()),
     }
+}
+
+fn accept_tool_update(
+    update: &SessionUpdate,
+    projection: &ProviderItemProjection,
+    handles: &ProviderSessionRuntimeHandles,
+    session_id: &str,
+) -> bool {
+    let SessionUpdate::ToolCallUpdate(update) = update else {
+        return true;
+    };
+    let tool_id = update.tool_call_id.0.as_ref();
+    handles.tool_registry.may_project_tool_update(
+        session_id,
+        tool_id,
+        handles.run_generation,
+        projection.has_tool_item(tool_id),
+    )
 }
 
 fn projection_error(error: ItemProjectionError) -> ExternalProviderRuntimeError {
@@ -295,6 +316,14 @@ async fn record_prompt_update(
             let mut sink_closed = false;
             let handled = MatchDispatch::new(dispatch)
                 .if_notification(async |notification: SessionNotification| {
+                    if !accept_tool_update(
+                        &notification.update,
+                        session_context.item_projection,
+                        session_context.runtime_handles,
+                        session_context.session_id,
+                    ) {
+                        return Ok(());
+                    }
                     if update_live_settings(
                         &notification.update,
                         session_context.runtime_handles,

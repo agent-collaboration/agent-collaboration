@@ -90,6 +90,8 @@ fn a_late_callback_for_an_ended_runs_tool_call_is_dropped_in_the_next_run() {
     assert!(registry.observe_tool("session", "old-tool", ToolObservation::Announcement));
     assert!(registry.observe_tool("session", "old-tool", ToolObservation::Continuation));
     assert!(registry.claim_turn_end("session", first_turn));
+    assert!(!registry.allows_session_permission("session", "old-tool"));
+    assert!(registry.allows_session_permission("session", "unseen-permission-tool"));
     let second = reload(&registry, "session", first);
     let _second_turn = start_turn(&registry, "session", second);
 

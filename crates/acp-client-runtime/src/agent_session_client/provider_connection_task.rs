@@ -118,6 +118,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task_session_settings = Arc::clone(&session_settings);
         let tool_registry = Arc::new(ProviderConnectionActivity::new(Arc::clone(&session_cells)));
         let task_tool_registry = Arc::clone(&tool_registry);
+        let permission_tool_registry = Arc::clone(&tool_registry);
         let retirement_registry = Arc::clone(&tool_registry);
         let todo_state = Arc::new(CursorPlanItems::default());
         let task_todo_state = Arc::clone(&todo_state);
@@ -235,6 +236,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
                         #[cfg(any(test, feature = "test-observation"))]
                         callback_permission_request_count.fetch_add(1, Ordering::Relaxed);
+                        if !permission_tool_registry.allows_session_permission(
+                            request.session_id.0.as_ref(),
+                            request.tool_call.tool_call_id.0.as_ref(),
+                        ) {
+                            return responder.respond(
+                                agent_client_protocol::schema::v1::RequestPermissionResponse::new(
+                                    agent_client_protocol::schema::v1::RequestPermissionOutcome::Cancelled,
+                                ),
+                            );
+                        }
                         let in_folder_allowance = crate::in_folder_allowance::active_grant(
                             &callback_in_folder_grants,
                             request.session_id.0.as_ref(),

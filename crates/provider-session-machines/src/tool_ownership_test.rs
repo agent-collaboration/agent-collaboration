@@ -100,10 +100,12 @@ fn tool_frames_and_callbacks_stay_with_the_generation_that_observed_them(case: h
                 if matches!(previous, Some(ToolOwnership::Retired { .. }))
                     && !matches!(phase, ToolSessionPhase::Loading { .. })
                 {
-                    assert_eq!(
-                        effect,
-                        ToolOwnershipEffect::None,
-                        "live phase accepted a retired ID"
+                    assert!(
+                        matches!(
+                            effect,
+                            ToolOwnershipEffect::None | ToolOwnershipEffect::CheckRetainedItem
+                        ),
+                        "a live frame or callback accepted a retired ID before projection"
                     );
                 }
                 match effect {
@@ -142,6 +144,16 @@ fn tool_frames_and_callbacks_stay_with_the_generation_that_observed_them(case: h
                             !observations.contains_key(&id),
                             "observed ID reached the unknown fallback"
                         );
+                    }
+                    ToolOwnershipEffect::CheckRetainedItem => assert!(matches!(
+                        event,
+                        ToolOwnershipEvent::Observe {
+                            phase: ToolSessionPhase::LiveIdle { generation },
+                            observation: ToolObservation::Continuation,
+                        } if matches!(previous, Some(ToolOwnership::Retired { generation: prior }) if prior == generation)
+                    )),
+                    ToolOwnershipEffect::ContinueRetainedItem { .. } => {
+                        panic!("a frame published before consulting the projection")
                     }
                     ToolOwnershipEffect::None => {}
                 }
@@ -215,5 +227,62 @@ fn an_owned_id_cannot_publish_in_another_generation() {
             (Some(old), ToolOwnershipEffect::None),
             "a second generation used the first generation's tool"
         );
+    }
+}
+
+#[hegel::test]
+fn only_same_generation_idle_completion_of_an_existing_item_publishes(case: hegel::TestCase) {
+    let prior = u64::from(case.draw(gs::integers::<u8>()));
+    let newer = prior + u64::from(case.draw(gs::integers::<u8>().min_value(1)));
+    let owner = Some(ToolOwnership::Retired {
+        generation: generation(prior),
+    });
+    let turn = TurnId(uuid::Uuid::from_u128(
+        0x0000_0000_0000_7000_8000_0000_0000_0001,
+    ));
+    for current in [generation(prior), generation(newer)] {
+        let idle = ToolSessionPhase::LiveIdle {
+            generation: current,
+        };
+        let running = ToolSessionPhase::LiveRunning {
+            generation: current,
+            turn,
+        };
+        for phase in [idle, running] {
+            for item_exists in [true, false] {
+                let (after, effect) = reduce_tool_ownership(
+                    owner,
+                    ToolOwnershipEvent::ProjectRetiredUpdate { phase, item_exists },
+                );
+                assert_eq!(after, owner);
+                if current == generation(prior) && phase == idle && item_exists {
+                    assert_eq!(
+                        effect,
+                        ToolOwnershipEffect::ContinueRetainedItem {
+                            generation: current
+                        },
+                        "same-generation idle completion must publish"
+                    );
+                } else {
+                    assert_eq!(
+                        effect,
+                        ToolOwnershipEffect::None,
+                        "an older, running, or absent item must never publish"
+                    );
+                }
+            }
+            for event in [
+                ToolOwnershipEvent::Observe {
+                    phase,
+                    observation: ToolObservation::Announcement,
+                },
+                ToolOwnershipEvent::Callback { phase },
+            ] {
+                assert_eq!(
+                    reduce_tool_ownership(owner, event),
+                    (owner, ToolOwnershipEffect::None)
+                );
+            }
+        }
     }
 }

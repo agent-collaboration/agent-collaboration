@@ -61,6 +61,10 @@ pub enum ToolOwnershipEvent {
     Callback {
         phase: ToolSessionPhase,
     },
+    ProjectRetiredUpdate {
+        phase: ToolSessionPhase,
+        item_exists: bool,
+    },
     TurnEnded {
         generation: SessionGeneration,
         turn: TurnId,
@@ -73,9 +77,20 @@ pub enum ToolOwnershipEvent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolOwnershipEffect {
     None,
-    ForwardFrame { generation: SessionGeneration },
-    ResolveOwner { generation: SessionGeneration },
-    UseSoleRunningTurn { generation: SessionGeneration },
+    ForwardFrame {
+        generation: SessionGeneration,
+    },
+    /// The frame may reach the actor, which owns knowledge of its items.
+    CheckRetainedItem,
+    ContinueRetainedItem {
+        generation: SessionGeneration,
+    },
+    ResolveOwner {
+        generation: SessionGeneration,
+    },
+    UseSoleRunningTurn {
+        generation: SessionGeneration,
+    },
 }
 
 /// None means the connection has no observation for this key. Retirement
@@ -113,6 +128,23 @@ pub fn reduce_tool_ownership(
                 ForwardFrame { generation },
             )
         }
+        (
+            Some(Retired { generation: prior }),
+            ToolOwnershipEvent::Observe {
+                phase: LiveIdle { generation },
+                observation: ToolObservation::Continuation,
+            },
+        ) if prior == generation => (owner, ToolOwnershipEffect::CheckRetainedItem),
+        (
+            Some(Retired { generation: prior }),
+            ToolOwnershipEvent::ProjectRetiredUpdate {
+                phase: LiveIdle { generation },
+                item_exists: true,
+            },
+        ) if prior == generation => (
+            owner,
+            ToolOwnershipEffect::ContinueRetainedItem { generation },
+        ),
         (
             previous,
             ToolOwnershipEvent::Observe {

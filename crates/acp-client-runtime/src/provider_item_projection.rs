@@ -346,6 +346,10 @@ impl ProviderItemProjection {
         self.plan_item = None;
     }
 
+    pub(crate) fn has_tool_item(&self, tool_id: &str) -> bool {
+        self.tool_items.contains_key(tool_id)
+    }
+
     pub(crate) fn finish_text(&mut self) -> Result<(), ItemProjectionError> {
         if let Some(active) = self.active_text.take() {
             self.emit(SessionEvent::ItemCompleted {
