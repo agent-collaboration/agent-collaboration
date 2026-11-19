@@ -12,7 +12,7 @@ use axum::{
 };
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, ProtocolError, ReplyPayload, RequestPayload,
-    TokenRenewalRefusal, TokenRenewalResult, decode_text, encode_text,
+    RequestStatusAnswer, TokenRenewalRefusal, TokenRenewalResult, decode_text, encode_text,
 };
 use collaboration_central_core::{ValidatedMachineConnection, WorkspaceCaller, WorkspaceRuntime};
 use fleet_identity_protocol::OrganizationId;
@@ -248,6 +248,53 @@ async fn serve_link(
                     result,
                 });
                 if !send_frame(&mut socket, &state.stop, &answer).await {
+                    return;
+                }
+            }
+            LinkFrame::Data(DataFrame::RequestStatus {
+                correlation_id,
+                caller,
+                query,
+            }) => {
+                let active = match runtime
+                    .restore_machine_connection(&connection.attachment())
+                    .await
+                {
+                    Ok(Ok(active)) => active,
+                    Ok(Err(_)) => {
+                        close_lapsed_link(&mut socket, &state.stop).await;
+                        return;
+                    }
+                    Err(_) => {
+                        close_link(
+                            &mut socket,
+                            &state.stop,
+                            close_code::ERROR,
+                            "central unavailable",
+                        )
+                        .await;
+                        return;
+                    }
+                };
+                let result = match WorkspaceCaller::new(active, caller) {
+                    Ok(caller) => runtime.request_status(&caller, &query).await,
+                    Err(_) => Ok(RequestStatusAnswer::NotFound),
+                };
+                let Ok(result) = result else {
+                    close_link(
+                        &mut socket,
+                        &state.stop,
+                        close_code::ERROR,
+                        "central unavailable",
+                    )
+                    .await;
+                    return;
+                };
+                let reply = LinkFrame::Data(DataFrame::RequestStatusReply {
+                    correlation_id,
+                    result: Box::new(result),
+                });
+                if !send_frame(&mut socket, &state.stop, &reply).await {
                     return;
                 }
             }

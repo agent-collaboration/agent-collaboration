@@ -40,6 +40,31 @@ pub(crate) struct ActorIdentityPlan {
 }
 
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+    /// Find the caller's actor without minting one on a status read.
+    pub(crate) async fn existing_caller_actor(
+        &self,
+        caller: &workspace_model::Caller,
+    ) -> Result<Option<ActorIdentityId>, StoreFailure> {
+        let identity = match caller {
+            workspace_model::Caller::Session(session) => Identity::AgentSession {
+                session: session.clone(),
+            },
+            workspace_model::Caller::Person { person_id, .. } => Identity::Person {
+                person_id: person_id.clone(),
+            },
+        };
+        let (kind, encoded) = identity_fields(&identity)?;
+        let rows = self.host.read(identity_lookup(kind, &encoded)).await?;
+        match rows.rows.as_slice() {
+            [] => Ok(None),
+            [row] => string(&rows, row, "actor_identity_id")?
+                .parse()
+                .map(Some)
+                .map_err(|_| corrupt("access_actor_identities.actor_identity_id")),
+            _ => Err(corrupt("access_actor_identities.identity")),
+        }
+    }
+
     /// Caller holds the org turn and supplies its sole applying time sample.
     pub(crate) async fn prepare_identity(
         &self,
