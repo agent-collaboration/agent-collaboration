@@ -39,7 +39,7 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
     // The observer's join also opened a window for the thread creator.
     assert_eq!(runtime.after_event().await.unwrap().windows_fired, 2);
     let query = || Statement {
-        sql: "SELECT message_id,sender,body,state FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",
+        sql: "SELECT message_id,sender,body,state FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",
         args: vec![text(&recipient), text(&thread)],
     };
     let before = runtime.read(query()).await.unwrap();
@@ -86,7 +86,7 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
     assert_eq!(after.rows[0][3], text("cancelled"));
     let direct = runtime
         .read(Statement {
-            sql: "SELECT state FROM messages WHERE message_id=? AND message_kind='direct'",
+            sql: "SELECT state FROM mail_messages WHERE message_id=? AND message_kind='direct'",
             args: vec![text(&direct_id)],
         })
         .await

@@ -324,7 +324,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     let earliest_cancel = r
         .statement_host()
         .read(super::super::Statement {
-            sql: "SELECT MIN(cancel_due_at) FROM messages WHERE state='queued'",
+            sql: "SELECT MIN(cancel_due_at) FROM mail_messages WHERE state='queued'",
             args: vec![],
         })
         .await
@@ -471,7 +471,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     )
     .await;
     assert!(!matches!(refused.result, m::WorkspaceResult::Done(_)));
-    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence FROM actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
+    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence FROM access_actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
     assert_eq!(policy.rows, vec![vec![text("m25")]]);
     drop(r);
     notices::exercise_notice_cadences(f).await;
@@ -510,7 +510,7 @@ async fn exercise_expiry(f: &mut Fixture) {
     let row = r
         .statement_host()
         .read(Statement {
-            sql: "SELECT expires_at FROM automations WHERE automation_id=?",
+            sql: "SELECT expires_at FROM automation_schedules WHERE automation_id=?",
             args: vec![text(&automation_id)],
         })
         .await
@@ -529,7 +529,7 @@ async fn exercise_expiry(f: &mut Fixture) {
     )
     .await;
     let r = f.host.central(&f.caller.organization_id).await;
-    let row=r.statement_host().read(Statement{sql:"SELECT state,next_due_at,(SELECT COUNT(*) FROM messages WHERE json_extract(body,'$.automation_id')=? OR json_extract(body,'$.automationId')=?) FROM automations WHERE automation_id=?",args:vec![text(&automation_id),text(&automation_id),text(&automation_id)]}).await.unwrap();
+    let row=r.statement_host().read(Statement{sql:"SELECT state,next_due_at,(SELECT COUNT(*) FROM mail_messages WHERE json_extract(body,'$.automation_id')=? OR json_extract(body,'$.automationId')=?) FROM automation_schedules WHERE automation_id=?",args:vec![text(&automation_id),text(&automation_id),text(&automation_id)]}).await.unwrap();
     assert_eq!(
         row.rows,
         vec![vec![

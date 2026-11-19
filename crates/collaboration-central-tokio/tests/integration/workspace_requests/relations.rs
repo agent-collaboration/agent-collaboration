@@ -195,7 +195,7 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT item_kind FROM changes WHERE change_kind='removed' ORDER BY position",
+                sql: "SELECT item_kind FROM workspace_changes WHERE change_kind='removed' ORDER BY position",
                 args: vec![],
             },
         )

@@ -31,55 +31,55 @@ async fn each_corrupt_timer_fails_alone_retires_on_the_next_pass_and_is_never_vi
 
     let healthy_wake = set_wake(&fixture, 4000, first_mark, "healthy wake").await;
     let healthy_automation = set_automation_at(&fixture, 4001, first_mark, "healthy").await;
-    let wake_row = "SELECT * FROM wakes WHERE wake_id=?";
-    let automation_row = "SELECT * FROM automations WHERE automation_id=?";
+    let wake_row = "SELECT * FROM automation_wakes WHERE wake_id=?";
+    let automation_row = "SELECT * FROM automation_schedules WHERE automation_id=?";
     let corrupt = [
         Corrupt {
             kind: "wake_timer",
             key: set_wake(&fixture, 4002, first_mark, "bad target").await,
-            column: "wakes.target",
+            column: "automation_wakes.target",
             table_row: wake_row,
         },
         Corrupt {
             kind: "wake_timer",
             key: set_wake(&fixture, 4003, first_mark, "bad due").await,
-            column: "wakes.due_at",
+            column: "automation_wakes.due_at",
             table_row: wake_row,
         },
         Corrupt {
             kind: "wake_timer",
             key: set_wake(&fixture, 4004, first_mark, "bad state").await,
-            column: "wakes.state",
+            column: "automation_wakes.state",
             table_row: wake_row,
         },
         Corrupt {
             kind: "automation_timer",
             key: set_automation_at(&fixture, 4005, first_mark, "bad timing").await,
-            column: "automations.timing_rule",
+            column: "automation_schedules.timing_rule",
             table_row: automation_row,
         },
     ];
     raw(
         &runtime,
-        "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+        "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
         vec![text(&corrupt[0].key)],
     )
     .await;
     raw(
         &runtime,
-        "UPDATE wakes SET due_at='not-a-time' WHERE wake_id=?",
+        "UPDATE automation_wakes SET due_at='not-a-time' WHERE wake_id=?",
         vec![text(&corrupt[1].key)],
     )
     .await;
     raw(
         &runtime,
-        "UPDATE wakes SET state='damaged' WHERE wake_id=?",
+        "UPDATE automation_wakes SET state='damaged' WHERE wake_id=?",
         vec![text(&corrupt[2].key)],
     )
     .await;
     raw(
         &runtime,
-        "UPDATE automations SET timing_rule='not-json' WHERE automation_id=?",
+        "UPDATE automation_schedules SET timing_rule='not-json' WHERE automation_id=?",
         vec![text(&corrupt[3].key)],
     )
     .await;

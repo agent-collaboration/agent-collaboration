@@ -70,7 +70,7 @@ async fn two_in_flight_requests_keep_distinct_correlations_and_payloads() -> Res
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT name FROM workspaces ORDER BY name",
+            sql: "SELECT name FROM directory_workspaces ORDER BY name",
             args: vec![],
         })
         .await?;
@@ -115,7 +115,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                    sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                     args: vec![
                         SqlValue::Text(serde_json::to_string(&vec![
                             workspace.workspace_id.clone(),
@@ -147,7 +147,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
     let store = workspace_store(&fixture, &workspace.workspace_id);
     let committed = store
         .read(Statement {
-            sql: "SELECT request_id,answer FROM request_log",
+            sql: "SELECT request_id,answer FROM workspace_request_log",
             args: vec![],
         })
         .await?;
@@ -174,7 +174,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
     assert_eq!(
         store
             .read(Statement {
-                sql: "SELECT area_id,name FROM areas",
+                sql: "SELECT area_id,name FROM workspace_areas",
                 args: vec![]
             })
             .await?
@@ -192,7 +192,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
     assert_eq!(
         store
             .read(Statement {
-                sql: "SELECT area_id,name FROM areas",
+                sql: "SELECT area_id,name FROM workspace_areas",
                 args: vec![]
             })
             .await?
@@ -202,7 +202,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
     assert_eq!(
         store
             .read(Statement {
-                sql: "SELECT request_id,answer FROM request_log",
+                sql: "SELECT request_id,answer FROM workspace_request_log",
                 args: vec![]
             })
             .await?,

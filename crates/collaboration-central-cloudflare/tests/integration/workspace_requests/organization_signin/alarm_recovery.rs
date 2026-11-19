@@ -86,7 +86,7 @@ async fn digest(f: &Fixture) -> TestResult<(u16, Value)> {
 async fn timer_rows(f: &Fixture) -> TestResult<Vec<Vec<SqlValue>>> {
     let runtime = f.runtime().await;
     Ok(runtime.statement_host().read(Statement {
-        sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM wakes ORDER BY wake_id",
+        sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM automation_wakes ORDER BY wake_id",
         args:vec![],
     }).await?.rows)
 }

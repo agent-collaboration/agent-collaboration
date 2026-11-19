@@ -68,8 +68,8 @@ async fn assert_stale_and_replayed_statements_preserve_rows(
             .0,
             200
         );
-        assert!(&f.read("SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id").await == retained_identity, "replay changed stamp identity or timestamps");
-        assert!(&f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id").await == retained_records, "replay changed record identities or timestamps");
+        assert!(&f.read("SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id").await == retained_identity, "replay changed stamp identity or timestamps");
+        assert!(&f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id").await == retained_records, "replay changed record identities or timestamps");
         let digest = f.post(DIGEST, &json!({"organizationId":ORG})).await;
         assert_eq!(digest.0, 200);
         assert!(
@@ -88,8 +88,8 @@ async fn complete_stamp_metadata_and_record_identity_survive_renewal_and_setup_r
     let first_reply = f.post(PROVISION, &body).await;
     assert_eq!(first_reply.0, 200);
     assert!(first_reply.1 == json!({"result":"provisioned"}));
-    let initial_identity = f.read("SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id").await;
-    let initial_records = f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id").await;
+    let initial_identity = f.read("SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id").await;
+    let initial_records = f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id").await;
     assert_eq!(
         (initial_identity.rows.len(), initial_records.rows.len()),
         (1, 1)
@@ -116,8 +116,8 @@ async fn complete_stamp_metadata_and_record_identity_survive_renewal_and_setup_r
         "initial digest metadata differs"
     );
     assert_eq!(f.post(PROVISION, &body).await.0, 200);
-    assert!(f.read("SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id").await == initial_identity, "setup repeat rewrote identity rows");
-    assert!(f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id").await == initial_records, "setup repeat rewrote record rows");
+    assert!(f.read("SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id").await == initial_identity, "setup repeat rewrote identity rows");
+    assert!(f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id").await == initial_records, "setup repeat rewrote record rows");
 
     f.clock.advance(Duration::from_secs(10)).unwrap();
     f.runtime().await; // Transport the same scenario clock before private HTTP admission.
@@ -132,8 +132,8 @@ async fn complete_stamp_metadata_and_record_identity_survive_renewal_and_setup_r
         .0,
         200
     );
-    let renewed_identity = f.read("SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id").await;
-    let renewed_records = f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id").await;
+    let renewed_identity = f.read("SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id").await;
+    let renewed_records = f.read("SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id").await;
     assert_eq!(
         (renewed_identity.rows.len(), renewed_records.rows.len()),
         (1, 2)

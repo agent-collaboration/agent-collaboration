@@ -142,7 +142,7 @@ pub(super) fn decode_approval_observation(
             Some(client_id),
             Some(seconds_timestamp(
                 last_grant_at,
-                "machine_approvals.last_grant_at",
+                "login_machine_approvals.last_grant_at",
             )?),
         ),
         StoredEnrollmentState::Lapsed => (
@@ -181,15 +181,15 @@ pub(super) fn decode_approval_observation(
             base_generation: checked.base_generation.get(),
             code_expires_at: seconds_timestamp(
                 checked.code_expires_at,
-                "machine_approvals.code_expires_at",
+                "login_machine_approvals.code_expires_at",
             )?,
             machine_client_id,
             last_grant_at,
             ended_at: checked
                 .ended_at_ms
-                .map(|value| timestamp(value, "machine_approvals.ended_at"))
+                .map(|value| timestamp(value, "login_machine_approvals.ended_at"))
                 .transpose()?,
-            created_at: timestamp(checked.approved_at_ms, "machine_approvals.created_at")?,
+            created_at: timestamp(checked.approved_at_ms, "login_machine_approvals.created_at")?,
         },
     ))
 }

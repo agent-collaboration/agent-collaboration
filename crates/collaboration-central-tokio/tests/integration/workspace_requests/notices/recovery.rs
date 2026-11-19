@@ -13,7 +13,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
         let workspace_id = f.workspace.clone();
         let read_cursor = || Statement {
-            sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&workspace_id)],
         };
         let initial = runtime.statement_host().read(read_cursor()).await.unwrap();
@@ -54,7 +54,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             let _ = pending.await;
             drop(applied);
         }
-        let changes = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,position FROM changes WHERE position>? ORDER BY position", args: vec![SqlValue::Integer(initial_position)] }).await.unwrap();
+        let changes = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,position FROM workspace_changes WHERE position>? ORDER BY position", args: vec![SqlValue::Integer(initial_position)] }).await.unwrap();
         assert_eq!(changes.rows.len(), 3);
         for (offset, row) in changes.rows.iter().enumerate() {
             assert_eq!(
@@ -70,7 +70,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             .inspect_workspace(
                 &f.workspace,
                 Statement {
-                    sql: "SELECT COUNT(*) FROM request_log WHERE request_id IN (?,?,?)",
+                    sql: "SELECT COUNT(*) FROM workspace_request_log WHERE request_id IN (?,?,?)",
                     args: vec![
                         text(id::<m::RequestId>(7212)),
                         text(id::<m::RequestId>(7213)),
@@ -96,7 +96,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         });
         held.until_held().await;
         let read_messages = || Statement {
-            sql: "SELECT i.change_id,w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?",
+            sql: "SELECT i.change_id,w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?",
             args: vec![text(&actor), text(&thread)],
         };
         let cut_cursor = runtime.statement_host().read(read_cursor()).await.unwrap();
@@ -195,7 +195,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         let due = reopened
             .statement_host()
             .read(Statement {
-                sql: "SELECT due_at FROM notification_windows WHERE recipient_actor=?",
+                sql: "SELECT due_at FROM mail_notification_windows WHERE recipient_actor=?",
                 args: vec![text(&actor)],
             })
             .await
@@ -282,7 +282,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![
@@ -328,7 +328,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
     });
     held.until_held().await;
     let read_due = || Statement {
-        sql: "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+        sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         args: vec![text(&f.workspace)],
     };
     let original = runtime.statement_host().read(read_due()).await.unwrap();
@@ -425,7 +425,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         driver_drained,
         "the native driver completed without reaching the due drain"
     );
-    let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
+    let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
     assert_eq!(after.rows.len(), 1);
     assert!(matches!(&after.rows[0][0], SqlValue::Integer(position) if position.get() > 0));
     assert_eq!(after.rows[0][1], SqlValue::Null);
@@ -460,7 +460,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         panic!("first post")
     };
     let (_, first_item_id) = first_item.kind_and_id();
-    let first_change = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,created_at FROM changes WHERE item_id=? AND change_kind='posted'", args: vec![text(first_item_id)] }).await.unwrap();
+    let first_change = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,created_at FROM workspace_changes WHERE item_id=? AND change_kind='posted'", args: vec![text(first_item_id)] }).await.unwrap();
     let SqlValue::Text(first_id) = &first_change.rows[0][0] else {
         panic!("first change id")
     };
@@ -468,7 +468,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
     let prior = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
@@ -482,7 +482,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+                sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
                 args: vec![text(&f.workspace)]
             })
             .await
@@ -513,7 +513,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT position,created_at,change_id FROM changes WHERE item_id=? AND change_kind='posted'",
+                sql: "SELECT position,created_at,change_id FROM workspace_changes WHERE item_id=? AND change_kind='posted'",
                 args: vec![text(second_item_id)],
             },
         )
@@ -546,13 +546,13 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
     let cursor = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
         .unwrap();
     assert_eq!(cursor.rows[0][0], stored.rows[0][0]);
-    let notice = runtime.statement_host().read(Statement { sql: "SELECT i.change_id FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=? ORDER BY i.change_id", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let notice = runtime.statement_host().read(Statement { sql: "SELECT i.change_id FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=? ORDER BY i.change_id", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         notice.rows,
         vec![vec![text(later_id)], vec![text(first_id)]]

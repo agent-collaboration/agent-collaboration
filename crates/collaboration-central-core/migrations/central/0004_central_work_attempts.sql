@@ -1,5 +1,5 @@
 -- One failure-only record per engine subject. Rust validates states and values.
-CREATE TABLE central_work_attempts (
+CREATE TABLE engine_work_attempts (
     attempt_id          TEXT PRIMARY KEY,
     machine_kind        TEXT NOT NULL,
     subject_key         TEXT NOT NULL,
@@ -15,6 +15,6 @@ CREATE TABLE central_work_attempts (
     updated_at          TEXT NOT NULL
 );
 CREATE UNIQUE INDEX central_work_attempts_subject
-    ON central_work_attempts(machine_kind, subject_key);
+    ON engine_work_attempts(machine_kind, subject_key);
 CREATE INDEX central_work_attempts_state
-    ON central_work_attempts(machine_kind, state, next_try_at);
+    ON engine_work_attempts(machine_kind, state, next_try_at);

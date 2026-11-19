@@ -24,7 +24,7 @@ async fn two_same_generation_approvals_first_grant_wins_in_both_orders_and_activ
             .await?;
         let b = enrollment(&b.1);
         assert_eq!(
-            f.rows("SELECT base_generation FROM machine_approvals ORDER BY approval_id")
+            f.rows("SELECT base_generation FROM login_machine_approvals ORDER BY approval_id")
                 .await?,
             vec![vec![number(0)], vec![number(0)]]
         );
@@ -43,11 +43,12 @@ async fn two_same_generation_approvals_first_grant_wins_in_both_orders_and_activ
             "late first grant replaced the winning enrollment"
         );
         assert_eq!(
-            f.rows("SELECT enrollment_generation FROM machines").await?,
+            f.rows("SELECT enrollment_generation FROM login_machines")
+                .await?,
             vec![vec![number(1)]]
         );
         assert_eq!(
-            f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
+            f.rows("SELECT COUNT(*) FROM login_machine_approvals WHERE state='enrolled'")
                 .await?,
             vec![vec![number(1)]]
         );
@@ -57,12 +58,13 @@ async fn two_same_generation_approvals_first_grant_wins_in_both_orders_and_activ
             (200, grant(winner, INSTALLATION, f.now(), None))
         );
         assert_eq!(
-            f.rows("SELECT enrollment_generation FROM machines").await?,
+            f.rows("SELECT enrollment_generation FROM login_machines")
+                .await?,
             vec![vec![number(1)]],
             "active repeat must not bump generation"
         );
         assert_eq!(
-            f.rows("SELECT COUNT(*) FROM organization_change_records WHERE kind='machineEnrolled'")
+            f.rows("SELECT COUNT(*) FROM signin_change_records WHERE kind='machineEnrolled'")
                 .await?,
             vec![vec![number(1)]]
         );
@@ -138,7 +140,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
         "ended approval replay changed rows"
     );
     assert_eq!(
-        f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines")
+        f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM login_machines")
             .await?,
         vec![vec![
             text("enrolled"),
@@ -146,7 +148,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
             text(serde_json::to_string(&vec![WORKSPACE, WORKSPACE_TWO])?)
         ]]
     );
-    let records=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE kind IN ('machineRevoked','machineEnrolled') ORDER BY id").await?;
+    let records=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE kind IN ('machineRevoked','machineEnrolled') ORDER BY id").await?;
     assert_eq!(
         records,
         vec![
@@ -177,7 +179,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
         ]
     );
     assert_eq!(
-        f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
+        f.rows("SELECT COUNT(*) FROM login_machine_approvals WHERE state='enrolled'")
             .await?,
         vec![vec![number(1)]]
     );

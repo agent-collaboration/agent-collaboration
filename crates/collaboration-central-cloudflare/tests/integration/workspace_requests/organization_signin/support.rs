@@ -140,7 +140,7 @@ impl Fixture {
         ));
     }
     pub async fn counts(&self) -> ReadOutcome {
-        self.read("SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM organization_authorization_floors),(SELECT COUNT(*) FROM person_organization_authorization_floors)").await
+        self.read("SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM signin_authorization_floors),(SELECT COUNT(*) FROM signin_person_authorization_floors)").await
     }
     pub async fn floors(&self) {
         assert_eq!(
@@ -191,8 +191,8 @@ impl Fixture {
         label: &'static str,
         session: &str,
     ) -> super::super::support::FixtureCaller {
-        self.execute("INSERT INTO machines(machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,'enrolled','[]',1,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![super::super::support::text(FIXTURE_MACHINE),super::super::support::text(label)]).await;
-        self.execute("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,?,'[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:56:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![super::super::support::text(FIXTURE_ENROLLMENT),super::super::support::text(FIXTURE_ENROLLMENT),super::super::support::text(FIXTURE_MACHINE),super::super::support::text(label),super::super::support::text(fixture::OWNER),super::super::support::text(FIXTURE_ENROLLMENT)]).await;
+        self.execute("INSERT INTO login_machines(machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,'enrolled','[]',1,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![super::super::support::text(FIXTURE_MACHINE),super::super::support::text(label)]).await;
+        self.execute("INSERT INTO login_machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,?,'[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:56:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![super::super::support::text(FIXTURE_ENROLLMENT),super::super::support::text(FIXTURE_ENROLLMENT),super::super::support::text(FIXTURE_MACHINE),super::super::support::text(label),super::super::support::text(fixture::OWNER),super::super::support::text(FIXTURE_ENROLLMENT)]).await;
         let now = runtime_primitives::Clock::now(self.clock.as_ref()).unix_millis() / 1000;
         super::super::support::machine_caller(
             self.org.clone(),

@@ -35,7 +35,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 session: target.clone(),
             })
             .map_err(|_| corrupt("session identity"))?;
-        let rows=self.host.read(Statement{sql:"SELECT a.actor_identity_id FROM actor_identities a JOIN machines m ON m.machine_id=? WHERE a.identity_kind='agentSession' AND a.identity=? AND m.state='enrolled'",args:vec![text(&target.machine_id),text(identity)]}).await?;
+        let rows=self.host.read(Statement{sql:"SELECT a.actor_identity_id FROM access_actor_identities a JOIN login_machines m ON m.machine_id=? WHERE a.identity_kind='agentSession' AND a.identity=? AND m.state='enrolled'",args:vec![text(&target.machine_id),text(identity)]}).await?;
         Ok(!rows.rows.is_empty())
     }
     pub(crate) async fn route_notice_actor(

@@ -157,8 +157,8 @@ async fn every_statement_profile_refusal_logs_one_closed_kind_without_signed_mat
         // Each vector addresses its own fresh org. The foreign-org vector
         // also carries B's genuine compact, so neither namespace may be written.
         for checked_organization in [organization.as_str(), B] {
-            let identities=f.rows(checked_organization,"SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",vec![]).await?;
-            let records=f.rows(checked_organization,"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id",vec![]).await?;
+            let identities=f.rows(checked_organization,"SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id",vec![]).await?;
+            let records=f.rows(checked_organization,"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id",vec![]).await?;
             assert!(
                 identities.is_empty() && records.is_empty(),
                 "{}: the refused profile wrote an identity or record in {}",
@@ -335,7 +335,7 @@ async fn unusable_signin_configuration_logs_one_invalid_configuration_without_st
     let rows = f
         .rows(
             UNCONFIGURED,
-            "SELECT COUNT(*) FROM organization_identity",
+            "SELECT COUNT(*) FROM signin_organization_identity",
             vec![],
         )
         .await?;

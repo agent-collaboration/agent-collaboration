@@ -35,7 +35,7 @@ async fn deliverable_issue_and_dependency_changes_carry_the_exact_owning_project
     )
     .await;
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let edge=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT dependency_id FROM deliverable_dependencies WHERE blocked_deliverable_id=?",args:vec![text(&second)]}).await.unwrap();
+    let edge=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT dependency_id FROM workspace_deliverable_dependencies WHERE blocked_deliverable_id=?",args:vec![text(&second)]}).await.unwrap();
     let SqlValue::Text(edge) = &edge.rows[0][0] else {
         panic!("edge");
     };
@@ -55,7 +55,7 @@ async fn deliverable_issue_and_dependency_changes_carry_the_exact_owning_project
         (m::ItemRef::Issue(issue), vec!["created", "stateChanged"]),
     ] {
         let (kind, id) = item.kind_and_id();
-        let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT item_kind,change_kind,thread_id,project_id FROM changes WHERE item_id=? ORDER BY position",args:vec![text(id)]}).await.unwrap();
+        let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT item_kind,change_kind,thread_id,project_id FROM workspace_changes WHERE item_id=? ORDER BY position",args:vec![text(id)]}).await.unwrap();
         assert_eq!(
             rows.rows,
             kinds
@@ -89,7 +89,7 @@ async fn deliverable_issue_and_dependency_changes_carry_the_exact_owning_project
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT project_id FROM changes WHERE item_id=? ORDER BY position",
+                sql: "SELECT project_id FROM workspace_changes WHERE item_id=? ORDER BY position",
                 args: vec![text(id)],
             },
         )

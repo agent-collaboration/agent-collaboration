@@ -145,10 +145,10 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
     }
     let scenarios = [
         (
-            "UPDATE posts SET addressees='[' WHERE post_id=?",
+            "UPDATE workspace_posts SET addressees='[' WHERE post_id=?",
             post_id.to_string(),
-            "UPDATE posts SET addressees='[]' WHERE post_id=?",
-            "posts.addressees",
+            "UPDATE workspace_posts SET addressees='[]' WHERE post_id=?",
+            "workspace_posts.addressees",
             vec![
                 m::WorkspaceOperation::Show { item: post.clone() },
                 m::WorkspaceOperation::List {
@@ -169,10 +169,10 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
             ],
         ),
         (
-            "UPDATE item_references SET details='{' WHERE reference_id=?",
+            "UPDATE workspace_item_references SET details='{' WHERE reference_id=?",
             reference_id.to_string(),
-            "UPDATE item_references SET details='null' WHERE reference_id=?",
-            "item_references.details",
+            "UPDATE workspace_item_references SET details='null' WHERE reference_id=?",
+            "workspace_item_references.details",
             vec![
                 m::WorkspaceOperation::Show {
                     item: reference.clone(),
@@ -183,10 +183,10 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
             ],
         ),
         (
-            "UPDATE links SET details='{' WHERE link_id=?",
+            "UPDATE workspace_links SET details='{' WHERE link_id=?",
             link_id.to_string(),
-            "UPDATE links SET details='null' WHERE link_id=?",
-            "links.details",
+            "UPDATE workspace_links SET details='null' WHERE link_id=?",
+            "workspace_links.details",
             vec![
                 m::WorkspaceOperation::Show { item: link.clone() },
                 m::WorkspaceOperation::RemoveLink {
@@ -232,7 +232,7 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
     )
     .await;
     f.workspace_execute(
-        "UPDATE read_marks SET scope='{'",
+        "UPDATE workspace_read_marks SET scope='{'",
         vec![],
         RowExpectation::Exactly(1),
     )
@@ -268,7 +268,7 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
             result,
             Err(StoreFailure::Corrupt {
                 reason: CorruptReason::BadValue {
-                    column: "read_marks.scope".to_owned()
+                    column: "workspace_read_marks.scope".to_owned()
                 }
             })
         );
@@ -288,7 +288,7 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
     // The retired single inbox scope is valid JSON but no ReadScope: the whole
     // mark record is refused, never read as an area mark.
     f.workspace_execute(
-        "UPDATE read_marks SET scope='{\"kind\":\"inbox\"}'",
+        "UPDATE workspace_read_marks SET scope='{\"kind\":\"inbox\"}'",
         vec![],
         RowExpectation::Exactly(1),
     )
@@ -297,12 +297,12 @@ async fn malformed_stored_json_is_field_named_corruption_on_views_and_rule_snaps
         f.host.request(&f.caller, inbox()).await,
         Err(StoreFailure::Corrupt {
             reason: CorruptReason::BadValue {
-                column: "read_marks".to_owned()
+                column: "workspace_read_marks".to_owned()
             }
         })
     );
     f.workspace_execute(
-        "UPDATE read_marks SET scope=json_object('kind','inboxArea','area_id',?)",
+        "UPDATE workspace_read_marks SET scope=json_object('kind','inboxArea','area_id',?)",
         vec![text(&area)],
         RowExpectation::Exactly(1),
     )

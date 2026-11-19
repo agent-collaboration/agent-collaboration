@@ -37,15 +37,15 @@ async fn private_reply(
 async fn owning_rows(f: &Fixture) -> Vec<ReadOutcome> {
     let mut rows = Vec::new();
     for sql in [
-        "SELECT * FROM organization_identity",
-        "SELECT * FROM organization_change_records",
-        "SELECT * FROM organization_used_requests",
-        "SELECT * FROM organization_authorization_floors",
-        "SELECT * FROM person_organization_authorization_floors",
-        "SELECT * FROM request_log",
-        "SELECT * FROM workspaces",
-        "SELECT * FROM machines",
-        "SELECT * FROM machine_approvals",
+        "SELECT * FROM signin_organization_identity",
+        "SELECT * FROM signin_change_records",
+        "SELECT * FROM admin_used_requests",
+        "SELECT * FROM signin_authorization_floors",
+        "SELECT * FROM signin_person_authorization_floors",
+        "SELECT * FROM runtime_request_log",
+        "SELECT * FROM directory_workspaces",
+        "SELECT * FROM login_machines",
+        "SELECT * FROM login_machine_approvals",
         "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
     ] {
         rows.push(f.read(sql).await);
@@ -119,7 +119,7 @@ async fn unstamped_private_reads_and_revisions_reveal_nothing_and_unknown_routes
         unknown.1.is_empty(),
         "an unknown private route revealed a response payload"
     );
-    let counts=f.read("SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM organization_authorization_floors),(SELECT COUNT(*) FROM person_organization_authorization_floors),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM workspaces)").await;
+    let counts=f.read("SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM signin_authorization_floors),(SELECT COUNT(*) FROM signin_person_authorization_floors),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM directory_workspaces)").await;
     assert!(
         counts.rows == vec![vec![SqlValue::Integer(0.try_into().unwrap()); 7]],
         "refused private requests wrote business, proof or decision rows"

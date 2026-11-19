@@ -17,7 +17,7 @@ impl TryFrom<u64> for EnrollmentGeneration {
     type Error = StoreFailure;
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         if value > 9_007_199_254_740_991 {
-            return Err(corrupt("machines.enrollment_generation"));
+            return Err(corrupt("login_machines.enrollment_generation"));
         }
         Ok(Self(value))
     }
@@ -30,7 +30,7 @@ impl EnrollmentGeneration {
         Self::try_from(
             self.0
                 .checked_add(1)
-                .ok_or_else(|| corrupt("machines.enrollment_generation"))?,
+                .ok_or_else(|| corrupt("login_machines.enrollment_generation"))?,
         )
     }
 }

@@ -46,7 +46,7 @@ async fn corrupt_retained_answer_is_unavailable_without_any_replay_effect() {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE request_log SET answer=? WHERE request_id=?",
+                        sql: "UPDATE runtime_request_log SET answer=? WHERE request_id=?",
                         args: vec![SqlValue::Text(encoded), SqlValue::Text(operation.clone())],
                     },
                     expect: RowExpectation::Exactly(1),
@@ -100,7 +100,7 @@ async fn validated_retained_answer_returns_its_original_json_text() {
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE request_log SET answer=? WHERE request_id=?",
+                    sql: "UPDATE runtime_request_log SET answer=? WHERE request_id=?",
                     args: vec![
                         SqlValue::Text(retained.clone()),
                         SqlValue::Text(operation.clone()),
@@ -133,7 +133,7 @@ async fn validated_retained_answer_returns_its_original_json_text() {
     );
     assert_eq!(
         fixture
-            .read("SELECT COUNT(*) FROM organization_used_requests")
+            .read("SELECT COUNT(*) FROM admin_used_requests")
             .await
             .rows,
         vec![vec![number(2)]]
@@ -147,7 +147,7 @@ async fn validated_retained_answer_returns_its_original_json_text() {
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE request_log SET answer=? WHERE request_id=?",
+                    sql: "UPDATE runtime_request_log SET answer=? WHERE request_id=?",
                     args: vec![
                         SqlValue::Text(extended_text.clone()),
                         SqlValue::Text(operation.clone()),

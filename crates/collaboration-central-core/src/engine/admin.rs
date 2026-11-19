@@ -42,9 +42,9 @@ const HIDDEN_KINDS: &[&str] = &["engine_probe", "owed_reply"];
 #[cfg(not(feature = "test-support"))]
 const HIDDEN_KINDS: &[&str] = &[];
 
-const READ_BY_ID: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM central_work_attempts WHERE attempt_id=?";
-const READ_RETIRED_PAGE: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM central_work_attempts WHERE state='retired' AND (?1 IS NULL OR attempt_id>?1) ORDER BY attempt_id LIMIT ?2";
-const READ_HEALTH: &str = "SELECT machine_kind,SUM(CASE WHEN state='failing' THEN 1 ELSE 0 END) AS failing,SUM(CASE WHEN state='retired' THEN 1 ELSE 0 END) AS retired,MIN(first_failed_at) AS oldest,(SELECT b.last_failure FROM central_work_attempts b WHERE b.machine_kind=a.machine_kind ORDER BY b.last_failed_at DESC,b.attempt_id DESC LIMIT 1) AS last_failure FROM central_work_attempts a GROUP BY machine_kind";
+const READ_BY_ID: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM engine_work_attempts WHERE attempt_id=?";
+const READ_RETIRED_PAGE: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM engine_work_attempts WHERE state='retired' AND (?1 IS NULL OR attempt_id>?1) ORDER BY attempt_id LIMIT ?2";
+const READ_HEALTH: &str = "SELECT machine_kind,SUM(CASE WHEN state='failing' THEN 1 ELSE 0 END) AS failing,SUM(CASE WHEN state='retired' THEN 1 ELSE 0 END) AS retired,MIN(first_failed_at) AS oldest,(SELECT b.last_failure FROM engine_work_attempts b WHERE b.machine_kind=a.machine_kind ORDER BY b.last_failed_at DESC,b.attempt_id DESC LIMIT 1) AS last_failure FROM engine_work_attempts a GROUP BY machine_kind";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct KindHealth {
@@ -93,7 +93,7 @@ fn registered_kind(raw: &str) -> Result<Option<EngineKindName>, StoreFailure> {
     if HIDDEN_KINDS.contains(&raw) {
         return Ok(None);
     }
-    Err(corrupt("central_work_attempts.machine_kind"))
+    Err(corrupt("engine_work_attempts.machine_kind"))
 }
 fn failure_class(tag: &str) -> Result<EngineFailureClass, StoreFailure> {
     Ok(match tag {
@@ -102,7 +102,7 @@ fn failure_class(tag: &str) -> Result<EngineFailureClass, StoreFailure> {
         "statement_rejected" => EngineFailureClass::StatementRejected,
         "refused" => EngineFailureClass::Refused,
         "other_store_unavailable" => EngineFailureClass::OtherStoreUnavailable,
-        _ => return Err(corrupt("central_work_attempts.last_failure")),
+        _ => return Err(corrupt("engine_work_attempts.last_failure")),
     })
 }
 fn integer(rows: &ReadOutcome, row: &[SqlValue], name: &str) -> Result<u32, StoreFailure> {
@@ -132,7 +132,7 @@ fn one_row(rows: &ReadOutcome, row: &[SqlValue]) -> ReadOutcome {
 /// record with this id goes, so a concurrent second change finds nothing.
 fn delete_retired(attempt_id: uuid::Uuid) -> GuardedStatement {
     exact(
-        "DELETE FROM central_work_attempts WHERE attempt_id=? AND state='retired'",
+        "DELETE FROM engine_work_attempts WHERE attempt_id=? AND state='retired'",
         vec![text(attempt_id)],
     )
 }
@@ -171,19 +171,19 @@ impl<R: EngineHost> Engine<'_, R> {
         for row in &rows.rows {
             let kind = match column(&rows, row, "machine_kind")? {
                 SqlValue::Text(kind) => registered_kind(kind)?,
-                _ => return Err(corrupt("central_work_attempts.machine_kind")),
+                _ => return Err(corrupt("engine_work_attempts.machine_kind")),
             };
             let Some(kind) = kind else { continue };
             let oldest = optional_text(&rows, row, "oldest")?
                 .map(|time| {
                     time.parse::<EngineTime>()
-                        .map_err(|_| corrupt("central_work_attempts.first_failed_at"))
+                        .map_err(|_| corrupt("engine_work_attempts.first_failed_at"))
                 })
                 .transpose()?;
             let entry = kinds
                 .iter_mut()
                 .find(|entry| entry.kind == kind)
-                .ok_or_else(|| corrupt("central_work_attempts.machine_kind"))?;
+                .ok_or_else(|| corrupt("engine_work_attempts.machine_kind"))?;
             *entry = KindHealth {
                 kind,
                 failing: integer(&rows, row, "failing")?,
@@ -235,16 +235,16 @@ impl<R: EngineHost> Engine<'_, R> {
         let mut items = Vec::new();
         for row in &rows.rows {
             let stored = decode_attempt(&one_row(&rows, row))?
-                .ok_or_else(|| corrupt("central_work_attempts.attempt_id"))?;
+                .ok_or_else(|| corrupt("engine_work_attempts.attempt_id"))?;
             let record = stored
                 .record
                 .map_err(|corruption| corrupt(&corruption.column))?;
             let AttemptState::Retired { retired_at } = record.state else {
-                return Err(corrupt("central_work_attempts.state"));
+                return Err(corrupt("engine_work_attempts.state"));
             };
             let Some(kind) = (match column(&rows, row, "machine_kind")? {
                 SqlValue::Text(kind) => registered_kind(kind)?,
-                _ => return Err(corrupt("central_work_attempts.machine_kind")),
+                _ => return Err(corrupt("engine_work_attempts.machine_kind")),
             }) else {
                 continue;
             };
@@ -253,7 +253,7 @@ impl<R: EngineHost> Engine<'_, R> {
                 kind,
                 subject_key: match column(&rows, row, "subject_key")? {
                     SqlValue::Text(key) => key.clone(),
-                    _ => return Err(corrupt("central_work_attempts.subject_key")),
+                    _ => return Err(corrupt("engine_work_attempts.subject_key")),
                 },
                 failure_class: failure_class(record.last_failure.storage_tag())?,
                 count: record.failure_count.get(),
@@ -286,16 +286,16 @@ impl<R: EngineHost> Engine<'_, R> {
         };
         let Some(kind) = (match column(&rows, row, "machine_kind")? {
             SqlValue::Text(kind) => registered_kind(kind)?,
-            _ => return Err(corrupt("central_work_attempts.machine_kind")),
+            _ => return Err(corrupt("engine_work_attempts.machine_kind")),
         }) else {
             return Ok(Err(AttemptRefusal::NotFound));
         };
         let key = match column(&rows, row, "subject_key")? {
             SqlValue::Text(key) => key.clone(),
-            _ => return Err(corrupt("central_work_attempts.subject_key")),
+            _ => return Err(corrupt("engine_work_attempts.subject_key")),
         };
         let stored = decode_attempt(&one_row(&rows, row))?
-            .ok_or_else(|| corrupt("central_work_attempts.attempt_id"))?;
+            .ok_or_else(|| corrupt("engine_work_attempts.attempt_id"))?;
         match &stored.record {
             Ok(record) if matches!(record.state, AttemptState::Retired { .. }) => {
                 Ok(Ok((stored, kind, key)))

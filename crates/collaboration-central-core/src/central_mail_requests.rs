@@ -49,6 +49,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let rows = self
             .host
             .read(crate::workspace_request_log::lookup(
+                crate::workspace_request_log::RequestLogStore::Organization,
                 &request.request_id,
                 &cutoff,
             ))
@@ -62,12 +63,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     m::RefusalReason::RequestIdReused,
                 )));
             }
-            let answer: Result = json(string(&rows, row, "answer")?, "request_log.answer")?;
+            let answer: Result = json(string(&rows, row, "answer")?, "runtime_request_log.answer")?;
             if matches!(
                 answer,
                 Result::Conflict | Result::OutcomeUnknown | Result::CentralUnavailable
             ) {
-                return Err(corrupt("request_log.answer"));
+                return Err(corrupt("runtime_request_log.answer"));
             }
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
@@ -107,7 +108,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
                 let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
                 let mut statements = vec![crate::guarded_statements::exact(
-                    "UPDATE actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
+                    "UPDATE access_actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
                     vec![
                         crate::guarded_statements::text(cadence_text),
                         crate::guarded_statements::text(central_mail_store::timestamp(now)),
@@ -124,7 +125,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 {
                     let due = Self::notice_due_with_cadence(now, *cadence)?;
                     statements.push(crate::guarded_statements::exact(
-                        "UPDATE notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
+                        "UPDATE mail_notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![
                             crate::guarded_statements::text(central_mail_store::timestamp(due)),
                             crate::guarded_statements::text(central_mail_store::timestamp(now)),
@@ -181,6 +182,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         };
 
         statements.extend(crate::workspace_request_log::retain(
+            crate::workspace_request_log::RequestLogStore::Organization,
             &request.request_id,
             &actor,
             &digest,

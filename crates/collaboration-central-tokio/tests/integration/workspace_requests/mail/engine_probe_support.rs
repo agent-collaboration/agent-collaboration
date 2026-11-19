@@ -63,14 +63,14 @@ pub(super) async fn probe_facts(
     group: uuid::Uuid,
 ) -> Vec<SqlValue> {
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT (SELECT state FROM engine_probe_items WHERE item_id=?),(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='engine_probe' AND subject_key=?)",
+        sql: "SELECT (SELECT state FROM engine_probe_items WHERE item_id=?),(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='engine_probe' AND subject_key=?)",
         args: vec![text(item), text(group), text(item)],
     }).await.unwrap();
     rows.rows.into_iter().next().unwrap()
 }
 pub(super) async fn attempt(runtime: &Runtime, item: uuid::Uuid) -> Vec<Vec<SqlValue>> {
     runtime.statement_host().read(Statement {
-        sql: "SELECT state,failure_count,last_failure FROM central_work_attempts WHERE machine_kind='engine_probe' AND subject_key=?",
+        sql: "SELECT state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='engine_probe' AND subject_key=?",
         args: vec![text(item)],
     }).await.unwrap().rows
 }
@@ -78,7 +78,7 @@ pub(super) async fn receipts(runtime: &Runtime, request: u32) -> i64 {
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM request_log WHERE request_id=?",
+            sql: "SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?",
             args: vec![text(id::<workspace_model::RequestId>(request))],
         })
         .await

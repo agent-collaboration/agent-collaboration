@@ -83,7 +83,7 @@ impl EngineOrg {
         engine
             .f
             .execute(
-                "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                 vec![
                     text(serde_json::to_string(&vec![engine.workspace.clone()]).unwrap()),
                     text(FIXTURE_MACHINE),
@@ -236,7 +236,7 @@ impl EngineOrg {
         );
         let actors = self
             .rows(
-                "SELECT actor_identity_id,identity FROM actor_identities",
+                "SELECT actor_identity_id,identity FROM access_actor_identities",
                 vec![],
             )
             .await;
@@ -310,14 +310,14 @@ impl EngineOrg {
     }
     pub async fn wake_messages(&self, wake: &str) -> i64 {
         self.count(
-            "SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
             vec![text(wake)],
         )
         .await
     }
     pub async fn record(&self, kind: &str, key: &str) -> Vec<Vec<SqlValue>> {
         self.rows(
-            "SELECT state,failure_count,next_try_at,last_failure FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+            "SELECT state,failure_count,next_try_at,last_failure FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
             vec![text(kind), text(key)],
         )
         .await
@@ -325,7 +325,7 @@ impl EngineOrg {
     pub async fn attempt_id(&self, kind: &str, key: &str) -> String {
         match &self
             .rows(
-                "SELECT attempt_id FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+                "SELECT attempt_id FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
                 vec![text(kind), text(key)],
             )
             .await[..]

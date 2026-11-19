@@ -76,10 +76,10 @@ Workspace writes use the named workspace file.
 
 ```sh
 sqlite3 -readonly "$CENTRAL_ROOT/central/$ORGANIZATION_ID.sqlite" \
-  'SELECT request_id, caller, created_at FROM request_log ORDER BY created_at;'
+  'SELECT request_id, caller, created_at FROM runtime_request_log ORDER BY created_at;'
 
 sqlite3 -readonly "$CENTRAL_ROOT/workspace-stores/$WORKSPACE_ID.sqlite" \
-  'SELECT request_id, caller, created_at FROM request_log ORDER BY created_at;'
+  'SELECT request_id, caller, created_at FROM workspace_request_log ORDER BY created_at;'
 ```
 
 Match the request ID and caller to the actual link reply. A retry of the same

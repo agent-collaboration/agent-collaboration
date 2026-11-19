@@ -22,13 +22,15 @@ async fn first_grant_uses_the_codes_exact_deadline_and_lapse_keeps_the_working_l
         let mut pending = approval(0xc602, INSTALLATION, "Pending", &[WORKSPACE_TWO], f.now());
         pending["codeExpiresAt"] = json!(deadline);
         let b = enrollment(&f.post(DEVICE, &pending).await?.1)?;
-        let machine = f.rows("SELECT * FROM machines ORDER BY machine_id").await?;
-        let immutable_pending = f.rows("SELECT approval_id,request_id,machine_id,label,allowed_workspaces,approved_by_person_id,permission_checked,base_generation,code_expires_at,created_at FROM machine_approvals WHERE label='Pending'").await?;
+        let machine = f
+            .rows("SELECT * FROM login_machines ORDER BY machine_id")
+            .await?;
+        let immutable_pending = f.rows("SELECT approval_id,request_id,machine_id,label,allowed_workspaces,approved_by_person_id,permission_checked,base_generation,code_expires_at,created_at FROM login_machine_approvals WHERE label='Pending'").await?;
         let working = f
-            .rows("SELECT * FROM machine_approvals WHERE label='Working'")
+            .rows("SELECT * FROM login_machine_approvals WHERE label='Working'")
             .await?;
         let records = f
-            .rows("SELECT * FROM organization_change_records ORDER BY id")
+            .rows("SELECT * FROM signin_change_records ORDER BY id")
             .await?;
         let credentials = f
             .rows(
@@ -45,7 +47,7 @@ async fn first_grant_uses_the_codes_exact_deadline_and_lapse_keeps_the_working_l
             .unwrap()
             .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
             assert_eq!(
-                f.rows("SELECT state,end_reason,machine_client_id,last_grant_at,ended_at,updated_at FROM machine_approvals WHERE label='Pending'").await?,
+                f.rows("SELECT state,end_reason,machine_client_id,last_grant_at,ended_at,updated_at FROM login_machine_approvals WHERE label='Pending'").await?,
                 vec![vec![
                     text("ended"),
                     text("lapsed"),
@@ -56,17 +58,19 @@ async fn first_grant_uses_the_codes_exact_deadline_and_lapse_keeps_the_working_l
                 ]]
             );
             assert!(
-                f.rows("SELECT * FROM machines ORDER BY machine_id").await? == machine,
+                f.rows("SELECT * FROM login_machines ORDER BY machine_id")
+                    .await?
+                    == machine,
                 "lapse leaves machine generation/current allowances alone"
             );
-            assert!(f.rows("SELECT approval_id,request_id,machine_id,label,allowed_workspaces,approved_by_person_id,permission_checked,base_generation,code_expires_at,created_at FROM machine_approvals WHERE label='Pending'").await? == immutable_pending);
+            assert!(f.rows("SELECT approval_id,request_id,machine_id,label,allowed_workspaces,approved_by_person_id,permission_checked,base_generation,code_expires_at,created_at FROM login_machine_approvals WHERE label='Pending'").await? == immutable_pending);
             assert!(
-                f.rows("SELECT * FROM machine_approvals WHERE label='Working'")
+                f.rows("SELECT * FROM login_machine_approvals WHERE label='Working'")
                     .await?
                     == working
             );
             assert!(
-                f.rows("SELECT * FROM organization_change_records ORDER BY id")
+                f.rows("SELECT * FROM signin_change_records ORDER BY id")
                     .await?
                     == records
             );
@@ -127,7 +131,8 @@ async fn renewal_extends_idle_deadline_and_thirty_days_without_grant_expires_onc
     );
     let renewed = f.now();
     assert_eq!(
-        f.rows("SELECT enrollment_generation FROM machines").await?,
+        f.rows("SELECT enrollment_generation FROM login_machines")
+            .await?,
         vec![vec![number(1)?]]
     );
     f.advance(30 * 24 * 60 * 60 * 1000 - 1000).await?;
@@ -146,11 +151,11 @@ async fn renewal_extends_idle_deadline_and_thirty_days_without_grant_expires_onc
         (200, refused("idleExpired"))
     );
     assert_eq!(
-        f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines")
+        f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM login_machines")
             .await?,
         vec![vec![text("revoked"), number(2)?, text("[]")]]
     );
-    let records=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE origin='automatic' ORDER BY id").await?;
+    let records=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE origin='automatic' ORDER BY id").await?;
     assert_eq!(
         records,
         vec![
@@ -252,12 +257,12 @@ async fn clients_organizations_unknown_ids_and_two_machine_logins_remain_isolate
         "foreign org lookup rewrote the original organization"
     );
     assert_eq!(
-        f.rows("SELECT enrollment_generation FROM machines ORDER BY machine_id")
+        f.rows("SELECT enrollment_generation FROM login_machines ORDER BY machine_id")
             .await?,
         vec![vec![number(1)?], vec![number(1)?]]
     );
     assert_eq!(
-        f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
+        f.rows("SELECT COUNT(*) FROM login_machine_approvals WHERE state='enrolled'")
             .await?,
         vec![vec![number(2)?]]
     );

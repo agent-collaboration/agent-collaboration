@@ -23,14 +23,14 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         json!({"result":"approved","enrollmentId":enrollment_id,"label":"Original label","allowedWorkspaces":[WORKSPACE,WORKSPACE_TWO]})
     );
     assert_eq!(
-        f.rows("SELECT state,enrollment_generation FROM machines")
+        f.rows("SELECT state,enrollment_generation FROM login_machines")
             .await?,
         vec![vec![text("revoked"), number(0)?]],
         "approval admits nothing"
     );
     assert_eq!(
         f.rows(
-            "SELECT state,base_generation,machine_client_id,last_grant_at FROM machine_approvals"
+            "SELECT state,base_generation,machine_client_id,last_grant_at FROM login_machine_approvals"
         )
         .await?,
         vec![vec![
@@ -79,7 +79,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         "owning reopen and a day beyond code expiry retain the exact three-field approval"
     );
     assert!(snapshot(&f).await? == activated);
-    let rows=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE kind='allowanceChanged' ORDER BY target_id").await?;
+    let rows=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE kind='allowanceChanged' ORDER BY target_id").await?;
     assert_eq!(
         rows,
         vec![
@@ -380,7 +380,7 @@ async fn approval_uses_only_the_issuer_machine_id_and_refuses_invalid_requests()
     assert_eq!(status, 200);
     assert_eq!(reply["result"], "approved");
     assert_eq!(
-        f.rows("SELECT machine_id FROM machines").await?,
+        f.rows("SELECT machine_id FROM login_machines").await?,
         vec![vec![text(INSTALLATION)]]
     );
     f.close().await

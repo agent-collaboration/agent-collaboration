@@ -133,7 +133,7 @@ async fn batch_journey(fixture: &Fixture) -> Result<BatchHibernationReceipt> {
         .inspect_workspace(
             &workspace,
             Statement {
-                sql: "SELECT area_id,name FROM areas ORDER BY name",
+                sql: "SELECT area_id,name FROM workspace_areas ORDER BY name",
                 args: vec![],
             },
         )
@@ -155,7 +155,7 @@ async fn batch_journey(fixture: &Fixture) -> Result<BatchHibernationReceipt> {
     let wakes = fixture
         .runtime()
         .read(Statement {
-            sql: "SELECT COUNT(*) AS wake_count FROM wakes",
+            sql: "SELECT COUNT(*) AS wake_count FROM automation_wakes",
             args: vec![],
         })
         .await?;

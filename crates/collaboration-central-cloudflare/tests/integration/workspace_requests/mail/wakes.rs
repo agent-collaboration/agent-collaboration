@@ -127,7 +127,7 @@ async fn actual_alarm_fires_simultaneous_wakes_once_and_excludes_cancelled() {
     let messages = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body FROM messages WHERE message_kind='wake'",
+            sql: "SELECT sender,target_session,body FROM mail_messages WHERE message_kind='wake'",
             args: vec![],
         })
         .await
@@ -164,7 +164,7 @@ async fn actual_alarm_fires_simultaneous_wakes_once_and_excludes_cancelled() {
     observed.sort();
     ids.sort();
     assert_eq!(observed, ids);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='wake'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM wakes WHERE state='disabled')", args: vec![] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM automation_wakes WHERE state='disabled')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![

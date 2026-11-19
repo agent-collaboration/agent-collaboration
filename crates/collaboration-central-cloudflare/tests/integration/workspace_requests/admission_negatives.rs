@@ -11,7 +11,7 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
     let schema = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT name, pk FROM pragma_table_info('machines') WHERE name IN ('machine_id', 'installation_id') ORDER BY cid",
+            sql: "SELECT name, pk FROM pragma_table_info('login_machines') WHERE name IN ('machine_id', 'installation_id') ORDER BY cid",
             args: vec![],
         })
         .await
@@ -26,12 +26,15 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
     let link = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT \"table\", \"to\" FROM pragma_foreign_key_list('messages') WHERE \"from\"='target_machine_id'",
+            sql: "SELECT \"table\", \"to\" FROM pragma_foreign_key_list('mail_messages') WHERE \"from\"='target_machine_id'",
             args: vec![],
         })
         .await
         .unwrap();
-    assert_eq!(link.rows, vec![vec![text("machines"), text("machine_id")]]);
+    assert_eq!(
+        link.rows,
+        vec![vec![text("login_machines"), text("machine_id")]]
+    );
     let legacy = runtime
         .statement_host()
         .read(Statement {
@@ -82,22 +85,22 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
     );
     let edits = [
         (
-            "UPDATE machines SET state='revoked' WHERE machine_id=?",
+            "UPDATE login_machines SET state='revoked' WHERE machine_id=?",
             text(f.caller.caller.machine_id()),
             m::RefusalReason::MachineRevoked,
-            "UPDATE machines SET state='enrolled' WHERE machine_id=?",
+            "UPDATE login_machines SET state='enrolled' WHERE machine_id=?",
         ),
         (
-            "UPDATE workspaces SET state='archived' WHERE workspace_id=?",
+            "UPDATE directory_workspaces SET state='archived' WHERE workspace_id=?",
             text(&f.workspace),
             m::RefusalReason::WorkspaceNotAllowed,
-            "UPDATE workspaces SET state='active' WHERE workspace_id=?",
+            "UPDATE directory_workspaces SET state='active' WHERE workspace_id=?",
         ),
         (
-            "UPDATE machines SET allowed_workspaces='[]' WHERE machine_id=?",
+            "UPDATE login_machines SET allowed_workspaces='[]' WHERE machine_id=?",
             text(f.caller.caller.machine_id()),
             m::RefusalReason::WorkspaceNotAllowed,
-            "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+            "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
         ),
     ];
     for (index, (sql, key, refusal, restore)) in edits.into_iter().enumerate() {
@@ -136,7 +139,7 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
             BatchOutcome::Applied { .. }
         ));
     }
-    let counts=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT (SELECT COUNT(*) FROM areas) AS areas,(SELECT COUNT(*) FROM changes) AS changes,(SELECT COUNT(*) FROM request_log) AS log",args:vec![]}).await.unwrap();
+    let counts=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT (SELECT COUNT(*) FROM workspace_areas) AS areas,(SELECT COUNT(*) FROM workspace_changes) AS changes,(SELECT COUNT(*) FROM workspace_request_log) AS log",args:vec![]}).await.unwrap();
     for cell in &counts.rows[0] {
         assert_eq!(
             *cell,
@@ -147,5 +150,30 @@ async fn live_admission_refuses_revoked_expired_wrong_token_and_archived_directo
         f.call(970, operation).await.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
+    f.host.close().await;
+}
+
+#[tokio::test]
+async fn fresh_organization_and_workspace_store_use_the_approved_table_names() {
+    use collaboration_central_conformance::workspace_schema_fixture as schema;
+
+    let f = Fixture::new().await;
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let names = || Statement {
+        sql: schema::APPLICATION_TABLE_NAMES,
+        args: vec![],
+    };
+    let organization = runtime.statement_host().read(names()).await.unwrap();
+    let workspace = runtime
+        .inspect_workspace(&f.workspace, names())
+        .await
+        .unwrap();
+    for (observed, expected) in [
+        (organization, schema::ORGANIZATION_TABLES),
+        (workspace, schema::WORKSPACE_TABLES),
+    ] {
+        let expected: Vec<_> = expected.iter().map(|name| vec![text(name)]).collect();
+        assert_eq!(observed.rows, expected);
+    }
     f.host.close().await;
 }

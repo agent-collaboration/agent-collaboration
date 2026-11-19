@@ -97,7 +97,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     assert!(
         store
             .read(Statement {
-                sql: "SELECT request_id FROM request_log WHERE request_id=?",
+                sql: "SELECT request_id FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(891))]
             })
             .await

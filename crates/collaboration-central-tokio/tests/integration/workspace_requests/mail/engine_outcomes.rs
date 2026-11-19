@@ -117,7 +117,7 @@ async fn race_one_request_id(
         (first.await.unwrap(), second)
     };
     let rows = runtime.statement_host().read(super::super::Statement {
-        sql: "SELECT (SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?),(SELECT COUNT(*) FROM engine_probe_items WHERE group_id=? AND state='fired')",
+        sql: "SELECT (SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?),(SELECT COUNT(*) FROM engine_probe_items WHERE group_id=? AND state='fired')",
         args: vec![text(group), text(id::<workspace_model::RequestId>(9010)), text(group)],
     }).await.unwrap().rows;
     assert_fixture_attempt_ids_are_uuid_v7(

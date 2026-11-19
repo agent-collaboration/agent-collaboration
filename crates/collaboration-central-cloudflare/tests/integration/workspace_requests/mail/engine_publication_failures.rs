@@ -76,7 +76,7 @@ async fn an_unpublishable_request_batch_rolls_back_inside_its_transaction() {
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM messages WHERE message_kind='direct'",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'",
             vec![]
         )
         .await,

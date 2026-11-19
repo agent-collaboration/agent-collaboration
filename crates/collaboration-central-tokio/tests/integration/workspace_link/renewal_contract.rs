@@ -119,7 +119,7 @@ async fn renew_machine_token_extends_the_open_connection_and_a_refusal_keeps_its
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT name FROM workspaces ORDER BY name",
+            sql: "SELECT name FROM directory_workspaces ORDER BY name",
             args: vec![],
         })
         .await?;
@@ -270,7 +270,7 @@ async fn a_renewal_just_before_the_deadline_renews_and_at_or_after_it_is_refused
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT name FROM workspaces",
+            sql: "SELECT name FROM directory_workspaces",
             args: vec![],
         })
         .await?;
@@ -362,7 +362,7 @@ async fn every_refused_renewal_keeps_the_current_deadline() -> Result<()> {
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT name FROM workspaces",
+            sql: "SELECT name FROM directory_workspaces",
             args: vec![],
         })
         .await?;

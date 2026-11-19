@@ -123,7 +123,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
     );
     // Re-open only as a corruption/fault fixture, so replay must not re-run the rule.
     f.workspace_batch(
-        "UPDATE threads SET state='open' WHERE thread_id=?",
+        "UPDATE workspace_threads SET state='open' WHERE thread_id=?",
         vec![text(thread)],
     )
     .await;
@@ -170,15 +170,18 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
         async move { runtime.request(&caller, request).await.unwrap() }
     });
     held.until_held().await;
-    f.workspace_batch("DELETE FROM links WHERE link_id=?", vec![text(&link)])
-        .await;
+    f.workspace_batch(
+        "DELETE FROM workspace_links WHERE link_id=?",
+        vec![text(&link)],
+    )
+    .await;
     held.release();
     assert_eq!(pending.await.unwrap().result, m::WorkspaceResult::Conflict);
     let logged = runtime
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT request_id FROM request_log WHERE request_id=?",
+                sql: "SELECT request_id FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(343))],
             },
         )
@@ -272,13 +275,13 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     let directory = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT * FROM workspaces ORDER BY workspace_id",
+            sql: "SELECT * FROM directory_workspaces ORDER BY workspace_id",
             args: vec![],
         })
         .await
         .unwrap();
     let ledger_query = || Statement {
-        sql: "SELECT answer,created_at FROM request_log WHERE request_id=?",
+        sql: "SELECT answer,created_at FROM runtime_request_log WHERE request_id=?",
         args: vec![text(id::<m::RequestId>(361))],
     };
     let first_ledger = runtime.statement_host().read(ledger_query()).await.unwrap();
@@ -304,7 +307,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT * FROM workspaces ORDER BY workspace_id",
+                sql: "SELECT * FROM directory_workspaces ORDER BY workspace_id",
                 args: vec![]
             })
             .await

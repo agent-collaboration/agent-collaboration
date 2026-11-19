@@ -175,7 +175,7 @@ impl Fixture {
         Ok(())
     }
     pub async fn snapshot(&self) -> Result<(Vec<Vec<SqlValue>>, Vec<Vec<SqlValue>>)> {
-        Ok((self.rows(A,"SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",vec![]).await?,self.rows(A,"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id",vec![]).await?))
+        Ok((self.rows(A,"SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id",vec![]).await?,self.rows(A,"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id",vec![]).await?))
     }
     pub async fn ready(&self) -> Result {
         if self
@@ -272,12 +272,12 @@ impl Fixture {
             machine_id: INSTALLATION.to_owned().try_into()?,
             session_id: session.to_owned().try_into()?,
         };
-        self.apply(A,"INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",vec![text(&wake),text(serde_json::to_string(&target)?),text(due.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(serde_json::to_string("pending before first stamp")?),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true))]).await?;
+        self.apply(A,"INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",vec![text(&wake),text(serde_json::to_string(&target)?),text(due.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(serde_json::to_string("pending before first stamp")?),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true))]).await?;
         Ok((wake, due))
     }
     pub async fn seed_machine(&self) -> Result {
-        self.apply(A,"INSERT INTO machines(machine_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,'existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(INSTALLATION)]).await?;
-        self.apply(A,"INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'existing machine','[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:46:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(ENROLLMENT),text("019f0000-0000-7000-8000-00000000b305"),text(INSTALLATION),text(signed::OWNER),text(ENROLLMENT)]).await
+        self.apply(A,"INSERT INTO login_machines(machine_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,'existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(INSTALLATION)]).await?;
+        self.apply(A,"INSERT INTO login_machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'existing machine','[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:46:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(ENROLLMENT),text("019f0000-0000-7000-8000-00000000b305"),text(INSTALLATION),text(signed::OWNER),text(ENROLLMENT)]).await
     }
 }
 pub(super) async fn post(

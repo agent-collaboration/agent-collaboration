@@ -117,34 +117,34 @@ const SNAPSHOT: &str = r#"
 WITH identity_records_and_organization_floor AS (
 SELECT 0 AS row_group,id AS row_id,json_object('kind','identity','row',json_object(
  'id',id,'statement',organization_statement,'created_at',created_at,'updated_at',updated_at)) AS payload
- FROM organization_identity
+ FROM signin_organization_identity
 UNION ALL SELECT 1,id,json_object('kind','record','row',json_object(
  'id',id,'request_id',request_id,'kind',kind,'origin',origin,'actor_person_id',actor_person_id,
  'permission_checked',permission_checked,'target_id',target_id,'created_at',created_at,'updated_at',updated_at))
- FROM organization_change_records
+ FROM signin_change_records
 UNION ALL SELECT 2,id,json_object('kind','organizationFloor','row',json_object(
  'id',id,'minimum_revision',minimum_revision,'state',state,'policy_digest',permission_policy_digest,
  'reject_through_ms',request_reject_through_ms,'created_at',created_at,'updated_at',updated_at))
- FROM organization_authorization_floors
+ FROM signin_authorization_floors
 ), person_proofs_and_workspaces AS (
 SELECT 3 AS row_group,person_id AS row_id,json_object('kind','personFloor','row',json_object(
  'id',id,'organization_id',organization_id,'person_id',person_id,'minimum_revision',minimum_revision,
  'state',state,'created_at',created_at,'updated_at',updated_at)) AS payload
- FROM person_organization_authorization_floors
+ FROM signin_person_authorization_floors
 UNION ALL SELECT 4,id,json_object('kind','usedRequest','row',json_object(
  'id',id,'organization_id',organization_id,'request_time_ms',request_time_ms,'operation_id',operation_id,
  'person_id',actor_person_id,'session_id',actor_session_id,'intent_digest',intent_digest,
  'proof_key_thumbprint',proof_key_thumbprint,'created_at',created_at,'updated_at',updated_at))
- FROM organization_used_requests
+ FROM admin_used_requests
 UNION ALL SELECT 5,workspace_id,json_object('kind','workspace','row',json_object(
  'workspaceId',workspace_id,'name',name,'state',state,'createdAt',created_at,'updatedAt',updated_at))
- FROM workspaces
+ FROM directory_workspaces
 ), machines_and_approvals AS (
 SELECT 6 AS row_group,machine_id AS row_id,json_object('kind','machine','row',json_object(
  'machine_id',machine_id,'label',label,'state',state,
  'allowed_workspaces',allowed_workspaces,'enrollment_generation',enrollment_generation,
  'created_at',created_at,'updated_at',updated_at)) AS payload
- FROM machines
+ FROM login_machines
 UNION ALL SELECT 7,a.approval_id,json_object('kind','machineApproval','row',json_object(
  'approval_id',a.approval_id,'request_id',a.request_id,'label',a.label,
  'allowed_workspaces',a.allowed_workspaces,'state',a.state,'end_reason',a.end_reason,
@@ -152,7 +152,7 @@ UNION ALL SELECT 7,a.approval_id,json_object('kind','machineApproval','row',json
  'base_generation',a.base_generation,'code_expires_at',a.code_expires_at,
  'machine_client_id',a.machine_client_id,'last_grant_at',a.last_grant_at,'ended_at',a.ended_at,
  'created_at',a.created_at,'updated_at',a.updated_at,'machine_id',m.machine_id))
- FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id
+ FROM login_machine_approvals a LEFT JOIN login_machines m ON m.machine_id=a.machine_id
 )
 SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM identity_records_and_organization_floor
 UNION ALL SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM person_proofs_and_workspaces
@@ -301,11 +301,11 @@ fn decode_snapshot(
         match row {
             SnapshotRow::Identity(row) => {
                 if observation.statement.is_some() || row.id != *organization {
-                    return Err(corrupt("organization_identity.id"));
+                    return Err(corrupt("signin_organization_identity.id"));
                 }
                 non_empty(
                     &row.statement,
-                    "organization_identity.organization_statement",
+                    "signin_organization_identity.organization_statement",
                 )?;
                 check_times(row.created_at, row.updated_at)?;
                 observation.stamp = Some(stamp_facts(&row.statement));
@@ -320,16 +320,16 @@ fn decode_snapshot(
                         None,
                     ) => {}
                     (StoredChangeOrigin::Person, Some(person_id), Some(permission_checked)) => {
-                        non_empty(&person_id, "organization_change_records.actor_person_id")?;
+                        non_empty(&person_id, "signin_change_records.actor_person_id")?;
                         non_empty(
                             &permission_checked,
-                            "organization_change_records.permission_checked",
+                            "signin_change_records.permission_checked",
                         )?;
                     }
-                    _ => return Err(corrupt("organization_change_records.origin")),
+                    _ => return Err(corrupt("signin_change_records.origin")),
                 };
-                non_empty(&row.target_id, "organization_change_records.target_id")?;
-                canonical_v7(&row.id, "organization_change_records.id")?;
+                non_empty(&row.target_id, "signin_change_records.target_id")?;
+                canonical_v7(&row.id, "signin_change_records.id")?;
                 observation.records.push(ObservedChangeRecord {
                     request_id: row.request_id,
                     kind: row.kind,
@@ -339,15 +339,15 @@ fn decode_snapshot(
             }
             SnapshotRow::OrganizationFloor(row) => {
                 if observation.organization_floor.is_some() || row.id != *organization {
-                    return Err(corrupt("organization_authorization_floors.id"));
+                    return Err(corrupt("signin_authorization_floors.id"));
                 }
                 non_empty(
                     &row.policy_digest,
-                    "organization_authorization_floors.permission_policy_digest",
+                    "signin_authorization_floors.permission_policy_digest",
                 )?;
                 if row.reject_through_ms.get() < 0 {
                     return Err(corrupt(
-                        "organization_authorization_floors.request_reject_through_ms",
+                        "signin_authorization_floors.request_reject_through_ms",
                     ));
                 }
                 check_times(row.created_at, row.updated_at)?;
@@ -359,7 +359,7 @@ fn decode_snapshot(
             SnapshotRow::PersonFloor(row) => {
                 if row.organization_id != *organization {
                     return Err(corrupt(
-                        "person_organization_authorization_floors.organization_id",
+                        "signin_person_authorization_floors.organization_id",
                     ));
                 }
                 check_times(row.created_at, row.updated_at)?;
@@ -372,22 +372,16 @@ fn decode_snapshot(
             }
             SnapshotRow::UsedRequest(row) => {
                 if row.organization_id != *organization {
-                    return Err(corrupt("organization_used_requests.organization_id"));
+                    return Err(corrupt("admin_used_requests.organization_id"));
                 }
                 if row.request_time_ms.get() < 0 {
-                    return Err(corrupt("organization_used_requests.request_time_ms"));
+                    return Err(corrupt("admin_used_requests.request_time_ms"));
                 }
-                canonical_v7(
-                    &row.session_id,
-                    "organization_used_requests.actor_session_id",
-                )?;
-                non_empty(
-                    &row.intent_digest,
-                    "organization_used_requests.intent_digest",
-                )?;
+                canonical_v7(&row.session_id, "admin_used_requests.actor_session_id")?;
+                non_empty(&row.intent_digest, "admin_used_requests.intent_digest")?;
                 non_empty(
                     &row.proof_key_thumbprint,
-                    "organization_used_requests.proof_key_thumbprint",
+                    "admin_used_requests.proof_key_thumbprint",
                 )?;
                 check_times(row.created_at, row.updated_at)?;
                 let _validated_marker = (row.operation_id, row.person_id);
@@ -397,11 +391,11 @@ fn decode_snapshot(
             }
             SnapshotRow::Workspace(row) => {
                 let name = ResourceName::try_from(row.name.clone())
-                    .map_err(|_| corrupt("workspaces.name"))?;
+                    .map_err(|_| corrupt("directory_workspaces.name"))?;
                 // ResourceName trims incoming input. A stored row must already
                 // be canonical; observation must never rewrite its name.
                 if name.as_str() != row.name {
-                    return Err(corrupt("workspaces.name"));
+                    return Err(corrupt("directory_workspaces.name"));
                 }
                 observation.workspaces.push(ObservedWorkspace {
                     workspace_id: row.workspace_id,

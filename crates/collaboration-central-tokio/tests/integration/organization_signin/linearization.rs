@@ -120,7 +120,7 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
     assert_eq!(
         f.rows(
             A,
-            "SELECT created_at,updated_at FROM organization_identity",
+            "SELECT created_at,updated_at FROM signin_organization_identity",
             vec![]
         )
         .await?,
@@ -132,7 +132,7 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
     assert_eq!(
         f.rows(
             A,
-            "SELECT created_at,updated_at FROM organization_change_records",
+            "SELECT created_at,updated_at FROM signin_change_records",
             vec![]
         )
         .await?,
@@ -184,7 +184,7 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
     assert_eq!(
         f.rows(
             A,
-            "SELECT state,(SELECT COUNT(*) FROM messages) FROM wakes WHERE wake_id=?",
+            "SELECT state,(SELECT COUNT(*) FROM mail_messages) FROM automation_wakes WHERE wake_id=?",
             vec![text(wake_id)]
         )
         .await?,
@@ -192,7 +192,8 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
     );
     f.reopen().await?;
     assert_eq!(
-        f.rows(A, "SELECT COUNT(*) FROM messages", vec![]).await?,
+        f.rows(A, "SELECT COUNT(*) FROM mail_messages", vec![])
+            .await?,
         vec![vec![number(1)?]],
         "restart does not duplicate the activated wake"
     );

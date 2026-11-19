@@ -18,7 +18,7 @@ pub(crate) struct DirectoryWorkspace {
 
 fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
     if rows.rows.len() > 1 {
-        return Err(corrupt("workspaces.workspace_id"));
+        return Err(corrupt("directory_workspaces.workspace_id"));
     }
     rows.rows
         .first()
@@ -32,23 +32,23 @@ fn decode_row(
 ) -> Result<DirectoryWorkspace, StoreFailure> {
     let workspace_id = string(rows, row, "workspace_id")?
         .parse()
-        .map_err(|_| corrupt("workspaces.workspace_id"))?;
+        .map_err(|_| corrupt("directory_workspaces.workspace_id"))?;
     let stored_name = string(rows, row, "name")?;
-    let name =
-        ResourceName::try_from(stored_name.to_owned()).map_err(|_| corrupt("workspaces.name"))?;
+    let name = ResourceName::try_from(stored_name.to_owned())
+        .map_err(|_| corrupt("directory_workspaces.name"))?;
     if name.as_str() != stored_name {
-        return Err(corrupt("workspaces.name"));
+        return Err(corrupt("directory_workspaces.name"));
     }
     let stored_description = string(rows, row, "description")?;
     if stored_description.len() > MAXIMUM_DESCRIPTION_BYTES {
-        return Err(corrupt("workspaces.description"));
+        return Err(corrupt("directory_workspaces.description"));
     }
     let description = Description::try_from(stored_description.to_owned())
-        .map_err(|_| corrupt("workspaces.description"))?;
+        .map_err(|_| corrupt("directory_workspaces.description"))?;
     let state = match string(rows, row, "state")? {
         "active" => WorkspaceState::Active,
         "archived" => WorkspaceState::Archived,
-        _ => return Err(corrupt("workspaces.state")),
+        _ => return Err(corrupt("directory_workspaces.state")),
     };
     for column in ["created_at", "updated_at"] {
         let _: Timestamp = string(rows, row, column)?
@@ -78,7 +78,7 @@ pub(crate) async fn read_all(
     host: &impl ObjectHost,
 ) -> Result<Vec<DirectoryWorkspace>, StoreFailure> {
     let rows = host.read(Statement {
-        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM workspaces ORDER BY workspace_id",
+        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM directory_workspaces ORDER BY workspace_id",
         args: vec![],
     }).await?;
     rows.rows.iter().map(|row| decode_row(&rows, row)).collect()
@@ -89,7 +89,7 @@ pub(crate) async fn read_by_id(
     workspace_id: &WorkspaceId,
 ) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
     let rows = host.read(Statement {
-        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM workspaces WHERE workspace_id=?",
+        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM directory_workspaces WHERE workspace_id=?",
         args: vec![text(workspace_id)],
     }).await?;
     let workspace = decode(&rows)?;
@@ -97,7 +97,7 @@ pub(crate) async fn read_by_id(
         .as_ref()
         .is_some_and(|workspace| workspace.workspace_id != *workspace_id)
     {
-        return Err(corrupt("workspaces.workspace_id"));
+        return Err(corrupt("directory_workspaces.workspace_id"));
     }
     Ok(workspace)
 }
@@ -109,7 +109,7 @@ pub(crate) async fn read_by_name(
     // Match workspaces_canonical_name exactly: SQLite folds ASCII only and trim()
     // removes surrounding ASCII spaces. No Rust/Unicode comparison substitutes.
     let rows = host.read(Statement {
-        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM workspaces WHERE lower(trim(name))=lower(trim(?))",
+        sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM directory_workspaces WHERE lower(trim(name))=lower(trim(?))",
         args: vec![text(name.as_str())],
     }).await?;
     decode(&rows)
@@ -122,7 +122,7 @@ pub(crate) fn insert(
     now: Timestamp,
 ) -> Result<GuardedStatement, StoreFailure> {
     Ok(exact(
-        "INSERT INTO workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'active',?,?)",
+        "INSERT INTO directory_workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'active',?,?)",
         vec![
             text(workspace_id),
             text(name.as_str()),

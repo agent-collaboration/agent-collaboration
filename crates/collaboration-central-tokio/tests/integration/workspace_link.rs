@@ -52,7 +52,7 @@ async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and
     let rows = runtime
         .statement_host()
         .read(central_storage::Statement {
-            sql: "SELECT machine_id FROM machines WHERE machine_id=?",
+            sql: "SELECT machine_id FROM login_machines WHERE machine_id=?",
             args: vec![central_storage::SqlValue::Text(INSTALLATION.into())],
         })
         .await?;
@@ -176,7 +176,7 @@ async fn semantic_requests_recheck_caller_and_original_grant_expiry() -> Result<
         runtime
             .statement_host()
             .read(central_storage::Statement {
-                sql: "SELECT workspace_id FROM workspaces",
+                sql: "SELECT workspace_id FROM directory_workspaces",
                 args: vec![]
             })
             .await?

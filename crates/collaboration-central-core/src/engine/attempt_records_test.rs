@@ -33,7 +33,7 @@ fn row() -> ReadOutcome {
             SqlValue::Integer(1.try_into().unwrap()),
             text("1970-01-01T00:05:00.000Z"),
             text("corrupt_row"),
-            text("wakes.target"),
+            text("automation_wakes.target"),
             text("1970-01-01T00:00:00.000Z"),
             text("1970-01-01T00:00:00.000Z"),
             SqlValue::Null,
@@ -137,9 +137,9 @@ fn every_closed_failure_class_decodes_its_declared_payload() {
     for (tag, detail, expected) in [
         (
             "corrupt_row",
-            Some("wakes.target\nnot-json"),
+            Some("automation_wakes.target\nnot-json"),
             ItemFailureClass::CorruptRow {
-                column: "wakes.target".into(),
+                column: "automation_wakes.target".into(),
                 raw_value: Some("not-json".into()),
             },
         ),

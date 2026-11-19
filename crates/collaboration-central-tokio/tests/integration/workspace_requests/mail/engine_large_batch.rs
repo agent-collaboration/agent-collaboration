@@ -86,7 +86,7 @@ async fn a_thousand_due_instances_complete_in_four_capped_batches_thirty_seconds
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='engine_probe'",
+            "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='engine_probe'",
             vec![]
         )
         .await,

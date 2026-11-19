@@ -78,7 +78,7 @@ async fn different_authorized_person_cannot_reuse_create_operation() -> Result {
         "other actor changed directory, record, ledger or actor map"
     );
     assert_eq!(
-        f.rows(A, "SELECT COUNT(*) FROM organization_used_requests", vec![])
+        f.rows(A, "SELECT COUNT(*) FROM admin_used_requests", vec![])
             .await?,
         vec![vec![number(2)?]],
         "admitted conflicting operation consumes only its fresh proof"

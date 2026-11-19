@@ -617,9 +617,9 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
         "/test/raw-read" => {
             let statement: OwnedStatement = request.json().await?;
             if ![
-                "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')",
-                "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
-                "SELECT * FROM organization_change_records ORDER BY id",
+                "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='active'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')",
+                "SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id",
+                "SELECT * FROM signin_change_records ORDER BY id",
             ].contains(&statement.sql.as_str())
                 || !statement.args.is_empty()
             {
@@ -637,14 +637,14 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
             }
             let mut statements = vec![central_storage::GuardedStatement {
                 statement: central_storage::Statement {
-                    sql: "DELETE FROM organization_identity",
+                    sql: "DELETE FROM signin_organization_identity",
                     args: vec![],
                 },
                 expect: central_storage::RowExpectation::Any,
             }];
             for (id, statement) in rows {
                 statements.push(central_storage::GuardedStatement {
-                    statement: central_storage::Statement { sql: "INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,?,0,0)", args: vec![central_storage::SqlValue::Text(id), central_storage::SqlValue::Text(statement)] },
+                    statement: central_storage::Statement { sql: "INSERT INTO signin_organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,?,0,0)", args: vec![central_storage::SqlValue::Text(id), central_storage::SqlValue::Text(statement)] },
                     expect: central_storage::RowExpectation::Exactly(1),
                 });
             }

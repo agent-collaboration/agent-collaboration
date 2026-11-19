@@ -22,10 +22,10 @@ async fn count(runtime: &Runtime, sql: &'static str) -> SqlValue {
         .rows[0][0]
         .clone()
 }
-const NOTICES: &str = "SELECT COUNT(*) FROM messages WHERE message_kind='notice'";
-const WINDOWS: &str = "SELECT COUNT(*) FROM notification_windows";
+const NOTICES: &str = "SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice'";
+const WINDOWS: &str = "SELECT COUNT(*) FROM mail_notification_windows";
 const WINDOW_RECORDS: &str =
-    "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_notice_windows'";
+    "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows'";
 async fn central_control(runtime: &Runtime, operation: &str, point: &str) {
     let _: bool = runtime.control(operation, &point).await.unwrap();
 }
@@ -46,7 +46,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     let due: String = match &runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT due_at FROM notification_windows",
+            sql: "SELECT due_at FROM mail_notification_windows",
             args: vec![],
         })
         .await

@@ -31,10 +31,10 @@ async fn floor_write_failure_is_unavailable_unchanged_and_a_healthy_retry_acknow
     assert_eq!(f.provision().await.0, 200);
     f.floors().await;
     let before = f
-        .read("SELECT * FROM organization_authorization_floors ORDER BY id")
+        .read("SELECT * FROM signin_authorization_floors ORDER BY id")
         .await;
     let counts_before = f.counts().await;
-    schema_statement(&f,"CREATE TRIGGER signin_floor_failure BEFORE UPDATE ON organization_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture authorization floor failure'); END").await;
+    schema_statement(&f,"CREATE TRIGGER signin_floor_failure BEFORE UPDATE ON signin_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture authorization floor failure'); END").await;
     let incoming = org_revision(4, "stopped");
     let failed = reqwest::Client::builder()
         .no_proxy()
@@ -58,7 +58,7 @@ async fn floor_write_failure_is_unavailable_unchanged_and_a_healthy_retry_acknow
         "a failed floor write publishes no acknowledgement or response payload"
     );
     assert_eq!(
-        f.read("SELECT * FROM organization_authorization_floors ORDER BY id")
+        f.read("SELECT * FROM signin_authorization_floors ORDER BY id")
             .await,
         before,
         "every retained floor column must survive the failed batch unchanged"
@@ -74,7 +74,7 @@ async fn floor_write_failure_is_unavailable_unchanged_and_a_healthy_retry_acknow
         (200, json!({"acknowledgedRevision":4}))
     );
     assert_eq!(
-        f.read("SELECT minimum_revision,state FROM organization_authorization_floors")
+        f.read("SELECT minimum_revision,state FROM signin_authorization_floors")
             .await
             .rows,
         vec![vec![

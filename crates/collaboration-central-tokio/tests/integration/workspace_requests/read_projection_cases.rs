@@ -118,7 +118,7 @@ async fn work_log_redaction_is_null_in_reopened_store_and_retains_original_order
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT body,redacted FROM work_log_entries WHERE entry_id=?",
+                sql: "SELECT body,redacted FROM workspace_work_log_entries WHERE entry_id=?",
                 args: vec![text(second)],
             },
         )

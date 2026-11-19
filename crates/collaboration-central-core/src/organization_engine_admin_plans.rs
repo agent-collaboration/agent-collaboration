@@ -59,8 +59,8 @@ fn refusal(refusal: AttemptRefusal) -> OrganizationAdminResult {
 
 fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, StoreFailure> {
     let answer: OrganizationAdminResult =
-        serde_json::from_value(json(encoded, "request_log.answer")?)
-            .map_err(|_| corrupt("request_log.answer"))?;
+        serde_json::from_value(json(encoded, "runtime_request_log.answer")?)
+            .map_err(|_| corrupt("runtime_request_log.answer"))?;
     match answer {
         OrganizationAdminResult::EngineRetried {}
         | OrganizationAdminResult::EngineDiscarded {}
@@ -69,7 +69,9 @@ fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, Stor
         | OrganizationAdminResult::Found { .. }
         | OrganizationAdminResult::Records { .. }
         | OrganizationAdminResult::EngineHealth { .. }
-        | OrganizationAdminResult::EngineRetired { .. } => Err(corrupt("request_log.answer")),
+        | OrganizationAdminResult::EngineRetired { .. } => {
+            Err(corrupt("runtime_request_log.answer"))
+        }
     }
 }
 
@@ -143,10 +145,14 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
             .host
-            .read(crate::workspace_request_log::lookup(&operation, &cutoff))
+            .read(crate::workspace_request_log::lookup(
+                crate::workspace_request_log::RequestLogStore::Organization,
+                &operation,
+                &cutoff,
+            ))
             .await?;
         if logged.rows.len() > 1 {
-            return Err(corrupt("request_log.request_id"));
+            return Err(corrupt("runtime_request_log.request_id"));
         }
         let Some(row) = logged.rows.first() else {
             return Ok(OperationReceipt::Fresh {
@@ -158,7 +164,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         };
         let stored_actor: ActorIdentityId = string(&logged, row, "caller")?
             .parse()
-            .map_err(|_| corrupt("request_log.caller"))?;
+            .map_err(|_| corrupt("runtime_request_log.caller"))?;
         if stored_actor != actor.actor
             || string(&logged, row, "content_digest")? != person.intent_digest
         {
@@ -207,6 +213,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             Err(reason) => refusal(reason),
         };
         statements.extend(crate::workspace_request_log::retain(
+            crate::workspace_request_log::RequestLogStore::Organization,
             &operation,
             &actor,
             &person.intent_digest,
@@ -254,6 +261,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         };
         let retain = |result: &OrganizationAdminResult| {
             crate::workspace_request_log::retain(
+                crate::workspace_request_log::RequestLogStore::Organization,
                 &operation,
                 &actor,
                 &person.intent_digest,

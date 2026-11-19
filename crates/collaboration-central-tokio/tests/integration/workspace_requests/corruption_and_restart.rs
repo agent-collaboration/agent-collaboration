@@ -27,7 +27,7 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         role: m::ProjectRole::Lead,
         holder: m::ActorRef::Session(other),
     };
-    f.workspace_execute("CREATE TRIGGER reject_lead_fixture BEFORE INSERT ON project_roles WHEN NEW.role='lead' BEGIN SELECT RAISE(ABORT,'fixture failure after end old'); END",vec![],RowExpectation::Any).await;
+    f.workspace_execute("CREATE TRIGGER reject_lead_fixture BEFORE INSERT ON workspace_project_roles WHEN NEW.role='lead' BEGIN SELECT RAISE(ABORT,'fixture failure after end old'); END",vec![],RowExpectation::Any).await;
     let failed = f.call(402, operation.clone()).await;
     assert!(
         matches!(
@@ -36,13 +36,13 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         ),
         "{failed:?}"
     );
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
+    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM workspace_project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
     assert_eq!(rows.rows, vec![vec![text(&original.lead)]]);
     let log = runtime
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT request_id FROM request_log WHERE request_id=?",
+                sql: "SELECT request_id FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(402))],
             },
         )
@@ -60,7 +60,7 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         f.call(402, operation.clone()).await.result,
         m::WorkspaceResult::OutcomeUnknown
     );
-    let applied=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
+    let applied=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM workspace_project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
     assert_eq!(applied.rows.len(), 1);
     assert_ne!(
         applied.rows,
@@ -134,7 +134,7 @@ async fn invalid_role_input_and_stored_role_rows_fail_closed() {
     )
     .await;
     f.workspace_batch(
-        "UPDATE deliverable_roles SET role='owner' WHERE deliverable_id=?",
+        "UPDATE workspace_deliverable_roles SET role='owner' WHERE deliverable_id=?",
         vec![text(&deliverable)],
     )
     .await;
@@ -154,7 +154,7 @@ async fn invalid_role_input_and_stored_role_rows_fail_closed() {
         )
         .await;
     assert!(
-        matches!(result,Err(StoreFailure::Corrupt{reason:CorruptReason::BadValue{column}}) if column=="deliverable_roles.role")
+        matches!(result,Err(StoreFailure::Corrupt{reason:CorruptReason::BadValue{column}}) if column=="workspace_deliverable_roles.role")
     );
     f.host.close().await;
 }
@@ -219,7 +219,7 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
         matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{items:entries,..}) if entries.len()==2 && entries[0].position()<entries[1].position())
     );
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
-    for table in ["deliverables", "changes"] {
+    for table in ["workspace_deliverables", "workspace_changes"] {
         let schema = runtime
             .inspect_workspace(
                 &f.workspace,

@@ -39,7 +39,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let id: WakeId = self.mint()?;
                 (
                     vec![exact(
-                        "INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
+                        "INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
                         vec![
                             text(&id),
                             encode(target)?,
@@ -59,7 +59,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let rows = self
                     .host
                     .read(Statement {
-                        sql: "SELECT state FROM wakes WHERE wake_id=?",
+                        sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
                         args: vec![text(wake_id)],
                     })
                     .await?;
@@ -71,7 +71,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let state: mail::WakeState = serde_json::from_value(serde_json::Value::String(
                     string(&rows, row, "state")?.to_owned(),
                 ))
-                .map_err(|_| corrupt("wakes.state"))?;
+                .map_err(|_| corrupt("automation_wakes.state"))?;
                 if state == mail::WakeState::Done {
                     return Ok(Err(Refusal::WakeAlreadyFired {
                         wake_id: wake_id.clone(),
@@ -81,7 +81,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     vec![]
                 } else {
                     vec![exact(
-                        "UPDATE wakes SET state='disabled',updated_at=? WHERE wake_id=? AND state='active'",
+                        "UPDATE automation_wakes SET state='disabled',updated_at=? WHERE wake_id=? AND state='active'",
                         vec![at(), text(wake_id)],
                     )]
                 };
@@ -145,7 +145,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let id: AutomationId = self.mint()?;
                 (
                     vec![exact(
-                        "INSERT INTO automations(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
+                        "INSERT INTO automation_schedules(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
                         vec![
                             text(&id),
                             encode(target)?,
@@ -166,7 +166,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 )
             }
             Op::DisableAutomation { automation_id } => {
-                let rows=self.host.read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automations WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
+                let rows=self.host.read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automation_schedules WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
                 let rows = decode_automations(&rows)?;
                 let Some(row) = rows.first() else {
                     return Ok(Err(Refusal::AutomationNotFound {
@@ -182,7 +182,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     vec![]
                 } else {
                     vec![exact(
-                        "UPDATE automations SET state='disabled',updated_at=? WHERE automation_id=? AND state='active'",
+                        "UPDATE automation_schedules SET state='disabled',updated_at=? WHERE automation_id=? AND state='active'",
                         vec![at(), text(automation_id)],
                     )]
                 };

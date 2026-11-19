@@ -27,7 +27,7 @@ async fn joined_observer(f: &Fixture, thread: &m::ThreadId) -> (FixtureCaller, m
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -72,7 +72,7 @@ async fn posted_notice_item(
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT change_id FROM changes WHERE position=?",
+                sql: "SELECT change_id FROM workspace_changes WHERE position=?",
                 args: vec![SqlValue::Integer(
                     i64::try_from(position.get()).unwrap().try_into().unwrap(),
                 )],
@@ -103,7 +103,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
     let runtime = f.host.central(&f.caller.organization_id).await;
     let actors = runtime
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -122,7 +122,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
         chrono::DateTime::from_timestamp_millis(f.clock.0.load(Ordering::SeqCst)).unwrap();
     let mut expected = vec![posted_notice_item(&f, 7103, &thread, &author, vec![]).await];
     let read_window = || Statement {
-        sql: "SELECT first_activity_at,due_at,(SELECT COUNT(*) FROM notification_window_items i WHERE i.window_id=w.window_id) FROM notification_windows w WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)",
+        sql: "SELECT first_activity_at,due_at,(SELECT COUNT(*) FROM mail_notification_window_items i WHERE i.window_id=w.window_id) FROM mail_notification_windows w WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)",
         args: vec![text(&actor), text(&thread)],
     };
     let first = runtime.statement_host().read(read_window()).await.unwrap();
@@ -167,7 +167,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
         after_addressed.rows[0][2],
         SqlValue::Integer(4.try_into().unwrap())
     );
-    let messages = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let messages = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         messages.rows,
         vec![vec![SqlValue::Integer(0.try_into().unwrap())]]
@@ -177,7 +177,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
     // The observer's join also opened a window for the thread creator.
     assert_eq!(runtime.after_event().await.unwrap().windows_fired, 2);
     assert_eq!(runtime.after_event().await.unwrap().windows_fired, 0);
-    let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND source_change_id=?", args: vec![text(&actor), text(&thread), text(&expected[0].change_id)] }).await.unwrap();
+    let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND source_change_id=?", args: vec![text(&actor), text(&thread), text(&expected[0].change_id)] }).await.unwrap();
     assert_eq!(messages.rows.len(), 1);
     let (SqlValue::Text(sender), SqlValue::Text(body)) =
         (&messages.rows[0][0], &messages.rows[0][1])
@@ -240,7 +240,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
             .unwrap();
         assert!(matches!(sent, CentralMailResult::Done(_)));
         let runtime = f.host.central(&f.caller.organization_id).await;
-        let before = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
+        let before = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             before.rows,
             vec![vec![
@@ -276,7 +276,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
             result.result,
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
         ));
-        let after = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='cancelled'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
+        let after = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='cancelled'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             after.rows,
             vec![vec![
@@ -303,7 +303,7 @@ async fn session_cadence_sets_nondefault_window_deadline() {
     let defaults = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
+            sql: "SELECT notice_cadence FROM access_actor_identities WHERE actor_identity_id=?",
             args: vec![text(&actor)],
         })
         .await
@@ -332,7 +332,7 @@ async fn session_cadence_sets_nondefault_window_deadline() {
         chrono::DateTime::from_timestamp_millis(f.clock.0.load(Ordering::SeqCst)).unwrap();
     created(f.call(7142, post(&thread, vec![])).await);
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT first_activity_at,due_at FROM notification_windows WHERE recipient_actor=?", args: vec![text(&actor)],
+        sql: "SELECT first_activity_at,due_at FROM mail_notification_windows WHERE recipient_actor=?", args: vec![text(&actor)],
     }).await.unwrap();
     assert_eq!(rows.rows.len(), 1);
     assert_eq!(

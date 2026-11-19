@@ -13,11 +13,11 @@ async fn floor_write_failure_is_unavailable_unchanged_and_a_healthy_retry_acknow
     let before = f
         .rows(
             A,
-            "SELECT * FROM organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_authorization_floors ORDER BY id",
             vec![],
         )
         .await?;
-    f.apply(A,"CREATE TRIGGER signin_floor_failure BEFORE UPDATE ON organization_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture authorization floor failure'); END",vec![]).await?;
+    f.apply(A,"CREATE TRIGGER signin_floor_failure BEFORE UPDATE ON signin_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture authorization floor failure'); END",vec![]).await?;
     let incoming = organization_floor(A, 4, "stopped");
     let failed = f.post(REVISIONS, &incoming).await?;
     assert_eq!(failed.status, 503);
@@ -28,7 +28,7 @@ async fn floor_write_failure_is_unavailable_unchanged_and_a_healthy_retry_acknow
     assert_eq!(
         f.rows(
             A,
-            "SELECT * FROM organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_authorization_floors ORDER BY id",
             vec![]
         )
         .await?,
@@ -43,7 +43,7 @@ async fn floor_write_failure_is_unavailable_unchanged_and_a_healthy_retry_acknow
     assert_eq!(
         f.rows(
             A,
-            "SELECT minimum_revision,state FROM organization_authorization_floors",
+            "SELECT minimum_revision,state FROM signin_authorization_floors",
             vec![]
         )
         .await?,

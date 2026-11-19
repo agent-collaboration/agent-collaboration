@@ -5,19 +5,19 @@ use super::support::*;
 async fn owning_snapshot(f: &MachineFixture) -> Result<Vec<Vec<Vec<central_storage::SqlValue>>>> {
     let mut rows = snapshot(f).await?;
     for sql in [
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM request_log ORDER BY request_id",
-        "SELECT * FROM organization_identity ORDER BY id",
-        "SELECT * FROM organization_authorization_floors ORDER BY id",
-        "SELECT * FROM person_organization_authorization_floors ORDER BY id",
-        "SELECT * FROM organization_used_requests ORDER BY id",
-        "SELECT * FROM workspace_drains ORDER BY workspace_id",
-        "SELECT * FROM messages ORDER BY message_id",
-        "SELECT * FROM notification_windows ORDER BY window_id",
-        "SELECT * FROM notification_window_items ORDER BY window_item_id",
-        "SELECT * FROM wakes ORDER BY wake_id",
-        "SELECT * FROM automations ORDER BY automation_id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM runtime_request_log ORDER BY request_id",
+        "SELECT * FROM signin_organization_identity ORDER BY id",
+        "SELECT * FROM signin_authorization_floors ORDER BY id",
+        "SELECT * FROM signin_person_authorization_floors ORDER BY id",
+        "SELECT * FROM admin_used_requests ORDER BY id",
+        "SELECT * FROM mail_workspace_drains ORDER BY workspace_id",
+        "SELECT * FROM mail_messages ORDER BY message_id",
+        "SELECT * FROM mail_notification_windows ORDER BY window_id",
+        "SELECT * FROM mail_notification_window_items ORDER BY window_item_id",
+        "SELECT * FROM automation_wakes ORDER BY wake_id",
+        "SELECT * FROM automation_schedules ORDER BY automation_id",
     ] {
         rows.push(f.rows(sql).await?);
     }
@@ -36,36 +36,36 @@ async fn persisted_invalid_lifecycle_identifiers_times_and_generation_refuse_emp
     for (domain, corrupt_sql) in [
         (
             "unknown lifecycle",
-            "UPDATE machine_approvals SET state='paused'",
+            "UPDATE login_machine_approvals SET state='paused'",
         ),
         (
             "enrolled without client",
-            "UPDATE machine_approvals SET machine_client_id=NULL",
+            "UPDATE login_machine_approvals SET machine_client_id=NULL",
         ),
         (
             "approved with an end",
-            "UPDATE machine_approvals SET state='approved',machine_client_id=NULL,last_grant_at=NULL,ended_at=created_at",
+            "UPDATE login_machine_approvals SET state='approved',machine_client_id=NULL,last_grant_at=NULL,ended_at=created_at",
         ),
         (
             "unknown ending reason",
-            "UPDATE machine_approvals SET state='ended',end_reason='bored',last_grant_at=NULL,ended_at=created_at",
+            "UPDATE login_machine_approvals SET state='ended',end_reason='bored',last_grant_at=NULL,ended_at=created_at",
         ),
         (
             "fractional last-grant seconds",
-            "UPDATE machine_approvals SET last_grant_at='2030-03-17T17:46:40.001Z'",
+            "UPDATE login_machine_approvals SET last_grant_at='2030-03-17T17:46:40.001Z'",
         ),
         (
             "malformed request ID",
-            "UPDATE machine_approvals SET request_id='not-a-uuid'",
+            "UPDATE login_machine_approvals SET request_id='not-a-uuid'",
         ),
         // This literal is intentionally an invalid stored version, not a generated ID.
         (
             "non-v7 request ID",
-            "UPDATE machine_approvals SET request_id='019f0000-0000-4000-8000-00000000d401'",
+            "UPDATE login_machine_approvals SET request_id='019f0000-0000-4000-8000-00000000d401'",
         ),
         (
             "negative machine generation",
-            "UPDATE machines SET enrollment_generation=-1",
+            "UPDATE login_machines SET enrollment_generation=-1",
         ),
     ] {
         let f = MachineFixture::new().await?;
@@ -90,7 +90,7 @@ async fn persisted_invalid_lifecycle_identifiers_times_and_generation_refuse_emp
             "{domain}: valid first Grant control"
         );
         let original = f
-            .rows("SELECT request_id,machine_client_id,last_grant_at FROM machine_approvals")
+            .rows("SELECT request_id,machine_client_id,last_grant_at FROM login_machine_approvals")
             .await?;
         assert_eq!(original.len(), 1);
         let healthy = owning_snapshot(&f).await?;
@@ -118,10 +118,10 @@ async fn persisted_invalid_lifecycle_identifiers_times_and_generation_refuse_emp
         // Restore the original stored scalar values exactly. This is repair setup,
         // not a product recovery path; the same real decision must work afterwards.
         f.execute(
-            "UPDATE machine_approvals SET state='enrolled',end_reason=NULL,ended_at=NULL,request_id=?,machine_client_id=?,last_grant_at=?",
+            "UPDATE login_machine_approvals SET state='enrolled',end_reason=NULL,ended_at=NULL,request_id=?,machine_client_id=?,last_grant_at=?",
             original[0].clone(),
         ).await?;
-        f.execute("UPDATE machines SET enrollment_generation=1", vec![])
+        f.execute("UPDATE login_machines SET enrollment_generation=1", vec![])
             .await?;
         assert!(
             owning_snapshot(&f).await? == healthy,

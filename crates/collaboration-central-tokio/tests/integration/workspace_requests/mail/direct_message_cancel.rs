@@ -63,9 +63,10 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
                 .rows
         }
     };
-    let terms =
-        stored("SELECT cancel_due_at,sender_request_id,state FROM messages WHERE message_id=?")
-            .await;
+    let terms = stored(
+        "SELECT cancel_due_at,sender_request_id,state FROM mail_messages WHERE message_id=?",
+    )
+    .await;
     assert_eq!(
         terms[0].iter().map(row_text).collect::<Vec<_>>(),
         vec![
@@ -88,7 +89,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     fixture.set_utc(mark - chrono::Duration::minutes(1)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        stored("SELECT state FROM messages WHERE message_id=?").await[0][0],
+        stored("SELECT state FROM mail_messages WHERE message_id=?").await[0][0],
         SqlValue::Text("queued".to_owned()),
         "never cancelled before its mark"
     );
@@ -96,13 +97,13 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     fixture.set_utc(mark).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        stored("SELECT state FROM messages WHERE message_id=?").await[0][0],
+        stored("SELECT state FROM mail_messages WHERE message_id=?").await[0][0],
         SqlValue::Text("cancelled".to_owned())
     );
     let notices = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body,state,cancel_due_at,sender_request_id FROM messages WHERE message_kind='deliveryOutcome'",
+            sql: "SELECT sender,target_session,body,state,cancel_due_at,sender_request_id FROM mail_messages WHERE message_kind='deliveryOutcome'",
             args: vec![],
         })
         .await
@@ -150,7 +151,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT COUNT(*) FROM messages WHERE message_kind='deliveryOutcome'",
+                sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='deliveryOutcome'",
                 args: vec![],
             })
             .await

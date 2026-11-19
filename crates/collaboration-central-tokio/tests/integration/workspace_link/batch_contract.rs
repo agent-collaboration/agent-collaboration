@@ -74,7 +74,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                    sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                     args: vec![
                         SqlValue::Text(serde_json::to_string(&vec![
                             workspace.workspace_id.clone(),
@@ -193,7 +193,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
     );
     let areas = store
         .read(Statement {
-            sql: "SELECT area_id,name FROM areas ORDER BY name",
+            sql: "SELECT area_id,name FROM workspace_areas ORDER BY name",
             args: vec![],
         })
         .await?;
@@ -212,7 +212,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
     );
     let logged = store
         .read(Statement {
-            sql: "SELECT request_id FROM request_log ORDER BY request_id",
+            sql: "SELECT request_id FROM workspace_request_log ORDER BY request_id",
             args: vec![],
         })
         .await?;
@@ -231,7 +231,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
         runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT wake_id FROM wakes",
+                sql: "SELECT wake_id FROM automation_wakes",
                 args: vec![]
             })
             .await?

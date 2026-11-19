@@ -12,7 +12,7 @@ async fn wake_message_times(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
     runtime
         .statement_host()
         .read(super::super::Statement {
-            sql: "SELECT created_at FROM messages WHERE message_kind='wake' ORDER BY created_at",
+            sql: "SELECT created_at FROM mail_messages WHERE message_kind='wake' ORDER BY created_at",
             args: vec![],
         })
         .await
@@ -32,7 +32,7 @@ async fn an_hour_without_traffic_wakes_only_when_work_is_due_and_each_time_once(
     );
     let windows = count(
         &runtime,
-        "SELECT COUNT(*) FROM notification_windows",
+        "SELECT COUNT(*) FROM mail_notification_windows",
         vec![],
     )
     .await;

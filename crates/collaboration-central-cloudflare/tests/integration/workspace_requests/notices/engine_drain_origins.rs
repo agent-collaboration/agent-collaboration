@@ -35,7 +35,7 @@ async fn second_workspace(f: &Fixture, request: u32) -> m::WorkspaceId {
 async fn drain_due_at(f: &Fixture, workspace: &m::WorkspaceId, due: chrono::DateTime<chrono::Utc>) {
     raw(
         &runtime(f).await,
-        "INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
+        "INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
         vec![text(workspace), stamp(due), stamp(due), stamp(due)],
     )
     .await;
@@ -43,7 +43,7 @@ async fn drain_due_at(f: &Fixture, workspace: &m::WorkspaceId, due: chrono::Date
 async fn drain_row(f: &Fixture, workspace: &m::WorkspaceId) -> Vec<SqlValue> {
     rows(
         &runtime(f).await,
-        "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
+        "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         vec![text(workspace)],
     )
     .await
@@ -65,7 +65,7 @@ async fn collide_drain_updates(
     let runtime = runtime(f).await;
     raw(
         &runtime,
-        "INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,NULL,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=NULL,updated_at=excluded.updated_at",
+        "INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,NULL,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=NULL,updated_at=excluded.updated_at",
         vec![text(&holder), stamp(at), stamp(at)],
     )
     .await;
@@ -74,7 +74,7 @@ async fn collide_drain_updates(
     raw(
         &runtime,
         leak(format!(
-            "CREATE UNIQUE INDEX drain_updated_once ON workspace_drains(updated_at) WHERE workspace_id IN ({})",
+            "CREATE UNIQUE INDEX drain_updated_once ON mail_workspace_drains(updated_at) WHERE workspace_id IN ({})",
             members.join(",")
         )),
         vec![],
@@ -119,7 +119,7 @@ async fn a_workspace_store_outage_is_recorded_and_the_batch_continues() {
     let case = case().await;
     let f = &case.fixture;
     f.workspace_execute(
-        "ALTER TABLE changes RENAME TO outage_changes",
+        "ALTER TABLE workspace_changes RENAME TO outage_changes",
         vec![],
         central_storage::RowExpectation::Any,
     )
@@ -279,7 +279,7 @@ async fn remote_down_never_masks_central_down_across_two_workspaces() {
     let other = second_workspace(f, 8610).await;
     drain_due_at(f, &other, case.at - chrono::Duration::seconds(1)).await;
     f.workspace_execute(
-        "ALTER TABLE changes RENAME TO outage_changes",
+        "ALTER TABLE workspace_changes RENAME TO outage_changes",
         vec![],
         central_storage::RowExpectation::Any,
     )

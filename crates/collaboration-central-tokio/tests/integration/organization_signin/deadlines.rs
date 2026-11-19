@@ -48,7 +48,7 @@ fn snapshot_bound(claims: &mut Value) {
     );
 }
 async fn counts(f: &Fixture) -> Result<Vec<Vec<SqlValue>>> {
-    f.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM request_log)",vec![]).await
+    f.rows(A,"SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM runtime_request_log)",vec![]).await
 }
 async fn held_read(f: &Fixture, adjust: fn(&mut Value), release_after_ms: u64) -> Result<Reply> {
     let person = signed::Person::owner(A, signed::NOW_SECONDS)?;

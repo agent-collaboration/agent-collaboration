@@ -10,7 +10,7 @@ use collaboration_central_core::engine_probe::{
 /// Every row a request could write: items, the group counter, receipts, records.
 async fn row_counts(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
     runtime.statement_host().read(Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM engine_probe_items),(SELECT group_concat(state) FROM (SELECT state FROM engine_probe_items ORDER BY item_id)),(SELECT SUM(effect_count) FROM engine_probe_groups),(SELECT COUNT(*) FROM request_log WHERE request_id IN (?,?,?,?)),(SELECT COUNT(*) FROM central_work_attempts)",
+        sql: "SELECT (SELECT COUNT(*) FROM engine_probe_items),(SELECT group_concat(state) FROM (SELECT state FROM engine_probe_items ORDER BY item_id)),(SELECT SUM(effect_count) FROM engine_probe_groups),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id IN (?,?,?,?)),(SELECT COUNT(*) FROM engine_work_attempts)",
         args: [9410, 9411, 9412, 9422]
             .map(|number| text(id::<workspace_model::RequestId>(number)))
             .to_vec(),
@@ -146,7 +146,7 @@ async fn an_undecodable_stored_receipt_is_corrupt_and_changes_nothing() {
         .unwrap();
     raw(
         &runtime,
-        "UPDATE request_log SET answer='{\"receipt\":\"unknownShape\"}' WHERE request_id=?",
+        "UPDATE runtime_request_log SET answer='{\"receipt\":\"unknownShape\"}' WHERE request_id=?",
         vec![text(id::<workspace_model::RequestId>(9422))],
     )
     .await;
@@ -158,7 +158,7 @@ async fn an_undecodable_stored_receipt_is_corrupt_and_changes_nothing() {
         replay,
         Err(StoreFailure::Corrupt {
             reason: CorruptReason::BadValue {
-                column: "request_log.answer".to_owned()
+                column: "runtime_request_log.answer".to_owned()
             }
         })
     );
@@ -171,7 +171,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
     let columns = runtime.statement_host().read(Statement {
-        sql: "SELECT name,type,\"notnull\",pk FROM pragma_table_info('central_work_attempts') ORDER BY cid",
+        sql: "SELECT name,type,\"notnull\",pk FROM pragma_table_info('engine_work_attempts') ORDER BY cid",
         args: vec![],
     }).await.unwrap().rows;
     let column = |name: &str, kind: &str, not_null: i64, pk: i64| {
@@ -196,7 +196,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
         ]
     );
     let indexes = runtime.statement_host().read(Statement {
-        sql: "SELECT name,\"unique\",(SELECT group_concat(name) FROM (SELECT name FROM pragma_index_info(l.name) ORDER BY seqno)) FROM pragma_index_list('central_work_attempts') l WHERE origin='c' ORDER BY name",
+        sql: "SELECT name,\"unique\",(SELECT group_concat(name) FROM (SELECT name FROM pragma_index_info(l.name) ORDER BY seqno)) FROM pragma_index_list('engine_work_attempts') l WHERE origin='c' ORDER BY name",
         args: vec![],
     }).await.unwrap().rows;
     assert_eq!(
@@ -217,7 +217,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
     let table = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sql FROM sqlite_master WHERE name='central_work_attempts'",
+            sql: "SELECT sql FROM sqlite_master WHERE name='engine_work_attempts'",
             args: vec![],
         })
         .await
@@ -243,7 +243,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
     let ids = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT attempt_id FROM central_work_attempts",
+            sql: "SELECT attempt_id FROM engine_work_attempts",
             args: vec![],
         })
         .await

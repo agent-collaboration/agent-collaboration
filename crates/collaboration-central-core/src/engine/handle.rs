@@ -300,8 +300,8 @@ fn receipt_failure<State, Error>(failure: ApplyFailure) -> HandleOutcome<State, 
         ApplyFailure::Superseded => HandleOutcome::Superseded,
         ApplyFailure::Uncertain => HandleOutcome::Uncertain,
         ApplyFailure::StoreDown(failure) => HandleOutcome::StoreDown(failure),
-        ApplyFailure::Rejected(_) => {
-            HandleOutcome::StoreDown(crate::workspace_decode_error::corrupt("request_log.claim"))
-        }
+        ApplyFailure::Rejected(_) => HandleOutcome::StoreDown(
+            crate::workspace_decode_error::corrupt("runtime_request_log.claim"),
+        ),
     }
 }

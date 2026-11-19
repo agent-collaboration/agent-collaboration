@@ -62,7 +62,7 @@ async fn one_due_batch_starts_each_kind_earliest_first_then_the_notice_units() {
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM messages WHERE message_kind IN ('wake','automation')",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind IN ('wake','automation')",
             vec![]
         )
         .await,

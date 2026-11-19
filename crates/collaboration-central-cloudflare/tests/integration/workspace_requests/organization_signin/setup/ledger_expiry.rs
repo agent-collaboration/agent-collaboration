@@ -6,19 +6,19 @@ use std::time::Duration;
 async fn unchanged_directory(f: &Fixture) -> Vec<Vec<Vec<SqlValue>>> {
     let mut rows = vec![];
     for sql in [
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
-        "SELECT * FROM organization_identity ORDER BY id",
-        "SELECT * FROM organization_authorization_floors ORDER BY id",
-        "SELECT * FROM person_organization_authorization_floors ORDER BY id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM signin_change_records ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM signin_organization_identity ORDER BY id",
+        "SELECT * FROM signin_authorization_floors ORDER BY id",
+        "SELECT * FROM signin_person_authorization_floors ORDER BY id",
     ] {
         rows.push(f.read(sql).await.rows);
     }
     rows
 }
 async fn ledger(f: &Fixture) -> Vec<Vec<SqlValue>> {
-    f.read("SELECT caller,content_digest,answer,created_at,updated_at FROM request_log ORDER BY request_id").await.rows
+    f.read("SELECT caller,content_digest,answer,created_at,updated_at FROM runtime_request_log ORDER BY request_id").await.rows
 }
 
 #[tokio::test]
@@ -71,7 +71,7 @@ async fn admin_create_after_ledger_expiry_retains_name_refusal_and_rolls_back_id
             .headers(signed::CREATE, &intent, &proof_id, now_seconds)
             .unwrap();
         if changed_name {
-            assert!(f.read("SELECT workspace_id FROM workspaces WHERE lower(trim(name))=lower(trim('Changed unused name'))").await.rows.is_empty(),"the changed name must be free so only workspace_id can conflict");
+            assert!(f.read("SELECT workspace_id FROM directory_workspaces WHERE lower(trim(name))=lower(trim('Changed unused name'))").await.rows.is_empty(),"the changed name must be free so only workspace_id can conflict");
         }
         let before = owned_rows(&f).await;
         let late = f.post_bytes(signed::CREATE, &body, &proof).await;
@@ -129,7 +129,7 @@ async fn admin_create_after_ledger_expiry_retains_name_refusal_and_rolls_back_id
                 "late name refusal changed directory, audit, actor or authority"
             );
             assert_eq!(
-                f.read("SELECT COUNT(*) FROM organization_used_requests")
+                f.read("SELECT COUNT(*) FROM admin_used_requests")
                     .await
                     .rows,
                 vec![vec![number(2)]]

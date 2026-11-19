@@ -9,7 +9,7 @@ struct SequenceState {
 async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str) -> Result<()> {
     let active = f
         .rows(
-            "SELECT approval_id FROM machine_approvals WHERE state='enrolled' ORDER BY approval_id",
+            "SELECT approval_id FROM login_machine_approvals WHERE state='enrolled' ORDER BY approval_id",
         )
         .await?;
     assert!(
@@ -26,7 +26,8 @@ async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str)
         "{step}: owning active enrollment differs from sequence model"
     );
     assert_eq!(
-        f.rows("SELECT enrollment_generation FROM machines").await?,
+        f.rows("SELECT enrollment_generation FROM login_machines")
+            .await?,
         vec![vec![number(state.generation)?]],
         "{step}: generation drift"
     );
@@ -35,7 +36,7 @@ async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str)
 async fn stale_grant(f: &MachineFixture, enrollment: &str, state: &SequenceState) -> Result<()> {
     let rows = f
         .rows(
-            "SELECT approval_id,base_generation,state FROM machine_approvals ORDER BY approval_id",
+            "SELECT approval_id,base_generation,state FROM login_machine_approvals ORDER BY approval_id",
         )
         .await?;
     let row = rows

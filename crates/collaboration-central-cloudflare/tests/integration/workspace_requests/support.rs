@@ -94,8 +94,8 @@ pub(super) async fn seed_enrollment(
         .unwrap()
         .to_rfc3339();
     let statements=[
-        ("INSERT INTO machines (machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,'enrolled',?,1,?,?)",vec![text(caller.caller.machine_id()),text("Machine"),text(allowed_workspaces),text(&at),text(&at)]),
-        ("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,'Machine',?,'enrolled',NULL,?,'machine:enroll',0,?,?,?,NULL,?,?)",vec![text(&caller.enrollment_id),text(&caller.enrollment_id),text(caller.caller.machine_id()),text(allowed_workspaces),text(signed::OWNER),text(code_expires),text(&caller.enrollment_id),text(&at),text(&at),text(&at)]),
+        ("INSERT INTO login_machines (machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,'enrolled',?,1,?,?)",vec![text(caller.caller.machine_id()),text("Machine"),text(allowed_workspaces),text(&at),text(&at)]),
+        ("INSERT INTO login_machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,'Machine',?,'enrolled',NULL,?,'machine:enroll',0,?,?,?,NULL,?,?)",vec![text(&caller.enrollment_id),text(&caller.enrollment_id),text(caller.caller.machine_id()),text(allowed_workspaces),text(signed::OWNER),text(code_expires),text(&caller.enrollment_id),text(&at),text(&at),text(&at)]),
     ].into_iter().map(|(sql,args)|GuardedStatement {statement:Statement {sql,args},expect:RowExpectation::Exactly(1)}).collect();
     assert!(matches!(
         runtime
@@ -113,7 +113,7 @@ pub(super) async fn seed_organization(host: &WorkerdHost, caller: &FixtureCaller
     let runtime = host.central(&caller.organization_id).await;
     // Existing clock-rollback cases stay within this independently signed standing.
     let statement = signed::stamp(caller.organization_id.as_str(), FIXTURE_NOW - 3600).unwrap();
-    assert!(matches!(runtime.run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement { sql: "INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,?,0,0)", args: vec![text(caller.organization_id.as_str()), text(statement)] }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await.unwrap(), BatchOutcome::Applied { .. }));
+    assert!(matches!(runtime.run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement { sql: "INSERT INTO signin_organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,?,0,0)", args: vec![text(caller.organization_id.as_str()), text(statement)] }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await.unwrap(), BatchOutcome::Applied { .. }));
 }
 pub(super) async fn seed(host: &WorkerdHost, caller: &FixtureCaller) {
     seed_organization(host, caller).await;
@@ -140,7 +140,7 @@ pub(super) async fn relocate_authority(
     let runtime = host.central(&caller.organization_id).await;
     let rows = runtime
         .read(Statement {
-            sql: "SELECT organization_statement FROM organization_identity WHERE id=?",
+            sql: "SELECT organization_statement FROM signin_organization_identity WHERE id=?",
             args: vec![text(caller.organization_id.as_str())],
         })
         .await
@@ -155,7 +155,7 @@ pub(super) async fn relocate_authority(
         .send().await.unwrap();
     assert_eq!(response.status().as_u16(), 200);
     assert!(matches!(runtime.run_batch(StatementBatch { statements: vec![
-        GuardedStatement { statement: Statement { sql: "UPDATE machine_approvals SET last_grant_at=?,updated_at=? WHERE approval_id=? AND state='enrolled'", args: vec![text(&at), text(&at), text(&caller.enrollment_id)] }, expect: RowExpectation::Exactly(1) },
+        GuardedStatement { statement: Statement { sql: "UPDATE login_machine_approvals SET last_grant_at=?,updated_at=? WHERE approval_id=? AND state='enrolled'", args: vec![text(&at), text(&at), text(&caller.enrollment_id)] }, expect: RowExpectation::Exactly(1) },
     ], alarm: AlarmUpdate::Unchanged }).await.unwrap(), BatchOutcome::Applied { .. }));
     fresh_auth(host, caller)
 }
@@ -196,7 +196,7 @@ pub(super) async fn create_workspace(host: &WorkerdHost, caller: &FixtureCaller)
     let batch = StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
-                sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                 args: vec![
                     text(serde_json::to_string(&vec![workspace.workspace_id.clone()]).unwrap()),
                     text(caller.caller.machine_id()),

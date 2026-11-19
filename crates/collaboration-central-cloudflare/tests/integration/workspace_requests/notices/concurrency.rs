@@ -58,13 +58,13 @@ async fn held_drain_serializes_second_drain_and_source_index_rejects_duplicate()
     assert_eq!(second.await.unwrap().notices_queued, 0);
     f.clock.0.fetch_add(900_000, Ordering::SeqCst);
     runtime.after_event().await.unwrap();
-    let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
     );
     let duplicate = runtime.run_batch(StatementBatch { statements: vec![GuardedStatement {
-        statement: Statement { sql: "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at) SELECT ?,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE message_kind='notice' AND source_thread_id=? AND recipient_actor=?", args: vec![text(id::<m::WorkspaceId>(7113)), text(&thread), text(&actor)] },
+        statement: Statement { sql: "INSERT INTO mail_messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at) SELECT ?,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM mail_messages WHERE message_kind='notice' AND source_thread_id=? AND recipient_actor=?", args: vec![text(id::<m::WorkspaceId>(7113)), text(&thread), text(&actor)] },
         expect: RowExpectation::Exactly(1),
     }], alarm: AlarmUpdate::Unchanged }).await;
     assert!(
@@ -99,7 +99,7 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![
@@ -144,7 +144,7 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
     });
     let _: bool = runtime.control("until-held", &pause).await.unwrap();
     let read_due = || Statement {
-        sql: "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+        sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         args: vec![text(&f.workspace)],
     };
     let original = runtime.read(read_due()).await.unwrap();
