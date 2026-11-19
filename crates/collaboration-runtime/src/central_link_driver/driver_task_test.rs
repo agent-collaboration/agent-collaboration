@@ -138,7 +138,7 @@ async fn a_restart_resends_writes_that_were_sent_without_an_answer() {
         let item = NewOutboxItem {
             request: id.parse().unwrap(),
             caller: caller(),
-            payload: thread_post(&id),
+            payload: queued_thread_post(&id),
             flush_at: SyncTime::from_unix_millis(MARK),
         };
         outbox
@@ -241,7 +241,7 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
         let item = NewOutboxItem {
             request: old.parse().unwrap(),
             caller: caller(),
-            payload: thread_post(&old),
+            payload: queued_thread_post(&old),
             flush_at: SyncTime::from_unix_millis(MARK - sixty_days_ms),
         };
         let ended_at = SyncTime::from_unix_millis(MARK - sixty_days_ms - 1_000);

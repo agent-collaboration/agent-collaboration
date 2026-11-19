@@ -8,12 +8,13 @@ use crate::outbox_store::{
     ANSWERED_RETENTION_MILLIS, ClaimedBatch, NewOutboxItem, OutboxInsert, OutboxStoreError,
     StoredOutboxWrite, payload_content_digest, with_send_time,
 };
+use central_link_client::QueuedWrite;
 use central_link_client::{
     EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
     OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
     RequestStatus,
 };
-use central_link_protocol::{ReplyPayload, RequestPayload};
+use central_link_protocol::ReplyPayload;
 use runtime_primitives::SyncTime;
 use std::collections::BTreeMap;
 use workspace_model::{Caller, RequestId};
@@ -36,7 +37,7 @@ enum RowState {
 struct Row {
     caller: Caller,
     /// The whole write until it ends; None once answered, refused or cancelled.
-    payload: Option<RequestPayload>,
+    payload: Option<QueuedWrite>,
     target: OutboxWriteTarget,
     content_digest: String,
     flush_at: SyncTime,
@@ -97,12 +98,14 @@ fn sent(state: &RowState) -> bool {
 
 fn content(
     request: &RequestId,
-    payload: &RequestPayload,
+    payload: &QueuedWrite,
 ) -> Result<OutboxWriteContent, OutboxStoreError> {
-    OutboxWriteContent::of(payload).ok_or_else(|| OutboxStoreError::CorruptItem {
-        request_id: request.as_str().to_owned(),
-        field: "payload_json",
-    })
+    payload
+        .content()
+        .ok_or_else(|| OutboxStoreError::CorruptItem {
+            request_id: request.as_str().to_owned(),
+            field: "payload_json",
+        })
 }
 
 impl OutboxStorage for MemoryOutbox {
@@ -112,7 +115,7 @@ impl OutboxStorage for MemoryOutbox {
         now: SyncTime,
     ) -> OutboxFuture<'call, OutboxInsert> {
         Box::pin(async move {
-            if item.payload.write_request_id() != Some(&item.request) {
+            if item.payload.request_id() != Some(&item.request) {
                 return Err(OutboxStoreError::RequestIdMismatch {
                     request: item.request.clone(),
                 });
@@ -122,7 +125,8 @@ impl OutboxStorage for MemoryOutbox {
                 let same_write = match &row.payload {
                     Some(payload) => payload == &item.payload,
                     None => {
-                        OutboxWriteContent::of(&item.payload)
+                        item.payload
+                            .content()
                             .is_some_and(|written| written.target == row.target)
                             && digest == row.content_digest
                     }

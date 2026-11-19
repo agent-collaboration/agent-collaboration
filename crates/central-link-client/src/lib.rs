@@ -6,6 +6,8 @@ mod link_calls;
 mod link_state;
 mod outbox_flush;
 mod outbox_views;
+mod queued_write;
+pub use queued_write::{QueuedWrite, ToolSendMessage};
 mod pending_calls;
 mod submission_path;
 

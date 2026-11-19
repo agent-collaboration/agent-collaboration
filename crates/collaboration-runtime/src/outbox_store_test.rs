@@ -19,12 +19,12 @@ fn uuid_v7(seed: u16) -> String {
 fn caller(seed: u16) -> Caller {
     serde_json::from_value(json!({
         "kind": "session",
-        "value": {"machineId": uuid_v7(60_000), "endpoint": "claude-local", "sessionId": format!("s{seed}")},
+        "value": {"machineId": uuid_v7(60_000), "sessionId": format!("s{seed}")},
     }))
     .unwrap()
 }
 
-fn thread_post(request: &str, body: &str) -> RequestPayload {
+fn thread_post(request: &str, body: &str) -> QueuedWrite {
     serde_json::from_value(json!({
         "kind": "workspace",
         "request": {
@@ -107,7 +107,10 @@ async fn a_write_moves_in_outbox_sent_accepted_and_survives_a_reopen() {
         vec![StoredOutboxWrite {
             request: write.request.clone(),
             caller: write.caller.clone(),
-            payload: write.payload.clone(),
+            payload: write
+                .payload
+                .clone()
+                .into_wire(chrono::DateTime::UNIX_EPOCH),
         }]
     );
     assert_eq!(after_send, RequestStatus::Sent);

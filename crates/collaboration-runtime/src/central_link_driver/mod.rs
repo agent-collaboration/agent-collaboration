@@ -73,6 +73,11 @@ impl FlushJitter for MachineFlushJitter {
 }
 
 pub(crate) enum DriverCommand {
+    QueueMessage {
+        caller: Caller,
+        message: central_link_client::ToolSendMessage,
+        reply: oneshot::Sender<Submission>,
+    },
     Submit {
         caller: Caller,
         payload: RequestPayload,
@@ -182,6 +187,30 @@ impl RouterLinkCalls {
 }
 
 impl LinkCalls for RouterLinkCalls {
+    fn submit_message(
+        &self,
+        caller: Caller,
+        message: central_link_client::ToolSendMessage,
+    ) -> LinkCallFuture<'_, Submission> {
+        Box::pin(async move {
+            let (reply, answer) = oneshot::channel();
+            let request = message.request_id.clone();
+            if self
+                .commands
+                .send(DriverCommand::QueueMessage {
+                    caller,
+                    message,
+                    reply,
+                })
+                .await
+                .is_err()
+            {
+                return Submission::Refused(SubmitRefusal::OutboxUnavailable);
+            }
+            answer.await.unwrap_or(Submission::Uncertain { request })
+        })
+    }
+
     fn submit(&self, caller: Caller, payload: RequestPayload) -> LinkCallFuture<'_, Submission> {
         Box::pin(async move {
             let (reply, answer) = oneshot::channel();

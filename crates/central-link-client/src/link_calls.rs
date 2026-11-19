@@ -17,6 +17,13 @@ pub trait LinkCalls: Send + Sync {
     /// Every write payload carries its caller-minted UUIDv7 RequestId.
     fn submit(&self, caller: Caller, payload: RequestPayload) -> LinkCallFuture<'_, Submission>;
 
+    /// Direct messages enter custody without a caller-supplied send timestamp.
+    fn submit_message(
+        &self,
+        caller: Caller,
+        message: crate::ToolSendMessage,
+    ) -> LinkCallFuture<'_, Submission>;
+
     /// Scoped to the caller's own requests: another caller's id answers NotFound.
     fn request_status(
         &self,
@@ -98,6 +105,8 @@ pub enum LinkAdmissionRefusal {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubmitRefusal {
+    #[error("direct messages must use the unstamped send-message request")]
+    UnstampedMessageRequired,
     /// Immediate kinds: nothing left the Mac.
     #[error("central is unavailable; nothing left this Mac")]
     CentralUnavailable,

@@ -5,7 +5,7 @@
 //! second time.
 use super::super::super::driver_test_support::*;
 use super::super::super::*;
-use central_link_client::{LinkCalls, OutboxCancellation, RequestStatus};
+use central_link_client::{LinkCalls, OutboxCancellation, QueuedWrite, RequestStatus};
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, RequestPayload, decode_text,
 };
@@ -46,7 +46,7 @@ async fn reopened(database: &std::path::Path) -> Arc<Mutex<dyn OutboxStorage>> {
 /// Runs the scenario for one write and returns how it ended and how many
 /// times central received it.
 async fn committed_then_lost_then_restarted_after(
-    payload: RequestPayload,
+    payload: QueuedWrite,
     id: &str,
     restart_after_ms: i64,
 ) -> (RequestStatus, Vec<central_link_client::EndedWrite>, usize) {
@@ -60,7 +60,15 @@ async fn committed_then_lost_then_restarted_after(
         reopened(&database).await,
     );
     let mut central = first.connected().await;
-    first.calls.submit(caller(), payload).await;
+    match payload {
+        QueuedWrite::Workspace(request) => {
+            first
+                .calls
+                .submit(caller(), RequestPayload::Workspace(request))
+                .await
+        }
+        QueuedWrite::SendMessage(request) => first.calls.submit_message(caller(), request).await,
+    };
     advance_to_next_mark(&first);
     for batch in batches_now(&first, &mut central).await {
         received += batch.len();
@@ -109,7 +117,8 @@ async fn committed_then_lost_then_restarted_after(
 async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes() {
     let id = uuid_v7(40);
     let (status, ended, received) =
-        committed_then_lost_then_restarted_after(thread_post(&id), &id, 16 * 60 * 1000).await;
+        committed_then_lost_then_restarted_after(queued_thread_post(&id), &id, 16 * 60 * 1000)
+            .await;
 
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
@@ -131,8 +140,12 @@ async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes
 #[tokio::test]
 async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minutes() {
     let id = uuid_v7(41);
-    let (status, ended, received) =
-        committed_then_lost_then_restarted_after(direct_message(&id), &id, 16 * 60 * 1000).await;
+    let (status, ended, received) = committed_then_lost_then_restarted_after(
+        QueuedWrite::SendMessage(direct_message(&id)),
+        &id,
+        16 * 60 * 1000,
+    )
+    .await;
 
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
@@ -152,7 +165,8 @@ async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minute
 async fn a_write_restarted_before_its_deadline_is_resent_under_the_same_id() {
     let id = uuid_v7(42);
     let (status, ended, received) =
-        committed_then_lost_then_restarted_after(thread_post(&id), &id, 10 * 60 * 1000).await;
+        committed_then_lost_then_restarted_after(queued_thread_post(&id), &id, 10 * 60 * 1000)
+            .await;
 
     assert_eq!(received, 2, "inside the window the replay goes out again");
     assert_eq!(status, RequestStatus::Answered(reply()));
@@ -229,7 +243,7 @@ async fn an_offline_router_ends_waiting_writes_at_the_exact_deadline() {
     harness.calls.submit(caller(), thread_post(&post)).await;
     harness
         .calls
-        .submit(caller(), direct_message(&message))
+        .submit_message(caller(), direct_message(&message))
         .await;
 
     harness

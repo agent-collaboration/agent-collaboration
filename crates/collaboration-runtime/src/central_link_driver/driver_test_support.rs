@@ -39,21 +39,28 @@ pub(crate) fn caller() -> Caller {
     .unwrap()
 }
 
-pub(crate) fn thread_post(request: &str) -> RequestPayload {
-    serde_json::from_value(json!({"kind": "workspace", "request": {
-        "requestId": request, "workspaceId": uuid_v7(9000),
-        "operation": {"kind": "threadPost", "threadId": uuid_v7(9001), "body": "hi", "addressees": []}}}))
-    .unwrap()
+pub(crate) fn queued_thread_post(request: &str) -> central_link_client::QueuedWrite {
+    central_link_client::QueuedWrite::Workspace(
+        serde_json::from_value(json!({
+            "requestId": request, "workspaceId": uuid_v7(9000),
+            "operation": {"kind": "threadPost", "threadId": uuid_v7(9001), "body": "hi", "addressees": []}
+        })).unwrap()
+    )
 }
 
-pub(crate) fn direct_message(request: &str) -> RequestPayload {
-    serde_json::from_value(
-        json!({"kind": "mail", "request": {"requestId": request, "operation": {
-        "kind": "sendMessage",
+pub(crate) fn thread_post(request: &str) -> RequestPayload {
+    let central_link_client::QueuedWrite::Workspace(request) = queued_thread_post(request) else {
+        panic!("thread post fixture must be a workspace request");
+    };
+    RequestPayload::Workspace(request)
+}
+
+pub(crate) fn direct_message(request: &str) -> central_link_client::ToolSendMessage {
+    serde_json::from_value(json!({
+        "requestId": request,
         "to": {"machineId": INSTALLATION, "sessionId": "recipient"},
-        "body": "are you there", "delivery": "auto", "replyTo": null,
-        "sentAt": "2030-01-01T00:00:00Z"}}}),
-    )
+        "body": "are you there", "delivery": "auto", "replyTo": null
+    }))
     .unwrap()
 }
 

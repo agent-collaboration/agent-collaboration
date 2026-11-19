@@ -5,6 +5,7 @@ use crate::MachineLocalStore;
 use crate::machine_local_store::MachineLocalWrite;
 use crate::outbox_deadline::DepartureAtDeadline;
 use crate::outbox_item_state::OutboxItemState;
+use central_link_client::QueuedWrite;
 use central_link_client::{
     EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxWriteContent, OutboxWriteTarget,
     OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState, RequestStatus,
@@ -43,7 +44,7 @@ pub enum OutboxStoreError {
 pub struct NewOutboxItem {
     pub request: RequestId,
     pub caller: Caller,
-    pub payload: RequestPayload,
+    pub payload: QueuedWrite,
     pub flush_at: SyncTime,
 }
 
@@ -131,7 +132,7 @@ impl<'store> MacOutbox<'store> {
         item: &NewOutboxItem,
         now: SyncTime,
     ) -> Result<OutboxInsert, OutboxStoreError> {
-        if item.payload.write_request_id() != Some(&item.request) {
+        if item.payload.request_id() != Some(&item.request) {
             return Err(OutboxStoreError::RequestIdMismatch {
                 request: item.request.clone(),
             });
@@ -164,7 +165,8 @@ impl<'store> MacOutbox<'store> {
                 // has the same target, workspace included, and the same content
                 // digest; any difference is a conflict. The outbox spans workspaces.
                 StoredPayload::Answered(answered) => {
-                    OutboxWriteContent::of(&item.payload)
+                    item.payload
+                        .content()
                         .is_some_and(|content| content.target == answered.target)
                         && payload_content_digest(&item.payload)? == answered.content_digest
                 }
@@ -784,7 +786,7 @@ struct AnsweredWrite {
 /// `payload_json` by row state: the whole write until central answers, then
 /// the body-free answered record.
 enum StoredPayload {
-    Unanswered(RequestPayload),
+    Unanswered(QueuedWrite),
     Answered(AnsweredWrite),
 }
 
@@ -808,9 +810,9 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
         | OutboxItemState::SentAnswerLost
         | OutboxItemState::Sent
         | OutboxItemState::Resent => {
-            let payload: RequestPayload =
+            let payload: QueuedWrite =
                 serde_json::from_str(&row.payload_json).map_err(|_| corrupt("payload_json"))?;
-            if payload.write_request_id().map(RequestId::as_str) != Some(row.request_id.as_str()) {
+            if payload.request_id().map(RequestId::as_str) != Some(row.request_id.as_str()) {
                 return Err(corrupt("payload_json"));
             }
             StoredPayload::Unanswered(payload)
@@ -878,16 +880,18 @@ fn decode_owned_row(row: &OutboxRow, caller: &Caller) -> Result<DecodedRow, Outb
 
 fn outbox_content(
     request_id: &str,
-    payload: &RequestPayload,
+    payload: &QueuedWrite,
 ) -> Result<OutboxWriteContent, OutboxStoreError> {
-    OutboxWriteContent::of(payload).ok_or_else(|| corrupt_row(request_id, "payload_json"))
+    payload
+        .content()
+        .ok_or_else(|| corrupt_row(request_id, "payload_json"))
 }
 
 /// The digest central's request log keys this write's content by.
-pub(crate) fn payload_content_digest(payload: &RequestPayload) -> Result<String, OutboxStoreError> {
+pub(crate) fn payload_content_digest(payload: &QueuedWrite) -> Result<String, OutboxStoreError> {
     let digest = match payload {
-        RequestPayload::Workspace(request) => operation_content_digest(&request.operation),
-        RequestPayload::Mail(request) => operation_content_digest(&request.operation),
+        QueuedWrite::Workspace(request) => operation_content_digest(&request.operation),
+        QueuedWrite::SendMessage(request) => operation_content_digest(request),
     };
     digest.map_err(|_| OutboxStoreError::Digest)
 }
@@ -963,19 +967,16 @@ async fn put_on_the_wire(
 /// so central's cancel mark counts from when the agent sent it and every
 /// replay carries the same value. Other writes are unchanged.
 pub(crate) fn with_send_time(
-    mut payload: RequestPayload,
+    payload: QueuedWrite,
     created_at_ms: i64,
 ) -> Result<RequestPayload, OutboxStoreError> {
-    if let RequestPayload::Mail(request) = &mut payload
-        && let workspace_model::central_mail::CentralMailOperation::SendMessage { sent_at, .. } =
-            &mut request.operation
-    {
-        *sent_at = chrono::DateTime::from_timestamp_millis(created_at_ms).ok_or_else(|| {
-            OutboxStoreError::CorruptItem {
-                request_id: request.request_id.as_str().to_owned(),
-                field: "created_at",
-            }
-        })?;
-    }
-    Ok(payload)
+    let created_at = chrono::DateTime::from_timestamp_millis(created_at_ms).ok_or_else(|| {
+        OutboxStoreError::CorruptItem {
+            request_id: payload
+                .request_id()
+                .map_or_else(String::new, ToString::to_string),
+            field: "created_at",
+        }
+    })?;
+    Ok(payload.into_wire(created_at))
 }

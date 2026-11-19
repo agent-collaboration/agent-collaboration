@@ -3,14 +3,13 @@
 //! caller and by the content digest over target and operation. A replay that
 //! differs is a Router defect, so it panics instead of answering.
 use super::driver_test_support::CentralEnd;
-use crate::outbox_store::payload_content_digest;
 use central_link_protocol::{
-    DataFrame, FrameDirection, LinkFrame, LinkRequest, ReplyPayload, decode_text,
+    DataFrame, FrameDirection, LinkFrame, LinkRequest, ReplyPayload, RequestPayload, decode_text,
 };
 use std::collections::BTreeMap;
 use workspace_model::{
     Caller, ChangePosition, ItemRef, RefusalReason, WorkspaceAnswer, WorkspaceReply,
-    WorkspaceResult,
+    WorkspaceResult, operation_content_digest,
 };
 
 /// What central does with one batch member.
@@ -103,7 +102,11 @@ impl ScriptedCentral {
     /// same caller and the same target and content, and gets the first post.
     fn admit(&mut self, member: &LinkRequest) -> String {
         let id = request_id(member);
-        let digest = payload_content_digest(member.payload()).unwrap();
+        let digest = match member.payload() {
+            RequestPayload::Workspace(request) => operation_content_digest(&request.operation),
+            RequestPayload::Mail(request) => operation_content_digest(&request.operation),
+        }
+        .unwrap();
         if let Some(record) = self.log.get(&id) {
             assert_eq!(
                 &record.caller,

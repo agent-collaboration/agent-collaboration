@@ -353,13 +353,29 @@ impl LinkDriver {
 
     async fn handle_command(&mut self, command: DriverCommand) {
         match command {
+            DriverCommand::QueueMessage {
+                caller,
+                message,
+                reply,
+            } => {
+                let queued = central_link_client::QueuedWrite::SendMessage(message);
+                if let Some(submission) = self.submit_to_outbox(caller, queued, &reply).await {
+                    let _ = reply.send(submission);
+                }
+            }
             DriverCommand::Submit {
                 caller,
                 payload,
                 reply,
             } => match submission_path(&payload) {
                 SubmissionPath::Outbox => {
-                    if let Some(submission) = self.submit_to_outbox(caller, payload, &reply).await {
+                    let RequestPayload::Workspace(request) = payload else {
+                        let _ = reply
+                            .send(Submission::Refused(SubmitRefusal::UnstampedMessageRequired));
+                        return;
+                    };
+                    let queued = central_link_client::QueuedWrite::Workspace(request);
+                    if let Some(submission) = self.submit_to_outbox(caller, queued, &reply).await {
                         let _ = reply.send(submission);
                     }
                 }
@@ -419,10 +435,10 @@ impl LinkDriver {
     async fn submit_to_outbox(
         &mut self,
         caller: Caller,
-        payload: RequestPayload,
+        payload: central_link_client::QueuedWrite,
         reply: &oneshot::Sender<Submission>,
     ) -> Option<Submission> {
-        let Some(request) = payload.write_request_id().cloned() else {
+        let Some(request) = payload.request_id().cloned() else {
             return Some(Submission::Refused(SubmitRefusal::OutboxUnavailable));
         };
         let now = self.clock.now();

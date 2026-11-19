@@ -41,18 +41,7 @@ impl OutboxWriteContent {
     #[must_use]
     pub fn of(payload: &RequestPayload) -> Option<Self> {
         match payload {
-            RequestPayload::Workspace(request) => match &request.operation {
-                WorkspaceOperation::ThreadPost {
-                    thread_id, body, ..
-                } => Some(Self {
-                    target: OutboxWriteTarget::Thread {
-                        workspace_id: request.workspace_id.clone(),
-                        thread_id: thread_id.clone(),
-                    },
-                    body: body.clone(),
-                }),
-                _ => None,
-            },
+            RequestPayload::Workspace(request) => Self::workspace(request),
             RequestPayload::Mail(request) => match &request.operation {
                 CentralMailOperation::SendMessage { to, body, .. } => Some(Self {
                     target: OutboxWriteTarget::Session { to: to.clone() },
@@ -60,6 +49,21 @@ impl OutboxWriteContent {
                 }),
                 _ => None,
             },
+        }
+    }
+
+    pub(crate) fn workspace(request: &workspace_model::WorkspaceRequest) -> Option<Self> {
+        match &request.operation {
+            WorkspaceOperation::ThreadPost {
+                thread_id, body, ..
+            } => Some(Self {
+                target: OutboxWriteTarget::Thread {
+                    workspace_id: request.workspace_id.clone(),
+                    thread_id: thread_id.clone(),
+                },
+                body: body.clone(),
+            }),
+            _ => None,
         }
     }
 }

@@ -9,6 +9,7 @@ use crate::link_calls::{
 };
 use crate::outbox_flush::MAX_BATCH_WRITES;
 use crate::submission_path::{SubmissionPath, submission_path};
+use crate::{QueuedWrite, ToolSendMessage};
 use central_link_protocol::{
     CorrelationId, LinkRequest, ProtocolError, ReplyPayload, RequestPayload,
 };
@@ -16,7 +17,7 @@ use router_clock::RuntimeClock;
 use runtime_primitives::SyncTime;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use workspace_model::{Caller, RequestId};
+use workspace_model::{Caller, RequestId, Timestamp};
 
 /// How the fake central behaves for the next calls and flushes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,8 +49,16 @@ struct FakeState {
 
 struct FakeRequest {
     caller: Caller,
-    payload: RequestPayload,
+    payload: FakePayload,
     status: RequestStatus,
+}
+
+enum FakePayload {
+    Immediate,
+    Queued {
+        write: Box<QueuedWrite>,
+        created_at: Timestamp,
+    },
 }
 
 impl FakeLinkCalls {
@@ -104,10 +113,14 @@ impl FakeLinkCalls {
             let Some(request) = state.requests.get_mut(&id) else {
                 continue;
             };
+            let FakePayload::Queued { write, created_at } = &request.payload else {
+                continue;
+            };
+            let wire = write.as_ref().clone().into_wire(*created_at);
             sent += 1;
             request.status = match central {
                 FakeCentral::Answering => {
-                    RequestStatus::Answered((self.responder)(&request.caller, &request.payload))
+                    RequestStatus::Answered((self.responder)(&request.caller, &wire))
                 }
                 FakeCentral::AnswerLost | FakeCentral::Unavailable | FakeCentral::NotEnrolled => {
                     RequestStatus::Sent
@@ -140,22 +153,17 @@ impl FakeLinkCalls {
         let request_id = payload.write_request_id().cloned();
         match (submission_path(&payload), request_id) {
             (SubmissionPath::Outbox, Some(request_id)) => {
-                if let Some(existing) = state.requests.get(&request_id) {
-                    return resubmitted_outbox_write(existing, &caller, &payload, request_id);
-                }
-                let flush_at = earliest_open_mark(now, state.last_flushed);
-                state.requests.insert(
-                    request_id.clone(),
-                    FakeRequest {
-                        caller,
-                        payload,
-                        status: RequestStatus::InOutbox { flush_at },
-                    },
-                );
-                Submission::InOutbox(OutboxReceipt {
-                    id: request_id,
-                    flush_at,
-                })
+                let RequestPayload::Workspace(request) = payload else {
+                    return Submission::Refused(SubmitRefusal::UnstampedMessageRequired);
+                };
+                queue_write(
+                    &mut state,
+                    caller,
+                    QueuedWrite::Workspace(request),
+                    request_id,
+                    now,
+                    self.clock.utc_now(),
+                )
             }
             (SubmissionPath::Outbox, None) => {
                 Submission::Refused(SubmitRefusal::InvalidRequest(request_id_policy()))
@@ -202,7 +210,7 @@ fn immediate_submission(
                 request_id.clone(),
                 FakeRequest {
                     caller,
-                    payload,
+                    payload: FakePayload::Immediate,
                     status: RequestStatus::Sent,
                 },
             );
@@ -217,7 +225,7 @@ fn immediate_submission(
                     request_id,
                     FakeRequest {
                         caller,
-                        payload,
+                        payload: FakePayload::Immediate,
                         status: RequestStatus::Answered(reply.clone()),
                     },
                 );
@@ -227,15 +235,46 @@ fn immediate_submission(
     }
 }
 
+fn queue_write(
+    state: &mut FakeState,
+    caller: Caller,
+    write: QueuedWrite,
+    request_id: RequestId,
+    now: SyncTime,
+    created_at: Timestamp,
+) -> Submission {
+    if let Some(existing) = state.requests.get(&request_id) {
+        return resubmitted_outbox_write(existing, &caller, &write, request_id);
+    }
+    let flush_at = earliest_open_mark(now, state.last_flushed);
+    state.requests.insert(
+        request_id.clone(),
+        FakeRequest {
+            caller,
+            payload: FakePayload::Queued {
+                write: Box::new(write),
+                created_at,
+            },
+            status: RequestStatus::InOutbox { flush_at },
+        },
+    );
+    Submission::InOutbox(OutboxReceipt {
+        id: request_id,
+        flush_at,
+    })
+}
+
 /// Resubmitting the same id and content returns the first receipt; the same id
 /// with different content or from another caller is refused.
 fn resubmitted_outbox_write(
     existing: &FakeRequest,
     caller: &Caller,
-    payload: &RequestPayload,
+    payload: &QueuedWrite,
     request_id: RequestId,
 ) -> Submission {
-    if existing.caller != *caller || existing.payload != *payload {
+    if existing.caller != *caller
+        || !matches!(&existing.payload, FakePayload::Queued { write, .. } if write.as_ref() == payload)
+    {
         return Submission::Refused(SubmitRefusal::RequestIdConflict);
     }
     match existing.status {
@@ -259,6 +298,30 @@ const fn request_id_policy() -> ProtocolError {
 }
 
 impl LinkCalls for FakeLinkCalls {
+    fn submit_message(
+        &self,
+        caller: Caller,
+        message: ToolSendMessage,
+    ) -> LinkCallFuture<'_, Submission> {
+        let created_at = self.clock.utc_now();
+        let now = SyncTime::from_unix_millis(created_at.timestamp_millis());
+        let request_id = message.request_id.clone();
+        let mut state = self.lock();
+        let submission = if state.central == FakeCentral::NotEnrolled {
+            Submission::Refused(SubmitRefusal::NotEnrolled)
+        } else {
+            queue_write(
+                &mut state,
+                caller,
+                QueuedWrite::SendMessage(message),
+                request_id,
+                now,
+                created_at,
+            )
+        };
+        Box::pin(async move { submission })
+    }
+
     fn submit(&self, caller: Caller, payload: RequestPayload) -> LinkCallFuture<'_, Submission> {
         let submission = self.submit_now(caller, payload);
         Box::pin(async move { submission })

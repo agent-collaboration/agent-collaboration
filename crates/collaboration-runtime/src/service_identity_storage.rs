@@ -21,6 +21,7 @@ struct PeerIdentityRecord {
 }
 
 /// Reads the existing Host identity without creating a directory or identity file.
+/// Legacy central enrollment only. Retires with #301 and the retrofit.
 pub fn read_service_identity(directory: &Path) -> io::Result<Option<workspace_ids::MachineId>> {
     match read_identity(&directory.join("service-identity.json")) {
         Ok(identity) => Ok(Some(identity)),
@@ -35,6 +36,8 @@ pub fn new_service_uuid() -> io::Result<UuidIdentity> {
     UuidIdentity::try_from(uuid::Uuid::now_v7().to_string()).map_err(io::Error::other)
 }
 
+/// Legacy central enrollment only. Retires with #301 and the retrofit.
+/// Host startup uses the machine-local database.
 pub fn load_service_identity(directory: &Path) -> io::Result<workspace_ids::MachineId> {
     let metadata = std::fs::symlink_metadata(directory)?;
     if !directory.is_absolute() || !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0
@@ -104,6 +107,7 @@ fn read_identity(path: &Path) -> io::Result<workspace_ids::MachineId> {
 }
 
 /// Reads an existing installation peer without creating a directory or identity file.
+/// Legacy central enrollment only. Retires with #301 and the retrofit.
 pub fn read_installation_peer(directory: &Path) -> io::Result<Option<fleet_sync_protocol::PeerId>> {
     match read_peer_identity(&directory.join("installation-peer.json")) {
         Ok(peer) => Ok(Some(peer)),
@@ -112,7 +116,8 @@ pub fn read_installation_peer(directory: &Path) -> io::Result<Option<fleet_sync_
     }
 }
 
-/// The installation's UUIDv7 peer is independent of its existing service UUID and enrollment.
+/// Legacy central enrollment only. Retires with #301 and the retrofit.
+/// Host startup uses the machine-local database.
 pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
     let metadata = std::fs::symlink_metadata(directory)?;
     if !directory.is_absolute() || !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0

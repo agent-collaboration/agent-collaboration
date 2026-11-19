@@ -88,7 +88,7 @@ async fn a_failed_restore_read_does_not_lose_the_waiting_write() {
             &NewOutboxItem {
                 request: id.parse().unwrap(),
                 caller: caller(),
-                payload: thread_post(&id),
+                payload: queued_thread_post(&id),
                 flush_at: SyncTime::from_unix_millis(MARK),
             },
             SyncTime::from_unix_millis(MARK - 30_000),

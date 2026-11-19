@@ -25,10 +25,10 @@ fn uuid_v7(seed: u16) -> String {
 }
 fn caller(seed: u16) -> Caller {
     serde_json::from_value(json!({"kind": "session", "value": {
-        "machineId": uuid_v7(50_000), "endpoint": "codex-local", "sessionId": format!("s{seed}")}}))
+        "machineId": uuid_v7(50_000), "sessionId": format!("s{seed}")}}))
     .unwrap()
 }
-fn post(request: &str, workspace: u16, body: &str) -> RequestPayload {
+fn post(request: &str, workspace: u16, body: &str) -> central_link_client::QueuedWrite {
     serde_json::from_value(json!({"kind": "workspace", "request": {
         "requestId": request, "workspaceId": uuid_v7(workspace),
         "operation": {"kind": "threadPost", "threadId": uuid_v7(60_002), "body": body, "addressees": []}}}))
@@ -49,12 +49,14 @@ fn message(seed: u16, body: &str, flush_at: i64) -> NewOutboxItem {
     NewOutboxItem {
         request: request.parse().unwrap(),
         caller: caller(1),
-        payload: serde_json::from_value(json!({"kind": "mail", "request": {
-            "requestId": request, "operation": {"kind": "sendMessage",
-            "to": {"machineId": uuid_v7(50_001), "endpoint": "codex-local", "sessionId": "r1"},
-            "body": body, "delivery": "auto", "replyTo": null,
-            "sentAt": "2030-01-01T00:00:00Z"}}}))
-        .unwrap(),
+        payload: central_link_client::QueuedWrite::SendMessage(
+            serde_json::from_value(json!({
+                "requestId": request,
+                "to": {"machineId": uuid_v7(50_001), "sessionId": "r1"},
+                "body": body, "delivery": "auto", "replyTo": null
+            }))
+            .unwrap(),
+        ),
         flush_at: at(flush_at),
     }
 }
@@ -93,7 +95,13 @@ pub(crate) async fn lifecycle_and_views(store: &mut dyn OutboxStorage) {
     );
     let sent = store.mark_sent(&ids(&[&first]), at(MARK)).await.unwrap();
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].payload, first.payload);
+    assert_eq!(
+        sent[0].payload,
+        first
+            .payload
+            .clone()
+            .into_wire(chrono::DateTime::UNIX_EPOCH)
+    );
     assert_eq!(
         store
             .request_status(&first.caller, &first.request)
@@ -365,7 +373,13 @@ pub(crate) async fn claim_takes_due_writes_oldest_first_up_to_the_limit(
             .collect::<Vec<_>>(),
         ids(&[&first, &second])
     );
-    assert_eq!(claimed[0].payload, first.payload);
+    assert_eq!(
+        claimed[0].payload,
+        first
+            .payload
+            .clone()
+            .into_wire(chrono::DateTime::UNIX_EPOCH)
+    );
     assert_eq!(
         store
             .request_status(&first.caller, &first.request)
@@ -633,7 +647,7 @@ pub(crate) async fn a_direct_message_goes_out_with_its_creation_stamp_as_sent_at
     assert_eq!(
         sent_at(&first),
         Some(stored_at),
-        "the creation stamp, not the submitter's"
+        "the outbox row supplies the creation stamp"
     );
     assert_eq!(
         sent_at(&replay),
@@ -645,7 +659,10 @@ pub(crate) async fn a_direct_message_goes_out_with_its_creation_stamp_as_sent_at
             .iter()
             .find(|write| write.request == post.request)
             .unwrap();
-        assert_eq!(sent_post.payload, post.payload);
+        assert_eq!(
+            sent_post.payload,
+            post.payload.clone().into_wire(chrono::DateTime::UNIX_EPOCH)
+        );
     }
 }
 

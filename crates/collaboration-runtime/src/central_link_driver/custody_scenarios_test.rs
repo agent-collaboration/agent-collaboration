@@ -251,7 +251,7 @@ async fn a_lone_sent_row_at_startup_is_replayed_and_answered() {
                 &NewOutboxItem {
                     request: id.parse().unwrap(),
                     caller: caller(),
-                    payload: thread_post(&id),
+                    payload: queued_thread_post(&id),
                     flush_at: SyncTime::from_unix_millis(MARK - 60_000),
                 },
                 SyncTime::from_unix_millis(MARK - 90_000),
