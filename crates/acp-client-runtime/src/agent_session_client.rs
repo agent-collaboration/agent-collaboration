@@ -290,6 +290,8 @@ pub struct AgentSessionClient<P: InteractionPort> {
     /// Each provider session's typed lifecycle, shared with the connection.
     session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     shutdown: CancellationToken,
+    /// A locally requested stop, distinct from transport failure breaking the task.
+    local_shutdown: CancellationToken,
     sink_closed: CancellationToken,
     retirement: CancellationToken,
     task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
@@ -337,6 +339,7 @@ impl<P: InteractionPort> std::fmt::Debug for AgentSessionClient<P> {
 
 impl<P: InteractionPort> Drop for AgentSessionClient<P> {
     fn drop(&mut self) {
+        self.local_shutdown.cancel();
         self.retirement.cancel();
         self.shutdown.cancel();
     }

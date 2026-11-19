@@ -428,14 +428,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             })
             .await
             .map_err(|_| self.retired_operation_error())?;
-        result
-            .await
-            .map_err(|_| match self.retired_operation_error() {
-                ExternalProviderRuntimeError::TransportFailure => {
-                    ExternalProviderRuntimeError::RestoreDisconnected
-                }
-                error => error,
-            })?
+        super::provider_session_restore::complete_restore(
+            result,
+            &self.local_shutdown,
+            &self.sink_closed,
+        )
+        .await
     }
 
     /// Test support: ends the session's actor the way an actor ends on its
@@ -627,6 +625,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     }
 
     pub async fn shutdown(&self) {
+        self.local_shutdown.cancel();
         self.retirement.cancel();
         self.shutdown.cancel();
         if let Some(task) = self.task.lock().await.take()

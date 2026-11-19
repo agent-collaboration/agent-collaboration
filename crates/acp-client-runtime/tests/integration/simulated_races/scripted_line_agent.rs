@@ -244,11 +244,11 @@ impl ScriptedLineAgent {
         let todo = self.request_callback("stale-todo", "cursor/update_todos", json!({
             "toolCallId":tool_id,"todos":[{"id":"stale","content":"expired restore todo sentinel","status":"pending"}],"merge":false,
         })).await;
-        assert_eq!(todo["result"], json!({}));
+        assert_eq!(todo.get("result"), Some(&json!({})));
         let plan = self.request_callback("stale-plan", "cursor/create_plan", json!({
             "toolCallId":tool_id,"name":"expired restore plan sentinel","plan":"do not apply",
         })).await;
-        assert_eq!(plan["result"], json!({"outcome":"cancelled"}));
+        assert_eq!(plan.get("result"), Some(&json!({"outcome":"cancelled"})));
     }
 
     async fn send_frame(&self, frame: &Value) {

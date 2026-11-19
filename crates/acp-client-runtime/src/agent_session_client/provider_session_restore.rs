@@ -14,6 +14,27 @@ use std::{future::Future, time::Duration};
 
 const RESTORE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Both restore entry points may lose their reply when the connection stops.
+/// An orderly local shutdown retains the ordinary transport failure result.
+pub(super) async fn complete_restore(
+    completion: tokio::sync::oneshot::Receiver<
+        Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError>,
+    >,
+    local_shutdown: &CancellationToken,
+    sink_closed: &CancellationToken,
+) -> Result<super::RestoredSessionAdmission, ExternalProviderRuntimeError> {
+    match completion.await {
+        Ok(Err(ExternalProviderRuntimeError::RestoreDisconnected)) | Err(_)
+            if local_shutdown.is_cancelled() =>
+        {
+            Err(ExternalProviderRuntimeError::TransportFailure)
+        }
+        Err(_) if sink_closed.is_cancelled() => Err(ExternalProviderRuntimeError::SinkClosed),
+        Err(_) => Err(ExternalProviderRuntimeError::RestoreDisconnected),
+        Ok(outcome) => outcome,
+    }
+}
+
 async fn await_restore_response<T>(
     clock: &dyn router_clock::RuntimeClock,
     shutdown: &CancellationToken,

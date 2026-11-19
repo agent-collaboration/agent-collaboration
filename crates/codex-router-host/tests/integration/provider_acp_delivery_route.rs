@@ -721,7 +721,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             );
             assert_uuid_v7_provider_reference(detail, code_label, error_code);
         } else {
-            assert_eq!(outcome["retryable"], true);
+            assert_eq!(outcome["retryable"], false);
             let reason = outcome["reason"].as_str().expect("not-submitted reason");
             assert!(reason.starts_with(expected_explanation), "{reason}");
             assert!(

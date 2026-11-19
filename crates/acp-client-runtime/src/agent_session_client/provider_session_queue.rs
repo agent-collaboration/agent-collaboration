@@ -296,6 +296,8 @@ pub struct SessionLoadStarted {
     completion: tokio::sync::oneshot::Receiver<
         Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError>,
     >,
+    local_shutdown: tokio_util::sync::CancellationToken,
+    sink_closed: tokio_util::sync::CancellationToken,
 }
 
 impl SessionLoadStarted {
@@ -304,9 +306,12 @@ impl SessionLoadStarted {
     pub async fn finished(
         self,
     ) -> Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError> {
-        self.completion
-            .await
-            .map_err(|_| super::ExternalProviderRuntimeError::RestoreDisconnected)?
+        super::provider_session_restore::complete_restore(
+            self.completion,
+            &self.local_shutdown,
+            &self.sink_closed,
+        )
+        .await
     }
 }
 
@@ -343,6 +348,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             Ok(generation) => Ok(SessionLoadStarted {
                 generation,
                 completion,
+                local_shutdown: self.local_shutdown.clone(),
+                sink_closed: self.sink_closed.clone(),
             }),
             // Refused before admission: the reply carries why.
             Err(_) => Err(completion

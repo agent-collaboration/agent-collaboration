@@ -219,7 +219,7 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
             code,
             correlation_id,
         } => provider_error_restore_failed(
-            "provider ACP method is unsupported",
+            "provider ACP method is unsupported, so check the provider's restore support before retrying",
             code,
             correlation_id,
         ),
@@ -227,7 +227,7 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
             code,
             correlation_id,
         } => provider_error_restore_failed(
-            "provider ACP parameters are invalid",
+            "provider ACP parameters are invalid, so check the session setup before retrying",
             code,
             correlation_id,
         ),
@@ -235,11 +235,18 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
             code,
             correlation_id,
         } => provider_error_restore_failed(
-            "provider ACP request was cancelled",
+            "provider ACP request was cancelled, so retry the restore when ready",
             code,
             correlation_id,
         ),
-        error => restore_failed(error.to_string()),
+        error @ (ExternalProviderRuntimeError::RestoreNoAnswer
+        | ExternalProviderRuntimeError::RestoreDisconnected
+        | ExternalProviderRuntimeError::HistoryReplayUnavailable) => {
+            restore_failed(error.to_string())
+        }
+        // A local admission refusal (for example, an overlapping load or
+        // unavailable history sink) keeps the pre-dispatch disposition.
+        error => unavailable(error.to_string()),
     }
 }
 

@@ -933,6 +933,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             session_settings,
             session_cells,
             shutdown,
+            local_shutdown: CancellationToken::new(),
             sink_closed: client_sink_closed,
             retirement,
             task: tokio::sync::Mutex::new(Some(task)),
