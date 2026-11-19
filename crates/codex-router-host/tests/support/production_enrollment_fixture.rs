@@ -28,7 +28,7 @@ impl ProductionEnrollmentFixture {
         let peer = crate::machine_identity_fixture::board_peer(&directory).await?;
         let central = TestCentral::start_with_peer(
             &root.path().join("central"),
-            &fixture_origin(&directory)?,
+            &fixture_origin(&directory).await?,
             peer,
         )
         .await
