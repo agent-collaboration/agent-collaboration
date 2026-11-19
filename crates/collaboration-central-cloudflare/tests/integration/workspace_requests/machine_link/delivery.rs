@@ -51,6 +51,50 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
     {
         return Err("the Worker did not push the accepted record with the resolved sender".into());
     }
+    let wrong_recipient = "019f0000-0000-7000-8000-00000000cf0e";
+    let other_token = signed::enroll_another_machine(
+        &fixture.client,
+        &fixture.host.signin_origin(),
+        ORGANIZATION,
+        wrong_recipient,
+        "019f0000-0000-7000-8000-00000000e402",
+        signed::NOW_SECONDS,
+    )
+    .await?;
+    let mut wrong_machine = fixture
+        .client
+        .get(fixture.link_url(ORGANIZATION))
+        .bearer_auth(other_token)
+        .upgrade()
+        .send()
+        .await?
+        .into_websocket()
+        .await?;
+    if !matches!(fixture::receive(&mut wrong_machine).await?, DataFrame::Welcome { machine_id, .. } if machine_id.as_str()==wrong_recipient)
+    {
+        return Err("the wrong-recipient probe needs an independently admitted machine".into());
+    }
+    let before_ack_log = fixture.host.captured_logs().len();
+    fixture::send(
+        &mut wrong_machine,
+        &DataFrame::Ack {
+            message_id: message_id.clone(),
+            answer: central_link_protocol::DeliveryAnswer::Accepted,
+        },
+    )
+    .await?;
+    fixture
+        .host
+        .until_log_after(
+            before_ack_log,
+            "machine_delivery_ack_ignored reason=WrongMachine",
+        )
+        .await;
+    wrong_machine.send(Message::Text("ping".to_owned())).await?;
+    if !matches!(wrong_machine.next().await, Some(Ok(Message::Text(pong))) if pong=="pong") {
+        return Err("a wrong-machine Ack must keep the socket open".into());
+    }
+    wrong_machine.close(CloseCode::Normal, None).await?;
     let mut replacement = ConnectedLink::open(fixture).await?;
     if fixture::receive(&mut replacement.socket).await? != offered {
         return Err("replacement did not receive the original unacknowledged record".into());
@@ -64,19 +108,17 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
         },
     )
     .await?;
-    let status = replacement
-        .call(WorkspaceRequest {
-            request_id: None,
-            workspace_id: None,
-            operation: WorkspaceOperation::List {
-                query: workspace_model::ListQuery::MessageStatus {
-                    message_id: message_id.clone(),
-                },
-                cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
-                limit: 1.try_into()?,
-            },
-        })
-        .await?;
+    let status_limit = 1.try_into()?;
+    let status_query = |message_id| WorkspaceRequest {
+        request_id: None,
+        workspace_id: None,
+        operation: WorkspaceOperation::List {
+            query: workspace_model::ListQuery::MessageStatus { message_id },
+            cursor: workspace_model::ListCursor::start(workspace_model::ListOrder::OldestFirst),
+            limit: status_limit,
+        },
+    };
+    let status = replacement.call(status_query(message_id.clone())).await?;
     if !matches!(
         workspace_reply(&status.reply)?.result,
         WorkspaceResult::Done(WorkspaceAnswer::MessageStatus {
@@ -98,14 +140,59 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
     let [DataFrame::Reply { result, .. }] = replies.as_slice() else {
         return Err("missing reply after the older socket closes".into());
     };
-    let ReplyPayload::Mail(CentralMailResult::Done(CentralMailAnswer::Queued { message_id })) =
-        result.as_ref()
+    let ReplyPayload::Mail(CentralMailResult::Done(CentralMailAnswer::Queued {
+        message_id: next_message,
+    })) = result.as_ref()
     else {
         return Err("the replacement's next send was not accepted".into());
     };
-    if !matches!(fixture::receive(&mut replacement.socket).await?, DataFrame::Deliver { message, .. } if &message.message_id == message_id)
+    if !matches!(fixture::receive(&mut replacement.socket).await?, DataFrame::Deliver { message, .. } if &message.message_id == next_message)
     {
         return Err("closing the previous socket lost the registered replacement".into());
     }
-    replacement.close().await
+    let accepted = |message_id| DataFrame::Ack {
+        message_id,
+        answer: central_link_protocol::DeliveryAnswer::Accepted,
+    };
+    fixture::send(&mut replacement.socket, &accepted(next_message.clone())).await?;
+    if !matches!(
+        workspace_reply(
+            &replacement
+                .call(status_query(next_message.clone()))
+                .await?
+                .reply
+        )?
+        .result,
+        WorkspaceResult::Done(WorkspaceAnswer::MessageStatus {
+            status: workspace_model::central_mail::MessageStatus::Delivered {}
+        })
+    ) {
+        return Err("second Ack must settle before reconnect".into());
+    }
+    let settled_rows = || Statement {
+        sql: "SELECT message_id,message_kind,state,updated_at FROM mail_messages ORDER BY message_id",
+        args: vec![],
+    };
+    let before = fixture.runtime().read(settled_rows()).await?;
+    super::renewal::advance(fixture, 1).await?;
+    let mut reconnected = ConnectedLink::open(fixture).await?;
+    fixture::send(&mut reconnected.socket, &accepted(message_id.clone())).await?;
+    if !matches!(
+        workspace_reply(
+            &reconnected
+                .call(status_query(message_id.clone()))
+                .await?
+                .reply
+        )?
+        .result,
+        WorkspaceResult::Done(WorkspaceAnswer::MessageStatus {
+            status: workspace_model::central_mail::MessageStatus::Delivered {}
+        })
+    ) {
+        return Err("the replayed Ack must remain silent and keep the socket open".into());
+    }
+    if fixture.runtime().read(settled_rows()).await? != before {
+        return Err("the replayed Ack rewrote a settled delivery or added an outcome".into());
+    }
+    reconnected.close().await
 }

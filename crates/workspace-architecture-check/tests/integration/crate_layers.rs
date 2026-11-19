@@ -14,14 +14,27 @@ mod workspace_boundaries;
 
 const LAYER_POLICY: [(&str, &[&str]); 25] = [
     ("workspace-ids", &[]),
-    ("workspace-model", &["workspace-ids", "agent-automation"]),
+    (
+        "workspace-model",
+        &[
+            "workspace-ids",
+            "agent-automation",
+            "collaboration-mail-protocol",
+            "message-board",
+        ],
+    ),
     (
         "central-link-protocol",
         &["workspace-ids", "workspace-model"],
     ),
     (
         "central-link-client",
-        &["central-link-protocol", "workspace-model", "router-clock"],
+        &[
+            "central-link-protocol",
+            "workspace-model",
+            "workspace-ids",
+            "router-clock",
+        ],
     ),
     ("central-storage", &[]),
     ("central-engine-model", &["central-storage"]),
@@ -109,6 +122,10 @@ const LAYER_POLICY: [(&str, &[&str]); 25] = [
     (
         "codex-router-cli",
         &[
+            // The central serve composition root owns the two listeners and clock.
+            "collaboration-central-core",
+            "collaboration-central-tokio",
+            "router-clock",
             // The quota composition root wires its preference adapter to this leaf store.
             "ui-preference-store",
             "codex-router-quota-service",

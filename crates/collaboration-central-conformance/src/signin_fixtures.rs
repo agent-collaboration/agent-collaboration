@@ -5,7 +5,9 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde_json::{Value, json};
 mod machine_tokens;
-pub use machine_tokens::{MACHINE_AUDIENCE, machine_token, resign_machine_token};
+pub use machine_tokens::{
+    MACHINE_AUDIENCE, enroll_another_machine, machine_token, resign_machine_token,
+};
 mod one_id_vectors;
 mod person_requests;
 pub use one_id_vectors::check_machine_identity_vectors;

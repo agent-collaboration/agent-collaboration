@@ -54,12 +54,12 @@ pub fn check_machine_identity_vectors(
             return Err(format!("{name} must round-trip the sign-in positive vector").into());
         }
         let mut legacy_present = input.clone();
-        legacy_present[legacy] = json!(MACHINE_ID);
+        super::set_claim(&mut legacy_present, legacy, json!(MACHINE_ID))?;
         if convert(legacy_present).is_some() {
             return Err(format!("{name} accepted obsolete field {legacy} beside {field}").into());
         }
         let mut v4 = input;
-        v4[field] = json!(V4_MACHINE_ID);
+        super::set_claim(&mut v4, field, json!(V4_MACHINE_ID))?;
         if convert(v4).is_some() {
             return Err(format!("{name} accepted a v4 machine ID").into());
         }

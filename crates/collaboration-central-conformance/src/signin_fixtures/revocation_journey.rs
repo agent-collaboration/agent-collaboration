@@ -60,7 +60,7 @@ impl RevocationJourney<'_> {
             ("secondFactorAt", json!(self.now - 10)),
         ] {
             let mut input = body.clone();
-            input[field] = forged;
+            super::set_claim(&mut input, field, forged)?;
             let reply = self.post(owner, enrollment, input).await?;
             if reply.status().as_u16() != 401 {
                 return Err(format!("an authenticated body with {field} must be refused").into());

@@ -368,3 +368,6 @@ mod workspace_outage;
 
 mod engine_drain_origins;
 mod engine_notice_units;
+
+#[path = "notices/delivery_expiry.rs"]
+mod delivery_expiry;

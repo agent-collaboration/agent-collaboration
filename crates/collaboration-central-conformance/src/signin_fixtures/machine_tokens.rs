@@ -35,3 +35,54 @@ pub fn machine_token(
         7,
     )
 }
+
+/// Enroll through the actual private listener so socket tests can authenticate
+/// an independent recipient in the same organization.
+pub async fn enroll_another_machine(
+    private: &reqwest::Client,
+    origin: &str,
+    organization: &str,
+    machine_id: &str,
+    request_id: &str,
+    now: i64,
+) -> ConformanceResult<String> {
+    let approval = private
+        .post(format!("{origin}/internal/device-login-decisions"))
+        .json(
+            &json!({"organizationId":organization,"approver":super::OWNER,
+            "permissionChecked":"machine:enroll","requestId":request_id,
+            "machineId":machine_id,"label":"Other recipient",
+            "allowedWorkspaces":[],"approverSecondFactorAt":now-60,"codeExpiresAt":now+600}),
+        )
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<Value>()
+        .await?;
+    let enrollment = approval
+        .get("enrollmentId")
+        .and_then(Value::as_str)
+        .filter(|_| approval.get("result").and_then(Value::as_str) == Some("approved"))
+        .ok_or("other machine approval refused")?;
+    let grant = private
+        .post(format!("{origin}/internal/machine-token-decisions"))
+        .json(
+            &json!({"organizationId":organization,"enrollmentId":enrollment,"clientId":enrollment}),
+        )
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<Value>()
+        .await?;
+    if grant.get("result").and_then(Value::as_str) != Some("grant")
+        || grant.get("machineId").and_then(Value::as_str) != Some(machine_id)
+        || grant.get("enrollmentId").and_then(Value::as_str) != Some(enrollment)
+    {
+        return Err("other machine did not receive its own token grant".into());
+    }
+    let until = grant
+        .get("grantExpiresAt")
+        .and_then(Value::as_i64)
+        .ok_or("other machine grant expiry")?;
+    machine_token(organization, machine_id, enrollment, now, until)
+}

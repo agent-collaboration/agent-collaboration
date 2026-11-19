@@ -53,6 +53,47 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
     {
         return Err("live delivery did not carry the accepted id and resolved sender".into());
     }
+    let private = reqwest::Client::builder()
+        .no_proxy()
+        .unix_socket(fixture.signin_socket.clone())
+        .build()?;
+    let other_token = signed::enroll_another_machine(
+        &private,
+        "http://localhost",
+        signed::ORGANIZATION,
+        OTHER_MACHINE,
+        "019f0000-0000-7000-8000-00000000e401",
+        signed::NOW_SECONDS,
+    )
+    .await?;
+    let mut wrong_machine = fixture
+        .client()?
+        .get(fixture.url(signed::ORGANIZATION))
+        .bearer_auth(other_token)
+        .upgrade()
+        .send()
+        .await?
+        .into_websocket()
+        .await?;
+    if !matches!(receive(&mut wrong_machine).await?, LinkFrame::Data(DataFrame::Welcome { machine_id, .. }) if machine_id.as_str()==OTHER_MACHINE)
+    {
+        return Err("the wrong-recipient probe needs an independently admitted machine".into());
+    }
+    send(
+        &mut wrong_machine,
+        &LinkFrame::Data(DataFrame::Ack {
+            message_id: message_id.clone(),
+            answer: central_link_protocol::DeliveryAnswer::Accepted,
+        }),
+    )
+    .await?;
+    send(&mut wrong_machine, &LinkFrame::Ping).await?;
+    if receive(&mut wrong_machine).await? != LinkFrame::Pong {
+        return Err("a wrong-machine Ack must keep the socket open".into());
+    }
+    wrong_machine
+        .close(reqwest_websocket::CloseCode::Normal, None)
+        .await?;
 
     let mut replacement = fixture.connect().await?;
     if !matches!(
@@ -111,6 +152,38 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
     if !matches!(receive(&mut replacement).await?, LinkFrame::Data(DataFrame::Deliver { message, .. }) if message.message_id == next_message)
     {
         return Err("closing the previous socket lost the registered replacement".into());
+    }
+    let accepted = |message_id| {
+        LinkFrame::Data(DataFrame::Ack {
+            message_id,
+            answer: central_link_protocol::DeliveryAnswer::Accepted,
+        })
+    };
+    send(&mut replacement, &accepted(next_message)).await?;
+    send(&mut replacement, &LinkFrame::Ping).await?;
+    if receive(&mut replacement).await? != LinkFrame::Pong {
+        return Err("second Ack did not leave the machine socket usable".into());
+    }
+    let settled_rows = || central_storage::Statement {
+        sql: "SELECT message_id,message_kind,state,updated_at FROM mail_messages ORDER BY message_id",
+        args: vec![],
+    };
+    let before = runtime.statement_host().read(settled_rows()).await?;
+    fixture.clock.advance(Duration::from_secs(1))?;
+    let mut reconnected = fixture.connect().await?;
+    if !matches!(
+        receive(&mut reconnected).await?,
+        LinkFrame::Data(DataFrame::Welcome { .. })
+    ) {
+        return Err("settled delivery reconnect must start with Welcome".into());
+    }
+    send(&mut reconnected, &accepted(message_id)).await?;
+    send(&mut reconnected, &LinkFrame::Ping).await?;
+    if receive(&mut reconnected).await? != LinkFrame::Pong {
+        return Err("the replayed Ack must remain silent and keep the socket open".into());
+    }
+    if runtime.statement_host().read(settled_rows()).await? != before {
+        return Err("the replayed Ack rewrote a settled delivery or added an outcome".into());
     }
     Ok(())
 }

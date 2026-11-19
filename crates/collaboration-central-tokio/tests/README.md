@@ -154,3 +154,19 @@ Ported from the paused reliability branch (alarm robustness):
 - `organization_signin::engine_unit_revival`: V2 notice units and `engine_source` on the
   native host; each unit recovers by itself, restarts its 60-day period, retires at 60
   days, stays stopped and returns only by EngineRetry; a retired source is never read.
+
+## Machine link and self-hosted central
+
+The `workspace_link` integration module opens actual loopback WebSockets
+using the modern workspace host. It exercises signed admission, renewal,
+batch, immediate request and reply correlation, delivery replay, and private
+signed revocation of an idle link. The fixture owns the host, private Unix
+listener, public socket and signing keys for each case.
+
+`codex-router central serve --config FILE` starts the same link and a private
+`signin.sock`. In the JSONC file, `listen` is the TCP address and port the
+carrier should reach. Configure a private interface or loopback address for
+that bind. `root` is an absolute private directory owned by the running
+account. The machine JWT audience is configured separately under
+`signIn.machineAudience`. The CLI integration target's `central_serve` case
+checks the route boundary and shutdown of the compiled command.
