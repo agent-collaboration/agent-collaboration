@@ -141,7 +141,7 @@ fn admit_machine_connection_wire_contract() {
     contract_artifacts::assert_contract::<AdmitMachineConnection>(
         "AdmitMachineConnection",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","clientId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","presented":{"machineId":"019a3dce-2000-7000-8000-000000000001"},"tokenExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","clientId":"019a3dce-2000-7000-8000-000000000002","presented":{"machineId":"019a3dce-2000-7000-8000-000000000001"},"tokenExpiresAt":1793448600_i64}),
         ],
         false,
     );
@@ -152,7 +152,7 @@ fn admitted_machine_wire_contract() {
     contract_artifacts::assert_contract::<AdmittedMachine>(
         "AdmittedMachine",
         vec![
-            json!({"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}),
         ],
         false,
     );
@@ -163,7 +163,7 @@ fn machine_connection_admission_wire_contract() {
     contract_artifacts::assert_contract::<MachineConnectionAdmission>(
         "MachineConnectionAdmission",
         vec![
-            json!({"result":"admitted","machine":{"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}}),
+            json!({"result":"admitted","machine":{"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}}),
             json!({"result":"refused","reason":{"kind":"unknownMachine"}}),
             json!({"result":"refused","reason":{"kind":"enrollmentNotActive"}}),
             json!({"result":"refused","reason":{"kind":"superseded"}}),

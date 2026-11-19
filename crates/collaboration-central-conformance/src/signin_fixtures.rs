@@ -10,7 +10,7 @@ pub use machine_tokens::{
 };
 mod one_id_vectors;
 mod person_requests;
-pub use one_id_vectors::check_machine_identity_vectors;
+pub use one_id_vectors::{check_admission_identity_vectors, check_machine_identity_vectors};
 mod revocation_journey;
 pub use person_requests::{
     CREATE, LOOKUP, MEMBER, MEMBER_SUBJECT, ORGANIZATION, OWNER, OWNER_SUBJECT, POLICY, Person,

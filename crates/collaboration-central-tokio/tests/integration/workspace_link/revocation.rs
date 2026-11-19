@@ -82,7 +82,8 @@ async fn revocation_journey(fixture: &Fixture) -> Result<()> {
 #[test]
 fn issuer_one_machine_id_vectors_are_closed_on_this_host() -> Result<()> {
     use collaboration_central_core::identity_contract::{
-        DecideDeviceLogin, MachinePrincipal, MachineTokenDecision, PresentedMachine,
+        AdmitMachineConnection, AdmittedMachine, DecideDeviceLogin, MachineConnectionAdmission,
+        MachinePrincipal, MachineTokenDecision, PresentedMachine,
     };
 
     fn round_trip<Wire: serde::de::DeserializeOwned + serde::Serialize>(
@@ -98,5 +99,10 @@ fn issuer_one_machine_id_vectors_are_closed_on_this_host() -> Result<()> {
         round_trip::<PresentedMachine>,
         round_trip::<MachineTokenDecision>,
         round_trip::<MachinePrincipal>,
+    )?;
+    signed::check_admission_identity_vectors(
+        round_trip::<AdmitMachineConnection>,
+        round_trip::<AdmittedMachine>,
+        round_trip::<MachineConnectionAdmission>,
     )
 }

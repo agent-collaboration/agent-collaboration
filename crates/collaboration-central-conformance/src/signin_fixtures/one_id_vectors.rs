@@ -66,3 +66,54 @@ pub fn check_machine_identity_vectors(
     }
     Ok(())
 }
+
+pub fn check_admission_identity_vectors(
+    admit: RoundTrip,
+    admitted: RoundTrip,
+    admission: RoundTrip,
+) -> ConformanceResult<()> {
+    let request = json!({"organizationId":ORGANIZATION_ID,"enrollmentId":ENROLLMENT_ID,
+        "clientId":ENROLLMENT_ID,"presented":{"machineId":MACHINE_ID},"tokenExpiresAt":2208989400_i64});
+    let response = json!({"organizationId":ORGANIZATION_ID,"enrollmentId":ENROLLMENT_ID,
+        "tokenExpiresAt":2208989400_i64});
+    let admission_response = json!({"result":"admitted","machine":response});
+    for (name, convert, input, legacy_fields) in [
+        (
+            "AdmitMachineConnection",
+            admit,
+            request,
+            &["installation"][..],
+        ),
+        (
+            "AdmittedMachine",
+            admitted,
+            response,
+            &["installation", "peer"][..],
+        ),
+        (
+            "MachineConnectionAdmission",
+            admission,
+            admission_response,
+            &["installation", "peer"][..],
+        ),
+    ] {
+        if convert(input.clone()).as_ref() != Some(&input) {
+            return Err(
+                format!("{name} must round-trip without obsolete machine identities").into(),
+            );
+        }
+        for field in legacy_fields {
+            let mut legacy = input.clone();
+            let target = if name == "MachineConnectionAdmission" {
+                &mut legacy["machine"]
+            } else {
+                &mut legacy
+            };
+            super::set_claim(target, field, json!(MACHINE_ID))?;
+            if convert(legacy).is_some() {
+                return Err(format!("{name} accepted obsolete field {field}").into());
+            }
+        }
+    }
+    Ok(())
+}

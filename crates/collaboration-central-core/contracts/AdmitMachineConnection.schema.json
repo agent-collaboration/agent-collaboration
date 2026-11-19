@@ -12,13 +12,6 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
     },
-    "InstallationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 36
-    },
     "MachineId": {
       "description": "The Router install's durable identity, shared with central.",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -56,9 +49,6 @@
     "enrollmentId": {
       "$ref": "#/$defs/EnrollmentId"
     },
-    "installation": {
-      "$ref": "#/$defs/InstallationId"
-    },
     "organizationId": {
       "$ref": "#/$defs/OrganizationId"
     },
@@ -72,7 +62,6 @@
   "required": [
     "organizationId",
     "enrollmentId",
-    "installation",
     "presented",
     "tokenExpiresAt",
     "clientId"

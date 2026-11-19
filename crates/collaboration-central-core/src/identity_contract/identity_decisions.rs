@@ -1,7 +1,6 @@
 //! Sign-in service decisions and machine-token extension claims.
-use super::PeerId;
 use super::{AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollPermission, PersonId};
-use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use message_board::MachineLabel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -132,7 +131,6 @@ pub struct PresentedMachine {
 pub struct AdmitMachineConnection {
     pub organization_id: OrganizationId,
     pub enrollment_id: EnrollmentId,
-    pub installation: InstallationId,
     pub presented: PresentedMachine,
     pub token_expires_at: UnixSeconds,
     pub client_id: ClientId,
@@ -140,9 +138,6 @@ pub struct AdmitMachineConnection {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AdmittedMachine {
-    pub installation: InstallationId,
-    #[schemars(with = "message_board::RecordId")]
-    pub peer: PeerId,
     pub organization_id: OrganizationId,
     pub enrollment_id: EnrollmentId,
     pub token_expires_at: UnixSeconds,
