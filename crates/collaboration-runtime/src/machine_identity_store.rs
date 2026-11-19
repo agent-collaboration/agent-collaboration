@@ -33,7 +33,11 @@ pub async fn load_or_create_machine_id(
         return Err(MachineIdentityError::InvalidDirectory);
     }
     let mut store = MachineLocalStore::open(&directory.join(MACHINE_LOCAL_DATABASE)).await?;
-    store.load_or_create_machine_id(now).await
+    let loaded = store.load_or_create_machine_id(now).await;
+    let closed = store.close().await;
+    let machine_id = loaded?;
+    closed?;
+    Ok(machine_id)
 }
 
 impl MachineLocalStore {
