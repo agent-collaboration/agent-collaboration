@@ -14,6 +14,7 @@ use super::{
         automation_timer,
         direct_message::DirectMessage,
         direct_message_store::DirectMessageStore,
+        system_message_expiry::{ExpireAt, SystemMessageExpiry, SystemMessageExpiryStore},
         timer_store::{AutomationStore, WakeStore},
         wake_timer,
     },
@@ -60,6 +61,7 @@ enum DueKind {
     Wake,
     Automation,
     DirectMessage,
+    SystemMessageExpiry,
     #[cfg(feature = "test-support")]
     Probe,
 }
@@ -69,6 +71,9 @@ impl DueKind {
             Self::Wake => MachineKind("wake_timer"),
             Self::Automation => MachineKind("automation_timer"),
             Self::DirectMessage => MachineKind("direct_message"),
+            Self::SystemMessageExpiry => {
+                <SystemMessageExpiry as central_engine_model::Machine>::KIND
+            }
             #[cfg(feature = "test-support")]
             Self::Probe => MachineKind("engine_probe"),
         }
@@ -78,6 +83,7 @@ impl DueKind {
             Self::Wake => query_registry::WAKE_LIST,
             Self::Automation => query_registry::AUTOMATION_LIST,
             Self::DirectMessage => query_registry::DIRECT_MESSAGE_LIST,
+            Self::SystemMessageExpiry => query_registry::SYSTEM_MESSAGE_EXPIRY_LIST,
             #[cfg(feature = "test-support")]
             Self::Probe => query_registry::PROBE_LIST,
         }
@@ -231,6 +237,7 @@ impl<R: EngineHost> Engine<'_, R> {
             DueKind::Wake,
             DueKind::Automation,
             DueKind::DirectMessage,
+            DueKind::SystemMessageExpiry,
             #[cfg(feature = "test-support")]
             DueKind::Probe,
         ] {
@@ -247,9 +254,15 @@ impl<R: EngineHost> Engine<'_, R> {
                     break;
                 }
             };
+            // Expiry must wait for the same boundary that closes its delivery window.
+            let cutoff = if matches!(kind, DueKind::SystemMessageExpiry) {
+                now
+            } else {
+                horizon
+            };
             let query = match central_engine_model::due_list_sql(
                 kind.sql(),
-                horizon,
+                cutoff,
                 policy.per_kind_cap + 1,
             ) {
                 Ok(query) => query,
@@ -372,12 +385,21 @@ impl<R: EngineHost> Engine<'_, R> {
                         )
                         .await
                     }
+                    DueKind::SystemMessageExpiry => {
+                        self.run_machine_unit::<SystemMessageExpiry, _>(
+                            &SystemMessageExpiryStore(self.0),
+                            row,
+                            "mail_messages.delivery_window_ends_at",
+                            ExpireAt,
+                        )
+                        .await
+                    }
                 };
                 match kind {
                     DueKind::Wake => work.wakes_fired = usize::from(done),
                     DueKind::Automation => work.automations_fired = usize::from(done),
                     // Cancels are observed through the messages they change.
-                    DueKind::DirectMessage => {}
+                    DueKind::DirectMessage | DueKind::SystemMessageExpiry => {}
                     #[cfg(feature = "test-support")]
                     DueKind::Probe => {}
                 }

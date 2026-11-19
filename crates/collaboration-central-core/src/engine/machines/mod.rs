@@ -11,6 +11,7 @@ pub(crate) mod lifecycle_finish;
     )
 )]
 pub(crate) mod owed_reply;
+pub(crate) mod system_message_expiry;
 pub(crate) mod timer_store;
 #[cfg(test)]
 mod timer_test_support;

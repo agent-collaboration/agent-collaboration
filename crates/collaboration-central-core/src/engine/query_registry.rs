@@ -43,6 +43,19 @@ macro_rules! direct_message_rows {
         )
     };
 }
+macro_rules! system_message_expiry_rows {
+    () => {
+        machine_rows!(
+            "mail_messages",
+            "message_id",
+            "s.delivery_window_ends_at",
+            "system_message_expiry",
+            "'queued'",
+            "'delivered','cancelled','failed'",
+            "s.state='queued' AND s.message_kind IN ('notice','deliveryOutcome') AND s.delivery_window_ends_at IS NOT NULL"
+        )
+    };
+}
 macro_rules! grid_inputs {
     () => {
         concat!(
@@ -65,6 +78,8 @@ macro_rules! grid_inputs {
             ",9223372036855)",
             ",COALESCE(",
             controlled_machine!("direct_message", direct_message_rows!()),
+            ",9223372036855),COALESCE(",
+            controlled_machine!("system_message_expiry", system_message_expiry_rows!()),
             ",9223372036855)"
         )
     };
@@ -168,6 +183,12 @@ pub(crate) const AUTOMATION_LIST: &str = concat!(
 pub(crate) const DIRECT_MESSAGE_LIST: &str = concat!(
     "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
     direct_message_rows!(),
+    ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
+);
+
+pub(crate) const SYSTEM_MESSAGE_EXPIRY_LIST: &str = concat!(
+    "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
+    system_message_expiry_rows!(),
     ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
 );
 

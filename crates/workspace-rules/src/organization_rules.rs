@@ -29,7 +29,7 @@ pub fn organize_work(
         } => (
             ItemRef::Area(area_id.clone()),
             vec![exact(
-                "INSERT INTO areas (area_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'open',?,?)",
+                "INSERT INTO workspace_areas (area_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'open',?,?)",
                 vec![
                     text(area_id),
                     text(name.as_str()),
@@ -45,7 +45,7 @@ pub fn organize_work(
             (
                 ItemRef::Area(area_id.clone()),
                 vec![exact(
-                    "UPDATE areas SET state='archived',updated_at=? WHERE area_id=?",
+                    "UPDATE workspace_areas SET state='archived',updated_at=? WHERE area_id=?",
                     vec![now(), text(area_id)],
                 )],
                 false,
@@ -59,7 +59,7 @@ pub fn organize_work(
             require_area(context, area_id, reads.area)?;
             let statement = match description {
                 Some(description) => exact(
-                    "UPDATE areas SET name=?,description=?,updated_at=? WHERE area_id=?",
+                    "UPDATE workspace_areas SET name=?,description=?,updated_at=? WHERE area_id=?",
                     vec![
                         text(name.as_str()),
                         text(description.as_str()),
@@ -68,7 +68,7 @@ pub fn organize_work(
                     ],
                 ),
                 None => exact(
-                    "UPDATE areas SET name=?,updated_at=? WHERE area_id=?",
+                    "UPDATE workspace_areas SET name=?,updated_at=? WHERE area_id=?",
                     vec![text(name.as_str()), now(), text(area_id)],
                 ),
             };
@@ -85,7 +85,7 @@ pub fn organize_work(
                 .ok_or_else(|| not_found(ItemRef::Project(project_id.clone())))?;
             let statement = match description {
                 Some(description) => exact(
-                    "UPDATE projects SET title=?,description=?,updated_at=? WHERE project_id=?",
+                    "UPDATE workspace_projects SET title=?,description=?,updated_at=? WHERE project_id=?",
                     vec![
                         text(title.as_str()),
                         text(description.as_str()),
@@ -94,7 +94,7 @@ pub fn organize_work(
                     ],
                 ),
                 None => exact(
-                    "UPDATE projects SET title=?,updated_at=? WHERE project_id=?",
+                    "UPDATE workspace_projects SET title=?,updated_at=? WHERE project_id=?",
                     vec![text(title.as_str()), now(), text(project_id)],
                 ),
             };
@@ -108,7 +108,7 @@ pub fn organize_work(
             (
                 ItemRef::Issue(issue_id.clone()),
                 vec![exact(
-                    "UPDATE issues SET title=?,updated_at=? WHERE issue_id=?",
+                    "UPDATE workspace_issues SET title=?,updated_at=? WHERE issue_id=?",
                     vec![text(title.as_str()), now(), text(issue_id)],
                 )],
                 false,
@@ -127,7 +127,7 @@ pub fn organize_work(
                 ItemRef::Project(project_id.clone()),
                 vec![
                     exact(
-                        "INSERT INTO projects (project_id,area_id,title,description,status,created_at,updated_at) VALUES (?,?,?,?,'backlog',?,?)",
+                        "INSERT INTO workspace_projects (project_id,area_id,title,description,status,created_at,updated_at) VALUES (?,?,?,?,'backlog',?,?)",
                         vec![
                             text(project_id),
                             text(area_id),
@@ -138,7 +138,7 @@ pub fn organize_work(
                         ],
                     ),
                     exact(
-                        "INSERT INTO project_roles (project_role_id,project_id,role,holder,granted_at,ended_at,created_at,updated_at) VALUES (?,?,'lead',?,?,NULL,?,?)",
+                        "INSERT INTO workspace_project_roles (project_role_id,project_id,role,holder,granted_at,ended_at,created_at,updated_at) VALUES (?,?,'lead',?,?,NULL,?,?)",
                         vec![
                             text(role_id),
                             text(project_id),
@@ -159,7 +159,7 @@ pub fn organize_work(
         } => (
             ItemRef::Initiative(initiative_id.clone()),
             vec![exact(
-                "INSERT INTO initiatives (initiative_id,name,description,status,created_at,updated_at) VALUES (?,?,?,'backlog',?,?)",
+                "INSERT INTO workspace_initiatives (initiative_id,name,description,status,created_at,updated_at) VALUES (?,?,?,'backlog',?,?)",
                 vec![
                     text(initiative_id),
                     text(name.as_str()),
@@ -182,7 +182,7 @@ pub fn organize_work(
             (
                 ItemRef::Initiative(initiative_id.clone()),
                 vec![exact(
-                    "UPDATE initiatives SET name=?,description=?,updated_at=? WHERE initiative_id=?",
+                    "UPDATE workspace_initiatives SET name=?,description=?,updated_at=? WHERE initiative_id=?",
                     vec![
                         text(name.as_str()),
                         text(description.as_str()),
@@ -206,7 +206,7 @@ pub fn organize_work(
             (
                 ItemRef::Deliverable(deliverable_id.clone()),
                 vec![exact(
-                    "INSERT INTO deliverables (deliverable_id,project_id,title,created_at,updated_at) VALUES (?,?,?,?,?)",
+                    "INSERT INTO workspace_deliverables (deliverable_id,project_id,title,created_at,updated_at) VALUES (?,?,?,?,?)",
                     vec![
                         text(deliverable_id),
                         text(project_id),
@@ -235,7 +235,7 @@ pub fn organize_work(
             (
                 ItemRef::Issue(issue_id.clone()),
                 vec![exact(
-                    "INSERT INTO issues (issue_id,deliverable_id,title,status,created_at,updated_at) VALUES (?,?,?,'backlog',?,?)",
+                    "INSERT INTO workspace_issues (issue_id,deliverable_id,title,status,created_at,updated_at) VALUES (?,?,?,'backlog',?,?)",
                     vec![
                         text(issue_id),
                         text(deliverable_id),

@@ -8,11 +8,18 @@ use chrono::{DateTime, Duration, Utc};
 
 /// The one delivery window, from when the agent sent the message.
 pub const DELIVERY_WINDOW: Duration = Duration::minutes(15);
-pub(crate) const SYSTEM_MESSAGE_DELIVERY_WINDOW: Duration = Duration::hours(24);
+const SYSTEM_MESSAGE_DELIVERY_WINDOW: Duration = Duration::hours(24);
+pub(crate) const EXPIRED_24_HOURS: &str = "expired24Hours";
 /// Room for the recipient's Ack before the cancel runs.
 pub const ACK_MARGIN: Duration = Duration::minutes(2);
 /// Due items run on this grid, like wakes.
-const DUE_GRID_SECONDS: i64 = 5 * 60;
+const DUE_GRID_SECONDS: u32 = 5 * 60;
+
+/// A notice or delivery outcome expires on the first grid mark at or after 24 hours.
+pub(crate) fn system_message_deadline(created_at: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    let earliest = created_at.checked_add_signed(SYSTEM_MESSAGE_DELIVERY_WINDOW)?;
+    crate::central_mail_time::aligned_at_or_after(earliest, DUE_GRID_SECONDS)
+}
 
 /// The cancel's 5-minute mark for a direct message the agent sent at
 /// `sent_at` (the Mac's clock) and central accepted at `accepted_at`.
@@ -45,7 +52,7 @@ pub fn delivery_window_open(
 
 fn round_up_to_grid(at: DateTime<Utc>) -> DateTime<Utc> {
     let millis = at.timestamp_millis();
-    let grid = DUE_GRID_SECONDS * 1000;
+    let grid = i64::from(DUE_GRID_SECONDS) * 1000;
     let rounded = millis.div_euclid(grid) * grid
         + if millis.rem_euclid(grid) == 0 {
             0

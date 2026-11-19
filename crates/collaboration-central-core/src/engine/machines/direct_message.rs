@@ -57,13 +57,6 @@ pub(crate) enum Event {
     /// The due batch reached the cancel mark.
     Due { occurrence: EngineTime },
     /// The recipient's Router answered a delivery.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the link's Ack frame drives it in step 2c piece 5"
-        )
-    )]
     Ack(mail::DeliveryAnswer),
 }
 

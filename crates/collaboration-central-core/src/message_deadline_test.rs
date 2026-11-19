@@ -42,6 +42,17 @@ fn the_window_closes_exactly_15_minutes_after_the_clamped_send() {
     ));
 }
 
+#[test]
+fn system_expiry_uses_the_first_grid_mark_at_or_after_24_hours() {
+    let day = 24 * 60 * MINUTE;
+    assert_eq!(system_message_deadline(at(0)), Some(at(day)));
+    assert_eq!(system_message_deadline(at(1)), Some(at(day + 5 * MINUTE)));
+    assert_eq!(
+        system_message_deadline(at(5 * MINUTE - 1)),
+        Some(at(day + 5 * MINUTE))
+    );
+}
+
 #[hegel::test]
 fn the_cancel_is_on_the_grid_after_the_window_and_margin_and_within_one_step(tc: TestCase) {
     let accepted = tc.draw(

@@ -74,14 +74,14 @@ fn r21_a_b_any_workspace_actor_edits_and_description_is_required() {
     let cleanup = output.batch.statements.first().unwrap();
     assert_eq!(
         cleanup.statement.sql,
-        "DELETE FROM item_references WHERE (source_kind='backlogItem' AND source_id=?) OR (target_kind='backlogItem' AND target_id=?)"
+        "DELETE FROM workspace_item_references WHERE (source_kind='backlogItem' AND source_id=?) OR (target_kind='backlogItem' AND target_id=?)"
     );
     assert!(
         output
             .batch
             .statements
             .iter()
-            .any(|row| row.statement.sql == "DELETE FROM backlog_items WHERE item_id=?")
+            .any(|row| row.statement.sql == "DELETE FROM workspace_backlog_items WHERE item_id=?")
     );
 }
 

@@ -14,7 +14,10 @@ use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, ProtocolError, ReplyPayload, RequestPayload,
     RequestStatusAnswer, TokenRenewalRefusal, TokenRenewalResult, decode_text, encode_text,
 };
-use collaboration_central_core::{ValidatedMachineConnection, WorkspaceCaller, WorkspaceRuntime};
+use collaboration_central_core::{
+    MailAckIgnored, MailAckSettlement, ValidatedMachineConnection, WorkspaceCaller,
+    WorkspaceRuntime,
+};
 use fleet_identity_protocol::OrganizationId;
 use std::sync::Arc;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -298,7 +301,28 @@ async fn serve_link(
                     return;
                 }
             }
-            // Acknowledgements and delivery belong to the delivery owner (C4).
+            LinkFrame::Data(DataFrame::Ack { message_id, answer }) => {
+                match runtime
+                    .acknowledge_delivery(&connection.attachment(), &message_id, answer)
+                    .await
+                {
+                    Ok(MailAckSettlement::Ignored(MailAckIgnored::MachineAuthorityLapsed)) => {
+                        close_lapsed_link(&mut socket, &state.stop).await;
+                        return;
+                    }
+                    Ok(_) => {}
+                    Err(_) => {
+                        close_link(
+                            &mut socket,
+                            &state.stop,
+                            close_code::ERROR,
+                            "central unavailable",
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
             // Direction validation also rejects server-only frames here.
             _ => {
                 close_link(

@@ -10,30 +10,6 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use workspace_ids::SessionRef;
 
-/// A session's thread notices share one cadence across all workspaces.
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema,
-)]
-pub enum NoticeCadence {
-    #[default]
-    #[serde(rename = "m15")]
-    M15,
-    #[serde(rename = "m25")]
-    M25,
-    #[serde(rename = "m55")]
-    M55,
-}
-impl NoticeCadence {
-    #[must_use]
-    pub const fn seconds(self) -> u32 {
-        match self {
-            Self::M15 => 900,
-            Self::M25 => 1500,
-            Self::M55 => 3300,
-        }
-    }
-}
-
 /// Authenticated origin stamped by the Host, outside semantic tool input.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(

@@ -110,7 +110,7 @@ async fn crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen
     )
     .unwrap();
     let binding = crate::MachineSenderBinding::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap(),

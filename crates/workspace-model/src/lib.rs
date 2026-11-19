@@ -7,6 +7,7 @@ mod request_digest;
 mod rule_commands;
 mod rule_results;
 mod validated_values;
+pub use central_mail::NoticeCadence;
 pub use request_contract::*;
 
 pub use entity_records::*;

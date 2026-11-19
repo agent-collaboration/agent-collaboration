@@ -188,8 +188,9 @@ async fn fresh_organization_and_workspace_store_use_the_approved_table_names() {
         .inspect_workspace(&f.workspace, names())
         .await
         .unwrap();
+    let expected_organization = schema::organization_test_tables();
     for (observed, expected) in [
-        (organization, schema::ORGANIZATION_TABLES),
+        (organization, expected_organization.as_slice()),
         (workspace, schema::WORKSPACE_TABLES),
     ] {
         let expected: Vec<_> = expected.iter().map(|name| vec![text(name)]).collect();

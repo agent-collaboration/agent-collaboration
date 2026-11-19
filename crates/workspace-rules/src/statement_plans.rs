@@ -71,7 +71,7 @@ pub(crate) fn change_row(
         _ => SqlValue::Null,
     };
     exact(
-        "INSERT INTO changes (change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) VALUES (?,(SELECT COALESCE(MAX(position),0)+1 FROM changes),?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO workspace_changes (change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) VALUES (?,(SELECT COALESCE(MAX(position),0)+1 FROM workspace_changes),?,?,?,?,?,?,?,?,?,?)",
         vec![
             text(change_id),
             text(event),

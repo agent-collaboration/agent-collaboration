@@ -5,7 +5,7 @@ mod link_renewal;
 mod link_request;
 mod request_status;
 
-pub use request_status::{RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery};
+pub use request_status::{RequestRefusal, RequestStatusAnswer, RequestStatusQuery};
 
 pub use link_codec::{DataFrame, FrameDirection, LinkFrame, decode_text, encode_text};
 pub use link_delivery::{DeliveryAnswer, MessageCancellation, MessageOutcome, MessageRefusal};
@@ -14,7 +14,7 @@ pub use link_renewal::{
 };
 pub use link_request::{
     CorrelationId, LinkRequest, LinkRequestBatch, MAX_LINK_REQUEST_BATCH_SIZE, ReplyPayload,
-    RequestPayload,
+    RequestPayload, RequestScope,
 };
 
 #[derive(Debug, thiserror::Error)]

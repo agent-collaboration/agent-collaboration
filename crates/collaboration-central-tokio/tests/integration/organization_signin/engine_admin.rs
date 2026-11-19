@@ -78,6 +78,7 @@ async fn health_lists_every_kind_and_the_retired_list_pages_in_attempt_order() {
             "wake_timer",
             "automation_timer",
             "direct_message",
+            "system_message_expiry",
             "legacy_notice_windows",
             "legacy_workspace_drains",
             "engine_source"

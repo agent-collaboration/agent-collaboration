@@ -38,7 +38,7 @@ pub fn change_thread(
         let item = ItemRef::Thread(thread_id.clone());
         let mut statements = vec![
             exact(
-                "INSERT INTO threads (thread_id,area_id,title,creator,state,created_at,updated_at) VALUES (?,?,?,?,'open',?,?)",
+                "INSERT INTO workspace_threads (thread_id,area_id,title,creator,state,created_at,updated_at) VALUES (?,?,?,?,'open',?,?)",
                 vec![
                     text(thread_id),
                     text(area_id),
@@ -49,7 +49,7 @@ pub fn change_thread(
                 ],
             ),
             exact(
-                "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,'participant',1,NULL,?,?)",
+                "INSERT INTO workspace_thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,'participant',1,NULL,?,?)",
                 vec![
                     text(member_id),
                     text(thread_id),
@@ -114,7 +114,7 @@ pub fn change_thread(
                 None => vec![],
             };
             statements.push(exact(
-                "UPDATE threads SET state='resolved',updated_at=? WHERE thread_id=? AND creator=? AND state='open'",
+                "UPDATE workspace_threads SET state='resolved',updated_at=? WHERE thread_id=? AND creator=? AND state='open'",
                 vec![now(), text(thread_id), text(&context.actor)],
             ));
             (
@@ -133,12 +133,12 @@ pub fn change_thread(
                     return Ok(unchanged());
                 }
                 exact(
-                    "UPDATE thread_members SET member_role='participant',updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
+                    "UPDATE workspace_thread_members SET member_role='participant',updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
                     vec![now(), text(&member.thread_member_id)],
                 )
             } else {
                 exact(
-                    "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)",
+                    "INSERT INTO workspace_thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)",
                     vec![
                         text(member_id),
                         text(thread_id),
@@ -177,7 +177,7 @@ pub fn change_thread(
                     return Ok(unchanged());
                 }
                 exact(
-                    "UPDATE thread_members SET member_role=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
+                    "UPDATE workspace_thread_members SET member_role=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
                     vec![
                         text(member_role_name(*role)),
                         now(),
@@ -186,7 +186,7 @@ pub fn change_thread(
                 )
             } else {
                 exact(
-                    "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)",
+                    "INSERT INTO workspace_thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)",
                     vec![
                         text(member_id),
                         text(thread_id),
@@ -213,7 +213,7 @@ pub fn change_thread(
                 "left",
                 Some(&context.actor),
                 vec![exact(
-                    "UPDATE thread_members SET left_at=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
+                    "UPDATE workspace_thread_members SET left_at=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
                     vec![now(), now(), text(&member.thread_member_id)],
                 )],
             )
@@ -234,7 +234,7 @@ pub fn change_thread(
                 },
                 Some(&context.actor),
                 vec![exact(
-                    "UPDATE thread_members SET notifications=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
+                    "UPDATE workspace_thread_members SET notifications=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
                     vec![
                         central_storage::SqlValue::Integer(
                             central_storage::SafeInteger::new(i64::from(
@@ -268,7 +268,7 @@ pub fn change_thread(
                 "posted",
                 None,
                 vec![exact(
-                    "INSERT INTO posts (post_id,thread_id,author,body,addressees,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO workspace_posts (post_id,thread_id,author,body,addressees,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
                     vec![
                         text(post_id),
                         text(thread_id),
@@ -358,7 +358,7 @@ fn post_statements(
     }
     Ok(vec![
         exact(
-            "INSERT INTO posts (post_id,thread_id,author,body,addressees,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO workspace_posts (post_id,thread_id,author,body,addressees,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
             vec![
                 text(&post.post_id),
                 text(thread_id),

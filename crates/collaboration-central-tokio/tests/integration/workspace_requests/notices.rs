@@ -431,6 +431,7 @@ mod busy_central_turn;
 mod busy_workspace;
 mod control_clear_race;
 mod corruption;
+mod delivery_expiry;
 mod drain_replay_isolation;
 mod identities;
 mod queued_cancel;

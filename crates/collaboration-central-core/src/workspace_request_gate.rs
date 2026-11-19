@@ -44,6 +44,20 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     if request.operation.is_write() && request.request_id.is_none() {
         return Ok(invalid("requestId"));
     }
+    if let m::WorkspaceOperation::List {
+        query: m::ListQuery::MessageStatus { message_id },
+        ..
+    } = &request.operation
+    {
+        if request.workspace_id.is_some() {
+            return Ok(invalid("workspaceId"));
+        }
+        let result = match runtime.direct_message_status(caller, message_id).await? {
+            Ok(status) => m::WorkspaceResult::Done(m::WorkspaceAnswer::MessageStatus { status }),
+            Err(refusal) => m::WorkspaceResult::Refused(refusal),
+        };
+        return Ok(reply(result));
+    }
     match crate::workspace_directory_requests::classify(&request) {
         Err(field) => return Ok(invalid(field)),
         Ok(Some(directory)) => {

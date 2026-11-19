@@ -153,8 +153,8 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     runtime.after_event().await.unwrap();
     assert_eq!(
         runtime.statement_host().published_alarm().unwrap(),
-        None,
-        "nothing timed is left: the outcome message never arms the alarm"
+        Some(deadline),
+        "a queued outcome arms the 24-hour expiry"
     );
     assert_eq!(
         runtime
@@ -169,4 +169,16 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         SqlValue::Integer(1.try_into().unwrap()),
         "a cancelled message is not cancelled twice"
     );
+    fixture.set_utc(deadline).await;
+    runtime.after_event().await.unwrap();
+    let terminal_outcomes = runtime.statement_host().read(Statement {
+        sql: "SELECT state,failure_reason FROM mail_messages WHERE message_kind='deliveryOutcome'",
+        args: vec![],
+    }).await.unwrap();
+    assert_eq!(
+        terminal_outcomes.rows,
+        vec![vec![text("cancelled"), text("expired24Hours")]]
+    );
+    assert_eq!(runtime.statement_host().published_alarm().unwrap(), None);
+    fixture.host.close().await;
 }
