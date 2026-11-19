@@ -28,6 +28,11 @@ pub trait OutboxStorage: Send {
         caller: &'call Caller,
         request: &'call RequestId,
     ) -> OutboxFuture<'call, RequestStatus>;
+    fn scoped_request_status<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        query: &'call central_link_protocol::RequestStatusQuery,
+    ) -> OutboxFuture<'call, RequestStatus>;
     fn pending_for<'call>(
         &'call mut self,
         caller: &'call Caller,
@@ -106,6 +111,35 @@ impl MachineLocalOutbox {
 }
 
 impl OutboxStorage for MachineLocalOutbox {
+    fn scoped_request_status<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        query: &'call central_link_protocol::RequestStatusQuery,
+    ) -> OutboxFuture<'call, RequestStatus> {
+        Box::pin(async move {
+            let Some(stored) = crate::outbox_store::read_decoded_outbox(
+                &mut self.store.connection,
+                &query.request_id,
+            )
+            .await?
+            else {
+                return Ok(RequestStatus::NotFound);
+            };
+            if stored.caller != *caller {
+                return Ok(RequestStatus::NotFound);
+            }
+            use crate::outbox_store::StoredPayload;
+            let scope = match &stored.payload {
+                StoredPayload::Unanswered(write) => write.request_scope(),
+                StoredPayload::Answered(profile) => profile.target.request_scope(),
+            };
+            Ok(if scope == query.scope {
+                stored.status
+            } else {
+                RequestStatus::NotFound
+            })
+        })
+    }
     fn insert<'call>(
         &'call mut self,
         item: &'call NewOutboxItem,

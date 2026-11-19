@@ -29,6 +29,22 @@ pub enum OutboxWriteTarget {
     },
 }
 
+impl OutboxWriteTarget {
+    pub fn request_scope(&self) -> central_link_protocol::RequestScope {
+        use central_link_protocol::RequestScope;
+        match self {
+            Self::Thread {
+                workspace_id: Some(workspace_id),
+                ..
+            } => RequestScope::Workspace(workspace_id.clone()),
+            Self::Thread {
+                workspace_id: None, ..
+            }
+            | Self::Session { .. } => RequestScope::Organization,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutboxWriteContent {
     pub target: OutboxWriteTarget,

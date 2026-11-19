@@ -112,6 +112,19 @@ fn content(
 }
 
 impl OutboxStorage for MemoryOutbox {
+    fn scoped_request_status<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        query: &'call central_link_protocol::RequestStatusQuery,
+    ) -> OutboxFuture<'call, RequestStatus> {
+        Box::pin(async move {
+            Ok(self
+                .rows
+                .get(&query.request_id)
+                .filter(|row| row.caller == *caller && row.target.request_scope() == query.scope)
+                .map_or(RequestStatus::NotFound, Row::status))
+        })
+    }
     fn insert<'call>(
         &'call mut self,
         item: &'call NewOutboxItem,

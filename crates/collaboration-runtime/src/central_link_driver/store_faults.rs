@@ -90,6 +90,17 @@ macro_rules! faulty {
 }
 
 impl OutboxStorage for FaultyOutbox {
+    fn scoped_request_status<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        query: &'call central_link_protocol::RequestStatusQuery,
+    ) -> OutboxFuture<'call, RequestStatus> {
+        faulty!(
+            self,
+            "request_status",
+            self.inner.scoped_request_status(caller, query)
+        )
+    }
     fn insert<'call>(
         &'call mut self,
         item: &'call NewOutboxItem,

@@ -447,7 +447,7 @@ impl LinkDriver {
             .store
             .lock()
             .await
-            .request_status(&caller, &query.request_id)
+            .scoped_request_status(&caller, &query)
             .await;
         match local {
             Ok(RequestStatus::NotFound) => {
