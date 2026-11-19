@@ -43,22 +43,69 @@ pub(crate) struct PendingAck {
 }
 
 #[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-enum InboxRowState {
-    PendingHandoff,
-    AckPending {
-        answer: DeliveryAnswer,
-        flush_at_ms: i64,
-    },
-    AckSent {
-        answer: DeliveryAnswer,
-    },
+#[serde(deny_unknown_fields)]
+struct InboxRowState {
+    answer: DeliveryAnswer,
+    ack: AckSchedule,
+    ended_at_ms: Option<i64>,
 }
 
-enum StoredDelivery {
-    PendingHandoff(Box<MessageRecord>),
-    AckPending(PendingAck),
-    AckSent { answer: DeliveryAnswer },
+/// Handoff and socket progress are independent. Replays retain the fact
+/// that the first Ack went out, including when a handoff finishes mid-replay.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+enum AckSchedule {
+    First { flush_at_ms: i64 },
+    Replay { flush_at_ms: i64 },
+    Sent,
+}
+
+impl AckSchedule {
+    fn mark(&self) -> Option<SyncTime> {
+        match *self {
+            Self::First { flush_at_ms } | Self::Replay { flush_at_ms } => {
+                Some(SyncTime::from_unix_millis(flush_at_ms))
+            }
+            Self::Sent => None,
+        }
+    }
+
+    fn was_sent(&self) -> bool {
+        !matches!(self, Self::First { .. })
+    }
+
+    fn reoffer(&mut self, mark: SyncTime) -> bool {
+        if matches!(self, Self::Sent) {
+            *self = Self::Replay {
+                flush_at_ms: mark.unix_millis(),
+            };
+            true
+        } else {
+            false
+        }
+    }
+}
+
+struct StoredDelivery {
+    message_id: MessageId,
+    message: Option<MessageRecord>,
+    state: InboxRowState,
+}
+
+impl StoredDelivery {
+    fn pending_ack(self) -> Option<PendingAck> {
+        Some(PendingAck {
+            message_id: self.message_id,
+            answer: self.state.answer,
+            flush_at: self.state.ack.mark()?,
+        })
+    }
+
+    fn end_if_complete(&mut self, now: SyncTime) {
+        if self.message.is_none() && self.state.ack.was_sent() {
+            self.state.ended_at_ms.get_or_insert(now.unix_millis());
+        }
+    }
 }
 
 struct InboxRow {
@@ -74,40 +121,35 @@ impl InboxRow {
             field,
         };
         let message_id: MessageId = self.message_id.parse().map_err(|_| corrupt("message_id"))?;
-        let state = serde_json::from_str(&self.delivery_state_json)
+        let state: InboxRowState = serde_json::from_str(&self.delivery_state_json)
             .map_err(|_| corrupt("delivery_state_json"))?;
-        match (state, self.message_json.as_deref()) {
-            (InboxRowState::PendingHandoff, Some(json)) => {
-                let message: MessageRecord =
-                    serde_json::from_str(json).map_err(|_| corrupt("message_json"))?;
-                if message.message_id != message_id {
-                    return Err(corrupt("message_json.message_id"));
-                }
-                Ok(StoredDelivery::PendingHandoff(Box::new(message)))
+        let message: Option<MessageRecord> = self
+            .message_json
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map_err(|_| corrupt("message_json"))?;
+        if let Some(message) = &message {
+            if message.message_id != message_id {
+                return Err(corrupt("message_json.message_id"));
             }
-            (
-                InboxRowState::AckPending {
-                    answer,
-                    flush_at_ms,
-                },
-                None,
-            ) => {
-                let flush_at = SyncTime::from_unix_millis(flush_at_ms);
-                if central_link_client::mark_in_window(flush_at) != Some(flush_at) {
-                    return Err(corrupt("delivery_state_json.flush_at_ms"));
-                }
-                Ok(StoredDelivery::AckPending(PendingAck {
-                    message_id,
-                    answer,
-                    flush_at,
-                }))
-            }
-            (InboxRowState::AckSent { answer }, None) => Ok(StoredDelivery::AckSent { answer }),
-            (InboxRowState::PendingHandoff, None)
-            | (InboxRowState::AckPending { .. } | InboxRowState::AckSent { .. }, Some(_)) => {
-                Err(corrupt("message_json"))
+            if state.answer != DeliveryAnswer::Accepted {
+                return Err(corrupt("message_json"));
             }
         }
+        if let Some(mark) = state.ack.mark()
+            && central_link_client::mark_in_window(mark) != Some(mark)
+        {
+            return Err(corrupt("delivery_state_json.ack.flush_at_ms"));
+        }
+        if state.ended_at_ms.is_some() != (message.is_none() && state.ack.was_sent()) {
+            return Err(corrupt("delivery_state_json.ended_at_ms"));
+        }
+        Ok(StoredDelivery {
+            message_id,
+            message,
+            state,
+        })
     }
 }
 
@@ -123,60 +165,63 @@ impl InboxStore {
     pub(crate) async fn record_delivery(
         &mut self,
         message: &MessageRecord,
+        answer: DeliveryAnswer,
         mark: SyncTime,
         now: SyncTime,
     ) -> Result<RecordDelivery, InboxStoreError> {
-        let message_id = message.message_id.as_str();
-        let mut txn = self.store.transaction(TransactionStart::Immediate).await?;
-        match read_delivery(&mut txn, &message.message_id).await? {
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let recorded = match read_delivery(&mut transaction, &message.message_id).await? {
             None => {
-                let payload = serde_json::to_string(message)?;
-                let state = serde_json::to_string(&InboxRowState::PendingHandoff)?;
+                let payload = (answer == DeliveryAnswer::Accepted)
+                    .then(|| serde_json::to_string(message))
+                    .transpose()?;
+                let state = serde_json::to_string(&InboxRowState {
+                    answer,
+                    ack: AckSchedule::First {
+                        flush_at_ms: mark.unix_millis(),
+                    },
+                    ended_at_ms: None,
+                })?;
                 sqlx::query(
                     "INSERT INTO inbox_messages
                      (message_id, message_json, delivery_state_json, created_at, updated_at)
                      VALUES (?, ?, ?, ?, ?)",
                 )
-                .bind(message_id)
+                .bind(message.message_id.as_str())
                 .bind(payload)
                 .bind(state)
                 .bind(now.unix_millis())
                 .bind(now.unix_millis())
-                .execute(&mut *txn)
+                .execute(&mut *transaction)
                 .await?;
-                txn.commit().await?;
-                Ok(RecordDelivery::Inserted)
+                RecordDelivery::Inserted
             }
-            Some(delivery) => {
-                if let StoredDelivery::AckSent { answer } = delivery {
-                    set_ack_state(
-                        &mut txn,
-                        &message.message_id,
-                        ack_pending(answer, mark),
-                        now,
-                    )
-                    .await?;
+            Some(mut delivery) => {
+                if delivery.state.ack.reoffer(mark) {
+                    update_delivery(&mut transaction, &delivery, now).await?;
                 }
-                txn.commit().await?;
-                Ok(RecordDelivery::Duplicate)
+                RecordDelivery::Duplicate
             }
-        }
+        };
+        transaction.commit().await?;
+        Ok(recorded)
     }
 
     pub(crate) async fn record_handoff(
         &mut self,
         message_id: &MessageId,
-        answer: DeliveryAnswer,
-        mark: SyncTime,
         now: SyncTime,
     ) -> Result<(), InboxStoreError> {
-        let mut txn = self.store.transaction(TransactionStart::Immediate).await?;
-        let Some(StoredDelivery::PendingHandoff(_)) = read_delivery(&mut txn, message_id).await?
-        else {
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let mut delivery = read_delivery(&mut transaction, message_id)
+            .await?
+            .ok_or_else(|| unexpected(message_id, "pending handoff"))?;
+        if delivery.message.take().is_none() {
             return Err(unexpected(message_id, "pending handoff"));
-        };
-        set_ack_state(&mut txn, message_id, ack_pending(answer, mark), now).await?;
-        txn.commit().await?;
+        }
+        delivery.end_if_complete(now);
+        update_delivery(&mut transaction, &delivery, now).await?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -185,40 +230,80 @@ impl InboxStore {
         message_id: &MessageId,
         now: SyncTime,
     ) -> Result<(), InboxStoreError> {
-        let mut txn = self.store.transaction(TransactionStart::Immediate).await?;
-        let Some(StoredDelivery::AckPending(ack)) = read_delivery(&mut txn, message_id).await?
-        else {
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let mut delivery = read_delivery(&mut transaction, message_id)
+            .await?
+            .ok_or_else(|| unexpected(message_id, "pending Ack"))?;
+        if delivery.state.ack.mark().is_none() {
             return Err(unexpected(message_id, "pending Ack"));
-        };
-        set_ack_state(
-            &mut txn,
-            message_id,
-            InboxRowState::AckSent { answer: ack.answer },
-            now,
+        }
+        delivery.state.ack = AckSchedule::Sent;
+        delivery.end_if_complete(now);
+        update_delivery(&mut transaction, &delivery, now).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn reoffer_recent_acks(
+        &mut self,
+        mark: SyncTime,
+        now: SyncTime,
+    ) -> Result<(), InboxStoreError> {
+        let cutoff = now.unix_millis().saturating_sub(RETENTION_MILLIS);
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let rows = sqlx::query_as!(
+            InboxRow,
+            "SELECT message_id, message_json, delivery_state_json FROM inbox_messages
+             WHERE created_at >= ? AND json_extract(delivery_state_json, '$.ack.kind') = 'sent'
+             ORDER BY created_at, message_id",
+            cutoff
         )
+        .fetch_all(&mut *transaction)
         .await?;
-        txn.commit().await?;
+        for row in rows {
+            let mut delivery = row.decode()?;
+            if delivery.state.answer == DeliveryAnswer::Accepted && delivery.state.ack.reoffer(mark)
+            {
+                update_delivery(&mut transaction, &delivery, now).await?;
+            }
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
     pub(crate) async fn pending_handoffs(&mut self) -> Result<Vec<MessageRecord>, InboxStoreError> {
-        let mut handoffs = Vec::new();
-        for delivery in self.active_deliveries().await? {
-            if let StoredDelivery::PendingHandoff(message) = delivery {
-                handoffs.push(*message);
-            }
-        }
-        Ok(handoffs)
+        let rows = sqlx::query_as!(
+            InboxRow,
+            "SELECT message_id, message_json, delivery_state_json FROM inbox_messages
+             WHERE message_json IS NOT NULL ORDER BY created_at, message_id",
+        )
+        .fetch_all(&mut self.store.connection)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(InboxRow::decode)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter_map(|delivery| delivery.message)
+            .collect())
     }
 
     pub(crate) async fn pending_acks(&mut self) -> Result<Vec<PendingAck>, InboxStoreError> {
-        let mut acks = Vec::new();
-        for delivery in self.active_deliveries().await? {
-            if let StoredDelivery::AckPending(ack) = delivery {
-                acks.push(ack);
-            }
-        }
-        Ok(acks)
+        let rows = sqlx::query_as!(
+            InboxRow,
+            "SELECT message_id, message_json, delivery_state_json FROM inbox_messages
+             WHERE json_extract(delivery_state_json, '$.ack.kind') IS NOT 'sent'
+             ORDER BY created_at, message_id",
+        )
+        .fetch_all(&mut self.store.connection)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(InboxRow::decode)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter_map(StoredDelivery::pending_ack)
+            .collect())
     }
 
     pub(crate) async fn acks_due(
@@ -233,57 +318,28 @@ impl InboxStore {
             .collect())
     }
 
-    pub(crate) async fn earliest_due(
-        &mut self,
-        next_mark: SyncTime,
-    ) -> Result<Option<SyncTime>, InboxStoreError> {
-        let active_due = self
-            .active_deliveries()
-            .await?
-            .into_iter()
-            .filter_map(|delivery| match delivery {
-                StoredDelivery::PendingHandoff(_) => Some(next_mark),
-                StoredDelivery::AckPending(ack) => Some(ack.flush_at),
-                StoredDelivery::AckSent { .. } => None,
-            })
-            .min();
-        let oldest_sent = sqlx::query_scalar!(
-            "SELECT min(updated_at) AS \"oldest?: i64\" FROM inbox_messages
-             WHERE json_extract(delivery_state_json, '$.kind') = 'ackSent'",
+    pub(crate) async fn next_prune(&mut self) -> Result<Option<SyncTime>, InboxStoreError> {
+        let oldest = sqlx::query_scalar!(
+            "SELECT min(json_extract(delivery_state_json, '$.ended_at_ms')) AS \"oldest?: i64\"
+             FROM inbox_messages",
         )
         .fetch_one(&mut self.store.connection)
         .await?;
-        let prune_due = oldest_sent.map(|ended| {
+        Ok(oldest.map(|ended| {
             central_link_client::next_mark_after(SyncTime::from_unix_millis(
                 ended.saturating_add(RETENTION_MILLIS),
             ))
-        });
-        Ok(active_due.into_iter().chain(prune_due).min())
+        }))
     }
 
     pub(crate) async fn prune_ended(&mut self, now: SyncTime) -> Result<(), InboxStoreError> {
         sqlx::query(
-            "DELETE FROM inbox_messages WHERE updated_at < ?
-             AND json_extract(delivery_state_json, '$.kind') = 'ackSent'",
+            "DELETE FROM inbox_messages WHERE json_extract(delivery_state_json, '$.ended_at_ms') < ?",
         )
         .bind(now.unix_millis().saturating_sub(RETENTION_MILLIS))
         .execute_as_transaction(&mut self.store)
         .await?;
         Ok(())
-    }
-
-    async fn active_deliveries(&mut self) -> Result<Vec<StoredDelivery>, InboxStoreError> {
-        sqlx::query_as!(
-            InboxRow,
-            "SELECT message_id, message_json, delivery_state_json FROM inbox_messages
-             WHERE json_extract(delivery_state_json, '$.kind') IS NOT 'ackSent'
-             ORDER BY created_at, message_id",
-        )
-        .fetch_all(&mut self.store.connection)
-        .await?
-        .into_iter()
-        .map(InboxRow::decode)
-        .collect()
     }
 }
 
@@ -303,26 +359,19 @@ async fn read_delivery(
     .transpose()
 }
 
-fn ack_pending(answer: DeliveryAnswer, mark: SyncTime) -> InboxRowState {
-    InboxRowState::AckPending {
-        answer,
-        flush_at_ms: mark.unix_millis(),
-    }
-}
-
-async fn set_ack_state(
+async fn update_delivery(
     connection: &mut SqliteConnection,
-    message_id: &MessageId,
-    state: InboxRowState,
+    delivery: &StoredDelivery,
     now: SyncTime,
 ) -> Result<(), InboxStoreError> {
     sqlx::query(
-        "UPDATE inbox_messages SET message_json = NULL, delivery_state_json = ?, updated_at = ?
-         WHERE message_id = ?",
+        "UPDATE inbox_messages SET message_json = CASE WHEN ? THEN NULL ELSE message_json END,
+            delivery_state_json = ?, updated_at = ? WHERE message_id = ?",
     )
-    .bind(serde_json::to_string(&state)?)
+    .bind(delivery.message.is_none())
+    .bind(serde_json::to_string(&delivery.state)?)
     .bind(now.unix_millis())
-    .bind(message_id.as_str())
+    .bind(delivery.message_id.as_str())
     .execute(connection)
     .await?;
     Ok(())

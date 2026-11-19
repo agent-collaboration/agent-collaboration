@@ -27,7 +27,10 @@ use std::{
     },
     time::{Duration, SystemTime},
 };
-use tokio::{sync::Mutex, task::JoinSet};
+use tokio::{
+    sync::{Mutex, Notify},
+    task::JoinSet,
+};
 use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use turmoil::net::{TcpListener, TcpStream};
@@ -50,17 +53,22 @@ enum LinkFault {
     DisconnectBeforeSettlingAck,
 }
 
-#[derive(Default)]
-struct Handoffs(AtomicUsize);
+struct Handoffs {
+    count: AtomicUsize,
+    wait_for_first_ack: Option<Arc<Notify>>,
+}
 
 impl CentralMessageHandoff for Handoffs {
     fn handoff<'call>(
         &'call self,
         _message: &'call MessageRecord,
-    ) -> TransportFuture<'call, Result<DeliveryAnswer, CentralHandoffUnavailable>> {
+    ) -> TransportFuture<'call, Result<(), CentralHandoffUnavailable>> {
         Box::pin(async move {
-            self.0.fetch_add(1, Ordering::SeqCst);
-            Ok(DeliveryAnswer::Accepted)
+            if let Some(first_ack) = &self.wait_for_first_ack {
+                first_ack.notified().await;
+            }
+            self.count.fetch_add(1, Ordering::SeqCst);
+            Ok(())
         })
     }
 }
@@ -68,6 +76,7 @@ impl CentralMessageHandoff for Handoffs {
 struct RouterFixture;
 
 impl MachineTokenSource for RouterFixture {
+    #[expect(clippy::unwrap_used, reason = "the fixed fixture token is well formed")]
     fn availability(&self) -> TokenAvailability {
         TokenAvailability::Ready(
             MachineTokenText::try_from("simulated.machine.token".to_owned()).unwrap(),
@@ -90,6 +99,7 @@ impl FlushOutcomeSink for RouterFixture {
     fn ended(&self, _: Vec<central_link_client::EndedWrite>) {}
 }
 
+#[expect(clippy::unwrap_used, reason = "the fixed fixture is a valid message")]
 fn fixture_message() -> MessageRecord {
     serde_json::from_value(serde_json::json!({
         "messageId": "01890f2e-7b4c-7cc0-98c4-000000000009",
@@ -106,7 +116,11 @@ fn fixture_message() -> MessageRecord {
     .unwrap()
 }
 
-async fn serve(observed: Rc<RefCell<Observations>>, fault: LinkFault) -> turmoil::Result {
+async fn serve(
+    observed: Rc<RefCell<Observations>>,
+    fault: LinkFault,
+    first_ack: Arc<Notify>,
+) -> turmoil::Result {
     let listener = TcpListener::bind((IpAddr::from(Ipv4Addr::UNSPECIFIED), LINK_PORT)).await?;
     let mut connections = JoinSet::new();
     loop {
@@ -114,7 +128,7 @@ async fn serve(observed: Rc<RefCell<Observations>>, fault: LinkFault) -> turmoil
             Some(finished) = connections.join_next(), if !connections.is_empty() => finished??,
             accepted = listener.accept() => {
                 let (stream, _) = accepted?;
-                connections.spawn_local(serve_delivery(stream, observed.clone(), fault));
+                connections.spawn_local(serve_delivery(stream, observed.clone(), fault, first_ack.clone()));
             }
         }
     }
@@ -124,13 +138,14 @@ async fn serve_delivery(
     stream: TcpStream,
     observed: Rc<RefCell<Observations>>,
     fault: LinkFault,
+    first_ack: Arc<Notify>,
 ) -> turmoil::Result {
     let Ok(mut socket) = accept_async(stream).await else {
         return Ok(());
     };
     let clock = SimulatedClock::for_host(CENTRAL_HOST);
     let welcome = LinkFrame::Data(DataFrame::Welcome {
-        machine_id: INSTALLATION.parse().unwrap(),
+        machine_id: INSTALLATION.parse()?,
         central_time: clock.utc_now(),
     });
     if send(&mut socket, &welcome).await.is_err() {
@@ -143,11 +158,13 @@ async fn serve_delivery(
     };
     if connection == 1 {
         clock
-            .sleep_until(router_clock::ClockInstant::ZERO.after(FIRST_PUSH))
+            .sleep_until(clock.monotonic_now().after(FIRST_PUSH))
             .await;
     }
     let message = fixture_message();
-    if observed.borrow().acks.is_empty() {
+    if observed.borrow().acks.is_empty()
+        && (fault == LinkFault::PartitionBeforePush || connection == 1)
+    {
         observed.borrow_mut().pushes += 1;
         if send(
             &mut socket,
@@ -174,8 +191,10 @@ async fn serve_delivery(
                 if fault == LinkFault::DisconnectBeforeSettlingAck && log.discarded_ack_at.is_none()
                 {
                     log.discarded_ack_at = Some(turmoil::elapsed());
+                    first_ack.notify_one();
                     // The frame crossed the socket, but this connection ends
-                    // before the answer settles. Welcome resends the message.
+                    // before the answer settles. The next socket sends only
+                    // Welcome, so it cannot re-arm the answer via Deliver.
                     return Ok(());
                 }
                 log.acks.push((turmoil::elapsed(), answer));
@@ -192,24 +211,38 @@ async fn send(socket: &mut WebSocketStream<TcpStream>, frame: &LinkFrame) -> tur
     Ok(())
 }
 
-fn run_delivery(fault: LinkFault) {
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "assertions report which simulated delivery obligation failed"
+)]
+fn run_delivery(fault: LinkFault) -> turmoil::Result {
     let observed = Rc::new(RefCell::new(Observations::default()));
     let server = Rc::clone(&observed);
     let client_observations = Rc::clone(&observed);
-    let handoffs = Arc::new(Handoffs::default());
+    let first_ack = Arc::new(Notify::new());
+    let handoffs = Arc::new(Handoffs {
+        count: AtomicUsize::new(0),
+        wait_for_first_ack: (fault == LinkFault::DisconnectBeforeSettlingAck)
+            .then(|| first_ack.clone()),
+    });
     let client_handoffs = Arc::clone(&handoffs);
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir()?;
     let mut sim = turmoil::Builder::new()
         .rng_seed(17)
         .epoch(SystemTime::UNIX_EPOCH + Duration::from_secs(1_893_456_000))
         .tick_duration(Duration::from_millis(20))
         .simulation_duration(TEST_DEADLINE)
         .build();
-    sim.host(CENTRAL_HOST, move || serve(server.clone(), fault));
+    sim.host(CENTRAL_HOST, move || {
+        serve(server.clone(), fault, first_ack.clone())
+    });
     sim.client(ROUTER_HOST, async move {
         let clock = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
-        let inbox =
-            CentralInbox::open(&root.path().join("machine_local.sqlite"), client_handoffs).await?;
+        let inbox = CentralInbox::open(
+            &root.path().join("machine_local.sqlite"),
+            client_handoffs.clone(),
+        )
+        .await?;
         let tasks = TaskTracker::new();
         let stop = CancellationToken::new();
         let calls = RouterLinkCalls::start(
@@ -226,7 +259,9 @@ fn run_delivery(fault: LinkFault) {
             &tasks,
             stop.clone(),
         );
-        while client_observations.borrow().acks.is_empty() {
+        while client_observations.borrow().acks.is_empty()
+            || client_handoffs.count.load(Ordering::SeqCst) == 0
+        {
             clock
                 .sleep_until(clock.monotonic_now().after(Duration::from_secs(1)))
                 .await;
@@ -237,47 +272,52 @@ fn run_delivery(fault: LinkFault) {
         tasks.wait().await;
         Ok(())
     });
-    let repair_at = Duration::from_secs(100);
-    let mut cut = false;
+    let mut repair_at = None;
     let mut repaired = false;
     loop {
         let now = sim.elapsed();
-        if fault == LinkFault::PartitionBeforePush && !cut && now >= Duration::from_secs(15) {
-            assert_eq!(handoffs.0.load(Ordering::SeqCst), 0);
-            assert!(observed.borrow().acks.is_empty());
+        if fault == LinkFault::PartitionBeforePush
+            && repair_at.is_none()
+            && observed.borrow().connections == 1
+        {
+            assert_eq!(handoffs.count.load(Ordering::SeqCst), 0);
+            assert_eq!(observed.borrow().pushes, 0);
             sim.partition(ROUTER_HOST, CENTRAL_HOST);
-            cut = true;
+            repair_at = Some(now + Duration::from_secs(85));
         }
-        if cut && !repaired && now >= repair_at {
+        if !repaired && repair_at.is_some_and(|repair| now >= repair) {
             assert!(observed.borrow().acks.is_empty());
             sim.repair(ROUTER_HOST, CENTRAL_HOST);
             repaired = true;
         }
-        if sim.step().unwrap() {
+        if sim.step()? {
             break;
         }
     }
     let observed = observed.borrow();
-    assert!(observed.connections >= 2 && observed.pushes >= 2);
-    assert_eq!(handoffs.0.load(Ordering::SeqCst), 1);
+    assert!(observed.connections >= 2);
+    assert_eq!(handoffs.count.load(Ordering::SeqCst), 1);
     let [(accepted_at, DeliveryAnswer::Accepted)] = observed.acks.as_slice() else {
-        panic!("central never received its one Ack: {:?}", observed.acks);
+        return Err(format!("central never received its one Ack: {:?}", observed.acks).into());
     };
     assert_on_minute(*accepted_at);
     match fault {
         LinkFault::PartitionBeforePush => {
-            assert!(cut && repaired);
-            assert!(*accepted_at >= repair_at);
+            assert!(repaired);
+            assert!(observed.pushes >= 2);
+            assert!(*accepted_at >= repair_at.ok_or("partition never started")?);
             assert_eq!(observed.discarded_ack_at, None);
         }
         LinkFault::DisconnectBeforeSettlingAck => {
+            assert_eq!(observed.pushes, 1);
             let lost_at = observed
                 .discarded_ack_at
-                .expect("the first Ack reached the socket");
+                .ok_or("the first Ack did not reach the socket")?;
             assert_on_minute(lost_at);
             assert!(*accepted_at >= lost_at + Duration::from_secs(54));
         }
     }
+    Ok(())
 }
 
 fn assert_on_minute(observed_at: Duration) {
@@ -286,11 +326,11 @@ fn assert_on_minute(observed_at: Duration) {
 }
 
 #[test]
-fn a_partition_across_delivery_waits_for_the_reconnect_push() {
-    run_delivery(LinkFault::PartitionBeforePush);
+fn a_partition_across_delivery_waits_for_the_reconnect_push() -> turmoil::Result {
+    run_delivery(LinkFault::PartitionBeforePush)
 }
 
 #[test]
-fn reconnect_resends_after_a_lost_ack_without_repeating_session_handoff() {
-    run_delivery(LinkFault::DisconnectBeforeSettlingAck);
+fn reconnect_resends_after_a_lost_ack_without_repeating_session_handoff() -> turmoil::Result {
+    run_delivery(LinkFault::DisconnectBeforeSettlingAck)
 }

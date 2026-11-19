@@ -62,6 +62,7 @@ pub(super) struct LinkDriver {
     immediate: BTreeMap<CorrelationId, ImmediateCall>,
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
+    inbox_retry_at: Option<ClockInstant>,
     deferred_pending: Vec<(Caller, PendingReply)>,
     /// The token the open connection was admitted or last renewed with.
     connected_token: Option<MachineTokenText>,
@@ -92,6 +93,7 @@ impl LinkDriver {
             immediate: BTreeMap::new(),
             batch: None,
             flush_wake: None,
+            inbox_retry_at: None,
             deferred_pending: Vec::new(),
             connected_token: None,
             renewing: None,
@@ -108,12 +110,12 @@ impl LinkDriver {
     ) {
         // Start-up: sent rows from before a stop go back to waiting.
         self.reconcile_sent().await;
-        self.recover_inbox(self.clock.now()).await;
         loop {
             self.drive_time().await;
             let deadline = [
                 self.client.next_deadline(),
                 self.flush_wake,
+                self.inbox_retry_at,
                 self.renew_retry_at,
             ]
             .into_iter()
@@ -144,6 +146,13 @@ impl LinkDriver {
             self.handle_action(action).await;
         }
         self.drive_renewal_retry().await;
+        if self
+            .inbox_retry_at
+            .is_some_and(|wake| self.clock.monotonic_now() >= wake)
+        {
+            self.inbox_retry_at = None;
+            self.retry_inbox(self.clock.now()).await;
+        }
         if self
             .flush_wake
             .is_some_and(|wake| self.clock.monotonic_now() >= wake)

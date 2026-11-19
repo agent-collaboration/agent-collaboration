@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-test-support = ["dep:sqlx-turso"]
+test-support = ["dep:sqlx-turso", "router-clock/test-support"]
 runtime-test-support = ["interaction-storage/runtime-test-support"]
 
 [lints]
@@ -58,7 +58,7 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-collaboration-link-test-support = { path = "../collaboration-link-test-support" }
+collaboration-link-test-support = { version = "0.1.154", path = "../collaboration-link-test-support" }
 rand.workspace = true
 turmoil.workspace = true
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }

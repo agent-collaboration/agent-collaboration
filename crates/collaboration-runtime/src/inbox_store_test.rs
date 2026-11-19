@@ -10,6 +10,17 @@ use workspace_model::{
     central_mail::{DeliveryAnswer, MessageRecord, MessageRefusal},
 };
 
+struct UnavailableHandoff;
+
+impl crate::CentralMessageHandoff for UnavailableHandoff {
+    fn handoff<'call>(
+        &'call self,
+        _: &'call MessageRecord,
+    ) -> crate::TransportFuture<'call, Result<(), crate::CentralHandoffUnavailable>> {
+        Box::pin(std::future::ready(Err(crate::CentralHandoffUnavailable)))
+    }
+}
+
 fn message(index: u8) -> MessageRecord {
     serde_json::from_value(serde_json::json!({
         "messageId": format!("01890f2e-7b4c-7cc0-98c4-{index:012x}"),
@@ -55,16 +66,15 @@ impl InboxTrial {
         let first_push = self.delivered.insert(message.message_id.clone());
         let recorded = self
             .store
-            .record_delivery(&message, mark, now)
+            .record_delivery(&message, answer(index), mark, now)
             .await
             .unwrap();
         assert_eq!(matches!(recorded, RecordDelivery::Inserted), first_push);
-        if let RecordDelivery::Inserted = recorded {
+        if recorded == RecordDelivery::Inserted && answer(index) == DeliveryAnswer::Accepted {
             let handoff = self.handoffs.entry(message.message_id.clone()).or_default();
             *handoff += 1;
-            let answer = answer(index);
             self.store
-                .record_handoff(&message.message_id, answer, mark, now)
+                .record_handoff(&message.message_id, now)
                 .await
                 .unwrap();
         }
@@ -94,13 +104,90 @@ impl InboxTrial {
 
     async fn reconnect(&mut self) {
         self.connected = true;
-        for index in 0..4 {
+        let now = self.clock.now();
+        self.store
+            .reoffer_recent_acks(central_link_client::next_mark_after(now), now)
+            .await
+            .unwrap();
+        for index in [1, 3] {
             let id = message(index).message_id;
             if self.delivered.contains(&id) && !self.settled.contains_key(&id) {
                 self.deliver(index).await;
             }
         }
     }
+}
+
+#[tokio::test]
+async fn committed_inbox_is_ackable_before_handoff_and_reoffers_without_another_deliver() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("machine_local.sqlite");
+    let mut store = InboxStore::new(MachineLocalStore::open(&path).await.unwrap());
+    let now = SyncTime::from_unix_millis(0);
+    let mark = central_link_client::next_mark_after(now);
+    let delivery = message(0);
+
+    store
+        .record_delivery(&delivery, DeliveryAnswer::Accepted, mark, now)
+        .await
+        .unwrap();
+    assert!(store.acks_due(now).await.unwrap().is_empty());
+    let acks = store.acks_due(mark).await.unwrap();
+    assert_eq!(acks.len(), 1);
+    assert_eq!(acks.first().unwrap().message_id, delivery.message_id);
+    assert_eq!(acks.first().unwrap().answer, DeliveryAnswer::Accepted);
+    store
+        .mark_ack_sent(&delivery.message_id, mark)
+        .await
+        .unwrap();
+    assert_eq!(
+        store.pending_handoffs().await.unwrap(),
+        std::slice::from_ref(&delivery)
+    );
+    assert!(store.acks_due(mark).await.unwrap().is_empty());
+
+    let mut store = InboxStore::new(MachineLocalStore::open(&path).await.unwrap());
+    let next_mark = central_link_client::next_mark_after(mark);
+    store.reoffer_recent_acks(next_mark, mark).await.unwrap();
+    assert_eq!(store.acks_due(next_mark).await.unwrap().len(), 1);
+    assert_eq!(store.pending_handoffs().await.unwrap(), [delivery]);
+}
+
+#[tokio::test]
+async fn failed_insert_has_no_ack_and_retries_the_held_frame_without_another_deliver() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("machine_local.sqlite");
+    let mut inbox = crate::CentralInbox::open(&path, std::sync::Arc::new(UnavailableHandoff))
+        .await
+        .unwrap();
+    let mut fault_connection = MachineLocalStore::open(&path).await.unwrap();
+    sqlx::query(
+        "CREATE TRIGGER reject_first_delivery BEFORE INSERT ON inbox_messages
+         BEGIN SELECT RAISE(ABORT, 'injected admission failure'); END",
+    )
+    .execute(&mut fault_connection.connection)
+    .await
+    .unwrap();
+    let now = SyncTime::from_unix_millis(0);
+    let first_mark = central_link_client::next_mark_after(now);
+    let message = message(0);
+
+    inbox.receive(message.clone(), first_mark, now).await;
+    assert!(inbox.needs_retry());
+    assert!(inbox.acks_due(first_mark).await.unwrap().is_empty());
+
+    sqlx::query("DROP TRIGGER reject_first_delivery")
+        .execute(&mut fault_connection.connection)
+        .await
+        .unwrap();
+    let retry_mark = central_link_client::next_mark_after(first_mark);
+    inbox.retry_pending(retry_mark, first_mark).await;
+    assert!(!inbox.needs_retry());
+    let acks = inbox.acks_due(retry_mark).await.unwrap();
+    assert_eq!(acks.len(), 1);
+    assert_eq!(acks.first().unwrap().message_id, message.message_id);
+    let mut store = InboxStore::new(fault_connection);
+    assert_eq!(store.pending_handoffs().await.unwrap(), [message]);
 }
 
 fn answer(index: u8) -> DeliveryAnswer {
@@ -115,8 +202,8 @@ fn answer(index: u8) -> DeliveryAnswer {
 
 #[hegel::test(test_cases = 48)]
 fn ambiguous_ack_replays_reach_one_settlement_without_repeating_handoff(tc: TestCase) {
-    let history = tc.draw(gs::vecs(
-        gs::tuples!(
+    let history = tc.draw(
+        gs::vecs(gs::tuples!(
             gs::sampled_from(vec![
                 Event::Deliver,
                 Event::Repeat,
@@ -125,9 +212,9 @@ fn ambiguous_ack_replays_reach_one_settlement_without_repeating_handoff(tc: Test
                 Event::Reconnect,
             ]),
             gs::integers::<u8>().max_value(3)
-        )
+        ))
         .max_size(20),
-    ));
+    );
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -188,7 +275,12 @@ fn ambiguous_ack_replays_reach_one_settlement_without_repeating_handoff(tc: Test
         for index in 0..4 {
             let id = message(index).message_id;
             if trial.delivered.contains(&id) {
-                assert_eq!(trial.handoffs.get(&id), Some(&1));
+                let expected_handoffs = if answer(index) == DeliveryAnswer::Accepted {
+                    Some(&1)
+                } else {
+                    None
+                };
+                assert_eq!(trial.handoffs.get(&id), expected_handoffs);
                 assert_eq!(trial.settled.get(&id), Some(&answer(index)));
             }
         }
@@ -215,7 +307,7 @@ async fn inbox_prunes_only_sent_answers_older_than_retention() {
     for index in 0..3 {
         assert_eq!(
             store
-                .record_delivery(&message(index), mark, now)
+                .record_delivery(&message(index), DeliveryAnswer::Accepted, mark, now)
                 .await
                 .unwrap(),
             RecordDelivery::Inserted
@@ -223,7 +315,7 @@ async fn inbox_prunes_only_sent_answers_older_than_retention() {
     }
     for index in 0..2 {
         store
-            .record_handoff(&message(index).message_id, answer(index), mark, now)
+            .record_handoff(&message(index).message_id, now)
             .await
             .unwrap();
     }
@@ -238,7 +330,12 @@ async fn inbox_prunes_only_sent_answers_older_than_retention() {
     let next_mark = central_link_client::next_mark_after(clock.now());
     assert_eq!(
         store
-            .record_delivery(&message(0), next_mark, clock.now())
+            .record_delivery(
+                &message(0),
+                DeliveryAnswer::Accepted,
+                next_mark,
+                clock.now()
+            )
             .await
             .unwrap(),
         RecordDelivery::Duplicate,
@@ -277,7 +374,10 @@ async fn inbox_rejects_unknown_state_and_a_payload_with_the_wrong_message_id() {
     let mark = central_link_client::next_mark_after(now);
     let first = message(0);
     let mut store = InboxStore::new(MachineLocalStore::open(&path).await.unwrap());
-    store.record_delivery(&first, mark, now).await.unwrap();
+    store
+        .record_delivery(&first, DeliveryAnswer::Accepted, mark, now)
+        .await
+        .unwrap();
 
     let mut database = MachineLocalStore::open(&path).await.unwrap();
     sqlx::query("UPDATE inbox_messages SET delivery_state_json = ?")
@@ -285,7 +385,9 @@ async fn inbox_rejects_unknown_state_and_a_payload_with_the_wrong_message_id() {
         .execute(&mut database.connection)
         .await
         .unwrap();
-    let result = store.record_delivery(&first, mark, now).await;
+    let result = store
+        .record_delivery(&first, DeliveryAnswer::Accepted, mark, now)
+        .await;
     assert!(matches!(
         result,
         Err(super::InboxStoreError::Corrupt {
@@ -295,7 +397,7 @@ async fn inbox_rejects_unknown_state_and_a_payload_with_the_wrong_message_id() {
     ));
 
     sqlx::query("UPDATE inbox_messages SET delivery_state_json = ?, message_json = ?")
-        .bind(r#"{"kind":"pendingHandoff"}"#)
+        .bind(r#"{"answer":{"kind":"accepted"},"ack":{"kind":"first","flush_at_ms":60000},"ended_at_ms":null}"#)
         .bind(serde_json::to_string(&message(1)).unwrap())
         .execute(&mut database.connection)
         .await

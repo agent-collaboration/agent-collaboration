@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT message_id, message_json, delivery_state_json FROM inbox_messages WHERE message_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "message_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "inbox_messages",
+            "name": "message_id"
+          }
+        }
+      },
+      {
+        "name": "message_json",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "inbox_messages",
+            "name": "message_json"
+          }
+        }
+      },
+      {
+        "name": "delivery_state_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "inbox_messages",
+            "name": "delivery_state_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "4b1e9ef5113d3ea2ce32dd313af8e71dddbe5ba1b6cae46dcf1bf660d38e0114"
+}

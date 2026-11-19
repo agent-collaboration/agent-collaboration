@@ -27,8 +27,8 @@ pub use link_transport::{
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
 
-use crate::{CentralInbox, OutboxStorage};
 use crate::outbox_store::OutboxStoreError;
+use crate::{CentralInbox, OutboxStorage};
 use central_link_client::{
     FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, LinkStatus, OutgoingWrite,
     PendingWrite, RequestStatus, Submission, SubmitRefusal,
@@ -129,8 +129,15 @@ impl RouterLinkCalls {
     pub fn start(parts: CentralLinkParts, tasks: &TaskTracker, stop: CancellationToken) -> Self {
         let (commands, receiver) = mpsc::channel(256);
         let client = LinkClient::new(parts.installation.clone(), parts.clock.clone());
+        let stop = stop.child_token();
+        if let Some(inbox) = &parts.inbox {
+            inbox.start_handoff(parts.clock.clone(), tasks, stop.clone());
+        }
         let driver = driver_task::LinkDriver::new(parts, client);
-        tasks.spawn(driver.run(receiver, stop));
+        tasks.spawn(async move {
+            let _stop_inbox_on_exit = stop.clone().drop_guard();
+            driver.run(receiver, stop).await;
+        });
         Self { commands }
     }
 

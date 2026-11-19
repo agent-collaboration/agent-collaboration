@@ -12,3 +12,5 @@ simulation clock and connect with `TurmoilLinkTransport` at
 `/v1/organizations/{organization}/link` and the fixture's machine token.
 The central uses real SQLite worker threads. Use mark-bounded outcomes as
 assertions because their I/O can complete at different simulation ticks.
+Enable Tokio I/O on the Turmoil builder when the fixture serves sign-in keys
+on loopback. The link itself still uses simulated TCP.

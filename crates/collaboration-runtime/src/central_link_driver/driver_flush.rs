@@ -94,8 +94,6 @@ impl LinkDriver {
     /// let the schedule decide, then prune writes that ended 60 days ago (a
     /// kept row is only a receipt).
     pub(super) async fn flush_tick(&mut self, now: SyncTime) {
-        self.recover_inbox(now).await;
-        self.prune_inbox(now).await;
         if self.batch.is_none() {
             self.reconcile_sent().await;
         }
@@ -118,7 +116,12 @@ impl LinkDriver {
     /// The link welcomed this Router: reconcile, then let the schedule arm.
     pub(super) async fn flush_link_connected(&mut self) {
         self.reconcile_sent().await;
-        self.recover_inbox(self.clock.now()).await;
+        let now = self.clock.now();
+        let mark = self.flush.receipt_mark(now);
+        if let Some(inbox) = self.inbox.as_mut() {
+            inbox.reoffer_recent_acks(mark, now).await;
+        }
+        self.arm_inbox_retry(now);
         let earliest_due = self.earliest_due().await;
         self.apply_flush(FlushEvent::LinkConnected { earliest_due })
             .await;
@@ -158,6 +161,9 @@ impl LinkDriver {
             return self.socket_closed().await;
         }
         let now = self.clock.now();
+        if mark_in_window(now) != Some(mark) {
+            return self.end_batch().await;
+        }
         let limit = u16::try_from(MAX_BATCH_WRITES).unwrap_or(u16::MAX);
         let claimed = {
             let mut store = self.store.lock().await;
@@ -316,18 +322,17 @@ impl LinkDriver {
             tracing::warn!("central delivery arrived without an inbox");
             return;
         };
-        if let Err(error) = inbox.receive(&message, mark, now).await {
-            tracing::warn!(%error, "inbox: could not take custody of delivery");
-        }
+        inbox.receive(message, mark, now).await;
+        self.arm_inbox_retry(now);
         if let Some(flush_at) = self.earliest_inbox_due().await {
             self.apply_flush(FlushEvent::Stored { flush_at }).await;
         }
     }
 
     pub(super) async fn earliest_inbox_due(&mut self) -> Option<SyncTime> {
-        let inbox = self.inbox.as_mut()?;
+        let inbox = self.inbox.as_ref()?;
         let mark = self.flush.receipt_mark(self.clock.now());
-        match inbox.earliest_due(mark).await {
+        match inbox.earliest_due().await {
             Ok(due) => due,
             Err(error) => {
                 tracing::warn!(%error, "inbox: unable to read work, retrying on the minute mark");
@@ -336,20 +341,26 @@ impl LinkDriver {
         }
     }
 
-    pub(super) async fn recover_inbox(&mut self, now: SyncTime) {
+    pub(super) async fn retry_inbox(&mut self, now: SyncTime) {
         let mark = self.flush.receipt_mark(now);
         if let Some(inbox) = self.inbox.as_mut() {
-            if let Err(error) = inbox.recover_handoffs(mark, now).await {
-                tracing::warn!(%error, "inbox: could not recover handoff");
-            }
+            inbox.retry_pending(mark, now).await;
+        }
+        self.arm_inbox_retry(now);
+        if let Some(flush_at) = self.earliest_inbox_due().await {
+            self.apply_flush(FlushEvent::Stored { flush_at }).await;
         }
     }
 
-    pub(super) async fn prune_inbox(&mut self, now: SyncTime) {
-        if let Some(inbox) = self.inbox.as_mut()
-            && let Err(error) = inbox.prune_ended(now).await
+    fn arm_inbox_retry(&mut self, now: SyncTime) {
+        if self.inbox_retry_at.is_none()
+            && self
+                .inbox
+                .as_ref()
+                .is_some_and(crate::CentralInbox::needs_retry)
         {
-            tracing::warn!(%error, "inbox: could not prune ended deliveries");
+            let mark = central_link_client::next_mark_after(now);
+            self.inbox_retry_at = Some(self.clock.wall_deadline(mark));
         }
     }
 

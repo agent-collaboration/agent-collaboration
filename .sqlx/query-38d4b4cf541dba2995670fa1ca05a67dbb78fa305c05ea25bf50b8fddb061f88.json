@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT message_id, message_json, delivery_state_json FROM inbox_messages\n             WHERE json_extract(delivery_state_json, '$.ack.kind') IS NOT 'sent'\n             ORDER BY created_at, message_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "message_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "inbox_messages",
+            "name": "message_id"
+          }
+        }
+      },
+      {
+        "name": "message_json",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "inbox_messages",
+            "name": "message_json"
+          }
+        }
+      },
+      {
+        "name": "delivery_state_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "inbox_messages",
+            "name": "delivery_state_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "38d4b4cf541dba2995670fa1ca05a67dbb78fa305c05ea25bf50b8fddb061f88"
+}
