@@ -296,11 +296,12 @@ pub(super) fn runtime_failure(
                 correlation_id,
             },
         }),
-        ExternalProviderRuntimeError::RestoreNoAnswer => failure(
+        error @ (ExternalProviderRuntimeError::RestoreNoAnswer
+        | ExternalProviderRuntimeError::RestoreDisconnected) => failure(
             ConversationOperationFailureKind::OutcomeUnknown,
             ConversationOperationFailureStage::Settlement,
             ProviderOperationEffect::Unknown,
-            "the provider did not answer the restore in time, so retry this session",
+            &error.to_string(),
             operation_id,
             target,
         ),

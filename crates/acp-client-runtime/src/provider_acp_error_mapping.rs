@@ -133,7 +133,7 @@ pub(crate) fn acp_load_session_error(
     error: agent_client_protocol::Error,
 ) -> ExternalProviderRuntimeError {
     if agent_client_protocol::is_incoming_transport_closed(&error) {
-        return ExternalProviderRuntimeError::TransportFailure;
+        return ExternalProviderRuntimeError::RestoreDisconnected;
     }
     if error.code == ErrorCode::ResourceNotFound {
         let reported_error_kind = ReportedProviderErrorKind::from_error_data(error.data.as_ref());

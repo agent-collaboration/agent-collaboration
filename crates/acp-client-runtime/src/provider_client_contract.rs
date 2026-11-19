@@ -236,6 +236,10 @@ pub enum ExternalProviderRuntimeError {
     },
     #[error("the provider did not answer the restore in time, so retry this session")]
     RestoreNoAnswer,
+    #[error(
+        "the provider disconnected before confirming the restore, so reconnect and retry this session"
+    )]
+    RestoreDisconnected,
     #[error("the provider failed while restoring this session, so retry it (ACP code {code})")]
     RestoreFailed {
         code: i64,

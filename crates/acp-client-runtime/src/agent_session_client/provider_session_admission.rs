@@ -371,7 +371,7 @@ pub(super) fn fail_pending_session_admission<P: InteractionPort>(
             });
         }
         PendingSessionAdmission::Restore { reply, .. } => {
-            let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));
+            let _result = reply.send(Err(ExternalProviderRuntimeError::RestoreDisconnected));
         }
         PendingSessionAdmission::Close { reply, .. } => {
             let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));

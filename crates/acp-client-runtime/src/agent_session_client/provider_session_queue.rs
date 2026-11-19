@@ -306,7 +306,7 @@ impl SessionLoadStarted {
     ) -> Result<super::RestoredSessionAdmission, super::ExternalProviderRuntimeError> {
         self.completion
             .await
-            .map_err(|_| super::ExternalProviderRuntimeError::TransportFailure)?
+            .map_err(|_| super::ExternalProviderRuntimeError::RestoreDisconnected)?
     }
 }
 

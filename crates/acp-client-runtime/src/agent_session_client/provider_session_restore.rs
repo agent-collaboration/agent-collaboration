@@ -22,7 +22,7 @@ async fn await_restore_response<T>(
     // Dropping the SDK's blocking restore future retires its provisional
     // route and cancels its correlation. This does not settle the peer's effect.
     tokio::select! {
-        () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
+        () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::RestoreDisconnected),
         result = router_clock::timeout(clock, RESTORE_RESPONSE_TIMEOUT, request) => result
             .map_err(|_| ExternalProviderRuntimeError::RestoreNoAnswer)?
             .map_err(acp_load_session_error),

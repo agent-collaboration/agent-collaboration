@@ -187,6 +187,36 @@ async fn a_retired_load_allows_a_same_session_retry_before_and_after_store_reope
 }
 
 #[tokio::test]
+async fn a_disconnect_during_restore_keeps_unknown_effect_and_reconnect_guidance() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("disconnect-during-restore").await;
+    let id = OperationId::generate();
+    host.load(rig.load_request(id.clone()))
+        .await
+        .expect("load admitted");
+    let failure = host
+        .wait(wait_request(id.clone()))
+        .await
+        .expect_err("connection closed during restore");
+    assert_eq!(failure.effect, ProviderOperationEffect::Unknown);
+    assert!(String::from(failure.message).contains("reconnect and retry this session"));
+    let row = rig
+        .store()
+        .await
+        .inspect(&id)
+        .await
+        .expect("operation read")
+        .expect("load recorded");
+    assert_eq!(row.stage, ProviderOperationStage::Terminal);
+    assert_eq!(
+        row.reconciliation_state,
+        ProviderReconciliationState::Unresolved
+    );
+    host.shutdown().await.expect("stop Host");
+}
+
+#[tokio::test]
 async fn an_uncertain_prompt_still_blocks_restore_before_and_after_store_reopen() {
     let rig = RestoreRig::new();
     rig.seed_session().await;

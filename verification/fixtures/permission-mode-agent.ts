@@ -15,6 +15,7 @@
 //   plain-prompts: record and end prompts without asking for permission.
 //   refuse-prompt: record the prompt and reject its ACP request.
 //   silent-first-restore: leave the first load or resume unanswered.
+//   disconnect-during-restore: exit after reading the load or resume.
 //   malformed-mode-reply: the first mode change gets a success with no
 //     configOptions, which a client cannot read; the mode stays and later
 //     changes are answered normally.
@@ -44,6 +45,7 @@ const known = [
   "plain-prompts",
   "refuse-prompt",
   "silent-first-restore",
+  "disconnect-during-restore",
   "malformed-mode-reply",
   "advertise-close",
   "offer-fast",
@@ -131,7 +133,7 @@ const refuse = (request: Record<string, unknown>, message: string): void => {
   agent.send({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message } });
 };
 
-for (;;) {
+requests: for (;;) {
   const request = await agent.readRequest();
   if (request === undefined) break;
   if (request.id === undefined) continue;
@@ -239,6 +241,7 @@ for (;;) {
       if (behaviours.has("narrow-restore-modes")) narrowedModeCatalogues.add(sessionId);
       if (behaviours.has("restore-fast-on")) currentFast.set(sessionId, "true");
       agent.receipt(receipt, observed);
+      if (behaviours.has("disconnect-during-restore")) break requests;
       if (behaviours.has("silent-first-restore") && observed.restores.length === 1) break;
       agent.respond(request, { configOptions: configOptions(sessionId) });
       break;
