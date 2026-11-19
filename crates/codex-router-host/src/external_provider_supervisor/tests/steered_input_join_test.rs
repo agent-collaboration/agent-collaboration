@@ -230,6 +230,9 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
     let approver_a = human("approver-a");
     let approver_b = human("approver-b");
     let mailed_operation = OperationId::generate();
+    let (published, release_publication) = session
+        .supervisor
+        .pause_after_result_publication(mailed_operation.clone());
     let mailed = session
         .supervisor
         .submit_delivery_prompt_contents(ProviderPromptContentsRequest {
@@ -282,6 +285,7 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
             timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
         })
         .await;
+    published.await.expect("the turn's result is visible");
     for _ in 0..=MAX_RETAINED_SETTLEMENTS {
         let other = OperationId::generate();
         session.supervisor.hold_live_operation(other.clone());
@@ -291,6 +295,7 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
         .supervisor
         .held_result_for_test(&mailed_operation)
         .is_none();
+    let _released = release_publication.send(());
     let _continued = continue_steer.send(());
     let submitted = steer.await.expect("steer task");
     let steered = session
@@ -406,6 +411,9 @@ async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approv
         })
         .await;
     let turn_c = OperationId::generate();
+    let (published, release_publication) = session
+        .supervisor
+        .pause_after_result_publication(turn_c.clone());
     session
         .supervisor
         .prompt(prompt(&turn_c, &approver_c, "third"))
@@ -426,12 +434,14 @@ async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approv
             timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
         })
         .await;
+    published.await.expect("turn C's result is visible");
     for _ in 0..=MAX_RETAINED_SETTLEMENTS {
         let other = OperationId::generate();
         session.supervisor.hold_live_operation(other.clone());
         assert!(session.supervisor.publish_held_result(&other).await);
     }
     let c_evicted = session.supervisor.held_result_for_test(&turn_c).is_none();
+    let _released = release_publication.send(());
     let _read = read_approver.send(());
     let submitted = steer.await.expect("steer task");
     let steered = session

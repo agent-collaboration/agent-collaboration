@@ -126,6 +126,9 @@ struct SupervisorInner {
     /// before it enters the line.
     #[cfg(test)]
     queue_enqueue_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    /// Pauses one operation after its result is visible and waiters are notified.
+    #[cfg(test)]
+    result_published_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
     /// Pauses one operation's settlement before its terminal write: its
     /// outcome is known, nothing is stored yet, and its turn is still held.
     #[cfg(any(test, feature = "test-support"))]
@@ -396,6 +399,8 @@ impl ExternalProviderSupervisor {
                 steer_injection_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 queue_enqueue_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                result_published_test_pause: StdMutex::new(None),
                 #[cfg(any(test, feature = "test-support"))]
                 terminal_write_test_pause: StdMutex::new(None),
                 #[cfg(any(test, feature = "test-support"))]
@@ -607,8 +612,7 @@ impl SupervisorInner {
         self.settings_catalogs.lock().await.insert(target, catalog);
     }
 
-    /// Publishes a live operation's result. Its protection from retention ends here, with
-    /// no store write, so the completion signal moves only after the result is set.
+    /// Registers the settlement for retention before making it visible to waiters.
     async fn publish_result(
         &self,
         operation_id: OperationId,
@@ -616,30 +620,48 @@ impl SupervisorInner {
         result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
         retention: provider_operation_finish::Retention,
     ) {
-        *live.result.lock().await = Some(result);
-        live.published.store(true, Ordering::Release);
+        #[cfg(test)]
+        let publication_pause = self
+            .result_published_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_if(|(selected, _)| *selected == operation_id)
+            .map(|(_, pause)| pause);
+        // Waiters can read the result slot directly before a wake, so the
+        // slot stays locked until the retention index and result agree.
+        let mut result_slot = live.result.lock().await;
+        {
+            let mut operations = self
+                .live_operations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let order = match retention {
+                provider_operation_finish::Retention::Settled => &mut operations.terminal_order,
+                provider_operation_finish::Retention::PersistenceFailed => {
+                    &mut operations.persistence_failed_order
+                }
+            };
+            order.push_back(operation_id);
+            let mut expired_operations = Vec::new();
+            while order.len() > MAX_RETAINED_SETTLEMENTS {
+                if let Some(expired) = order.pop_front() {
+                    expired_operations.push(expired);
+                }
+            }
+            for expired in expired_operations {
+                operations.operations.remove(&expired);
+            }
+            *result_slot = Some(result);
+            live.published.store(true, Ordering::Release);
+        }
+        drop(result_slot);
         live.changed.notify_waiters();
         self.completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));
-        let mut operations = self
-            .live_operations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let order = match retention {
-            provider_operation_finish::Retention::Settled => &mut operations.terminal_order,
-            provider_operation_finish::Retention::PersistenceFailed => {
-                &mut operations.persistence_failed_order
-            }
-        };
-        order.push_back(operation_id);
-        let mut expired_operations = Vec::new();
-        while order.len() > MAX_RETAINED_SETTLEMENTS {
-            if let Some(expired) = order.pop_front() {
-                expired_operations.push(expired);
-            }
-        }
-        for expired in expired_operations {
-            operations.operations.remove(&expired);
+        #[cfg(test)]
+        if let Some(pause) = publication_pause {
+            let _entered = pause.entered.send(());
+            let _released = pause.release.await;
         }
     }
 }

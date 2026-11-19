@@ -2,7 +2,7 @@
 //! race windows: the first receiver fires there, and sending on the returned
 //! sender lets it go on.
 
-use super::{AdmissionTestPause, ExternalProviderSupervisor};
+use super::{AdmissionTestPause, ExternalProviderSupervisor, OperationId};
 
 impl ExternalProviderSupervisor {
     /// Pauses the next queued API dispatch just after it claims its entry:
@@ -79,6 +79,24 @@ impl ExternalProviderSupervisor {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) =
             Some(AdmissionTestPause { entered, release });
+        (entered_receiver, release_sender)
+    }
+
+    pub(crate) fn pause_after_result_publication(
+        &self,
+        operation_id: OperationId,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
+        let (release_sender, release) = tokio::sync::oneshot::channel();
+        *self
+            .inner
+            .result_published_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some((operation_id, AdmissionTestPause { entered, release }));
         (entered_receiver, release_sender)
     }
 
