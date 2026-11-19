@@ -50,7 +50,7 @@ fn corrupt_attempt_field(name: &str, raw: Option<&SqlValue>) -> AttemptCorruptio
         None => "<missing column>".into(),
     };
     AttemptCorruption {
-        column: format!("central_work_attempts.{name}"),
+        column: format!("engine_work_attempts.{name}"),
         raw_value,
     }
 }

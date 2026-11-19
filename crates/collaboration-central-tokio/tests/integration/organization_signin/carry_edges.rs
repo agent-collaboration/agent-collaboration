@@ -346,7 +346,7 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     let retried = f.post(REVISIONS, &request).await?;
     assert_eq!(retried.status, 200);
     assert_eq!(retried.value()?, json!({"acknowledgedRevision":4}));
-    assert_eq!(f.rows(A,"SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM signin_authorization_floors o,person_organization_authorization_floors p",vec![]).await?,vec![vec![number(3)?,text("active"),number(4)?,text(signed::OWNER_SUBJECT)]]);
+    assert_eq!(f.rows(A,"SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM signin_authorization_floors o,signin_person_authorization_floors p",vec![]).await?,vec![vec![number(3)?,text("active"),number(4)?,text(signed::OWNER_SUBJECT)]]);
     let person_before = f
         .rows(
             A,
