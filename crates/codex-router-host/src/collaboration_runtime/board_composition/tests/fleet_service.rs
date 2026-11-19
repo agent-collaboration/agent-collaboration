@@ -58,6 +58,7 @@ mod fixture_sender_binding;
 
 struct Consumer {
     peer: PeerId,
+    installation: message_board::ServiceId,
     directory: Arc<DirectoryProbe>,
     fleet_reads: Arc<FleetReadProbe>,
     read_copy_entries: Arc<Mutex<Vec<fleet_admission::DirectoryEntry>>>,
@@ -448,6 +449,7 @@ impl TestFleet {
             },
             Arc::new(Consumer {
                 peer,
+                installation: auth.installation.clone(),
                 directory: directory_probe.clone(),
                 fleet_reads: fleet_reads.clone(),
                 read_copy_entries: read_copy_entries.clone(),
