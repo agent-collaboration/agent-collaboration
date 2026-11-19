@@ -216,7 +216,10 @@ pub enum MessageOutcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageRefusal {
-    RecipientRefused,
+    /// The receiving Router has no harness that owns this session.
+    UnknownSession,
+    /// More than one local harness claims the same provider session id.
+    AmbiguousSession,
 }
 
 /// The recipient Router's answer to a delivered message: into its inbox, or

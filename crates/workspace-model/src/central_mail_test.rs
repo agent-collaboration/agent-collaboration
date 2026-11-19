@@ -166,9 +166,9 @@ fn a_delivery_outcome_body_has_closed_wire_names_and_refuses_unknown_outcomes() 
         ),
         (
             MessageOutcome::Refused {
-                reason: MessageRefusal::RecipientRefused,
+                reason: MessageRefusal::UnknownSession,
             },
-            json!({"kind": "refused", "reason": "recipientRefused"}),
+            json!({"kind": "refused", "reason": "unknownSession"}),
         ),
         (
             MessageOutcome::Cancelled {

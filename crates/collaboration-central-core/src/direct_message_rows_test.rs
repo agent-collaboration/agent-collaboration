@@ -56,16 +56,16 @@ fn a_queued_direct_message_decodes_with_its_mark_sender_and_request() {
     );
     let failed = decode(&stored(&[
         ("state", value("failed")),
-        ("failure_reason", value("recipientRefused")),
+        ("failure_reason", value("unknownSession")),
     ]))
     .unwrap();
     assert_eq!(
         failed.status,
-        DirectMessageStatus::Failed(mail::MessageRefusal::RecipientRefused)
+        DirectMessageStatus::Failed(mail::MessageRefusal::UnknownSession)
     );
     assert_eq!(
-        refusal_text(mail::MessageRefusal::RecipientRefused).unwrap(),
-        "recipientRefused"
+        refusal_text(mail::MessageRefusal::UnknownSession).unwrap(),
+        "unknownSession"
     );
 }
 
@@ -87,7 +87,7 @@ fn every_invalid_stored_direct_message_is_refused() {
             ("state", value("failed")),
             ("failure_reason", value("tooBusy")),
         ],
-        vec![("failure_reason", value("recipientRefused"))],
+        vec![("failure_reason", value("unknownSession"))],
         vec![("sender", value(r#"{"kind":"central"}"#))],
     ] {
         assert!(

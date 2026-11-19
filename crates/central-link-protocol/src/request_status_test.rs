@@ -68,16 +68,22 @@ fn message_status_shapes_refuse_extra_fields_and_open_reasons() {
         workspace_model::ListQuery::MessageStatus { .. }
     ));
     use workspace_model::central_mail::{MessageRefusal, MessageStatus};
-    let failed = MessageStatus::Failed {
-        reason: MessageRefusal::RecipientRefused,
-    };
-    assert_eq!(
-        serde_json::to_value(failed).unwrap(),
-        json!({"kind":"failed","reason":"recipientRefused"})
-    );
+    for (reason, wire_reason) in [
+        (MessageRefusal::UnknownSession, "unknownSession"),
+        (MessageRefusal::AmbiguousSession, "ambiguousSession"),
+    ] {
+        let failed = MessageStatus::Failed { reason };
+        let wire = json!({"kind":"failed","reason":wire_reason});
+        assert_eq!(serde_json::to_value(failed).unwrap(), wire);
+        assert_eq!(
+            serde_json::from_value::<MessageStatus>(wire).unwrap(),
+            failed
+        );
+    }
     for wire in [
         json!({"kind":"failed","reason":"arbitrary"}),
-        json!({"kind":"queued","reason":"recipientRefused"}),
+        json!({"kind":"failed","reason":"recipientRefused"}),
+        json!({"kind":"queued","reason":"unknownSession"}),
         json!({"kind":"delivered","messageId":REQUEST}),
     ] {
         assert!(serde_json::from_value::<MessageStatus>(wire).is_err());
