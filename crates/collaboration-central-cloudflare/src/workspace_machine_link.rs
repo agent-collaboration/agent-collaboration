@@ -76,8 +76,18 @@ impl CentralObject {
             worker::console_warn!("post_welcome_alarm_recompute_failed failure={failure:?}");
         }
         let tag = connection.machine_id().as_str();
-        let older = self.state.get_websockets_with_tag(tag);
-        self.state.accept_websocket_with_tags(&pair.server, &[tag]);
+        let older = match runtime
+            .register_active_machine(&connection.attachment(), || {
+                let older = self.state.get_websockets_with_tag(tag);
+                self.state.accept_websocket_with_tags(&pair.server, &[tag]);
+                older
+            })
+            .await
+        {
+            Ok(Ok(older)) => older,
+            Ok(Err(_)) => return Response::error("machine refused", 401),
+            Err(_) => return Response::error("machine admission unavailable", 503),
+        };
         send(&pair.server, welcome)?;
         for socket in older {
             let _ = socket.close(Some(1000), Some("machine link replaced"));

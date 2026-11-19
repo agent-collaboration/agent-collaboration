@@ -134,6 +134,7 @@ mod organization_signin_http;
 mod organization_signin_port;
 mod organization_stamp_rows;
 mod person_admission_plans;
+mod private_machine_revocation;
 pub use organization_admin_contract::*;
 pub use organization_signin_http::organization_signin_router;
 pub use organization_signin_port::OrganizationSignInPort;

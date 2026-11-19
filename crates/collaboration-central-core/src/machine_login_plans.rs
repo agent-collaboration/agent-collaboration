@@ -22,13 +22,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .await;
         let _turn = self.take_central_turn().await;
         let time = self.machine_login_time(&request.organization_id).await?;
-        let machine_id = request
-            .installation
-            .as_str()
-            .parse()
-            .map_err(|_| crate::workspace_decode_error::corrupt("issuer.installation"))?;
         let query = EnrollmentQuery {
-            machine_id: Some(machine_id),
+            machine_id: Some(request.machine_id.clone()),
             request: Some(request.request_id.clone()),
             workspaces: request.allowed_workspaces.as_slice().to_vec(),
             ..EnrollmentQuery::default()

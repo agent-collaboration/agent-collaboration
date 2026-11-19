@@ -60,6 +60,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) turns: WorkspaceTurns,
     pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
     pub(crate) mail_delivery_ready: Arc<dyn Fn(MailDeliveryReady) + Send + Sync>,
+    pub(crate) machine_revoked: Arc<dyn Fn(workspace_ids::MachineId) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-support")]
@@ -109,6 +110,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             signin_authority: Default::default(),
             signin_observer: Arc::new(|_| {}),
             mail_delivery_ready: Arc::new(|_| {}),
+            machine_revoked: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
             central_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
@@ -143,6 +145,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         observer: Arc<dyn Fn(MailDeliveryReady) + Send + Sync>,
     ) -> Self {
         self.mail_delivery_ready = observer;
+        self
+    }
+    pub fn with_machine_revocation_observer(
+        mut self,
+        observer: Arc<dyn Fn(workspace_ids::MachineId) + Send + Sync>,
+    ) -> Self {
+        self.machine_revoked = observer;
         self
     }
     pub fn with_sign_in_verification(

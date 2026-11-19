@@ -50,6 +50,7 @@ pub fn organization_signin_router<Port: OrganizationSignInPort>(port: Arc<Port>)
         AdminRoute::EngineListRetired,
         AdminRoute::EngineRetry,
         AdminRoute::EngineDiscard,
+        AdminRoute::RevokeMachineEnrollment,
     ] {
         let port = port.clone();
         router = router.route(
@@ -164,6 +165,9 @@ async fn forward_admin<Port: OrganizationSignInPort>(
     match port.admin(organization_id, input).await {
         Ok(OrganizationAdminAnswer::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Ok(OrganizationAdminAnswer::Answered(result)) => {
+            (StatusCode::OK, Json(result)).into_response()
+        }
+        Ok(OrganizationAdminAnswer::MachineEnrollmentRevocation(result)) => {
             (StatusCode::OK, Json(result)).into_response()
         }
         Ok(OrganizationAdminAnswer::Retained(answer)) => (

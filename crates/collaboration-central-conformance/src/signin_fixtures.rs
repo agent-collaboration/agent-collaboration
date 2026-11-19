@@ -5,13 +5,17 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde_json::{Value, json};
 mod machine_tokens;
-pub use machine_tokens::{MACHINE_AUDIENCE, machine_token};
+pub use machine_tokens::{MACHINE_AUDIENCE, machine_token, resign_machine_token};
+mod one_id_vectors;
 mod person_requests;
+pub use one_id_vectors::check_machine_identity_vectors;
+mod revocation_journey;
 pub use person_requests::{
     CREATE, LOOKUP, MEMBER, MEMBER_SUBJECT, ORGANIZATION, OWNER, OWNER_SUBJECT, POLICY, Person,
     ProofKey, RECORDS, SESSION, canonical, create_body, create_intent, fresh_request_id,
     lookup_intent, records_intent, sha256_url,
 };
+pub use revocation_journey::RevocationJourney;
 
 pub const ISSUER: &str = "https://sign-in.example.invalid";
 pub const AUDIENCE: &str = "https://central.example.invalid/identity";

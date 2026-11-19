@@ -5,7 +5,7 @@ use collaboration_central_core::{
     SignInTrustSettings,
     identity_contract::{DeviceLoginDecision, MachineTokenDecision, ProvisionOrganization},
 };
-use collaboration_central_tokio::{TokioWorkspaceHost, WorkspaceLink};
+use collaboration_central_tokio::{OrganizationSignInLink, TokioWorkspaceHost, WorkspaceLink};
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use router_clock::ManualClock;
@@ -24,6 +24,9 @@ pub(super) struct Fixture {
     pub host: Arc<TokioWorkspaceHost>,
     pub clock: Arc<ManualClock>,
     pub token: String,
+    pub enrollment_id: fleet_identity_protocol::EnrollmentId,
+    pub signin_socket: std::path::PathBuf,
+    signin_link: OrganizationSignInLink,
     address: std::net::SocketAddr,
     link: WorkspaceLink,
     stop: CancellationToken,
@@ -73,7 +76,7 @@ impl Fixture {
         let approval = serde_json::from_value(json!({
             "organizationId": signed::ORGANIZATION, "approver": signed::OWNER,
             "permissionChecked":"machine:enroll", "requestId":"019f0000-0000-7000-8000-00000000ce04",
-            "installation":INSTALLATION, "peer":INSTALLATION, "label":"Link test machine",
+            "machineId":INSTALLATION, "label":"Link test machine",
             "allowedWorkspaces":[], "approverSecondFactorAt":signed::NOW_SECONDS-60,
             "codeExpiresAt":signed::NOW_SECONDS+600,
         }))?;
@@ -96,9 +99,11 @@ impl Fixture {
             &json!({"iss":signed::ISSUER,"aud":AUDIENCE,"iat":signed::NOW_SECONDS,
                 "exp":signed::NOW_SECONDS+600,"grant_expires_at":grant_expires_at.0,
                 "organization_id":signed::ORGANIZATION,"client_id":enrollment_id,"azp":enrollment_id,
-                "principal":{"kind":"machine","installation_id":INSTALLATION,"enrollment_id":enrollment_id}}),
+                "principal":{"kind":"machine","machine_id":INSTALLATION,"enrollment_id":enrollment_id}}),
             7,
         )?;
+        let signin_socket = root.path().join("signin.sock");
+        let signin_link = OrganizationSignInLink::start(host.clone(), &signin_socket)?;
         let listener =
             tokio::net::TcpListener::bind(std::net::SocketAddr::from(([127, 0, 0, 1], 0))).await?;
         let address = listener.local_addr()?;
@@ -115,6 +120,9 @@ impl Fixture {
             host,
             clock,
             token,
+            enrollment_id,
+            signin_socket,
+            signin_link,
             address,
             link,
             stop,
@@ -151,7 +159,7 @@ impl Fixture {
             claims
                 .get_mut("principal")
                 .ok_or("fixture machine principal")?,
-            "installation_id",
+            "machine_id",
             json!(machine_id),
         )?;
         signed::sign(
@@ -178,6 +186,7 @@ impl Fixture {
         self.stop.cancel();
         self.serving.await??;
         self.link.shutdown().await;
+        self.signin_link.shutdown().await?;
         self.host.close().await;
         self.keys.shutdown().await
     }

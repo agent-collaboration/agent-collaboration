@@ -18,7 +18,7 @@ const OTHER_MACHINE_REQUEST: &str = "019f0000-0000-7000-8000-00000000f204";
 fn approval(request: &str, label: &str, workspaces: &[&str], now: i64) -> Value {
     json!({"organizationId":signed::ORGANIZATION,"approver":signed::OWNER,
         "permissionChecked":"machine:enroll","requestId":request,
-        "installation":INSTALLATION,"peer":INSTALLATION,"label":label,
+        "machineId":INSTALLATION,"label":label,
         "allowedWorkspaces":workspaces,"approverSecondFactorAt":now-60,
         "codeExpiresAt":now+600})
 }
@@ -54,7 +54,7 @@ async fn token(child: &LauncherChild, enrollment: &str) -> TestResult<Value> {
 fn grant(enrollment: &str, now: i64, predecessor: Option<&str>) -> Value {
     let mut fields = serde_json::Map::from_iter([
         ("result".to_owned(), json!("grant")),
-        ("installation".to_owned(), json!(INSTALLATION)),
+        ("machineId".to_owned(), json!(INSTALLATION)),
         ("enrollmentId".to_owned(), json!(enrollment)),
         ("decidedAt".to_owned(), json!(now)),
         ("grantExpiresAt".to_owned(), json!(now + 600)),
@@ -269,8 +269,8 @@ async fn private_observe_projects_machine_and_approval_fields_with_independent_a
         &[SECOND_WORKSPACE],
         now + 5,
     );
-    other_body["installation"] = json!(OTHER_INSTALLATION);
-    other_body["peer"] = json!(OTHER_INSTALLATION);
+    other_body["machineId"] = json!(OTHER_INSTALLATION);
+
     let d = approve(&child, &other_body).await?;
     let (all_machines, all_approvals) =
         machine_arrays(&child.observe(signed::ORGANIZATION).await?)?;

@@ -3,7 +3,7 @@
 //! operationId, params}`, RFC 8785 JCS, SHA-256, base64url).
 use super::compact_jwt::sha256_url;
 use super::refusal::PersonRequestRefusal;
-use fleet_identity_protocol::OrganizationId;
+use fleet_identity_protocol::{EnrollmentId, OrganizationId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -199,6 +199,21 @@ pub struct EngineAttemptRequest {
     pub attempt_id: uuid::Uuid,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RevokeMachineEnrollmentRequest {
+    pub organization_id: OrganizationId,
+    pub enrollment_id: EnrollmentId,
+}
+
+/// Revocation has only two body fields. The verified bearer supplies the
+/// person and factor time used by the proof's intent projection.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AuthorizedMachineRevocation {
+    pub request: RevokeMachineEnrollmentRequest,
+    authorization: MachineRevocationParams,
+}
+
 /// Which route a request arrived on decides how its body is read; the body
 /// never chooses its own operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -211,6 +226,7 @@ pub enum AdminRoute {
     EngineListRetired,
     EngineRetry,
     EngineDiscard,
+    RevokeMachineEnrollment,
 }
 
 impl AdminRoute {
@@ -224,6 +240,7 @@ impl AdminRoute {
             Self::EngineListRetired => "/organization-admin/v1/engine-retired",
             Self::EngineRetry => "/organization-admin/v1/engine-retry",
             Self::EngineDiscard => "/organization-admin/v1/engine-discard",
+            Self::RevokeMachineEnrollment => "/organization-admin/v1/revoke-machine-enrollment",
         }
     }
     /// The permission the sign-in service's policy grants for this route.
@@ -237,6 +254,7 @@ impl AdminRoute {
             // Mapped by the sign-in service's policy (Fleet access Lead); until it
             // is, admission refuses these two routes with NotPermitted.
             Self::EngineRetry | Self::EngineDiscard => "organization:repairWork",
+            Self::RevokeMachineEnrollment => "machine:enroll",
         }
     }
     /// Changes need a fresh second factor; reads are exempt.
@@ -244,7 +262,10 @@ impl AdminRoute {
     pub const fn changes_state(self) -> bool {
         matches!(
             self,
-            Self::CreateWorkspace | Self::EngineRetry | Self::EngineDiscard
+            Self::CreateWorkspace
+                | Self::EngineRetry
+                | Self::EngineDiscard
+                | Self::RevokeMachineEnrollment
         )
     }
 }
@@ -260,6 +281,7 @@ pub enum AdminOperation {
     EngineListRetired(EngineListRetiredRequest),
     EngineRetry(EngineAttemptRequest),
     EngineDiscard(EngineAttemptRequest),
+    RevokeMachineEnrollment(AuthorizedMachineRevocation),
 }
 
 /// The version-one T06 object whose canonical bytes a person's proof hashes.
@@ -323,6 +345,13 @@ enum OrganizationAdminIntentWire {
         operation_id: AdminOperationId,
         params: EngineAttemptParams,
     },
+    RevokeMachineEnrollment {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: EnrollmentId,
+        operation_id: (),
+        params: MachineRevocationParams,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -381,8 +410,32 @@ struct EngineAttemptParams {
     attempt_id: uuid::Uuid,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MachineRevocationParams {
+    actor: String,
+    second_factor_at: Option<i64>,
+}
+
 impl AdminOperation {
     pub fn parse(route: AdminRoute, body: &[u8]) -> Result<Self, PersonRequestRefusal> {
+        Self::parse_authenticated(route, body, None)
+    }
+
+    pub(super) fn parse_for_person(
+        route: AdminRoute,
+        body: &[u8],
+        actor: &str,
+        second_factor_at: Option<i64>,
+    ) -> Result<Self, PersonRequestRefusal> {
+        Self::parse_authenticated(route, body, Some((actor, second_factor_at)))
+    }
+
+    fn parse_authenticated(
+        route: AdminRoute,
+        body: &[u8],
+        person: Option<(&str, Option<i64>)>,
+    ) -> Result<Self, PersonRequestRefusal> {
         if body.len() > 8192 {
             return Err(PersonRequestRefusal::OperationBody);
         }
@@ -409,6 +462,22 @@ impl AdminOperation {
             AdminRoute::EngineDiscard => {
                 Self::EngineDiscard(serde_json::from_slice(body).map_err(refusal)?)
             }
+            AdminRoute::RevokeMachineEnrollment => {
+                let (actor, second_factor_at) = person.ok_or(PersonRequestRefusal::PersonClaims)?;
+                let request: RevokeMachineEnrollmentRequest =
+                    serde_json::from_slice(body).map_err(refusal)?;
+                super::compact_jwt::uuid_v7(
+                    request.enrollment_id.as_str(),
+                    PersonRequestRefusal::OperationBody,
+                )?;
+                Self::RevokeMachineEnrollment(AuthorizedMachineRevocation {
+                    request,
+                    authorization: MachineRevocationParams {
+                        actor: actor.to_owned(),
+                        second_factor_at,
+                    },
+                })
+            }
         };
         operation.validate()?;
         Ok(operation)
@@ -424,7 +493,8 @@ impl AdminOperation {
             | Self::EngineHealth(_)
             | Self::EngineListRetired(_)
             | Self::EngineRetry(_)
-            | Self::EngineDiscard(_) => true,
+            | Self::EngineDiscard(_)
+            | Self::RevokeMachineEnrollment(_) => true,
         };
         if valid {
             Ok(())
@@ -443,6 +513,7 @@ impl AdminOperation {
             Self::EngineListRetired(_) => AdminRoute::EngineListRetired,
             Self::EngineRetry(_) => AdminRoute::EngineRetry,
             Self::EngineDiscard(_) => AdminRoute::EngineDiscard,
+            Self::RevokeMachineEnrollment(_) => AdminRoute::RevokeMachineEnrollment,
         }
     }
 
@@ -455,6 +526,7 @@ impl AdminOperation {
             Self::EngineHealth(request) => &request.organization_id,
             Self::EngineListRetired(request) => &request.organization_id,
             Self::EngineRetry(request) | Self::EngineDiscard(request) => &request.organization_id,
+            Self::RevokeMachineEnrollment(revocation) => &revocation.request.organization_id,
         }
     }
 
@@ -468,7 +540,8 @@ impl AdminOperation {
             Self::WorkspaceLookup(_)
             | Self::ReadChangeRecords(_)
             | Self::EngineHealth(_)
-            | Self::EngineListRetired(_) => None,
+            | Self::EngineListRetired(_)
+            | Self::RevokeMachineEnrollment(_) => None,
         }
     }
 
@@ -539,6 +612,15 @@ impl AdminOperation {
                     attempt_id: request.attempt_id,
                 },
             },
+            Self::RevokeMachineEnrollment(revocation) => {
+                OrganizationAdminIntentWire::RevokeMachineEnrollment {
+                    v: IntentVersionOne,
+                    organization,
+                    target: revocation.request.enrollment_id.clone(),
+                    operation_id: (),
+                    params: revocation.authorization.clone(),
+                }
+            }
         })
     }
 

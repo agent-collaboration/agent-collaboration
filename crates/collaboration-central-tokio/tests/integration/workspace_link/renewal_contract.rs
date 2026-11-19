@@ -303,7 +303,11 @@ async fn every_refused_renewal_keeps_the_current_deadline() -> Result<()> {
     )
     .await?;
 
-    // Act: three refusals, with no successful renewal anywhere in this test.
+    let overlong = signed::resign_machine_token(
+        &fixture.token,
+        &[("exp", serde_json::json!(signed::NOW_SECONDS + 601))],
+    )?;
+    // Act: refusals with no successful renewal anywhere in this test.
     let mut answers = Vec::new();
     for (correlation, token) in [
         ("019f0000-0000-7000-8000-00000000c311", "not.a.token"),
@@ -315,6 +319,7 @@ async fn every_refused_renewal_keeps_the_current_deadline() -> Result<()> {
             "019f0000-0000-7000-8000-00000000c313",
             other_client.as_str(),
         ),
+        ("019f0000-0000-7000-8000-00000000c314", overlong.as_str()),
     ] {
         send(&mut socket, &renew_frame(correlation, token)?).await?;
         answers.push(answer_to(&mut socket, correlation).await?);
@@ -348,6 +353,9 @@ async fn every_refused_renewal_keeps_the_current_deadline() -> Result<()> {
             },
             TokenRenewalResult::Refused {
                 reason: TokenRenewalRefusal::DifferentMachine
+            },
+            TokenRenewalResult::Refused {
+                reason: TokenRenewalRefusal::TokenRejected
             },
             TokenRenewalResult::Refused {
                 reason: TokenRenewalRefusal::TokenRejected

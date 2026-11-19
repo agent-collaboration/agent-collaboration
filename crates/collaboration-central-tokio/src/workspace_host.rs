@@ -203,11 +203,16 @@ impl TokioWorkspaceHost {
         };
         let registry = self.push_registry.clone();
         let organization_key = organization.clone();
+        let revocation_registry = self.push_registry.clone();
+        let revocation_org = organization.clone();
         let runtime = Arc::new(
             runtime
                 .with_sign_in_observer(Arc::new(crate::native_logging::observe))
                 .with_mail_delivery_observer(Arc::new(move |delivery| {
                     registry.offer(&organization_key, &delivery.machine_id, delivery.message_id);
+                }))
+                .with_machine_revocation_observer(Arc::new(move |machine_id| {
+                    revocation_registry.disconnect(&revocation_org, &machine_id);
                 })),
         );
         runtime.recompute_alarm().await?;

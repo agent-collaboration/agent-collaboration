@@ -83,7 +83,7 @@ fn fixture(
     )
 }
 fn claims() -> Value {
-    json!({"iss":"issuer", "aud":"machine", "iat":NOW, "exp":NOW+600, "grant_expires_at":NOW+300, "organization_id":ID, "client_id":ID, "azp":ID, "principal":{"kind":"machine", "installation_id":ID, "enrollment_id":ID}, "sub":"ignored", "extension":true})
+    json!({"iss":"issuer", "aud":"machine", "iat":NOW, "exp":NOW+600, "grant_expires_at":NOW+300, "organization_id":ID, "client_id":ID, "azp":ID, "principal":{"kind":"machine", "machine_id":ID, "enrollment_id":ID}, "sub":"ignored", "extension":true})
 }
 fn sign(key: &Ed25519KeyPair, header: Value, claims: Value) -> String {
     let header = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap());
@@ -139,7 +139,7 @@ async fn rejects_wrong_profile_ids_and_grant_without_leeway() {
     principal["principal"]["extra"] = json!(true);
     invalid.push(principal);
     let mut machine_id = claims();
-    machine_id["principal"]["installation_id"] = json!("legacy");
+    machine_id["principal"]["machine_id"] = json!("legacy");
     invalid.push(machine_id);
     let mut wrong_client = claims();
     let other_client = json!("019a61bb-0000-7000-8000-000000000099");

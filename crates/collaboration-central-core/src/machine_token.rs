@@ -149,7 +149,7 @@ impl Claims {
         let MachineTokenClaims {
             principal:
                 MachinePrincipal::Machine {
-                    installation_id,
+                    machine_id,
                     enrollment_id,
                 },
             organization_id,
@@ -192,7 +192,6 @@ impl Claims {
                 return Err(rejected);
             }
         }
-        let machine_id = installation_id.as_str().parse().map_err(|_| rejected)?;
         Ok(VerifiedMachineToken {
             organization_id,
             machine_id,

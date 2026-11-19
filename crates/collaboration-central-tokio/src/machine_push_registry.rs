@@ -46,6 +46,13 @@ impl MachinePushRegistry {
         }
     }
 
+    pub(crate) fn disconnect(&self, organization: &OrganizationId, machine: &MachineId) {
+        let mut sockets = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(socket) = sockets.remove(&(organization.clone(), machine.clone())) {
+            socket.replaced.cancel();
+        }
+    }
+
     pub(crate) fn offer(
         &self,
         organization: &OrganizationId,

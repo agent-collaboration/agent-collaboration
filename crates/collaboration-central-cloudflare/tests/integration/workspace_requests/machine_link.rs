@@ -7,6 +7,7 @@ mod probe_diagnostic;
 mod receipt;
 mod renewal;
 mod request_status;
+mod revocation;
 mod witness_assertions;
 
 use super::workerd_host::c2_controls::{
@@ -333,6 +334,23 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
             .client
             .get(fixture.link_url(ORGANIZATION))
             .bearer_auth(signed::tamper_signature(&fixture.token)?),
+        fixture
+            .client
+            .get(fixture.link_url(ORGANIZATION))
+            .bearer_auth(signed::resign_machine_token(
+                &fixture.token,
+                &[("exp", serde_json::json!(signed::NOW_SECONDS + 601))],
+            )?),
+        fixture
+            .client
+            .get(fixture.link_url(ORGANIZATION))
+            .bearer_auth(signed::resign_machine_token(
+                &fixture.token,
+                &[
+                    ("client_id", serde_json::json!(OTHER_ORGANIZATION)),
+                    ("azp", serde_json::json!(OTHER_ORGANIZATION)),
+                ],
+            )?),
         fixture
             .client
             .get(fixture.link_url(ORGANIZATION))

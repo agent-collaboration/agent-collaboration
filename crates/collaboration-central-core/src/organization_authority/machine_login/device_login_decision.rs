@@ -24,15 +24,10 @@ pub(crate) fn decide_device_login(
     let refuse = |reason| Ok(Decided::unchanged(DeviceLoginDecision::Refused { reason }));
     if request.organization_id != facts.organization_id
         || time.now_ms.saturating_sub(received_at_ms) > SD8_MILLIS
-        || request.peer.to_string() != request.installation.as_str()
     {
         return refuse(DeviceLoginRefusal::NotPermitted {});
     }
-    let machine_id = request
-        .installation
-        .as_str()
-        .parse::<workspace_ids::MachineId>()
-        .map_err(|_| crate::workspace_decode_error::corrupt("issuer.installation"))?;
+    let machine_id = request.machine_id.clone();
     // N03: after admission and SD8, request identity owns the first snapshot
     // for its original machine_id.
     // Mutable labels, workspaces, factor freshness and enrollment state cannot

@@ -59,6 +59,7 @@ pub async fn machine_login_control<H: ObjectHost, S: WorkspaceStoreCalls>(
                 &facts,
                 &person_id,
                 &operation_id,
+                "machine:revoke",
                 time,
                 runtime.ids.as_ref(),
             )?;

@@ -83,8 +83,7 @@ async fn create_workspaces(bridge: &Bridge) -> ConformanceResult<()> {
 
 fn approval(request: &str, workspaces: &[&str], now: i64, deadline: i64) -> Value {
     json!({"organizationId":signed::ORGANIZATION,"approver":signed::OWNER,
-        "permissionChecked":"machine:enroll","requestId":request,"installation":INSTALLATION,"peer":INSTALLATION,
-        "peer":INSTALLATION,"label":"Observed machine","allowedWorkspaces":workspaces,
+        "permissionChecked":"machine:enroll","requestId":request,"machineId":INSTALLATION,"label":"Observed machine","allowedWorkspaces":workspaces,
         "approverSecondFactorAt":now-60,"codeExpiresAt":deadline})
 }
 
@@ -246,7 +245,7 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     bridge.set_time((start + 1) * 1000, 1).await?;
     assert_eq!(
         token(&bridge, &first).await?,
-        json!({"result":"grant","installation":INSTALLATION,
+        json!({"result":"grant","machineId":INSTALLATION,
         "enrollmentId":first,"decidedAt":start+1,"grantExpiresAt":start+601})
     );
     first_row["state"] = json!("enrolled");
@@ -283,7 +282,7 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     bridge.set_time((start + 3) * 1000, 1).await?;
     assert_eq!(
         token(&bridge, &second).await?,
-        json!({"result":"grant","installation":INSTALLATION,
+        json!({"result":"grant","machineId":INSTALLATION,
         "enrollmentId":second,"decidedAt":start+3,"grantExpiresAt":start+603,
         "superseded":{"enrollmentId":first,"clientId":first}})
     );
@@ -298,7 +297,7 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     bridge.set_time((start + 4) * 1000, 1).await?;
     assert_eq!(
         token(&bridge, &second).await?,
-        json!({"result":"grant","installation":INSTALLATION,
+        json!({"result":"grant","machineId":INSTALLATION,
         "enrollmentId":second,"decidedAt":start+4,"grantExpiresAt":start+604,
         "superseded":{"enrollmentId":first,"clientId":first}})
     );
@@ -339,8 +338,8 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     // organization, not just the machine used by the preceding lifecycle stages.
     bridge.set_time((start + 7) * 1000, 1).await?;
     let mut another = approval(REQUEST_FOUR, &[WORKSPACE_TWO], start + 7, start + 607);
-    another["installation"] = json!(INSTALLATION_TWO);
-    another["peer"] = json!(INSTALLATION_TWO);
+    another["machineId"] = json!(INSTALLATION_TWO);
+
     let approved = post(&bridge, DEVICE, &another).await?;
     let fourth = approved
         .get("enrollmentId")
@@ -425,7 +424,7 @@ async fn bridge_first_observation_after_real_idle_expiry_accepts_automatic_recor
     let first = approve(&bridge, REQUEST_ONE, &[WORKSPACE_ONE], start, start + 600).await?;
     assert_eq!(
         token(&bridge, &first).await?,
-        json!({"result":"grant","installation":INSTALLATION,
+        json!({"result":"grant","machineId":INSTALLATION,
         "enrollmentId":first,"decidedAt":start,"grantExpiresAt":start+600})
     );
     let idle_at = start + 30 * 24 * 60 * 60;

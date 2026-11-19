@@ -16,6 +16,7 @@ pub(crate) fn revoke_machine_enrollment(
     facts: &EnrollmentFacts,
     person: &PersonId,
     operation: &AdminOperationId,
+    permission_checked: &'static str,
     time: DecisionTime,
     ids: &dyn IdSource,
 ) -> Result<Decided<Option<EndedMachineClient>>, StoreFailure> {
@@ -29,7 +30,7 @@ pub(crate) fn revoke_machine_enrollment(
     let ids = DecisionIds(ids);
     let origin = OrganizationChangeOrigin::Person {
         person_id: person.as_str().to_owned(),
-        permission_checked: "machine:revoke".to_owned(),
+        permission_checked: permission_checked.to_owned(),
     };
     let mut changes = vec![
         EnrollmentChange::ReplaceEnrollment(StoredEnrollment {

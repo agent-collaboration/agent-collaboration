@@ -90,7 +90,7 @@ impl Fixture {
         .await?;
         let grant = grant(&host, &client, &enrollment).await?;
         let MachineTokenDecision::Grant {
-            installation: machine_id,
+            machine_id,
             enrollment_id,
             grant_expires_at,
             decided_at,
@@ -213,7 +213,7 @@ async fn approve(
 ) -> Result<EnrollmentId> {
     let request: DecideDeviceLogin = serde_json::from_value(json!({
         "organizationId":ORGANIZATION,"approver":signed::OWNER,"permissionChecked":"machine:enroll",
-        "requestId":request_id,"installation":INSTALLATION,"peer":INSTALLATION,"label":"Hibernating machine",
+        "requestId":request_id,"machineId":INSTALLATION,"label":"Hibernating machine",
         "allowedWorkspaces":[],"approverSecondFactorAt":now-60,"codeExpiresAt":now+600,
     }))?;
     match post(host, client, "/internal/device-login-decisions", &request).await? {

@@ -24,6 +24,7 @@ pub(crate) fn is_signin_path(path: &str) -> bool {
         AdminRoute::EngineListRetired.path(),
         AdminRoute::EngineRetry.path(),
         AdminRoute::EngineDiscard.path(),
+        AdminRoute::RevokeMachineEnrollment.path(),
     ]
     .contains(&path)
 }

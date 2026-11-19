@@ -2,10 +2,11 @@
 use super::PeerId;
 use super::{AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollPermission, PersonId};
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
-use message_board::{MachineLabel, RecordId};
+use message_board::MachineLabel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::num::NonZeroU32;
+use workspace_ids::MachineId;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DecideDeviceLogin {
@@ -13,11 +14,7 @@ pub struct DecideDeviceLogin {
     pub approver: PersonId,
     pub permission_checked: EnrollPermission,
     pub request_id: DeviceLoginRequestId,
-    #[serde(deserialize_with = "uuid_v7_installation")]
-    #[schemars(with = "RecordId")]
-    pub installation: InstallationId,
-    #[schemars(with = "message_board::RecordId")]
-    pub peer: PeerId,
+    pub machine_id: MachineId,
     pub label: MachineLabel,
     pub allowed_workspaces: AllowedWorkspaces,
     #[serde(deserialize_with = "nullable_nonnegative_unix_seconds")]
@@ -44,12 +41,6 @@ fn nullable_nonnegative_unix_seconds<'de, D: Deserializer<'de>>(
         return Err(serde::de::Error::custom("Unix seconds must be nonnegative"));
     }
     Ok(seconds)
-}
-fn uuid_v7_installation<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<InstallationId, D::Error> {
-    let installation = RecordId::deserialize(deserializer)?;
-    InstallationId::try_from(String::from(installation)).map_err(serde::de::Error::custom)
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
@@ -103,7 +94,7 @@ pub struct EndedMachineClient {
 )]
 pub enum MachineTokenDecision {
     Grant {
-        installation: InstallationId,
+        machine_id: MachineId,
         enrollment_id: EnrollmentId,
         #[serde(deserialize_with = "nonnegative_unix_seconds")]
         #[schemars(with = "UnixSeconds", extend("minimum" = 0))]
@@ -134,9 +125,7 @@ pub enum MachineTokenRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PresentedMachine {
-    pub installation: InstallationId,
-    #[schemars(with = "message_board::RecordId")]
-    pub peer: PeerId,
+    pub machine_id: MachineId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -248,7 +237,7 @@ pub enum DisabledMachineClient {
 )]
 pub enum MachinePrincipal {
     Machine {
-        installation_id: InstallationId,
+        machine_id: MachineId,
         enrollment_id: EnrollmentId,
     },
 }

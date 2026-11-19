@@ -6,12 +6,10 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
     },
-    "InstallationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 36
+    "MachineId": {
+      "description": "The Router install's durable identity, shared with central.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
     },
     "MachinePrincipal": {
       "oneOf": [
@@ -21,17 +19,17 @@
             "enrollment_id": {
               "$ref": "#/$defs/EnrollmentId"
             },
-            "installation_id": {
-              "$ref": "#/$defs/InstallationId"
-            },
             "kind": {
               "const": "machine",
               "type": "string"
+            },
+            "machine_id": {
+              "$ref": "#/$defs/MachineId"
             }
           },
           "required": [
             "kind",
-            "installation_id",
+            "machine_id",
             "enrollment_id"
           ],
           "type": "object"

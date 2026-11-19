@@ -7,8 +7,8 @@ fn request() -> serde_json::Value {
         "approver":"018f1111-2222-7000-8000-000000000002",
         "permissionChecked":"machine:enroll",
         "requestId":"018f1111-2222-7000-8000-000000000003",
-        "installation":"018f1111-2222-7000-8000-000000000004",
-        "peer":"018f1111-2222-7000-8000-000000000004",
+        "machineId":"018f1111-2222-7000-8000-000000000004",
+
         "label":"machine",
         "allowedWorkspaces":[],
         "approverSecondFactorAt":null,
@@ -44,10 +44,7 @@ fn device_login_requires_checked_permission_true_deadline_uuid_v7_and_bounded_wo
     }
     for (field, value) in [
         ("permissionChecked", json!("machine:revoke")),
-        (
-            "installation",
-            json!("018f1111-2222-4000-8000-000000000004"),
-        ),
+        ("machineId", json!("018f1111-2222-4000-8000-000000000004")),
         (
             "formerServiceId",
             json!("018f1111-2222-7000-8000-000000000005"),
@@ -110,12 +107,12 @@ fn machine_grant_serializes_superseded_only_when_an_old_client_was_ended() {
         .to_owned()
         .try_into()
         .unwrap();
-    let installation = "018f1111-2222-7000-8000-000000000004"
+    let machine_id = "018f1111-2222-7000-8000-000000000004"
         .to_owned()
         .try_into()
         .unwrap();
     let mut grant = MachineTokenDecision::Grant {
-        installation,
+        machine_id,
         enrollment_id,
         decided_at: UnixSeconds(1800000000),
         grant_expires_at: UnixSeconds(1800000600),

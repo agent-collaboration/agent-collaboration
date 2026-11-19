@@ -71,8 +71,27 @@ pub struct EngineRetiredItem {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OrganizationAdminAnswer {
     Answered(OrganizationAdminResult),
+    MachineEnrollmentRevocation(MachineEnrollmentRevocationResult),
     Retained(RetainedOrganizationAdminAnswer),
     Unauthenticated,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "result", rename_all = "camelCase", deny_unknown_fields)]
+pub enum MachineEnrollmentRevocationResult {
+    Revoked {},
+    NotFound {},
+    AlreadyEnded {},
+    Refused {
+        reason: MachineEnrollmentRevocationRefusal,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MachineEnrollmentRevocationRefusal {
+    NotPermitted,
+    FactorNotRecent,
 }
 
 /// Validated retained JSON travels to HTTP without another serialization.

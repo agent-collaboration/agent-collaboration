@@ -127,6 +127,21 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         self.restore_machine_connection_held(attachment).await
     }
 
+    /// Register socket ownership while the live authority check still holds
+    /// the organization turn. Revocation then either sees the registration or
+    /// wins the turn first and refuses it.
+    pub async fn register_active_machine<Value>(
+        &self,
+        attachment: &MachineConnectionAttachment,
+        register: impl FnOnce() -> Value,
+    ) -> Result<Result<Value, MachineConnectionRefusal>, StoreFailure> {
+        let _turn = self.take_central_turn_for_admission().await;
+        Ok(self
+            .restore_machine_connection_held(attachment)
+            .await?
+            .map(|_| register()))
+    }
+
     /// Caller holds the existing central turn through the decision or effect it admits.
     pub(crate) async fn restore_machine_connection_held(
         &self,

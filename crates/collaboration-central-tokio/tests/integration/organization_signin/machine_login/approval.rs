@@ -134,7 +134,7 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
     );
 
     let mut another_installation = original.clone();
-    another_installation["installation"] = json!(INSTALLATION_TWO);
+    another_installation["machineId"] = json!(INSTALLATION_TWO);
 
     // The new machine_id/peer pair is internally consistent. Only ownership
     // of the already-retained request differs.
@@ -337,16 +337,17 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
     let f = MachineFixture::new().await?;
     let original = approval(0xc301, INSTALLATION, "Checked", &[WORKSPACE], f.now());
     for (case, expected_status) in [
-        ("peer", 200),
         ("workspace", 200),
         ("permission", 400),
         ("former", 400),
+        ("legacy peer", 400),
+        ("legacy installation", 400),
+        ("non-v7 machine", 400),
         ("missing deadline", 400),
         ("missing factor", 400),
     ] {
         let mut request = original.clone();
         match case {
-            "peer" => request["peer"] = json!(INSTALLATION_TWO),
             "workspace" => request["allowedWorkspaces"] = json!([id(0xc399)]),
             "permission" => request["permissionChecked"] = json!("machine:revoke"),
             "former" => {
@@ -354,6 +355,11 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
                     .as_object_mut()
                     .unwrap()
                     .insert("formerServiceId".into(), json!(id(0xc398)));
+            }
+            "legacy peer" => request["peer"] = json!(INSTALLATION_TWO),
+            "legacy installation" => request["installation"] = json!(INSTALLATION),
+            "non-v7 machine" => {
+                request["machineId"] = json!("019a61bb-0000-4000-8000-000000000001");
             }
             "missing factor" => {
                 request
@@ -368,11 +374,8 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
         let before = snapshot(&f).await?;
         let response = f.post(DEVICE, &request).await?;
         assert_eq!(response.0, expected_status, "{case}");
-        if case == "peer" {
-            assert_eq!(
-                response.1,
-                json!({"result":"refused","reason":{"kind":"notPermitted"}})
-            );
+        if case == "legacy peer" {
+            assert_eq!(response.1, json!({"kind":"wrong-operation"}));
         }
         if case == "workspace" {
             assert_eq!(
@@ -382,5 +385,12 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
         }
         assert!(snapshot(&f).await? == before, "{case} changed owning rows");
     }
+    let (status, reply) = f.post(DEVICE, &original).await?;
+    assert_eq!(status, 200);
+    assert_eq!(reply["result"], "approved");
+    assert_eq!(
+        f.rows("SELECT machine_id FROM login_machines").await?,
+        vec![vec![text(INSTALLATION)]]
+    );
     f.close().await
 }

@@ -140,7 +140,7 @@ const OTHER_INSTALLATION: &str = "019f0000-0000-7000-8000-00000000cf2a";
 const OTHER_ENROLLMENT: &str = "019f0000-0000-7000-8000-00000000cf2b";
 
 /// Moves the one injected clock and hands the time to the Worker and its object.
-async fn advance(fixture: &Fixture, seconds: u64) -> Result<()> {
+pub(super) async fn advance(fixture: &Fixture, seconds: u64) -> Result<()> {
     fixture.clock.advance(Duration::from_secs(seconds))?;
     fixture
         .host
@@ -275,8 +275,19 @@ async fn refusals_journey(fixture: &Fixture) -> Result<()> {
         signed::NOW_SECONDS,
         signed::NOW_SECONDS + 900,
     )?;
+    let wrong_client = signed::resign_machine_token(
+        &fixture.token,
+        &[
+            ("client_id", serde_json::json!(OTHER_ENROLLMENT)),
+            ("azp", serde_json::json!(OTHER_ENROLLMENT)),
+        ],
+    )?;
+    let overlong = signed::resign_machine_token(
+        &fixture.token,
+        &[("exp", serde_json::json!(signed::NOW_SECONDS + 601))],
+    )?;
 
-    // Act: three refusals and no successful renewal; then the object is evicted.
+    // Act: refusals without a successful renewal; then the object is evicted.
     let mut answers = Vec::new();
     for (correlation, token) in [
         ("019f0000-0000-7000-8000-00000000c321", "not.a.token"),
@@ -288,6 +299,11 @@ async fn refusals_journey(fixture: &Fixture) -> Result<()> {
             "019f0000-0000-7000-8000-00000000c323",
             other_enrollment.as_str(),
         ),
+        (
+            "019f0000-0000-7000-8000-00000000c325",
+            wrong_client.as_str(),
+        ),
+        ("019f0000-0000-7000-8000-00000000c326", overlong.as_str()),
     ] {
         answers.push(renewal(&mut link, renew(correlation, token)?).await?);
     }
@@ -320,6 +336,8 @@ async fn refusals_journey(fixture: &Fixture) -> Result<()> {
         TokenRenewalRefusal::TokenRejected,
         TokenRenewalRefusal::DifferentMachine,
         TokenRenewalRefusal::DifferentEnrollment,
+        TokenRenewalRefusal::TokenRejected,
+        TokenRenewalRefusal::TokenRejected,
     ]
     .map(|reason| TokenRenewalResult::Refused { reason });
     if answers != expected {

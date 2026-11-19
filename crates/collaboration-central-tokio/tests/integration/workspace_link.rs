@@ -6,6 +6,7 @@ mod delivery;
 mod fixture;
 mod link_support;
 mod renewal_contract;
+mod revocation;
 mod transport_contract;
 use central_link_client::{ClientAction, ClientEvent, LinkClient};
 use central_link_protocol::{DataFrame, LinkFrame, ReplyPayload, RequestPayload};
@@ -222,6 +223,21 @@ async fn public_route_requires_upgrade_and_header_token_and_matching_organizatio
             .bearer_auth("bad-token"),
         client
             .get(fixture.url(signed::ORGANIZATION))
+            .bearer_auth(signed::resign_machine_token(
+                &fixture.token,
+                &[("exp", json!(signed::NOW_SECONDS + 601))],
+            )?),
+        client
+            .get(fixture.url(signed::ORGANIZATION))
+            .bearer_auth(signed::resign_machine_token(
+                &fixture.token,
+                &[
+                    ("client_id", json!(OTHER_MACHINE)),
+                    ("azp", json!(OTHER_MACHINE)),
+                ],
+            )?),
+        client
+            .get(fixture.url(signed::ORGANIZATION))
             // A well-formed machine_id with no machine row is refused.
             .bearer_auth(fixture.token_for_installation("019f0000-0000-7000-8000-00000000ce0f")?),
         client
@@ -253,5 +269,83 @@ async fn unknown_ack_keeps_the_link_open_and_shutdown_drains_it() -> Result<()> 
     assert!(matches!(socket.next().await, Some(Ok(Message::Text(text))) if text == "pong"));
     fixture.close().await?;
     assert!(!matches!(socket.next().await, Some(Ok(Message::Text(_)))));
+    Ok(())
+}
+
+#[tokio::test]
+async fn real_public_tcp_excludes_all_private_paths_before_and_after_owner_credentials()
+-> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = private_route_boundary(&fixture).await;
+    fixture.close().await?;
+    result
+}
+
+async fn private_route_boundary(fixture: &Fixture) -> Result<()> {
+    let organization = signed::ORGANIZATION;
+    let private = reqwest::Client::builder()
+        .no_proxy()
+        .unix_socket(fixture.signin_socket.clone())
+        .build()?;
+    let digest_path = "/internal/organization-statement-digest";
+    let response = private
+        .post(format!("http://localhost{digest_path}"))
+        .json(&json!({"organizationId":organization}))
+        .send()
+        .await?;
+    if response.status().as_u16() != 200 {
+        return Err("private sign-in digest must be mounted".into());
+    }
+    let mut public_url = reqwest::Url::parse(&fixture.url(organization))?;
+    let signed_owner = signed::Person::owner(organization, signed::NOW_SECONDS)?;
+    let public = fixture.client()?;
+    let runtime = fixture
+        .host
+        .central(&organization.to_owned().try_into()?)
+        .await?;
+    let rows = || central_storage::Statement {
+        sql: "SELECT (SELECT COUNT(*) FROM directory_workspaces) AS workspaces, (SELECT COUNT(*) FROM runtime_request_log) AS requests, (SELECT COUNT(*) FROM admin_used_requests) AS proofs, (SELECT COUNT(*) FROM access_actor_identities) AS actors",
+        args: vec![],
+    };
+    let before = runtime.statement_host().read(rows()).await?;
+    let operation = "019f0000-0000-7000-8000-00000000d7e1";
+    for path in [
+        "/internal/organization-provisioning",
+        digest_path,
+        "/internal/organization-authorization-revisions",
+        "/internal/device-login-decisions",
+        "/internal/machine-token-decisions",
+        signed::CREATE,
+        signed::LOOKUP,
+        signed::RECORDS,
+    ] {
+        public_url.set_path(path);
+        for authorized in [false, true] {
+            let mut request = public.post(public_url.clone()).json(&signed::create_body(
+                organization,
+                operation,
+                "Public refused",
+            ));
+            if authorized {
+                for (name, value) in signed_owner.headers(
+                    path,
+                    &signed::create_intent(organization, operation, "Public refused"),
+                    &signed::fresh_request_id(signed::NOW_SECONDS)?,
+                    signed::NOW_SECONDS,
+                )? {
+                    request = request.header(name, value);
+                }
+            }
+            if request.send().await?.status().as_u16() != 404 {
+                return Err(format!(
+                    "public listener exposed {path} with credentials={authorized}"
+                )
+                .into());
+            }
+        }
+    }
+    if runtime.statement_host().read(rows()).await? != before {
+        return Err("private route refusals changed owning rows".into());
+    }
     Ok(())
 }

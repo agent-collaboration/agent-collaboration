@@ -288,6 +288,7 @@ impl CentralObject {
             Ok(None) | Err(_) => runtime,
         };
         let mail_pushes = self.mail_pushes.clone();
+        let state_for_revocation = self.state.clone();
         let runtime = Arc::new(
             runtime
                 .with_sign_in_observer(Arc::new(crate::signin_observation::observe_signin))
@@ -296,6 +297,12 @@ impl CentralObject {
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(message);
+                }))
+                .with_machine_revocation_observer(Arc::new(move |machine_id| {
+                    for socket in state_for_revocation.get_websockets_with_tag(machine_id.as_str())
+                    {
+                        let _ = socket.close(Some(1008), Some("machine authority revoked"));
+                    }
                 })),
         );
         runtime.recompute_alarm().await?;

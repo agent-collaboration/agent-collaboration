@@ -81,7 +81,7 @@ pub(super) fn approval(
     now: i64,
 ) -> Value {
     json!({"organizationId":ORG,"approver":signed::OWNER,"permissionChecked":"machine:enroll",
- "requestId":id(serial),"installation":machine_id,"peer":machine_id,"label":label,
+ "requestId":id(serial),"machineId":machine_id,"label":label,
  "allowedWorkspaces":workspaces,"approverSecondFactorAt":now-60,"codeExpiresAt":now+600})
 }
 pub(super) fn token(enrollment: &str, client: &str) -> Value {
@@ -108,7 +108,7 @@ pub(super) fn grant(
 ) -> Value {
     let mut answer = serde_json::Map::from_iter([
         ("result".to_owned(), json!("grant")),
-        ("installation".to_owned(), json!(machine_id)),
+        ("machineId".to_owned(), json!(machine_id)),
         ("enrollmentId".to_owned(), json!(enrollment)),
         ("decidedAt".to_owned(), json!(now)),
         ("grantExpiresAt".to_owned(), json!(now + LIFETIME)),

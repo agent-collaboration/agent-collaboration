@@ -147,13 +147,22 @@ async fn serve_link(
     if let Err(failure) = runtime.recompute_alarm().await {
         tracing::warn!(failure = ?failure, "post_welcome_alarm_recompute_failed");
     }
-    if !send_frame(&mut socket, &state.stop, &welcome).await {
+    let registration = runtime
+        .register_active_machine(&connection.attachment(), || {
+            state.host.push_registry.register(
+                connection.organization_id().clone(),
+                connection.machine_id().clone(),
+            )
+        })
+        .await;
+    let Ok(Ok(mut registration)) = registration else {
+        close_lapsed_link(&mut socket, &state.stop).await;
+        return;
+    };
+    if registration.replaced.is_cancelled() || !send_frame(&mut socket, &state.stop, &welcome).await
+    {
         return;
     }
-    let mut registration = state.host.push_registry.register(
-        connection.organization_id().clone(),
-        connection.machine_id().clone(),
-    );
     if !send_welcome_backlog(
         &mut socket,
         &state,
@@ -169,7 +178,10 @@ async fn serve_link(
         let message = tokio::select! {
             biased;
             () = state.stop.cancelled() => return,
-            () = registration.replaced.cancelled() => return,
+            () = registration.replaced.cancelled() => {
+                close_link(&mut socket, &state.stop, close_code::NORMAL, "machine link ended").await;
+                return;
+            }
             message = socket.recv() => message,
             ready = registration.receiver.recv() => {
                 let Some(message_id) = ready else { return; };

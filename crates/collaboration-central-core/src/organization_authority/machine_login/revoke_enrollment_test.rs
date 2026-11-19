@@ -20,6 +20,7 @@ fn owner_revocation_fences_pending_approvals_and_aba_without_a_public_route() {
         &facts,
         &person(),
         &operation,
+        "machine:revoke",
         time(NOW_MS),
         &CountingIds::new(),
     )
@@ -82,6 +83,7 @@ fn owner_revocation_fences_pending_approvals_and_aba_without_a_public_route() {
             &empty_facts(),
             &person(),
             &operation,
+            "machine:revoke",
             time(NOW_MS),
             &CountingIds::new()
         )

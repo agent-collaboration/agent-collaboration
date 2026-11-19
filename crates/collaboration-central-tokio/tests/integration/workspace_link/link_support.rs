@@ -83,7 +83,7 @@ pub(super) fn renewed_token(
     client_id: &str,
 ) -> Result<String> {
     let MachineTokenDecision::Grant {
-        installation: machine_id,
+        machine_id,
         enrollment_id,
         decided_at,
         grant_expires_at,
@@ -104,7 +104,7 @@ pub(super) fn renewed_token(
         &json!({"iss":signed::ISSUER,"aud":audience,"iat":decided_at.0,
             "exp":decided_at.0+600,"grant_expires_at":grant_expires_at.0,
             "organization_id":signed::ORGANIZATION,"client_id":client_id,"azp":client_id,
-            "principal":{"kind":"machine","installation_id":machine_id,"enrollment_id":enrollment_id}}),
+            "principal":{"kind":"machine","machine_id":machine_id,"enrollment_id":enrollment_id}}),
         7,
     )
 }

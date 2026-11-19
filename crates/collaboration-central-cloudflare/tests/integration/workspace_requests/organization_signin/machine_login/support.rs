@@ -83,7 +83,7 @@ pub(super) fn approval(
     now: i64,
 ) -> Value {
     json!({"organizationId":ORG,"approver":signed::OWNER,"permissionChecked":"machine:enroll",
- "requestId":id(serial),"installation":machine_id,"peer":machine_id,"label":label,
+ "requestId":id(serial),"machineId":machine_id,"label":label,
  "allowedWorkspaces":workspaces,"approverSecondFactorAt":now-60,"codeExpiresAt":now+600})
 }
 pub(super) fn token(enrollment: &str, client: &str) -> Value {
@@ -101,7 +101,7 @@ pub(super) fn grant(
     now: i64,
     superseded: Option<(&str, &str)>,
 ) -> Value {
-    let mut answer = json!({"result":"grant","installation":machine_id,"enrollmentId":enrollment,"decidedAt":now,"grantExpiresAt":now+LIFETIME});
+    let mut answer = json!({"result":"grant","machineId":machine_id,"enrollmentId":enrollment,"decidedAt":now,"grantExpiresAt":now+LIFETIME});
     if let Some((enrollment, client)) = superseded {
         answer.as_object_mut().unwrap().insert(
             "superseded".into(),
