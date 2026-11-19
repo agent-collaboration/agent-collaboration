@@ -23,7 +23,8 @@ pub trait LinkCalls: Send + Sync {
     fn submit_message(
         &self,
         caller: Caller,
-        message: crate::ToolSendMessage,
+        request_id: RequestId,
+        message: workspace_model::central_mail::SendMessageRequest,
     ) -> LinkCallFuture<'_, Submission>;
 
     /// Scoped to the caller's own requests: another caller's id answers NotFound.

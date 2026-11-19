@@ -68,7 +68,15 @@ async fn committed_then_lost_then_restarted_after(
                 .submit(caller(), RequestPayload::Workspace(request))
                 .await
         }
-        QueuedWrite::SendMessage(request) => first.calls.submit_message(caller(), request).await,
+        QueuedWrite::SendMessage {
+            request_id,
+            message,
+        } => {
+            first
+                .calls
+                .submit_message(caller(), request_id, message)
+                .await
+        }
     };
     advance_to_next_mark(&first);
     for batch in batches_now(&first, &mut central).await {
@@ -148,7 +156,10 @@ async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes
 async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minutes() {
     let id = uuid_v7(41);
     let (status, ended, received) = committed_then_lost_then_restarted_after(
-        QueuedWrite::SendMessage(direct_message(&id)),
+        QueuedWrite::SendMessage {
+            request_id: id.parse().unwrap(),
+            message: direct_message(),
+        },
         &id,
         16 * 60 * 1000,
     )
@@ -250,7 +261,7 @@ async fn an_offline_router_ends_waiting_writes_at_the_exact_deadline() {
     harness.calls.submit(caller(), thread_post(&post)).await;
     harness
         .calls
-        .submit_message(caller(), direct_message(&message))
+        .submit_message(caller(), message.parse().unwrap(), direct_message())
         .await;
 
     harness

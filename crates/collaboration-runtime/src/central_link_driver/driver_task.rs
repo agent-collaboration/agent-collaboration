@@ -357,10 +357,14 @@ impl LinkDriver {
         match command {
             DriverCommand::QueueMessage {
                 caller,
+                request_id,
                 message,
                 reply,
             } => {
-                let queued = central_link_client::QueuedWrite::SendMessage(message);
+                let queued = central_link_client::QueuedWrite::SendMessage {
+                    request_id,
+                    message,
+                };
                 if let Some(submission) = self.submit_to_outbox(caller, queued, &reply).await {
                     let _ = reply.send(submission);
                 }

@@ -2,39 +2,32 @@
 use crate::{OutboxWriteContent, OutboxWriteTarget};
 use central_link_protocol::{RequestPayload, RequestScope};
 use serde::{Deserialize, Serialize};
-use workspace_ids::SessionRef;
 use workspace_model::{
-    MessageId, PostText, RequestId, Timestamp, WorkspaceRequest,
-    central_mail::{CentralMailOperation, CentralMailRequest, MessageDelivery},
+    RequestId, Timestamp, WorkspaceRequest,
+    central_mail::{CentralMailOperation, CentralMailRequest, SendMessageRequest},
 };
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ToolSendMessage {
-    pub request_id: RequestId,
-    pub to: SessionRef,
-    pub body: PostText,
-    pub delivery: MessageDelivery,
-    pub reply_to: Option<MessageId>,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     content = "request",
     rename_all = "camelCase",
+    rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
 pub enum QueuedWrite {
     Workspace(WorkspaceRequest),
-    SendMessage(ToolSendMessage),
+    SendMessage {
+        request_id: RequestId,
+        message: SendMessageRequest,
+    },
 }
 
 impl QueuedWrite {
     pub fn request_id(&self) -> Option<&RequestId> {
         match self {
             Self::Workspace(request) => request.request_id.as_ref(),
-            Self::SendMessage(request) => Some(&request.request_id),
+            Self::SendMessage { request_id, .. } => Some(request_id),
         }
     }
 
@@ -44,18 +37,18 @@ impl QueuedWrite {
                 .workspace_id
                 .clone()
                 .map_or(RequestScope::Organization, RequestScope::Workspace),
-            Self::SendMessage(_) => RequestScope::Organization,
+            Self::SendMessage { .. } => RequestScope::Organization,
         }
     }
 
     pub fn content(&self) -> Option<OutboxWriteContent> {
         match self {
             Self::Workspace(request) => OutboxWriteContent::workspace(request),
-            Self::SendMessage(request) => Some(OutboxWriteContent {
+            Self::SendMessage { message, .. } => Some(OutboxWriteContent {
                 target: OutboxWriteTarget::Session {
-                    to: request.to.clone(),
+                    to: message.to.clone(),
                 },
-                body: request.body.clone(),
+                body: message.body.clone(),
             }),
         }
     }
@@ -63,13 +56,16 @@ impl QueuedWrite {
     pub fn into_wire(self, sent_at: Timestamp) -> RequestPayload {
         match self {
             Self::Workspace(request) => RequestPayload::Workspace(request),
-            Self::SendMessage(request) => RequestPayload::Mail(CentralMailRequest {
-                request_id: request.request_id,
+            Self::SendMessage {
+                request_id,
+                message,
+            } => RequestPayload::Mail(CentralMailRequest {
+                request_id,
                 operation: CentralMailOperation::SendMessage {
-                    to: request.to,
-                    body: request.body,
-                    delivery: request.delivery,
-                    reply_to: request.reply_to,
+                    to: message.to,
+                    body: message.body,
+                    delivery: message.delivery,
+                    reply_to: message.reply_to,
                     sent_at,
                 },
             }),

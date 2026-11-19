@@ -55,9 +55,8 @@ pub(crate) fn thread_post(request: &str) -> RequestPayload {
     RequestPayload::Workspace(request)
 }
 
-pub(crate) fn direct_message(request: &str) -> central_link_client::ToolSendMessage {
+pub(crate) fn direct_message() -> workspace_model::central_mail::SendMessageRequest {
     serde_json::from_value(json!({
-        "requestId": request,
         "to": {"machineId": INSTALLATION, "sessionId": "recipient"},
         "body": "are you there", "delivery": "auto", "replyTo": null
     }))

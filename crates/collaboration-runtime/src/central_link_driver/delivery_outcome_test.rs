@@ -42,7 +42,10 @@ async fn the_late_delivery_outcome_recovers_acceptance_and_notifies_the_sink_onc
             &NewOutboxItem {
                 request: query.request_id.clone(),
                 caller: caller(),
-                payload: QueuedWrite::SendMessage(direct_message(query.request_id.as_str())),
+                payload: QueuedWrite::SendMessage {
+                    request_id: query.request_id.clone(),
+                    message: direct_message(),
+                },
                 flush_at: SyncTime::from_unix_millis(created_at),
             },
             SyncTime::from_unix_millis(created_at),

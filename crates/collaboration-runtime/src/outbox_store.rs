@@ -897,7 +897,7 @@ pub(crate) fn outbox_content(
 pub(crate) fn payload_content_digest(payload: &QueuedWrite) -> Result<String, OutboxStoreError> {
     let digest = match payload {
         QueuedWrite::Workspace(request) => operation_content_digest(&request.operation),
-        QueuedWrite::SendMessage(request) => operation_content_digest(request),
+        QueuedWrite::SendMessage { message, .. } => operation_content_digest(message),
     };
     digest.map_err(|_| OutboxStoreError::Digest)
 }

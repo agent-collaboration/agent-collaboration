@@ -3,13 +3,13 @@
 //! answer InOutbox and become Answered after a flush on their mark; immediate
 //! kinds answer, or are Uncertain when the answer is lost; another caller's
 //! request id answers NotFound. It proves nothing about the real link.
+use crate::QueuedWrite;
 use crate::flush_marks::{earliest_open_mark, mark_in_window};
 use crate::link_calls::{
     LinkCallFuture, LinkCalls, OutboxReceipt, RequestStatus, Submission, SubmitRefusal,
 };
 use crate::outbox_flush::MAX_BATCH_WRITES;
 use crate::submission_path::{SubmissionPath, submission_path};
-use crate::{QueuedWrite, ToolSendMessage};
 use central_link_protocol::{
     CorrelationId, LinkRequest, ProtocolError, ReplyPayload, RequestPayload,
 };
@@ -304,11 +304,11 @@ impl LinkCalls for FakeLinkCalls {
     fn submit_message(
         &self,
         caller: Caller,
-        message: ToolSendMessage,
+        request_id: RequestId,
+        message: workspace_model::central_mail::SendMessageRequest,
     ) -> LinkCallFuture<'_, Submission> {
         let created_at = self.clock.utc_now();
         let now = SyncTime::from_unix_millis(created_at.timestamp_millis());
-        let request_id = message.request_id.clone();
         let mut state = self.lock();
         let submission = if state.central == FakeCentral::NotEnrolled {
             Submission::Refused(SubmitRefusal::NotEnrolled)
@@ -316,7 +316,10 @@ impl LinkCalls for FakeLinkCalls {
             queue_write(
                 &mut state,
                 caller,
-                QueuedWrite::SendMessage(message),
+                QueuedWrite::SendMessage {
+                    request_id: request_id.clone(),
+                    message,
+                },
                 request_id,
                 now,
                 created_at,

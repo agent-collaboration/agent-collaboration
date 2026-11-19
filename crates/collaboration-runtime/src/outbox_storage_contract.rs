@@ -49,14 +49,14 @@ fn message(seed: u16, body: &str, flush_at: i64) -> NewOutboxItem {
     NewOutboxItem {
         request: request.parse().unwrap(),
         caller: caller(1),
-        payload: central_link_client::QueuedWrite::SendMessage(
-            serde_json::from_value(json!({
-                "requestId": request,
+        payload: central_link_client::QueuedWrite::SendMessage {
+            request_id: request.parse().unwrap(),
+            message: serde_json::from_value(json!({
                 "to": {"machineId": uuid_v7(50_001), "sessionId": "r1"},
                 "body": body, "delivery": "auto", "replyTo": null
             }))
             .unwrap(),
-        ),
+        },
         flush_at: at(flush_at),
     }
 }
