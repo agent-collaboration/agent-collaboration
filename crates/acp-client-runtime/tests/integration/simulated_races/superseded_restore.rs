@@ -256,9 +256,10 @@ async fn assert_restore_accepts_input_after_set(reply: ModeReply, actual: Option
     client.shutdown().await;
 }
 
+/// A silent optional setter stops delaying activation at the injected
+/// deadline, and excludes only overlapping restore setters.
 #[tokio::test]
-async fn a_sent_restore_mode_write_fences_a_later_load_past_the_local_deadline() {
-    // Arrange: close the loading run while the agent holds its setting reply.
+async fn a_silent_restore_setter_allows_input_and_a_same_session_reload() {
     let clock = restore_clock();
     let (client, agent, session) = closed_session(
         clock.clone(),
@@ -267,56 +268,87 @@ async fn a_sent_restore_mode_write_fences_a_later_load_past_the_local_deadline()
     .await;
     agent.restore_in_mode("plan");
     agent.hold_setting_answers();
-    let first = spawn_load(&client, &session, Some("default"));
-    agent.received("session/set_config_option").await;
+    let first_restore = load_in_mode(&client, &session, "default");
+    let mut first_restore = Box::pin(first_restore);
     let response_wait = Duration::from_secs(30);
-    clock
-        .not_due_check_now(ClockInstant::ZERO.after(response_wait))
-        .await;
+    tokio::select! {
+        () = clock.not_due_check_now(ClockInstant::ZERO.after(response_wait)) => {},
+        result = &mut first_restore => panic!("the optional setter had not settled: {result:?}"),
+    }
+    agent.received("session/set_config_option").await;
+    clock.advance(response_wait).expect("reach the deadline");
+    let first = first_restore
+        .await
+        .expect("a silent setter does not make load fail");
+    assert_eq!(first.permission_mode.actual, None);
+    assert_eq!(
+        first.mode_difference,
+        Some(acp_client_runtime::RestoredModeDifference::NoAnswer)
+    );
+    prompt_restored_session(&client, &session).await;
     client
         .close_session(session.clone())
         .await
-        .expect("close the pending load");
+        .expect("close the active first run");
 
-    // Act: the waiting restore times out, but its correlation stays live.
-    clock.advance(response_wait).expect("reach the deadline");
-    let timed_out = first.await.expect("restore task");
-    let later = tokio::select! {
-        () = loads_read(&agent, 2) => panic!("the later load reached ACP while the old mode write was pending"),
-        result = load_in_mode(&client, &session, "default") => result,
+    let second_restore = load_in_mode(&client, &session, "default");
+    let mut second_restore = Box::pin(second_restore);
+    let second = tokio::select! {
+        result = &mut second_restore => result.expect("the earlier setter cannot hold reload"),
+        () = agent.mode_sets_received(2) => panic!("the next restore sent an overlapping setter"),
     };
-
-    // Assert: the later restore sends nothing until that correlation settles.
-    assert!(
-        matches!(
-            timed_out,
-            Err(ExternalProviderRuntimeError::SessionReleased)
-        ),
-        "{timed_out:?}"
-    );
-    assert!(
-        matches!(later, Err(ExternalProviderRuntimeError::LocalBusy { .. })),
-        "{later:?}"
-    );
+    assert!(second.generation.number() > first.generation.number());
+    assert_eq!(second.permission_mode.actual, None);
     assert_eq!(
-        agent
-            .methods()
-            .iter()
-            .filter(|method| *method == "session/load")
-            .count(),
-        1
+        second.mode_difference,
+        Some(acp_client_runtime::RestoredModeDifference::EarlierWriteUnanswered)
     );
-    assert_eq!(agent.mode_sets(), ["default"]);
+    prompt_restored_session(&client, &session).await;
+    assert_eq!(
+        agent.prompt_sessions(),
+        [session.as_str(), session.as_str()]
+    );
 
     agent.release_setting_answers();
     agent.setting_answers_sent(1).await;
-    // A request following the old response on the wire witnesses dispatch
-    // through its ordered response callback, even though the run is closed.
     let _barrier = agent.request_permission(&session).await;
+    assert_eq!(
+        client
+            .settings_catalog(&session)
+            .expect("live catalog")
+            .effective_settings()
+            .mode,
+        None
+    );
+    assert_eq!(agent.mode_sets(), ["default"]);
+    assert_eq!(
+        agent.prompt_sessions(),
+        [session.as_str(), session.as_str()]
+    );
+    client
+        .close_session(session.clone())
+        .await
+        .expect("close the second run");
     let recovered = load_in_mode(&client, &session, "default")
         .await
-        .expect("the old reply released the fence");
+        .expect("after the late reply");
     assert_eq!(recovered.permission_mode.actual.as_deref(), Some("default"));
     assert_eq!(agent.mode_sets(), ["default", "default"]);
     client.shutdown().await;
+}
+
+async fn prompt_restored_session(client: &AgentSessionClient<NoInteraction>, session: &str) {
+    let prompt = ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(vec![
+        session_event_model::PromptContent::text("continue once".to_owned()).expect("prompt text"),
+    ]));
+    client
+        .submit_with_approval_dispatch_for_input(
+            session.to_owned(),
+            session_event_model::InputId::generate(),
+            prompt,
+            (),
+            None,
+        )
+        .await
+        .expect("restored input completes");
 }

@@ -128,6 +128,9 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                 requested_mode.as_deref(),
                 &mut settings_catalog,
                 behavior.as_ref(),
+                session_cells.read(&provider_session_id, |cell| {
+                    cell.restore_mode_write.is_some()
+                }),
                 || {
                     crate::session_cell_bookkeeping::claim_restore_mode_write(
                         &session_cells,

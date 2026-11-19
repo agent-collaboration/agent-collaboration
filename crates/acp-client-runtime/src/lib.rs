@@ -90,7 +90,7 @@ pub use interaction_port::{
 pub use permission_mode_plan::{
     AUTO_PERMISSION_MODE, AutoPermissionMode, AutoRealization, PermissionModePlan,
     PermissionModeReason, PermissionModeRefusal, PermissionModeReport, RequestedPermissionMode,
-    plan_permission_mode,
+    RestoredModeDifference, plan_permission_mode,
 };
 pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;
@@ -103,8 +103,8 @@ pub use provider_session_actor::{ProviderSessionActivity, ProviderSteeringOutcom
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
     FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
-    ProviderConfigValue, ProviderSettingApplication, ProviderSettingRequest,
-    ProviderSettingsCatalog, RequestedProviderSettings,
+    ProviderConfigValue, ProviderModeObservation, ProviderSettingApplication,
+    ProviderSettingRequest, ProviderSettingsCatalog, RequestedProviderSettings,
 };
 pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_cell_table::QueueEntrySink;

@@ -383,30 +383,21 @@ fn a_closed_load_attempt_claims_no_mode_write() {
     );
 }
 
-/// Oracle: review F1, "settle an already admitted write before allowing the
-/// next run to race it": a write the loading attempt claimed survives the
-/// close (it may be on its way to the agent), and no new load is admitted
-/// until it settles.
+/// Keep the old setter exclusive while allowing the newer run to load.
 #[test]
-fn a_claimed_restore_mode_write_holds_the_next_load_until_it_settles() {
-    // Arrange
+fn a_pending_restore_setter_excludes_only_the_next_setter() {
     let cells = std::sync::Arc::new(SessionCellTable::default());
-    admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(1)).expect("the load is admitted");
-    let claim = claim_restore_mode_write(&cells, SESSION, load_attempt(1))
-        .expect("the loading attempt claims its write");
-    admit_close(&cells, SESSION, close_attempt(2)).expect("the close is admitted");
+    admit_load(&cells, SESSION, RestoreVia::Load, load_attempt(1)).expect("first load");
+    let claim =
+        claim_restore_mode_write(&cells, SESSION, load_attempt(1)).expect("first setter claimed");
+    admit_close(&cells, SESSION, close_attempt(2)).expect("close while sent");
     let closed = settle_close(&cells, SESSION, close_attempt(2), true);
+    assert!(closed.is_some());
 
-    // Act
-    let while_unsettled = admit_load(&cells, SESSION, RestoreVia::Resume, load_attempt(3));
+    let next_attempt = load_attempt(3);
+    admit_load(&cells, SESSION, RestoreVia::Resume, next_attempt)
+        .expect("the later restore is admitted");
+    assert!(claim_restore_mode_write(&cells, SESSION, next_attempt).is_none());
     drop(claim);
-    let once_settled = admit_load(&cells, SESSION, RestoreVia::Resume, load_attempt(4));
-
-    // Assert
-    assert!(closed.is_some(), "the close published Closed");
-    assert!(
-        while_unsettled.is_err(),
-        "a new load raced the earlier restore's unsettled mode write"
-    );
-    assert!(once_settled.is_ok(), "{once_settled:?}");
+    assert!(claim_restore_mode_write(&cells, SESSION, next_attempt).is_some());
 }

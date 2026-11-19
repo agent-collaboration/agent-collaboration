@@ -248,8 +248,7 @@ pub(crate) fn start_direct_turn(
             | SessionCellRefusal::NotHead
             | SessionCellRefusal::UnknownEntry
             | SessionCellRefusal::NotLive
-            | SessionCellRefusal::Setting(_)
-            | SessionCellRefusal::RestoreModeWriteUnsettled,
+            | SessionCellRefusal::Setting(_),
         )
         | TransitionError::NotAllowed { .. }
         | TransitionError::Stale => busy(),
@@ -565,8 +564,7 @@ fn lifecycle_refusal_error(
             | SessionCellRefusal::NotHead
             | SessionCellRefusal::UnknownEntry
             | SessionCellRefusal::NotLive
-            | SessionCellRefusal::Setting(_)
-            | SessionCellRefusal::RestoreModeWriteUnsettled,
+            | SessionCellRefusal::Setting(_),
         )
         | TransitionError::NotAllowed { .. }
         | TransitionError::Stale => ExternalProviderRuntimeError::LocalBusy {
@@ -578,8 +576,7 @@ fn lifecycle_refusal_error(
 /// A restore's claim on writing the session's recorded mode to the agent
 /// (review F1): granted only while its load attempt still owns the session,
 /// so a close that came first means nothing is sent. Dropping the claim, once
-/// the write is answered or abandoned, settles it, and a later load waits for
-/// that.
+/// the response correlation ends, settles it. While it exists another restore may load, but cannot claim a second write.
 pub(crate) struct RestoreModeWriteClaim {
     cells: std::sync::Arc<SessionCellTable>,
     session_id: String,

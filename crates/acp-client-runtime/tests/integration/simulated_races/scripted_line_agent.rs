@@ -27,6 +27,7 @@ pub(super) struct ScriptedLineAgent {
     loads_released: Arc<tokio::sync::Notify>,
     restored_mode: Arc<Mutex<Option<String>>>,
     mode_sets: Arc<Mutex<Vec<String>>>,
+    prompt_sessions: Arc<Mutex<Vec<String>>>,
     mode_reply: Arc<Mutex<Option<ModeReply>>>,
     writer: Arc<Mutex<Option<AgentWriter>>>,
     responses: Arc<Mutex<Vec<Value>>>,
@@ -120,6 +121,23 @@ impl ScriptedLineAgent {
     /// Every mode value the agent was asked to switch to, in order.
     pub(super) fn mode_sets(&self) -> Vec<String> {
         self.mode_sets
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    pub(super) async fn mode_sets_received(&self, count: usize) {
+        loop {
+            let changed = self.changed.notified();
+            if self.mode_sets().len() >= count {
+                return;
+            }
+            changed.await;
+        }
+    }
+
+    pub(super) fn prompt_sessions(&self) -> Vec<String> {
+        self.prompt_sessions
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -220,6 +238,7 @@ impl ScriptedLineAgent {
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .push(value.clone());
+                    self.changed.notify_waiters();
                     let result = match self
                         .mode_reply
                         .lock()
@@ -244,9 +263,17 @@ impl ScriptedLineAgent {
                         "configOptions": effort_options(&value),
                     }})
                 }
-                "session/prompt" => json!({"jsonrpc": "2.0", "id": id, "result": {
-                    "stopReason": "end_turn",
-                }}),
+                "session/prompt" => {
+                    let session_id = frame
+                        .pointer("/params/sessionId")
+                        .and_then(Value::as_str)
+                        .expect("prompt session");
+                    self.prompt_sessions
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .push(session_id.to_owned());
+                    json!({"jsonrpc": "2.0", "id": id, "result": {"stopReason": "end_turn"}})
+                }
                 "session/load" => {
                     let restored = self
                         .restored_mode

@@ -108,9 +108,17 @@ pub struct ProviderConfigOption {
 
 /// Last options advertised by a provider Session. The Host supervisor may keep
 /// this snapshot after the Session unloads for model/list and settings inspect.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ProviderModeObservation {
+    #[default]
+    FromCatalogue,
+    Unconfirmed,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ProviderSettingsCatalog {
     pub current_mode: Option<String>,
+    pub mode_observation: ProviderModeObservation,
     pub modes: Vec<ProviderSettingChoice>,
     pub config_options: Vec<ProviderConfigOption>,
     pub model_reasoning: crate::ModelReasoningMetadata,
@@ -131,6 +139,10 @@ impl ProviderSettingsCatalog {
             config: self
                 .config_options
                 .iter()
+                .filter(|option| {
+                    option.category != Some(ProviderSettingKind::Mode)
+                        || self.mode_observation != ProviderModeObservation::Unconfirmed
+                })
                 .map(|option| ConfigValue {
                     id: option.id.clone(),
                     value: match &option.current_value {
@@ -212,7 +224,12 @@ impl ProviderSettingsCatalog {
                 })
         };
         EffectiveProviderSettings {
-            mode: selected(ProviderSettingKind::Mode).or_else(|| self.current_mode.clone()),
+            mode: match self.mode_observation {
+                ProviderModeObservation::FromCatalogue => {
+                    selected(ProviderSettingKind::Mode).or_else(|| self.current_mode.clone())
+                }
+                ProviderModeObservation::Unconfirmed => None,
+            },
             model: selected(ProviderSettingKind::Model),
             effort: selected(ProviderSettingKind::Effort),
             fast: Some(self.fast_observed()),

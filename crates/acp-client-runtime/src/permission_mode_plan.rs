@@ -179,6 +179,17 @@ pub struct PermissionModeReport {
     pub reason: Option<PermissionModeReason>,
 }
 
+/// Why the optional mode portion of a restore differs from its saved setup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RestoredModeDifference {
+    NotOffered,
+    Refused,
+    NoAnswer,
+    EarlierWriteUnanswered,
+    DifferentReply,
+    UnconfirmedReply,
+}
+
 #[cfg(test)]
 #[path = "permission_mode_plan_test.rs"]
 mod tests;

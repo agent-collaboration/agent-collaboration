@@ -58,7 +58,7 @@ pub struct SessionCell {
     pub settings: HashMap<ProviderSettingKind, SessionSetting>,
     /// A restore's mode write, claimed while its load attempt still owned
     /// the session (review F1): a close after the claim can't recall a write
-    /// already on its way to the agent, so a later load waits until it settles.
+    /// already on its way to the agent. Later loads can run while their own optional write is skipped.
     pub restore_mode_write: Option<LoadAttempt>,
 }
 
@@ -285,8 +285,6 @@ pub enum SessionCellRefusal {
     /// The session isn't Live in the line's run, so nothing commits.
     NotLive,
     Setting(SessionSettingRefusal),
-    /// An earlier restore's mode write hasn't settled, so no new load yet.
-    RestoreModeWriteUnsettled,
 }
 
 impl RefusalTag for SessionCellRefusal {
@@ -300,7 +298,6 @@ impl RefusalTag for SessionCellRefusal {
             Self::UnknownEntry => "unknown_entry",
             Self::NotLive => "not_live",
             Self::Setting(refusal) => refusal.refusal_tag(),
-            Self::RestoreModeWriteUnsettled => "restore_mode_write_unsettled",
         }
     }
 }
@@ -569,11 +566,6 @@ impl StateMachine for SessionCellMachine {
         match event {
             V::CreateAdmitted => lifecycle_move(cell, SessionLifecycleEvent::CreateAdmitted),
             V::LoadRequested { via, attempt } => {
-                if cell.restore_mode_write.is_some() {
-                    return Err(TransitionError::Domain(
-                        SessionCellRefusal::RestoreModeWriteUnsettled,
-                    ));
-                }
                 lifecycle_move(cell, SessionLifecycleEvent::LoadRequested { via, attempt })
             }
             V::Loaded { attempt } => {

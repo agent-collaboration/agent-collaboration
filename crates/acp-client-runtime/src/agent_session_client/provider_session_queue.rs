@@ -285,11 +285,6 @@ impl SessionQueueDoor<'_> {
             TransitionError::Domain(SessionCellRefusal::Turn(refusal)) => QueueRefusal::Refused {
                 answer: refusal.human_phrase().to_owned(),
             },
-            TransitionError::Domain(SessionCellRefusal::RestoreModeWriteUnsettled) => {
-                QueueRefusal::Refused {
-                    answer: "an earlier load of this session is still setting its mode; load it again once that settles".to_owned(),
-                }
-            }
         }
     }
 }

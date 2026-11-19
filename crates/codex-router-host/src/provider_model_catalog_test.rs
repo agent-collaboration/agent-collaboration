@@ -7,6 +7,7 @@ fn model_choices_replace_provider_default_in_agent_order() {
     let catalog = ProviderSettingsCatalog {
         model_reasoning: acp_client_runtime::ModelReasoningMetadata::default(),
         current_mode: None,
+        mode_observation: acp_client_runtime::ProviderModeObservation::FromCatalogue,
         modes: Vec::new(),
         config_options: vec![ProviderConfigOption {
             id: "model".into(),

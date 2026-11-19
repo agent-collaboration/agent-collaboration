@@ -36,6 +36,7 @@ pub(crate) enum SettingSetupFailure {
 pub(crate) enum RestoreModeObservation {
     Confirmed(String),
     Unconfirmed,
+    NoAnswer,
 }
 
 enum SettingResponseFailure {
@@ -47,7 +48,6 @@ enum SettingResponseFailure {
 struct RestoreModeWrite<'clock> {
     claim: crate::session_cell_bookkeeping::RestoreModeWriteClaim,
     clock: &'clock dyn router_clock::RuntimeClock,
-    report_named_mode: bool,
 }
 
 /// The outcome of applying a start's settings in order.
@@ -338,6 +338,7 @@ fn judge_agent_mode(
 pub(crate) struct RestoredPermissionMode {
     pub(crate) report: crate::PermissionModeReport,
     pub(crate) router_auto_active: bool,
+    pub(crate) difference: Option<crate::RestoredModeDifference>,
 }
 
 /// Judges the mode the agent reports for a restored session against the mode
@@ -358,6 +359,7 @@ pub(crate) fn restored_permission_mode(
             reason: None,
         },
         router_auto_active: false,
+        difference: None,
     };
     if requested_mode == crate::RequestedPermissionMode::Unspecified {
         return restored;
@@ -368,7 +370,7 @@ pub(crate) fn restored_permission_mode(
         &catalog.advertised_values(ProviderSettingKind::Mode),
         behavior.auto_permission_mode(),
     ) {
-        Err(_) => {}
+        Err(_) => restored.difference = Some(crate::RestoredModeDifference::NotOffered),
         Ok(crate::PermissionModePlan::Keep { reason, .. }) => restored.report.reason = reason,
         Ok(crate::PermissionModePlan::Set {
             mode,
@@ -405,10 +407,18 @@ pub(crate) async fn reapply_recorded_mode(
     requested: Option<&str>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
+    earlier_write_pending: bool,
     claim_write: impl FnOnce() -> Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
     clock: &dyn router_clock::RuntimeClock,
 ) -> RestoredPermissionMode {
-    let kept = restored_permission_mode(requested, catalog, behavior);
+    let mut kept = restored_permission_mode(requested, catalog, behavior);
+    if earlier_write_pending {
+        catalog.mode_observation = crate::ProviderModeObservation::Unconfirmed;
+        kept.report.actual = None;
+        kept.router_auto_active = false;
+        kept.difference = Some(crate::RestoredModeDifference::EarlierWriteUnanswered);
+        return kept;
+    }
     if !restored_mode_drifted(requested, catalog, behavior) {
         return kept;
     }
@@ -423,6 +433,7 @@ pub(crate) async fn reapply_recorded_mode(
                 reason: kept.report.reason,
             },
             router_auto_active: false,
+            difference: kept.difference,
         };
     };
     let outcome = apply_settings(
@@ -433,26 +444,35 @@ pub(crate) async fn reapply_recorded_mode(
         },
         catalog,
         behavior,
-        Some(RestoreModeWrite {
-            claim,
-            clock,
-            report_named_mode: matches!(
-                crate::RequestedPermissionMode::from_request(requested),
-                crate::RequestedPermissionMode::AgentMode(_)
-            ),
-        }),
+        Some(RestoreModeWrite { claim, clock }),
     )
     .await;
     if let Some(failure) = outcome.failure {
-        let actual = match failure {
+        use crate::RestoredModeDifference as Difference;
+        let (actual, difference) = match failure {
             SettingSetupFailure::Uncertain {
-                restore_readback: Some(readback),
+                restore_readback: Some(RestoreModeObservation::Confirmed(mode)),
                 ..
-            } => match readback {
-                RestoreModeObservation::Confirmed(mode) => Some(mode),
-                RestoreModeObservation::Unconfirmed => None,
-            },
-            _ => catalog.effective_settings().mode,
+            } => (Some(mode), Difference::DifferentReply),
+            SettingSetupFailure::Uncertain {
+                restore_readback, ..
+            } => {
+                catalog.mode_observation = crate::ProviderModeObservation::Unconfirmed;
+                (
+                    None,
+                    if matches!(restore_readback, Some(RestoreModeObservation::NoAnswer)) {
+                        Difference::NoAnswer
+                    } else {
+                        Difference::UnconfirmedReply
+                    },
+                )
+            }
+            SettingSetupFailure::Agent { .. } => {
+                (catalog.effective_settings().mode, Difference::Refused)
+            }
+            SettingSetupFailure::Invalid { .. } => {
+                (catalog.effective_settings().mode, Difference::NotOffered)
+            }
         };
         return RestoredPermissionMode {
             report: crate::PermissionModeReport {
@@ -461,11 +481,13 @@ pub(crate) async fn reapply_recorded_mode(
                 reason: kept.report.reason,
             },
             router_auto_active: false,
+            difference: Some(difference),
         };
     }
     RestoredPermissionMode {
         report: outcome.permission_mode,
         router_auto_active: outcome.router_auto_active,
+        difference: None,
     }
 }
 
@@ -514,9 +536,7 @@ async fn apply_one_setting(
             advertised,
         });
     }
-    let restore = restore_write
-        .as_ref()
-        .is_some_and(|write| write.report_named_mode);
+    let restore = restore_write.is_some();
     let result = if let Some(option) = catalog.config_option(kind) {
         let request = SetSessionConfigOptionRequest::new(
             session.session_id().clone(),
@@ -555,6 +575,7 @@ async fn apply_one_setting(
         };
         if result.is_ok() {
             catalog.current_mode = Some(value.clone());
+            catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
         }
         result
     } else {
@@ -655,13 +676,9 @@ async fn send_setting_request(
     restore_write: Option<RestoreModeWrite<'_>>,
 ) -> Result<serde_json::Value, SettingResponseFailure> {
     let (reply, result) = tokio::sync::oneshot::channel();
-    let (claim, clock, restore) = restore_write.map_or((None, None, false), |write| {
-        (
-            Some(write.claim),
-            Some(write.clock),
-            write.report_named_mode,
-        )
-    });
+    let (claim, clock) =
+        restore_write.map_or((None, None), |write| (Some(write.claim), Some(write.clock)));
+    let restore = clock.is_some();
     connection
         .send_request(request)
         .on_receiving_result(async move |response| {
@@ -675,7 +692,9 @@ async fn send_setting_request(
     let response = if let Some(clock) = clock {
         router_clock::timeout(clock, SETTING_RESPONSE_TIMEOUT, result)
             .await
-            .map_err(|_| unconfirmed_response(restore))?
+            .map_err(|_| {
+                SettingResponseFailure::RestoreReadback(RestoreModeObservation::NoAnswer)
+            })?
     } else {
         tokio::time::timeout(SETTING_RESPONSE_TIMEOUT, result)
             .await

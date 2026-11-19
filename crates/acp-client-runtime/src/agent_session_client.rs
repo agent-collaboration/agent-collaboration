@@ -266,6 +266,7 @@ pub(crate) struct CreateAdmissionReply {
 pub struct RestoredSessionAdmission {
     pub generation: provider_session_machines::SessionGeneration,
     pub permission_mode: crate::PermissionModeReport,
+    pub mode_difference: Option<crate::RestoredModeDifference>,
 }
 
 struct RestoredProviderSession {

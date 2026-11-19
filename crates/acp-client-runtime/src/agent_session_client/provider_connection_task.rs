@@ -529,6 +529,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 )
                                             }).map(|_| generation);
                                             let mut permission_mode = crate::PermissionModeReport::default();
+                                            let mut mode_difference = None;
                                             // The cell moves Loading to Live on a registered restore,
                                             // and back to NotLoaded on a failed one.
                                             crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
@@ -550,6 +551,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         result = Err(ExternalProviderRuntimeError::SinkClosed);
                                                     }
                                                     let _written = task_session_settings.write(&provider_session_id, generation, catalog.clone());
+                                                    mode_difference = restored_mode.difference;
                                                     permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, restored_mode);
                                                     // The session's fast hold outlives its runs (note §12.3): a
                                                     // restored run whose agent reads fast on has it turned off
@@ -573,7 +575,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 }
                                                 let _result = activation.send(());
                                             }
-                                            let _result = reply.send(result.map(|generation| super::RestoredSessionAdmission { generation, permission_mode }));
+                                            let _result = reply.send(result.map(|generation| super::RestoredSessionAdmission { generation, permission_mode, mode_difference }));
                                         }
                                         PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
                                             // A done close ends NotLoaded and can be loaded again (ACP

@@ -34,6 +34,7 @@ pub(crate) fn catalog_from_session_response(
     let mut catalog = ProviderSettingsCatalog {
         model_reasoning: connection_models.clone(),
         current_mode,
+        mode_observation: crate::ProviderModeObservation::FromCatalogue,
         modes,
         config_options: response
             .config_options
@@ -67,6 +68,12 @@ pub(crate) fn replace_catalog_config_options(
     options: &[SessionConfigOption],
 ) {
     catalog.config_options = options.iter().filter_map(project_config_option).collect();
+    if catalog
+        .config_option(ProviderSettingKind::Mode)
+        .is_some_and(|option| matches!(option.current_value, ProviderConfigValue::Select(_)))
+    {
+        catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
+    }
 }
 
 /// Apply agent-reported settings without losing the initial choice catalog.
@@ -80,6 +87,7 @@ pub(crate) fn apply_settings_update(
         SessionUpdate::CurrentModeUpdate(mode) => {
             let current_mode = mode.current_mode_id.0.to_string();
             catalog.current_mode = Some(current_mode.clone());
+            catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
             if let Some(option) = catalog
                 .config_options
                 .iter_mut()
