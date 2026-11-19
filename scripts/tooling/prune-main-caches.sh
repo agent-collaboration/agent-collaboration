@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the key saved by this serialized main run, then remove its predecessors.
+# Keep the key saved in each cache family by this serialized main run, then remove its predecessors.
 set -euo pipefail
 
 prune_mode="${1:-}"
@@ -22,7 +22,7 @@ if [[ "$prune_mode" == --apply ]]; then
     --attempt "$GITHUB_RUN_ATTEMPT" --json jobs)"
   writers_started_at="$(printf '%s\n' "$cache_jobs" | jq -er '
     [.jobs[] | select(.name == "Static validation" or (.name | startswith("Test Rust workspace ("))
-      or .name == "Rust local end-to-end" or .name == "Central Worker build and local workerd conformance")
+      or .name == "Rust local end-to-end" or (.name | startswith("Central Worker build and local workerd conformance (")))
       | select(.conclusion != "skipped" and .startedAt != null and .startedAt != "0001-01-01T00:00:00Z")
       | .startedAt] | min // error("No cache writer start time")')"
   cache_inventory="$(gh cache list --repo "$GITHUB_REPOSITORY" \
@@ -46,10 +46,17 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
       // error("Expected a UTC cache-writer timestamp"))
     | .whole + "." + (((.fraction // "") + "000000000")[0:9]) + "Z";
   def family($key):
-    ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
-     "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
-     "v0-rust-e2e-", "v0-rust-wasm-", "node-cache-Linux-x64-pnpm-"]
-    | map(. as $prefix | select($key | startswith($prefix))) | first;
+    if $key | startswith("v0-rust-wasm-") then
+      # Worker partitions can run with different Rust environments. rust-cache
+      # restores by this prefix and appends the dependency hash to the saved key.
+      ($key | capture("^(?<restore_prefix>v0-rust-wasm-Linux-x64-[0-9a-f]{8})-[0-9a-f]{8}$").restore_prefix)
+      // error("Unexpected WASM cache key: " + $key)
+    else
+      ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
+       "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
+       "v0-rust-e2e-", "node-cache-Linux-x64-pnpm-"]
+      | map(. as $prefix | select($key | startswith($prefix))) | first
+    end;
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
       error("Cache inventory must be a complete array with fewer than 1000 entries")

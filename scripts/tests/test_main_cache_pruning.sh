@@ -8,13 +8,14 @@ trap 'rm -rf "$fixture_root"' EXIT
 writers_started_at=2026-10-27T01:00:00Z
 
 jq -n '
-  ["v0-rust-static-", "v0-rust-test-", "v0-rust-e2e-", "v0-rust-wasm-",
+  "v0-rust-wasm-Linux-x64-aaaaaaaa-" as $wasm_prefix
+  | ["v0-rust-static-", "v0-rust-test-", "v0-rust-e2e-", $wasm_prefix,
    "Linux-X64-rust-tools-",
    "Linux-X64-rust-tools-sqlx-", "Linux-X64-worker-build-"]
   | to_entries | map(
-      [{id: (100 + .key), key: (.value + "z-old"), ref: "refs/heads/main",
+      [{id: (100 + .key), key: (.value + (if .value == $wasm_prefix then "11111111" else "z-old" end)), ref: "refs/heads/main",
         createdAt: "2026-10-26T01:00:00Z", sizeInBytes: 10},
-       {id: (200 + .key), key: (.value + "a-new"), ref: "refs/heads/main",
+       {id: (200 + .key), key: (.value + (if .value == $wasm_prefix then "22222222" else "a-new" end)), ref: "refs/heads/main",
         createdAt: "2026-10-27T01:00:01.2Z", sizeInBytes: 20}]) | add
   | . + [{id: 900, key: "v0-rust-static-pr", ref: "refs/pull/1/merge",
           createdAt: "2026-10-27T01:00:02Z", sizeInBytes: 30},
@@ -27,7 +28,8 @@ jq -n '
 
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/inventory.json" > "$fixture_root/plan.json"
 jq -e 'length == 7 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]
-  and all(.[]; .keepKey | endswith("a-new"))' "$fixture_root/plan.json" > /dev/null
+  and any(.[]; .keepKey == "v0-rust-wasm-Linux-x64-aaaaaaaa-22222222")
+  and ([.[] | select(.keepKey | endswith("a-new"))] | length) == 6' "$fixture_root/plan.json" > /dev/null
 
 # An exact hit has only one key and creates no new archive.
 jq 'map(select(.id >= 200))' "$fixture_root/inventory.json" > "$fixture_root/hits.json"
@@ -59,6 +61,22 @@ jq '.[0].id = .[1].id' "$fixture_root/inventory.json" > "$fixture_root/duplicate
 expect_plan_failure "$fixture_root/duplicate.json" 'duplicate IDs'
 jq -n '[range(1000) | {id: (1 + .), key: "unrelated", ref: "refs/heads/main"}]' > "$fixture_root/truncated.json"
 expect_plan_failure "$fixture_root/truncated.json" 'a possibly truncated inventory'
+
+# Two Worker partitions can save different environment hashes in one run.
+jq '[.[] | select(.id == 103 or .id == 203)] + [
+  {id:204,key:"v0-rust-wasm-Linux-x64-bbbbbbbb-22222222",ref:"refs/heads/main",
+   createdAt:"2026-10-27T01:00:02Z",sizeInBytes:20}
+]' "$fixture_root/inventory.json" > "$fixture_root/wasm-split.json"
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/wasm-split.json" > "$fixture_root/wasm-plan.json"
+jq -e '([.[].keepKey] | sort) == ["v0-rust-wasm-Linux-x64-aaaaaaaa-22222222", "v0-rust-wasm-Linux-x64-bbbbbbbb-22222222"]
+  and [.[].delete[].id] == [103]' "$fixture_root/wasm-plan.json" > /dev/null
+
+jq 'map(if .id == 204 then .key = "v0-rust-wasm-Linux-x64-aaaaaaaa-33333333" else . end)' \
+  "$fixture_root/wasm-split.json" > "$fixture_root/wasm-ambiguous.json"
+expect_plan_failure "$fixture_root/wasm-ambiguous.json" 'two fresh WASM keys in one restore prefix'
+jq 'map(if .id == 204 then .key = "v0-rust-wasm-unrecognized" else . end)' \
+  "$fixture_root/wasm-split.json" > "$fixture_root/wasm-unknown.json"
+expect_plan_failure "$fixture_root/wasm-unknown.json" 'an unrecognized WASM key format'
 
 # Release workflow caches: several main keys, none saved by this run, are left alone.
 jq '. + [
@@ -107,7 +125,9 @@ chmod +x "$fixture_root/gh"
 export GH_CALLS="$fixture_root/calls" GH_FIXTURE="$fixture_root/inventory.json"
 printf '%s\n' '{"createdAt":"2026-10-26T01:00:00Z","jobs":[
   {"name":"Prune superseded main caches","startedAt":"2026-10-27T02:00:00Z","conclusion":null},
-  {"name":"Static validation","startedAt":"2026-10-27T01:00:00Z","conclusion":"success"},
+  {"name":"Central Worker build and local workerd conformance (2/2)","startedAt":"2026-10-27T01:00:00Z","conclusion":"success"},
+  {"name":"Central Worker build and local workerd conformance (1/2)","startedAt":"2026-10-27T01:00:02Z","conclusion":"success"},
+  {"name":"Static validation","startedAt":"2026-10-27T01:00:03Z","conclusion":"success"},
   {"name":"Test Rust workspace (1/2)","startedAt":"2026-10-27T01:00:03Z","conclusion":"failure"},
   {"name":"Test Rust workspace (2/2)","startedAt":"0001-01-01T00:00:00Z","conclusion":"skipped"}
 ]}' > "$fixture_root/jobs.json"
@@ -171,4 +191,4 @@ if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/r
   exit 1
 fi
 [[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 1 ]]
-printf 'Main cache pruning: 21 checks passed\n'
+printf 'Main cache pruning: 24 checks passed\n'
