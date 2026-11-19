@@ -1,7 +1,7 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::{BoardClientError, CollaborationClient};
 use message_board::{BoardFailureKind, PageLimit, PageRequest, WorkspaceListRequest};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::DirBuilderExt;
 
 use crate::board_fixture;
 #[path = "../support/native_project_fixture.rs"]
@@ -156,21 +156,27 @@ async fn subscription_restart_contains_project_failure(
     use board_fixture::{BoardFixture, accepted};
     use message_board::*;
     use serde_json::json;
+    use sqlx::Connection;
     use std::sync::Arc;
 
     let fixture = BoardFixture::start().await?;
     // The native fixture's grants use this peer; the restarted Host must load it too.
     let fixture_peer = board_fixture::fixture_peer()?;
-    let identity_file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(fixture._directory.path().join("installation-peer.json"))?;
-    serde_json::to_writer(&identity_file, &json!({"version":1,"peerId":fixture_peer}))?;
-    identity_file.sync_all()?;
-    drop(identity_file);
+    let fixture_root = fixture._directory.path();
+    crate::machine_identity_fixture::machine_id(fixture_root).await?;
+    let mut identity_database = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(fixture_root.join(collaboration_runtime::MACHINE_LOCAL_DATABASE)),
+    )
+    .await?;
+    let written = sqlx::query("UPDATE machine_identity SET machine_id = ?")
+        .bind(fixture_peer.as_str())
+        .execute(&mut identity_database)
+        .await?;
+    assert_eq!(written.rows_affected(), 1);
+    identity_database.close().await?;
     assert_eq!(
-        crate::machine_identity_fixture::board_peer(fixture._directory.path()).await?,
+        crate::machine_identity_fixture::board_peer(fixture_root).await?,
         fixture_peer
     );
     let (healthy, _) = fixture.project().await?;
@@ -237,7 +243,6 @@ async fn subscription_restart_contains_project_failure(
     drop(fixture._registry);
 
     // Inject one fault only after closing the native stores. Reader/scope keys stay valid.
-    use sqlx::Connection;
     let mut observer = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(
             root.join("projects")
