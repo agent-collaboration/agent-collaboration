@@ -525,6 +525,7 @@ pub use central_mail_delivery_read::{
 };
 mod central_mail_requests;
 mod central_mail_rows;
+mod central_mail_status;
 mod central_mail_store;
 mod central_timer_plans;
 mod central_timer_rows;

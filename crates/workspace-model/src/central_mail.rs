@@ -260,10 +260,11 @@ pub enum MessageCancellation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MessageStatus {
-    Queued,
-    Delivered,
+    Queued {},
+    Delivered {},
     Failed { reason: MessageRefusal },
     Cancelled { reason: MessageCancellation },
+    NotFound {},
 }
 
 #[derive(

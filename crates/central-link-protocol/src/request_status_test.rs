@@ -85,6 +85,7 @@ fn message_status_shapes_refuse_extra_fields_and_open_reasons() {
         json!({"kind":"failed","reason":"recipientRefused"}),
         json!({"kind":"queued","reason":"unknownSession"}),
         json!({"kind":"delivered","messageId":REQUEST}),
+        json!({"kind":"notFound","messageId":REQUEST}),
     ] {
         assert!(serde_json::from_value::<MessageStatus>(wire).is_err());
     }
