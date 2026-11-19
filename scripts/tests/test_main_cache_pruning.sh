@@ -3,16 +3,41 @@
 set -euo pipefail
 repository_root="$(git rev-parse --show-toplevel)"
 prune_script="$repository_root/scripts/tooling/prune-main-caches.sh"
+cache_command="$repository_root/scripts/tooling/ci-rust-cache-command.sh"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 writers_started_at=2026-10-27T01:00:00Z
 
+# The command wrapper supplies the pinned toolchain and preserves other argv.
+[[ "$(RUST_TOOLCHAIN=1.98.1 bash "$cache_command" rustup toolchain list --quiet)" == 1.98.1 ]]
+[[ "$(bash "$cache_command" printf '%s\n' 'argument with spaces')" == 'argument with spaces' ]]
+
+# A stable replacement makes the retired namespace eligible for cleanup.
+printf '%s\n' '[
+  {"id":1,"key":"v0-rust-e2e-Linux-x64-aaaaaaaa-11111111","ref":"refs/heads/main","createdAt":"2026-10-26T01:00:00Z"},
+  {"id":2,"key":"v1-rust-e2e-Linux-x64-bbbbbbbb-22222222","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:01Z"}
+]' > "$fixture_root/migration.json"
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/migration.json" |
+  jq -e 'length == 1 and .[0].keepKey == "v1-rust-e2e-Linux-x64-bbbbbbbb-22222222" and [.[].delete[].id] == [1]' > /dev/null
+# A prior successful save can finish an interrupted legacy cleanup on an exact hit.
+bash "$prune_script" --plan 2026-10-28T01:00:00Z < "$fixture_root/migration.json" |
+  jq -e 'length == 1 and .[0].reason == "Stable CI replacement already present" and [.[].delete[].id] == [1]' > /dev/null
+# A failed or missing save leaves the old cache available for rollback.
+jq '[.[] | select(.id == 1)]' "$fixture_root/migration.json" |
+  bash "$prune_script" --plan "$writers_started_at" |
+  jq -e 'length == 1 and .[0].reason == "No stable CI replacement available" and .[0].delete == []' > /dev/null
+
+# Distinct prior stable keys give no basis for choosing one after a cache hit.
+jq '. + [.[1] + {id:3,key:"v1-rust-e2e-Linux-x64-cccccccc-33333333"}]' "$fixture_root/migration.json" |
+  bash "$prune_script" --plan 2026-10-28T01:00:00Z |
+  jq -e 'length == 1 and .[0].reason == "No key saved in this run" and .[0].delete == []' > /dev/null
+
 jq -n '
-  ["v0-rust-static-", "v0-rust-test-", "v0-rust-e2e-", "v0-rust-wasm-",
+  ["v1-rust-static-", "v1-rust-test-", "v1-rust-e2e-", "v1-rust-wasm-",
    "Linux-X64-rust-tools-",
    "Linux-X64-rust-tools-sqlx-", "Linux-X64-worker-build-"]
   | to_entries | map(
-      (.value | startswith("v0-rust-")) as $rust_cache
+      (.value | startswith("v1-rust-")) as $rust_cache
       | [{id: (100 + .key), key: (.value + (if $rust_cache then "Linux-x64-aaaaaaaa-11111111" else "z-old" end)), ref: "refs/heads/main",
         createdAt: "2026-10-26T01:00:00Z", sizeInBytes: 10},
        {id: (200 + .key), key: (.value + (if $rust_cache then "Linux-x64-aaaaaaaa-22222222" else "a-new" end)), ref: "refs/heads/main",
@@ -40,9 +65,9 @@ bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/versions.json
 
 # Compare fractional seconds accurately at the writer-start boundary.
 printf '%s\n' '[
-  {"id":1,"key":"v0-rust-static-Linux-x64-aaaaaaaa-11111111","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.09Z"},
-  {"id":2,"key":"v0-rust-static-Linux-x64-aaaaaaaa-22222222","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.2Z"}
-]' | bash "$prune_script" --plan 2026-10-27T01:00:00.100000001Z | jq -e '.[0].keepKey == "v0-rust-static-Linux-x64-aaaaaaaa-22222222" and [.[].delete[].id] == [1]' > /dev/null
+  {"id":1,"key":"v1-rust-static-Linux-x64-aaaaaaaa-11111111","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.09Z"},
+  {"id":2,"key":"v1-rust-static-Linux-x64-aaaaaaaa-22222222","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.2Z"}
+]' | bash "$prune_script" --plan 2026-10-27T01:00:00.100000001Z | jq -e '.[0].keepKey == "v1-rust-static-Linux-x64-aaaaaaaa-22222222" and [.[].delete[].id] == [1]' > /dev/null
 
 # A run with exact hits can have several older keys in the same group.
 jq 'map(.createdAt = "2026-10-26T01:00:00Z")' "$fixture_root/inventory.json" > "$fixture_root/no-saves.json"
@@ -66,19 +91,18 @@ expect_plan_failure "$fixture_root/duplicate.json" 'duplicate IDs'
 jq -n '[range(1000) | {id: (1 + .), key: "unrelated", ref: "refs/heads/main"}]' > "$fixture_root/truncated.json"
 expect_plan_failure "$fixture_root/truncated.json" 'a possibly truncated inventory'
 
-# Different Rust environments save and prune independently in every CI family.
+# One current save supersedes an unused restore prefix in every CI family.
 jq '. + [.[] | select(.id >= 200 and .id <= 203)
-  | .id += 200 | .key |= sub("-aaaaaaaa-"; "-bbbbbbbb-")]' \
+  | .id += 200 | .createdAt = "2026-10-26T01:00:00Z" | .key |= sub("-aaaaaaaa-"; "-bbbbbbbb-")]' \
   "$fixture_root/inventory.json" > "$fixture_root/rust-split.json"
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/rust-split.json" > "$fixture_root/rust-split-plan.json"
-jq -e 'length == 11 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]
-  and ([.[] | select(.keepKey | endswith("-bbbbbbbb-22222222"))] | length) == 4' \
+jq -e 'length == 7 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,400,401,402,403]' \
   "$fixture_root/rust-split-plan.json" > /dev/null
 
-jq 'map(if .id == 403 then .key = "v0-rust-wasm-Linux-x64-aaaaaaaa-33333333" else . end)' \
+jq 'map(if .id == 403 then .createdAt = "2026-10-27T01:00:02Z" else . end)' \
   "$fixture_root/rust-split.json" > "$fixture_root/rust-ambiguous.json"
-expect_plan_failure "$fixture_root/rust-ambiguous.json" 'two fresh Rust keys in one restore prefix'
-jq 'map(if .id == 403 then .key = "v0-rust-wasm-unrecognized" else . end)' \
+expect_plan_failure "$fixture_root/rust-ambiguous.json" 'two fresh Rust keys even across restore prefixes'
+jq 'map(if .id == 403 then .key = "v1-rust-wasm-unrecognized" else . end)' \
   "$fixture_root/rust-split.json" > "$fixture_root/rust-unknown.json"
 expect_plan_failure "$fixture_root/rust-unknown.json" 'an unrecognized rust-cache key format'
 jq 'map(if .id == 403 then .key = "v0-rust-unknown-Linux-x64-bbbbbbbb-22222222" else . end)' \
@@ -91,7 +115,7 @@ jq '. + [
   {id:401,key:"v0-rust-release-arm64-background-Darwin-arm64-aaaaaaaa-22222222",ref:"refs/heads/main",createdAt:"2026-10-27T01:00:01Z",sizeInBytes:20}
 ]' "$fixture_root/inventory.json" > "$fixture_root/with-release.json"
 if ! bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/with-release.json" |
-  jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106] and all(.[]; .family | startswith("v0-rust-release-") | not)' > /dev/null; then
+  jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106] and all(.[]; .family | contains("rust-release-") | not)' > /dev/null; then
   echo 'Release workflow caches must never be selected or block pruning' >&2
   exit 1
 fi
@@ -180,7 +204,7 @@ set -e
 [[ "$delete_status" == 9 && "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 3 ]]
 
 # Report budget pressure instead of deleting the protected working set.
-jq -n '[{id:1,key:"v0-rust-static-Linux-x64-aaaaaaaa-22222222",ref:"refs/heads/main",
+jq -n '[{id:1,key:"v1-rust-static-Linux-x64-aaaaaaaa-22222222",ref:"refs/heads/main",
   createdAt:"2026-10-27T01:00:01Z",sizeInBytes:10000000001}]' > "$fixture_root/overbudget.json"
 : > "$GH_CALLS"
 if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
@@ -198,4 +222,4 @@ if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/r
   exit 1
 fi
 [[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 1 ]]
-printf 'Main cache pruning: 25 checks passed\n'
+printf 'Main cache pruning: 31 checks passed\n'

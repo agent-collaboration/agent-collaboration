@@ -15,6 +15,11 @@ permissions:
   contents: read
   actions: read
 
+env:
+  # Keep the CI cache separate from keys fed by the runner's preinstalled Rust.
+  CI_RUST_CACHE_PREFIX: v1-rust
+  CI_RUST_CACHE_COMMAND: bash scripts/tooling/ci-rust-cache-command.sh {0}
+
 # Static checks, Worker conformance, workspace tests and E2E each report
 # their result. Light static checks overlap serial Cargo work; feature-specific
 # E2E binaries keep their own runner instead of competing with workspace tests.
@@ -52,8 +57,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy,rustfmt,rust-src
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: static
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Restore pinned Rust tools
@@ -199,8 +206,10 @@ jobs:
           components: clippy,rustfmt,rust-src
           targets: wasm32-unknown-unknown
       # Static checks remain the only writer for this dependency cache.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: static
           save-if: false
       - name: Restore pinned Rust tools
@@ -252,8 +261,10 @@ jobs:
           components: clippy,rustfmt,rust-src
           targets: wasm32-unknown-unknown
       # Static checks remain the only writer for this dependency cache.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: static
           save-if: false
       - uses: actions/setup-node@v5
@@ -313,8 +324,10 @@ jobs:
           components: clippy,rustfmt,rust-src
           targets: wasm32-unknown-unknown
       # Static checks remain the only writer for this dependency cache.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: static
           save-if: false
       - name: Wait for runner disk cleanup
@@ -393,8 +406,10 @@ jobs:
           components: clippy,rustfmt,rust-src
       # Shard 1 builds the workspace tests and shard 2 the quota-reset harness;
       # only shard 1 saves the shared dependency cache.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: test
           save-if: ${{ matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # The dependency-structure tests use offline Cargo metadata for all
@@ -551,8 +566,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy,rustfmt,rust-src
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: e2e
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # The baseline spent over nine minutes rebuilding these pinned tools.
@@ -633,12 +650,15 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy,rustfmt,rust-src
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          prefix-key: ${{ env.CI_RUST_CACHE_PREFIX }}
+          cmd-format: ${{ env.CI_RUST_CACHE_COMMAND }}
           shared-key: wasm
           workspaces: |
             . -> target
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Both partitions restore the same key. Partition 1 owns the save.
+          save-if: ${{ matrix.partition == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: verification/package.json
