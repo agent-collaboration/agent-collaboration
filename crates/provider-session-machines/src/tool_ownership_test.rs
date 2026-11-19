@@ -1,6 +1,6 @@
 use super::{
-    ToolObservation, ToolOrigin, ToolOwnership, ToolOwnershipEffect, ToolOwnershipEvent,
-    ToolSessionPhase, reduce_tool_ownership,
+    SessionlessCallbackOwner, ToolObservation, ToolOrigin, ToolOwnership, ToolOwnershipEffect,
+    ToolOwnershipEvent, ToolSessionPhase, reduce_tool_ownership, sessionless_callback_owner,
 };
 use crate::{SessionGeneration, session_turn_machine::TurnId};
 use hegel::generators as gs;
@@ -284,5 +284,66 @@ fn only_same_generation_idle_completion_of_an_existing_item_publishes(case: hege
                 );
             }
         }
+    }
+}
+#[hegel::test]
+fn two_observing_sessions_never_recover_a_sessionless_callback_owner(case: hegel::TestCase) {
+    let mut owners = HashMap::new();
+    let first = case.draw(gs::booleans());
+    let second = !first;
+    let initial = generation(1);
+    let announcement = ToolOwnershipEvent::Observe {
+        phase: ToolSessionPhase::LiveIdle {
+            generation: initial,
+        },
+        observation: ToolObservation::Announcement,
+    };
+    for session in [first, second] {
+        let (Some(owner), _) = reduce_tool_ownership(None, announcement) else {
+            panic!("session did not observe the tool");
+        };
+        owners.insert(session, owner);
+    }
+    let retired = case.draw(gs::booleans());
+    let (Some(ended), _) = reduce_tool_ownership(
+        owners.get(&retired).copied(),
+        ToolOwnershipEvent::RunRetired {
+            generation: initial,
+        },
+    ) else {
+        panic!("retirement lost an observed ID");
+    };
+    owners.insert(retired, ended);
+    assert_eq!(
+        sessionless_callback_owner(owners.iter()),
+        SessionlessCallbackOwner::Refused,
+        "retirement must not make the other observing session eligible"
+    );
+
+    for number in 2..=u64::from(case.draw(gs::integers::<u8>().min_value(2).max_value(64))) {
+        let session = case.draw(gs::booleans());
+        let generation = generation(number);
+        let prior = owners.get(&session).copied();
+        let event = if case.draw(gs::booleans()) {
+            ToolOwnershipEvent::Observe {
+                phase: ToolSessionPhase::Loading { generation },
+                observation: ToolObservation::Announcement,
+            }
+        } else {
+            ToolOwnershipEvent::RunRetired {
+                generation: prior
+                    .and_then(ToolOwnership::owned_generation)
+                    .unwrap_or(generation),
+            }
+        };
+        let (Some(next), _) = reduce_tool_ownership(prior, event) else {
+            panic!("the connection lost an observed tool record");
+        };
+        owners.insert(session, next);
+        assert_eq!(
+            sessionless_callback_owner(owners.iter()),
+            SessionlessCallbackOwner::Refused,
+            "later retirements and replay cannot remove the ambiguity"
+        );
     }
 }

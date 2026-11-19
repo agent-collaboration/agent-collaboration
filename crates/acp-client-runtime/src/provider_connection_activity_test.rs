@@ -55,7 +55,8 @@ fn reload(
 }
 
 /// Cursor omits sessionId. A unique observed owner wins over the sole
-/// running-turn fallback. Two live owners leave the callback ambiguous.
+/// running-turn fallback. Two observers leave a sessionless callback
+/// ambiguous for the connection even after one owner retires.
 #[test]
 fn resolves_only_unique_tool_ownership_or_one_running_turn() {
     let registry = registry();
@@ -72,7 +73,8 @@ fn resolves_only_unique_tool_ownership_or_one_running_turn() {
     assert!(registry.observe_tool("second", "first-tool", ToolObservation::Announcement));
     assert_eq!(registry.resolve_session("first-tool"), None);
     assert!(registry.claim_turn_end("second", second_turn));
-    assert_eq!(registry.resolve_session("first-tool"), owner("first", 1));
+    assert_eq!(registry.resolve_session("first-tool"), None);
+    assert!(registry.allows_session_permission("first", "first-tool"));
     assert_eq!(
         registry.resolve_session("second-tool"),
         None,
