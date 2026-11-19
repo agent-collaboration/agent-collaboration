@@ -695,13 +695,13 @@ async fn an_unoffered_saved_mode_still_accepts_input_on_the_restored_session() {
         .await
         .expect("the same session resumes");
     fixture
-        .client
-        .accept_session_settings(id.to_owned())
-        .expect("accept is allowed after restore");
-    fixture
         .prompt_in_folder_edit(id)
         .await
         .expect("the same session accepts input");
+    fixture
+        .client
+        .accept_session_settings(id.to_owned())
+        .expect("accept is allowed after restore");
     fixture.client.shutdown().await;
     let receipt = fixture.receipt();
     assert_eq!(
