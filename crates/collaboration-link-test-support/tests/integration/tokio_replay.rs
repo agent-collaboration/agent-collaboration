@@ -36,15 +36,21 @@ type FixtureResult<T> = Result<T, Box<dyn std::error::Error>>;
 type TokenSlot = Rc<RefCell<Option<MachineTokenText>>>;
 const WRITE_ID: &str = "019f0000-0000-7000-8000-00000000df01";
 
-async fn provision_host(
+#[derive(Clone, Default)]
+struct CentralRestart {
+    requested: CancellationToken,
+    reopened: Arc<Notify>,
+}
+
+async fn open_host(
     root: &Path,
     clock: Arc<dyn RuntimeClock>,
     keys: &signed::SignInKeys,
-) -> ConformanceResult<(Arc<TokioWorkspaceHost>, MachineTokenText)> {
-    let host = Arc::new(
+) -> ConformanceResult<Arc<TokioWorkspaceHost>> {
+    Ok(Arc::new(
         TokioWorkspaceHost::open_with_signin(
             root,
-            clock.clone(),
+            clock,
             SignInTrustSettings {
                 issuer: signed::ISSUER.into(),
                 audience: signed::AUDIENCE.into(),
@@ -61,7 +67,15 @@ async fn provision_host(
         )
         .await
         .map_err(|error| format!("open native host at {:?}: {error}", turmoil::elapsed()))?,
-    );
+    ))
+}
+
+async fn provision_host(
+    root: &Path,
+    clock: Arc<dyn RuntimeClock>,
+    keys: &signed::SignInKeys,
+) -> ConformanceResult<(Arc<TokioWorkspaceHost>, MachineTokenText)> {
+    let host = open_host(root, clock.clone(), keys).await?;
     let organization = signed::ORGANIZATION.to_owned().try_into()?;
     let runtime = host.central(&organization).await.map_err(|error| {
         format!(
@@ -131,15 +145,29 @@ async fn run_central(
     tokens: TokenSlot,
     stop: CancellationToken,
     drained: Arc<Notify>,
+    restart: Option<CentralRestart>,
 ) -> turmoil::Result {
     let clock: Arc<dyn RuntimeClock> = Arc::new(SimulatedClock::for_host(CENTRAL_HOST));
     let keys = signed::SignInKeys::start()
         .await
         .map_err(simulation_error)?;
-    let (host, token) = provision_host(root.path(), clock, &keys)
+    let (host, token) = provision_host(root.path(), clock.clone(), &keys)
         .await
         .map_err(simulation_error)?;
     *tokens.borrow_mut() = Some(token);
+    let host = if let Some(restart) = restart {
+        let first = serve_tokio_central(host.clone(), LINK_PORT, restart.requested).await;
+        host.close().await;
+        drop(host);
+        first?;
+        let reopened = open_host(root.path(), clock, &keys)
+            .await
+            .map_err(simulation_error)?;
+        restart.reopened.notify_one();
+        reopened
+    } else {
+        host
+    };
     let result = serve_tokio_central(host.clone(), LINK_PORT, stop).await;
     host.close().await;
     keys.shutdown().await.map_err(simulation_error)?;
@@ -186,10 +214,27 @@ async fn write_workspace(
     Ok(reply.result)
 }
 
+async fn connect_router(
+    transport: &TurmoilLinkTransport,
+    token: &MachineTokenText,
+    clock: Arc<dyn RuntimeClock>,
+) -> FixtureResult<(Box<dyn LinkSocket>, LinkClient, ConnectionAttempt)> {
+    let mut socket = transport.connect(token).await?;
+    let mut client = LinkClient::new(MACHINE_ID.parse()?, clock);
+    let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
+        return Err("the Router did not begin a connection".into());
+    };
+    if client.receive(&attempt, receive(socket.as_mut()).await?)? != ClientEvent::Welcomed {
+        return Err("the native link did not Welcome the Router".into());
+    }
+    Ok((socket, client, attempt))
+}
+
 async fn run_router(
     tokens: TokenSlot,
     stop: CancellationToken,
     drained: Arc<Notify>,
+    restart: Option<CentralRestart>,
 ) -> turmoil::Result {
     let clock: Arc<dyn RuntimeClock> = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
     let token = loop {
@@ -205,14 +250,8 @@ async fn run_router(
         LINK_PORT,
         format!("/v1/organizations/{}/link", signed::ORGANIZATION),
     );
-    let mut socket = transport.connect(&token).await?;
-    let mut client = LinkClient::new(MACHINE_ID.parse()?, clock);
-    let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
-        return Err("the Router did not begin a connection".into());
-    };
-    if client.receive(&attempt, receive(socket.as_mut()).await?)? != ClientEvent::Welcomed {
-        return Err("the native link did not Welcome the Router".into());
-    }
+    let (mut socket, mut client, mut attempt) =
+        connect_router(&transport, &token, clock.clone()).await?;
     let first =
         write_workspace(&mut client, &attempt, socket.as_mut(), "Turmoil workspace").await?;
     if !matches!(
@@ -220,6 +259,12 @@ async fn run_router(
         WorkspaceResult::Done(WorkspaceAnswer::WorkspaceCreated { .. })
     ) {
         return Err(format!("workspace creation was not applied: {first:?}").into());
+    }
+    if let Some(restart) = restart {
+        socket.close().await;
+        restart.requested.cancel();
+        restart.reopened.notified().await;
+        (socket, client, attempt) = connect_router(&transport, &token, clock).await?;
     }
     let replay =
         write_workspace(&mut client, &attempt, socket.as_mut(), "Turmoil workspace").await?;
@@ -238,6 +283,15 @@ async fn run_router(
 
 #[test]
 fn authenticated_tokio_route_replays_a_real_write_over_the_simulated_network() -> turmoil::Result {
+    run_replay(None)
+}
+
+#[test]
+fn authenticated_tokio_route_replays_a_real_write_after_central_reopens() -> turmoil::Result {
+    run_replay(Some(CentralRestart::default()))
+}
+
+fn run_replay(restart: Option<CentralRestart>) -> turmoil::Result {
     let root = Rc::new(tempfile::tempdir()?);
     let tokens = Rc::new(RefCell::new(None));
     let stop = CancellationToken::new();
@@ -254,14 +308,16 @@ fn authenticated_tokio_route_replays_a_real_write_over_the_simulated_network() -
     let central_tokens = Rc::clone(&tokens);
     let central_stop = stop.clone();
     let central_drained = Arc::clone(&drained);
+    let central_restart = restart.clone();
     sim.host(CENTRAL_HOST, move || {
         run_central(
             root.clone(),
             central_tokens.clone(),
             central_stop.clone(),
             central_drained.clone(),
+            central_restart.clone(),
         )
     });
-    sim.client(ROUTER_HOST, run_router(tokens, stop, drained));
+    sim.client(ROUTER_HOST, run_router(tokens, stop, drained, restart));
     sim.run()
 }
