@@ -24,7 +24,7 @@ pub(crate) fn configured_request()
         agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(
             r#"{
             "version":1,"routers":[{"name":"Sunbook",
-            "connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001",
+            "connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000001",
                 "mcpUrl":"https://machine.example.invalid:443/mcp",
                 "nativeCodex":{"address":"wss://machine.example.invalid:443/"}},
             "defaultRemoteCwd":"/remote/only/project"}]
@@ -41,7 +41,7 @@ async fn individual_machine_switch_reads_and_publishes_only_its_bound_source() {
     let mut request = configured_request().unwrap();
     request.root = SessionsPickerRoot::Any;
     let endpoint: collaboration_client::protocol::EndpointRef = serde_json::from_value(
-        serde_json::json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"source-native"}),
+        serde_json::json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"source-native"}),
     ).unwrap();
     let expected_endpoint = endpoint.clone();
     let loader: SessionsPickerRecordLoader = Arc::new(move |request| {
@@ -120,7 +120,7 @@ async fn individual_machine_switch_reads_and_publishes_only_its_bound_source() {
     assert_eq!(
         selection.identity,
         agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(
-            collaboration_client::protocol::SessionRef {
+            collaboration_client::protocol::HarnessSessionRef {
                 endpoint: expected_endpoint,
                 session_id: "source-only-id".to_owned().try_into().unwrap()
             }

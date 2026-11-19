@@ -13,8 +13,8 @@ use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_mail_protocol::NotificationSource;
 use collaboration_protocol::{
     AttemptId, DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
-    DeliveryRejection, DeliveryRejectionReason, MachineId, MessageDelivery, MessageText,
-    PushHeaderFacts, PushKind, PushLineInput, PushRecord, RouterLink, render_push_line,
+    DeliveryRejection, DeliveryRejectionReason, MessageDelivery, MessageText, PushHeaderFacts,
+    PushKind, PushLineInput, PushRecord, RouterLink, render_push_line,
 };
 use fleet_sync_delivery::DeliveryError;
 use fleet_sync_protocol::DeliveryItem;
@@ -189,10 +189,7 @@ pub fn prepare_mail_push_with_load_policy(
         held_since.clone_from(local_held_since);
     }
     let line = render_push_line(&PushLineInput {
-        link: RouterLink::new(
-            MachineId::from(machine.service_id().clone()),
-            draft.push_id.clone(),
-        ),
+        link: RouterLink::new(machine.service_id().clone(), draft.push_id.clone()),
         machine_label: machine.machine_label().clone(),
         origin: draft.origin,
         header_facts: draft.header_facts,

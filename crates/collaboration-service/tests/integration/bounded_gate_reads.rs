@@ -165,7 +165,7 @@ async fn context_cost(
     let fixture = BoardFixture::start_context().await?;
     let (project, workstream) = fixture.project().await?;
     let session: SessionRef = serde_json::from_value(
-        json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"context-reader"}),
+        json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"context-reader"}),
     )?;
     accepted(&fixture.api.call("role_grant",fixture.request(&project,json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":workstream},"role":"implementer","holder":{"kind":"session","session":session},"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}))).await?);
     let store = fixture

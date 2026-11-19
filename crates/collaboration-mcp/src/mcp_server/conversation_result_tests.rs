@@ -3,8 +3,8 @@ use collaboration_protocol::{OperationEffect, OperationId};
 
 #[test]
 fn codex_running_prompt_is_a_successful_typed_tool_result() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"active-thread"
     }))
     .expect("target");
@@ -40,8 +40,8 @@ fn codex_running_prompt_is_a_successful_typed_tool_result() {
 
 #[test]
 fn codex_prompt_tool_result_exposes_final_reply_without_stream_updates() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"answered-thread"
     }))
     .expect("target");
@@ -83,7 +83,7 @@ fn codex_prompt_tool_result_exposes_final_reply_without_stream_updates() {
 fn unavailable_provider_error_keeps_catalog_endpoint_reason_and_fix() {
     let operation_id = OperationId::generate();
     let endpoint = serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"
+        "serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"
     });
     let availability = serde_json::json!({
         "state":"unavailable","observedAt":"2026-09-24T00:00:00Z",
@@ -113,7 +113,7 @@ fn unavailable_provider_error_keeps_catalog_endpoint_reason_and_fix() {
 fn unavailable_conversation_selection_reports_catalog_reason_and_fix() {
     let operation_id = OperationId::generate();
     let endpoint = serde_json::from_value(serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"
+        "serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"
     }))
     .expect("endpoint");
     let result = super::conversation_tool_result::<collaboration_client::ConversationOperationResult>(
@@ -144,8 +144,8 @@ fn unavailable_conversation_selection_reports_catalog_reason_and_fix() {
 
 #[test]
 fn create_and_prompt_failure_retains_created_target_and_unknown_effect() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"created-thread"
     }))
     .expect("target");
@@ -182,8 +182,8 @@ fn create_and_prompt_failure_retains_created_target_and_unknown_effect() {
 
 #[test]
 fn resumed_prompt_failure_retains_known_target_and_rejection_evidence() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"existing-thread"
     }))
     .expect("target");
@@ -210,13 +210,13 @@ fn resumed_prompt_failure_retains_known_target_and_rejection_evidence() {
 
 #[test]
 fn prompt_carrier_preserves_permission_required_and_explicit_approver() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"created-thread"
     }))
     .expect("target");
-    let approver: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let approver: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"approver-thread"
     }))
     .expect("approver");
@@ -271,8 +271,8 @@ fn prompt_carrier_preserves_permission_required_and_explicit_approver() {
 
 #[test]
 fn prompt_carrier_preserves_busy_precondition_rejection_without_auto_retry() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"busy-thread"
     }))
     .expect("target");
@@ -304,8 +304,8 @@ fn prompt_carrier_preserves_busy_precondition_rejection_without_auto_retry() {
 
 #[test]
 fn resumed_prompt_preflight_failure_retains_requested_target_without_effect() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"existing-thread"
     }))
     .expect("target");
@@ -327,8 +327,8 @@ fn resumed_prompt_preflight_failure_retains_requested_target_without_effect() {
 
 #[test]
 fn resumed_prompt_load_response_loss_retains_target_with_unknown_effect() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"existing-thread"
     }))
     .expect("target");

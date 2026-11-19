@@ -143,7 +143,7 @@ fn debug_dry_run_preserves_isolated_socket_and_never_executes_codex() {
 #[test]
 fn message_discovery_error_reports_category_without_leaking_content_or_path() {
     // Arrange: nonexistent service directory; no native process or send can occur.
-    let id = "00000000-0000-4000-8000-000000000001";
+    let id = "00000000-0000-7000-8000-000000000001";
     let target = serde_json::json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"test"}).to_string();
     let absent = format!("/tmp/absent-message-service-{}", std::process::id());
     // Act.

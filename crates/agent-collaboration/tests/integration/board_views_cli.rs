@@ -98,13 +98,13 @@ async fn view_commands_reach_the_real_service_and_report_read_marks() -> Result<
     .await?;
     assert_eq!(
         own.pointer("/result/record/payload/session/endpoint/serviceId"),
-        Some(&json!("00000000-0000-4000-8000-000000000001"))
+        Some(&json!("00000000-0000-7000-8000-000000000001"))
     );
     assert_eq!(
         own.pointer("/result/record/payload/session/sessionId"),
         Some(&json!("fixture-current-session"))
     );
-    let session=json!({"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"00000000-0000-4000-8000-000000000003"}).to_string();
+    let session=json!({"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-7000-8000-000000000001"},"sessionId":"00000000-0000-4000-8000-000000000003"}).to_string();
     let context = cli(
         directory,
         &["view", "session-context", "--session", &session],

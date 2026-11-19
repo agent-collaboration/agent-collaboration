@@ -1,37 +1,31 @@
 //! Verified token provenance becomes a connection only after live organization admission.
 use crate::{
     identity_contract::{ClientId, MachineConnectionRefusal},
-    machine_login_row_values::{identifier, private_id},
+    machine_login_row_values::identifier,
     organization_authority::machine_login::{EnrollmentFacts, MachineState, StoredEnrollmentState},
     workspace_decode_error::corrupt,
 };
 use central_storage::StoreFailure;
-use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use workspace_model::MachineId;
+use workspace_ids::MachineId;
 
 /// Hibernation provenance is untrusted until the runtime restores it against live rows.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MachineConnectionAttachment {
     organization_id: OrganizationId,
-    machine_id: Uuid,
-    installation_id: InstallationId,
+    machine_id: MachineId,
     enrollment_id: EnrollmentId,
     client_id: ClientId,
     effective_expires_at: UnixSeconds,
 }
 
 impl MachineConnectionAttachment {
-    pub(crate) fn from_verified(
-        verified: &crate::machine_token::VerifiedMachineToken,
-        machine_id: Uuid,
-    ) -> Self {
+    pub(crate) fn from_verified(verified: &crate::machine_token::VerifiedMachineToken) -> Self {
         Self {
             organization_id: verified.organization_id().clone(),
-            machine_id,
-            installation_id: verified.installation_id().clone(),
+            machine_id: verified.machine_id().clone(),
             enrollment_id: verified.enrollment_id().clone(),
             client_id: verified.client_id().clone(),
             effective_expires_at: verified.effective_expires_at(),
@@ -41,8 +35,8 @@ impl MachineConnectionAttachment {
     pub fn organization_id(&self) -> &OrganizationId {
         &self.organization_id
     }
-    pub(crate) fn installation_id(&self) -> &InstallationId {
-        &self.installation_id
+    pub(crate) fn machine_id(&self) -> &MachineId {
+        &self.machine_id
     }
     pub(crate) fn enrollment_id(&self) -> &EnrollmentId {
         &self.enrollment_id
@@ -53,7 +47,6 @@ impl MachineConnectionAttachment {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValidatedMachineConnection {
     attachment: MachineConnectionAttachment,
-    installation_machine_id: MachineId,
 }
 impl ValidatedMachineConnection {
     #[must_use]
@@ -61,12 +54,8 @@ impl ValidatedMachineConnection {
         &self.attachment.organization_id
     }
     #[must_use]
-    pub fn installation_id(&self) -> &InstallationId {
-        &self.attachment.installation_id
-    }
-    #[must_use]
-    pub fn installation_machine_id(&self) -> &MachineId {
-        &self.installation_machine_id
+    pub fn machine_id(&self) -> &MachineId {
+        &self.attachment.machine_id
     }
     #[must_use]
     pub fn enrollment_id(&self) -> &EnrollmentId {
@@ -89,14 +78,11 @@ impl ValidatedMachineConnection {
 pub(crate) type Admission =
     Result<Result<ValidatedMachineConnection, MachineConnectionRefusal>, StoreFailure>;
 
-pub(crate) fn validate_shape(
-    attachment: &MachineConnectionAttachment,
-) -> Result<MachineId, StoreFailure> {
+pub(crate) fn validate_shape(attachment: &MachineConnectionAttachment) -> Result<(), StoreFailure> {
     let _: OrganizationId = identifier(
         attachment.organization_id.as_str(),
         "connection.organization_id",
     )?;
-    private_id(&attachment.machine_id.to_string(), "connection.machine_id")?;
     let _: EnrollmentId = identifier(
         attachment.enrollment_id.as_str(),
         "connection.enrollment_id",
@@ -111,11 +97,7 @@ pub(crate) fn validate_shape(
         .checked_mul(1000)
         .and_then(|millis| central_storage::SafeInteger::new(millis).ok())
         .ok_or_else(|| corrupt("connection.effective_expires_at"))?;
-    attachment
-        .installation_id
-        .as_str()
-        .parse()
-        .map_err(|_| corrupt("connection.installation_id"))
+    Ok(())
 }
 
 pub(crate) fn validate_live(
@@ -124,7 +106,7 @@ pub(crate) fn validate_live(
     facts: &EnrollmentFacts,
     now_ms: i64,
 ) -> Admission {
-    let installation_machine_id = validate_shape(attachment)?;
+    validate_shape(attachment)?;
     if &attachment.organization_id != organization || &facts.organization_id != organization {
         return Ok(Err(
             MachineConnectionRefusal::MachineInAnotherOrganization {},
@@ -139,10 +121,8 @@ pub(crate) fn validate_live(
     let Some(enrollment) = &facts.enrollment else {
         return Ok(Err(MachineConnectionRefusal::EnrollmentNotActive {}));
     };
-    if machine.id != attachment.machine_id
-        || machine.installation != attachment.installation_id
-        || enrollment.machine_id != machine.id
-        || enrollment.installation != attachment.installation_id
+    if machine.machine_id != attachment.machine_id
+        || enrollment.machine_id != attachment.machine_id
         || enrollment.id != attachment.enrollment_id
         || machine.state != MachineState::Enrolled
     {
@@ -166,7 +146,6 @@ pub(crate) fn validate_live(
     }
     Ok(Ok(ValidatedMachineConnection {
         attachment: attachment.clone(),
-        installation_machine_id,
     }))
 }
 

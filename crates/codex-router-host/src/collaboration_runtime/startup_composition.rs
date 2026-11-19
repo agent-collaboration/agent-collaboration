@@ -775,7 +775,7 @@ impl CollaborationRuntime {
         let central_link_tasks = tokio_util::task::TaskTracker::new();
         let central_link = collaboration_runtime::open_installation_link(
             &inputs.directory,
-            &installation_peer,
+            machine_identity.service_id(),
             worker_clock.clone(),
             None,
             &central_link_tasks,

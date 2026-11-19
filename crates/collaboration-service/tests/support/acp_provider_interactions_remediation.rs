@@ -10,7 +10,7 @@ use super::*;
 async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let owner: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
     let interaction_store = Arc::new(
@@ -105,7 +105,7 @@ async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestRes
 async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let owner: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
     let interaction_store = Arc::new(

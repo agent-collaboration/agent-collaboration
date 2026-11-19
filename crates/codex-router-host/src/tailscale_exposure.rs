@@ -56,7 +56,7 @@ impl PreparedTailscaleExposure {
     pub(crate) async fn start(
         self,
         backend: SocketAddr,
-        service_id: &UuidIdentity,
+        service_id: &workspace_ids::MachineId,
         service_epoch: &UuidIdentity,
     ) -> io::Result<TailscaleExposure> {
         let https_port = self.authority.https_port();

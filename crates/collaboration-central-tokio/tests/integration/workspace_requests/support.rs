@@ -39,26 +39,16 @@ pub(super) fn settings(url: &str) -> collaboration_central_core::SignInTrustSett
 }
 pub(super) async fn seed_machine(
     host: &TokioWorkspaceHost,
-    installation: &m::MachineId,
-    private: u32,
+    machine_id: &workspace_ids::MachineId,
     enrollment: u32,
     now: i64,
 ) {
-    seed_machine_for(
-        host,
-        &organization(),
-        installation,
-        private,
-        enrollment,
-        now,
-    )
-    .await;
+    seed_machine_for(host, &organization(), machine_id, enrollment, now).await;
 }
 pub(super) async fn seed_machine_for(
     host: &TokioWorkspaceHost,
     organization: &fleet_identity_protocol::OrganizationId,
-    installation: &m::MachineId,
-    private: u32,
+    machine_id: &workspace_ids::MachineId,
     enrollment: u32,
     now: i64,
 ) {
@@ -67,8 +57,8 @@ pub(super) async fn seed_machine_for(
         .unwrap()
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let statements = [
-        ("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,'Machine','enrolled','[]',1,?,?)", vec![text(id::<m::WorkspaceId>(private)), text(installation), text(&at), text(&at)]),
-        ("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'Machine','[]','enrolled',?,'machine:enroll',0,?,?,?,?,?)", vec![text(id::<m::WorkspaceId>(enrollment)),text(id::<m::WorkspaceId>(enrollment+1)),text(id::<m::WorkspaceId>(private)),text(signed::OWNER),text(&at),text(id::<m::WorkspaceId>(enrollment)),text(&at),text(&at),text(&at)]),
+        ("INSERT INTO machines(machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,'Machine','enrolled','[]',1,?,?)", vec![text(machine_id), text(&at), text(&at)]),
+        ("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'Machine','[]','enrolled',?,'machine:enroll',0,?,?,?,?,?)", vec![text(id::<m::WorkspaceId>(enrollment)),text(id::<m::WorkspaceId>(enrollment+1)),text(machine_id),text(signed::OWNER),text(&at),text(id::<m::WorkspaceId>(enrollment)),text(&at),text(&at),text(&at)]),
     ].into_iter().map(|(sql,args)| GuardedStatement { statement: Statement { sql,args }, expect: RowExpectation::Exactly(1) }).collect();
     assert!(matches!(
         runtime
@@ -147,7 +137,7 @@ pub(super) async fn create_workspace(
                 sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                 args: vec![
                     text(serde_json::to_string(&vec![workspace.workspace_id.clone()]).unwrap()),
-                    text(id::<m::WorkspaceId>(3)),
+                    text(caller.caller().machine_id()),
                 ],
             },
             expect: RowExpectation::Exactly(1),
@@ -205,12 +195,11 @@ impl Fixture {
             )
             .await
             .unwrap();
-        seed_machine(&host, &id(2), 3, 4, now).await;
+        seed_machine(&host, &id(2), 4, now).await;
         let caller = authenticated(
             &host,
-            m::Caller::Session(m::SessionAddress {
+            m::Caller::Session(workspace_ids::SessionRef {
                 machine_id: id(2),
-                endpoint: "codex-local".to_owned().try_into().unwrap(),
                 session_id: "test-session".to_owned().try_into().unwrap(),
             }),
             &id::<m::WorkspaceId>(4).to_string(),
@@ -442,7 +431,7 @@ impl Fixture {
     }
 }
 
-pub(super) fn session(caller: &WorkspaceCaller) -> m::SessionAddress {
+pub(super) fn session(caller: &WorkspaceCaller) -> workspace_ids::SessionRef {
     let m::Caller::Session(session) = caller.caller() else {
         panic!("fixture requires session caller");
     };
@@ -468,10 +457,10 @@ pub async fn admitted_organization<C: runtime_primitives::Clock + ?Sized>(
             },
         )
         .await?;
-    seed_machine_for(host, organization, &id(2), 3, 4, now).await;
+    seed_machine_for(host, organization, &id(2), 4, now).await;
     let token = signed::machine_token(
         organization.as_str(),
-        &id::<m::MachineId>(2).to_string(),
+        &id::<workspace_ids::MachineId>(2).to_string(),
         &id::<m::WorkspaceId>(4).to_string(),
         now,
         now + 600,
@@ -482,9 +471,8 @@ pub async fn admitted_organization<C: runtime_primitives::Clock + ?Sized>(
         .map_err(|_| "fixture machine admission refused")?;
     let caller = collaboration_central_core::WorkspaceCaller::new(
         connection,
-        m::Caller::Session(m::SessionAddress {
+        m::Caller::Session(workspace_ids::SessionRef {
             machine_id: id(2),
-            endpoint: "codex-local".to_owned().try_into()?,
             session_id: "test-session".to_owned().try_into()?,
         }),
     )

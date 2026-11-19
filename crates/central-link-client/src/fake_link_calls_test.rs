@@ -16,7 +16,7 @@ fn uuid_v7(seed: u8) -> String {
 fn session_caller(seed: u8) -> Caller {
     serde_json::from_value(json!({
         "kind": "session",
-        "value": {"machineId": uuid_v7(200), "endpoint": "codex-local", "sessionId": format!("session-{seed}")},
+        "value": {"machineId": uuid_v7(200), "sessionId": format!("session-{seed}")},
     }))
     .unwrap()
 }

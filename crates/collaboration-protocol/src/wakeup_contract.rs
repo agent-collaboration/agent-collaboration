@@ -1,7 +1,7 @@
 //! Timed wake creation is durable local acceptance, distinct from native message acceptance.
 use crate::{
-    CodexGeneration, ExpiryRequest, MessageContent, MessageDelivery, ObservationTimestamp,
-    SessionRef, TimingRequest,
+    CodexGeneration, ExpiryRequest, HarnessSessionRef, MessageContent, MessageDelivery,
+    ObservationTimestamp, TimingRequest,
 };
 use agent_automation::{ChangeId, DeliveryId, OccurrenceId, OperationId, WakeupId};
 use schemars::JsonSchema;
@@ -10,14 +10,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SavedMessage {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub content: MessageContent,
     pub delivery: MessageDelivery,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation_guard: Option<CodexGeneration>,
 }
 impl agent_automation::DurableMessage for SavedMessage {
-    type Target = SessionRef;
+    type Target = HarnessSessionRef;
     type Content = MessageContent;
     type Generation = CodexGeneration;
     fn target(&self) -> &Self::Target {

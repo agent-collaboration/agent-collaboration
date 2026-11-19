@@ -97,7 +97,9 @@ pub trait ProviderConversationBackend: Send + Sync {
     ) -> ProviderConversationFuture<'_, ConversationOperationSnapshot>;
 }
 
-fn settings_unavailable(target: collaboration_protocol::SessionRef) -> ProviderSettingsFailure {
+fn settings_unavailable(
+    target: collaboration_protocol::HarnessSessionRef,
+) -> ProviderSettingsFailure {
     ProviderSettingsFailure {
         kind: ProviderSettingsFailureKind::Unavailable,
         stage: None,

@@ -23,6 +23,7 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+workspace-ids.workspace = true
 router-clock.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true

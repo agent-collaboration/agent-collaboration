@@ -1,14 +1,14 @@
 //! Stored command results use their original snapshots, not a fresh read of the resource.
 use automation_storage::{StorageError, StoredOperationRecord, StoredOperationState};
 use collaboration_protocol::{
-    AutomationOperationMethod as Method, EndpointRef, OperationEffects, OperationFailure,
-    OperationSnapshot, OperationState, OperationSuccess, SavedMessage, SessionRef, UuidIdentity,
+    AutomationOperationMethod as Method, EndpointRef, HarnessSessionRef, OperationEffects,
+    OperationFailure, OperationSnapshot, OperationState, OperationSuccess, SavedMessage,
 };
 use serde_json::Value;
 
 pub(crate) fn snapshot(
     record: StoredOperationRecord,
-    service: &UuidIdentity,
+    service: &workspace_ids::MachineId,
 ) -> Result<OperationSnapshot, StorageError> {
     let method: Method = decode(Value::String(record.method))?;
     let state = match record.state {
@@ -88,7 +88,7 @@ fn project_failure(
 fn success(
     method: Method,
     result: Value,
-    service: &UuidIdentity,
+    service: &workspace_ids::MachineId,
 ) -> Result<OperationSuccess, StorageError> {
     let method_value = Value::String(method.as_str().into());
     match method {
@@ -107,7 +107,7 @@ fn success(
         | Method::ScheduleDisable
         | Method::SchedulePrepare
         | Method::ScheduleImport => {
-            let inspection: automation_storage::ScheduleInspection<SessionRef, EndpointRef> =
+            let inspection: automation_storage::ScheduleInspection<HarnessSessionRef, EndpointRef> =
                 if method == Method::ScheduleCreate {
                     automation_storage::ScheduleInspection {
                         record: decode(result)?,

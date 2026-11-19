@@ -10,14 +10,14 @@ use collaboration_protocol::{
     ConversationOperationSettlement, ConversationOperationShowRequest,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, ConversationPromptRequest,
     ConversationResumeRequest, EndpointDescription, EndpointId, EndpointRef, GenerationNumber,
-    MessageContent, MessageText, NonEmptyText, OperationId, PositiveSeconds, ProviderBindingId,
-    ProviderBindingIdentity, ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence,
-    ProviderCapabilityName, ProviderCapabilityStatus, ProviderKind, ProviderOperationEffect,
-    ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
-    ProviderRequestedPolicy, ProviderRequestedSettings, ProviderRuntimeIdentity,
-    ProviderSessionInspectRequest, ProviderSettingName, ProviderSettingsAcceptRequest,
-    ProviderSettingsFailureKind, ProviderSettingsSetRequest, ProviderTransport,
-    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef, UuidIdentity,
+    HarnessSessionRef, MessageContent, MessageText, NonEmptyText, OperationId, PositiveSeconds,
+    ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities, ProviderCapability,
+    ProviderCapabilityEvidence, ProviderCapabilityName, ProviderCapabilityStatus, ProviderKind,
+    ProviderOperationEffect, ProviderOperationStage, ProviderPromptStopReason,
+    ProviderReconciliationState, ProviderRequestedPolicy, ProviderRequestedSettings,
+    ProviderRuntimeIdentity, ProviderSessionInspectRequest, ProviderSettingName,
+    ProviderSettingsAcceptRequest, ProviderSettingsFailureKind, ProviderSettingsSetRequest,
+    ProviderTransport, ProviderWorkingDirectory, RouterAccess, SessionId, UuidIdentity,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::NativeControlBackend;
@@ -60,7 +60,9 @@ macro_rules! ensure_eq {
 
 fn endpoint(name: &str) -> TestResult<EndpointRef> {
     Ok(EndpointRef {
-        service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?,
+        service_id: workspace_ids::MachineId::try_from(
+            "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+        )?,
         endpoint_id: EndpointId::try_from(name.to_owned())?,
     })
 }
@@ -103,8 +105,8 @@ fn binding(endpoint: EndpointRef, name: &str) -> TestResult<ProviderBindingIdent
     })
 }
 
-fn actor(endpoint: EndpointRef, id: &str) -> TestResult<SessionRef> {
-    Ok(SessionRef {
+fn actor(endpoint: EndpointRef, id: &str) -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint,
         session_id: SessionId::try_from(id.to_owned())?,
     })
@@ -222,8 +224,8 @@ async fn assert_process_reaped(process_id_path: &std::path::Path) -> TestResult 
 
 async fn approval_broker_fixture(
     root: &tempfile::TempDir,
-    service_id: &UuidIdentity,
-    approver: &SessionRef,
+    service_id: &workspace_ids::MachineId,
+    approver: &HarnessSessionRef,
 ) -> TestResult<(
     Arc<ServiceInteractionBroker>,
     tokio::task::JoinHandle<Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>>>,

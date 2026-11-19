@@ -1,6 +1,7 @@
 use crate::central_timer_rows::{AutomationRow, WakeRow};
 use central_engine_model::{Context, EngineTime, IdSource};
-use workspace_model::{SessionAddress, central_mail as mail};
+use workspace_ids::SessionRef;
+use workspace_model::central_mail as mail;
 
 pub(super) struct ReplayIds;
 impl IdSource for ReplayIds {
@@ -17,10 +18,9 @@ pub(super) fn context(minute: i64, ids: &mut ReplayIds) -> Context<'_> {
         ids,
     }
 }
-fn target() -> SessionAddress {
-    SessionAddress {
+fn target() -> SessionRef {
+    SessionRef {
         machine_id: "01890f2e-7b4c-7cc0-98c4-000000000001".parse().unwrap(),
-        endpoint: "codex-local".to_owned().try_into().unwrap(),
         session_id: "timer-test".to_owned().try_into().unwrap(),
     }
 }

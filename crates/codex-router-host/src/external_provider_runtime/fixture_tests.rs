@@ -19,7 +19,7 @@ pub(super) fn has_completed_router_endpoints_call(tool_calls: &[ExternalProvider
 pub(super) fn accepts_native_router_result(
     tool_calls: &[ExternalProviderToolCall],
     response: &str,
-    expected_service_id: &collaboration_protocol::UuidIdentity,
+    expected_service_id: &workspace_ids::MachineId,
 ) -> bool {
     let output = classify_provider_output(response, expected_service_id);
     has_completed_router_endpoints_call(tool_calls)
@@ -39,7 +39,7 @@ pub(super) struct ProviderOutputClassification {
 
 pub(super) fn classify_provider_output(
     output: &str,
-    expected_service_id: &collaboration_protocol::UuidIdentity,
+    expected_service_id: &workspace_ids::MachineId,
 ) -> ProviderOutputClassification {
     fn is_uuid_shape(candidate: &[u8]) -> bool {
         candidate.len() == 36
@@ -68,8 +68,7 @@ pub(super) fn classify_provider_output(
             && bounded_after
             && is_uuid_shape(&bytes[start..end])
             && let Ok(candidate) = std::str::from_utf8(&bytes[start..end])
-            && let Ok(identity) =
-                collaboration_protocol::UuidIdentity::try_from(candidate.to_owned())
+            && let Ok(identity) = workspace_ids::MachineId::try_from(candidate.to_owned())
         {
             returned_uuids.push(identity);
             start = end;

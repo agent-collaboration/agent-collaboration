@@ -10,7 +10,7 @@ use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
-    DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, SessionReachability, SessionRef,
+    DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, SessionReachability,
 };
 use collaboration_service::ApplicationFixture;
 
@@ -29,7 +29,7 @@ use std::{
     time::Duration,
 };
 pub(super) type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
-pub(super) const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+pub(super) const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 #[derive(Default)]
 pub(super) struct CarrierStandIn {
     pub(super) injections: AtomicUsize,
@@ -64,7 +64,7 @@ impl SessionMessageDelivery for CarrierStandIn {
     }
 }
 impl TargetPresenceProbe for CarrierStandIn {
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence> {
         let presence = if String::from(target.session_id.clone()) == "capacity-unloaded" {
             TargetPresence::Wakeable
         } else {

@@ -2,8 +2,8 @@
 use crate::served_api;
 use automation_storage::AutomationStore;
 use collaboration_protocol::{
-    CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
-    ScheduleCreateRequest, SchedulePrepareRequest, SessionRef,
+    CodexGeneration, EndpointDescription, HarnessSessionRef, InstructionCreateParams,
+    InstructionText, OperationId, ScheduleCreateRequest, SchedulePrepareRequest,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -48,10 +48,10 @@ async fn exercise_preparation(
     ));
     let path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&path)?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(
+    let target: HarnessSessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"fixture-new-target"}),
     )?;
     let mut definitions = serde_json::Map::new();
@@ -149,7 +149,7 @@ async fn exercise_preparation(
                 let current = backend_store
                     .lock()
                     .await
-                    .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
+                    .inspect_schedule::<HarnessSessionRef, collaboration_protocol::EndpointRef>(
                         &backend_schedule,
                     )
                     .await?;

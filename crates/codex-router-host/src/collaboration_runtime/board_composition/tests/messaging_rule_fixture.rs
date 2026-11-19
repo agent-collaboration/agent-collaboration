@@ -15,7 +15,7 @@ mod cancel_fixture;
 mod publication;
 pub(super) use cancel_fixture::FollowSeed;
 
-pub(super) const RECIPIENT: &str = "550e8400-e29b-41d4-a716-446655445183";
+pub(super) const RECIPIENT: &str = "550e8400-e29b-71d4-a716-446655445183";
 pub(super) struct RuleFixture {
     pub holder: claim_fixture::ClaimFixture,
     pub successor: RuleMachine,

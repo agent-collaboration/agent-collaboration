@@ -1,5 +1,5 @@
 use crate::proof_context::ProofResult;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{io::Write, os::unix::fs::OpenOptionsExt, path::Path};
@@ -10,7 +10,7 @@ pub(super) const STATE_FILENAME: &str = "messaging-skill-dx-state.json";
 #[serde(rename_all = "camelCase")]
 pub(super) struct MessagingProofState {
     pub prior_host_pid: u64,
-    pub recipient: SessionRef,
+    pub recipient: HarnessSessionRef,
     pub recipient_cwd: String,
     pub sender_cwd: String,
     pub skill_path: String,

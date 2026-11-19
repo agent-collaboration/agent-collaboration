@@ -10,7 +10,7 @@ use collaboration_contracts::NOT_LOADED_REASON;
 use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     ConversationOperationFailureKind, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, PositiveSeconds, ProviderOperationStage, SessionRef,
+    ConversationOperationWaitRequest, HarnessSessionRef, PositiveSeconds, ProviderOperationStage,
 };
 use collaboration_runtime::ProviderOperationStore;
 use std::{
@@ -58,7 +58,7 @@ pub(crate) struct ProviderAcpMessageFifo {
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
-    senders: StdMutex<HashMap<SessionRef, mpsc::Sender<ProviderQueuedPrompt>>>,
+    senders: StdMutex<HashMap<HarnessSessionRef, mpsc::Sender<ProviderQueuedPrompt>>>,
     workers: StdMutex<Vec<JoinHandle<()>>>,
     shutdown: CancellationToken,
 }
@@ -83,7 +83,7 @@ impl ProviderAcpMessageFifo {
 
     pub(crate) fn reserve(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<mpsc::OwnedPermit<ProviderQueuedPrompt>, &'static str> {
         if self.shutdown.is_cancelled() {
             return Err("provider queue is shutting down");
@@ -157,7 +157,7 @@ impl Drop for ProviderAcpMessageFifo {
 }
 
 async fn run_provider_message_fifo(
-    target: SessionRef,
+    target: HarnessSessionRef,
     mut receiver: mpsc::Receiver<ProviderQueuedPrompt>,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,

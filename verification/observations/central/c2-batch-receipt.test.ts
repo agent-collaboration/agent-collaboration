@@ -10,8 +10,8 @@ import { c2RecordSchema, type C2WitnessRecord } from "./c2-witness.ts";
 import { c2BatchSelector, c2ProductSelector, requireSingleC2Selection } from "./c2-product-run.ts";
 
 const organization = "019f0000-0000-7000-8000-000000000001";
-const installation = "019f0000-0000-7000-8000-000000000002";
-const privateMachine = "019f0000-0000-7000-8000-000000000003";
+const machineId = "019f0000-0000-7000-8000-000000000002";
+const otherMachine = "019f0000-0000-7000-8000-000000000003";
 const oldInstance = "019f0000-0000-7000-8000-000000000004";
 const newInstance = "019f0000-0000-7000-8000-000000000005";
 const baselineId = "019f0000-0000-7000-8000-000000000006";
@@ -29,13 +29,12 @@ const areas = [
   { areaId: "019f0000-0000-7000-8000-00000000000d", name: "First batch area" },
   { areaId: "019f0000-0000-7000-8000-00000000000e", name: "Later batch area" },
 ];
-const session = { machineId: installation, endpoint: "codex-local", sessionId: privateMachine };
+const session = { machineId, sessionId: "provider/opaque-session" };
 const caller = { kind: "session", value: session };
 const objectId = "a".repeat(64);
 const attachment = {
   organizationId: organization,
-  machineId: privateMachine,
-  installationId: installation,
+  machineId,
   enrollmentId: baselineId,
   clientId: baselineId,
   effectiveExpiresAt: 1_900_000_600,
@@ -88,7 +87,7 @@ function witnessFrames(): {
   append({ kind: "constructor", objectId });
   append({ kind: "handler", objectId, instanceId: newInstance, attachment });
   for (const correlationId of correlations) {
-    for (const query of ["byEnrollment", "machineByInstallation", "activeEnrollment"])
+    for (const query of ["byEnrollment", "machineById", "activeEnrollment"])
       append({ kind: "enrollmentRead", objectId, query, outcome: "read" });
     append({ kind: "restoreResult", objectId, correlationId, outcome: "admitted" });
     append({ kind: "alarmSnapshot", objectId, correlationId, earliestDueMs: null, alarmMs: null });
@@ -162,8 +161,8 @@ function validReceipt(): C2BatchReceipt {
   return c2BatchReceiptSchema.parse({
     kind: "c2BatchHibernation",
     organization,
-    installationId: installation,
-    welcome: { kind: "welcome", machineId: installation, centralTime: "2030-03-17T17:46:40Z" },
+    machineId,
+    welcome: { kind: "welcome", machineId, centralTime: "2030-03-17T17:46:40Z" },
     baselineRequest: requests.baselineRequest,
     baselineReply: reply(baselineId, {
       kind: "workspaceCreated",
@@ -231,11 +230,11 @@ test("batch receipt rejects reordered replies, changed refusal and unobserved wa
     ...forged.batchRequest.requests,
     ...forged.readRequests.map((frame) => frame.request),
   ])
-    member.caller.value.machineId = privateMachine;
+    member.caller.value.machineId = otherMachine;
   const forgedWake = forged.batchRequest.requests[1];
   assert.ok(forgedWake?.payload.kind === "mail");
-  forgedWake.payload.request.operation.target.machineId = privateMachine;
-  assert.throws(() => assertC2BatchReceipt(forged), /batch caller uses installation/);
+  forgedWake.payload.request.operation.target.machineId = otherMachine;
+  assert.throws(() => assertC2BatchReceipt(forged), /batch caller uses the Router machine ID/);
   const reordered = validReceipt();
   reordered.batchReplies.reverse();
   assert.throws(() => assertC2BatchReceipt(reordered), /frame order and correlation/);

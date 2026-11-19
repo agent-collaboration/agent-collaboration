@@ -3,10 +3,10 @@ use super::proof_context::{ProofContext, ProofResult};
 use codex_native_integration::NativeOperation;
 use collaboration_client::protocol::{
     DeliveryClientReceipt, DeliveryReceipt, DeliveryRouteEvidence, DestinationPreparation,
-    ExecutionDestination, InstructionCreateParams, MessageContent, MessageDelivery,
-    NativeSendAcceptance, OperationId, RunExecution, RunListRequest, RunState,
+    ExecutionDestination, HarnessSessionRef, InstructionCreateParams, MessageContent,
+    MessageDelivery, NativeSendAcceptance, OperationId, RunExecution, RunListRequest, RunState,
     ScheduleCreateRequest, ScheduleDefinition, ScheduleEnableRequest, SchedulePrepareRequest,
-    SessionMessageSendParams, SessionRef, TimingRequest,
+    SessionMessageSendParams, TimingRequest,
 };
 use collaboration_client::{ClientError, CollaborationClient};
 use serde_json::{Value, json};
@@ -250,7 +250,7 @@ pub async fn exercise() -> ProofResult<()> {
 
 struct MessageProbeInput<'a> {
     proof: &'a ProofContext,
-    target: &'a SessionRef,
+    target: &'a HarnessSessionRef,
     delivery: MessageDelivery,
     text: &'a str,
 }

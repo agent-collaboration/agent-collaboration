@@ -2,7 +2,7 @@
 use crate::failure_line::render_failure_line;
 use crate::message_input_arguments::MessageSendArguments;
 use clap::{Parser, Subcommand};
-use collaboration_client::protocol::{PushId, RouterLink, SessionRef};
+use collaboration_client::protocol::{HarnessSessionRef, PushId, RouterLink};
 use collaboration_client::{OperationEffect, OperationFailure, OperationFailureKind};
 use std::{
     ffi::OsString,
@@ -47,7 +47,7 @@ struct InboxArguments {
 
 #[derive(clap::Args)]
 struct HistoryArguments {
-    /// Exact SessionRef JSON for the other participant.
+    /// Exact HarnessSessionRef JSON for the other participant.
     #[arg(long = "with")]
     other_session: String,
     #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=100))]
@@ -154,7 +154,10 @@ fn report_message_failure(kind: &str, message: &str, exit_code: i32, machine: bo
     }
 }
 
-fn operation_failure_line(failure: &OperationFailure, target: Option<&SessionRef>) -> String {
+fn operation_failure_line(
+    failure: &OperationFailure,
+    target: Option<&HarnessSessionRef>,
+) -> String {
     let explanation = target.map_or_else(
         || failure.message.clone(),
         |target| {

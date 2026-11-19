@@ -1,8 +1,8 @@
 //! Public schedule snapshots project separate configuration/timing and Run-owned occupancy.
 use automation_storage::ScheduleInspection;
-use collaboration_protocol::{EndpointRef, ScheduleSnapshot, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef, ScheduleSnapshot};
 pub(crate) fn snapshot(
-    inspection: ScheduleInspection<SessionRef, EndpointRef>,
+    inspection: ScheduleInspection<HarnessSessionRef, EndpointRef>,
 ) -> Result<ScheduleSnapshot, ()> {
     let record = inspection.record;
     Ok(ScheduleSnapshot {

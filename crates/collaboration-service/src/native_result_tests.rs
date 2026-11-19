@@ -12,10 +12,10 @@ mod tests {
     };
     use serde_json::json;
 
-    fn target() -> SessionRef {
-        serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native-result-recipient"})).unwrap()
+    fn target() -> HarnessSessionRef {
+        serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native-result-recipient"})).unwrap()
     }
-    fn effects() -> NativeEffectEvidence<SessionRef, CodexGeneration> {
+    fn effects() -> NativeEffectEvidence<HarnessSessionRef, CodexGeneration> {
         NativeEffectEvidence {
             permission_differences: Vec::new(),
             target: Some(target()),

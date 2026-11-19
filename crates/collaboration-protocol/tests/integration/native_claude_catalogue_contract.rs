@@ -3,7 +3,7 @@ use collaboration_protocol::{ProviderSessionListResult, ProviderSessionSummary};
 use serde_json::{Value, json};
 
 fn background_summary() -> Value {
-    json!({"origin":"claudeCodeBackground","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"},
+    json!({"origin":"claudeCodeBackground","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"},
         "jobHandle":"job-handle-42","workingDirectory":"/source/project","name":"Before first prompt","startedAt":1790162100_i64,"state":{"kind":"blocked"},"status":null,"peer":null})
 }
 

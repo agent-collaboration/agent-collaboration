@@ -2,9 +2,9 @@
 use crate::provider_operation_store::OneStatementWrite;
 use crate::{ProviderOperationStore, ProviderOperationStoreError, ProviderSessionRecord};
 use collaboration_protocol::{
-    ConversationBindingIdentity, EndpointRef, OperationId, ProviderOperationEffect,
-    ProviderOperationKind, ProviderOperationStage, ProviderReconciliationState,
-    ProviderWorkingDirectory, SessionId, SessionRef,
+    ConversationBindingIdentity, EndpointRef, HarnessSessionRef, OperationId,
+    ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
+    ProviderReconciliationState, ProviderWorkingDirectory, SessionId,
 };
 
 impl ProviderOperationStore {
@@ -141,7 +141,7 @@ impl ProviderOperationStore {
 
     pub async fn session_record(
         &mut self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Option<ProviderSessionRecord>, ProviderOperationStoreError> {
         let target_service_id = String::from(target.endpoint.service_id.clone());
         let target_endpoint_id = String::from(target.endpoint.endpoint_id.clone());
@@ -200,7 +200,7 @@ impl ProviderOperationStore {
         .await?;
         rows.into_iter()
             .map(|row| {
-                let target = SessionRef {
+                let target = HarnessSessionRef {
                     endpoint: endpoint.clone(),
                     session_id: SessionId::try_from(row.target_session_id)
                         .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,

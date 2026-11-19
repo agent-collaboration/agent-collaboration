@@ -536,7 +536,7 @@ impl collaboration_contracts::SessionDeliveryRoute for LiveElsewhereRoute {
     }
     fn claim(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim>
     {
         self.claims
@@ -553,7 +553,7 @@ impl collaboration_contracts::SessionDeliveryRoute for LiveElsewhereRoute {
     }
     fn presence(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::RoutePresence> {
         Box::pin(async {
             Ok(collaboration_contracts::RoutePresence::LiveElsewhere {
@@ -590,7 +590,7 @@ fn live_elsewhere_service(
         delivery: router.clone(),
         presence: router,
         machine_identity: collaboration_contracts::MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
+            workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).unwrap(),
             Some("live-elsewhere-proof"),
         )
         .unwrap(),

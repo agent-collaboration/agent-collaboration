@@ -7,9 +7,9 @@ use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCreateRequest,
     ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationPromptRequest, DeliveryOutcome,
-    EndpointAvailability, EndpointId, EndpointRef, MessageContent, MessageText, OperationId,
-    PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId,
-    SessionRef,
+    EndpointAvailability, EndpointId, EndpointRef, HarnessSessionRef, MessageContent, MessageText,
+    OperationId, PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
+    SessionId,
 };
 use std::os::unix::fs::PermissionsExt as _;
 
@@ -101,7 +101,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
         service_epoch: inventory.service_epoch,
         generation: generation_number,
     };
-    let actor = SessionRef {
+    let actor = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: provider_endpoint.endpoint.service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("actor endpoint"),
@@ -312,7 +312,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
                 root.path().display().to_string(),
             )
             .expect("cwd"),
-            created_by: SessionRef {
+            created_by: HarnessSessionRef {
                 endpoint: EndpointRef {
                     service_id: service_id.clone(),
                     endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("endpoint"),
@@ -320,7 +320,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
                 session_id: SessionId::try_from("caller".to_owned()).expect("session"),
             }
             .into(),
-            approver: SessionRef {
+            approver: HarnessSessionRef {
                 endpoint: EndpointRef {
                     service_id,
                     endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("endpoint"),

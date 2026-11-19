@@ -11,7 +11,8 @@ use collaboration_client::{
     ConversationPromptInput, PublicPromptContent,
     board::Identity,
     protocol::{
-        ApprovalDecideParams, ConversationCreateOutcome, OperationId, RouterAccess, SessionRef,
+        ApprovalDecideParams, ConversationCreateOutcome, HarnessSessionRef, OperationId,
+        RouterAccess,
     },
 };
 use serde_json::{Value, json};
@@ -188,10 +189,10 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
 
 async fn create_provider_session(
     proof: &mut ProofContext,
-    creator: &SessionRef,
+    creator: &HarnessSessionRef,
     endpoint_id: &str,
-    approver: &SessionRef,
-) -> ProofResult<SessionRef> {
+    approver: &HarnessSessionRef,
+) -> ProofResult<HarnessSessionRef> {
     let endpoint = proof
         .client
         .list_endpoints()
@@ -236,8 +237,8 @@ async fn create_provider_session(
 
 async fn deliver_pending_approval(
     proof: &mut ProofContext,
-    creator: &SessionRef,
-    approver: &SessionRef,
+    creator: &HarnessSessionRef,
+    approver: &HarnessSessionRef,
     receipt_path: &Path,
 ) -> ProofResult<String> {
     let requester = create_provider_session(proof, creator, "claude-local", approver).await?;
@@ -326,7 +327,7 @@ async fn deliver_pending_approval(
     clippy::indexing_slicing,
     reason = "The fixture protocol and assertions use established positions in their prepared inputs."
 )]
-fn prompt_count(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<usize> {
+fn prompt_count(path: &Path, target: &HarnessSessionRef, marker: &str) -> ProofResult<usize> {
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
@@ -357,7 +358,7 @@ fn prompt_count(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<u
     clippy::indexing_slicing,
     reason = "The fixture protocol and assertions use established positions in their prepared inputs."
 )]
-fn read_prompt_text(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<String> {
+fn read_prompt_text(path: &Path, target: &HarnessSessionRef, marker: &str) -> ProofResult<String> {
     for line in std::fs::read_to_string(path)?.lines() {
         let frame: Value = serde_json::from_str(line)?;
         if frame["params"]["sessionId"] != json!(String::from(target.session_id.clone())) {
@@ -378,7 +379,7 @@ fn read_prompt_text(path: &Path, target: &SessionRef, marker: &str) -> ProofResu
 
 async fn observe_single_prompt(
     path: &Path,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     marker: &str,
     timeout: Duration,
 ) -> ProofResult<()> {
@@ -397,7 +398,11 @@ async fn observe_single_prompt(
     }
 }
 
-fn assert_exactly_once(path: &Path, target: &SessionRef, markers: &[String]) -> ProofResult<()> {
+fn assert_exactly_once(
+    path: &Path,
+    target: &HarnessSessionRef,
+    markers: &[String],
+) -> ProofResult<()> {
     let prompt_frames = std::fs::read_to_string(path)?.lines().count();
     if prompt_frames != super::ACP_TARGET_EXPECTED_PROMPTS {
         return Err(format!(
@@ -438,8 +443,8 @@ fn record_cell(
 #[test]
 fn recipient_log_counts_prompt_frames_and_rejects_duplicate_delivery() -> ProofResult<()> {
     use std::io::Write as _;
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"cursor-local"},
+    let target: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"cursor-local"},
         "sessionId":"matrix-acp-target"
     }))?;
     let marker = "DELIVERY_MATRIX_unique_providerAcp";
@@ -498,8 +503,8 @@ async fn scripted_recipient_records_a_duplicate_after_its_last_expected_prompt()
         )
         .into());
     }
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"cursor-local"},
+    let target: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"cursor-local"},
         "sessionId":"matrix-acp-target"
     }))?;
     if prompt_count(log.path(), &target, "LAST_MARKER")? != 2

@@ -11,8 +11,8 @@ use collaboration_contracts::NativeRefusalCode;
 use collaboration_contracts::UnsentCause;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryOutcome, DeliveryRejectionReason, MessageDelivery, PushKind,
-    SessionReachability, SessionRef,
+    CodexGeneration, DeliveryOutcome, DeliveryRejectionReason, HarnessSessionRef, MessageDelivery,
+    PushKind, SessionReachability,
 };
 use message_board::BoardError;
 use tokio::sync::Mutex;
@@ -68,7 +68,7 @@ impl SubscriptionPushStore {
 
     async fn reconcile_queued(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         prepared: &collaboration_contracts::layer_zero::PreparedPush,
         sink: &CapturedAttemptEvidence,
     ) -> NativeDeliveryResult {
@@ -110,12 +110,12 @@ impl SubscriptionPushStore {
 
 #[derive(Default)]
 struct CapturedAttemptEvidence {
-    recorded: Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    recorded: Mutex<Option<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 }
 impl AttemptEvidenceSink for CapturedAttemptEvidence {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async move {
             *self.recorded.lock().await = Some(evidence);

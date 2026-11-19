@@ -12,7 +12,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         workspace: Option<&WorkspaceId>,
     ) -> Result<Result<(), RefusalReason>, StoreFailure> {
         if caller.organization_id() != &self.organization
-            || caller.caller().machine_id() != caller.connection().installation_machine_id()
+            || caller.caller().machine_id() != caller.connection().machine_id()
         {
             return Ok(Err(RefusalReason::MachineRevoked));
         }
@@ -25,14 +25,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         }
         if let Some(workspace) = workspace {
             let rows = self.host.read(Statement {
-                sql: "SELECT m.allowed_workspaces,w.state AS workspace_state FROM machines m LEFT JOIN workspaces w ON w.workspace_id=? WHERE m.installation_id=?",
-                args: vec![SqlValue::Text(workspace.to_string()), SqlValue::Text(caller.connection().installation_id().as_str().to_owned())],
+                sql: "SELECT m.allowed_workspaces,w.state AS workspace_state FROM machines m LEFT JOIN workspaces w ON w.workspace_id=? WHERE m.machine_id=?",
+                args: vec![SqlValue::Text(workspace.to_string()), SqlValue::Text(caller.connection().machine_id().as_str().to_owned())],
             }).await?;
             let Some(row) = rows.rows.first() else {
                 return Ok(Err(RefusalReason::MachineRevoked));
             };
             if rows.rows.len() != 1 {
-                return Err(corrupt("machines.installation_id"));
+                return Err(corrupt("machines.machine_id"));
             }
             let allowed: Vec<WorkspaceId> = json(
                 string(&rows, row, "allowed_workspaces")?,
@@ -60,16 +60,16 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let rows = self
             .host
             .read(Statement {
-                sql: "SELECT allowed_workspaces FROM machines WHERE installation_id=?",
+                sql: "SELECT allowed_workspaces FROM machines WHERE machine_id=?",
                 args: vec![SqlValue::Text(
-                    caller.connection().installation_id().as_str().to_owned(),
+                    caller.connection().machine_id().as_str().to_owned(),
                 )],
             })
             .await?;
         let row = rows
             .rows
             .first()
-            .ok_or_else(|| corrupt("machines.installation_id"))?;
+            .ok_or_else(|| corrupt("machines.machine_id"))?;
         json(
             string(&rows, row, "allowed_workspaces")?,
             "allowed_workspaces",

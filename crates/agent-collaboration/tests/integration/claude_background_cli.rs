@@ -72,7 +72,7 @@ impl ClaudeProcessFixture {
         fs::write(
             root.path().join("router/agent-communication/service.json"),
             serde_json::json!({
-                "version":3,"serviceId":"00000000-0000-4000-8000-000000000001",
+                "version":3,"serviceId":"00000000-0000-7000-8000-000000000001",
                 "machineLabel":"fixture","serviceEpoch":"00000000-0000-4000-8000-000000000002",
                 "serviceVersion":env!("CARGO_PKG_VERSION"),
                 "api":{"transport":"streamableHttpUnix","path":"control.sock"},

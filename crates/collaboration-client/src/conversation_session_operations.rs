@@ -18,9 +18,10 @@ use collaboration_protocol::{
     ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSettlement, ConversationOperationSubmission,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest,
-    ConversationPromptRequest as ProviderPromptRequest, NonEmptyText, OperationId, PositiveSeconds,
-    ProviderIdentity, ProviderOperationEffect, ProviderOperationStage, ProviderPromptStopReason,
-    ProviderRequestedPolicy, ProviderWorkingDirectory, SessionRef,
+    ConversationPromptRequest as ProviderPromptRequest, HarnessSessionRef, NonEmptyText,
+    OperationId, PositiveSeconds, ProviderIdentity, ProviderOperationEffect,
+    ProviderOperationStage, ProviderPromptStopReason, ProviderRequestedPolicy,
+    ProviderWorkingDirectory,
 };
 use std::{path::Path, time::Duration};
 use tokio_util::sync::CancellationToken;
@@ -390,7 +391,7 @@ pub(crate) enum ProviderSettlementKind {
 pub(crate) fn provider_operation_result(
     waited: collaboration_protocol::ConversationOperationWaitResult,
     operation_id: OperationId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     expected: ProviderSettlementKind,
 ) -> Result<ConversationOperationResult, ConversationClientError> {
     let settlement = match (expected, waited.output) {
@@ -499,7 +500,7 @@ fn provider_stop_reason(reason: ProviderPromptStopReason) -> ConversationStopRea
 
 fn operation_settlement_failure(
     operation_id: OperationId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     effect: ProviderOperationEffect,
 ) -> ConversationClientError {
     let message = match NonEmptyText::try_from(
@@ -534,8 +535,8 @@ fn operation_settlement_failure(
 /// A Session requester or approver must belong to the target's service; a Human approver
 /// belongs to no service.
 fn validate_target_operation(
-    target: &SessionRef,
-    requested_by: Option<&SessionRef>,
+    target: &HarnessSessionRef,
+    requested_by: Option<&HarnessSessionRef>,
     approver: Option<&ProviderIdentity>,
 ) -> Result<(), ConversationClientError> {
     if requested_by.is_some_and(|actor| actor.endpoint.service_id != target.endpoint.service_id)

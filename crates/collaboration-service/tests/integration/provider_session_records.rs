@@ -1,10 +1,11 @@
 use collaboration_protocol::{
-    CodexGeneration, EndpointId, EndpointRef, GenerationNumber, NonEmptyText, OperationId,
-    ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities, ProviderCapability,
-    ProviderCapabilityEvidence, ProviderCapabilityName, ProviderCapabilityStatus, ProviderIdentity,
-    ProviderKind, ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
-    ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
-    RouterAccess, SessionId, SessionRef, UuidIdentity,
+    CodexGeneration, EndpointId, EndpointRef, GenerationNumber, HarnessSessionRef, NonEmptyText,
+    OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
+    ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
+    ProviderCapabilityStatus, ProviderIdentity, ProviderKind, ProviderOperationEffect,
+    ProviderOperationKind, ProviderOperationStage, ProviderRequestedPolicy,
+    ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory, RouterAccess, SessionId,
+    UuidIdentity,
 };
 use collaboration_runtime::ProviderOperationAdmission;
 use collaboration_runtime::ProviderOperationStore;
@@ -38,17 +39,19 @@ macro_rules! ensure_eq {
     }};
 }
 
-fn session_ref(endpoint_id: &str, session_id: &str) -> TestResult<SessionRef> {
-    Ok(SessionRef {
+fn session_ref(endpoint_id: &str, session_id: &str) -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?,
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )?,
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned())?,
         },
         session_id: SessionId::try_from(session_id.to_owned())?,
     })
 }
 
-fn provider_binding(target: &SessionRef) -> TestResult<ProviderBindingIdentity> {
+fn provider_binding(target: &HarnessSessionRef) -> TestResult<ProviderBindingIdentity> {
     Ok(ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("provider-binding-1".to_owned())?,
@@ -154,8 +157,8 @@ async fn human_creator_and_approver_survive_store_reopen_and_old_reader_fails_cl
     .fetch_one(&mut raw)
     .await?;
     ensure_eq!(stored_creator, r#"{"humanId":"owner"}"#);
-    let old_reader = serde_json::from_str::<SessionRef>(&stored_creator)
-        .expect_err("old SessionRef-only reader must reject a human creator");
+    let old_reader = serde_json::from_str::<HarnessSessionRef>(&stored_creator)
+        .expect_err("old HarnessSessionRef-only reader must reject a human creator");
     ensure!(old_reader.to_string().contains("humanId"));
     raw.close().await?;
     Ok(())

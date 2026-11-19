@@ -15,7 +15,7 @@ mod tests {
     };
     use tokio::io::{AsyncBufReadExt, BufReader};
 
-    const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+    const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
     const OLD_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
     const NEW_EPOCH: &str = "00000000-0000-4000-8000-000000000004";
     const FIXTURE_PATH_ENV: &str = "COMMUNICATION_PROCESS_CRASH_FIXTURE";

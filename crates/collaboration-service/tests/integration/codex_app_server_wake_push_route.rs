@@ -11,10 +11,9 @@ use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequ
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
-    AcceptedResumeEffect, CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MachineId,
-    MachineLabel, MessageDelivery, MessageInputKind, MessageRepresentation, PushDeliveryState,
-    PushKind, PushLineInput, RouterLink, RouterOriginRef, SessionRef, UuidIdentity,
-    render_push_line,
+    AcceptedResumeEffect, CodexGeneration, DeliveryCorrelationId, DeliveryOutcome,
+    HarnessSessionRef, MachineLabel, MessageDelivery, MessageInputKind, MessageRepresentation,
+    PushDeliveryState, PushKind, PushLineInput, RouterLink, RouterOriginRef, render_push_line,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::EndpointDirectory;
@@ -29,12 +28,12 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::Message;
 
-struct RecordingEvidenceSink(Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
+struct RecordingEvidenceSink(Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>);
 
 impl AttemptEvidenceSink for RecordingEvidenceSink {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         let result = self
             .0
@@ -52,10 +51,11 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
     let socket_path = root.path().join("native.sock");
     let automation_path = root.path().join("automation.sqlite");
     let mut automation = AutomationStore::open(&automation_path).await?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"unloaded-wake-thread"
     }))?;
@@ -115,10 +115,7 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
         return Err("stored wake push changed its kind, target, or pending state".into());
     }
     let line = render_push_line(&PushLineInput {
-        link: RouterLink::new(
-            MachineId::from(service_id.clone()),
-            stored_push.push_id.clone(),
-        ),
+        link: RouterLink::new(service_id.clone(), stored_push.push_id.clone()),
         machine_label: MachineLabel::try_from("fixture-host".to_owned())?,
         origin: stored_push.origin.clone(),
         header_facts: stored_push.header_facts.clone(),

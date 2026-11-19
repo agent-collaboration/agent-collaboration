@@ -75,7 +75,7 @@ async fn fork_ssh_profile_fixture_reaches_qualified_fork_and_returns_its_source_
     .unwrap();
     assert_eq!(
         receipt,
-        serde_json::json!({"kind":"fork","identity":{"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-fixture-ssh"},"sessionId":"00000000-0000-4000-8000-000000000011"}}})
+        serde_json::json!({"kind":"fork","identity":{"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-fixture-ssh"},"sessionId":"00000000-0000-4000-8000-000000000011"}}})
     );
     assert!(!directory.path().join("source-preparation.json").exists());
 }

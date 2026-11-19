@@ -18,7 +18,6 @@ export const c2AttachmentSchema = z
   .object({
     organizationId: z.uuidv7(),
     machineId: z.uuidv7(),
-    installationId: z.uuidv7(),
     enrollmentId: z.uuidv7(),
     clientId: z.uuidv7(),
     effectiveExpiresAt: z.number().int().safe().nonnegative(),
@@ -45,7 +44,7 @@ export const c2EventSchema = z.discriminatedUnion("kind", [
   common
     .extend({
       kind: z.literal("enrollmentRead"),
-      query: z.enum(["byEnrollment", "machineByInstallation", "activeEnrollment"]),
+      query: z.enum(["byEnrollment", "machineById", "activeEnrollment"]),
       outcome: z.enum(["read", "unavailable"]),
     })
     .strict(),
@@ -232,7 +231,7 @@ export function assertC2LiveReads(input: {
   readonly after: number;
   readonly before: number;
 }): void {
-  const required = ["byEnrollment", "machineByInstallation", "activeEnrollment"];
+  const required = ["byEnrollment", "machineById", "activeEnrollment"];
   let next = 0;
   for (const record of input.records) {
     if (

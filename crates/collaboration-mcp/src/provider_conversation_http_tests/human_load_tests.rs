@@ -75,7 +75,7 @@ async fn mcp_provider_load_rejects_foreign_session_requester_or_approver_before_
     let target = json!({"endpoint":endpoint,"sessionId":"provider-thread"});
     let local_actor = json!({"endpoint":endpoint,"sessionId":"requesting-agent"});
     let foreign_actor = json!({"endpoint":{
-        "serviceId":"00000000-0000-4000-8000-000000000009","endpointId":"codex-local"
+        "serviceId":"00000000-0000-7000-8000-000000000009","endpointId":"codex-local"
     },"sessionId":"foreign-agent"});
     for (requester, approver) in [
         (foreign_actor.clone(), local_actor),

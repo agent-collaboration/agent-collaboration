@@ -17,7 +17,8 @@ use runtime_primitives::SyncTime;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_model::{Caller, MachineId, SessionAddress, WorkspaceOperation, WorkspaceRequest};
+use workspace_ids::SessionRef;
+use workspace_model::{Caller, WorkspaceOperation, WorkspaceRequest};
 
 pub(super) const ROUTER_HOST: &str = "router";
 pub(super) const INSTALLATION: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
@@ -70,9 +71,8 @@ fn installation() -> MachineId {
 
 pub(super) fn caller() -> Caller {
     #[expect(clippy::unwrap_used, reason = "fixed valid session fields")]
-    Caller::Session(SessionAddress {
+    Caller::Session(SessionRef {
         machine_id: installation(),
-        endpoint: "codex-local".to_owned().try_into().unwrap(),
         session_id: "simulated-session".to_owned().try_into().unwrap(),
     })
 }
@@ -186,3 +186,5 @@ pub(super) async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> 
     link.stop().await;
     Ok(())
 }
+
+use workspace_ids::MachineId;

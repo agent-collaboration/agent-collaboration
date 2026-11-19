@@ -1,6 +1,7 @@
 //! Sender custody are typed separately from native pushes.
 use crate::{
-    MailDigest, MailItemId, PushOrigin, PushRecordShowParams, PushRecordShowResult, SessionRef,
+    HarnessSessionRef, MailDigest, MailItemId, PushOrigin, PushRecordShowParams,
+    PushRecordShowResult,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -43,7 +44,7 @@ pub struct MessageHistoryResult {
 pub enum MailReadContext {
     Direct {
         origin: PushOrigin,
-        recipient: SessionRef,
+        recipient: HarnessSessionRef,
     },
     Project {
         project: message_board::ProjectId,
@@ -60,7 +61,7 @@ pub enum HumanMessageReader {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum MessageReadCaller {
-    Session(SessionRef),
+    Session(HarnessSessionRef),
     Human(HumanMessageReader),
 }
 

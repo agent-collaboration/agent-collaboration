@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 use agent_session_inventory::test_support::fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000002";
 const HUMAN_ACTOR: &str = r#"{"kind":"human","humanId":"uncertainty-proof"}"#;
 type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 

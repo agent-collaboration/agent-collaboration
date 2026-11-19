@@ -208,7 +208,7 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
     let socket_path = directory.path().join("claude.sock");
     let listener = UnixListener::bind(&socket_path)?;
     let backend = ScriptedSessionBackend::new()?;
-    let stored_target: collaboration_protocol::SessionRef =
+    let stored_target: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(serde_json::to_value(&backend.session)?)?;
     let owner: collaboration_protocol::ProviderIdentity =
         serde_json::from_value(json!({"humanId":"owner"}))?;

@@ -57,7 +57,7 @@ async fn project_admission(
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: collaboration_contracts::MachineIdentity::new(
-                    collaboration_protocol::UuidIdentity::try_from(TEST_SERVICE_ID.to_owned())
+                    workspace_ids::MachineId::try_from(TEST_SERVICE_ID.to_owned())
                         .expect("service"),
                     Some("API proof"),
                 )

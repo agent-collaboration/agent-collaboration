@@ -1,7 +1,7 @@
 //! Attempt history always discloses its retention coverage, including empty pages.
 use crate::{
-    AttemptId, CessationEvidence, DeliveryEvidence, DeliveryId, ObservationTimestamp, PageLimit,
-    PositiveSeconds, RunId, SessionRef,
+    AttemptId, CessationEvidence, DeliveryEvidence, DeliveryId, HarnessSessionRef,
+    ObservationTimestamp, PageLimit, PositiveSeconds, RunId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,7 @@ pub struct SummaryInspection {
     pub summary_attempt_id: AttemptId,
     pub run_id: RunId,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub native_turn_id: Option<String>,
     pub effective_timeout_seconds: PositiveSeconds,

@@ -32,13 +32,13 @@ impl SessionDeliveryRoute for CapturingEndpoint {
     }
     fn claim(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
     fn presence(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> DeliveryFuture<'_, RoutePresence> {
         Box::pin(async { Ok(RoutePresence::Running) })
     }
@@ -88,7 +88,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     let registry =
         crate::native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
     let origin = ActorOrigin {
-        installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+        installation: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("intent proof".to_owned())?,
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
@@ -103,9 +103,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             Some("intent proof"),
         )?,
     })?);
@@ -133,15 +131,13 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
         delivery: routes.clone(),
         presence: routes.clone(),
         machine_identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             Some("intent proof"),
         )?,
         clock: clock.clone(),
     });
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission.clone())
@@ -155,7 +151,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
             actors: delivery.clone(),
             presence: routes,
             machine: MachineIdentity::new(
-                "00000000-0000-4000-8000-000000000001"
+                "00000000-0000-7000-8000-000000000001"
                     .to_owned()
                     .try_into()?,
                 Some("intent proof"),
@@ -206,7 +202,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     grant["operation"] = json!({"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"lead","holder":actor,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null});
     accepted(&api.call("role_grant", grant).await?);
     let root = PostId::generate();
-    let target = json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"intent-endpoint-stand-in"}});
+    let target = json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"intent-endpoint-stand-in"}});
     let mut create = header();
     create["projectId"] = json!(project);
     create["postId"] = json!(root);

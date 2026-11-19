@@ -30,15 +30,16 @@ use collaboration_contracts::SettlementEvidence;
 use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
     CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
-    DeliveryRejection, DeliveryRejectionReason, RouterLink, RunExecution, ScheduleFailureKind,
-    SessionRef,
+    DeliveryRejection, DeliveryRejectionReason, HarnessSessionRef, RouterLink, RunExecution,
+    ScheduleFailureKind,
 };
 
 impl ClaudeCodePeerDeliveryRoute {
     async fn peer_run_evidence(
         &self,
-        target: &SessionRef,
-    ) -> Result<RouteEffectEvidence<SessionRef, CodexGeneration>, DeliveryContractError> {
+        target: &HarnessSessionRef,
+    ) -> Result<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>, DeliveryContractError>
+    {
         if !self.serves(target) {
             return Err(DeliveryContractError::ClientOperation);
         }
@@ -81,7 +82,7 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
     fn initial_evidence(
         &self,
         destination: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, RouteEffectEvidence<SessionRef, CodexGeneration>> {
+    ) -> DeliveryFuture<'_, RouteEffectEvidence<HarnessSessionRef, CodexGeneration>> {
         let destination = destination.clone();
         Box::pin(async move {
             match destination {
@@ -144,7 +145,7 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
 
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         _declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {

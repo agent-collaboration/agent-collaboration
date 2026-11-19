@@ -20,14 +20,14 @@ use collaboration_contracts::ScheduledRunExecution;
 use collaboration_contracts::ScheduledRunRoute;
 use collaboration_contracts::ScheduledRunSubmission;
 use collaboration_contracts::StopRequestOutcome;
-use collaboration_protocol::{EndpointRef, SessionReachability, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef, SessionReachability};
 use futures_util::future::join_all;
 use std::sync::Arc;
 
 impl SessionDeliveryRouter {
     async fn scheduled_for_existing(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Arc<dyn ScheduledRunRoute>, DeliveryContractError> {
         let claims = join_all(self.routes.iter().map(|route| route.claim(target)))
             .await
@@ -84,7 +84,7 @@ impl SessionDeliveryRouter {
 
     fn scheduled_for_recorded(
         &self,
-        evidence: &RouteEffectEvidence<SessionRef, collaboration_protocol::CodexGeneration>,
+        evidence: &RouteEffectEvidence<HarnessSessionRef, collaboration_protocol::CodexGeneration>,
     ) -> Result<Arc<dyn ScheduledRunRoute>, DeliveryContractError> {
         let reachability = match evidence {
             RouteEffectEvidence::CodexAppServer(_) => SessionReachability::CodexAppServer,
@@ -124,8 +124,10 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
     fn initial_evidence(
         &self,
         destination: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, RouteEffectEvidence<SessionRef, collaboration_protocol::CodexGeneration>>
-    {
+    ) -> DeliveryFuture<
+        '_,
+        RouteEffectEvidence<HarnessSessionRef, collaboration_protocol::CodexGeneration>,
+    > {
         let destination = destination.clone();
         Box::pin(async move {
             let route = match &destination {
@@ -159,7 +161,7 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
 
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {

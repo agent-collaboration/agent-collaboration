@@ -83,7 +83,7 @@ async fn create_workspaces(bridge: &Bridge) -> ConformanceResult<()> {
 
 fn approval(request: &str, workspaces: &[&str], now: i64, deadline: i64) -> Value {
     json!({"organizationId":signed::ORGANIZATION,"approver":signed::OWNER,
-        "permissionChecked":"machine:enroll","requestId":request,"installation":INSTALLATION,
+        "permissionChecked":"machine:enroll","requestId":request,"installation":INSTALLATION,"peer":INSTALLATION,
         "peer":INSTALLATION,"label":"Observed machine","allowedWorkspaces":workspaces,
         "approverSecondFactorAt":now-60,"codeExpiresAt":deadline})
 }
@@ -149,7 +149,7 @@ fn expected_approval(
 }
 
 fn expected_machine(machine: &str, state: &str, workspaces: &[&str], generation: i64) -> Value {
-    json!({"machineId":machine,"installationId":INSTALLATION,"state":state,
+    json!({"machineId":machine,"state":state,
         "allowedWorkspaces":workspaces,"enrollmentGeneration":generation})
 }
 
@@ -335,7 +335,7 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
         vec![third_row.clone(), first_row.clone(), second_row.clone()],
     );
 
-    // A distinct installation creates another owning machine. Observe the whole
+    // A distinct machine_id creates another owning machine. Observe the whole
     // organization, not just the machine used by the preceding lifecycle stages.
     bridge.set_time((start + 7) * 1000, 1).await?;
     let mut another = approval(REQUEST_FOUR, &[WORKSPACE_TWO], start + 7, start + 607);
@@ -361,10 +361,10 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     assert_eq!(actual_machines.len(), 2);
     let second_machine = actual_machines
         .iter()
-        .find(|row| row.get("installationId") == Some(&json!(INSTALLATION_TWO)))
+        .find(|row| row.get("machineId") == Some(&json!(INSTALLATION_TWO)))
         .and_then(|row| row.get("machineId"))
         .and_then(Value::as_str)
-        .ok_or("second installation's owning machine missing")?;
+        .ok_or("second machine_id's owning machine missing")?;
     let second_machine = second_machine.to_owned();
     let parsed = uuid::Uuid::parse_str(&second_machine)?;
     assert_eq!(parsed.get_version_num(), 7);
@@ -372,7 +372,7 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     assert_ne!(second_machine, machine);
     let mut expected_machines = vec![
         expected_machine(&machine, "enrolled", &[WORKSPACE_ONE, WORKSPACE_TWO], 2),
-        json!({"machineId":second_machine,"installationId":INSTALLATION_TWO,"state":"revoked",
+        json!({"machineId":second_machine,"state":"revoked",
             "allowedWorkspaces":[WORKSPACE_TWO],"enrollmentGeneration":0}),
     ];
     // Machines have no promised order; cardinality plus complete identity-sorted

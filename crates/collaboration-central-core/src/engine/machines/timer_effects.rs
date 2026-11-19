@@ -29,7 +29,7 @@ impl From<NotUuidV7> for TransitionError<TimerRefusal> {
 /// A queued message from central, minted with the next id from the context.
 pub(crate) fn queue_message(
     context: &mut Context<'_>,
-    target: workspace_model::SessionAddress,
+    target: workspace_ids::SessionRef,
     body: mail::MessageBody,
 ) -> Result<mail::MessageRecord, NotUuidV7> {
     let id = context.ids.next_id();

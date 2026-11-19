@@ -1,19 +1,19 @@
 //! Router-owned native operation parameters and results; native payload schemas stay upstream.
 use crate::{
-    AcceptedResumeEffect, CodexGeneration, MessageContent, MessageDelivery, MessageInputKind,
-    MessageRepresentation, NonEmptyText, SessionRef,
+    AcceptedResumeEffect, CodexGeneration, HarnessSessionRef, MessageContent, MessageDelivery,
+    MessageInputKind, MessageRepresentation, NonEmptyText,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeInspectParams {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeInspectResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub effective_access: Option<crate::RouterAccess>,
     pub settings_observation: crate::SettingsObservation,
@@ -28,20 +28,20 @@ pub struct NativeInspectResult {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeRenameParams {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub name: String,
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeRenameResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub name: String,
     pub previous_name: Option<String>,
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeInterruptParams {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub turn_id: NonEmptyText,
 }
@@ -53,7 +53,7 @@ pub enum NativeInterruptKind {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeInterruptResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub turn_id: NonEmptyText,
     pub kind: NativeInterruptKind,
@@ -62,7 +62,7 @@ pub struct NativeInterruptResult {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeSendParams {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub message: MessageContent,
     #[serde(default)]
@@ -103,7 +103,7 @@ pub enum NativeInputDisposition {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeSendReceipt {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub input_kind: MessageInputKind,
     pub representation: MessageRepresentation,

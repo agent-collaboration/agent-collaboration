@@ -190,7 +190,9 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     assert!(manifest.mcp.url.starts_with("http://127.0.0.1:"));
     assert!(manifest.mcp.url.ends_with("/mcp"));
     assert_eq!(
-        minted_version(&manifest.service_id),
+        uuid::Uuid::parse_str(manifest.service_id.as_str())
+            .unwrap()
+            .get_version_num(),
         7,
         "fresh-root service id"
     );

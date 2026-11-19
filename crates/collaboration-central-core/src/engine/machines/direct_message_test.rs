@@ -2,15 +2,14 @@ use super::*;
 use crate::engine::machines::timer_test_support::{ReplayIds, context, time};
 use central_engine_model::check_transitions;
 
-fn session(name: &str) -> SessionAddress {
-    SessionAddress {
+fn session(name: &str) -> SessionRef {
+    SessionRef {
         machine_id: "01890f2e-7b4c-7cc0-98c4-000000000001".parse().unwrap(),
-        endpoint: "codex-local".to_owned().try_into().unwrap(),
         session_id: name.to_owned().try_into().unwrap(),
     }
 }
 
-fn subject(sender_session: Option<SessionAddress>) -> DirectMessageSubject {
+fn subject(sender_session: Option<SessionRef>) -> DirectMessageSubject {
     DirectMessageSubject {
         id: "01890f2e-7b4c-7cc0-98c4-0000000000a1".parse().unwrap(),
         sender_session,

@@ -4,7 +4,7 @@ use agent_session_inventory::sessions::source_ssh_protocol::{
 };
 use agent_session_inventory::source_inventory_request::PickerSourceContext;
 use agent_session_tui::session_picker::{NewClientInventoryLoader, SessionClientPorts};
-use collaboration_client::protocol::{EndpointInventory, UuidIdentity};
+use collaboration_client::protocol::EndpointInventory;
 use std::sync::Arc;
 
 pub(crate) fn production_ports(context: CliContext) -> SessionClientPorts {
@@ -53,7 +53,7 @@ pub(super) async fn read_client_inventory(
     source: PickerSourceContext,
 ) -> Result<
     (
-        UuidIdentity,
+        workspace_ids::MachineId,
         EndpointInventory,
         SourceNativeLaunchAvailability,
     ),

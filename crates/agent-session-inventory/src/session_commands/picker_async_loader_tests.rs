@@ -14,7 +14,7 @@ async fn configured_picker_loader_rejects_unqualified_credentials_and_unsupporte
     let registry = router_connection_registry::RouterConnectionRegistry::parse(
         r#"{
         "version":1,"routers":[{"name":"Source fixture","connection":{"kind":"remote",
-        "serviceId":"00000000-0000-4000-8000-000000000003","mcpUrl":"https://source.invalid/mcp",
+        "serviceId":"00000000-0000-7000-8000-000000000003","mcpUrl":"https://source.invalid/mcp",
         "credential":{"kind":"environment","variable":"UNQUALIFIED_SOURCE_CREDENTIAL"}},
         "defaultRemoteCwd":"/remote/new-only"}]}"#,
     )

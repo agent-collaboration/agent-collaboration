@@ -15,7 +15,7 @@ use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeExitStat
 
 fn binding() -> SourceNativeBinding {
     SourceNativeBinding {
-        service_id: "00000000-0000-4000-8000-000000000001"
+        service_id: "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap(),
@@ -85,7 +85,7 @@ fn claude_background_new_returns_terminal_handoff_before_native_start() {
 fn claude_stopped_details_offers_open_without_background_resume() {
     let summary = serde_json::from_value(serde_json::json!({
         "origin":"claudeCodeBackground",
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"},
         "jobHandle":"deadbeef","workingDirectory":"/source/project","startedAt":1,"state":{"kind":"stopped"}
     })).unwrap();
     let record = SessionPickerRecord::from_provider_summary(&summary, "Native Claude");

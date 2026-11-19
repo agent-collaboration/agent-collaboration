@@ -84,7 +84,7 @@ mod tests {
     #[tokio::test]
     async fn permission_reporting_preserves_thread_and_both_cwd_checks() {
         // Arrange: a recorded route with a fixed thread and working directory.
-        let actor = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"});
+        let actor = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"});
         let route: ApprovalRoute = serde_json::from_value(json!({
             "threadId":"recorded-thread","createdBy":actor,"approver":actor,
             "access":"workspace-write","scratchPath":"/recorded-scratch","rootMessageId":null

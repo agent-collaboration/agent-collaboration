@@ -1,5 +1,5 @@
 //! Local carrier observations and remote outbox custody are different send results.
-use crate::{MailItemId, PushMessageSendResult, SessionMessageReplyResult, SessionRef};
+use crate::{HarnessSessionRef, MailItemId, PushMessageSendResult, SessionMessageReplyResult};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ pub type MessageReplyResult = MessageSendResult<SessionMessageReplyResult>;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QueuedMessageSend {
     pub item: MailItemId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub target_identity: String,
 }
 

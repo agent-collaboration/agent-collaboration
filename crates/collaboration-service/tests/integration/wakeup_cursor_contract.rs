@@ -26,7 +26,7 @@ async fn exercise_cursor(
         automation_storage::AutomationStore::open(&path).await?,
     ));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
@@ -36,7 +36,7 @@ async fn exercise_cursor(
     // MS-10: independent page records occupy independent target slots.
     for index in 0..2 {
         let request: WakeSendRequest = serde_json::from_value(
-            json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":format!("fixture-{index}")},"content":{"kind":"humanUser","text":"x".repeat(text_bytes)},"delivery":"auto","generationGuard":null},"timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
+            json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":format!("fixture-{index}")},"content":{"kind":"humanUser","text":"x".repeat(text_bytes)},"delivery":"auto","generationGuard":null},"timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
         )?;
         client.send_wakeup(request).await?;
     }

@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 
 /// A served API that runs one request at a time, with that one held by a wake wait.
 struct SaturatedApi {
@@ -69,7 +69,7 @@ impl SaturatedApi {
                 .map_err(|error| std::io::Error::other(error.to_string()))?,
             fleet: Arc::new(fleet),
             identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+                workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
                 Some("overload proof"),
             )?,
         })?);

@@ -1,7 +1,7 @@
 //! Poll policy facts discover SDK-owned items without creating a delivery push.
 use crate::{InteractionStore, StorageError};
 use chrono::{DateTime, SecondsFormat, Utc};
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use fleet_sync_protocol::ItemId;
 use message_board::RecordId;
@@ -10,7 +10,7 @@ use sqlx_turso::TursoConnection;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingPollMail {
     pub item: ItemId,
-    pub recipient: SessionRef,
+    pub recipient: HarnessSessionRef,
     pub membership: RecordId,
     pub received_at: DateTime<Utc>,
 }
@@ -37,7 +37,7 @@ impl TryFrom<PendingPollRow> for PendingPollMail {
         }
         Ok(Self {
             item: row.item_id.try_into().map_err(|_| invalid())?,
-            recipient: SessionRef {
+            recipient: HarnessSessionRef {
                 endpoint: collaboration_protocol::EndpointRef {
                     service_id: row.recipient_service_id.try_into().map_err(|_| invalid())?,
                     endpoint_id: row
@@ -109,7 +109,7 @@ pub async fn delete_pending_poll_in_scope<THost: Host>(
 impl InteractionStore {
     pub async fn pending_poll_mail(
         &self,
-        recipient: &SessionRef,
+        recipient: &HarnessSessionRef,
     ) -> Result<Vec<PendingPollMail>, StorageError> {
         let service = String::from(recipient.endpoint.service_id.clone());
         let endpoint = String::from(recipient.endpoint.endpoint_id.clone());

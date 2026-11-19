@@ -62,7 +62,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     ))
     .await?;
     let machine = MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         Some("notice fixture"),

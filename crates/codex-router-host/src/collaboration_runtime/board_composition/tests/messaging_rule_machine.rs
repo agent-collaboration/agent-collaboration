@@ -68,7 +68,7 @@ impl RuleMachine {
         let machine = holder.central.additional_machine(origin, peer).await?;
         let root = holder.directory.path().join(directory_name);
         let identity = MachineIdentity::new(
-            UuidIdentity::try_from(origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(origin.installation.as_str().to_owned())?,
             Some(origin.machine.as_str()),
         )?;
         let mut board =

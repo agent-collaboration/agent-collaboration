@@ -6,7 +6,7 @@ use collaboration_contracts::RouterConsumerProtocol;
 use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::MailSender;
 use collaboration_protocol::{
-    EndpointId, EndpointRef, MailItemId, PushRecord, SessionId, SessionRef,
+    EndpointId, EndpointRef, HarnessSessionRef, MailItemId, PushRecord, SessionId,
 };
 use durable_steps::{
     AtomicStore, CallFailure, CallId, NotSentReason, StoreError, turso_store::TursoScope,
@@ -78,7 +78,7 @@ pub struct PendingLocalCancelFixture {
     directory: tempfile::TempDir,
     registry: PathBuf,
     listener: UnixListener,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub item: MailItemId,
     pub cancel: ItemId,
     peer: PeerId,
@@ -112,7 +112,7 @@ impl PendingLocalCancelFixture {
         let socket = registry.join("peer.sock");
         let listener = UnixListener::bind(&socket)?;
         listener.set_nonblocking(true)?;
-        let target = SessionRef {
+        let target = HarnessSessionRef {
             endpoint: EndpointRef {
                 service_id: service.clone(),
                 endpoint_id: EndpointId::try_from("claude-local".to_owned())?,

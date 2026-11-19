@@ -107,7 +107,7 @@ async fn signed_machine_token_returns_identity_and_the_earliest_deadline() {
     let (verifier, key) = fixture(false);
     let verified = verifier.verify(&token(&key, claims())).await.unwrap();
     assert_eq!(verified.organization_id().as_str(), ID);
-    assert_eq!(verified.installation_id().as_str(), ID);
+    assert_eq!(verified.machine_id().as_str(), ID);
     assert_eq!(verified.enrollment_id().as_str(), ID);
     assert_eq!(verified.client_id().as_str(), ID);
     assert_eq!(verified.effective_expires_at(), UnixSeconds(NOW + 300));
@@ -138,9 +138,9 @@ async fn rejects_wrong_profile_ids_and_grant_without_leeway() {
     let mut principal = claims();
     principal["principal"]["extra"] = json!(true);
     invalid.push(principal);
-    let mut installation = claims();
-    installation["principal"]["installation_id"] = json!("legacy");
-    invalid.push(installation);
+    let mut machine_id = claims();
+    machine_id["principal"]["installation_id"] = json!("legacy");
+    invalid.push(machine_id);
     for claim in invalid {
         assert_eq!(
             verifier.verify(&token(&key, claim)).await,

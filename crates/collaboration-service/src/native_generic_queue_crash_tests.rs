@@ -49,7 +49,7 @@ async fn generic_queue_host_stop_reconciles_exact_item_causal() {
             .await
             .unwrap(),
     ));
-    let before=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
+    let before=store.lock().await.read_delivery::<HarnessSessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
     assert_eq!(before.status, DeliveryStatus::Dispatching);
     let attempt = before.attempt.unwrap();
     let before_attempt_id = attempt.attempt_id.clone();
@@ -62,7 +62,7 @@ async fn generic_queue_host_stop_reconciles_exact_item_causal() {
         .recover_interrupted_deliveries(chrono::Utc::now().timestamp_millis() + 1000)
         .await
         .unwrap();
-    let recovered=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
+    let recovered=store.lock().await.read_delivery::<HarnessSessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
     assert_eq!(recovered.status, DeliveryStatus::Uncertain);
     assert_eq!(
         recovered.attempt.as_ref().unwrap().attempt_id,
@@ -117,7 +117,7 @@ async fn generic_queue_host_stop_reconciles_exact_item_causal() {
     )
     .await
     .unwrap();
-    let after=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
+    let after=store.lock().await.read_delivery::<HarnessSessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
     if after.status != DeliveryStatus::Accepted {
         native.abort();
         let _ = native.await;

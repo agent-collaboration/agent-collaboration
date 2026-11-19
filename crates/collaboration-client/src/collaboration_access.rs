@@ -10,7 +10,7 @@ use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ConversationCancelRequest,
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationSubmission,
     ConversationOperationWaitRequest, ConversationOperationWaitResult, ConversationPromptRequest,
-    EndpointInventory, UuidIdentity,
+    EndpointInventory,
 };
 use std::{
     future::Future,
@@ -26,7 +26,7 @@ pub type LocalFuture<'a, TResult> =
 /// The Router's own collaboration operations, for carrier clients running inside the Host.
 /// A failure is the rejection the Router published, as `ClientError::Rejected`.
 pub trait LocalCollaboration: Send + Sync {
-    fn service_id(&self) -> UuidIdentity;
+    fn service_id(&self) -> workspace_ids::MachineId;
     fn endpoints(&self) -> Result<EndpointInventory, ClientError>;
     fn create_provider_conversation(
         &self,
@@ -115,7 +115,7 @@ pub(crate) enum EndpointDirectoryReader {
 }
 
 impl EndpointDirectoryReader {
-    pub(crate) fn service_id(&self) -> UuidIdentity {
+    pub(crate) fn service_id(&self) -> workspace_ids::MachineId {
         match self {
             Self::Api(client) => client.identity().service_id.clone(),
             Self::Local(router) => router.service_id(),

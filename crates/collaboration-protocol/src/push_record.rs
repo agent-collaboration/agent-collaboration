@@ -1,7 +1,7 @@
 //! Validated record shapes shared by Router storage and push-reading surfaces.
 use crate::{
-    CodexGeneration, DeliveryOutcome, DeliveryReceipt, MailItemId, MessageDelivery, MessageText,
-    PushHeaderFacts, PushId, PushKind, PushOrigin, SessionRef,
+    CodexGeneration, DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, MailItemId,
+    MessageDelivery, MessageText, PushHeaderFacts, PushId, PushKind, PushOrigin,
 };
 use chrono::{DateTime, Utc};
 use message_board::{FeedCursor, ProjectId, ThreadId};
@@ -65,7 +65,7 @@ pub struct PushRecordDraft {
     pub kind: PushKind,
     pub origin: PushOrigin,
     pub origin_router_ref: Option<String>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<MessageDelivery>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -239,7 +239,7 @@ pub struct PushRecord {
     pub kind: PushKind,
     pub origin: PushOrigin,
     pub origin_router_ref: Option<String>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<MessageDelivery>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -261,7 +261,7 @@ pub struct PushRecord {
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PushRecordShowParams {
-    pub caller: SessionRef,
+    pub caller: HarnessSessionRef,
     /// A local push id or a router:// machine/push/id link.
     pub reference: String,
 }
@@ -284,15 +284,15 @@ pub struct PushRecordShowResult {
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PushRecordListParams {
-    pub caller: SessionRef,
+    pub caller: HarnessSessionRef,
     pub limit: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PushRecordHistoryParams {
-    pub caller: SessionRef,
-    pub with: SessionRef,
+    pub caller: HarnessSessionRef,
+    pub with: HarnessSessionRef,
     pub limit: u32,
 }
 
@@ -303,7 +303,7 @@ pub struct PushRecordNotice {
     pub link: String,
     pub line: String,
     pub origin: PushOrigin,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     // Global item/push reference; the parent need not exist in local history.
     pub reply_to_push_id: Option<PushId>,
     pub delivery_state: PushDeliveryState,
@@ -324,7 +324,7 @@ pub struct PushRecordListResult {
 pub struct PushMessageSendResult {
     pub push_id: PushId,
     pub link: String,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub target_identity: String,
     pub delivery_state: PushDeliveryState,
     pub receipt: DeliveryReceipt,

@@ -6,11 +6,11 @@ use crate::sessions::source_ssh_protocol::{
 };
 use collaboration_client::protocol::{
     ChannelDescription, CodexGeneration, ConversationOperationWaitRequest,
-    ConversationResumeRequest, EndpointAvailability, NativeSessionScope, NativeSessionSource,
-    NativeSessionView, OperationId, PositiveSeconds, ProviderBindingIdentity,
+    ConversationResumeRequest, EndpointAvailability, HarnessSessionRef, NativeSessionScope,
+    NativeSessionSource, NativeSessionView, OperationId, PositiveSeconds, ProviderBindingIdentity,
     ProviderCapabilityName, ProviderCapabilityStatus, ProviderIdentity, ProviderRequestedPolicy,
     ProviderSessionInspectRequest, ProviderSessionListParams, ProviderSessionSummary,
-    ProviderWorkingDirectory, SessionRef,
+    ProviderWorkingDirectory,
 };
 use collaboration_client::{
     ClientError, CollaborationAccess, CollaborationClient, ConversationActor, ConversationClient,
@@ -31,7 +31,7 @@ struct StoredLoadMetadata {
 pub async fn inspect_stored_provider(
     request: &SourceRequest,
     binding: &ProviderBindingIdentity,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> Result<SourceReply, SourceRejection> {
     if binding.endpoint.service_id != request.expected_service
         || target.endpoint != binding.endpoint
@@ -231,7 +231,7 @@ pub async fn execute_provider_action(
 
 fn unknown_result(
     operation_id: &OperationId,
-    target: Option<&SessionRef>,
+    target: Option<&HarnessSessionRef>,
 ) -> SourceProviderActionResult {
     SourceProviderActionResult::Unknown {
         operation_id: operation_id.clone(),
@@ -241,7 +241,7 @@ fn unknown_result(
 
 fn failed_or_unknown(
     operation_id: &OperationId,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     error: ClientError,
 ) -> SourceProviderActionResult {
     match error.conversation_failure() {
@@ -314,7 +314,7 @@ async fn validate_binding(
 
 async fn stored_load_metadata(
     client: &CollaborationClient,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> Result<StoredLoadMetadata, SourceRejection> {
     let mut cursor = None;
     let mut seen_cursors = BTreeSet::new();

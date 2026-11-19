@@ -1,7 +1,6 @@
 //! Component proofs for the actual Host factory; process-level G2 remains separate.
 use super::*;
 use collaboration_contracts::ProjectRegistrationState;
-use collaboration_protocol::UuidIdentity;
 use fleet_sync_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationRefusal};
 use fleet_sync_session::SessionClientStore;
 use fleet_sync_writer::WriterRegistrationOutcome;
@@ -107,7 +106,7 @@ impl collaboration_contracts::ProjectReplicationPosition for EmptyProjectProgres
 
 pub(super) fn identity() -> Result<MachineIdentity, Box<dyn std::error::Error + Send + Sync>> {
     Ok(MachineIdentity::new(
-        UuidIdentity::try_from("550e8400-e29b-41d4-a716-446655440000".to_owned())?,
+        workspace_ids::MachineId::try_from("550e8400-e29b-71d4-a716-446655440000".to_owned())?,
         Some("board session fixture"),
     )?)
 }
@@ -136,7 +135,7 @@ async fn absent_enrollment_constructs_no_machine_session_or_resume_file() -> Tes
 
 pub(super) fn origin() -> Result<ActorOrigin, Box<dyn std::error::Error + Send + Sync>> {
     Ok(ActorOrigin {
-        installation: ServiceId::try_from("550e8400-e29b-41d4-a716-446655440000".to_owned())?,
+        installation: ServiceId::try_from("550e8400-e29b-71d4-a716-446655440000".to_owned())?,
         machine: MachineLabel::try_from("board session fixture".to_owned())?,
     })
 }
@@ -179,7 +178,7 @@ async fn assert_rejected_receipt_read(
 ) -> TestResult {
     use message_board::public_replies as public;
     let application = (collaboration_service::ApplicationFixture::new(
-        "550e8400-e29b-41d4-a716-446655440000",
+        "550e8400-e29b-71d4-a716-446655440000",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission.clone()))
@@ -349,7 +348,7 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
         ))
     ));
     let projection = (collaboration_service::ApplicationFixture::new(
-        "550e8400-e29b-41d4-a716-446655440000",
+        "550e8400-e29b-71d4-a716-446655440000",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission.clone())

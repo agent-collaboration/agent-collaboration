@@ -17,7 +17,7 @@ struct SubscriptionExpansionFixture {
     control: ControlHarness,
     project_id: ProjectId,
     thread_id: ThreadId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     board_reader: Identity,
     initialization: message_board::RequestId,
 }
@@ -56,7 +56,7 @@ impl SubscriptionExpansionFixture {
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: MachineIdentity::new(
-                    UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service"),
+                    workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service"),
                     Some("range proof"),
                 )
                 .expect("identity"),
@@ -271,7 +271,7 @@ impl SubscriptionExpansionFixture {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn board_session_identity(target: &SessionRef) -> Identity {
+fn board_session_identity(target: &HarnessSessionRef) -> Identity {
     Identity::Session {
         session: BoardSessionRef {
             endpoint: SessionEndpointRef {
@@ -391,9 +391,7 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
         )
         .await;
     let link = collaboration_protocol::RouterLink::new(
-        collaboration_protocol::MachineId::from(
-            UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("machine UUID"),
-        ),
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("machine UUID"),
         push_id.clone(),
     )
     .to_string();

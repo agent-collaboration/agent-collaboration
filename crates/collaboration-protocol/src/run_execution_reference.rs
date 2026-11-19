@@ -1,12 +1,12 @@
 //! Public execution identity names the route and exact effect observed for a Run.
-use crate::{ObservationTimestamp, OperationId, PositiveSeconds, SessionRef};
+use crate::{HarnessSessionRef, ObservationTimestamp, OperationId, PositiveSeconds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeExecution {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(rename = "nativeTurnId")]
     pub turn_id: String,
     pub started_at: ObservationTimestamp,
@@ -24,14 +24,14 @@ pub struct NativeExecution {
 pub enum RunExecution {
     CodexAppServer(NativeExecution),
     ProviderAcp {
-        target: SessionRef,
+        target: HarnessSessionRef,
         operation_id: OperationId,
         started_at: ObservationTimestamp,
         deadline_at: ObservationTimestamp,
         effective_timeout_seconds: PositiveSeconds,
     },
     ClaudeCodePeer {
-        target: SessionRef,
+        target: HarnessSessionRef,
         written_at: ObservationTimestamp,
     },
 }

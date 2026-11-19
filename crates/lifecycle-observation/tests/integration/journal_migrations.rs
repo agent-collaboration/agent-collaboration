@@ -5,7 +5,7 @@ use sqlx::{Connection, SqliteConnection};
 const LEGACY_SCHEMA: &str = include_str!("../fixtures/journal_v1.sql");
 
 fn identity() -> Result<UuidIdentity, Box<dyn std::error::Error>> {
-    Ok("00000000-0000-4000-8000-000000000001"
+    Ok("00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()?)
 }
@@ -28,10 +28,10 @@ fn legacy_checkpoint_address(
         .ok_or("checkpoint timestamp out of range")?
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let entry = serde_json::json!({
-        "address":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":thread_id},
+        "address":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":thread_id},
         "firstObservedAt":observed_at,
         "lastObservedAt":observed_at,
-        "lastObservation":{"journalId":"00000000-0000-4000-8000-000000000001","sequence":sequence},
+        "lastObservation":{"journalId":"00000000-0000-7000-8000-000000000001","sequence":sequence},
         "lastStatus":null,"statusScope":null,"statusOrdering":"unknown",
         "disposition":{"existence":"observed","archive":"unknown","lastClose":null,"lastChange":null}
     });
@@ -80,15 +80,15 @@ async fn legacy_adoption_preserves_all_rows_and_rejects_changed_history() {
         .execute(&mut connection)
         .await
         .unwrap_or_else(|error| panic!("journal migration proof: {error}"));
-    sqlx::raw_sql("INSERT INTO journal_metadata VALUES (1,1,'00000000-0000-4000-8000-000000000001',9,100,24); INSERT INTO journal_checkpoint VALUES(1,7); INSERT INTO lifecycle_records VALUES(9,100,'retained record'); INSERT INTO thread_addresses VALUES('address','retained address',16);")
+    sqlx::raw_sql("INSERT INTO journal_metadata VALUES (1,1,'00000000-0000-7000-8000-000000000001',9,100,24); INSERT INTO journal_checkpoint VALUES(1,7); INSERT INTO lifecycle_records VALUES(9,100,'retained record'); INSERT INTO thread_addresses VALUES('address','retained address',16);")
         .execute(&mut connection)
         .await
         .unwrap_or_else(|error| panic!("journal migration proof: {error}"));
     let checkpoint_entry = serde_json::json!({
-        "address":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":"checkpoint"},
+        "address":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":"checkpoint"},
         "firstObservedAt":"2026-09-05T12:34:56.789Z",
         "lastObservedAt":"2026-10-05T12:34:56.789Z",
-        "lastObservation":{"journalId":"00000000-0000-4000-8000-000000000001","sequence":7},
+        "lastObservation":{"journalId":"00000000-0000-7000-8000-000000000001","sequence":7},
         "lastStatus":null,"statusScope":null,"statusOrdering":"unknown",
         "disposition":{"existence":"observed","archive":"unknown","lastClose":null,"lastChange":null}
     });
@@ -157,7 +157,7 @@ async fn legacy_checkpoint_backfill_pages_250_rows_at_exact_100_row_boundaries()
     sqlx::raw_sql(LEGACY_SCHEMA)
         .execute(&mut connection)
         .await?;
-    sqlx::raw_sql("INSERT INTO journal_metadata VALUES (1,1,'00000000-0000-4000-8000-000000000001',250,100,0); INSERT INTO journal_checkpoint VALUES(1,250);")
+    sqlx::raw_sql("INSERT INTO journal_metadata VALUES (1,1,'00000000-0000-7000-8000-000000000001',250,100,0); INSERT INTO journal_checkpoint VALUES(1,250);")
         .execute(&mut connection)
         .await?;
     let mut transaction = connection.begin().await?;
@@ -212,7 +212,7 @@ async fn corrupt_legacy_checkpoint_backfill_names_row_and_rolls_back_schema()
     sqlx::raw_sql(LEGACY_SCHEMA)
         .execute(&mut connection)
         .await?;
-    sqlx::raw_sql("INSERT INTO journal_metadata VALUES (1,1,'00000000-0000-4000-8000-000000000001',1,100,0); INSERT INTO journal_checkpoint VALUES(1,1);")
+    sqlx::raw_sql("INSERT INTO journal_metadata VALUES (1,1,'00000000-0000-7000-8000-000000000001',1,100,0); INSERT INTO journal_checkpoint VALUES(1,1);")
         .execute(&mut connection)
         .await?;
     let (address_key, mut entry_json) = legacy_checkpoint_address(
@@ -305,7 +305,7 @@ async fn incompatible_legacy_schema_or_metadata_is_rejected_without_history() {
         let path = std::env::temp_dir().join(format!("journal-native-invalid-{}-{index}.sqlite", std::process::id()));
         let mut connection = connect(&path).await.unwrap();
         sqlx::raw_sql(LEGACY_SCHEMA).execute(&mut connection).await.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
-        sqlx::raw_sql("INSERT INTO journal_metadata VALUES(1,1,'00000000-0000-4000-8000-000000000001',0,0,0); INSERT INTO journal_checkpoint VALUES(1,0);").execute(&mut connection).await.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
+        sqlx::raw_sql("INSERT INTO journal_metadata VALUES(1,1,'00000000-0000-7000-8000-000000000001',0,0,0); INSERT INTO journal_checkpoint VALUES(1,0);").execute(&mut connection).await.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
         sqlx::raw_sql(change).execute(&mut connection).await.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
         let before: Vec<(String, Option<String>)> = sqlx::query_as("SELECT name,sql FROM sqlite_master ORDER BY name").fetch_all(&mut connection).await.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
         connection.close().await.unwrap_or_else(|error| panic!("journal migration proof: {error}"));

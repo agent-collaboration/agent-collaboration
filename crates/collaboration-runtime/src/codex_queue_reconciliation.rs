@@ -6,8 +6,8 @@ use codex_native_integration::{NativeConnectionError, NativeOperation, NativePro
 use collaboration_contracts::AttemptReconciliation;
 use collaboration_contracts::AttemptReconciliationContext;
 use collaboration_protocol::{
-    AcceptedResumeEffect, DeliveryReceipt, MessageDelivery, MessageInputKind,
-    MessageRepresentation, NativeSendAcceptance, NativeSendReceipt, SessionRef,
+    AcceptedResumeEffect, DeliveryReceipt, HarnessSessionRef, MessageDelivery, MessageInputKind,
+    MessageRepresentation, NativeSendAcceptance, NativeSendReceipt,
 };
 use serde_json::{Value, json};
 
@@ -85,7 +85,7 @@ pub async fn reconcile(
 
 async fn find_queued_input(
     admission: &NativeAdmission,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     correlation: &str,
 ) -> Result<Option<String>, NativeConnectionError> {
     let schemas = admission

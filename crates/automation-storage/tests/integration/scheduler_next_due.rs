@@ -5,7 +5,7 @@ use agent_automation::{
     TimingRule,
 };
 use automation_storage::{AutomationStore, ScheduleCreate};
-use collaboration_protocol::{EndpointRef, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef};
 use serde_json::json;
 use sqlx::Connection;
 
@@ -28,12 +28,12 @@ async fn the_next_due_time_is_the_earliest_actionable_item_strictly_after_now()
             BASE_MS,
         )
         .await?;
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+    let target: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"next-due"
     }))?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,

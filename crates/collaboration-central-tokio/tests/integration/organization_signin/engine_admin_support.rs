@@ -74,7 +74,7 @@ impl EngineOrg {
                 "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                 vec![
                     text(serde_json::to_string(&vec![engine.workspace.clone()]).unwrap()),
-                    text(MACHINE),
+                    text(INSTALLATION),
                 ],
             )
             .await
@@ -241,7 +241,7 @@ impl EngineOrg {
             .await
             .unwrap()
     }
-    pub fn target(&self) -> m::SessionAddress {
+    pub fn target(&self) -> workspace_ids::SessionRef {
         let m::Caller::Session(address) = self.caller.caller() else {
             panic!("session caller")
         };

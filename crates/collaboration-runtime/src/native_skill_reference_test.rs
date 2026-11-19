@@ -2,7 +2,7 @@ use super::*;
 
 fn session(id: &str, endpoint: &str) -> Result<SessionRef, serde_json::Error> {
     serde_json::from_value(
-        serde_json::json!({"endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":endpoint},"sessionId":id}),
+        serde_json::json!({"endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":endpoint},"sessionId":id}),
     )
 }
 

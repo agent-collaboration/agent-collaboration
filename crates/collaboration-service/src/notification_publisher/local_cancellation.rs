@@ -12,7 +12,7 @@ impl NotificationPublisher {
         &self,
         project: &ProjectId,
         reference: &DeliveryItemRef,
-        target: &collaboration_protocol::SessionRef,
+        target: &collaboration_protocol::HarnessSessionRef,
     ) -> Result<bool, BoardError> {
         let target: message_board::SessionRef = target
             .clone()

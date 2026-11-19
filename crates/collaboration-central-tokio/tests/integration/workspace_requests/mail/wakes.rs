@@ -21,7 +21,7 @@ async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result
         .unwrap()
 }
 
-fn wake(target: workspace_model::SessionAddress, due_at: workspace_model::Timestamp) -> Operation {
+fn wake(target: workspace_ids::SessionRef, due_at: workspace_model::Timestamp) -> Operation {
     Operation::SetWake {
         target,
         due_at,
@@ -151,7 +151,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
             workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
-            serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
+            serde_json::from_str::<workspace_ids::SessionRef>(address).unwrap(),
             target
         );
         let workspace_model::central_mail::MessageBody::Wake {

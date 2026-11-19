@@ -1,5 +1,5 @@
 use super::*;
-use collaboration_protocol::{EndpointId, EndpointRef, SessionId, UuidIdentity};
+use collaboration_protocol::{EndpointId, EndpointRef, SessionId};
 
 #[tokio::test]
 async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_replacement()
@@ -9,8 +9,9 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
         "2026-10-19T18:00:00Z".parse()?,
     ));
     let registry = crate::test_project_runtime::registry(directory.path(), clock.clone())?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target = SessionRef {
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned())?,

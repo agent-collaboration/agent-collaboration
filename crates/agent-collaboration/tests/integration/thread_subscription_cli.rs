@@ -23,8 +23,8 @@ use std::time::Duration;
 #[path = "../thread_subscription_cli/wait_uncertainty.rs"]
 mod wait_uncertainty;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000101";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000102";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000101";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000102";
 const SESSION_ID: &str = "thread-subscription-cli";
 const NO_WATCH_SESSION_ID: &str = "thread-subscription-no-watch";
 type TestError = Box<dyn std::error::Error + Send + Sync>;
@@ -58,7 +58,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+            workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
             Some("CLI subscription proof"),
         )?,
     })?);
@@ -77,7 +77,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
     let delivery: Arc<dyn SessionMessageDelivery> = router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = router.clone();
     let machine_identity = MachineIdentity::new(
-        collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
         None,
     )?;
     let subscription_delivery =

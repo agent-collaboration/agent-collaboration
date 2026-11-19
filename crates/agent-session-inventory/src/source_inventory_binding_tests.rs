@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::{Value, json};
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 
 fn native(service: &str) -> Value {
     json!({"endpoint":{"serviceId":service,"endpointId":"codex-local"},"label":"Native","availability":{"state":"unprobed"},

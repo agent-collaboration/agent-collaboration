@@ -144,7 +144,7 @@ async fn rejected_interrupt_stays_blocked_through_active_reload_and_clears_after
             ),
             backend_path: socket.clone().into(),
             generation: serde_json::from_value(
-                json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+                json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
             )
             .unwrap(),
             schemas: Arc::new(NativePayloadSchemas::from_bundle(&bundle).unwrap()),
@@ -163,7 +163,7 @@ async fn rejected_interrupt_stays_blocked_through_active_reload_and_clears_after
             (
                 2,
                 "session/new",
-                json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"operationId":collaboration_protocol::OperationId::generate(),"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}}),
+                json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"operationId":collaboration_protocol::OperationId::generate(),"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}}),
             ),
         ] {
             write

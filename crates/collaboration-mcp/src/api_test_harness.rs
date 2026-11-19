@@ -36,8 +36,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-pub(crate) const TEST_SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-pub(crate) const TEST_SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+pub(crate) const TEST_SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
+pub(crate) const TEST_SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000002";
 pub(crate) const TEST_PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// A Router identity with no stores; tests add the stores their operations need.

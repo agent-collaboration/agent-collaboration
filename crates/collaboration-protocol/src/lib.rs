@@ -155,7 +155,7 @@ pub use native_session_catalog::{
     NativeSessionSource, NativeSessionSummary, NativeSessionView,
 };
 pub use push_line::{
-    MAX_MACHINE_LABEL_SCALARS, MAX_PUSH_LINE_BYTES, MachineId, MachineLabel, MachineLabelError,
+    MAX_MACHINE_LABEL_SCALARS, MAX_PUSH_LINE_BYTES, MachineLabel, MachineLabelError,
     ParsedPushLine, ParsedPushLineHeader, PushHeaderFacts, PushId, PushIdError, PushKind,
     PushLineError, PushLineInput, PushOrigin, RouterLink, escape_push_line_field, parse_push_line,
     parse_push_line_header, render_push_line,
@@ -185,7 +185,7 @@ pub use native_control_contract::{
 mod endpoint_identity;
 pub use backend_generation::{CodexGeneration, GenerationNumber};
 pub use endpoint_identity::{
-    EndpointId, EndpointRef, IdentityError, SessionId, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, IdentityError, SessionId, UuidIdentity,
 };
 mod message_frame_limit;
 pub use message_frame_limit::MAX_CONTROL_FRAME_BYTES;

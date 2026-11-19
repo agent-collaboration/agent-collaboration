@@ -10,8 +10,8 @@ use agent_automation::{
 use automation_storage::AutomationStore;
 use chrono::{DateTime, SecondsFormat, Utc};
 use collaboration_protocol::{
-    EndpointId, EndpointRef, MessageContent, MessageDelivery, MessageText, PushHeaderFacts, PushId,
-    PushKind, PushOrigin, PushRecordDraft, SavedMessage, SessionId, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, MessageContent, MessageDelivery, MessageText,
+    PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft, SavedMessage, SessionId,
 };
 use serde_json::{Value, json};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -31,10 +31,10 @@ fn ensure(condition: bool, detail: &'static str) -> TestResult {
     }
 }
 
-pub(super) fn session(session_id: &str) -> TestResult<SessionRef> {
-    Ok(SessionRef {
+pub(super) fn session(session_id: &str) -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+            service_id: workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
             endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
         },
         session_id: SessionId::try_from(session_id.to_owned())?,
@@ -116,7 +116,7 @@ pub(super) async fn load_broker(
         interaction_storage::InteractionStore::open(directory.join("interaction.sqlite")).await?,
     );
     Ok(ServiceInteractionBroker::load(
-        UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())?,
         NativeControlBackend {
             endpoint: session("unused-backend")?.endpoint,
             gate: gate.clone(),

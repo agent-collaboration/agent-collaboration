@@ -7,10 +7,11 @@ use super::{
     ConversationCreateOutcome, ConversationCreatePromptInput, ConversationCreatePromptOutcome,
     ConversationLoadInput, ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationResult, ConversationPromptInput, ConversationRecord,
-    ConversationStopReason, CreateArguments, Duration, EndpointRef, LoadArguments, OperationEffect,
-    OperationFailure, OperationId, PromptArguments, PublicPromptContent, RouterAccess, SessionId,
-    SessionRef, Write, conversation_target, current_session_ref, io, operation_failure_exit,
-    operation_failure_from_client_error, prepare, validate_choice_value,
+    ConversationStopReason, CreateArguments, Duration, EndpointRef, HarnessSessionRef,
+    LoadArguments, OperationEffect, OperationFailure, OperationId, PromptArguments,
+    PublicPromptContent, RouterAccess, SessionId, Write, conversation_target, current_session_ref,
+    io, operation_failure_exit, operation_failure_from_client_error, prepare,
+    validate_choice_value,
 };
 
 #[path = "conversation_client_command_reporting.rs"]
@@ -131,7 +132,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
                 Err(_) => {
                     return crate::endpoint_commands::report_failure(
                         "invalidField",
-                        "--from must be a SessionRef or typed Identity JSON",
+                        "--from must be a HarnessSessionRef or typed Identity JSON",
                         2,
                         args.json,
                     );
@@ -143,7 +144,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
                     return report_conversation_failure(
                         operation_failure_from_client_error(
                             ClientError::Protocol(
-                                "current session identity unavailable; run agent-collaboration whoami --json or pass --from SessionRef JSON",
+                                "current session identity unavailable; run agent-collaboration whoami --json or pass --from HarnessSessionRef JSON",
                             ),
                             OperationEffect::None,
                         ),
@@ -174,7 +175,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
                     Err(_) => {
                         return crate::endpoint_commands::report_failure(
                             "invalidField",
-                            "--approver must be a SessionRef or typed Identity JSON",
+                            "--approver must be a HarnessSessionRef or typed Identity JSON",
                             2,
                             args.json,
                         );

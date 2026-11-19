@@ -1,8 +1,8 @@
 //! Provider Session inventory is distinct from Codex's native thread catalog.
 
 use crate::{
-    EndpointRef, NativeSessionScope, NativeSessionSource, NativeSessionView, ObservationTimestamp,
-    ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, SessionRef,
+    EndpointRef, HarnessSessionRef, NativeSessionScope, NativeSessionSource, NativeSessionView,
+    ObservationTimestamp, ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub enum ProviderSessionState {
 pub enum ProviderSessionSummary {
     ClaudeCodeBackground {
         origin: ClaudeCodeBackgroundOrigin,
-        target: SessionRef,
+        target: HarnessSessionRef,
         job_handle: crate::NativeClaudeJobHandle,
         working_directory: ProviderWorkingDirectory,
         name: Option<String>,
@@ -57,7 +57,7 @@ pub enum ProviderSessionSummary {
     HostedProvider {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<HostedProviderOrigin>,
-        target: SessionRef,
+        target: HarnessSessionRef,
         working_directory: ProviderWorkingDirectory,
         /// Unix seconds; Router has no durable creation timestamp for these rows.
         updated_at: i64,
@@ -68,7 +68,7 @@ pub enum ProviderSessionSummary {
     },
     ClaudeCodeInteractive {
         origin: ClaudeCodeInteractiveOrigin,
-        target: SessionRef,
+        target: HarnessSessionRef,
         name: Option<String>,
         working_directory: ProviderWorkingDirectory,
         status: ClaudeCodeInteractiveStatus,
@@ -109,7 +109,7 @@ impl ProviderSessionSummary {
             Self::ClaudeCodeInteractive { .. } | Self::ClaudeCodeBackground { .. }
         )
     }
-    pub fn target(&self) -> &SessionRef {
+    pub fn target(&self) -> &HarnessSessionRef {
         match self {
             Self::HostedProvider { target, .. }
             | Self::ClaudeCodeInteractive { target, .. }
@@ -146,7 +146,7 @@ pub struct NativeClaudePeerObservation {
 #[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeClaudeSessionConflict {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub reason: crate::NativeClaudeConflictReason,
 }
 

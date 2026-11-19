@@ -50,7 +50,7 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToRouter,
-            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"endpoint":"codex","sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
+            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
         ),
         (
             FrameDirection::ToCentral,
@@ -99,7 +99,7 @@ fn mail_request_and_reply_reuse_the_existing_contract_without_wire_coercion() {
     let fixtures = [
         (
             FrameDirection::ToCentral,
-            json!({"kind":"request","request":{"correlationId":id,"caller":{"kind":"session","value":{"machineId":id,"endpoint":"codex","sessionId":"s"}},"payload":{"kind":"mail","request":{"requestId":"01890f2e-7b4c-7cc0-98c4-000000000002","operation":{"kind":"setNoticeCadence","cadence":"m25"}}}}}),
+            json!({"kind":"request","request":{"correlationId":id,"caller":{"kind":"session","value":{"machineId":id,"sessionId":"s"}},"payload":{"kind":"mail","request":{"requestId":"01890f2e-7b4c-7cc0-98c4-000000000002","operation":{"kind":"setNoticeCadence","cadence":"m25"}}}}}),
         ),
         (
             FrameDirection::ToRouter,
@@ -118,7 +118,7 @@ fn mail_request_and_reply_reuse_the_existing_contract_without_wire_coercion() {
 
 #[test]
 fn batch_of_writes_round_trips_raw_json() {
-    let fixture = json!({"kind":"batch","requests":[{"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001","caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}}]});
+    let fixture = json!({"kind":"batch","requests":[{"correlationId":"01890f2e-7b4c-7cc0-98c4-000000000001","caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}}]});
     let frame = decode_text(&fixture.to_string(), FrameDirection::ToCentral).unwrap();
     let encoded = encode_text(&frame, FrameDirection::ToCentral).unwrap();
     assert_eq!(
@@ -128,7 +128,7 @@ fn batch_of_writes_round_trips_raw_json() {
 }
 
 fn batch_member(number: usize) -> serde_json::Value {
-    json!({"correlationId":format!("01890f2e-7b4c-7cc0-98c4-{number:012x}"),"caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}})
+    json!({"correlationId":format!("01890f2e-7b4c-7cc0-98c4-{number:012x}"),"caller":{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}},"payload":{"kind":"workspace","request":{"workspaceId":"01890f2e-7b4c-7cc0-98c4-000000000003","requestId":"01890f2e-7b4c-7cc0-98c4-000000000004","operation":{"kind":"createArea","name":"Work","description":"Where the work happens"}}}})
 }
 
 #[test]

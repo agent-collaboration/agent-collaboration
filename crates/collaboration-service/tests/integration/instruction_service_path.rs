@@ -16,7 +16,7 @@ async fn real_control_client_creates_and_reads_durable_instruction()
     ));
     let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?

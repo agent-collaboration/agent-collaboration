@@ -38,8 +38,8 @@ use collaboration_contracts::ProviderConversationBackend;
 use collaboration_contracts::RouteClaim;
 use collaboration_protocol::{
     CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryRejection,
-    DeliveryRejectionReason, MessageDelivery, OperationId, ProviderIdentity,
-    ProviderOperationEffect, SessionReachability, SessionRef, UuidIdentity,
+    DeliveryRejectionReason, HarnessSessionRef, MessageDelivery, OperationId, ProviderIdentity,
+    ProviderOperationEffect, SessionReachability,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
@@ -50,24 +50,24 @@ use std::{
 use tokio::sync::Mutex;
 
 pub struct ProviderAcpDeliveryRoute {
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     claim: ProviderAcpRouteClaim,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
     queue: ProviderAcpMessageFifo,
-    session_locks: StdMutex<HashMap<SessionRef, Arc<Mutex<()>>>>,
+    session_locks: StdMutex<HashMap<HarnessSessionRef, Arc<Mutex<()>>>>,
 }
 
 impl ProviderAcpDeliveryRoute {
     #[must_use]
-    pub fn queue_list(&self, session: &SessionRef) -> Vec<crate::ProviderQueuedInput> {
+    pub fn queue_list(&self, session: &HarnessSessionRef) -> Vec<crate::ProviderQueuedInput> {
         self.supervisor.queued_operation_registry().list(session)
     }
 
     pub fn queue_cancel(
         &self,
-        session: &SessionRef,
+        session: &HarnessSessionRef,
         input_id: &session_event_model::InputId,
     ) -> Result<(), crate::ProviderQueueCancellationError> {
         self.supervisor
@@ -77,7 +77,7 @@ impl ProviderAcpDeliveryRoute {
 
     #[must_use]
     pub fn new(
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         provider_endpoints: HashSet<collaboration_protocol::EndpointRef>,
         directory: EndpointDirectory,
         supervisor: Arc<ExternalProviderSupervisor>,
@@ -107,7 +107,10 @@ impl ProviderAcpDeliveryRoute {
         }
     }
 
-    fn session_lock(&self, target: &SessionRef) -> Result<Arc<Mutex<()>>, DeliveryContractError> {
+    fn session_lock(
+        &self,
+        target: &HarnessSessionRef,
+    ) -> Result<Arc<Mutex<()>>, DeliveryContractError> {
         let mut locks = self
             .session_locks
             .lock()
@@ -123,7 +126,7 @@ impl ProviderAcpDeliveryRoute {
         self.queue.shutdown().await;
     }
 
-    fn serves(&self, target: &SessionRef) -> bool {
+    fn serves(&self, target: &HarnessSessionRef) -> bool {
         self.claim.serves(target)
     }
 
@@ -131,7 +134,8 @@ impl ProviderAcpDeliveryRoute {
         request: &ProviderDeliveryRequest,
         binding: &collaboration_protocol::ProviderBindingIdentity,
         submission: SubmissionEffect,
-    ) -> Result<RouteEffectEvidence<SessionRef, CodexGeneration>, DeliveryContractError> {
+    ) -> Result<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>, DeliveryContractError>
+    {
         let reference =
             ProviderBindingReference::try_from(String::from(binding.binding_id.clone()))
                 .map_err(|_| DeliveryContractError::InvalidEvidence)?;
@@ -521,7 +525,7 @@ impl ProviderAcpDeliveryRoute {
 }
 
 fn update_submission(
-    effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
+    effect: &mut RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     submission: SubmissionEffect,
 ) {
     if let RouteEffectEvidence::ProviderAcp(provider) = effect {

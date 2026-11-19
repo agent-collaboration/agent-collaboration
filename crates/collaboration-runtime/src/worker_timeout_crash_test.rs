@@ -19,7 +19,7 @@ use tokio_tungstenite::tungstenite::Message;
 const ROOT_ENV: &str = "WORKER_TIMEOUT_TEST_ROOT";
 const STAGE_ENV: &str = "WORKER_TIMEOUT_TEST_STAGE";
 const EXIT_CODE: i32 = 96;
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 
 fn child_root() -> TestResult<PathBuf> {
@@ -92,7 +92,7 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         serde_json::from_value(json!({"serviceId":SERVICE_ID,"endpointId":"codex-local"}))?;
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":SERVICE_ID,"generation":1}))?;
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint.clone(),
         session_id: "recorded-thread".to_owned().try_into()?,
     };
@@ -104,7 +104,7 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -123,22 +123,21 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         })
         .await?;
     let run_id = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("run missing")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
+        .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60001)
         .await?;
-    let mut effects: NativeEffectEvidence<SessionRef, CodexGeneration> = serde_json::from_value(
-        json!({
+    let mut effects: NativeEffectEvidence<HarnessSessionRef, CodexGeneration> =
+        serde_json::from_value(json!({
             "target":target,"generation":generation,"clientUserMessageId":run_id,"nativeTurnId":null,"nativeSubmissionId":null,
             "allocation":"notRequested","resume":"notRequested","submission":"dispatching","cessation":"unconfirmed"
-        }),
-    )?;
+        }))?;
     let mut prepared = effects.clone();
     prepared.submission = agent_automation::SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run_id.clone(),
                 effects: prepared.into(),
@@ -245,7 +244,7 @@ async fn recover(root: &Path) -> TestResult<()> {
     let before = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?;
     if before.phase != RunPhase::Stopping
         || before
@@ -337,7 +336,7 @@ async fn recover(root: &Path) -> TestResult<()> {
         let record = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
             .await?;
         if serde_json::to_value(&record.evidence.timing)? != timing
             || record.native_turn_id.as_deref() != Some("recorded-turn")
@@ -347,7 +346,7 @@ async fn recover(root: &Path) -> TestResult<()> {
         let inventory = store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, EndpointRef>(&record.schedule_id)
+            .inspect_schedule::<HarnessSessionRef, EndpointRef>(&record.schedule_id)
             .await?;
         if stopped {
             if record.phase != RunPhase::Finished

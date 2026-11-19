@@ -5,8 +5,9 @@ use super::router_connection_registry::{
 use codex_native_integration::ResumeModelChoice;
 use collaboration_client::protocol::{
     CodexGeneration, ConversationOperationFailure, EndpointInventory, EndpointRef,
-    NativeSessionListParams, NativeSessionListResult, OperationId, ProviderBindingIdentity,
-    ProviderSessionListParams, ProviderSessionListResult, SchemaDigest, SessionRef, UuidIdentity,
+    HarnessSessionRef, NativeSessionListParams, NativeSessionListResult, OperationId,
+    ProviderBindingIdentity, ProviderSessionListParams, ProviderSessionListResult, SchemaDigest,
+    UuidIdentity,
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +20,7 @@ pub const MAX_SOURCE_REPLY_BYTES: usize =
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceRequest {
     pub service_directory: AbsoluteSourcePath,
-    pub expected_service: UuidIdentity,
+    pub expected_service: workspace_ids::MachineId,
     pub operation: SourceOperation,
 }
 
@@ -35,7 +36,7 @@ pub enum SourceOperation {
     ClientInventory,
     ProviderInspect {
         binding: ProviderBindingIdentity,
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     NativeSessions {
         params: NativeSessionListParams,
@@ -135,12 +136,12 @@ pub enum SourceNativeClaudeAction {
         arguments: Vec<std::ffi::OsString>,
     },
     Resume {
-        target: SessionRef,
+        target: HarnessSessionRef,
         directory: AbsoluteRemoteCwd,
         arguments: Vec<std::ffi::OsString>,
     },
     Fork {
-        target: SessionRef,
+        target: HarnessSessionRef,
         directory: AbsoluteRemoteCwd,
         arguments: Vec<std::ffi::OsString>,
     },
@@ -180,11 +181,11 @@ pub enum SourceNativeClaudeIdentity {
         directory: AbsoluteRemoteCwd,
     },
     Resume {
-        target: SessionRef,
+        target: HarnessSessionRef,
         directory: AbsoluteRemoteCwd,
     },
     Fork {
-        target: SessionRef,
+        target: HarnessSessionRef,
         directory: AbsoluteRemoteCwd,
     },
 }
@@ -192,7 +193,7 @@ pub enum SourceNativeClaudeIdentity {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceNativeBinding {
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub service_epoch: UuidIdentity,
 }
 
@@ -240,8 +241,8 @@ pub enum SourceNativeObservation {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum SourceManagedAction {
     Create { directory: AbsoluteRemoteCwd },
-    Load { target: SessionRef },
-    Resume { target: SessionRef },
+    Load { target: HarnessSessionRef },
+    Resume { target: HarnessSessionRef },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -263,12 +264,12 @@ pub enum SourceProviderActionResult {
     },
     Failed {
         operation_id: OperationId,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         failure: Box<ConversationOperationFailure>,
     },
     Unknown {
         operation_id: OperationId,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
     },
 }
 
@@ -302,24 +303,24 @@ pub enum SourceSessionAction {
         directory: AbsoluteRemoteCwd,
     },
     Resume {
-        target: SessionRef,
+        target: HarnessSessionRef,
         stored_model: SourceStoredModel,
     },
     Fork {
-        target: SessionRef,
+        target: HarnessSessionRef,
         stored_model: SourceStoredModel,
     },
 }
 
 impl SourceSessionAction {
-    pub fn target(&self) -> Option<&SessionRef> {
+    pub fn target(&self) -> Option<&HarnessSessionRef> {
         match self {
             Self::New { .. } => None,
             Self::Resume { target, .. } | Self::Fork { target, .. } => Some(target),
         }
     }
 
-    pub fn validate(&self, service: &UuidIdentity) -> Result<(), SourceRejection> {
+    pub fn validate(&self, service: &workspace_ids::MachineId) -> Result<(), SourceRejection> {
         match self {
             Self::New { .. } => Ok(()),
             Self::Resume {

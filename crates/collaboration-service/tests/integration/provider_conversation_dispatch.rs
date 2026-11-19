@@ -150,7 +150,7 @@ impl ProviderConversationBackend for RecordingBackend {
     }
 }
 
-fn settings_result(target: collaboration_protocol::SessionRef) -> ProviderSettingsResult {
+fn settings_result(target: collaboration_protocol::HarnessSessionRef) -> ProviderSettingsResult {
     ProviderSettingsResult {
         target,
         effective_settings: collaboration_protocol::EffectiveProviderSettings {

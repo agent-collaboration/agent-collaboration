@@ -16,9 +16,9 @@ use collaboration_client::{
     },
     protocol::{
         AutomationConfigureRequest, DestinationPreparation, EndpointId, EndpointRef,
-        InstructionCreateParams, InstructionId, OperationId, ScheduleCreateRequest,
-        ScheduleEnableRequest, ScheduleId, SchedulePrepareRequest, SessionRef, WakeSendRequest,
-        WakeState, WakeupId,
+        HarnessSessionRef, InstructionCreateParams, InstructionId, OperationId,
+        ScheduleCreateRequest, ScheduleEnableRequest, ScheduleId, SchedulePrepareRequest,
+        WakeSendRequest, WakeState, WakeupId,
     },
 };
 use serde_json::json;
@@ -417,7 +417,7 @@ impl RuntimeCleanupFixture {
         )
     }
 
-    pub(super) fn peer_target(&self) -> ProofResult<SessionRef> {
+    pub(super) fn peer_target(&self) -> ProofResult<HarnessSessionRef> {
         Ok(self
             .peer
             .as_ref()

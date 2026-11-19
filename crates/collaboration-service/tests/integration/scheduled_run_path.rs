@@ -2,8 +2,8 @@
 use crate::served_api;
 use automation_storage::AutomationStore;
 use collaboration_protocol::{
-    CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
-    ScheduleCreateRequest, SessionRef,
+    CodexGeneration, EndpointDescription, HarnessSessionRef, InstructionCreateParams,
+    InstructionText, OperationId, ScheduleCreateRequest,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -101,7 +101,7 @@ async fn exercise_scheduled_run(
     let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
         lifecycle_observation::ObservationJournal::open(
             &root.join("session-registry.sqlite"),
-            "00000000-0000-4000-8000-000000000001"
+            "00000000-0000-7000-8000-000000000001"
                 .to_owned()
                 .try_into()?,
         )
@@ -113,10 +113,10 @@ async fn exercise_scheduled_run(
         Arc::new(interaction_storage::InteractionStore::open(&interaction_database).await?);
     let path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&path)?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(
+    let target: HarnessSessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"fixture-new-target"}),
     )?;
     let mut definitions = serde_json::Map::new();
@@ -382,7 +382,7 @@ async fn exercise_scheduled_run(
                 }
                 let ids = backend_store.lock().await.observable_run_ids(None).await?;
                 let run_id = ids.first().ok_or("busy Run missing")?;
-                let run=backend_store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                let run=backend_store.lock().await.read_run::<HarnessSessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
                 if run.evidence.timing.is_some() {
                     return Err("busy wait consumed execution budget".into());
                 }
@@ -449,7 +449,7 @@ async fn exercise_scheduled_run(
         store
             .lock()
             .await
-            .enqueue_due_run::<SessionRef, collaboration_protocol::EndpointRef>(
+            .enqueue_due_run::<HarnessSessionRef, collaboration_protocol::EndpointRef>(
                 &schedule.schedule_id,
                 now,
             )
@@ -458,7 +458,7 @@ async fn exercise_scheduled_run(
         store
             .lock()
             .await
-            .admit_waiting_run::<SessionRef, collaboration_protocol::EndpointRef>(
+            .admit_waiting_run::<HarnessSessionRef, collaboration_protocol::EndpointRef>(
                 &schedule.schedule_id,
                 now,
             )
@@ -498,14 +498,14 @@ async fn exercise_scheduled_run(
         let mut known_run=None;
         loop{
             poll.tick().await;
-            let current=store.lock().await.inspect_schedule::<SessionRef,collaboration_protocol::EndpointRef>(&schedule.schedule_id).await?;
+            let current=store.lock().await.inspect_schedule::<HarnessSessionRef,collaboration_protocol::EndpointRef>(&schedule.schedule_id).await?;
             if current.active_run_id.is_some(){known_run=current.active_run_id;}
             if known_run.is_none() {
                 let page = client.list_runs(collaboration_protocol::RunListRequest { schedule_id: schedule.schedule_id.clone(), cursor: None, limit: 1.try_into().map_err(|_|automation_storage::StorageError::InvalidRecord)? }).await.map_err(|_|automation_storage::StorageError::InvalidRecord)?;
                 known_run = page.records.first().map(|run|run.run_id.clone());
             }
             if let Some(run_id)=&known_run{
-                let run=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                let run=store.lock().await.read_run::<HarnessSessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
                 last_observed_phase = Some(run.phase);
                 if resume_rejected && run.phase == agent_automation::RunPhase::Uncertain {
                     resume_uncertainty_observed.notify_one();
@@ -547,7 +547,7 @@ async fn exercise_scheduled_run(
         let current = store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
+            .inspect_schedule::<HarnessSessionRef, collaboration_protocol::EndpointRef>(
                 &schedule.schedule_id,
             )
             .await?;
@@ -596,7 +596,7 @@ async fn exercise_scheduled_run(
         && store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
+            .inspect_schedule::<HarnessSessionRef, collaboration_protocol::EndpointRef>(
                 &schedule.schedule_id,
             )
             .await?

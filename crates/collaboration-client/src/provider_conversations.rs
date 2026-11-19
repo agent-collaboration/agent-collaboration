@@ -9,7 +9,7 @@ use collaboration_protocol::{
     ConversationCancelRequest, ConversationCreateRequest, ConversationLoadRequest,
     ConversationOperationSnapshot, ConversationOperationSubmission,
     ConversationOperationWaitRequest, ConversationOperationWaitResult, ConversationPromptRequest,
-    OperationId, UuidIdentity,
+    OperationId,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -27,7 +27,7 @@ pub enum ProviderConversations {
 }
 
 impl ProviderConversations {
-    pub(crate) fn service_id(&self) -> UuidIdentity {
+    pub(crate) fn service_id(&self) -> workspace_ids::MachineId {
         match self {
             Self::Api(client) => client.identity().service_id.clone(),
             Self::Local(router) => router.service_id(),

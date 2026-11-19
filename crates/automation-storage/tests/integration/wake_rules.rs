@@ -32,7 +32,7 @@ fn request(timing: TimingRule, expiry: ExpiryRule) -> TestResult<WakeCreate<Save
         replace: false,
         operation_id: OperationId::generate(),
         message: serde_json::from_value(json!({
-            "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"wake-target"},
+            "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"wake-target"},
             "content":{"kind":"humanUser","text":"A bounded reminder"},"delivery":"auto"
         }))?,
         timing,

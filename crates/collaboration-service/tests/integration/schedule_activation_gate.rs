@@ -16,7 +16,7 @@ async fn enabled_schedule_requires_available_native_capabilities()
         automation_storage::AutomationStore::open(&path).await?,
     ));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
@@ -30,7 +30,7 @@ async fn enabled_schedule_requires_available_native_capabilities()
         })
         .await?;
     let request: ScheduleCreateRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":60},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"cwd":"/fixture"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}}),
+        json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":60},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"cwd":"/fixture"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}}),
     )?;
     if client.create_schedule(request).await.is_ok() {
         return Err("enabled schedule admitted without native execution capabilities".into());

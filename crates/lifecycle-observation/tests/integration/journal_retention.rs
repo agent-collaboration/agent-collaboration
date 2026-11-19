@@ -8,13 +8,13 @@ async fn expired_prefix_keeps_checkpoint_and_rejects_old_cursor() {
         std::process::id()
     ));
     let id = || {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap_or_else(|e| panic!("id: {e}"))
     };
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"});
     let address = json!({"endpoint":endpoint,"nativeThreadId":"thread"});
     let observation = |change| {
         serde_json::from_value::<LifecycleObservation>(json!({"observedAt":"2026-09-05T12:00:00Z","source":"nativeNotification","scope":{"endpoint":endpoint,"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000003","generation":1},"observerId":"00000000-0000-4000-8000-000000000002"},"subject":{"kind":"thread","address":address},"change":change})).unwrap_or_else(|e|panic!("observation: {e}"))
@@ -131,7 +131,7 @@ async fn checkpoint_addresses_keep_exact_two_calendar_month_boundary_and_latest_
     let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
     let path = directory.path().join("journal.sqlite");
     let journal_id = || {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap_or_else(|error| panic!("journal id: {error}"))
@@ -141,7 +141,7 @@ async fn checkpoint_addresses_keep_exact_two_calendar_month_boundary_and_latest_
     let cutoff = chrono::DateTime::parse_from_rfc3339("2026-08-31T12:00:00Z")
         .unwrap_or_else(|error| panic!("cutoff: {error}"));
     let endpoint = serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001",
+        "serviceId":"00000000-0000-7000-8000-000000000001",
         "endpointId":"codex-local"
     });
     let make_observation = |thread_id: &str, last_seen_ms: i64| {
@@ -268,7 +268,7 @@ async fn checkpoint_readers_reject_unbackfilled_zero_last_seen() {
     let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
     let path = directory.path().join("journal.sqlite");
     let id = || {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap_or_else(|error| panic!("journal id: {error}"))
@@ -278,7 +278,7 @@ async fn checkpoint_readers_reject_unbackfilled_zero_last_seen() {
         .unwrap_or_else(|error| panic!("open: {error}"));
     journal.close().await;
     let endpoint = serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001",
+        "serviceId":"00000000-0000-7000-8000-000000000001",
         "endpointId":"codex-local"
     });
     let address = serde_json::json!({"endpoint":endpoint,"nativeThreadId":"zero"});
@@ -286,7 +286,7 @@ async fn checkpoint_readers_reject_unbackfilled_zero_last_seen() {
         "address":address,
         "firstObservedAt":"2026-10-05T12:34:56.789Z",
         "lastObservedAt":"2026-10-05T12:34:56.789Z",
-        "lastObservation":{"journalId":"00000000-0000-4000-8000-000000000001","sequence":0},
+        "lastObservation":{"journalId":"00000000-0000-7000-8000-000000000001","sequence":0},
         "lastStatus":null,"statusScope":null,"statusOrdering":"unknown",
         "disposition":{"existence":"observed","archive":"unknown","lastClose":null,"lastChange":null}
     });

@@ -1,20 +1,20 @@
 //! Equivalent mail and RPC vocabulary is converted once at the facade boundary.
-use crate::{CodexGeneration, GenerationNumber, MessageDelivery, SessionRef, UuidIdentity};
+use crate::{CodexGeneration, GenerationNumber, HarnessSessionRef, MessageDelivery, UuidIdentity};
 use collaboration_mail_protocol::{GenerationGuard, MailDeliveryMode};
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid mail boundary field: {0}")]
 pub struct MailBoundaryConversionError(&'static str);
 
-impl TryFrom<SessionRef> for message_board::SessionRef {
+impl TryFrom<HarnessSessionRef> for message_board::SessionRef {
     type Error = MailBoundaryConversionError;
-    fn try_from(session: SessionRef) -> Result<Self, Self::Error> {
+    fn try_from(session: HarnessSessionRef) -> Result<Self, Self::Error> {
         let encoded =
             serde_json::to_value(session).map_err(|_| MailBoundaryConversionError("session"))?;
         serde_json::from_value(encoded).map_err(|_| MailBoundaryConversionError("session"))
     }
 }
-impl TryFrom<message_board::SessionRef> for SessionRef {
+impl TryFrom<message_board::SessionRef> for HarnessSessionRef {
     type Error = MailBoundaryConversionError;
     fn try_from(session: message_board::SessionRef) -> Result<Self, Self::Error> {
         let encoded =

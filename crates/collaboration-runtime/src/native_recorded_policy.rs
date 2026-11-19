@@ -1,6 +1,6 @@
 //! Request-local classification and projection of existing recorded authority.
 use codex_acp_adapter::{ApprovalBroker, ApprovalRoute, RecordedSessionResume, SessionSetupError};
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use std::sync::Weak;
 
 #[derive(Clone)]
@@ -21,7 +21,7 @@ impl RecordedNativeRouteClassification {
 
 pub async fn classify_recorded_native_route(
     broker: Option<&Weak<dyn ApprovalBroker>>,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> RecordedNativeRouteClassification {
     let Some(policy_owner) = broker else {
         return RecordedNativeRouteClassification::GenericRoute;
@@ -41,7 +41,7 @@ pub async fn classify_recorded_native_route(
 
 pub async fn prepare_classified_native_policy(
     classification: &RecordedNativeRouteClassification,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     working_directory: Option<&str>,
 ) -> Result<Option<RecordedSessionResume>, SessionSetupError> {
     let (recorded_route, policy_owner) = match classification {
@@ -71,7 +71,7 @@ pub async fn prepare_classified_native_policy(
 
 pub(crate) async fn prepare_recorded_native_policy(
     broker: Option<&Weak<dyn ApprovalBroker>>,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     working_directory: Option<&str>,
 ) -> Result<Option<RecordedSessionResume>, SessionSetupError> {
     let classification = classify_recorded_native_route(broker, target).await;

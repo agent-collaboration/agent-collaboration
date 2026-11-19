@@ -9,8 +9,8 @@ use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, RefusalTag, StateTag, Transition,
     TransitionError,
 };
+use workspace_ids::SessionRef;
 use workspace_ids::{MessageId, RequestId};
-use workspace_model::SessionAddress;
 use workspace_model::central_mail as mail;
 
 pub(crate) struct DirectMessage;
@@ -21,7 +21,7 @@ pub(crate) struct DirectMessageSubject {
     pub id: MessageId,
     /// None when the sender is a person: there is no session to tell, and the
     /// sender's Router reads the state instead.
-    pub sender_session: Option<SessionAddress>,
+    pub sender_session: Option<SessionRef>,
     pub sender_request_id: RequestId,
     pub cancel_due_at: EngineTime,
 }

@@ -1,7 +1,7 @@
 //! The common result of waiting for a caller-owned conversation create.
 use crate::{
-    AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting,
-    NotAppliedProviderSetting, OperationId, SessionRef,
+    AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, HarnessSessionRef,
+    NotAppliedProviderSetting, OperationId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 pub enum ConversationCreateOutcome {
     Created {
         operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         effective_settings: Option<EffectiveProviderSettings>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -24,7 +24,7 @@ pub enum ConversationCreateOutcome {
     },
     CreatedWithoutSettings {
         operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         applied: Vec<AppliedProviderSetting>,
         failed: Vec<FailedProviderSetting>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

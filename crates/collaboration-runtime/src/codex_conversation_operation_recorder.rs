@@ -3,8 +3,8 @@ use crate::{ProviderOperationAdmission, ProviderOperationAdmissionResult, Provid
 use codex_acp_adapter::{ConversationOperationRecorder, ConversationRecordFuture};
 use collaboration_protocol::{
     CodexGeneration, CodexPermissionModeReport, ConversationBindingIdentity, EndpointRef,
-    NonEmptyText, OperationId, ProviderOperationEffect, ProviderOperationKind,
-    ProviderOperationStage, ProviderReconciliationState, SessionId, SessionRef,
+    HarnessSessionRef, NonEmptyText, OperationId, ProviderOperationEffect, ProviderOperationKind,
+    ProviderOperationStage, ProviderReconciliationState, SessionId,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -24,7 +24,7 @@ pub struct CodexConversationOperationRecorder {
     /// memory only, never the operation store: it lasts for the Host's life, so a
     /// closed session still shows its create-time report, and a Host restart
     /// leaves show with the effective access only.
-    permission_modes: Arc<StdMutex<HashMap<SessionRef, CodexPermissionModeReport>>>,
+    permission_modes: Arc<StdMutex<HashMap<HarnessSessionRef, CodexPermissionModeReport>>>,
 }
 
 impl CodexConversationOperationRecorder {
@@ -164,7 +164,7 @@ impl ConversationOperationRecorder for CodexConversationOperationRecorder {
         Box::pin(async move {
             if let Ok(mut modes) = self.permission_modes.lock() {
                 modes.insert(
-                    SessionRef {
+                    HarnessSessionRef {
                         endpoint: self.endpoint.clone(),
                         session_id: session_id.clone(),
                     },
@@ -175,7 +175,7 @@ impl ConversationOperationRecorder for CodexConversationOperationRecorder {
             store
                 .record_target(
                     operation_id,
-                    &SessionRef {
+                    &HarnessSessionRef {
                         endpoint: self.endpoint.clone(),
                         session_id: session_id.clone(),
                     },
@@ -257,14 +257,14 @@ pub trait CodexPermissionModes: Send + Sync {
     /// The create-time report for `target`, if this Host created it.
     fn effective_settings(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Option<collaboration_protocol::EffectiveProviderSettings>;
 }
 
 impl CodexPermissionModes for CodexConversationOperationRecorder {
     fn effective_settings(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Option<collaboration_protocol::EffectiveProviderSettings> {
         self.permission_modes
             .lock()

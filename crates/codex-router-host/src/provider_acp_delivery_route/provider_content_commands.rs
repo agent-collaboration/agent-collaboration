@@ -1,9 +1,9 @@
 //! Host-internal typed prompt, steer, and queue admission.
 
 use super::{
-    LoadPolicy, OperationId, ProviderAcpDeliveryRoute, ProviderConversationBackend,
-    ProviderIdentity, ProviderPromptContentsRequest, ProviderQueuedPrompt,
-    ProviderSessionLoadOutcome, ProviderSteeringOutcome, RouteClaim, SessionRef,
+    HarnessSessionRef, LoadPolicy, OperationId, ProviderAcpDeliveryRoute,
+    ProviderConversationBackend, ProviderIdentity, ProviderPromptContentsRequest,
+    ProviderQueuedPrompt, ProviderSessionLoadOutcome, ProviderSteeringOutcome, RouteClaim,
     ensure_provider_session_loaded,
 };
 
@@ -44,7 +44,7 @@ pub enum ProviderPromptContentsError {
 impl ProviderAcpDeliveryRoute {
     pub async fn prompt_contents(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
         contents: session_event_model::ProviderSubmission,
@@ -61,7 +61,7 @@ impl ProviderAcpDeliveryRoute {
 
     pub async fn compact(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
     ) -> Result<collaboration_protocol::ConversationOperationSubmission, ProviderPromptContentsError>
@@ -77,7 +77,7 @@ impl ProviderAcpDeliveryRoute {
 
     async fn submit_input(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
         input: acp_client_runtime::ProviderTurnInput,
@@ -166,7 +166,7 @@ impl ProviderAcpDeliveryRoute {
 
     pub async fn steer_contents(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
         contents: session_event_model::ProviderSubmission,
@@ -234,7 +234,7 @@ impl ProviderAcpDeliveryRoute {
 
     pub async fn queue_contents(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         actor: ProviderIdentity,
         contents: session_event_model::ProviderSubmission,
     ) -> Result<crate::ProviderQueuedInput, ProviderQueueAdmissionError> {

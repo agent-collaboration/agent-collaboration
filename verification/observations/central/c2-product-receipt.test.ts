@@ -9,8 +9,7 @@ import { c2ProductSelector, requireSingleC2Selection } from "./c2-product-run.ts
 import { c2RecordSchema, type C2WitnessRecord } from "./c2-witness.ts";
 
 const organization = "019f0000-0000-7000-8000-000000000001";
-const installation = "019f0000-0000-7000-8000-000000000002";
-const privateMachine = "019f0000-0000-7000-8000-000000000003";
+const machineId = "019f0000-0000-7000-8000-000000000002";
 const oldInstance = "019f0000-0000-7000-8000-000000000004";
 const newInstance = "019f0000-0000-7000-8000-000000000005";
 const baselineId = "019f0000-0000-7000-8000-000000000006";
@@ -22,15 +21,14 @@ const name = "Hibernation area";
 const objectId = "a".repeat(64);
 const attachment = {
   organizationId: organization,
-  machineId: privateMachine,
-  installationId: installation,
+  machineId,
   enrollmentId: baselineId,
   clientId: baselineId,
   effectiveExpiresAt: 1_800_000_600,
 };
 const caller = {
   kind: "session",
-  value: { machineId: installation, endpoint: "codex-local", sessionId: privateMachine },
+  value: { machineId, sessionId: "provider/opaque-session" },
 };
 
 function events(instanceId: string, correlationId: string, offset: number): C2WitnessRecord[] {
@@ -39,7 +37,7 @@ function events(instanceId: string, correlationId: string, offset: number): C2Wi
     ...(offset === 0 ? [{ kind: "upgrade", objectId, instanceId, attachments: [attachment] }] : []),
     { kind: "handler", objectId, instanceId, attachment },
     { kind: "enrollmentRead", objectId, query: "byEnrollment", outcome: "read" },
-    { kind: "enrollmentRead", objectId, query: "machineByInstallation", outcome: "read" },
+    { kind: "enrollmentRead", objectId, query: "machineById", outcome: "read" },
     { kind: "enrollmentRead", objectId, query: "activeEnrollment", outcome: "read" },
     { kind: "restoreResult", objectId, correlationId, outcome: "admitted" },
     { kind: "alarmSnapshot", objectId, correlationId, earliestDueMs: null, alarmMs: null },
@@ -88,8 +86,8 @@ function validReceipt(): C2ProductReceipt {
   return c2ProductReceiptSchema.parse({
     kind: "c2Hibernation",
     organization,
-    installationId: installation,
-    welcome: { kind: "welcome", machineId: installation, centralTime: "2027-01-15T08:00:00Z" },
+    machineId,
+    welcome: { kind: "welcome", machineId, centralTime: "2027-01-15T08:00:00Z" },
     baselineRequest: frame({
       correlationId: baselineId,
       operation: { kind: "createWorkspace", name: "Baseline workspace" },

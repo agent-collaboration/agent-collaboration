@@ -5,8 +5,8 @@ use codex_acp_adapter::{
 };
 use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
-    ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, PushLineInput,
-    RouterAccess, RouterLink, RouterOriginRef, SessionRef, render_push_line,
+    ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, HarnessSessionRef,
+    PushLineInput, RouterAccess, RouterLink, RouterOriginRef, render_push_line,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_service::ApplicationFixture;
@@ -32,8 +32,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000011";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000012";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000011";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000012";
 
 struct ApprovalFixture {
     directory: tempfile::TempDir,
@@ -41,8 +41,8 @@ struct ApprovalFixture {
     broker: Arc<ServiceInteractionBroker>,
     _automation_store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     generation: CodexGeneration,
-    requester: SessionRef,
-    approver: SessionRef,
+    requester: HarnessSessionRef,
+    approver: HarnessSessionRef,
     service_api: ServedApi,
     fault_task: Option<tokio::task::JoinHandle<()>>,
     forwarded_decisions: Option<Arc<AtomicUsize>>,
@@ -52,8 +52,8 @@ struct ApprovalFixture {
 }
 
 struct ApprovalDeliveryCapture {
-    requester: SessionRef,
-    approver: SessionRef,
+    requester: HarnessSessionRef,
+    approver: HarnessSessionRef,
     broker: Arc<ServiceInteractionBroker>,
     machine_identity: MachineIdentity,
 }
@@ -113,7 +113,7 @@ impl ApprovalFixture {
                 .await
                 .expect("automation store"),
         ));
-        let service_id: collaboration_protocol::UuidIdentity =
+        let service_id: workspace_ids::MachineId =
             SERVICE_ID.to_owned().try_into().expect("service id");
         let machine_identity = MachineIdentity::new(service_id.clone(), Some("Permission fixture"))
             .expect("machine identity");
@@ -121,11 +121,11 @@ impl ApprovalFixture {
             service_id: service_id.clone(),
             endpoint_id: "codex-local".to_owned().try_into().expect("endpoint id"),
         };
-        let requester: SessionRef = serde_json::from_value(json!({
+        let requester: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint": endpoint, "sessionId": "permission-requester"
         }))
         .expect("requester");
-        let approver: SessionRef = serde_json::from_value(json!({
+        let approver: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint": requester.endpoint, "sessionId": "permission-approver"
         }))
         .expect("approver");
@@ -434,7 +434,7 @@ async fn serve_approval_deliveries(
                     let link = RouterLink::parse(link_text).expect("valid router push link");
                     assert_eq!(
                         link.machine_id(),
-                        &MachineId::from(capture.machine_identity.service_id().clone())
+                        &capture.machine_identity.service_id().clone()
                     );
                     assert!(!text.contains("Self-declared sender:"));
                     assert!(!text.contains("Intended recipient:"));
@@ -612,11 +612,11 @@ async fn read_http_request(stream: &mut tokio::net::UnixStream) -> Option<Vec<u8
     }
 }
 
-fn cli_actor(actor: &SessionRef) -> String {
+fn cli_actor(actor: &HarnessSessionRef) -> String {
     serde_json::to_string(actor).expect("actor JSON")
 }
 
-async fn run_cli_decision(directory: &Path, request_id: &str, actor: &SessionRef) -> i32 {
+async fn run_cli_decision(directory: &Path, request_id: &str, actor: &HarnessSessionRef) -> i32 {
     let arguments = vec![
         OsString::from("agent-collaboration approval"),
         OsString::from("decide"),

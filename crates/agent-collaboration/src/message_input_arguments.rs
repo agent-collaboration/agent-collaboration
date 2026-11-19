@@ -1,7 +1,7 @@
 //! Shared input options keep immediate messages and timed wake-ups semantically identical.
 use clap::{Args, ValueEnum};
 use collaboration_client::protocol::{
-    MessageContent, MessageDelivery, MessageText, SavedMessage, SessionRef, UuidIdentity,
+    HarnessSessionRef, MessageContent, MessageDelivery, MessageText, SavedMessage,
 };
 use serde_json::json;
 use std::{
@@ -195,7 +195,7 @@ fn prepare_message_input(
 
 pub(crate) fn session_ref_guidance(field: &str) -> String {
     format!(
-        "{field} must be compact SessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example {field} '{{\"endpoint\":{{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"}},\"sessionId\":\"target-session\"}}'. nativeThreadId is a lifecycle address, not a SessionRef. Copy .target from sessions list --json."
+        "{field} must be compact HarnessSessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example {field} '{{\"endpoint\":{{\"serviceId\":\"00000000-0000-7000-8000-000000000001\",\"endpointId\":\"codex-local\"}},\"sessionId\":\"target-session\"}}'. nativeThreadId is a lifecycle address, not a HarnessSessionRef. Copy .target from sessions list --json."
     )
 }
 
@@ -210,12 +210,15 @@ enum PreparedMessageContent {
         text: MessageText,
     },
     Agent {
-        sender: Option<SessionRef>,
+        sender: Option<HarnessSessionRef>,
         text: MessageText,
     },
 }
 impl PreparedMessage {
-    pub(crate) fn resolve(self, service_id: &UuidIdentity) -> Result<SavedMessage, String> {
+    pub(crate) fn resolve(
+        self,
+        service_id: &workspace_ids::MachineId,
+    ) -> Result<SavedMessage, String> {
         Ok(SavedMessage {
             target: self.target.resolve(service_id)?,
             content: self.content.resolve(service_id)?,
@@ -225,7 +228,7 @@ impl PreparedMessage {
     }
     pub(crate) fn resolve_direct_message(
         self,
-        service_id: &UuidIdentity,
+        service_id: &workspace_ids::MachineId,
     ) -> Result<SavedMessage, String> {
         Ok(SavedMessage {
             target: self.target.into_mail_recipient(service_id),
@@ -236,7 +239,7 @@ impl PreparedMessage {
     }
 }
 impl PreparedMessageContent {
-    fn resolve(self, service_id: &UuidIdentity) -> Result<MessageContent, String> {
+    fn resolve(self, service_id: &workspace_ids::MachineId) -> Result<MessageContent, String> {
         Ok(match self {
             PreparedMessageContent::HumanUser { text } => MessageContent::HumanUser { text },
             PreparedMessageContent::Agent { sender, text } => {
@@ -252,13 +255,13 @@ impl PreparedMessageContent {
 }
 
 fn resolve_sender_ref(
-    service_id: &UuidIdentity,
-    explicit: Option<SessionRef>,
+    service_id: &workspace_ids::MachineId,
+    explicit: Option<HarnessSessionRef>,
     read_harness: impl FnOnce() -> Result<
         crate::current_session_identity::HarnessSessionIdentity,
         crate::current_session_identity::CurrentSessionIdentityError,
     >,
-) -> Result<SessionRef, String> {
+) -> Result<HarnessSessionRef, String> {
     if let Some(sender) = explicit {
         return Ok(sender);
     }
@@ -271,12 +274,12 @@ fn resolve_sender_ref(
 #[cfg(test)]
 mod tests {
     use super::resolve_sender_ref;
-    use collaboration_client::protocol::UuidIdentity;
 
     #[test]
     fn sender_comes_from_harness_identity_and_fails_with_whoami_guidance_when_absent() {
-        let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())
-            .expect("service identity");
+        let service_id =
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
+                .expect("service identity");
         let resolved = resolve_sender_ref(&service_id, None, || {
             crate::current_session_identity::resolve_harness_session_identity(|name| {
                 (name == "CURSOR_CONVERSATION_ID").then(|| "cursor-1".into())

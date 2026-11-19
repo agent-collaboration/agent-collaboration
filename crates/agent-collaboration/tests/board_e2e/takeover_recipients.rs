@@ -6,7 +6,7 @@ use super::{
     owned_host::BoardHost,
 };
 use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::json;
 use std::{ops::AsyncFnOnce, os::unix::fs::DirBuilderExt, path::Path};
@@ -19,14 +19,14 @@ pub struct Recipients {
     expected_second_frames: Option<u64>,
 }
 
-pub async fn session(host: &BoardHost) -> FixtureResult<SessionRef> {
+pub async fn session(host: &BoardHost) -> FixtureResult<HarnessSessionRef> {
     let identity = host.mcp("installation_show", json!({})).await?;
     Ok(serde_json::from_value(json!({"endpoint":{
         "serviceId":identity.get("serviceId").ok_or("service identity absent")?,
         "endpointId":"claude-local"},"sessionId":"fixture-session"}))?)
 }
 
-async fn start(directory: &Path, target: &SessionRef) -> FixtureResult<PeerFixture> {
+async fn start(directory: &Path, target: &HarnessSessionRef) -> FixtureResult<PeerFixture> {
     let registry = directory.join("absent-peer-registry");
     if !registry.exists() {
         std::fs::DirBuilder::new().mode(0o700).create(&registry)?;
@@ -154,7 +154,10 @@ pub struct AcpRecipients {
 
 impl AcpRecipients {
     /// Names the recipient on the first Host, absent.
-    pub async fn arm_first(&mut self, fixture: &mut BoardFixture) -> FixtureResult<SessionRef> {
+    pub async fn arm_first(
+        &mut self,
+        fixture: &mut BoardFixture,
+    ) -> FixtureResult<HarnessSessionRef> {
         if self.first.is_some() {
             return Err("first recipient already exists".into());
         }
@@ -180,7 +183,10 @@ impl AcpRecipients {
     }
 
     /// Names the recipient on the second Host, absent.
-    pub async fn arm_second(&mut self, second: &mut SecondHost) -> FixtureResult<SessionRef> {
+    pub async fn arm_second(
+        &mut self,
+        second: &mut SecondHost,
+    ) -> FixtureResult<HarnessSessionRef> {
         if self.second.is_some() {
             return Err("second recipient already exists".into());
         }

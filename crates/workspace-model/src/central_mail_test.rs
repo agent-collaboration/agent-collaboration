@@ -12,7 +12,6 @@ fn request_round_trips_typed_timing_and_camel_case_fields() {
             "kind": "setAutomation",
             "target": {
                 "machineId": "01890f3e-7b8c-7cc0-8000-000000000002",
-                "endpoint": "codex",
                 "sessionId": "session-1"
             },
             "timing": { "kind": "interval", "seconds": 60 },
@@ -79,7 +78,7 @@ fn sender_variants_are_closed_and_round_trip() {
 
 #[test]
 fn queue_has_no_time_cutoff_and_ready_is_not_a_message_state() {
-    let wire = json!({"session":{"machineId":"01890f3e-7b8c-7cc0-8000-000000000002","endpoint":"codex","sessionId":"session-1"},"messages":[]});
+    let wire = json!({"session":{"machineId":"01890f3e-7b8c-7cc0-8000-000000000002","sessionId":"session-1"},"messages":[]});
     let queue: super::SessionQueue = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(queue).unwrap(), wire);
     let mut obsolete = wire;
@@ -109,7 +108,7 @@ fn a_direct_body_or_send_without_delivery_or_reply_to_is_refused_not_defaulted()
         json!({ "kind": "direct", "body": "hello", "delivery": "auto" }),
         json!({ "kind": "direct", "body": "hello", "replyTo": null }),
     ];
-    let to = json!({"machineId": "019f0000-0000-7000-8000-000000000001", "endpoint": "codex-local", "sessionId": "s"});
+    let to = json!({"machineId": "019f0000-0000-7000-8000-000000000001", "sessionId": "s"});
     let sends = [
         json!({ "kind": "sendMessage", "to": to, "body": "hello" }),
         json!({ "kind": "sendMessage", "to": to, "body": "hello", "delivery": "auto" }),

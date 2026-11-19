@@ -56,7 +56,7 @@ impl PrivateRegistry {
 
 fn fixture_endpoint() -> ProofResult<EndpointRef> {
     Ok(serde_json::from_value(json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001",
+        "serviceId":"00000000-0000-7000-8000-000000000001",
         "endpointId":"codex-local",
     }))?)
 }
@@ -118,7 +118,7 @@ async fn authenticated_user_frames_reach_the_actual_receiver() -> ProofResult<()
         PeerFixture::start_in_registry(&registry.directory, &fixture_endpoint()?).await?;
     let scenario: ProofResult<()> = async {
         if serde_json::to_value(&peer.target)? != json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "sessionId":"fixture-session",
         }) {
             return Err("peer target changed service, endpoint or session identity".into());

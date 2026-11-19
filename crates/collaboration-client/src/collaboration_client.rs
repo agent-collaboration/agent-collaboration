@@ -88,7 +88,7 @@ impl ClientError {
 /// The Router a client calls, as its published manifest names it.
 #[derive(Clone, Debug)]
 pub struct RouterIdentity {
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub service_epoch: UuidIdentity,
     pub service_version: String,
     pub machine_label: MachineLabel,
@@ -248,7 +248,7 @@ impl CollaborationClient {
 
     pub async fn inspect_session(
         &self,
-        target: &collaboration_protocol::SessionRef,
+        target: &collaboration_protocol::HarnessSessionRef,
     ) -> Result<collaboration_protocol::NativeInspectResult, ClientError> {
         let params = collaboration_protocol::NativeInspectParams {
             target: target.clone(),
@@ -288,7 +288,7 @@ impl CollaborationClient {
 
     pub async fn interrupt_turn(
         &self,
-        target: &collaboration_protocol::SessionRef,
+        target: &collaboration_protocol::HarnessSessionRef,
         generation: &collaboration_protocol::CodexGeneration,
         turn_id: &str,
     ) -> Result<collaboration_protocol::NativeInterruptResult, ClientError> {
@@ -629,7 +629,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary service directory");
         let manifest = serde_json::json!({
             "version":2,
-            "serviceId":"00000000-0000-4000-8000-000000000001",
+            "serviceId":"00000000-0000-7000-8000-000000000001",
             "serviceEpoch":"00000000-0000-4000-8000-000000000002",
             "machineLabel":"fixture-host",
             "control":{"transport":"unixJsonLines","path":"control.sock"},

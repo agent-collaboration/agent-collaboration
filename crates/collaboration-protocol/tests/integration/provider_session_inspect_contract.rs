@@ -3,7 +3,7 @@ use serde_json::json;
 
 #[test]
 fn provider_inspect_preserves_capability_auth_and_advertised_values() {
-    let target = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-session"});
+    let target = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-session"});
     let request = json!({"target":target});
     let _: ProviderSessionInspectRequest = serde_json::from_value(request).expect("request");
     let result = json!({

@@ -36,7 +36,7 @@ async fn legacy_wake(
     expiry: Option<i64>,
 ) -> TestResult<WakeupId> {
     let id = WakeupId::generate();
-    let definition = json!({"wakeupId":id,"changeId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":target},"content":{"kind":"humanUser","text":"legacy wake"},"delivery":"auto"},"timing":timing,"anchorAtMs":created,"expiresAtMs":expiry,"createdAtMs":created});
+    let definition = json!({"wakeupId":id,"changeId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":target},"content":{"kind":"humanUser","text":"legacy wake"},"delivery":"auto"},"timing":timing,"anchorAtMs":created,"expiresAtMs":expiry,"createdAtMs":created});
     sqlx::query("INSERT INTO wakeup_definitions(wakeup_id,change_id,wakeup_status,definition_json,anchor_at_ms,evaluated_through_ms,next_due_at_ms,expires_at_ms,first_fire_json,pending_delivery_id,created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,?,?,NULL,NULL,?,?)")
         .bind(id.as_str()).bind(definition.get("changeId").and_then(Value::as_str)).bind(status).bind(definition.to_string()).bind(created).bind(created).bind(created + 600_000).bind(expiry).bind(created).bind(created).execute(connection).await?;
     Ok(id)

@@ -20,7 +20,7 @@ fn project_item(
     let template = runtime.fixture.item(&runtime.fixture.draft());
     let mut recipient = template.recipient().clone();
     recipient.peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    recipient.address.endpoint.service_id = "00000000-0000-4000-8000-000000000002"
+    recipient.address.endpoint.service_id = "00000000-0000-7000-8000-000000000002"
         .to_owned()
         .try_into()
         .unwrap();
@@ -252,8 +252,8 @@ async fn unconfigured_remote_direct_send_is_unavailable_without_native_admission
     let mail = std::sync::Arc::new(runtime.local_mail_runtime());
     let presence = runtime.local_mail_props().presence;
     let identity = crate::ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
     )
     .unwrap()
     .with_automation_store(runtime.automation.clone())
@@ -269,7 +269,7 @@ async fn unconfigured_remote_direct_send_is_unavailable_without_native_admission
     let push_id = item.clone().try_into().unwrap();
     let target = serde_json::from_value(serde_json::json!({
         "endpoint": {
-            "serviceId": "00000000-0000-4000-8000-000000000002",
+            "serviceId": "00000000-0000-7000-8000-000000000002",
             "endpointId": "codex-local"
         },
         "sessionId": "unconfigured-remote-recipient"

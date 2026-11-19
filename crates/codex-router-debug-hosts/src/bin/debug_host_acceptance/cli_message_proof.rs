@@ -1,13 +1,13 @@
 //! Built CLI acceptance against the owned debug service; no shell command interpolation.
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use serde_json::Value;
 use std::{error::Error, path::Path, time::Duration};
 
 pub struct CliSubmission<'a> {
     pub executable: &'a Path,
     pub directory: &'a Path,
-    pub target: &'a SessionRef,
-    pub sender: &'a SessionRef,
+    pub target: &'a HarnessSessionRef,
+    pub sender: &'a HarnessSessionRef,
     pub text: &'a str,
 }
 pub async fn submit(request: CliSubmission<'_>) -> Result<String, Box<dyn Error>> {

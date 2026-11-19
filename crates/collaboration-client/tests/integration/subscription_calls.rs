@@ -198,7 +198,7 @@ async fn subscription_wait_uses_the_rebound_method_and_decodes_notice_ranges() -
             "kind":"session",
             "session":{
                 "endpoint":{
-                    "serviceId":"00000000-0000-4000-8000-000000000001",
+                    "serviceId":"00000000-0000-7000-8000-000000000001",
                     "endpointId":"codex-local"
                 },
                 "sessionId":"subscription-client"

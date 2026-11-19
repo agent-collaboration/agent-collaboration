@@ -280,12 +280,12 @@ async fn report_wait(
 }
 
 pub(super) fn lifecycle_actor(
-    service_id: &collaboration_client::protocol::UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     actor: Option<&str>,
 ) -> Result<ProviderIdentity, String> {
     match actor {
         Some(actor) => serde_json::from_str(actor)
-            .map_err(|_| "--from must be a SessionRef or Human identity JSON".into()),
+            .map_err(|_| "--from must be a HarnessSessionRef or Human identity JSON".into()),
         None => current_session_ref(service_id, None).map(Into::into),
     }
 }
@@ -296,7 +296,7 @@ pub(super) fn lifecycle_approver(
 ) -> Result<ProviderIdentity, &'static str> {
     match approver {
         Some(approver) => serde_json::from_str(approver)
-            .map_err(|_| "--approver must be a SessionRef or Human identity JSON"),
+            .map_err(|_| "--approver must be a HarnessSessionRef or Human identity JSON"),
         None => Ok(default.clone()),
     }
 }

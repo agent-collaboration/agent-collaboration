@@ -8,7 +8,7 @@ use fake_api_support::{FakeCollaborationApi, FakeReply};
 
 #[tokio::test]
 async fn fixed_source_provider_read_preserves_availability_vs_invalid_without_private_data() {
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let sentinel = "SOURCE_READ_PRIVATE_SENTINEL";
     for (code, data, expected_reason) in [

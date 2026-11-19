@@ -260,7 +260,7 @@ mod tests {
 
     fn selected_source() -> PickerSourceContext {
         let registry = agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(
-            r#"{"version":1,"routers":[{"name":"Selected source","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"http://127.0.0.1:43129/mcp"}}]}"#,
+            r#"{"version":1,"routers":[{"name":"Selected source","connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000001","mcpUrl":"http://127.0.0.1:43129/mcp"}}]}"#,
         ).unwrap();
         PickerSourceContext::ConfiguredHosted(registry.routers[0].clone())
     }

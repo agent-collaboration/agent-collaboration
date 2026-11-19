@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn endpoint_has_two_protocol_channels_without_two_identities() {
-    let description = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"label":"Local Codex","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":null,"generation":null},{"kind":"acp","transport":"unixJsonLines","path":"codex-acp.sock","schemaDigest":format!("sha256:{}","a".repeat(64))}]});
+    let description = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"label":"Local Codex","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":null,"generation":null},{"kind":"acp","transport":"unixJsonLines","path":"codex-acp.sock","schemaDigest":format!("sha256:{}","a".repeat(64))}]});
     let value: EndpointDescription = serde_json::from_value(description.clone())
         .unwrap_or_else(|error| panic!("valid: {error}"));
     assert_eq!(
@@ -14,7 +14,7 @@ fn endpoint_has_two_protocol_channels_without_two_identities() {
 
 #[test]
 fn invalid_channel_carrier_and_empty_channels_are_rejected() {
-    let base = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"label":"Local Codex","availability":{"state":"unprobed"},"channels":[]});
+    let base = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"label":"Local Codex","availability":{"state":"unprobed"},"channels":[]});
     assert!(serde_json::from_value::<EndpointDescription>(base.clone()).is_err());
     let mut wrong = base;
     wrong["channels"] = json!([{"kind":"nativeCodex","transport":"unixJsonLines","path":"x","schemaDigest":null,"generation":null}]);
@@ -23,7 +23,7 @@ fn invalid_channel_carrier_and_empty_channels_are_rejected() {
 
 #[test]
 fn unavailable_endpoint_has_no_transport_and_names_a_fix() {
-    let endpoint = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Claude Code","availability":{"state":"unavailable","observedAt":"2026-09-24T12:00:00Z","reason":"executable not found","fix":"install claude-agent-acp"},"channels":[]});
+    let endpoint = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"label":"Claude Code","availability":{"state":"unavailable","observedAt":"2026-09-24T12:00:00Z","reason":"executable not found","fix":"install claude-agent-acp"},"channels":[]});
     let decoded: EndpointDescription =
         serde_json::from_value(endpoint.clone()).expect("unavailable provider with no transport");
     assert_eq!(serde_json::to_value(decoded).expect("serialize"), endpoint);
@@ -32,7 +32,7 @@ fn unavailable_endpoint_has_no_transport_and_names_a_fix() {
 fn external_provider_endpoint() -> Value {
     json!({
         "endpoint": {
-            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "serviceId": "00000000-0000-7000-8000-000000000001",
             "endpointId": "claude-code"
         },
         "label": "Claude Code",

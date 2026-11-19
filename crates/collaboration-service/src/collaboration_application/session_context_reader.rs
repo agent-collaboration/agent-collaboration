@@ -29,7 +29,7 @@ impl SessionContextReader {
     }
     pub(crate) async fn repository(&self, session: &SessionRef) -> Option<RepositoryRef> {
         let target = serde_json::to_value(session)
-            .and_then(serde_json::from_value::<collaboration_protocol::SessionRef>)
+            .and_then(serde_json::from_value::<collaboration_protocol::HarnessSessionRef>)
             .ok()?;
         if target.endpoint.service_id != *self.identity.service_id() {
             return None;

@@ -9,7 +9,8 @@ use crate::{
     organization_authority::machine_login::{EnrollmentFacts, EnrollmentQuery},
 };
 use central_storage::StoreFailure;
-use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_identity_protocol::EnrollmentId;
+use workspace_ids::MachineId;
 
 impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
     pub async fn admit_machine_connection(&self, token: &str) -> Admission {
@@ -32,15 +33,11 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 MachineConnectionRefusal::MachineInAnotherOrganization {},
             ));
         }
-        // Row identity is resolved from the public installation, never supplied by the caller.
         let time = self.machine_login_time(verified.organization_id()).await?;
         let facts = self
-            .connection_facts(verified.installation_id(), verified.enrollment_id())
+            .connection_facts(verified.machine_id(), verified.enrollment_id())
             .await?;
-        let Some(machine) = &facts.machine else {
-            return Ok(Err(MachineConnectionRefusal::UnknownMachine {}));
-        };
-        let attachment = MachineConnectionAttachment::from_verified(&verified, machine.id);
+        let attachment = MachineConnectionAttachment::from_verified(&verified);
         validate_live(&attachment, &self.organization, &facts, time.now_ms)
     }
 
@@ -49,7 +46,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
     /// (`RenewMachineToken`), and central answers `renewed` or
     /// `refused { reason }`." The token is verified exactly as at connect, then
     /// the enrollment is read live under the central turn. It must name the
-    /// connection's own organization, installation, enrollment and client. The
+    /// connection's own organization, machine_id, enrollment and client. The
     /// renewed connection counts until the new token's
     /// min(exp + 60 s, grant_expires_at), which may extend it; on refusal the
     /// caller keeps the current connection and its expiry.
@@ -88,7 +85,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         };
         let _turn = self.take_central_turn_for_admission().await;
         if verified.organization_id() != current.organization_id()
-            || verified.installation_id() != current.installation_id()
+            || verified.machine_id() != current.machine_id()
         {
             return Ok(Err(Refusal::DifferentMachine));
         }
@@ -102,12 +99,12 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             return Ok(Err(Refusal::EnrollmentNotActive));
         }
         let facts = self
-            .connection_facts(verified.installation_id(), verified.enrollment_id())
+            .connection_facts(verified.machine_id(), verified.enrollment_id())
             .await?;
-        let Some(machine) = &facts.machine else {
+        if facts.machine.is_none() {
             return Ok(Err(Refusal::EnrollmentNotActive));
-        };
-        let renewed = MachineConnectionAttachment::from_verified(&verified, machine.id);
+        }
+        let renewed = MachineConnectionAttachment::from_verified(&verified);
         Ok(
             match validate_live(&renewed, &self.organization, &facts, time.now_ms)? {
                 Ok(connection) => Ok(connection),
@@ -145,21 +142,21 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .machine_login_time(attachment.organization_id())
             .await?;
         let facts = self
-            .connection_facts(attachment.installation_id(), attachment.enrollment_id())
+            .connection_facts(attachment.machine_id(), attachment.enrollment_id())
             .await?;
         validate_live(attachment, &self.organization, &facts, time.now_ms)
     }
 
     async fn connection_facts(
         &self,
-        installation: &InstallationId,
+        machine_id: &MachineId,
         enrollment: &EnrollmentId,
     ) -> Result<EnrollmentFacts, StoreFailure> {
         crate::machine_login_reads::facts(
             self.host.as_ref(),
             self.organization.clone(),
             &EnrollmentQuery {
-                installation: Some(installation.clone()),
+                machine_id: Some(machine_id.clone()),
                 enrollment: Some(enrollment.clone()),
                 ..EnrollmentQuery::default()
             },
@@ -175,7 +172,7 @@ pub enum MachineTokenRenewalRefusal {
     TokenRejected,
     /// Its enrollment is not the machine's active one, or its grant has run out.
     EnrollmentNotActive,
-    /// It names another organization or installation than the connection.
+    /// It names another organization or machine_id than the connection.
     DifferentMachine,
     /// It names another enrollment or client than the connection.
     DifferentEnrollment,

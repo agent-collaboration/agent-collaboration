@@ -13,7 +13,8 @@ use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
-    DeliveryClientReceipt, MailItemId, PushId, SessionReachability, SessionRef as RouterSessionRef,
+    DeliveryClientReceipt, HarnessSessionRef as RouterSessionRef, MailItemId, PushId,
+    SessionReachability,
 };
 use collaboration_service::ApplicationFixture;
 
@@ -23,8 +24,8 @@ use serde_json::json;
 use std::{os::unix::fs::PermissionsExt, sync::OnceLock};
 use transport::WireEvent;
 
-const SOURCE: &str = "00000000-0000-4000-8000-000000000001";
-const RECIPIENT: &str = "00000000-0000-4000-8000-000000000002";
+const SOURCE: &str = "00000000-0000-7000-8000-000000000001";
+const RECIPIENT: &str = "00000000-0000-7000-8000-000000000002";
 
 #[derive(Clone, Debug)]
 struct CapturedDelivery {

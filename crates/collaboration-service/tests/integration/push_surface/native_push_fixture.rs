@@ -8,8 +8,7 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
-    DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, PushDeliveryState, SessionRef,
-    UuidIdentity,
+    DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, PushDeliveryState,
 };
 use collaboration_service::ApplicationFixture;
 
@@ -191,7 +190,7 @@ pub(super) async fn setup() -> (
     );
     let delivery = Arc::new(RecordingDelivery::new(store.clone()));
     let machine = collaboration_contracts::MachineIdentity::new(
-        UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
         Some("push-surface-test"),
     )
     .expect("machine identity");
@@ -259,7 +258,7 @@ pub(super) struct RunningPresence;
 impl collaboration_contracts::TargetPresenceProbe for RunningPresence {
     fn presence(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
         Box::pin(async { Ok(collaboration_contracts::TargetPresence::Running) })
     }

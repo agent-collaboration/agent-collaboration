@@ -4,8 +4,8 @@ use super::{
     ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationFailureStage, ConversationOperationSettlement,
     ConversationOperationSubmission, ConversationPromptRequest, ExternalProviderSupervisor,
-    OperationId, PreparedOperation, ProviderConversationFuture, ProviderIdentity,
-    ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind, SessionRef,
+    HarnessSessionRef, OperationId, PreparedOperation, ProviderConversationFuture,
+    ProviderIdentity, ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind,
     admitted_submission, existing_submission, failure, optional_message_text,
     prompt_runtime_failure, retain_operation,
 };
@@ -16,7 +16,7 @@ use super::{
 pub struct ProviderPromptContentsRequest {
     pub operation_id: OperationId,
     pub input_id: session_event_model::InputId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub requested_by: ProviderIdentity,
     pub approver: ProviderIdentity,
     pub input: acp_client_runtime::ProviderTurnInput,
@@ -26,7 +26,7 @@ impl ProviderPromptContentsRequest {
     pub(crate) fn from_prepared_push(
         operation_id: OperationId,
         input_id: session_event_model::InputId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         requested_by: ProviderIdentity,
         approver: ProviderIdentity,
         line: &collaboration_protocol::MessageText,

@@ -8,9 +8,9 @@ use automation_storage::{
 };
 use collaboration_protocol::{
     AutomationInspectionFailure, AutomationPage, AutomationPageRequest, CodexGeneration,
-    DeliveryInspection, DeliveryListRequest, DeliveryShowRequest, EndpointRef, InstructionSnapshot,
-    OperationShowRequest, OperationSnapshot, RevisionListRequest, RevisionRecord, RunListRequest,
-    RunShowRequest, RunSnapshot, ScheduleSnapshot, SessionRef, UuidIdentity,
+    DeliveryInspection, DeliveryListRequest, DeliveryShowRequest, EndpointRef, HarnessSessionRef,
+    InstructionSnapshot, OperationShowRequest, OperationSnapshot, RevisionListRequest,
+    RevisionRecord, RunListRequest, RunShowRequest, RunSnapshot, ScheduleSnapshot,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -403,7 +403,7 @@ pub(super) fn typed_records<TRecord: DeserializeOwned>(
 }
 
 fn next_token(
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     scope: &str,
     digest: &str,
     upper: Option<&AutomationListKey>,
@@ -446,7 +446,7 @@ async fn read_delivery(
     request: &DeliveryShowRequest,
 ) -> InspectionResult<
     automation_storage::DeliveryRecord<
-        SessionRef,
+        HarnessSessionRef,
         CodexGeneration,
         collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
     >,
@@ -454,7 +454,7 @@ async fn read_delivery(
     store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&request.delivery_id)
+        .read_delivery::<HarnessSessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&request.delivery_id)
         .await
         .map_err(failure::storage)
 }
@@ -465,7 +465,7 @@ async fn read_run(
     request: &RunShowRequest,
 ) -> InspectionResult<
     agent_automation::RunRecord<
-        SessionRef,
+        HarnessSessionRef,
         EndpointRef,
         CodexGeneration,
         collaboration_runtime::stored_run_receipt::StoredRunReceipt,
@@ -474,7 +474,7 @@ async fn read_run(
     store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&request.run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&request.run_id)
         .await
         .map_err(failure::storage)
 }

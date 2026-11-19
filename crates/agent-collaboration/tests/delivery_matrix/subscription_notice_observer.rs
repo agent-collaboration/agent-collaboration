@@ -2,13 +2,13 @@
 use crate::delivery_matrix_debug_acceptance::SUBSCRIPTION_NOTICE_LABEL;
 use crate::proof_context::{ProofContext, ProofResult};
 use collaboration_client::protocol::{
-    PushKind, PushRecordShowParams, PushRecordShowResult, SessionRef,
+    HarnessSessionRef, PushKind, PushRecordShowParams, PushRecordShowResult,
 };
 use serde_json::json;
 
 pub(crate) async fn verify_subscription_notice(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     notice: &str,
     body_marker: &str,
 ) -> ProofResult<PushRecordShowResult> {

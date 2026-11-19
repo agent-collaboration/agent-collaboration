@@ -33,7 +33,7 @@ use super::{
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
-use collaboration_protocol::{PushId, PushRecord, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, PushId, PushRecord};
 use message_board::{BoardError, Identity, ProjectId};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, mpsc, oneshot};
@@ -307,7 +307,7 @@ impl SubscriptionDeliveryService {
     /// The record already exists: route its known-unsent work through the target's owner.
     pub async fn deliver_direct_message(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         push_id: PushId,
     ) -> Result<PushRecord, BoardError> {
         self.require_started().await?;
@@ -687,7 +687,7 @@ impl Drop for SubscriptionDeliveryService {
     }
 }
 
-fn reader_for_target(target: &SessionRef) -> Result<Identity, BoardError> {
+fn reader_for_target(target: &HarnessSessionRef) -> Result<Identity, BoardError> {
     let session = serde_json::from_value(
         serde_json::to_value(target).map_err(|_| BoardError::board_unavailable())?,
     )

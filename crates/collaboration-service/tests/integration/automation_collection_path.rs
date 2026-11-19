@@ -19,7 +19,7 @@ async fn sdk_lists_local_collections_and_rejects_cross_collection_cursor()
         automation_storage::AutomationStore::open(&path).await?,
     ));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?

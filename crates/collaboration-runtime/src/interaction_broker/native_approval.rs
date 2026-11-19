@@ -3,8 +3,8 @@
 use super::{
     APPROVAL_TIMEOUT, ApprovalBroker, ApprovalBrokerError, ApprovalRequestRecord, ApprovalRoute,
     ApprovalState, Arc, BrokeredApprovalOutcome, BrokeredApprovalRequest, CancellationMarker,
-    NativeApprovalRefusalReason, PendingApproval, ServiceInteractionBroker, SessionRef, Value,
-    map_native_options, native_approval_refusal_diagnostic, native_option_records, oneshot,
+    HarnessSessionRef, NativeApprovalRefusalReason, PendingApproval, ServiceInteractionBroker,
+    Value, map_native_options, native_approval_refusal_diagnostic, native_option_records, oneshot,
 };
 
 impl ApprovalBroker for ServiceInteractionBroker {
@@ -43,7 +43,7 @@ impl ApprovalBroker for ServiceInteractionBroker {
         >,
     > {
         Box::pin(async move {
-            let requester = SessionRef {
+            let requester = HarnessSessionRef {
                 endpoint: self.backend.endpoint.clone(),
                 session_id: request
                     .thread_id

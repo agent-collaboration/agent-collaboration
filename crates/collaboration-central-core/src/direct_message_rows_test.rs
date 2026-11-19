@@ -106,7 +106,7 @@ fn identity(kind: &str, identity: &str) -> ReadOutcome {
 
 #[test]
 fn an_agent_sender_has_a_session_to_tell_a_person_has_none_and_a_missing_actor_is_corrupt() {
-    let session = r#"{"kind":"agentSession","session":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000001","endpoint":"codex-local","sessionId":"sender"}}"#;
+    let session = r#"{"kind":"agentSession","session":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000001","sessionId":"sender"}}"#;
     let told = decode_sender_session(&identity("agentSession", session)).unwrap();
     assert_eq!(told.unwrap().session_id.as_str(), "sender");
     assert!(decode_sender_session(&identity("person", session)).is_err());

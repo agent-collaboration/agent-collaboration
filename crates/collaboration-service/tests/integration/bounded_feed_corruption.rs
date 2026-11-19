@@ -106,10 +106,10 @@ async fn unread_excludes_only_the_same_session_endpoint() -> Result<(), TestErro
         .await?;
     let (project, _) = fixture.project().await?;
     let reader: Identity = serde_json::from_value(
-        json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"same-session-id"}}),
+        json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"same-session-id"}}),
     )?;
     let writer: Identity = serde_json::from_value(
-        json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000003","endpointId":"claude-local"},"sessionId":"same-session-id"}}),
+        json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000003","endpointId":"claude-local"},"sessionId":"same-session-id"}}),
     )?;
     client
         .inbox_fetch(initialized_request(project.clone(), reader.clone())?)

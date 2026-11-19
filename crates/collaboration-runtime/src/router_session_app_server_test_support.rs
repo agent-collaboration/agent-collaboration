@@ -109,7 +109,7 @@ pub(super) struct ScriptedSessionBackend {
 impl ScriptedSessionBackend {
     pub(super) fn new() -> Result<Arc<Self>, serde_json::Error> {
         let endpoint: SessionEndpointRef = serde_json::from_value(json!({
-            "serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89",
+            "serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89",
             "endpointId":"claude-local"
         }))?;
         let session: SessionRef = serde_json::from_value(json!({

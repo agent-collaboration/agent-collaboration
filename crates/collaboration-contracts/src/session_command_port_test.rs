@@ -111,12 +111,12 @@ async fn every_command_keeps_the_typed_actor() {
         serde_json::from_value(serde_json::json!({"kind":"human","humanId":"owner"}))
             .expect("typed human actor");
     let session: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"19e49a31-daa3-428c-b985-e0c7373a89ed"
     }))
     .expect("session reference");
     let endpoint: SessionEndpointRef = serde_json::from_value(serde_json::json!({
-        "serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"
+        "serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"
     }))
     .expect("endpoint");
     let recorded = Arc::new(Mutex::new(Vec::new()));

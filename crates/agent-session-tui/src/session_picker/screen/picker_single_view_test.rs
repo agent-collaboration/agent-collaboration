@@ -66,7 +66,7 @@ async fn assert_held_switch(result: SwitchResult) {
                     };
                 }
                 let endpoint: collaboration_client::protocol::EndpointRef = serde_json::from_value(
-                    serde_json::json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"source-native"}),
+                    serde_json::json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"source-native"}),
                 ).unwrap();
                 let mut row = picker_record(
                     "source-row",

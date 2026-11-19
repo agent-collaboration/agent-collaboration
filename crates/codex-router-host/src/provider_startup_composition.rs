@@ -51,7 +51,7 @@ pub(crate) struct ProviderStartupComposition {
 pub(crate) async fn compose_provider_startup(
     configured: Vec<ExternalProviderStartup>,
     store: Option<Arc<Mutex<ProviderOperationStore>>>,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     service_epoch: &UuidIdentity,
     mcp_url: &str,
     scratch_root: Option<std::path::PathBuf>,
@@ -261,7 +261,7 @@ fn provider_startup_failure_reason(
 }
 
 fn unavailable_endpoint(
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     provider: ProviderKind,
     reason: NonEmptyText,
     fix: NonEmptyText,

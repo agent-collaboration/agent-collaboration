@@ -5,8 +5,8 @@ use super::{
     format_recency_at_ms, normalize_path, session_context_from_cwd, truncate_end,
 };
 use collaboration_client::protocol::{
-    ChannelDescription, EndpointDescription, EndpointRef, NativeSessionSource, ProviderKind,
-    ProviderSessionState, ProviderSessionSummary, SessionRef,
+    ChannelDescription, EndpointDescription, EndpointRef, HarnessSessionRef, NativeSessionSource,
+    ProviderKind, ProviderSessionState, ProviderSessionSummary,
 };
 use collaboration_client::session_catalog::{
     SessionHistorySource, StoredSessionRecord, read_session_conversation_history,
@@ -22,9 +22,9 @@ pub type SessionConversationSource = SessionHistorySource;
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SessionPickerIdentity {
     LocalCodex(String),
-    HostedCodex(SessionRef),
-    HostedProvider(SessionRef),
-    NativeClaude(SessionRef),
+    HostedCodex(HarnessSessionRef),
+    HostedProvider(HarnessSessionRef),
+    NativeClaude(HarnessSessionRef),
 }
 
 impl SessionPickerIdentity {
@@ -370,7 +370,7 @@ impl SessionPickerRecord {
     pub fn with_hosted_codex(mut self, endpoint: &EndpointRef) -> Self {
         if let Ok(session_id) = self.session_id.clone().try_into() {
             self.provenance = SessionRowProvenance::DefaultAttributed;
-            self.identity = SessionPickerIdentity::HostedCodex(SessionRef {
+            self.identity = SessionPickerIdentity::HostedCodex(HarnessSessionRef {
                 endpoint: endpoint.clone(),
                 session_id,
             });

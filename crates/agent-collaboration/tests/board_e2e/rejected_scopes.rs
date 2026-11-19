@@ -8,7 +8,7 @@ use super::{
     role_checks::Roles,
 };
 use codex_router_test_support::FixtureResult;
-use collaboration_client::protocol::{EndpointId, EndpointRef, SessionRef};
+use collaboration_client::protocol::{EndpointId, EndpointRef, HarnessSessionRef};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ const SENTINEL: &str = "BR01 independent healthy scope sentinel";
 
 struct ScopeCase {
     reader: Value,
-    session: SessionRef,
+    session: HarnessSessionRef,
     fact: String,
     post: String,
     cursor: Value,
@@ -95,7 +95,7 @@ fn expected_summary(fixture: &BoardFixture, initialized: bool, unread: bool) -> 
     json!([{"workspaceId":fixture.workspace,"mainTrackingInitialized":initialized,"hasUnread":unread}])
 }
 
-async fn prepare(fixture: &BoardFixture, session: SessionRef) -> FixtureResult<ScopeCase> {
+async fn prepare(fixture: &BoardFixture, session: HarnessSessionRef) -> FixtureResult<ScopeCase> {
     let reader = human("rejected-scope-reader");
     assert_eq!(summary(fixture, &reader).await?, json!([]));
     fixture
@@ -165,7 +165,11 @@ async fn prepare(fixture: &BoardFixture, session: SessionRef) -> FixtureResult<S
     Ok(case)
 }
 
-async fn context(fixture: &BoardFixture, session: &SessionRef, fact: &str) -> FixtureResult<Value> {
+async fn context(
+    fixture: &BoardFixture,
+    session: &HarnessSessionRef,
+    fact: &str,
+) -> FixtureResult<Value> {
     let context = fixture
         .host()?
         .mcp("view_session_context", json!({"session":session}))

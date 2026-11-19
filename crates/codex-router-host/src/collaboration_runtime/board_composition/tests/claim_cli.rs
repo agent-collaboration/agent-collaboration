@@ -66,7 +66,7 @@ async fn claim_cli_installs_the_imported_prefix_and_reports_native_not_found() -
     std::fs::create_dir(&directory)?;
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
     let app = (collaboration_service::ApplicationFixture::new(
-        "550e8400-e29b-41d4-a716-446655440000",
+        "550e8400-e29b-71d4-a716-446655440000",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(fixture.admission.clone())

@@ -4,10 +4,11 @@ use crate::{
     DeliverableId, DeliverableRole, DependencyId, Description, ExternalLink, Identity,
     InitiativeId, IssueId, IssueTitle, ItemRef, ItemView, LinkId, ListQuery, MemberRole,
     NotificationSetting, PostText, ProjectId, ProjectRole, ReadScope, ReferenceId, ReferenceSource,
-    ReferenceTarget, RefusalReason, RequestId, ResourceName, SessionAddress, ThreadId, TrailTag,
-    TrailText, WorkLogEntryId, WorkStatus, Workspace,
+    ReferenceTarget, RefusalReason, RequestId, ResourceName, ThreadId, TrailTag, TrailText,
+    WorkLogEntryId, WorkStatus, Workspace,
 };
 use serde::{Deserialize, Serialize};
+use workspace_ids::SessionRef;
 
 /// A session's thread notices share one cadence across all workspaces.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -41,15 +42,15 @@ impl NoticeCadence {
     deny_unknown_fields
 )]
 pub enum Caller {
-    Session(SessionAddress),
+    Session(SessionRef),
     Person {
-        machine_id: crate::MachineId,
+        machine_id: workspace_ids::MachineId,
         person_id: crate::PersonId,
     },
 }
 impl Caller {
     #[must_use]
-    pub fn machine_id(&self) -> &crate::MachineId {
+    pub fn machine_id(&self) -> &workspace_ids::MachineId {
         match self {
             Self::Session(session) => &session.machine_id,
             Self::Person { machine_id, .. } => machine_id,
@@ -67,7 +68,7 @@ impl Caller {
 pub enum ActorRef {
     Me,
     Actor(ActorIdentityId),
-    Session(SessionAddress),
+    Session(SessionRef),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

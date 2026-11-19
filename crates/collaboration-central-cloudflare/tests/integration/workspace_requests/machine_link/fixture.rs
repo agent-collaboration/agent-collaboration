@@ -20,16 +20,16 @@ use runtime_primitives::{Clock, SyncTime};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
 use std::sync::Arc;
-use workspace_model::{Caller, SessionAddress, WorkspaceId, WorkspaceRequest};
+use workspace_ids::SessionRef;
+use workspace_model::{Caller, WorkspaceId, WorkspaceRequest};
 
 pub(super) const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000cf01";
 pub(super) const INSTALLATION: &str = "019f0000-0000-7000-8000-00000000cf02";
 pub(super) const OTHER_ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000cf03";
 
 pub(super) fn session_caller() -> Result<Caller> {
-    Ok(Caller::Session(SessionAddress {
+    Ok(Caller::Session(SessionRef {
         machine_id: INSTALLATION.parse()?,
-        endpoint: "codex-local".to_owned().try_into()?,
         session_id: "019f0000-0000-7000-8000-00000000cf07"
             .to_owned()
             .try_into()?,
@@ -97,7 +97,7 @@ impl Fixture {
         .await?;
         let grant = grant(&host, &client, &enrollment).await?;
         let MachineTokenDecision::Grant {
-            installation,
+            installation: machine_id,
             enrollment_id,
             grant_expires_at,
             decided_at,
@@ -106,7 +106,7 @@ impl Fixture {
         else {
             return Err("real machine token grant refused".into());
         };
-        if installation.as_str() != INSTALLATION
+        if machine_id.as_str() != INSTALLATION
             || enrollment_id != enrollment
             || decided_at.0 != signed::NOW_SECONDS
             || grant_expires_at.0 != signed::NOW_SECONDS + 600
@@ -155,7 +155,7 @@ impl Fixture {
         let result = self.runtime().run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql:"UPDATE machines SET allowed_workspaces=?,updated_at=? WHERE installation_id=?",
+                    sql:"UPDATE machines SET allowed_workspaces=?,updated_at=? WHERE machine_id=?",
                     args:vec![SqlValue::Text(serde_json::to_string(&vec![workspace])?),SqlValue::Text(timestamp.to_rfc3339()),SqlValue::Text(INSTALLATION.into())],
                 }, expect:RowExpectation::Exactly(1),
             }], alarm:AlarmUpdate::Unchanged,

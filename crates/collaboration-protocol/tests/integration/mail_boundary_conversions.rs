@@ -33,7 +33,7 @@ fn delivery_tags_and_default_round_trip_without_changing_json() {
 fn generation_guard_round_trips_exact_json_and_rejects_the_same_invalid_inputs() {
     for generation in [1, 9_007_199_254_740_991_u64] {
         let wire =
-            json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":generation});
+            json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":generation});
         let rpc: CodexGeneration = serde_json::from_value(wire.clone()).unwrap();
         let mail: GenerationGuard = serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(GenerationGuard::try_from(rpc.clone()).unwrap(), mail);
@@ -41,7 +41,7 @@ fn generation_guard_round_trips_exact_json_and_rejects_the_same_invalid_inputs()
         assert_eq!(serde_json::to_value(rpc).unwrap(), wire);
         assert_eq!(serde_json::to_value(mail).unwrap(), wire);
     }
-    let valid = json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1});
+    let valid = json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1});
     let mut invalid_inputs = Vec::new();
     for number in [
         json!(0),
@@ -67,7 +67,7 @@ fn generation_guard_round_trips_exact_json_and_rejects_the_same_invalid_inputs()
         .as_object_mut()
         .unwrap()
         .remove("serviceEpoch");
-    wrong_spelling["service_epoch"] = json!("00000000-0000-4000-8000-000000000001");
+    wrong_spelling["service_epoch"] = json!("00000000-0000-7000-8000-000000000001");
     invalid_inputs.push(wrong_spelling);
     let mut unknown = valid;
     unknown["extra"] = json!(true);
@@ -87,16 +87,17 @@ fn generation_guard_round_trips_exact_json_and_rejects_the_same_invalid_inputs()
 #[test]
 fn session_references_convert_both_ways_without_reinterpreting_provider_ids() {
     for session_id in ["provider:opaque/thread#1".to_owned(), "μ".repeat(2048)] {
-        let wire = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":session_id});
-        let rpc: collaboration_protocol::SessionRef = serde_json::from_value(wire.clone()).unwrap();
+        let wire = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":session_id});
+        let rpc: collaboration_protocol::HarnessSessionRef =
+            serde_json::from_value(wire.clone()).unwrap();
         let mail = message_board::SessionRef::try_from(rpc.clone()).unwrap();
         assert_eq!(serde_json::to_value(&mail).unwrap(), wire);
         assert_eq!(
-            collaboration_protocol::SessionRef::try_from(mail).unwrap(),
+            collaboration_protocol::HarnessSessionRef::try_from(mail).unwrap(),
             rpc
         );
     }
-    let valid = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"opaque"});
+    let valid = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"opaque"});
     for (field, value) in [
         ("/sessionId", json!("")),
         ("/sessionId", json!("invalid\u{0000}")),
@@ -110,7 +111,8 @@ fn session_references_convert_both_ways_without_reinterpreting_provider_ids() {
         let mut invalid = valid.clone();
         *invalid.pointer_mut(field).unwrap() = value;
         assert!(
-            serde_json::from_value::<collaboration_protocol::SessionRef>(invalid.clone()).is_err()
+            serde_json::from_value::<collaboration_protocol::HarnessSessionRef>(invalid.clone())
+                .is_err()
         );
         assert!(serde_json::from_value::<message_board::SessionRef>(invalid).is_err());
     }
@@ -118,7 +120,8 @@ fn session_references_convert_both_ways_without_reinterpreting_provider_ids() {
         let mut invalid = valid.clone();
         invalid.pointer_mut(location).unwrap()["extra"] = json!(true);
         assert!(
-            serde_json::from_value::<collaboration_protocol::SessionRef>(invalid.clone()).is_err()
+            serde_json::from_value::<collaboration_protocol::HarnessSessionRef>(invalid.clone())
+                .is_err()
         );
         assert!(serde_json::from_value::<message_board::SessionRef>(invalid).is_err());
     }

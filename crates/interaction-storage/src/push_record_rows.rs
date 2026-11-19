@@ -2,9 +2,9 @@
 use crate::StorageError;
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{
-    EndpointId, EndpointRef, MessageDelivery, PushActivitySnapshot, PushDeliveryState, PushId,
-    PushKind, PushOrigin, PushRecord, PushRecordDraft, RouterOriginRef, SessionId, SessionRef,
-    UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, MessageDelivery, PushActivitySnapshot,
+    PushDeliveryState, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft, RouterOriginRef,
+    SessionId,
 };
 use serde::Serialize;
 use sqlx::FromRow;
@@ -195,7 +195,7 @@ pub(crate) fn serialize_kind(kind: PushKind) -> Result<String, StorageError> {
         .ok_or(StorageError::InvalidRecord)
 }
 
-pub(crate) fn serialize_origin(origin: &PushOrigin) -> (&'static str, Option<&SessionRef>) {
+pub(crate) fn serialize_origin(origin: &PushOrigin) -> (&'static str, Option<&HarnessSessionRef>) {
     match origin {
         PushOrigin::Session(session) => ("session", Some(session)),
         PushOrigin::OwnerUnverified => ("owner", None),
@@ -250,10 +250,10 @@ pub(crate) fn session_from_parts(
     service_id: String,
     endpoint_id: String,
     session_id: String,
-) -> Result<SessionRef, StorageError> {
-    Ok(SessionRef {
+) -> Result<HarnessSessionRef, StorageError> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from(service_id)
+            service_id: workspace_ids::MachineId::try_from(service_id)
                 .map_err(|_| StorageError::InvalidRecord)?,
             endpoint_id: EndpointId::try_from(endpoint_id)
                 .map_err(|_| StorageError::InvalidRecord)?,

@@ -2,15 +2,15 @@
 use super::super::{subscription_push::target_session, subscription_service::OwnerObservation};
 use super::owner_fixture::*;
 use collaboration_protocol::{
-    MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecord,
-    PushRecordDraft, SessionId, SessionRef,
+    HarnessSessionRef, MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
+    PushOrigin, PushRecord, PushRecordDraft, SessionId,
 };
 use message_board::*;
 use router_clock::RuntimeClock;
 use sqlx::Connection;
 
 fn direct_message_draft(
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     push_body: &str,
     created_at: chrono::DateTime<chrono::Utc>,
 ) -> PushRecordDraft {

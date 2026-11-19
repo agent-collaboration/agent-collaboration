@@ -13,10 +13,10 @@ use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCreateOutcome, ConversationOperationFailure,
     ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, EndpointDescription, EndpointRef, NonEmptyText, OperationId,
-    PositiveSeconds, ProviderOperationEffect, ProviderOperationStage, ProviderRequestedPolicy,
-    ProviderRequestedSettings, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
-    UuidIdentity,
+    ConversationOperationWaitRequest, EndpointDescription, EndpointRef, HarnessSessionRef,
+    NonEmptyText, OperationId, PositiveSeconds, ProviderOperationEffect, ProviderOperationStage,
+    ProviderRequestedPolicy, ProviderRequestedSettings, ProviderWorkingDirectory, RouterAccess,
+    SessionId, UuidIdentity,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -59,7 +59,7 @@ impl ConversationCreateInput {
 pub struct ConversationLoadInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<OperationId>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub working_directory: PathBuf,
     pub requested_by: ProviderIdentity,
     #[serde(default)]
@@ -74,7 +74,7 @@ pub struct ConversationLoadInput {
 pub struct ConversationPromptInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<OperationId>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default)]
     pub working_directory: Option<PathBuf>,
     pub requested_by: ConversationActor,
@@ -92,7 +92,7 @@ pub struct ConversationPromptInput {
 pub struct ConversationCancelInput {
     pub operation_id: OperationId,
     pub target_operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub requested_by: ConversationActor,
     #[serde(default)]
     pub approver: Option<ProviderIdentity>,
@@ -143,7 +143,7 @@ pub enum ConversationClientError {
     #[error("conversation was created, but its prompt did not complete: {source}")]
     AfterCreate {
         create_operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         #[source]
         source: Box<ConversationClientError>,
     },

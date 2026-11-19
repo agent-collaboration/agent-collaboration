@@ -6,8 +6,8 @@ use std::os::unix::fs::PermissionsExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio_tungstenite::tungstenite::Message;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
+const SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000002";
 
 #[tokio::test]
 async fn stateless_http_application_deadline_detaches_without_cancelling_turn() {

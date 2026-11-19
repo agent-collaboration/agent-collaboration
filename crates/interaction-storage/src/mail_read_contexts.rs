@@ -1,7 +1,7 @@
 //! Immutable read authority accompanies mail; the SDK alone owns its status.
 use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
-use collaboration_protocol::{MailItemId, MailReadContext, PushOrigin, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, MailItemId, MailReadContext, PushOrigin};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use sqlx_turso::TursoConnection;
 
@@ -134,8 +134,8 @@ impl InteractionStore {
     }
     pub async fn direct_mail_read_contexts(
         &self,
-        caller: &SessionRef,
-        other: &SessionRef,
+        caller: &HarnessSessionRef,
+        other: &HarnessSessionRef,
         limit: u32,
     ) -> Result<Vec<StoredMailReadContext>, StorageError> {
         if !(1..=100).contains(&limit) {

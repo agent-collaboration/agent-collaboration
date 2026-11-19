@@ -2,7 +2,7 @@
 use super::*;
 use serde_json::{Value, json};
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 const FOREIGN: &str = "00000000-0000-4000-8000-000000000003";
 
@@ -159,7 +159,7 @@ fn expected_service_epoch_and_exact_selector_cannot_be_substituted() {
         ),
         Err(NativeBindingRejection::WrongService)
     );
-    inventory.service_epoch = foreign;
+    inventory.service_epoch = foreign.as_str().to_owned().try_into().unwrap();
     assert_eq!(
         bind_native_inventory(
             &inventory,

@@ -1,10 +1,10 @@
 //! Native outcome and evidence construction has one owning boundary.
 use super::{
     AttemptEvidenceSink, CodexGeneration, DeliveryClientReceipt, DeliveryContractError,
-    DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, NativeDeliveryResult,
-    NativeObservedOutcome, OperationId, ProviderAcpDeliveryRoute, ProviderDeliveryRequest,
-    ProviderSessionLoadRejection, RouteEffectEvidence, SessionReachability, SessionRef,
-    SubmissionEffect, UnsentCause, update_submission,
+    DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, HarnessSessionRef,
+    NativeDeliveryResult, NativeObservedOutcome, OperationId, ProviderAcpDeliveryRoute,
+    ProviderDeliveryRequest, ProviderSessionLoadRejection, RouteEffectEvidence,
+    SessionReachability, SubmissionEffect, UnsentCause, update_submission,
 };
 impl ProviderAcpDeliveryRoute {
     pub(super) fn observed(
@@ -53,7 +53,7 @@ impl ProviderAcpDeliveryRoute {
         &self,
         _request: &ProviderDeliveryRequest,
         sink: &dyn AttemptEvidenceSink,
-        effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
+        effect: &mut RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         reason: impl Into<String>,
         retryable: bool,
         cause: UnsentCause,
@@ -68,7 +68,7 @@ impl ProviderAcpDeliveryRoute {
     pub(super) async fn finish_rejected(
         &self,
         sink: &dyn AttemptEvidenceSink,
-        effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
+        effect: &mut RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         provider_reason: ProviderSessionLoadRejection,
     ) -> Result<NativeDeliveryResult, DeliveryContractError> {
         update_submission(effect, SubmissionEffect::NotDispatched);
@@ -104,7 +104,7 @@ impl ProviderAcpDeliveryRoute {
     pub(super) async fn finish_unknown(
         &self,
         sink: &dyn AttemptEvidenceSink,
-        effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
+        effect: &mut RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> Result<NativeDeliveryResult, DeliveryContractError> {
         update_submission(effect, SubmissionEffect::Unknown);
         let _result = sink.record(effect.clone()).await;

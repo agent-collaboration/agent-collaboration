@@ -2,8 +2,8 @@
 use collaboration_contracts::NativeRefusalCode;
 use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryNextAction, DeliveryRejectionReason, NativeDeliveryFailureCause,
-    PermissionDifference, SessionRef,
+    CodexGeneration, DeliveryNextAction, DeliveryRejectionReason, HarnessSessionRef,
+    NativeDeliveryFailureCause, PermissionDifference,
 };
 use serde_json::{Value, json};
 
@@ -72,7 +72,7 @@ pub(crate) const HELD_BY_ANOTHER_CLIENT_GUIDANCE: &str =
     "Message it from the Codex client that holds it.";
 
 pub struct NativeMessageAttemptEvidence<'a> {
-    pub effects: &'a mut agent_automation::NativeEffectEvidence<SessionRef, CodexGeneration>,
+    pub effects: &'a mut agent_automation::NativeEffectEvidence<HarnessSessionRef, CodexGeneration>,
     pub sink: &'a dyn collaboration_contracts::AttemptEvidenceSink,
 }
 impl NativeMessageAttemptEvidence<'_> {

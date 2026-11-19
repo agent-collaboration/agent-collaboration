@@ -12,7 +12,7 @@ use agent_automation::{
 };
 use automation_storage::ScheduleCreate;
 use collaboration_contracts::{DeliveryContractError, DeliveryFuture, RunSubmission};
-use collaboration_protocol::{EndpointRef, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef};
 use runtime_primitives::SyncTime;
 use std::{
     sync::atomic::{AtomicUsize, Ordering},
@@ -65,7 +65,7 @@ impl SchedulerFixture {
         self.store
             .lock()
             .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+            .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
                 operation_id: OperationId::generate(),
                 definition: ScheduleDefinition {
                     instruction_id: instruction.instruction_id,

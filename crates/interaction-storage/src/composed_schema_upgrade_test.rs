@@ -3,7 +3,7 @@ use super::*;
 use sqlx::Connection;
 
 fn historical_refusal(
-    target: collaboration_protocol::SessionRef,
+    target: collaboration_protocol::HarnessSessionRef,
 ) -> crate::InteractionHistoryRecord {
     let requester: message_board::SessionRef = target.try_into().unwrap();
     crate::InteractionHistoryRecord::RefusedApproval {

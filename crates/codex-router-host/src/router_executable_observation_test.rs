@@ -197,7 +197,7 @@ async fn a_fresh_mcp_initialize_reports_an_atomically_replaced_router_as_stale()
     let shutdown = tokio_util::sync::CancellationToken::new();
     let config = collaboration_mcp::CollaborationApiConfig {
         application: collaboration_service::ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
         .expect("identity")

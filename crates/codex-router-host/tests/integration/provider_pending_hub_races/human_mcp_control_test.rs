@@ -209,7 +209,7 @@ async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime_and_broker() 
         created["result"]["structuredContent"]["operationId"],
         json!(create_id)
     );
-    let target: SessionRef =
+    let target: HarnessSessionRef =
         serde_json::from_value(created["result"]["structuredContent"]["target"].clone())?;
     let mut observer = HubEventFollow::new(&client, &target);
     let prompt_id = OperationId::generate();
@@ -409,7 +409,7 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
         "approver":{"kind":"human","humanId":"independent-approver"},"timeoutSeconds":5
     })).await?;
         check_eq!(created["result"]["isError"], false, "{created}");
-        let target: SessionRef =
+        let target: HarnessSessionRef =
             serde_json::from_value(created["result"]["structuredContent"]["target"].clone())?;
         let mut observer = HubEventFollow::new(&client, &target);
         let prompt_id = OperationId::generate();

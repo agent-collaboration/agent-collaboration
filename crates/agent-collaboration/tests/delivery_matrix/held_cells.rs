@@ -6,7 +6,7 @@ use super::{
 use codex_native_integration::NativeOperation;
 use collaboration_client::board::{Identity, SubscriptionScope, ThreadId};
 use collaboration_client::protocol::{
-    PushRecordShowParams, RouterAccess, SessionRef, ThreadSubscriptionPresence,
+    HarnessSessionRef, PushRecordShowParams, RouterAccess, ThreadSubscriptionPresence,
     ThreadSubscriptionsRequest,
 };
 use collaboration_client::{
@@ -17,9 +17,9 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 pub(super) struct UnloadedMatrixTargets {
-    pub(super) held_dm: SessionRef,
-    pub(super) held_subscription: SessionRef,
-    pub(super) wake: SessionRef,
+    pub(super) held_dm: HarnessSessionRef,
+    pub(super) held_subscription: HarnessSessionRef,
+    pub(super) wake: HarnessSessionRef,
 }
 
 pub(super) async fn prepare_unloaded_targets(
@@ -47,7 +47,7 @@ pub(super) async fn prepare_unloaded_targets(
 async fn prepare_materialized_target(
     proof: &mut ProofContext,
     role: &str,
-) -> ProofResult<SessionRef> {
+) -> ProofResult<HarnessSessionRef> {
     let target = proof.start_thread(role).await?;
     let marker = matrix_marker("unloaded-preparation");
     let task = format!("Output exactly {marker}. Do not call tools or spawn agents.");
@@ -144,7 +144,10 @@ async fn prepare_materialized_target(
     }
 }
 
-async fn require_unloaded_target(proof: &mut ProofContext, target: &SessionRef) -> ProofResult<()> {
+async fn require_unloaded_target(
+    proof: &mut ProofContext,
+    target: &HarnessSessionRef,
+) -> ProofResult<()> {
     let response = proof
         .native
         .request_validated(
@@ -177,8 +180,8 @@ async fn require_unloaded_target(proof: &mut ProofContext, target: &SessionRef) 
 
 pub(super) async fn cover_held_dm_cell(
     proof: &mut ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
 ) -> ProofResult<()> {
     require_unloaded_target(proof, target).await?;
     let marker = matrix_marker("held-dm");
@@ -226,8 +229,8 @@ pub(super) async fn cover_held_dm_cell(
 
 pub(super) async fn cover_held_subscription_batch_cell(
     proof: &mut ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     resources: &mut super::owned_resources::OwnedMatrixResources,
 ) -> ProofResult<()> {
     require_unloaded_target(proof, target).await?;
@@ -275,8 +278,8 @@ pub(super) async fn cover_held_subscription_batch_cell(
 
 async fn load_codex_target(
     proof: &ProofContext,
-    requested_by: &SessionRef,
-    target: &SessionRef,
+    requested_by: &HarnessSessionRef,
+    target: &HarnessSessionRef,
 ) -> ProofResult<()> {
     let conversation = ConversationClient::connect(
         &collaboration_client::CollaborationAccess::api(&proof.service_directory),
@@ -307,7 +310,7 @@ async fn load_codex_target(
 
 async fn wait_for_held_subscription_roots(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     roots: &[ThreadId],
 ) -> ProofResult<()> {
     if roots.len() != 2 || roots.first() == roots.last() {
@@ -349,7 +352,7 @@ async fn wait_for_held_subscription_roots(
 
 async fn require_one_subscription_input(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     expected_line: &str,
 ) -> ProofResult<()> {
     let turns = proof.turns(target).await?;

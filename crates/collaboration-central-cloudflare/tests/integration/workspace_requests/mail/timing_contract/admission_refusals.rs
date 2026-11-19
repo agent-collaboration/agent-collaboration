@@ -1,7 +1,7 @@
 //! Timing admission rejects invalid shapes and horizons before any durable effect.
 use super::*;
 
-pub(super) async fn exercise_refusals(f: &Fixture, target: &m::SessionAddress) {
+pub(super) async fn exercise_refusals(f: &Fixture, target: &workspace_ids::SessionRef) {
     let runtime = f.host.central(&f.caller.organization_id).await;
     let snapshot = || Statement {
         sql: "SELECT (SELECT json_group_array(json_array(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at)) FROM automations),(SELECT json_group_array(json_array(wake_id,target,due_at,text,state,created_at,updated_at)) FROM wakes),(SELECT json_group_array(json_array(message_id,sender,target_session,body,state,created_at,updated_at)) FROM messages),(SELECT json_group_array(json_array(actor_identity_id,identity,notice_cadence,created_at,updated_at)) FROM actor_identities),(SELECT json_group_array(json_array(request_id,caller,content_digest,answer,created_at,updated_at)) FROM request_log)",

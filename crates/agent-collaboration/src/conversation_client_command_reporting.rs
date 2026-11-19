@@ -3,8 +3,8 @@ use super::{
     ClientError, CodexGeneration, CollaborationClient, ConversationClientError,
     ConversationCreateOutcome, ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationResult, ConversationRecord, ConversationStopReason, EndpointRef,
-    OperationEffect, OperationFailure, OperationId, SessionRef, Write, io, operation_failure_exit,
-    operation_failure_from_client_error,
+    HarnessSessionRef, OperationEffect, OperationFailure, OperationId, Write, io,
+    operation_failure_exit, operation_failure_from_client_error,
 };
 
 pub(super) async fn resolve_create_endpoint(
@@ -282,7 +282,7 @@ pub(super) fn report_create_failure(
 
 pub(super) fn report_conversation_failure(
     failure: OperationFailure,
-    target: Option<collaboration_client::protocol::SessionRef>,
+    target: Option<collaboration_client::protocol::HarnessSessionRef>,
     json_output: bool,
 ) -> i32 {
     let record = ConversationRecord::ConversationError {
@@ -343,11 +343,11 @@ pub(super) fn parse_session_ref(
     value: &str,
     flag: &str,
     json_output: bool,
-) -> Result<SessionRef, i32> {
+) -> Result<HarnessSessionRef, i32> {
     serde_json::from_str(value).map_err(|_| {
         crate::endpoint_commands::report_failure(
             "invalidField",
-            &format!("invalid {flag} SessionRef"),
+            &format!("invalid {flag} HarnessSessionRef"),
             2,
             json_output,
         )
@@ -358,7 +358,7 @@ pub(super) fn parse_optional_session_ref(
     value: Option<&str>,
     flag: &str,
     json_output: bool,
-) -> Result<Option<SessionRef>, i32> {
+) -> Result<Option<HarnessSessionRef>, i32> {
     value
         .map(|value| parse_session_ref(value, flag, json_output))
         .transpose()

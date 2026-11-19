@@ -8,7 +8,7 @@ use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 
 const PROBE: &str = "session_picker::source::picker_machine_control_test::picker_all_status_test::ssh_source_publication_test::source_executable_ssh_publication_probe";
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
 fn inventory() -> Value {

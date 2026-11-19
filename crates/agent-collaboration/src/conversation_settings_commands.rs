@@ -3,8 +3,8 @@
 use clap::{Args, Subcommand};
 use collaboration_client::CollaborationClient;
 use collaboration_client::protocol::{
-    ProviderIdentity, ProviderSettingName, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsFailureKind, ProviderSettingsSetRequest, SessionRef,
+    HarnessSessionRef, ProviderIdentity, ProviderSettingName, ProviderSettingsAcceptRequest,
+    ProviderSettingsFailure, ProviderSettingsFailureKind, ProviderSettingsSetRequest,
 };
 use std::{
     io::{self, Write},
@@ -22,7 +22,7 @@ enum SettingsCommand {
     Set {
         #[arg(long)]
         target: String,
-        /// Exact creator or Approver SessionRef JSON.
+        /// Exact creator or Approver HarnessSessionRef JSON.
         #[arg(long)]
         actor: String,
         #[arg(long)]
@@ -37,7 +37,7 @@ enum SettingsCommand {
     Accept {
         #[arg(long)]
         target: String,
-        /// Exact creator or Approver SessionRef JSON.
+        /// Exact creator or Approver HarnessSessionRef JSON.
         #[arg(long)]
         actor: String,
         #[arg(long)]
@@ -85,12 +85,12 @@ pub(crate) fn run(arguments: SettingsArguments) -> i32 {
             json,
         } => (target, actor, None, service_directory, json),
     };
-    let target: SessionRef = match serde_json::from_str(&target) {
+    let target: HarnessSessionRef = match serde_json::from_str(&target) {
         Ok(value) => value,
         Err(_) => {
             return crate::endpoint_commands::report_failure(
                 "invalidField",
-                "--target must be a SessionRef JSON",
+                "--target must be a HarnessSessionRef JSON",
                 2,
                 json_output,
             );
@@ -101,7 +101,7 @@ pub(crate) fn run(arguments: SettingsArguments) -> i32 {
         Err(_) => {
             return crate::endpoint_commands::report_failure(
                 "invalidField",
-                "--actor must be a SessionRef or Human identity JSON",
+                "--actor must be a HarnessSessionRef or Human identity JSON",
                 2,
                 json_output,
             );

@@ -9,7 +9,8 @@ use collaboration_client::{
     ConversationOperationResult, ConversationPromptInput, PublicPromptContent,
     board::Identity,
     protocol::{
-        ApprovalDecideParams, ConversationCreateOutcome, OperationId, RouterAccess, SessionRef,
+        ApprovalDecideParams, ConversationCreateOutcome, HarnessSessionRef, OperationId,
+        RouterAccess,
     },
 };
 use serde_json::json;
@@ -18,8 +19,8 @@ use tokio_util::sync::CancellationToken;
 
 pub(super) async fn deliver_approval_notice(
     proof: &mut ProofContext,
-    creator: &SessionRef,
-    approver: &SessionRef,
+    creator: &HarnessSessionRef,
+    approver: &HarnessSessionRef,
     marker: &str,
     mut peer: Option<&mut PeerFixture>,
 ) -> ProofResult<String> {
@@ -133,9 +134,9 @@ pub(super) async fn deliver_approval_notice(
 
 async fn wait_for_pending_request(
     proof: &mut ProofContext,
-    requester: &SessionRef,
-    creator: &SessionRef,
-    approver: &SessionRef,
+    requester: &HarnessSessionRef,
+    creator: &HarnessSessionRef,
+    approver: &HarnessSessionRef,
     prompt_task: &mut tokio::task::JoinHandle<
         Result<ConversationOperationResult, ConversationClientError>,
     >,

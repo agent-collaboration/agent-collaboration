@@ -9,7 +9,8 @@ use central_link_protocol::{
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
-use workspace_model::{Caller, MachineId, central_mail::MessageRecord};
+use workspace_ids::MachineId;
+use workspace_model::{Caller, central_mail::MessageRecord};
 
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 const CALL_DEADLINE: Duration = Duration::from_secs(30);

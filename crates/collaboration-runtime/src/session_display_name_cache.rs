@@ -1,6 +1,6 @@
 //! Cached display names learned from existing Router session observations.
 use collaboration_protocol::{
-    SessionDisplayName, SessionDisplayNameLookup, SessionDisplayNameLookupError, SessionRef,
+    HarnessSessionRef, SessionDisplayName, SessionDisplayNameLookup, SessionDisplayNameLookupError,
 };
 use std::{
     collections::HashMap,
@@ -11,7 +11,7 @@ const MAX_CACHED_SESSION_DISPLAY_NAMES: usize = 4096;
 
 #[derive(Clone, Default)]
 pub struct SessionDisplayNameCache {
-    names: Arc<RwLock<HashMap<SessionRef, SessionDisplayName>>>,
+    names: Arc<RwLock<HashMap<HarnessSessionRef, SessionDisplayName>>>,
 }
 
 impl SessionDisplayNameCache {
@@ -19,7 +19,7 @@ impl SessionDisplayNameCache {
     ///
     /// Writes wait for the brief cache critical section. A poisoned lock is logged and
     /// never changes the outcome of the operation that learned the name.
-    pub fn remember(&self, session: SessionRef, name: &str) {
+    pub fn remember(&self, session: HarnessSessionRef, name: &str) {
         let Ok(name) = SessionDisplayName::try_from(name.to_owned()) else {
             self.forget(session);
             return;
@@ -41,7 +41,7 @@ impl SessionDisplayNameCache {
     }
 
     /// Removes a cached label after the Router observes that its name was cleared.
-    pub fn forget(&self, session: SessionRef) {
+    pub fn forget(&self, session: HarnessSessionRef) {
         match self.names.write() {
             Ok(mut names) => {
                 names.remove(&session);
@@ -56,7 +56,7 @@ impl SessionDisplayNameCache {
 impl SessionDisplayNameLookup for SessionDisplayNameCache {
     fn display_name_for(
         &self,
-        session: &SessionRef,
+        session: &HarnessSessionRef,
     ) -> Result<Option<SessionDisplayName>, SessionDisplayNameLookupError> {
         match self.names.try_read() {
             Ok(names) => Ok(names.get(session).cloned()),
@@ -78,12 +78,12 @@ impl std::fmt::Debug for SessionDisplayNameCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use collaboration_protocol::{EndpointId, EndpointRef, SessionId, UuidIdentity};
+    use collaboration_protocol::{EndpointId, EndpointRef, SessionId};
 
-    fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
-        SessionRef {
+    fn session(endpoint_id: &str, session_id: &str) -> HarnessSessionRef {
+        HarnessSessionRef {
             endpoint: EndpointRef {
-                service_id: UuidIdentity::try_from(
+                service_id: workspace_ids::MachineId::try_from(
                     "018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned(),
                 )
                 .expect("valid service UUID"),

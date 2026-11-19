@@ -3,7 +3,7 @@ use super::super::subscription_push::{
 };
 use super::super::subscription_service::OwnerObservation;
 use super::owner_fixture::*;
-use collaboration_protocol::{DeliveryOutcome, PushDeliveryState, RouterOriginRef, UuidIdentity};
+use collaboration_protocol::{DeliveryOutcome, PushDeliveryState, RouterOriginRef};
 use message_board::{SubscriptionDeliveryOutcome, SubscriptionScope};
 use router_clock::RuntimeClock;
 use sqlx::Connection;
@@ -31,7 +31,7 @@ fn test_subscription_push_store(fixture: &OwnerFixture) -> SubscriptionPushStore
         store: Arc::clone(&fixture.interactions),
         delivery: Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new())),
         machine: collaboration_contracts::MachineIdentity::new(
-            UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
+            workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).unwrap(),
             Some("Owner-test-machine"),
         )
         .unwrap(),

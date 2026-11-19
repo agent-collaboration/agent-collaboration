@@ -1,7 +1,6 @@
 //! Provider ACP scheduled-run policy over recorded provider operations.
 use crate::{ExternalProviderSupervisor, LiveSessionOwnershipCheck};
 use collaboration_contracts::LoadPolicy;
-use collaboration_protocol::UuidIdentity;
 use collaboration_runtime::ProviderOperationStore;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -9,7 +8,7 @@ use tokio::sync::Mutex;
 mod provider_acp_run_observation;
 
 pub struct ProviderAcpScheduledRuns {
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
@@ -17,7 +16,7 @@ pub struct ProviderAcpScheduledRuns {
 
 impl ProviderAcpScheduledRuns {
     pub(crate) fn new(
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         supervisor: Arc<ExternalProviderSupervisor>,
         store: Arc<Mutex<ProviderOperationStore>>,
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
@@ -65,8 +64,8 @@ use collaboration_contracts::ScheduledRunSubmission;
 use collaboration_contracts::SettlementEvidence;
 use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
-    CodexGeneration, DestinationPreparation, EndpointRef, ProviderCapabilityName,
-    ProviderCapabilityStatus, ScheduleFailureKind, SessionRef,
+    CodexGeneration, DestinationPreparation, EndpointRef, HarnessSessionRef,
+    ProviderCapabilityName, ProviderCapabilityStatus, ScheduleFailureKind,
 };
 
 impl ProviderAcpScheduledRuns {
@@ -76,9 +75,10 @@ impl ProviderAcpScheduledRuns {
 
     fn evidence_for(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         attempt_id: AttemptId,
-    ) -> Result<RouteEffectEvidence<SessionRef, CodexGeneration>, DeliveryContractError> {
+    ) -> Result<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>, DeliveryContractError>
+    {
         if !self.serves(&target.endpoint) {
             return Err(DeliveryContractError::ClientOperation);
         }
@@ -173,7 +173,7 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
     fn initial_evidence(
         &self,
         destination: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, RouteEffectEvidence<SessionRef, CodexGeneration>> {
+    ) -> DeliveryFuture<'_, RouteEffectEvidence<HarnessSessionRef, CodexGeneration>> {
         let destination = destination.clone();
         Box::pin(async move {
             match destination {
@@ -297,7 +297,7 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
 
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         _declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {

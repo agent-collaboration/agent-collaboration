@@ -48,7 +48,7 @@ struct EndpointAnswer {
 pub(super) async fn verify(
     backend: SocketAddr,
     proxy_authority: &ProxyAuthority,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     service_epoch: &UuidIdentity,
 ) -> io::Result<()> {
     if !backend.ip().is_loopback() || backend.port() == 0 {
@@ -184,7 +184,7 @@ async fn call<TResult: DeserializeOwned>(
 
 fn validate_endpoint_identity(
     answer: &EndpointAnswer,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     service_epoch: &UuidIdentity,
 ) -> io::Result<()> {
     if answer.is_error == Some(true)
@@ -206,9 +206,9 @@ fn validate_endpoint_identity(
 #[cfg(test)]
 mod tests {
     use super::*;
-    const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+    const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
     const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
-    const OTHER: &str = "00000000-0000-4000-8000-000000000003";
+    const OTHER: &str = "00000000-0000-7000-8000-000000000003";
 
     fn answer(service: &str, epoch: &str) -> EndpointAnswer {
         serde_json::from_value(json!({
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn tailscale_readiness_requires_the_intended_service_and_current_epoch() {
-        let service = UuidIdentity::try_from(SERVICE.to_owned()).expect("service");
+        let service = workspace_ids::MachineId::try_from(SERVICE.to_owned()).expect("service");
         let epoch = UuidIdentity::try_from(EPOCH.to_owned()).expect("epoch");
         assert!(validate_endpoint_identity(&answer(SERVICE, EPOCH), &service, &epoch).is_ok());
         assert!(validate_endpoint_identity(&answer(OTHER, EPOCH), &service, &epoch).is_err());

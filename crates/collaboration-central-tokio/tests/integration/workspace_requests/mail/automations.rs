@@ -169,7 +169,7 @@ async fn interval_catches_up_once_and_after_finishes() {
             workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
-            serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
+            serde_json::from_str::<workspace_ids::SessionRef>(address).unwrap(),
             session(&fixture.caller)
         );
         let workspace_model::central_mail::MessageBody::Automation {

@@ -1,7 +1,7 @@
 //! Consumer proofs over the actual Host composition, with weak test-only observers.
 use super::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use std::{os::unix::fs::PermissionsExt as _, sync::Arc, time::Duration};
 
 const BOUND: Duration = Duration::from_secs(20);
@@ -139,7 +139,7 @@ async fn start_host_with_providers(
 
 /// A Codex session: with no native backend in this Host its follow batches are held by
 /// choice, unlike a closed Claude Code peer's, which are refused.
-fn codex_target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
+fn codex_target(runtime: &CollaborationRuntime, session: &str) -> HarnessSessionRef {
     serde_json::from_value(serde_json::json!({
         "endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},
         "sessionId":session
@@ -147,7 +147,7 @@ fn codex_target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
     .expect("local Codex target")
 }
 
-fn target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
+fn target(runtime: &CollaborationRuntime, session: &str) -> HarnessSessionRef {
     serde_json::from_value(serde_json::json!({
         "endpoint":{"serviceId":runtime.service_id(),"endpointId":"claude-local"},
         "sessionId":session

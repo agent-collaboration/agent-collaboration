@@ -3,8 +3,8 @@ use acp_client_runtime::{ApprovalPortOutcome, InteractionPort, SessionEventSink}
 use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{
     CodexGeneration, EndpointId as ProtocolEndpointId, EndpointRef as ProtocolEndpointRef,
-    GenerationNumber, OperationId, ProviderIdentity, SessionId as ProtocolSessionId,
-    SessionRef as ProtocolSessionRef, UuidIdentity,
+    GenerationNumber, HarnessSessionRef as ProtocolSessionRef, OperationId, ProviderIdentity,
+    SessionId as ProtocolSessionId, UuidIdentity,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -19,8 +19,9 @@ use tokio::sync::Mutex;
 #[tokio::test]
 async fn typed_broker_interactions_publish_pending_and_resolution_in_order() {
     let root = tempfile::tempdir().expect("temporary store");
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())
-        .expect("service ID");
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
+            .expect("service ID");
     let provider_endpoint = ProtocolEndpointRef {
         service_id: service_id.clone(),
         endpoint_id: ProtocolEndpointId::try_from("fixture-provider".to_owned())
@@ -99,7 +100,7 @@ async fn typed_broker_interactions_publish_pending_and_resolution_in_order() {
             operation_id: OperationId::generate(),
             binding_generation: CodexGeneration {
                 service_epoch: UuidIdentity::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
+                    "00000000-0000-7000-8000-000000000001".to_owned(),
                 )
                 .expect("epoch"),
                 generation: GenerationNumber::try_from(1).expect("generation"),
@@ -163,7 +164,7 @@ async fn typed_broker_interactions_publish_pending_and_resolution_in_order() {
             operation_id: OperationId::generate(),
             binding_generation: CodexGeneration {
                 service_epoch: UuidIdentity::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
+                    "00000000-0000-7000-8000-000000000001".to_owned(),
                 )
                 .expect("epoch"),
                 generation: GenerationNumber::try_from(1).expect("generation"),
@@ -207,7 +208,7 @@ async fn typed_broker_interactions_publish_pending_and_resolution_in_order() {
         operation_id: OperationId::generate(),
         binding_generation: CodexGeneration {
             service_epoch: UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
+                "00000000-0000-7000-8000-000000000001".to_owned(),
             )
             .expect("epoch"),
             generation: GenerationNumber::try_from(1).expect("generation"),
@@ -348,7 +349,7 @@ async fn publication_before_replay_reset_is_never_reintroduced_after_it() {
         .expect("provider store");
     let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
     let endpoint = SessionEndpointRef {
-        service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
+        service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
             .expect("service"),
         endpoint_id: EndpointId::try_from("fixture-provider".to_owned()).expect("endpoint"),
     };
@@ -404,7 +405,7 @@ async fn idle_config_change_notifies_provider_catalog_worker() {
         .expect("provider store");
     let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
     let endpoint = SessionEndpointRef {
-        service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
+        service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
             .expect("service"),
         endpoint_id: EndpointId::try_from("fixture-provider".to_owned()).expect("endpoint"),
     };
@@ -440,7 +441,7 @@ async fn closing_session_releases_backlog_and_publication_tracking() {
         .expect("provider store");
     let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
     let endpoint = SessionEndpointRef {
-        service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
+        service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
             .expect("service"),
         endpoint_id: EndpointId::try_from("fixture-provider".to_owned()).expect("endpoint"),
     };

@@ -12,8 +12,9 @@ use collaboration_central_conformance::{ConformanceResult as Result, signin_fixt
 use collaboration_central_tokio::ObjectStorage;
 use serde_json::json;
 use std::{collections::BTreeSet, sync::Arc};
+use workspace_ids::SessionRef;
 use workspace_model::{
-    Caller, ItemRef, SessionAddress, WorkspaceAnswer, WorkspaceReply, WorkspaceResult,
+    Caller, ItemRef, WorkspaceAnswer, WorkspaceReply, WorkspaceResult,
     central_mail::{CentralMailRefusal, CentralMailResult, TimingRequirement},
 };
 
@@ -30,10 +31,10 @@ fn request_from_client(frame: LinkFrame) -> Result<LinkRequest> {
 )]
 #[tokio::test]
 async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal() -> Result<()> {
-    // Arrange: real signed admission and an ordinary installation-addressed session.
+    // Arrange: real signed admission and an ordinary machine_id-addressed session.
     let fixture = Fixture::new().await?;
-    let target: SessionAddress = serde_json::from_value(json!({
-        "machineId":INSTALLATION,"endpoint":"codex-local",
+    let target: SessionRef = serde_json::from_value(json!({
+        "machineId":INSTALLATION,
         "sessionId":"019f0000-0000-7000-8000-00000000cf07"
     }))?;
     let caller = Caller::Session(target.clone());
@@ -43,7 +44,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
     };
     let mut socket = fixture.connect().await?;
     if client.receive(&attempt, receive(&mut socket).await?)? != ClientEvent::Welcomed {
-        return Err("normal installation did not receive Welcome".into());
+        return Err("normal machine_id did not receive Welcome".into());
     }
     let create = client.begin_request(
         caller.clone(),
@@ -73,7 +74,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+                    sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                     args: vec![
                         SqlValue::Text(serde_json::to_string(&vec![
                             workspace.workspace_id.clone(),

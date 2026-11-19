@@ -26,7 +26,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
     let mut store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .unwrap();
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("uncertain-session".to_owned()).unwrap(),
     };

@@ -8,7 +8,7 @@ use automation_storage::{AutomationStore, RunPreparationIntent, ScheduleCreate};
 use collaboration_protocol::{EndpointRef, OperationId};
 
 type NativeRunRecord = agent_automation::RunRecord<
-    SessionRef,
+    HarnessSessionRef,
     EndpointRef,
     CodexGeneration,
     collaboration_runtime::stored_run_receipt::StoredRunReceipt,
@@ -17,7 +17,7 @@ struct StoredPolicyRun {
     store: Arc<tokio::sync::Mutex<AutomationStore>>,
     run_id: RunId,
     schedule_id: ScheduleId,
-    initial: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    initial: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 }
 impl StoredPolicyRun {
     async fn create(fixture: &RecordedPolicyFixture) -> Result<Self, TestError> {
@@ -31,7 +31,7 @@ impl StoredPolicyRun {
             )
             .await?;
         let schedule = store
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+            .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
                 operation_id: OperationId::generate(),
                 definition: ScheduleDefinition {
                     instruction_id: instruction.instruction_id,
@@ -50,14 +50,14 @@ impl StoredPolicyRun {
             })
             .await?;
         let run_id = store
-            .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+            .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
             .await?
             .ok_or("run not enqueued")?;
         store
-            .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
+            .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60001)
             .await?;
         let initial = fixture.scheduled_run().recorded;
-        store.begin_run_preparation::<SessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(RunPreparationIntent{run_id:run_id.clone(),effects:initial.clone()}).await?;
+        store.begin_run_preparation::<HarnessSessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(RunPreparationIntent{run_id:run_id.clone(),effects:initial.clone()}).await?;
         Ok(Self {
             store: Arc::new(tokio::sync::Mutex::new(store)),
             run_id,
@@ -70,7 +70,7 @@ impl StoredPolicyRun {
     }
     fn sink(
         &self,
-        initial: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        initial: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> collaboration_runtime::test_support::scheduled_run_evidence_sink::StoredRunEvidenceSink
     {
         collaboration_runtime::test_support::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
@@ -85,7 +85,7 @@ impl StoredPolicyRun {
     async fn submission(
         &self,
         fixture: &RecordedPolicyFixture,
-        recorded: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        recorded: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> Result<collaboration_contracts::ScheduledRunSubmission, TestError> {
         let mut submission = fixture.scheduled_run();
         submission.run_id = self.run_id.clone();
@@ -171,7 +171,7 @@ async fn stored_two_attempts(
     // Fresh owning store decodes the actual committed transition, not sink.latest().
     let mut reopened =
         AutomationStore::open(&fixture.directory.path().join("automation.sqlite")).await?;
-    let record=reopened.read_run::<SessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&stored.run_id).await?;
+    let record=reopened.read_run::<HarnessSessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&stored.run_id).await?;
     reopened.close().await?;
     Ok((record, second, requests))
 }

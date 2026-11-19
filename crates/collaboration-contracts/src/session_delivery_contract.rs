@@ -1,8 +1,8 @@
 //! The feature-facing delivery seam and the route-facing client contract.
 use agent_automation::RouteEffectEvidence;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryReceipt, DeliveryRejection, MessageDelivery, PushId,
-    SessionReachability, SessionRef,
+    CodexGeneration, DeliveryReceipt, DeliveryRejection, HarnessSessionRef, MessageDelivery,
+    PushId, SessionReachability,
 };
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -31,7 +31,7 @@ pub mod layer_zero {
     use super::{DeliveryPrecondition, LoadPolicy};
     use agent_automation::AttemptId;
     use collaboration_protocol::{
-        DeliveryCorrelationId, MessageDelivery, MessageText, PushId, SessionRef,
+        DeliveryCorrelationId, HarnessSessionRef, MessageDelivery, MessageText, PushId,
     };
 
     #[derive(Clone, Debug)]
@@ -44,7 +44,7 @@ pub mod layer_zero {
     #[derive(Clone, Debug)]
     pub struct DeliveryRequest {
         pub payload: PreparedPush,
-        pub target: SessionRef,
+        pub target: HarnessSessionRef,
         pub mode: MessageDelivery,
         pub precondition: DeliveryPrecondition,
         pub correlation: DeliveryCorrelationId,
@@ -93,10 +93,10 @@ pub enum DeliveryPrecondition {
 }
 
 pub struct AttemptReconciliationContext {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub prepared_push_id: PushId,
     pub mode: MessageDelivery,
-    pub recorded: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    pub recorded: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 }
 
 pub enum AttemptReconciliation {
@@ -135,7 +135,7 @@ pub enum RouteClaim {
 pub trait AttemptEvidenceSink: Send + Sync {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()>;
 }
 
@@ -145,7 +145,7 @@ pub struct UnstoredAttemptEvidenceSink;
 impl AttemptEvidenceSink for UnstoredAttemptEvidenceSink {
     fn record(
         &self,
-        _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
@@ -154,7 +154,7 @@ impl AttemptEvidenceSink for UnstoredAttemptEvidenceSink {
 pub trait SessionMessageDelivery: Send + Sync {
     /// Reports whether the route serving this target can accept the requested mode.
     /// Implementations without route-specific mode constraints accept it by default.
-    fn supports_delivery_mode(&self, _target: &SessionRef, _mode: MessageDelivery) -> bool {
+    fn supports_delivery_mode(&self, _target: &HarnessSessionRef, _mode: MessageDelivery) -> bool {
         true
     }
 
@@ -171,17 +171,17 @@ pub trait SessionMessageDelivery: Send + Sync {
 }
 
 pub trait TargetPresenceProbe: Send + Sync {
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, TargetPresence>;
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence>;
 }
 
 pub trait SessionDeliveryRoute: Send + Sync {
     fn reachability(&self) -> SessionReachability;
     /// Returns false only when this route serves the target and rejects the mode.
-    fn supports_delivery_mode(&self, _target: &SessionRef, _mode: MessageDelivery) -> bool {
+    fn supports_delivery_mode(&self, _target: &HarnessSessionRef, _mode: MessageDelivery) -> bool {
         true
     }
-    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim>;
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence>;
+    fn claim(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim>;
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence>;
     fn deliver<'a>(
         &'a self,
         request: layer_zero::DeliveryRequest,

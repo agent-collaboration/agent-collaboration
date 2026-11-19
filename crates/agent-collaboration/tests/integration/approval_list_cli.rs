@@ -42,9 +42,9 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
     let directory = tempfile::tempdir_in("/tmp").expect("private fixture directory");
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private fixture permissions");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
-    let typed_service_id: collaboration_protocol::UuidIdentity =
+    let typed_service_id: workspace_ids::MachineId =
         service_id.to_owned().try_into().expect("service ID");
     let endpoint = collaboration_protocol::EndpointRef {
         service_id: typed_service_id.clone(),
@@ -82,10 +82,11 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         "endpoint":endpoint,"sessionId":"provider-session"
     }))
     .expect("provider requester");
-    let prompting_requester: collaboration_protocol::SessionRef = serde_json::from_value(json!({
-        "endpoint":endpoint,"sessionId":"prompting-session"
-    }))
-    .expect("prompting requester");
+    let prompting_requester: collaboration_protocol::HarnessSessionRef =
+        serde_json::from_value(json!({
+            "endpoint":endpoint,"sessionId":"prompting-session"
+        }))
+        .expect("prompting requester");
     let approver: message_board::SessionRef = serde_json::from_value(json!({
         "endpoint":endpoint,"sessionId":"approver-session"
     }))
@@ -186,7 +187,7 @@ async fn approval_list_rejection_preserves_rejected_kind_and_exit_four() {
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity");

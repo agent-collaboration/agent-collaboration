@@ -144,7 +144,7 @@ fn session_grouping_machine_keeps_source_qualified_keys() {
     let mut rows = vec![record("same"), record("same")];
     rows[0].source_context = Some(PickerSourceContext::LocalCodex);
     rows[1].source_context = Some(PickerSourceContext::DefaultHosted);
-    let target = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"same"})).unwrap();
+    let target = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"same"})).unwrap();
     rows[1].identity = SessionPickerIdentity::HostedCodex(target);
     let result = compute_session_groups(
         SessionGroupFacet::Machine,

@@ -21,7 +21,7 @@ async fn create_and_first_prompt_share_one_connection_and_return_correlated_sett
         .mode(0o700)
         .create(&root)
         .unwrap();
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let identity=ApplicationFixture::new(service_id,service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
     let served = ServedCollaborationApi::start(&root, (identity).build())
@@ -75,7 +75,7 @@ async fn create_and_first_prompt_share_one_connection_and_return_correlated_sett
     });
     let endpoint_ref: collaboration_protocol::EndpointRef =
         serde_json::from_value(endpoint).unwrap();
-    let sender: collaboration_protocol::SessionRef = serde_json::from_value(json!({
+    let sender: collaboration_protocol::HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":endpoint_ref,
         "sessionId":"first-sender"
     }))
@@ -144,7 +144,7 @@ async fn create_and_first_prompt_backend_rejection_retains_created_target() {
         .mode(0o700)
         .create(&root)
         .unwrap();
-    let service_id = "00000000-0000-4000-8000-000000000003";
+    let service_id = "00000000-0000-7000-8000-000000000003";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let identity=ApplicationFixture::new(service_id,service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP rejection fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
     let served = ServedCollaborationApi::start(&root, (identity).build())
@@ -178,7 +178,7 @@ async fn create_and_first_prompt_backend_rejection_retains_created_target() {
     });
     let endpoint_ref: collaboration_protocol::EndpointRef =
         serde_json::from_value(endpoint).unwrap();
-    let sender: collaboration_protocol::SessionRef =
+    let sender: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(json!({"endpoint":endpoint_ref,"sessionId":"sender"})).unwrap();
     let error = AcpConversation::create_and_prompt(
         &CollaborationAccess::api(&root),
@@ -251,7 +251,7 @@ async fn reusable_acp_client_orders_load_updates_and_detaches_on_caller_cancel()
         .mode(0o700)
         .create(&root)
         .unwrap();
-    let id = "00000000-0000-4000-8000-000000000001";
+    let id = "00000000-0000-7000-8000-000000000001";
     let endpoint = json!({"serviceId":id,"endpointId":"codex-local"});
     let identity=ApplicationFixture::new(id,id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
     let served = ServedCollaborationApi::start(&root, (identity).build())

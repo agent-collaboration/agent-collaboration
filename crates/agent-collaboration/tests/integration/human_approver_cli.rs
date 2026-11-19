@@ -6,8 +6,8 @@ use codex_router_host::{
 };
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    BoundedObservationRequest, NativeSessionScope, NativeSessionSource, NativeSessionView,
-    ProviderIdentity, ProviderSessionListParams, ProviderSessionSummary, SessionRef,
+    BoundedObservationRequest, HarnessSessionRef, NativeSessionScope, NativeSessionSource,
+    NativeSessionView, ProviderIdentity, ProviderSessionListParams, ProviderSessionSummary,
 };
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
@@ -111,7 +111,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
         String::from_utf8_lossy(&create.stderr)
     );
     let created = output_line(&create.stdout, "created")?;
-    let target: SessionRef = serde_json::from_value(created["target"].clone())?;
+    let target: HarnessSessionRef = serde_json::from_value(created["target"].clone())?;
     let mut observer = ProviderEvents::new(client.clone(), target.clone());
     // `events listen` follows the provider Session through events_observe; it is attached
     // before the message, so it must stream the interaction that follows while it listens.
@@ -209,7 +209,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
         String::from_utf8_lossy(&human_created.stdout),
         String::from_utf8_lossy(&human_created.stderr)
     );
-    let human_target: SessionRef =
+    let human_target: HarnessSessionRef =
         serde_json::from_value(output_line(&human_created.stdout, "created")?["target"].clone())?;
     let listed = client
         .list_provider_sessions(ProviderSessionListParams {
@@ -270,7 +270,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
         String::from_utf8_lossy(&owner_created.stdout),
         String::from_utf8_lossy(&owner_created.stderr)
     );
-    let owner_target: SessionRef =
+    let owner_target: HarnessSessionRef =
         serde_json::from_value(output_line(&owner_created.stdout, "created")?["target"].clone())?;
     let listed = client
         .list_provider_sessions(ProviderSessionListParams {
@@ -314,7 +314,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
 /// its lines until it streams an interaction request or ten seconds pass.
 async fn start_provider_listener(
     root: &Path,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> TestResult<tokio::task::JoinHandle<Result<Vec<Value>, String>>> {
     use tokio::io::AsyncBufReadExt;
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
@@ -400,14 +400,14 @@ fn output_line(stdout: &[u8], kind: &str) -> TestResult<Value> {
 /// the last event's sequence within the hub's epoch.
 struct ProviderEvents {
     client: CollaborationClient,
-    target: SessionRef,
+    target: HarnessSessionRef,
     after_sequence: Option<u64>,
     epoch: Option<u64>,
     pending: std::collections::VecDeque<Value>,
 }
 
 impl ProviderEvents {
-    fn new(client: CollaborationClient, target: SessionRef) -> Self {
+    fn new(client: CollaborationClient, target: HarnessSessionRef) -> Self {
         Self {
             client,
             target,

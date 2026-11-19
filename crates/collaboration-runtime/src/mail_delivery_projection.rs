@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::CarrierAcceptance;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, MachineId, MessageSendResult, PushMessageSendResult,
-    RouterLink,
+    DeliveryOutcome, DeliveryReceipt, MessageSendResult, PushMessageSendResult, RouterLink,
 };
 use durable_steps::{Host, turso_store::TursoScope};
 use fleet_sync_delivery::DeliveryError;
@@ -157,11 +156,8 @@ pub async fn project_mail_outcome<THost: Host>(
     {
         let result = PushMessageSendResult {
             push_id: record.push_id.clone(),
-            link: RouterLink::new(
-                MachineId::from(record.target.endpoint.service_id.clone()),
-                record.push_id,
-            )
-            .to_string(),
+            link: RouterLink::new(record.target.endpoint.service_id.clone(), record.push_id)
+                .to_string(),
             target: record.target,
             target_identity: answer.target_identity,
             delivery_state: record.delivery_state,

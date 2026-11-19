@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 struct PreparedPromptFixture {
     operation_id: OperationId,
     input_id: session_event_model::InputId,
-    target: SessionRef,
+    target: HarnessSessionRef,
     preview: String,
 }
 
@@ -25,7 +25,7 @@ fn prepared_prompt_request(fixture: PreparedPromptFixture) -> ProviderPromptCont
     let line = MessageText::try_from(
         collaboration_protocol::render_push_line(&collaboration_protocol::PushLineInput {
             link: collaboration_protocol::RouterLink::new(
-                collaboration_protocol::MachineId::from(fixture.target.endpoint.service_id.clone()),
+                fixture.target.endpoint.service_id.clone(),
                 push_id,
             ),
             machine_label: collaboration_protocol::MachineLabel::try_from(
@@ -115,8 +115,10 @@ fn ordered_prompt_fixture(socket_path: &std::path::Path) -> ExternalProviderLaun
 
 fn endpoint() -> EndpointRef {
     EndpointRef {
-        service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-            .expect("service ID"),
+        service_id: workspace_ids::MachineId::try_from(
+            "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+        )
+        .expect("service ID"),
         endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint ID"),
     }
 }
@@ -149,8 +151,8 @@ pub(crate) fn binding() -> ProviderBindingIdentity {
     }
 }
 
-pub(crate) fn requester() -> SessionRef {
-    SessionRef {
+pub(crate) fn requester() -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("requester".to_owned()).expect("session ID"),
     }
@@ -161,7 +163,7 @@ struct NoLivePeer;
 impl crate::LiveSessionOwnershipCheck for NoLivePeer {
     fn check<'a>(
         &'a self,
-        _target: &'a SessionRef,
+        _target: &'a HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'a, crate::LiveSessionOwnership> {
         Box::pin(async { Ok(crate::LiveSessionOwnership::NotLive) })
     }
@@ -192,7 +194,7 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
     )
     .expect("supervisor initializes");
     let operation_id = OperationId::generate();
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
     };
@@ -244,7 +246,7 @@ async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
         .submit_delivery_prompt_contents(prepared_prompt_request(PreparedPromptFixture {
             operation_id: OperationId::generate(),
             input_id: session_event_model::InputId::generate(),
-            target: SessionRef {
+            target: HarnessSessionRef {
                 endpoint: endpoint(),
                 session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
             },
@@ -306,7 +308,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         store,
         Arc::new(NoLivePeer),
     );
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
     };
@@ -413,7 +415,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         )
         .expect("supervisor"),
     );
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
     };
@@ -517,7 +519,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         )
         .expect("supervisor"),
     );
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
     };

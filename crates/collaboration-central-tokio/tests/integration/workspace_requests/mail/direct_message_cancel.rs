@@ -116,8 +116,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         MessageSender::Central
     );
     assert_eq!(
-        serde_json::from_str::<workspace_model::SessionAddress>(row_text(&notice[1]).unwrap())
-            .unwrap(),
+        serde_json::from_str::<workspace_ids::SessionRef>(row_text(&notice[1]).unwrap()).unwrap(),
         sender
     );
     assert_eq!(

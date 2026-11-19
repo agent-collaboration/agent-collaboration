@@ -7,8 +7,8 @@ use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
-    MessageText, PushId, SessionRef, UuidIdentity,
+    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription,
+    HarnessSessionRef, MessageDelivery, MessageText, PushId,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::EndpointDirectory;
@@ -24,7 +24,7 @@ struct DiscardEvidence;
 impl AttemptEvidenceSink for DiscardEvidence {
     fn record(
         &self,
-        _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
@@ -36,8 +36,9 @@ async fn missing_thread_without_holder_is_known_not_submitted()
     let socket =
         std::path::PathBuf::from(format!("/tmp/codex-missing-{}.sock", std::process::id()));
     let listener = tokio::net::UnixListener::bind(&socket)?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"00000000-0000-4000-8000-000000000099"
     }))?;

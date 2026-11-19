@@ -16,7 +16,7 @@ async fn native_stream_records_status_and_marks_loss_without_prompting() {
         "/tmp/native-ingestion-{}.sqlite",
         std::process::id()
     ));
-    let scope:ObservationScope=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},"observerId":"00000000-0000-4000-8000-000000000003"})).unwrap_or_else(|e|panic!("scope: {e}"));
+    let scope:ObservationScope=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},"observerId":"00000000-0000-4000-8000-000000000003"})).unwrap_or_else(|e|panic!("scope: {e}"));
     let journal = ObservationJournal::open(&path, scope.observer_id.clone())
         .await
         .unwrap_or_else(|e| panic!("open: {e}"));

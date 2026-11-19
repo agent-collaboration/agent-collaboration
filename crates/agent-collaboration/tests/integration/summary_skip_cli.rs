@@ -4,7 +4,9 @@ use agent_automation::{
     ScheduleDefinition, TimingRule,
 };
 use automation_storage::{AutomationStore, RunDispatchIntent, ScheduleCreate};
-use collaboration_client::protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
+use collaboration_client::protocol::{
+    CodexGeneration, EndpointRef, HarnessSessionRef, NativeSendReceipt,
+};
 use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
@@ -18,10 +20,10 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(
+    let target: HarnessSessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"recorded-thread"}),
     )?;
     let instruction = store
@@ -32,7 +34,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -51,19 +53,20 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         })
         .await?;
     let run_id = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("run missing")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
+        .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60001)
         .await?;
-    let mut effects: NativeEffectEvidence<SessionRef, CodexGeneration> = serde_json::from_value(
-        json!({"target":target,"generation":generation,"clientUserMessageId":run_id,"nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"dispatching","cessation":"unconfirmed"}),
-    )?;
+    let mut effects: NativeEffectEvidence<HarnessSessionRef, CodexGeneration> =
+        serde_json::from_value(
+            json!({"target":target,"generation":generation,"clientUserMessageId":run_id,"nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"dispatching","cessation":"unconfirmed"}),
+        )?;
     let mut prepared = effects.clone();
     prepared.submission = agent_automation::SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run_id.clone(),
                 effects: prepared.into(),
@@ -94,7 +97,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         })
         .await?;
     store
-        .complete_run_settlement::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .complete_run_settlement::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunCompletion {
                 run_id: run_id.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("recorded-turn".into()),
@@ -104,7 +107,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     store
-        .begin_required_summary::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_required_summary::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             &automation_storage::SummaryAdmission {
                 run_id: run_id.clone(),
                 timeout_seconds: 900,
@@ -113,7 +116,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     let previous = store
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?
         .summary_attempt
         .ok_or("missing attempt")?;
@@ -172,7 +175,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
     let current = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?;
     if !matches!(
         current.worker_outcome,
@@ -184,7 +187,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         || store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, EndpointRef>(&schedule.schedule_id)
+            .inspect_schedule::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id)
             .await?
             .active_run_id
             .is_some()

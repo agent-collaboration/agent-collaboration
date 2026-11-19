@@ -8,11 +8,13 @@ autotests = false
 
 [dependencies]
 serde.workspace = true
+schemars.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 
 [lints]
 workspace = true

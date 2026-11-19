@@ -16,7 +16,7 @@ fn native_inventory(service_id: &str, epoch: &str) -> Value {
 #[tokio::test]
 async fn interrupt_cli_reports_unknown_when_the_api_disconnects_after_submission() {
     // Arrange: a stand-in API accepts the exact command and drops its response.
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let mut fixture = FakeCollaborationApi::new(service_id, epoch)
         .unwrap_or_else(|error| panic!("fixture: {error}"));
@@ -66,7 +66,7 @@ async fn interrupt_cli_reports_unknown_when_the_api_disconnects_after_submission
 
 #[tokio::test]
 async fn session_inspect_cli_preserves_native_rejection_message() {
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let mut fixture = FakeCollaborationApi::new(service_id, epoch)
         .unwrap_or_else(|error| panic!("fixture: {error}"));
@@ -129,7 +129,7 @@ async fn message_cli_retains_target_after_response_loss_and_keeps_refusal_distin
         ("outcome-unknown", Some("outcomeUnknown"), 5),
         ("native-refusal", Some("nativeRejected"), 4),
     ] {
-        let service_id = "00000000-0000-4000-8000-000000000001";
+        let service_id = "00000000-0000-7000-8000-000000000001";
         let epoch = "00000000-0000-4000-8000-000000000002";
         let mut fixture = FakeCollaborationApi::new(service_id, epoch)
             .unwrap_or_else(|error| panic!("fixture: {error}"));

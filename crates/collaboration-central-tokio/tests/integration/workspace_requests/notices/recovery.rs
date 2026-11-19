@@ -207,7 +207,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         f.set_utc(due).await;
         reopened.after_event().await.unwrap();
         let batch = reopened
-            .queued_for_session(&m::SessionAddress {
+            .queued_for_session(&workspace_ids::SessionRef {
                 session_id: "notice-observer".to_owned().try_into().unwrap(),
                 ..session(&f.caller)
             })

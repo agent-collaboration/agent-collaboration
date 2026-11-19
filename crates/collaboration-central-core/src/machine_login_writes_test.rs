@@ -4,8 +4,7 @@ use fleet_identity_protocol::UnixSeconds;
 
 fn machine() -> MachineRow {
     MachineRow {
-        id: values::private_id("019a3dce-2000-7000-8000-000000000002", "machine_id").unwrap(),
-        installation: "019a3dce-2000-7000-8000-000000000003"
+        machine_id: "019a3dce-2000-7000-8000-000000000003"
             .to_owned()
             .try_into()
             .unwrap(),
@@ -21,8 +20,7 @@ fn enrollment() -> StoredEnrollment {
             .to_owned()
             .try_into()
             .unwrap(),
-        machine_id: machine().id,
-        installation: machine().installation,
+        machine_id: machine().machine_id,
         request_id: "019a3dce-2000-7000-8000-000000000004"
             .to_owned()
             .try_into()
@@ -119,7 +117,7 @@ fn changing_any_first_approval_reply_field_is_not_a_lifecycle_write() {
 fn new_machine_keys_and_generation_are_never_rewritten_or_wrapped() {
     let before = machine();
     let mut rekeyed = before.clone();
-    rekeyed.id = values::private_id("019a3dce-2000-7000-8000-000000000009", "machine_id").unwrap();
+    rekeyed.machine_id = "019a3dce-2000-7000-8000-000000000009".parse().unwrap();
     assert_eq!(
         put_machine(Some(&before), &rekeyed, "2030-03-17T17:46:41.000Z"),
         Err(corrupt("machines.machine_id"))

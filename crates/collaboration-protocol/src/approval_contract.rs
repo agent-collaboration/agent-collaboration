@@ -1,5 +1,5 @@
 //! Client-exposed Codex approval routing and single-use decisions.
-use crate::{CodexGeneration, SessionRef};
+use crate::{CodexGeneration, HarnessSessionRef};
 use message_board::Identity;
 use serde::{Deserialize, Serialize};
 
@@ -143,8 +143,8 @@ pub enum ApprovalListResponse {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApprovalRequestRecord {
     pub request_id: String,
-    pub requester: SessionRef,
-    pub approver: SessionRef,
+    pub requester: HarnessSessionRef,
+    pub approver: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub state: ApprovalState,
     #[serde(default, skip_serializing_if = "Option::is_none")]

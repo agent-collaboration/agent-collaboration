@@ -10,7 +10,7 @@ use crate::test_support::{
 #[tokio::test]
 async fn wire_observer_preserves_genuine_api_header_acceptance_and_rejection() {
     let fixture =
-        SourceApiFixture::start("00000000-0000-4000-8000-000000000001", "source-model").await;
+        SourceApiFixture::start("00000000-0000-7000-8000-000000000001", "source-model").await;
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -75,7 +75,7 @@ async fn wire_observer_preserves_genuine_api_header_acceptance_and_rejection() {
 async fn configured_dispatch_reads_two_real_mcp_sources_without_collapsing_equal_ids() {
     // Arrange: actual APIs own separate SQLite catalogs; neither native backend is running.
     let (first, second) = tokio::join!(
-        SourceApiFixture::start("00000000-0000-4000-8000-000000000001", "first-source-model"),
+        SourceApiFixture::start("00000000-0000-7000-8000-000000000001", "first-source-model"),
         SourceApiFixture::start(
             "00000000-0000-4000-8000-000000000002",
             "second-source-model"
@@ -161,7 +161,7 @@ async fn configured_dispatch_rejects_wrong_service_and_unqualified_credential_be
 fn source_provider_projection_keeps_source_path_and_unknown_model_without_caller_canonicalization()
 {
     use collaboration_client::protocol::{
-        ProviderIdentity, ProviderSessionState, ProviderSessionSummary, SessionRef,
+        HarnessSessionRef, ProviderIdentity, ProviderSessionState, ProviderSessionSummary,
     };
     let caller = tempfile::tempdir().unwrap();
     let caller_root = std::fs::canonicalize(caller.path()).unwrap();
@@ -169,8 +169,8 @@ fn source_provider_projection_keeps_source_path_and_unknown_model_without_caller
     std::fs::create_dir(&actual).unwrap();
     let source_path = caller_root.join("source-shaped-link");
     std::os::unix::fs::symlink(&actual, &source_path).unwrap();
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"source-provider-id"
     }))
     .unwrap();

@@ -12,7 +12,7 @@ use serde_json::json;
 #[tokio::test]
 async fn question_list_and_answer_cross_the_real_api() {
     let root = tempfile::tempdir().expect("temporary service directory");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let endpoint: EndpointRef = serde_json::from_value(json!({
         "serviceId":service_id,"endpointId":"claude-local"
