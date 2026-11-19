@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT min(json_extract(delivery_state_json, '$.ended_at_ms')) AS \"oldest?: i64\"\n             FROM inbox_messages",
+  "describe": {
+    "columns": [
+      {
+        "name": "oldest?: i64",
+        "ordinal": 0,
+        "type_info": "Null",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0e677dfba03ce465c1687acaed1b6605e17d14916d33656b0ee06bb55c79c300"
+}

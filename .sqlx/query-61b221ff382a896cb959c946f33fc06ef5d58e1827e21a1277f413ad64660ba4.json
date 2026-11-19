@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT min(expires_at_ms) AS \"deadline?: i64\" FROM outbox_items\n                   WHERE item_state IN (?, ?)",
+  "describe": {
+    "columns": [
+      {
+        "name": "deadline?: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "61b221ff382a896cb959c946f33fc06ef5d58e1827e21a1277f413ad64660ba4"
+}

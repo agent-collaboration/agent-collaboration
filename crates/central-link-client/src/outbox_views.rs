@@ -29,6 +29,22 @@ pub enum OutboxWriteTarget {
     },
 }
 
+impl OutboxWriteTarget {
+    pub fn request_scope(&self) -> central_link_protocol::RequestScope {
+        use central_link_protocol::RequestScope;
+        match self {
+            Self::Thread {
+                workspace_id: Some(workspace_id),
+                ..
+            } => RequestScope::Workspace(workspace_id.clone()),
+            Self::Thread {
+                workspace_id: None, ..
+            }
+            | Self::Session { .. } => RequestScope::Organization,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutboxWriteContent {
     pub target: OutboxWriteTarget,
@@ -41,18 +57,7 @@ impl OutboxWriteContent {
     #[must_use]
     pub fn of(payload: &RequestPayload) -> Option<Self> {
         match payload {
-            RequestPayload::Workspace(request) => match &request.operation {
-                WorkspaceOperation::ThreadPost {
-                    thread_id, body, ..
-                } => Some(Self {
-                    target: OutboxWriteTarget::Thread {
-                        workspace_id: request.workspace_id.clone(),
-                        thread_id: thread_id.clone(),
-                    },
-                    body: body.clone(),
-                }),
-                _ => None,
-            },
+            RequestPayload::Workspace(request) => Self::workspace(request),
             RequestPayload::Mail(request) => match &request.operation {
                 CentralMailOperation::SendMessage { to, body, .. } => Some(Self {
                     target: OutboxWriteTarget::Session { to: to.clone() },
@@ -62,6 +67,21 @@ impl OutboxWriteContent {
             },
         }
     }
+
+    pub(crate) fn workspace(request: &workspace_model::WorkspaceRequest) -> Option<Self> {
+        match &request.operation {
+            WorkspaceOperation::ThreadPost {
+                thread_id, body, ..
+            } => Some(Self {
+                target: OutboxWriteTarget::Thread {
+                    workspace_id: request.workspace_id.clone(),
+                    thread_id: thread_id.clone(),
+                },
+                body: body.clone(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// Where a pending write stands. A write that went out in a batch whose answer
@@ -69,7 +89,14 @@ impl OutboxWriteContent {
 /// stays on the Mac only until central answers (owner, 2026-11-15: "unsent text
 /// in the Mac outbox: allowed until central answers"), so only the unanswered
 /// states carry the body.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum PendingWriteState {
     /// Never left the Mac.
     Unsent { body: PostText },
@@ -134,12 +161,25 @@ pub struct EndedWrite {
     pub reason: crate::link_calls::OutboxCancellation,
 }
 
+/// The sender's delivery notice. The inbox id is its idempotency key.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SenderDeliveryOutcome {
+    pub inbox_message_id: workspace_model::MessageId,
+    pub message_id: workspace_model::MessageId,
+    pub request_id: RequestId,
+    pub outcome: workspace_model::central_mail::MessageOutcome,
+}
+
 /// Receives every flush's outcomes and every write that ended unsent; the
 /// CLI+MCP side groups and words them per session.
 pub trait FlushOutcomeSink: Send + Sync {
     fn deliver(&self, outcomes: FlushOutcomes);
     /// Writes that passed their deadline, told when the Router ends them.
     fn ended(&self, ended: Vec<EndedWrite>);
+    /// Admit a durable receipt keyed by the inbox message id. Retrying an
+    /// interrupted handoff must reuse that same receipt.
+    fn delivery_outcome(&self, caller: &Caller, outcome: &SenderDeliveryOutcome);
 }
 
 #[cfg(test)]

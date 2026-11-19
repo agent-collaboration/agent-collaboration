@@ -19,12 +19,12 @@ fn uuid_v7(seed: u16) -> String {
 fn caller(seed: u16) -> Caller {
     serde_json::from_value(json!({
         "kind": "session",
-        "value": {"machineId": uuid_v7(60_000), "endpoint": "claude-local", "sessionId": format!("s{seed}")},
+        "value": {"machineId": uuid_v7(60_000), "sessionId": format!("s{seed}")},
     }))
     .unwrap()
 }
 
-fn thread_post(request: &str, body: &str) -> RequestPayload {
+fn thread_post(request: &str, body: &str) -> QueuedWrite {
     serde_json::from_value(json!({
         "kind": "workspace",
         "request": {
@@ -107,7 +107,10 @@ async fn a_write_moves_in_outbox_sent_accepted_and_survives_a_reopen() {
         vec![StoredOutboxWrite {
             request: write.request.clone(),
             caller: write.caller.clone(),
-            payload: write.payload.clone(),
+            payload: write
+                .payload
+                .clone()
+                .into_wire(chrono::DateTime::UNIX_EPOCH),
         }]
     );
     assert_eq!(after_send, RequestStatus::Sent);
@@ -276,10 +279,10 @@ async fn ended_rows_read_as_cancelled_hold_no_text_and_are_pruned() {
     assert_eq!(
         statuses,
         vec![
-            RequestStatus::Cancelled {
+            RequestStatus::Ended {
                 reason: OutboxCancellation::NotSentWithin15Minutes
             },
-            RequestStatus::Cancelled {
+            RequestStatus::Ended {
                 reason: OutboxCancellation::NotConfirmedWithin15Minutes
             },
         ]
@@ -388,7 +391,9 @@ async fn unanswered_writes_return_with_their_receipt_mark_and_refusals_are_kept(
             .request_status(&second.caller, &second.request)
             .await
             .unwrap(),
-        RequestStatus::Refused(LinkAdmissionRefusal::MachineRevoked)
+        RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+            LinkAdmissionRefusal::MachineRevoked
+        ))
     );
 }
 
@@ -510,7 +515,7 @@ enum ModelState {
     SentAnswerLost,
     Accepted,
     Refused,
-    /// Past its deadline: a thread post gives up 24 hours after it was stored.
+    /// Past the 15-minute deadline shared by thread posts and direct messages.
     Ended(OutboxCancellation),
 }
 
@@ -531,8 +536,12 @@ impl ModelWrite {
             },
             ModelState::Sent => RequestStatus::Sent,
             ModelState::Accepted => RequestStatus::Answered(accepted_reply()),
-            ModelState::Refused => RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict),
-            ModelState::Ended(reason) => RequestStatus::Cancelled { reason },
+            ModelState::Refused => {
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+                    LinkAdmissionRefusal::RequestIdConflict,
+                ))
+            }
+            ModelState::Ended(reason) => RequestStatus::Ended { reason },
         }
     }
 }

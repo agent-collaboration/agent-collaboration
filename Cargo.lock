@@ -1104,6 +1104,7 @@ dependencies = [
  "hegeltest",
  "router-clock",
  "runtime-primitives",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1499,6 +1500,7 @@ dependencies = [
  "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
+ "central-link-protocol",
  "chrono",
  "claude-code-peer-messaging",
  "codex-acp-adapter",
@@ -1559,6 +1561,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]
@@ -2063,6 +2066,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "collaboration-link-test-support"
+version = "0.1.154"
+dependencies = [
+ "central-link-client",
+ "central-link-protocol",
+ "chrono",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-runtime",
+ "futures-util",
+ "hyper",
+ "hyper-util",
+ "router-clock",
+ "runtime-primitives",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "turmoil",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
 name = "collaboration-mail-protocol"
 version = "0.1.154"
 dependencies = [
@@ -2165,9 +2194,9 @@ dependencies = [
  "codex-native-integration",
  "codex-router-test-support",
  "collaboration-contracts",
+ "collaboration-link-test-support",
  "collaboration-mail-protocol",
  "collaboration-protocol",
- "collaboration-runtime",
  "durable-steps",
  "fleet-admission",
  "fleet-sync-delivery",

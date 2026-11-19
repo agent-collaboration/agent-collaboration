@@ -33,7 +33,7 @@ async fn a_post_flushes_on_its_mark_as_one_batch_and_its_answer_is_reported() {
     let status = loop {
         let status = harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
         if status != RequestStatus::Sent {
             break status;
@@ -138,7 +138,7 @@ async fn a_restart_resends_writes_that_were_sent_without_an_answer() {
         let item = NewOutboxItem {
             request: id.parse().unwrap(),
             caller: caller(),
-            payload: thread_post(&id),
+            payload: queued_thread_post(&id),
             flush_at: SyncTime::from_unix_millis(MARK),
         };
         outbox
@@ -198,7 +198,7 @@ async fn a_machine_revoked_answer_returns_the_write_unsent_and_the_next_mark_res
     let pending = harness.calls.pending_for(caller()).await.unwrap();
     let status = harness
         .calls
-        .request_status(caller(), id.parse().unwrap())
+        .request_status(caller(), status_query(&id))
         .await;
     assert!(matches!(
         &pending[..],
@@ -241,7 +241,7 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
         let item = NewOutboxItem {
             request: old.parse().unwrap(),
             caller: caller(),
-            payload: thread_post(&old),
+            payload: queued_thread_post(&old),
             flush_at: SyncTime::from_unix_millis(MARK - sixty_days_ms),
         };
         let ended_at = SyncTime::from_unix_millis(MARK - sixty_days_ms - 1_000);
@@ -265,7 +265,7 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
     harness.calls.submit(caller(), thread_post(&fresh)).await;
     let before = harness
         .calls
-        .request_status(caller(), old.parse().unwrap())
+        .request_status(caller(), status_query(&old))
         .await;
 
     harness
@@ -275,10 +275,8 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
     let LinkFrame::Data(DataFrame::Batch { .. }) = central.frame().await else {
         panic!("the flush tick sends its batch");
     };
-    let after = harness
-        .calls
-        .request_status(caller(), old.parse().unwrap())
-        .await;
+    let _ = harness.calls.link_status().await;
+    let after = harness.local_status(&old).await;
 
     assert!(matches!(before, RequestStatus::Answered(_)));
     assert_eq!(after, RequestStatus::NotFound, "pruned at the tick");

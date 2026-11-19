@@ -110,6 +110,8 @@ async fn enroll(
     if !directory.exists() {
         private_directory(&directory)?;
     }
+    // Legacy central enrollment only. Retires with #301 and the retrofit.
+    // Host startup uses the machine-local database.
     let service = collaboration_runtime::load_service_identity(&directory)?;
     let peer = collaboration_runtime::load_installation_peer(&directory)?;
     let credential = uuid::Uuid::now_v7().to_string();

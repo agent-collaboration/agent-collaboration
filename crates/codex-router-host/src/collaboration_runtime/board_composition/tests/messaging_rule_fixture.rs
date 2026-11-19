@@ -76,7 +76,7 @@ impl RuleFixture {
             matches!(holder.claim(&project).await?, board_sync_protocol::ProjectClaimReply::Claimed { epoch, .. } if epoch.value()==2)
         );
         let successor_origin = ActorOrigin {
-            installation: "550e8400-e29b-41d4-a716-446655445182"
+            installation: "550e8400-e29b-71d4-a716-446655445182"
                 .to_owned()
                 .try_into()?,
             machine: "rule successor".to_owned().try_into()?,

@@ -9,7 +9,7 @@ pub struct EndpointDirectory {
     state: Arc<Mutex<DirectoryState>>,
 }
 struct DirectoryState {
-    service_id: workspace_ids::MachineId,
+    machine_id: workspace_ids::MachineId,
     endpoints: BTreeMap<EndpointRef, EndpointDescription>,
     /// Counts every publication across the Host, independent of any subscriber.
     publications: u64,
@@ -21,18 +21,18 @@ pub struct EndpointSnapshot {
 impl EndpointDirectory {
     /// Registers a bounded inventory without inferring endpoint liveness.
     pub fn publish_inventory(&self, endpoints: Vec<EndpointDescription>) -> io::Result<()> {
-        let service_id = self
+        let machine_id = self
             .state
             .lock()
             .map_err(|_| io::Error::other("endpoint directory unavailable"))?
-            .service_id
+            .machine_id
             .clone();
         let mut identities = std::collections::HashSet::new();
         if endpoints.len() > 64 {
             return Err(io::Error::other("too many endpoints"));
         }
         for endpoint in &endpoints {
-            if endpoint.endpoint.service_id != service_id {
+            if endpoint.endpoint.service_id != machine_id {
                 return Err(io::Error::other("endpoint belongs to another service"));
             }
             if !identities.insert(endpoint.endpoint.clone()) {
@@ -63,10 +63,10 @@ impl EndpointDirectory {
     }
 
     #[must_use]
-    pub fn new(service_id: workspace_ids::MachineId) -> Self {
+    pub fn new(machine_id: workspace_ids::MachineId) -> Self {
         Self {
             state: Arc::new(Mutex::new(DirectoryState {
-                service_id,
+                machine_id,
                 endpoints: BTreeMap::new(),
                 publications: 0,
             })),
@@ -77,7 +77,7 @@ impl EndpointDirectory {
             .state
             .lock()
             .map_err(|_| io::Error::other("endpoint directory unavailable"))?;
-        if endpoint.endpoint.service_id != state.service_id
+        if endpoint.endpoint.service_id != state.machine_id
             || endpoint.channels.len() > 2
             || (endpoint.channels.is_empty()
                 && !matches!(

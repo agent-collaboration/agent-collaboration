@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT machine_id FROM machine_identity",
+  "describe": {
+    "columns": [
+      {
+        "name": "machine_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machine_identity",
+            "name": "machine_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3164eecc59cd939c4d94e0fab72b7ffa5d5d776918f16ad7a670334848fb8c52"
+}

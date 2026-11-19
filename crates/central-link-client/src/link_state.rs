@@ -5,12 +5,15 @@ use crate::{
 };
 use central_link_protocol::{
     CorrelationId, DataFrame, LinkFrame, LinkRequest, ReplyPayload, RequestPayload,
-    TokenRenewalResult,
+    RequestStatusAnswer, RequestStatusQuery, TokenRenewalResult,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
 use workspace_ids::MachineId;
-use workspace_model::{Caller, ResolvedSender, central_mail::MessageRecord};
+use workspace_model::{
+    Caller, MessageId, ResolvedSender,
+    central_mail::{DeliveryAnswer, MessageRecord},
+};
 
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 const CALL_DEADLINE: Duration = Duration::from_secs(30);
@@ -74,6 +77,10 @@ pub enum ClientEvent {
     Reply {
         correlation_id: CorrelationId,
         result: ReplyPayload,
+    },
+    RequestStatusReply {
+        correlation_id: CorrelationId,
+        result: RequestStatusAnswer,
     },
     LateReply {
         correlation_id: CorrelationId,
@@ -207,6 +214,38 @@ impl LinkClient {
         }))
     }
 
+    /// A delivery Ack carries no correlation id and expects no reply.
+    pub fn acknowledge_delivery(
+        &self,
+        message_id: MessageId,
+        answer: DeliveryAnswer,
+    ) -> Result<LinkFrame, ClientError> {
+        if !matches!(self.state, ConnectionState::Connected { .. }) {
+            return Err(ClientError::CentralUnavailable);
+        }
+        Ok(LinkFrame::Data(DataFrame::Ack { message_id, answer }))
+    }
+
+    pub fn begin_request_status(
+        &mut self,
+        caller: Caller,
+        query: RequestStatusQuery,
+    ) -> Result<LinkFrame, ClientError> {
+        if !matches!(self.state, ConnectionState::Connected { .. }) {
+            return Err(ClientError::CentralUnavailable);
+        }
+        let correlation_id = self.next_correlation();
+        self.pending.insert_request_status(
+            correlation_id.clone(),
+            self.clock.monotonic_now().after(CALL_DEADLINE),
+        )?;
+        Ok(LinkFrame::Data(DataFrame::RequestStatus {
+            correlation_id,
+            caller,
+            query,
+        }))
+    }
+
     /// Only DefinitelyNotSent guarantees no request bytes were sent.
     pub fn send_failed(
         &mut self,
@@ -264,6 +303,16 @@ impl LinkClient {
                 message: *message,
                 sender,
             }),
+            LinkFrame::Data(DataFrame::RequestStatusReply {
+                correlation_id,
+                result,
+            }) => match self.pending.complete_request_status(&correlation_id)? {
+                ReplyDisposition::Completed => Ok(ClientEvent::RequestStatusReply {
+                    correlation_id,
+                    result: *result,
+                }),
+                ReplyDisposition::AlreadyResolved => Ok(ClientEvent::LateReply { correlation_id }),
+            },
             // The Host owns renewal correlation (it sent the frame); the client
             // only surfaces central's answer.
             LinkFrame::Data(DataFrame::MachineTokenRenewal {
@@ -278,7 +327,6 @@ impl LinkClient {
                 DataFrame::Welcome { .. }
                 | DataFrame::Request { .. }
                 | DataFrame::RequestStatus { .. }
-                | DataFrame::RequestStatusReply { .. }
                 | DataFrame::Batch { .. }
                 | DataFrame::Ack { .. }
                 | DataFrame::RenewMachineToken { .. },

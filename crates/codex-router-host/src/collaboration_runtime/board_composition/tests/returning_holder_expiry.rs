@@ -33,7 +33,7 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
     )
     .await?;
     let second_origin = ActorOrigin {
-        installation: "550e8400-e29b-41d4-a716-446655441087"
+        installation: "550e8400-e29b-71d4-a716-446655441087"
             .to_owned()
             .try_into()?,
         machine: "expiry roundtrip receiver".to_owned().try_into()?,

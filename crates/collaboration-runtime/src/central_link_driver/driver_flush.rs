@@ -8,18 +8,24 @@
 use super::{BatchInFlight, LinkDriver};
 use central_link_client::{
     EndedWrite, FlushEffect, FlushEvent, FlushOutcome, FlushOutcomes, MAX_BATCH_WRITES,
-    MemberOutcome, transition,
+    MemberOutcome, mark_in_window, transition,
 };
 use central_link_protocol::{DataFrame, LinkFrame, LinkRequestBatch};
 use runtime_primitives::SyncTime;
 use std::collections::BTreeMap;
-use workspace_model::RequestId;
+use workspace_model::{RequestId, central_mail::MessageRecord};
 
 impl LinkDriver {
     /// The store's earliest due work. A sent row with no batch on the wire
     /// is due too: the next tick reconciles it. A failed read assumes
     /// something is due, so the schedule arms the next mark and retries.
-    pub(super) async fn earliest_due(&mut self) -> Option<SyncTime> {
+    async fn earliest_due(&mut self) -> Option<SyncTime> {
+        let outbox = self.earliest_outbox_due().await;
+        let inbox = self.earliest_inbox_due().await;
+        outbox.into_iter().chain(inbox).min()
+    }
+
+    async fn earliest_outbox_due(&mut self) -> Option<SyncTime> {
         let due_now = Some(SyncTime::from_unix_millis(0));
         let idle = self.batch.is_none();
         let mut store = self.store.lock().await;
@@ -84,6 +90,36 @@ impl LinkDriver {
         }
     }
 
+    pub(super) async fn refresh_outbox_deadline(&mut self) {
+        let stored = self.store.lock().await.earliest_deadline().await;
+        let deadline = match stored {
+            Ok(deadline) => deadline,
+            Err(error) => {
+                tracing::warn!(%error, "outbox: could not read the local deadline, retrying next minute");
+                Some(central_link_client::next_mark_after(self.clock.now()))
+            }
+        };
+        self.apply_flush(FlushEvent::LocalDeadlineChanged { deadline })
+            .await;
+    }
+
+    pub(super) async fn expire_offline_writes(&mut self) {
+        let now = self.clock.now();
+        let overdue = self.store.lock().await.end_overdue(now).await;
+        match overdue {
+            Ok(ended) => {
+                self.tell_ended(ended);
+                self.refresh_outbox_deadline().await;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "outbox: ending overdue writes failed, retrying next minute");
+                let deadline = Some(central_link_client::next_mark_after(now));
+                self.apply_flush(FlushEvent::LocalDeadlineChanged { deadline })
+                    .await;
+            }
+        }
+    }
+
     /// A flush wake fired: reconcile when idle, end writes past their deadline,
     /// let the schedule decide, then prune writes that ended 60 days ago (a
     /// kept row is only a receipt).
@@ -110,6 +146,12 @@ impl LinkDriver {
     /// The link welcomed this Router: reconcile, then let the schedule arm.
     pub(super) async fn flush_link_connected(&mut self) {
         self.reconcile_sent().await;
+        let now = self.clock.now();
+        let mark = self.flush.receipt_mark(now);
+        if let Some(inbox) = self.inbox.as_mut() {
+            inbox.reoffer_recent_acks(mark, now).await;
+        }
+        self.arm_inbox_retry(now);
         let earliest_due = self.earliest_due().await;
         self.apply_flush(FlushEvent::LinkConnected { earliest_due })
             .await;
@@ -127,6 +169,9 @@ impl LinkDriver {
         for effect in effects {
             match effect {
                 FlushEffect::SendBatch { mark } => Box::pin(self.send_batch(mark)).await,
+                FlushEffect::WakeAtLocalDeadline { deadline } => {
+                    self.outbox_deadline_at = deadline.map(|at| self.clock.wall_deadline(at));
+                }
                 FlushEffect::WakeAt { mark } => {
                     let jitter = self.jitter.jitter_millis(mark).clamp(-3_000, 3_000);
                     let at = SyncTime::from_unix_millis(mark.unix_millis().saturating_add(jitter));
@@ -145,7 +190,13 @@ impl LinkDriver {
 
     /// Claims the next due writes from the store and sends them as one frame.
     async fn send_batch(&mut self, mark: SyncTime) {
+        if !self.send_inbox_acks(mark).await {
+            return self.socket_closed().await;
+        }
         let now = self.clock.now();
+        if mark_in_window(now) != Some(mark) {
+            return self.end_batch().await;
+        }
         let limit = u16::try_from(MAX_BATCH_WRITES).unwrap_or(u16::MAX);
         let claimed = {
             let mut store = self.store.lock().await;
@@ -278,6 +329,7 @@ impl LinkDriver {
     }
 
     async fn end_batch(&mut self) {
+        Box::pin(self.refresh_outbox_deadline()).await;
         if self.flush.batch_in_flight() {
             let earliest_due = self.earliest_due().await;
             self.apply_flush(FlushEvent::BatchEnded { earliest_due })
@@ -293,6 +345,93 @@ impl LinkDriver {
                 complete,
             });
         }
+    }
+}
+
+impl LinkDriver {
+    pub(super) async fn receive_delivery(&mut self, message: MessageRecord) {
+        let now = self.clock.now();
+        let mark = self.flush.receipt_mark(now);
+        let Some(inbox) = self.inbox.as_mut() else {
+            tracing::warn!("central delivery arrived without an inbox");
+            return;
+        };
+        inbox.receive(message, mark, now).await;
+        self.arm_inbox_retry(now);
+        if let Some(flush_at) = self.earliest_inbox_due().await {
+            self.apply_flush(FlushEvent::Stored { flush_at }).await;
+        }
+    }
+
+    pub(super) async fn earliest_inbox_due(&mut self) -> Option<SyncTime> {
+        let inbox = self.inbox.as_ref()?;
+        let mark = self.flush.receipt_mark(self.clock.now());
+        match inbox.earliest_due().await {
+            Ok(due) => due,
+            Err(error) => {
+                tracing::warn!(%error, "inbox: unable to read work, retrying on the minute mark");
+                Some(mark)
+            }
+        }
+    }
+
+    pub(super) async fn retry_inbox(&mut self, now: SyncTime) {
+        let mark = self.flush.receipt_mark(now);
+        if let Some(inbox) = self.inbox.as_mut() {
+            inbox.retry_pending(mark, now).await;
+        }
+        self.arm_inbox_retry(now);
+        if let Some(flush_at) = self.earliest_inbox_due().await {
+            self.apply_flush(FlushEvent::Stored { flush_at }).await;
+        }
+    }
+
+    fn arm_inbox_retry(&mut self, now: SyncTime) {
+        if self.inbox_retry_at.is_none()
+            && self
+                .inbox
+                .as_ref()
+                .is_some_and(crate::CentralInbox::needs_retry)
+        {
+            let mark = central_link_client::next_mark_after(now);
+            self.inbox_retry_at = Some(self.clock.wall_deadline(mark));
+        }
+    }
+
+    /// Acks are separate wire frames submitted together at a minute flush.
+    /// A failed socket write leaves its answer pending. A later Deliver also
+    /// re-arms a locally sent answer that may never have reached central.
+    pub(super) async fn send_inbox_acks(&mut self, mark: SyncTime) -> bool {
+        let Some(inbox) = self.inbox.as_mut() else {
+            return true;
+        };
+        let acks = match inbox.acks_due(mark).await {
+            Ok(acks) => acks,
+            Err(error) => {
+                tracing::warn!(%error, "inbox: could not read pending Acks, retrying next minute");
+                return true;
+            }
+        };
+        for ack in acks {
+            if mark_in_window(self.clock.now()) != Some(mark) {
+                break;
+            }
+            let Ok(frame) = self
+                .client
+                .acknowledge_delivery(ack.message_id.clone(), ack.answer)
+            else {
+                return false;
+            };
+            if !self.send(&frame).await {
+                return false;
+            }
+            if let Some(inbox) = self.inbox.as_mut()
+                && let Err(error) = inbox.mark_ack_sent(&ack, self.clock.now()).await
+            {
+                tracing::warn!(%error, "inbox: could not retire a sent Ack, retrying next minute");
+            }
+        }
+        true
     }
 }
 

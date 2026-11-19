@@ -5,9 +5,9 @@ use super::link_transport::{
     LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError, MachineTokenSource,
     TokenAvailability, TransportFuture,
 };
-use super::{DriverCommand, FlushJitter};
-use crate::OutboxStorage;
+use super::{CentralLinkParts, DriverCommand, FlushJitter};
 use crate::outbox_store::{NewOutboxItem, OutboxInsert, OutboxStoreError};
+use crate::{CentralInbox, OutboxStorage};
 use central_link_client::{
     CallFailure, ClientAction, ClientEvent, ConnectionAttempt, FailedCall, FlushEvent,
     FlushOutcome, FlushOutcomeSink, LinkAdmissionRefusal, LinkClient, MemberOutcome,
@@ -53,6 +53,7 @@ pub(super) struct LinkDriver {
     pub(super) tokens: Arc<dyn MachineTokenSource>,
     pub(super) jitter: Arc<dyn FlushJitter>,
     pub(super) sink: Arc<dyn FlushOutcomeSink>,
+    pub(super) inbox: Option<CentralInbox>,
     pub(super) client: LinkClient,
     pub(super) flush: OutboxFlushState,
     socket: Option<(ConnectionAttempt, Box<dyn LinkSocket>)>,
@@ -60,8 +61,11 @@ pub(super) struct LinkDriver {
     /// serving calls, and the client's Welcome deadline abandons it.
     connecting: Option<PendingConnect>,
     immediate: BTreeMap<CorrelationId, ImmediateCall>,
+    status_waiters: BTreeMap<CorrelationId, oneshot::Sender<RequestStatus>>,
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
+    outbox_deadline_at: Option<ClockInstant>,
+    inbox_retry_at: Option<ClockInstant>,
     deferred_pending: Vec<(Caller, PendingReply)>,
     /// The token the open connection was admitted or last renewed with.
     connected_token: Option<MachineTokenText>,
@@ -76,29 +80,25 @@ pub(super) struct LinkDriver {
 }
 
 impl LinkDriver {
-    pub(super) fn new(
-        clock: Arc<dyn RuntimeClock>,
-        store: Arc<Mutex<dyn OutboxStorage>>,
-        transport: Arc<dyn LinkTransport>,
-        tokens: Arc<dyn MachineTokenSource>,
-        jitter: Arc<dyn FlushJitter>,
-        sink: Arc<dyn FlushOutcomeSink>,
-        client: LinkClient,
-    ) -> Self {
+    pub(super) fn new(parts: CentralLinkParts, client: LinkClient) -> Self {
         Self {
-            clock,
-            store,
-            transport,
-            tokens,
-            jitter,
-            sink,
+            clock: parts.clock,
+            store: parts.store,
+            transport: parts.transport,
+            tokens: parts.tokens,
+            jitter: parts.jitter,
+            sink: parts.outcomes,
+            inbox: parts.inbox,
             client,
             flush: OutboxFlushState::default(),
             socket: None,
             connecting: None,
             immediate: BTreeMap::new(),
+            status_waiters: BTreeMap::new(),
             batch: None,
             flush_wake: None,
+            outbox_deadline_at: None,
+            inbox_retry_at: None,
             deferred_pending: Vec::new(),
             connected_token: None,
             renewing: None,
@@ -115,11 +115,14 @@ impl LinkDriver {
     ) {
         // Start-up: sent rows from before a stop go back to waiting.
         self.reconcile_sent().await;
+        self.refresh_outbox_deadline().await;
         loop {
             self.drive_time().await;
             let deadline = [
                 self.client.next_deadline(),
                 self.flush_wake,
+                self.outbox_deadline_at,
+                self.inbox_retry_at,
                 self.renew_retry_at,
             ]
             .into_iter()
@@ -150,6 +153,20 @@ impl LinkDriver {
             self.handle_action(action).await;
         }
         self.drive_renewal_retry().await;
+        if self
+            .outbox_deadline_at
+            .is_some_and(|wake| self.clock.monotonic_now() >= wake)
+        {
+            self.outbox_deadline_at = None;
+            self.expire_offline_writes().await;
+        }
+        if self
+            .inbox_retry_at
+            .is_some_and(|wake| self.clock.monotonic_now() >= wake)
+        {
+            self.inbox_retry_at = None;
+            self.retry_inbox(self.clock.now()).await;
+        }
         if self
             .flush_wake
             .is_some_and(|wake| self.clock.monotonic_now() >= wake)
@@ -279,13 +296,29 @@ impl LinkDriver {
                 correlation_id,
                 result,
             } => self.reply_arrived(&correlation_id, result).await,
+            ClientEvent::RequestStatusReply {
+                correlation_id,
+                result,
+            } => {
+                if let Some(reply) = self.status_waiters.remove(&correlation_id) {
+                    use central_link_protocol::RequestStatusAnswer;
+                    let status = match result {
+                        RequestStatusAnswer::Answered(reply) => RequestStatus::Answered(reply),
+                        RequestStatusAnswer::Refused(reason) => RequestStatus::Refused(
+                            central_link_client::RequestStatusRefusal::Central(reason),
+                        ),
+                        RequestStatusAnswer::NotFound => RequestStatus::NotFound,
+                    };
+                    let _ = reply.send(status);
+                }
+            }
             // Pong resets the client's heartbeat; a late reply was settled.
-            // Inbox delivery and message outcomes arrive in 2c steps C and D.
             ClientEvent::TokenRenewal {
                 correlation_id,
                 result,
             } => self.renewal_answered(&correlation_id, &result),
-            ClientEvent::Pong | ClientEvent::LateReply { .. } | ClientEvent::Deliver { .. } => {}
+            ClientEvent::Deliver { message, sender: _ } => self.receive_delivery(message).await,
+            ClientEvent::Pong | ClientEvent::LateReply { .. } => {}
         }
     }
 
@@ -311,7 +344,9 @@ impl LinkDriver {
     async fn settle_failed(&mut self, failed: Vec<FailedCall>) {
         let mut batch_member_failed = false;
         for call in failed {
-            if let Some(immediate) = self.immediate.remove(&call.correlation_id) {
+            if let Some(reply) = self.status_waiters.remove(&call.correlation_id) {
+                let _ = reply.send(RequestStatus::StatusUnavailable);
+            } else if let Some(immediate) = self.immediate.remove(&call.correlation_id) {
                 // The call was accepted, so its frame may have left: a read is
                 // ReadAnswerLost; a write the client knows was never sent is unavailable.
                 let submission = match (call.failure, immediate.request) {
@@ -340,13 +375,33 @@ impl LinkDriver {
 
     async fn handle_command(&mut self, command: DriverCommand) {
         match command {
+            DriverCommand::QueueMessage {
+                caller,
+                request_id,
+                message,
+                reply,
+            } => {
+                let queued = central_link_client::QueuedWrite::SendMessage {
+                    request_id,
+                    message,
+                };
+                if let Some(submission) = self.submit_to_outbox(caller, queued, &reply).await {
+                    let _ = reply.send(submission);
+                }
+            }
             DriverCommand::Submit {
                 caller,
                 payload,
                 reply,
             } => match submission_path(&payload) {
                 SubmissionPath::Outbox => {
-                    if let Some(submission) = self.submit_to_outbox(caller, payload, &reply).await {
+                    let RequestPayload::Workspace(request) = payload else {
+                        let _ = reply
+                            .send(Submission::Refused(SubmitRefusal::UnstampedMessageRequired));
+                        return;
+                    };
+                    let queued = central_link_client::QueuedWrite::Workspace(request);
+                    if let Some(submission) = self.submit_to_outbox(caller, queued, &reply).await {
                         let _ = reply.send(submission);
                     }
                 }
@@ -357,16 +412,9 @@ impl LinkDriver {
             },
             DriverCommand::Status {
                 caller,
-                request,
+                query,
                 reply,
-            } => {
-                let mut store = self.store.lock().await;
-                let status = store
-                    .request_status(&caller, &request)
-                    .await
-                    .unwrap_or(RequestStatus::NotFound);
-                let _ = reply.send(status);
-            }
+            } => self.read_request_status(caller, query, reply).await,
             DriverCommand::Pending { caller, reply } => {
                 if self.batch.is_some() {
                     self.deferred_pending.push((caller, reply));
@@ -389,16 +437,53 @@ impl LinkDriver {
         }
     }
 
+    async fn read_request_status(
+        &mut self,
+        caller: Caller,
+        query: central_link_protocol::RequestStatusQuery,
+        reply: oneshot::Sender<RequestStatus>,
+    ) {
+        let local = self
+            .store
+            .lock()
+            .await
+            .scoped_request_status(&caller, &query)
+            .await;
+        match local {
+            Ok(RequestStatus::NotFound) => {
+                let Ok(frame) = self.client.begin_request_status(caller, query) else {
+                    let _ = reply.send(RequestStatus::StatusUnavailable);
+                    return;
+                };
+                let LinkFrame::Data(DataFrame::RequestStatus { correlation_id, .. }) = &frame
+                else {
+                    let _ = reply.send(RequestStatus::StatusUnavailable);
+                    return;
+                };
+                self.status_waiters.insert(correlation_id.clone(), reply);
+                if !self.send(&frame).await {
+                    self.socket_closed().await;
+                }
+            }
+            Ok(status) => {
+                let _ = reply.send(status);
+            }
+            Err(_) => {
+                let _ = reply.send(RequestStatus::StatusUnavailable);
+            }
+        }
+    }
+
     /// Stores an outbox write and answers with its receipt. None when the caller
     /// went away before admission: no row is written and nothing is sent
     /// (pre-admission cancel). Once the insert commits, nothing is undone.
     async fn submit_to_outbox(
         &mut self,
         caller: Caller,
-        payload: RequestPayload,
+        payload: central_link_client::QueuedWrite,
         reply: &oneshot::Sender<Submission>,
     ) -> Option<Submission> {
-        let Some(request) = payload.write_request_id().cloned() else {
+        let Some(request) = payload.request_id().cloned() else {
             return Some(Submission::Refused(SubmitRefusal::OutboxUnavailable));
         };
         let now = self.clock.now();
@@ -418,6 +503,7 @@ impl LinkDriver {
         };
         Some(match inserted {
             Ok(OutboxInsert::Stored) => {
+                self.refresh_outbox_deadline().await;
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
                 Submission::InOutbox(OutboxReceipt {
                     id: request,
@@ -430,30 +516,38 @@ impl LinkDriver {
                     flush_at,
                 }),
                 RequestStatus::Answered(reply) => Submission::Answered(reply),
-                RequestStatus::Sent | RequestStatus::NotFound => Submission::Uncertain {
+                RequestStatus::Sent
+                | RequestStatus::NotFound
+                | RequestStatus::StatusUnavailable => Submission::Uncertain {
                     request,
                     scope: item.payload.request_scope(),
                 },
-                RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict) => {
-                    Submission::Refused(SubmitRefusal::RequestIdConflict)
-                }
-                RequestStatus::Refused(_) | RequestStatus::Cancelled { .. } => {
-                    Submission::Uncertain {
-                        request,
-                        scope: item.payload.request_scope(),
-                    }
-                }
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+                    LinkAdmissionRefusal::RequestIdConflict,
+                )) => Submission::Refused(SubmitRefusal::RequestIdConflict),
+                RequestStatus::Refused(_) | RequestStatus::Ended { .. } => Submission::Uncertain {
+                    request,
+                    scope: item.payload.request_scope(),
+                },
             },
             Ok(OutboxInsert::ConflictingContent) => {
                 Submission::Refused(SubmitRefusal::RequestIdConflict)
+            }
+            Err(error @ OutboxStoreError::InsertNotStarted(_)) => {
+                tracing::warn!(%error, "outbox: could not begin inserting a write");
+                Submission::Refused(SubmitRefusal::OutboxUnavailable)
             }
             Err(error) => {
                 // The insert may have committed with its acknowledgement lost;
                 // the store is the truth, so arm its mark anyway. If nothing
                 // was stored, that tick finds nothing due.
                 tracing::warn!(%error, "outbox: storing a write failed");
+                self.refresh_outbox_deadline().await;
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
-                Submission::Refused(SubmitRefusal::OutboxUnavailable)
+                Submission::Uncertain {
+                    request,
+                    scope: item.payload.request_scope(),
+                }
             }
         })
     }
@@ -562,10 +656,16 @@ async fn pending_for(
     store.pending_for(caller).await
 }
 
+#[cfg(test)]
+#[path = "delivery_outcome_test.rs"]
+mod delivery_outcome_tests;
 #[path = "driver_flush.rs"]
 mod driver_flush;
 #[path = "driver_tokens.rs"]
 mod driver_tokens;
+#[cfg(test)]
+#[path = "status_read_test.rs"]
+mod status_read_tests;
 
 #[cfg(test)]
 #[path = "store_faults_test.rs"]

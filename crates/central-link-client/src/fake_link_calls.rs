@@ -3,6 +3,7 @@
 //! answer InOutbox and become Answered after a flush on their mark; immediate
 //! kinds answer, or are Uncertain when the answer is lost; another caller's
 //! request id answers NotFound. It proves nothing about the real link.
+use crate::QueuedWrite;
 use crate::flush_marks::{earliest_open_mark, mark_in_window};
 use crate::link_calls::{
     LinkCallFuture, LinkCalls, OutboxReceipt, RequestStatus, Submission, SubmitRefusal,
@@ -16,7 +17,7 @@ use router_clock::RuntimeClock;
 use runtime_primitives::SyncTime;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use workspace_model::{Caller, RequestId};
+use workspace_model::{Caller, RequestId, Timestamp};
 
 /// How the fake central behaves for the next calls and flushes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,8 +49,16 @@ struct FakeState {
 
 struct FakeRequest {
     caller: Caller,
-    payload: RequestPayload,
+    payload: FakePayload,
     status: RequestStatus,
+}
+
+enum FakePayload {
+    Immediate(central_link_protocol::RequestScope),
+    Queued {
+        write: Box<QueuedWrite>,
+        created_at: Timestamp,
+    },
 }
 
 impl FakeLinkCalls {
@@ -104,10 +113,14 @@ impl FakeLinkCalls {
             let Some(request) = state.requests.get_mut(&id) else {
                 continue;
             };
+            let FakePayload::Queued { write, created_at } = &request.payload else {
+                continue;
+            };
+            let wire = write.as_ref().clone().into_wire(*created_at);
             sent += 1;
             request.status = match central {
                 FakeCentral::Answering => {
-                    RequestStatus::Answered((self.responder)(&request.caller, &request.payload))
+                    RequestStatus::Answered((self.responder)(&request.caller, &wire))
                 }
                 FakeCentral::AnswerLost | FakeCentral::Unavailable | FakeCentral::NotEnrolled => {
                     RequestStatus::Sent
@@ -120,7 +133,7 @@ impl FakeLinkCalls {
     /// Central refuses a request it was sent or will be sent.
     pub fn refuse(&self, request: &RequestId, reason: crate::LinkAdmissionRefusal) {
         if let Some(entry) = self.lock().requests.get_mut(request) {
-            entry.status = RequestStatus::Refused(reason);
+            entry.status = RequestStatus::Refused(crate::RequestStatusRefusal::Link(reason));
         }
     }
 
@@ -140,22 +153,17 @@ impl FakeLinkCalls {
         let request_id = payload.write_request_id().cloned();
         match (submission_path(&payload), request_id) {
             (SubmissionPath::Outbox, Some(request_id)) => {
-                if let Some(existing) = state.requests.get(&request_id) {
-                    return resubmitted_outbox_write(existing, &caller, &payload, request_id);
-                }
-                let flush_at = earliest_open_mark(now, state.last_flushed);
-                state.requests.insert(
-                    request_id.clone(),
-                    FakeRequest {
-                        caller,
-                        payload,
-                        status: RequestStatus::InOutbox { flush_at },
-                    },
-                );
-                Submission::InOutbox(OutboxReceipt {
-                    id: request_id,
-                    flush_at,
-                })
+                let RequestPayload::Workspace(request) = payload else {
+                    return Submission::Refused(SubmitRefusal::UnstampedMessageRequired);
+                };
+                queue_write(
+                    &mut state,
+                    caller,
+                    QueuedWrite::Workspace(request),
+                    request_id,
+                    now,
+                    self.clock.utc_now(),
+                )
             }
             (SubmissionPath::Outbox, None) => {
                 Submission::Refused(SubmitRefusal::InvalidRequest(request_id_policy()))
@@ -203,7 +211,7 @@ fn immediate_submission(
                 request_id.clone(),
                 FakeRequest {
                     caller,
-                    payload,
+                    payload: FakePayload::Immediate(scope.clone()),
                     status: RequestStatus::Sent,
                 },
             );
@@ -219,7 +227,7 @@ fn immediate_submission(
                     request_id,
                     FakeRequest {
                         caller,
-                        payload,
+                        payload: FakePayload::Immediate(payload.request_scope()),
                         status: RequestStatus::Answered(reply.clone()),
                     },
                 );
@@ -229,15 +237,46 @@ fn immediate_submission(
     }
 }
 
+fn queue_write(
+    state: &mut FakeState,
+    caller: Caller,
+    write: QueuedWrite,
+    request_id: RequestId,
+    now: SyncTime,
+    created_at: Timestamp,
+) -> Submission {
+    if let Some(existing) = state.requests.get(&request_id) {
+        return resubmitted_outbox_write(existing, &caller, &write, request_id);
+    }
+    let flush_at = earliest_open_mark(now, state.last_flushed);
+    state.requests.insert(
+        request_id.clone(),
+        FakeRequest {
+            caller,
+            payload: FakePayload::Queued {
+                write: Box::new(write),
+                created_at,
+            },
+            status: RequestStatus::InOutbox { flush_at },
+        },
+    );
+    Submission::InOutbox(OutboxReceipt {
+        id: request_id,
+        flush_at,
+    })
+}
+
 /// Resubmitting the same id and content returns the first receipt; the same id
 /// with different content or from another caller is refused.
 fn resubmitted_outbox_write(
     existing: &FakeRequest,
     caller: &Caller,
-    payload: &RequestPayload,
+    payload: &QueuedWrite,
     request_id: RequestId,
 ) -> Submission {
-    if existing.caller != *caller || existing.payload != *payload {
+    if existing.caller != *caller
+        || !matches!(&existing.payload, FakePayload::Queued { write, .. } if write.as_ref() == payload)
+    {
         return Submission::Refused(SubmitRefusal::RequestIdConflict);
     }
     match existing.status {
@@ -248,10 +287,11 @@ fn resubmitted_outbox_write(
         RequestStatus::Answered(ref reply) => Submission::Answered(reply.clone()),
         RequestStatus::Sent
         | RequestStatus::Refused(_)
-        | RequestStatus::Cancelled { .. }
+        | RequestStatus::Ended { .. }
+        | RequestStatus::StatusUnavailable
         | RequestStatus::NotFound => Submission::Uncertain {
             request: request_id,
-            scope: existing.payload.request_scope(),
+            scope: payload.request_scope(),
         },
     }
 }
@@ -261,6 +301,33 @@ const fn request_id_policy() -> ProtocolError {
 }
 
 impl LinkCalls for FakeLinkCalls {
+    fn submit_message(
+        &self,
+        caller: Caller,
+        request_id: RequestId,
+        message: workspace_model::central_mail::SendMessageRequest,
+    ) -> LinkCallFuture<'_, Submission> {
+        let created_at = self.clock.utc_now();
+        let now = SyncTime::from_unix_millis(created_at.timestamp_millis());
+        let mut state = self.lock();
+        let submission = if state.central == FakeCentral::NotEnrolled {
+            Submission::Refused(SubmitRefusal::NotEnrolled)
+        } else {
+            queue_write(
+                &mut state,
+                caller,
+                QueuedWrite::SendMessage {
+                    request_id: request_id.clone(),
+                    message,
+                },
+                request_id,
+                now,
+                created_at,
+            )
+        };
+        Box::pin(async move { submission })
+    }
+
     fn submit(&self, caller: Caller, payload: RequestPayload) -> LinkCallFuture<'_, Submission> {
         let submission = self.submit_now(caller, payload);
         Box::pin(async move { submission })
@@ -269,13 +336,19 @@ impl LinkCalls for FakeLinkCalls {
     fn request_status(
         &self,
         caller: Caller,
-        request: RequestId,
+        query: central_link_protocol::RequestStatusQuery,
     ) -> LinkCallFuture<'_, RequestStatus> {
         let status = self
             .lock()
             .requests
-            .get(&request)
-            .filter(|entry| entry.caller == caller)
+            .get(&query.request_id)
+            .filter(|entry| {
+                entry.caller == caller
+                    && match &entry.payload {
+                        FakePayload::Immediate(scope) => *scope == query.scope,
+                        FakePayload::Queued { write, .. } => write.request_scope() == query.scope,
+                    }
+            })
             .map_or(RequestStatus::NotFound, |entry| entry.status.clone());
         Box::pin(async move { status })
     }

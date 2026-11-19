@@ -4,8 +4,8 @@
 mod driver_task;
 #[cfg(test)]
 mod driver_test_support;
-mod installation_link;
 mod link_transport;
+mod machine_link;
 #[cfg(test)]
 mod overlay_property_test;
 #[cfg(test)]
@@ -16,18 +16,18 @@ mod store_faults;
 pub use central_link_client::{
     LinkStatus as CentralLinkStatus, RefusalReason as CentralLinkRefusal,
 };
-pub use installation_link::{
-    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, open_installation_link,
-    start_installation_link,
-};
 pub use link_transport::{
     AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
+pub use machine_link::{
+    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, open_machine_link,
+    start_machine_link,
+};
 use workspace_ids::MachineId;
 
-use crate::OutboxStorage;
 use crate::outbox_store::OutboxStoreError;
+use crate::{CentralInbox, OutboxStorage};
 use central_link_client::{
     FlushOutcomeSink, LinkCallFuture, LinkCalls, LinkClient, LinkStatus, OutgoingWrite,
     PendingWrite, RequestStatus, Submission, SubmitRefusal,
@@ -38,7 +38,7 @@ use runtime_primitives::SyncTime;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_model::{Caller, RequestId};
+use workspace_model::Caller;
 
 /// Where on a minute mark's ±3 s window this Router sends (owner, 2026-11-15:
 /// "jitter i was thinking +-3s"). Injected so tests and simulations decide it.
@@ -48,14 +48,14 @@ pub trait FlushJitter: Send + Sync {
 }
 
 /// Spreads Routers across the window by their installation, deterministically.
-pub struct InstallationFlushJitter {
+pub struct MachineFlushJitter {
     seed: u64,
 }
 
-impl InstallationFlushJitter {
+impl MachineFlushJitter {
     #[must_use]
-    pub fn new(installation: &MachineId) -> Self {
-        let seed = installation
+    pub fn new(machine_id: &MachineId) -> Self {
+        let seed = machine_id
             .as_str()
             .bytes()
             .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
@@ -65,7 +65,7 @@ impl InstallationFlushJitter {
     }
 }
 
-impl FlushJitter for InstallationFlushJitter {
+impl FlushJitter for MachineFlushJitter {
     fn jitter_millis(&self, mark: SyncTime) -> i64 {
         let mixed = self.seed ^ mark.unix_millis().cast_unsigned();
         i64::try_from(mixed % 6_001).unwrap_or(0) - 3_000
@@ -73,6 +73,12 @@ impl FlushJitter for InstallationFlushJitter {
 }
 
 pub(crate) enum DriverCommand {
+    QueueMessage {
+        caller: Caller,
+        request_id: workspace_model::RequestId,
+        message: workspace_model::central_mail::SendMessageRequest,
+        reply: oneshot::Sender<Submission>,
+    },
     Submit {
         caller: Caller,
         payload: RequestPayload,
@@ -80,7 +86,7 @@ pub(crate) enum DriverCommand {
     },
     Status {
         caller: Caller,
-        request: RequestId,
+        query: central_link_protocol::RequestStatusQuery,
         reply: oneshot::Sender<RequestStatus>,
     },
     Pending {
@@ -99,13 +105,14 @@ pub(crate) enum DriverCommand {
 
 /// Everything the driver needs, created once by the Host.
 pub struct CentralLinkParts {
-    pub installation: MachineId,
+    pub machine_id: MachineId,
     pub clock: Arc<dyn RuntimeClock>,
     pub store: Arc<Mutex<dyn OutboxStorage>>,
     pub transport: Arc<dyn LinkTransport>,
     pub tokens: Arc<dyn MachineTokenSource>,
     pub jitter: Arc<dyn FlushJitter>,
     pub outcomes: Arc<dyn FlushOutcomeSink>,
+    pub inbox: Option<CentralInbox>,
 }
 
 /// The tools' handle on the running link. Cheap to clone.
@@ -126,17 +133,22 @@ impl RouterLinkCalls {
     /// Starts the link driver on `tasks`; it stops when `stop` is cancelled.
     pub fn start(parts: CentralLinkParts, tasks: &TaskTracker, stop: CancellationToken) -> Self {
         let (commands, receiver) = mpsc::channel(256);
-        let client = LinkClient::new(parts.installation, parts.clock.clone());
-        let driver = driver_task::LinkDriver::new(
-            parts.clock,
-            parts.store,
-            parts.transport,
-            parts.tokens,
-            parts.jitter,
-            parts.outcomes,
-            client,
-        );
-        tasks.spawn(driver.run(receiver, stop));
+        let client = LinkClient::new(parts.machine_id.clone(), parts.clock.clone());
+        let stop = stop.child_token();
+        if let Some(inbox) = &parts.inbox {
+            inbox.start_handoff(
+                parts.clock.clone(),
+                parts.store.clone(),
+                parts.outcomes.clone(),
+                tasks,
+                stop.clone(),
+            );
+        }
+        let driver = driver_task::LinkDriver::new(parts, client);
+        tasks.spawn(async move {
+            let _stop_inbox_on_exit = stop.clone().drop_guard();
+            driver.run(receiver, stop).await;
+        });
         Self { commands }
     }
 
@@ -182,9 +194,52 @@ impl RouterLinkCalls {
 }
 
 impl LinkCalls for RouterLinkCalls {
+    fn submit_message(
+        &self,
+        caller: Caller,
+        request_id: workspace_model::RequestId,
+        message: workspace_model::central_mail::SendMessageRequest,
+    ) -> LinkCallFuture<'_, Submission> {
+        Box::pin(async move {
+            let (reply, answer) = oneshot::channel();
+            let request = request_id.clone();
+            if self
+                .commands
+                .send(DriverCommand::QueueMessage {
+                    caller,
+                    request_id,
+                    message,
+                    reply,
+                })
+                .await
+                .is_err()
+            {
+                return Submission::Refused(SubmitRefusal::OutboxUnavailable);
+            }
+            answer.await.unwrap_or(Submission::Uncertain {
+                request,
+                scope: central_link_protocol::RequestScope::Organization,
+            })
+        })
+    }
+
     fn submit(&self, caller: Caller, payload: RequestPayload) -> LinkCallFuture<'_, Submission> {
         Box::pin(async move {
             let (reply, answer) = oneshot::channel();
+            let unavailable = match central_link_client::submission_path(&payload) {
+                central_link_client::SubmissionPath::Outbox => SubmitRefusal::OutboxUnavailable,
+                central_link_client::SubmissionPath::Immediate => SubmitRefusal::CentralUnavailable,
+            };
+            let lost_reply =
+                payload
+                    .write_request_id()
+                    .cloned()
+                    .map_or(Submission::ReadAnswerLost, |request| {
+                        Submission::Uncertain {
+                            request,
+                            scope: payload.request_scope(),
+                        }
+                    });
             let sent = self
                 .commands
                 .send(DriverCommand::Submit {
@@ -194,10 +249,8 @@ impl LinkCalls for RouterLinkCalls {
                 })
                 .await;
             match sent {
-                Ok(()) => answer
-                    .await
-                    .unwrap_or(Submission::Refused(SubmitRefusal::CentralUnavailable)),
-                Err(_) => Submission::Refused(SubmitRefusal::CentralUnavailable),
+                Ok(()) => answer.await.unwrap_or(lost_reply),
+                Err(_) => Submission::Refused(unavailable),
             }
         })
     }
@@ -205,7 +258,7 @@ impl LinkCalls for RouterLinkCalls {
     fn request_status(
         &self,
         caller: Caller,
-        request: RequestId,
+        query: central_link_protocol::RequestStatusQuery,
     ) -> LinkCallFuture<'_, RequestStatus> {
         Box::pin(async move {
             let (reply, answer) = oneshot::channel();
@@ -213,13 +266,13 @@ impl LinkCalls for RouterLinkCalls {
                 .commands
                 .send(DriverCommand::Status {
                     caller,
-                    request,
+                    query,
                     reply,
                 })
                 .await;
             match sent {
-                Ok(()) => answer.await.unwrap_or(RequestStatus::NotFound),
-                Err(_) => RequestStatus::NotFound,
+                Ok(()) => answer.await.unwrap_or(RequestStatus::StatusUnavailable),
+                Err(_) => RequestStatus::StatusUnavailable,
             }
         })
     }

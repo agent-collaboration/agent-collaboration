@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-test-support = ["dep:sqlx-turso"]
+test-support = ["dep:sqlx-turso", "router-clock/test-support"]
 runtime-test-support = ["interaction-storage/runtime-test-support"]
 
 [lints]
@@ -59,9 +59,7 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-# The integration target runs the link driver on the in-memory outbox.
-collaboration-runtime = { path = ".", features = ["test-support"] }
-# Turmoil link simulation (tests/integration/turmoil_link): simulated network, time and sockets.
+collaboration-link-test-support = { version = "0.1.154", path = "../collaboration-link-test-support" }
 rand.workspace = true
 turmoil.workspace = true
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }

@@ -24,6 +24,7 @@ workspace = true
 
 [dependencies]
 workspace-ids.workspace = true
+workspace-model.workspace = true
 router-clock.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true
@@ -76,6 +77,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+central-link-protocol.workspace = true
 router-clock = { workspace = true, features = ["test-support"] }
 collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.126", features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }

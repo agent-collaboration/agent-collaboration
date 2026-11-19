@@ -1,6 +1,7 @@
 //! Two real Host compositions share the same persisted native session identity.
 use super::*;
 use board_sync_protocol::{FleetLinkRecord, FleetLinkRefusal, FleetLinkState};
+use sqlx::{Connection as _, SqliteConnection, sqlite::SqliteConnectOptions};
 
 #[tokio::test]
 async fn two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_flop() {
@@ -41,13 +42,27 @@ async fn two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_
         std::fs::Permissions::from_mode(0o700),
     )
     .unwrap();
-    for identity in ["installation-peer.json", "service-identity.json"] {
-        std::fs::copy(
-            first.directory.path().join(identity),
-            second_directory.path().join(identity),
-        )
+    let identity_path = second_directory
+        .path()
+        .join(collaboration_runtime::MACHINE_LOCAL_DATABASE);
+    collaboration_runtime::MachineLocalStore::open(&identity_path)
+        .await
+        .unwrap()
+        .close()
+        .await
         .unwrap();
-    }
+    let mut identity_store =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(identity_path))
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO machine_identity (machine_id, created_at, updated_at) VALUES (?, 0, 0)",
+    )
+    .bind(first.runtime.service_id().as_str())
+    .execute(&mut identity_store)
+    .await
+    .unwrap();
+    identity_store.close().await.unwrap();
     let cache_store = message_board_storage::FleetStore::open(
         &second_directory
             .path()

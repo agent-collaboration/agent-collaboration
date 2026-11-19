@@ -32,6 +32,13 @@ impl StoredThreadCatalog {
             .fetch_all(&self.pool)
             .await
     }
+    /// Checks the exact provider id in normal Codex state without opening a thread.
+    pub async fn contains_session(&self, session_id: &str) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?)")
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await
+    }
     pub async fn close(self) {
         self.pool.close().await;
     }

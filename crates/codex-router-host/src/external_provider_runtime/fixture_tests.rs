@@ -47,7 +47,7 @@ pub(super) fn classify_provider_output(
                 if matches!(index, 8 | 13 | 18 | 23) {
                     *byte == b'-'
                 } else {
-                    byte.is_ascii_hexdigit()
+                    byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)
                 }
             })
     }
@@ -56,7 +56,7 @@ pub(super) fn classify_provider_output(
         byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
     }
 
-    let expected = String::from(expected_service_id.clone());
+    let expected = expected_service_id.as_str();
     let bytes = output.as_bytes();
     let mut returned_uuids = Vec::new();
     let mut start = 0_usize;
@@ -68,17 +68,15 @@ pub(super) fn classify_provider_output(
             && bounded_after
             && is_uuid_shape(&bytes[start..end])
             && let Ok(candidate) = std::str::from_utf8(&bytes[start..end])
-            && let Ok(identity) = workspace_ids::MachineId::try_from(candidate.to_owned())
         {
-            returned_uuids.push(identity);
+            // Extra UUIDs count against the provider response regardless of version.
+            returned_uuids.push(candidate);
             start = end;
             continue;
         }
         start += 1;
     }
-    let expected_identity_token_present = returned_uuids
-        .iter()
-        .any(|identity| identity == expected_service_id);
+    let expected_identity_token_present = returned_uuids.contains(&expected);
     ProviderOutputClassification {
         output_empty: output.is_empty(),
         exact_identity_equal: output.trim() == expected,

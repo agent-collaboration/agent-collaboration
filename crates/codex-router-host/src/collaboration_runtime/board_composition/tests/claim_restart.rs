@@ -12,7 +12,10 @@ use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
 use std::{
     io::Write,
-    os::unix::{fs::OpenOptionsExt, process::ExitStatusExt},
+    os::unix::{
+        fs::{OpenOptionsExt, PermissionsExt},
+        process::ExitStatusExt,
+    },
     process::Stdio,
 };
 use tokio::{
@@ -46,6 +49,7 @@ const CHILD_PHASE: &str = "BOARD_CLAIM_RESTART_PHASE";
 #[derive(Serialize, Deserialize)]
 struct ChildInputs {
     root: std::path::PathBuf,
+    origin: ActorOrigin,
     endpoint: String,
     peer: PeerId,
     relay: PeerId,
@@ -126,11 +130,24 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
     let receiving = !matches!(journey, RestartJourney::ClaimCrash);
     let graceful = matches!(journey, RestartJourney::ReceivingGraceful);
     let directory = tempfile::tempdir()?;
-    let central = board_central_test_support::TestCentral::start(
-        &directory.path().join("central"),
-        &origin()?,
-    )
-    .await?;
+    let root = directory.path().join("router");
+    let mut origin = origin()?;
+    let central_root = directory.path().join("central");
+    let central = if graceful {
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
+        let machine_id = collaboration_runtime::load_or_create_machine_id(
+            &root,
+            runtime_primitives::SyncTime::from_unix_millis(0),
+        )
+        .await?;
+        origin.installation = machine_id.as_str().to_owned().try_into()?;
+        let peer = PeerId::try_from(machine_id.as_str().to_owned())?;
+        board_central_test_support::TestCentral::start_with_peer(&central_root, &origin, peer)
+            .await?
+    } else {
+        board_central_test_support::TestCentral::start(&central_root, &origin).await?
+    };
     let project = ProjectId::generate();
     let (snapshot, record) = project_claim::imported_snapshot(
         &central,
@@ -140,7 +157,8 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
     .await?;
     let inputs = central.session_inputs()?;
     let mut config = ChildInputs {
-        root: directory.path().join("router"),
+        root,
+        origin,
         endpoint: inputs.endpoint.as_str().to_owned(),
         peer: inputs.peer,
         relay: inputs.relay,
@@ -314,7 +332,7 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
                 posted["text"],
                 "committed after interrupted receiving install"
             );
-            assert_eq!(posted["origin"], serde_json::to_value(origin()?)?);
+            assert_eq!(posted["origin"], serde_json::to_value(&config.origin)?);
         }
         let status = timeout(BOUND, second.wait()).await??;
         if !status.success() {

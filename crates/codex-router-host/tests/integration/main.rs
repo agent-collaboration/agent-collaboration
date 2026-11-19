@@ -3,6 +3,8 @@
 use collaboration_application_test_support::board_fixture;
 #[path = "../support/host_replacement_cleanup.rs"]
 mod host_replacement_cleanup;
+#[path = "../support/machine_identity_fixture.rs"]
+mod machine_identity_fixture;
 #[path = "../support/operator_client.rs"]
 mod operator_client;
 #[path = "../support/provider_acp_message_fifo_support.rs"]

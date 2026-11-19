@@ -1,105 +1,15 @@
 //! Every write the Router accepted reaches central exactly once, through link
 //! partitions, lost answers and a Router restart, and its answer names the post
 //! central created the first time.
-use super::{
-    central_request_log::{CENTRAL_HOST, CentralLog, SharedCentralLog, serve_central},
-    router_host::{
-        INSTALLATION, ROUTER_HOST, RouterPlan, RouterReport, SharedRouterReport, run_router,
-    },
-};
 use central_link_client::RequestStatus;
 use central_link_protocol::ReplyPayload;
-use rand::{Rng, SeedableRng, rngs::SmallRng};
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    time::{Duration, SystemTime},
+use collaboration_link_test_support::{
+    router_host::RouterPlan,
+    write_simulation::{Cut, Outcome, Partition, run_write_simulation},
 };
+use rand::{Rng, SeedableRng, rngs::SmallRng};
+use std::time::Duration;
 use workspace_model::{ItemRef, WorkspaceAnswer, WorkspaceReply, WorkspaceResult};
-
-/// 2030-01-01T00:00:00Z: simulated UTC never comes from the machine running the test.
-const EPOCH_UNIX_SECONDS: u64 = 1_893_456_000;
-const TICK: Duration = Duration::from_millis(20);
-
-/// Which way a partition drops messages.
-#[derive(Clone, Copy, Debug)]
-enum Cut {
-    /// Nothing gets through either way: a batch may never reach central.
-    BothWays,
-    /// Central receives but its answers are dropped: central applies the
-    /// write and the Router never hears, so the write is replayed.
-    AnswersLost,
-}
-
-/// A partition between router and central, from `at` for `lasting`.
-#[derive(Clone, Copy, Debug)]
-struct Partition {
-    at: Duration,
-    lasting: Duration,
-    cut: Cut,
-}
-
-struct Outcome {
-    central: CentralLog,
-    router: RouterReport,
-}
-
-#[expect(
-    clippy::unwrap_used,
-    reason = "a harness failure (tempdir, simulation) must fail the test loudly"
-)]
-fn run(seed: u64, plan: RouterPlan, partitions: &[Partition]) -> Outcome {
-    let central_log: SharedCentralLog = Rc::new(RefCell::new(CentralLog::default()));
-    let report: SharedRouterReport = Rc::new(RefCell::new(RouterReport::default()));
-    let mut sim = turmoil::Builder::new()
-        .rng_seed(seed)
-        .epoch(SystemTime::UNIX_EPOCH + Duration::from_secs(EPOCH_UNIX_SECONDS))
-        .tick_duration(TICK)
-        .simulation_duration(Duration::from_secs(3 * 60 * 60))
-        .min_message_latency(Duration::from_millis(1))
-        .max_message_latency(Duration::from_millis(80))
-        .build();
-    let central = Rc::clone(&central_log);
-    sim.host(CENTRAL_HOST, move || {
-        serve_central(INSTALLATION.parse().unwrap(), Rc::clone(&central))
-    });
-    let router_report = Rc::clone(&report);
-    sim.client(ROUTER_HOST, run_router(plan, router_report));
-    let mut partitioned_until: Option<(Duration, Cut)> = None;
-    let mut pending: Vec<Partition> = partitions.to_vec();
-    pending.sort_by_key(|partition| partition.at);
-    loop {
-        let now = sim.elapsed();
-        if let Some((until, cut)) = partitioned_until
-            && now >= until
-        {
-            match cut {
-                Cut::BothWays => sim.repair(ROUTER_HOST, CENTRAL_HOST),
-                Cut::AnswersLost => sim.repair_oneway(CENTRAL_HOST, ROUTER_HOST),
-            }
-            partitioned_until = None;
-        }
-        if partitioned_until.is_none()
-            && let Some(next) = pending.first().copied()
-            && now >= next.at
-        {
-            pending.remove(0);
-            match next.cut {
-                Cut::BothWays => sim.partition(ROUTER_HOST, CENTRAL_HOST),
-                Cut::AnswersLost => sim.partition_oneway(CENTRAL_HOST, ROUTER_HOST),
-            }
-            partitioned_until = Some((now + next.lasting, next.cut));
-        }
-        if sim.step().unwrap() {
-            break;
-        }
-    }
-    drop(sim);
-    Outcome {
-        central: Rc::try_unwrap(central_log).ok().unwrap().into_inner(),
-        router: Rc::try_unwrap(report).ok().unwrap().into_inner(),
-    }
-}
 
 fn created_post(status: &RequestStatus) -> Option<String> {
     match status {
@@ -173,7 +83,7 @@ fn writes_cross_a_partition_and_a_restart_and_reach_central_once() {
         },
     ];
 
-    let outcome = run(7, plan, &partitions);
+    let outcome = run_write_simulation(7, plan, &partitions);
 
     assert_each_write_reached_central_once(&outcome, "fixed schedule");
     assert!(
@@ -211,7 +121,7 @@ fn seeded_fault_schedules_never_lose_or_double_a_write() {
             answers_by: Duration::from_secs(40 * 60),
         };
 
-        let outcome = run(seed, plan.clone(), &partitions);
+        let outcome = run_write_simulation(seed, plan.clone(), &partitions);
 
         assert_each_write_reached_central_once(
             &outcome,
@@ -237,8 +147,8 @@ fn the_same_seed_gives_the_same_timeline_twice() {
         cut: Cut::AnswersLost,
     }];
 
-    let first = run(11, plan.clone(), &partitions);
-    let second = run(11, plan, &partitions);
+    let first = run_write_simulation(11, plan.clone(), &partitions);
+    let second = run_write_simulation(11, plan, &partitions);
 
     assert!(!first.central.timeline.is_empty());
     assert_eq!(first.central.timeline, second.central.timeline);

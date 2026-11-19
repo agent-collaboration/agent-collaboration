@@ -6,8 +6,6 @@ use collaboration_protocol::{
     ObservationTimestamp, ProviderKind, RouterExecutableRelation, SchemaDigest, UuidIdentity,
 };
 use collaboration_runtime::NativeRelayListener;
-use collaboration_runtime::load_installation_peer;
-use collaboration_runtime::load_service_identity;
 use collaboration_runtime::new_service_uuid;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
@@ -35,6 +33,7 @@ pub struct CollaborationRuntimeInputs {
 pub(crate) struct HostCollaborationInputs {
     pub enrollment_reset_directory: PathBuf,
     pub collaboration_runtime: CollaborationRuntimeInputs,
+    pub central_link: Option<collaboration_runtime::ConfiguredCentralLink>,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,
 }
@@ -145,7 +144,7 @@ pub struct CollaborationRuntime {
     /// `nativeSchemaDigest`.
     native_digest: Option<SchemaDigest>,
     payload_cache: crate::native_schema_cache::NativeSchemaCache,
-    service_id: workspace_ids::MachineId,
+    machine_id: workspace_ids::MachineId,
     installation_peer: fleet_sync_protocol::PeerId,
     service_epoch: UuidIdentity,
     publication: BackendPublication,
@@ -279,7 +278,7 @@ impl CollaborationRuntime {
 
     #[must_use]
     pub fn service_id(&self) -> &workspace_ids::MachineId {
-        &self.service_id
+        &self.machine_id
     }
     #[must_use]
     pub fn installation_peer(&self) -> fleet_sync_protocol::PeerId {
@@ -296,6 +295,8 @@ mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
 #[path = "collaboration_runtime/board_composition.rs"]
 mod board_composition;
+#[path = "collaboration_runtime/central_recipient_directory.rs"]
+mod central_recipient_directory;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
 #[path = "collaboration_runtime/mail_delivery_composition.rs"]

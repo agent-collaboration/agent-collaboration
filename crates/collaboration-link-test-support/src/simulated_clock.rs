@@ -8,13 +8,13 @@ use router_clock::{ClockInstant, RuntimeClock};
 use runtime_primitives::{Clock, SyncTime};
 use std::{future::Future, pin::Pin};
 
-pub(super) struct SimulatedClock {
+pub struct SimulatedClock {
     host_name: &'static str,
 }
 
 impl SimulatedClock {
     /// Create inside the host's software: Turmoil answers for the running host.
-    pub(super) fn for_host(host_name: &'static str) -> Self {
+    pub fn for_host(host_name: &'static str) -> Self {
         Self { host_name }
     }
 }

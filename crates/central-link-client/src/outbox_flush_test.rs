@@ -59,6 +59,9 @@ impl FlushModel {
                     assert_eq!(mark.unix_millis().rem_euclid(FLUSH_INTERVAL_MILLIS), 0);
                     self.armed_wake = Some(*mark);
                 }
+                FlushEffect::WakeAtLocalDeadline { .. } => {
+                    panic!("the minute schedule model does not request local deadline wakes");
+                }
             }
         }
         effects

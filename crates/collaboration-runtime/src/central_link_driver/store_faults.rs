@@ -90,12 +90,37 @@ macro_rules! faulty {
 }
 
 impl OutboxStorage for FaultyOutbox {
+    fn scoped_request_status<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        query: &'call central_link_protocol::RequestStatusQuery,
+    ) -> OutboxFuture<'call, RequestStatus> {
+        faulty!(
+            self,
+            "request_status",
+            self.inner.scoped_request_status(caller, query)
+        )
+    }
     fn insert<'call>(
         &'call mut self,
         item: &'call NewOutboxItem,
         now: SyncTime,
     ) -> OutboxFuture<'call, OutboxInsert> {
-        faulty!(self, "insert", self.inner.insert(item, now))
+        match self.plan.take("insert") {
+            None => self.inner.insert(item, now),
+            Some(FaultKind::BeforeCall) => Box::pin(async {
+                Err(OutboxStoreError::InsertNotStarted(
+                    sqlx::Error::PoolTimedOut,
+                ))
+            }),
+            Some(FaultKind::AfterCommit) => {
+                let call = self.inner.insert(item, now);
+                Box::pin(async move {
+                    let _committed = call.await;
+                    injected()
+                })
+            }
+        }
     }
     fn request_status<'call>(
         &'call mut self,
@@ -134,6 +159,9 @@ impl OutboxStorage for FaultyOutbox {
     fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
         faulty!(self, "earliest_waiting", self.inner.earliest_waiting())
     }
+    fn earliest_deadline(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        faulty!(self, "earliest_deadline", self.inner.earliest_deadline())
+    }
     fn claim_next_batch(
         &mut self,
         mark: SyncTime,
@@ -151,6 +179,18 @@ impl OutboxStorage for FaultyOutbox {
         now: SyncTime,
     ) -> OutboxFuture<'_, Vec<central_link_client::EndedWrite>> {
         faulty!(self, "end_overdue", self.inner.end_overdue(now))
+    }
+    fn record_sender_delivery<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        notice: &'call central_link_client::SenderDeliveryOutcome,
+        now: SyncTime,
+    ) -> OutboxFuture<'call, bool> {
+        faulty!(
+            self,
+            "record_sender_delivery",
+            self.inner.record_sender_delivery(caller, notice, now)
+        )
     }
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {
         faulty!(

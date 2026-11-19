@@ -67,23 +67,23 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
     };
     let root = fixture.directory.path().join("nonholder");
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+    let reader_id = collaboration_runtime::load_or_create_machine_id(
+        &root,
+        runtime_primitives::SyncTime::from_unix_millis(0),
+    )
+    .await?;
     let reader_origin = ActorOrigin {
-        installation: "550e8400-e29b-41d4-a716-446655440009"
-            .to_owned()
-            .try_into()?,
+        installation: reader_id.as_str().to_owned().try_into()?,
         machine: "native Directory reader".to_owned().try_into()?,
     };
     let enrolled = fixture
         .central
         .additional_machine(
             &reader_origin,
-            collaboration_runtime::load_installation_peer(&root)?,
+            fleet_sync_protocol::PeerId::try_from(reader_id.as_str().to_owned())?,
         )
         .await?;
-    let reader_identity = MachineIdentity::new(
-        workspace_ids::MachineId::try_from(reader_origin.installation.as_str().to_owned())?,
-        Some(reader_origin.machine.as_str()),
-    )?;
+    let reader_identity = MachineIdentity::new(reader_id, Some(reader_origin.machine.as_str()))?;
     let board =
         open_board_admission(&root, reader_identity, Some(enrolled.session_inputs()?)).await?;
     let session = board.session.as_ref().ok_or("reader session")?;

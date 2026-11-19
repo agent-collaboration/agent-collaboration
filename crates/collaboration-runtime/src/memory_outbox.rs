@@ -8,12 +8,13 @@ use crate::outbox_store::{
     ANSWERED_RETENTION_MILLIS, ClaimedBatch, NewOutboxItem, OutboxInsert, OutboxStoreError,
     StoredOutboxWrite, payload_content_digest, with_send_time,
 };
+use central_link_client::QueuedWrite;
 use central_link_client::{
     EndedWrite, LinkAdmissionRefusal, MemberOutcome, OutboxCancellation, OutboxWriteContent,
     OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,
     RequestStatus,
 };
-use central_link_protocol::{ReplyPayload, RequestPayload};
+use central_link_protocol::ReplyPayload;
 use runtime_primitives::SyncTime;
 use std::collections::BTreeMap;
 use workspace_model::{Caller, RequestId};
@@ -36,9 +37,10 @@ enum RowState {
 struct Row {
     caller: Caller,
     /// The whole write until it ends; None once answered, refused or cancelled.
-    payload: Option<RequestPayload>,
+    payload: Option<QueuedWrite>,
     target: OutboxWriteTarget,
     content_digest: String,
+    delivery_outcome: Option<central_link_client::SenderDeliveryOutcome>,
     flush_at: SyncTime,
     expires_at: i64,
     state: RowState,
@@ -54,8 +56,10 @@ impl Row {
             },
             RowState::Sent | RowState::Resent => RequestStatus::Sent,
             RowState::Answered(reply) => RequestStatus::Answered(reply.clone()),
-            RowState::Refused(reason) => RequestStatus::Refused(*reason),
-            RowState::Ended(reason) => RequestStatus::Cancelled { reason: *reason },
+            RowState::Refused(reason) => {
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(*reason))
+            }
+            RowState::Ended(reason) => RequestStatus::Ended { reason: *reason },
         }
     }
 }
@@ -97,22 +101,37 @@ fn sent(state: &RowState) -> bool {
 
 fn content(
     request: &RequestId,
-    payload: &RequestPayload,
+    payload: &QueuedWrite,
 ) -> Result<OutboxWriteContent, OutboxStoreError> {
-    OutboxWriteContent::of(payload).ok_or_else(|| OutboxStoreError::CorruptItem {
-        request_id: request.as_str().to_owned(),
-        field: "payload_json",
-    })
+    payload
+        .content()
+        .ok_or_else(|| OutboxStoreError::CorruptItem {
+            request_id: request.as_str().to_owned(),
+            field: "payload_json",
+        })
 }
 
 impl OutboxStorage for MemoryOutbox {
+    fn scoped_request_status<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        query: &'call central_link_protocol::RequestStatusQuery,
+    ) -> OutboxFuture<'call, RequestStatus> {
+        Box::pin(async move {
+            Ok(self
+                .rows
+                .get(&query.request_id)
+                .filter(|row| row.caller == *caller && row.target.request_scope() == query.scope)
+                .map_or(RequestStatus::NotFound, Row::status))
+        })
+    }
     fn insert<'call>(
         &'call mut self,
         item: &'call NewOutboxItem,
         now: SyncTime,
     ) -> OutboxFuture<'call, OutboxInsert> {
         Box::pin(async move {
-            if item.payload.write_request_id() != Some(&item.request) {
+            if item.payload.request_id() != Some(&item.request) {
                 return Err(OutboxStoreError::RequestIdMismatch {
                     request: item.request.clone(),
                 });
@@ -122,7 +141,8 @@ impl OutboxStorage for MemoryOutbox {
                 let same_write = match &row.payload {
                     Some(payload) => payload == &item.payload,
                     None => {
-                        OutboxWriteContent::of(&item.payload)
+                        item.payload
+                            .content()
                             .is_some_and(|written| written.target == row.target)
                             && digest == row.content_digest
                     }
@@ -142,6 +162,7 @@ impl OutboxStorage for MemoryOutbox {
                     payload: Some(item.payload.clone()),
                     target,
                     content_digest: digest,
+                    delivery_outcome: None,
                     flush_at: item.flush_at,
                     expires_at,
                     state: RowState::InOutbox,
@@ -298,6 +319,17 @@ impl OutboxStorage for MemoryOutbox {
         })
     }
 
+    fn earliest_deadline(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        Box::pin(async move {
+            Ok(self
+                .rows
+                .values()
+                .filter(|row| unsent(&row.state))
+                .map(|row| SyncTime::from_unix_millis(row.expires_at))
+                .min())
+        })
+    }
+
     fn claim_next_batch(
         &mut self,
         mark: SyncTime,
@@ -324,6 +356,59 @@ impl OutboxStorage for MemoryOutbox {
 
     fn end_overdue(&mut self, now: SyncTime) -> OutboxFuture<'_, Vec<EndedWrite>> {
         Box::pin(async move { self.end_overdue_waiting(now) })
+    }
+    fn record_sender_delivery<'call>(
+        &'call mut self,
+        caller: &'call Caller,
+        notice: &'call central_link_client::SenderDeliveryOutcome,
+        now: SyncTime,
+    ) -> OutboxFuture<'call, bool> {
+        Box::pin(async move {
+            let Some(row) = self
+                .rows
+                .get_mut(&notice.request_id)
+                .filter(|row| row.caller == *caller)
+            else {
+                return Ok(false);
+            };
+            if !matches!(row.target, OutboxWriteTarget::Session { .. }) {
+                return Err(OutboxStoreError::DeliveryOutcomeMismatch {
+                    request: notice.request_id.clone(),
+                });
+            }
+            let may_have_left = matches!(
+                row.state,
+                RowState::Sent
+                    | RowState::Resent
+                    | RowState::SentAnswerLost
+                    | RowState::Ended(OutboxCancellation::NotConfirmedWithin15Minutes)
+            );
+            let accepted = crate::outbox_delivery_outcome_store::confirmed_request(
+                &row.status(),
+                may_have_left,
+                notice,
+            )?;
+            match row.delivery_outcome.as_ref() {
+                Some(previous) if previous == notice => return Ok(true),
+                Some(previous) if previous.inbox_message_id == notice.inbox_message_id => {
+                    return Err(OutboxStoreError::DeliveryOutcomeMismatch {
+                        request: notice.request_id.clone(),
+                    });
+                }
+                Some(previous)
+                    if previous.outcome
+                        == workspace_model::central_mail::MessageOutcome::DeliveredAfterAll =>
+                {
+                    return Ok(false);
+                }
+                Some(_) | None => {}
+            }
+            row.delivery_outcome = Some(notice.clone());
+            row.state = RowState::Answered(accepted);
+            row.payload = None;
+            row.updated_at = now.unix_millis();
+            Ok(true)
+        })
     }
 
     fn sent_without_answer(&mut self) -> OutboxFuture<'_, Vec<RequestId>> {

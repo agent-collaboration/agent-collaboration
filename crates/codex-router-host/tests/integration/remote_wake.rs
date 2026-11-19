@@ -17,9 +17,9 @@ use crate::registered_route_project;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(20);
 
-fn origin(root: &Path) -> TestResult<message_board::ActorOrigin> {
+async fn origin(root: &Path) -> TestResult<message_board::ActorOrigin> {
     Ok(message_board::ActorOrigin {
-        installation: String::from(collaboration_runtime::load_service_identity(root)?)
+        installation: String::from(crate::machine_identity_fixture::machine_id(root).await?)
             .try_into()?,
         machine: "remote wake fixture".to_owned().try_into()?,
     })
@@ -84,14 +84,14 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
     }
     let central = TestCentral::start_with_peer(
         &root.path().join("central"),
-        &origin(&a)?,
-        collaboration_runtime::load_installation_peer(&a)?,
+        &origin(&a).await?,
+        crate::machine_identity_fixture::board_peer(&a).await?,
     )
     .await?;
     let enrolled: EnrolledTestMachine = central
         .additional_machine(
-            &origin(&b)?,
-            collaboration_runtime::load_installation_peer(&b)?,
+            &origin(&b).await?,
+            crate::machine_identity_fixture::board_peer(&b).await?,
         )
         .await?;
     let socket = b.join("peers/peer.sock");

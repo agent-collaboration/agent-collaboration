@@ -1,0 +1,38 @@
+[package]
+autotests = false
+name = "collaboration-link-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+central-link-client = { version = "0.1.154", path = "../central-link-client" }
+central-link-protocol.workspace = true
+chrono.workspace = true
+collaboration-central-tokio = { version = "0.1.154", path = "../collaboration-central-tokio" }
+collaboration-runtime = { version = "0.1.154", path = "../collaboration-runtime", features = ["test-support"] }
+futures-util.workspace = true
+hyper.workspace = true
+hyper-util = { workspace = true, features = ["service"] }
+router-clock.workspace = true
+runtime-primitives.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tokio-util.workspace = true
+turmoil.workspace = true
+workspace-ids.workspace = true
+workspace-model.workspace = true
+
+[dev-dependencies]
+collaboration-central-conformance = { version = "0.1.154", path = "../collaboration-central-conformance", features = ["signin-test-support"] }
+collaboration-central-core = { version = "0.1.154", path = "../collaboration-central-core" }
+serde_json.workspace = true
+tempfile = "3.27.0"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

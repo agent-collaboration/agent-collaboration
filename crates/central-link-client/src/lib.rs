@@ -6,6 +6,8 @@ mod link_calls;
 mod link_state;
 mod outbox_flush;
 mod outbox_views;
+mod queued_write;
+pub use queued_write::QueuedWrite;
 mod pending_calls;
 mod submission_path;
 
@@ -16,8 +18,8 @@ pub use flush_marks::{
     FLUSH_INTERVAL_MILLIS, FLUSH_JITTER_MILLIS, earliest_open_mark, mark_in_window, next_mark_after,
 };
 pub use link_calls::{
-    LinkAdmissionRefusal, LinkCallFuture, LinkCalls, OutboxCancellation, OutboxReceipt,
-    OutboxReceiptId, RequestStatus, Submission, SubmitRefusal,
+    LinkAdmissionRefusal, LinkCallFuture, LinkCalls, MessageStatusUnavailable, OutboxCancellation,
+    OutboxReceipt, OutboxReceiptId, RequestStatus, RequestStatusRefusal, Submission, SubmitRefusal,
 };
 pub use link_state::{
     ClientAction, ClientEvent, ConnectionAttempt, LinkClient, LinkStatus, RefusalReason,
@@ -26,6 +28,7 @@ pub use outbox_flush::{
     FlushEffect, FlushEvent, FlushTransitionError, LinkAvailability, MAX_BATCH_WRITES,
     MemberOutcome, OutboxFlushState, transition,
 };
+pub use outbox_views::SenderDeliveryOutcome;
 pub use outbox_views::{
     EndedWrite, FlushOutcome, FlushOutcomeSink, FlushOutcomes, OutboxWriteContent,
     OutboxWriteTarget, OutgoingOutcome, OutgoingWrite, PendingWrite, PendingWriteState,

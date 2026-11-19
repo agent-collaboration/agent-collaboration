@@ -66,12 +66,8 @@ impl Custody {
         self.next_seed += 1;
         let submission = self.harness.calls.submit(caller(), thread_post(&id)).await;
         self.settle().await;
-        let visible = self
-            .harness
-            .calls
-            .request_status(caller(), id.parse().unwrap())
-            .await
-            != central_link_client::RequestStatus::NotFound;
+        let visible =
+            self.harness.local_status(&id).await != central_link_client::RequestStatus::NotFound;
         // A write is accepted when the outbox holds it, whatever the caller
         // was told: a commit whose acknowledgement was lost still flushes.
         if matches!(submission, Submission::InOutbox(_)) || visible {
@@ -255,7 +251,7 @@ async fn a_lone_sent_row_at_startup_is_replayed_and_answered() {
                 &NewOutboxItem {
                     request: id.parse().unwrap(),
                     caller: caller(),
-                    payload: thread_post(&id),
+                    payload: queued_thread_post(&id),
                     flush_at: SyncTime::from_unix_millis(MARK - 60_000),
                 },
                 SyncTime::from_unix_millis(MARK - 90_000),
@@ -327,7 +323,7 @@ async fn a_timed_out_batch_is_replayed_and_its_late_reply_cannot_settle_the_repl
         let after_late_reply = custody
             .harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
         assert_eq!(
             after_late_reply,

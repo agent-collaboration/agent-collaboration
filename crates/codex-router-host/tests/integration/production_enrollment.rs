@@ -73,8 +73,8 @@ async fn production_host_discovers_enrollment_and_creates_a_central_project() ->
             )?;
             require_shared_link_status(&client, host, peer).await?;
             require(
-                collaboration_runtime::load_installation_peer(directory)? == peer,
-                "startup changed the persisted installation peer",
+                crate::machine_identity_fixture::board_peer(directory).await? == peer,
+                "startup changed the database machine identity",
             )?;
             Ok::<_, Box<dyn Error>>(())
         })
@@ -103,8 +103,8 @@ async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable
                 "Host read enrollment from the wrong root",
             )?;
             require(
-                collaboration_runtime::load_installation_peer(directory)? == peer,
-                "startup changed the persisted installation peer",
+                crate::machine_identity_fixture::board_peer(directory).await? == peer,
+                "startup changed the database machine identity",
             )?;
             Ok::<_, Box<dyn Error>>(())
         })
@@ -172,15 +172,21 @@ async fn production_host_refuses_dangling_enrollment_link_instead_of_falling_bac
 }
 
 #[tokio::test]
-async fn production_host_preserves_the_installation_peer_mismatch_refusal() -> TestResult {
+async fn production_host_refuses_a_corrupt_database_machine_id_before_publication() -> TestResult {
     let root = fixture_root()?;
-    collaboration_runtime::load_installation_peer(&root.path().join("collaboration"))?;
-    write_private_enrollment(root.path())?;
-    require_startup_refusal(
-        root.path(),
-        "enrollment peer differs from this installation's persisted peer",
+    let directory = root.path().join("collaboration");
+    crate::machine_identity_fixture::machine_id(&directory).await?;
+    let mut database = <sqlx::SqliteConnection as sqlx::Connection>::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(directory.join(collaboration_runtime::MACHINE_LOCAL_DATABASE)),
     )
-    .await
+    .await?;
+    sqlx::query("UPDATE machine_identity SET machine_id = ?")
+        .bind("80000000-0000-4000-8000-000000000014")
+        .execute(&mut database)
+        .await?;
+    sqlx::Connection::close(database).await?;
+    require_startup_refusal(root.path(), "machine_identity.machine_id is corrupt").await
 }
 
 fn write_private_enrollment(root: &Path) -> TestResult<PathBuf> {
@@ -275,9 +281,9 @@ fn fixture_root() -> TestResult<tempfile::TempDir> {
     Ok(root)
 }
 
-fn fixture_origin(directory: &Path) -> TestResult<message_board::ActorOrigin> {
+async fn fixture_origin(directory: &Path) -> TestResult<message_board::ActorOrigin> {
     Ok(message_board::ActorOrigin {
-        installation: String::from(collaboration_runtime::load_service_identity(directory)?)
+        installation: String::from(crate::machine_identity_fixture::machine_id(directory).await?)
             .try_into()?,
         machine: "production enrollment fixture".to_owned().try_into()?,
     })
@@ -494,7 +500,8 @@ async fn production_enrollment_host_child() -> TestResult {
         ),
         ManagedUpdateInputs::production(),
     ))
-    .await?;
+    .await
+    .inspect_err(|error| eprintln!("Host startup: {error}"))?;
     Ok(())
 }
 

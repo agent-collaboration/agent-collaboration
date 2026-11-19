@@ -34,11 +34,21 @@ pub use codex_conversation_operation_recorder::{
     CodexConversationOperationRecorder, CodexPermissionModes,
     UnavailableConversationOperationRecorder,
 };
+mod central_inbox;
 mod central_link_driver;
+mod inbox_store;
+pub use central_inbox::{
+    CentralHandoffUnavailable, CentralInbox, CentralMessageHandoff, CentralRecipientLookup,
+    CentralRecipientUnavailable,
+};
+mod machine_identity_store;
 mod machine_local_store;
+pub use machine_identity_store::{MachineIdentityError, load_or_create_machine_id};
 pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
 mod outbox_deadline;
+mod outbox_delivery_outcome_store;
 mod outbox_item_state;
+mod outbox_receipt_profile;
 mod outbox_storage;
 #[cfg(test)]
 mod outbox_storage_contract;
@@ -54,12 +64,12 @@ pub use central_link_driver::{
     CentralLinkStatus,
     ConfiguredCentralLink,
     FlushJitter,
-    InstallationFlushJitter,
     LinkClosed,
     LinkInbound,
     LinkSocket,
     LinkTransport,
     LinkTransportError,
+    MachineFlushJitter,
     MachineTokenSource,
     NotEnrolledTokens,
     OutboxReadError,
@@ -68,8 +78,8 @@ pub use central_link_driver::{
     TransportFuture,
     UnconfiguredLinkTransport,
     WebSocketLinkTransport,
-    open_installation_link,
-    start_installation_link,
+    open_machine_link,
+    start_machine_link,
 };
 #[cfg(feature = "test-support")]
 pub use memory_outbox::MemoryOutbox;

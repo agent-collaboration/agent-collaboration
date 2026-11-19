@@ -458,10 +458,8 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .unwrap_or_else(|e| panic!("shutdown: {e}"));
     std::fs::remove_file(root.join("session-registry.sqlite"))
         .unwrap_or_else(|e| panic!("database cleanup: {e}"));
-    std::fs::remove_file(root.join("service-identity.json"))
-        .unwrap_or_else(|e| panic!("identity cleanup: {e}"));
-    std::fs::remove_file(root.join("installation-peer.json"))
-        .unwrap_or_else(|e| panic!("installation peer cleanup: {e}"));
+    assert!(!root.join("service-identity.json").exists());
+    assert!(!root.join("installation-peer.json").exists());
     std::fs::remove_file(schema_path).unwrap_or_else(|error| panic!("schema cleanup: {error}"));
     std::fs::remove_file(root.join("backend.sock"))
         .unwrap_or_else(|error| panic!("backend cleanup: {error}"));

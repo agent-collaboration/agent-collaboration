@@ -8,7 +8,6 @@ use crate::collaboration_runtime::{CollaborationRuntime, CollaborationRuntimeInp
 use collaboration_runtime::ProjectReadCopySource;
 use fleet_sync_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest};
 use fleet_sync_session::SessionClientStore;
-use std::os::unix::fs::PermissionsExt;
 
 pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
     let before_ready = match phase {
@@ -16,29 +15,6 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
         "receive-graceful-resume" => false,
         _ => return Err("unknown graceful restart phase".into()),
     };
-    if before_ready {
-        // The normal Host validates these two existing installation identities.
-        std::fs::create_dir_all(&inputs.root)?;
-        std::fs::set_permissions(&inputs.root, std::fs::Permissions::from_mode(0o700))?;
-        for (name, value) in [
-            (
-                "service-identity.json",
-                serde_json::json!({"version":1,"serviceId":origin()?.installation}),
-            ),
-            (
-                "installation-peer.json",
-                serde_json::json!({"version":1,"peerId":inputs.peer}),
-            ),
-        ] {
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(inputs.root.join(name))?;
-            file.write_all(&serde_json::to_vec(&value)?)?;
-            file.sync_all()?;
-        }
-    }
     let session = board_fleet_sync::BoardSessionInputs {
         endpoint: fleet_sync_session::Endpoint::new(&inputs.endpoint)?,
         access: board_fleet_sync::AccessServiceToken::new(
@@ -333,7 +309,7 @@ async fn resume_and_post(
     let RecordPlacement::Project(position) = post.envelope.position else {
         return Err("central post origin".into());
     };
-    assert_eq!(position.origin, origin()?);
+    assert_eq!(position.origin, inputs.origin);
     read.finish().await?;
     emit(
         "RECEIVING_RESTART_POST ",

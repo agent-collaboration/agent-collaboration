@@ -21,6 +21,24 @@ async fn faulty_store(root: &tempfile::TempDir) -> (Arc<Mutex<dyn OutboxStorage>
     (Arc::new(Mutex::new(store)), plan)
 }
 
+#[tokio::test]
+async fn a_failed_local_status_read_is_unavailable() {
+    let root = tempfile::tempdir().unwrap();
+    let (store, plan) = faulty_store(&root).await;
+    let harness = Harness::start_with_store(root, clock_at(MARK - 20_000), store);
+    plan.fail_once("request_status");
+    let status = harness
+        .calls
+        .request_status(caller(), status_query(&uuid_v7(29)))
+        .await;
+    assert_eq!(status, RequestStatus::StatusUnavailable);
+    assert!(
+        plan.pending().is_empty(),
+        "the status read hit the injected error"
+    );
+    harness.stop().await;
+}
+
 /// The batch central has received so far, if any; heartbeats are answered.
 /// Never blocks: a stranded write shows as None, not as a hang.
 async fn batch_now(harness: &Harness, central: &mut CentralEnd) -> Option<Vec<LinkRequest>> {
@@ -70,7 +88,7 @@ async fn a_failed_restore_read_does_not_lose_the_waiting_write() {
             &NewOutboxItem {
                 request: id.parse().unwrap(),
                 caller: caller(),
-                payload: thread_post(&id),
+                payload: queued_thread_post(&id),
                 flush_at: SyncTime::from_unix_millis(MARK),
             },
             SyncTime::from_unix_millis(MARK - 30_000),
@@ -169,7 +187,7 @@ async fn a_failed_return_or_answer_write_is_reconciled_and_the_write_answered() 
         }
         let status = harness
             .calls
-            .request_status(caller(), id.parse().unwrap())
+            .request_status(caller(), status_query(&id))
             .await;
 
         assert_eq!(resent[0].payload().write_request_id().unwrap().as_str(), id);

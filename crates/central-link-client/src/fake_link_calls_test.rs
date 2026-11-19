@@ -21,6 +21,13 @@ fn session_caller(seed: u8) -> Caller {
     .unwrap()
 }
 
+fn status_query(request: &str) -> central_link_protocol::RequestStatusQuery {
+    central_link_protocol::RequestStatusQuery {
+        request_id: request_id(request),
+        scope: central_link_protocol::RequestScope::Workspace(uuid_v7(201).parse().unwrap()),
+    }
+}
+
 fn thread_post(request: &str, body: &str) -> RequestPayload {
     serde_json::from_value(json!({
         "kind": "workspace",
@@ -95,7 +102,9 @@ async fn a_thread_post_is_in_the_outbox_until_its_mark_then_answered() {
     assert_eq!(receipt.id, request_id(&id));
     assert_eq!(receipt.flush_at, SyncTime::from_unix_millis(MARK));
     assert_eq!(
-        calls.request_status(caller.clone(), request_id(&id)).await,
+        calls
+            .request_status(caller.clone(), status_query(&id))
+            .await,
         RequestStatus::InOutbox {
             flush_at: SyncTime::from_unix_millis(MARK)
         }
@@ -107,7 +116,7 @@ async fn a_thread_post_is_in_the_outbox_until_its_mark_then_answered() {
         .unwrap();
     assert_eq!(calls.flush_on_mark(), 1);
     assert_eq!(
-        calls.request_status(caller, request_id(&id)).await,
+        calls.request_status(caller, status_query(&id)).await,
         RequestStatus::Answered(conflict_reply())
     );
 }
@@ -121,7 +130,7 @@ async fn another_callers_request_id_answers_not_found() {
         .await;
 
     let status = calls
-        .request_status(session_caller(2), request_id(&id))
+        .request_status(session_caller(2), status_query(&id))
         .await;
 
     assert_eq!(status, RequestStatus::NotFound);
@@ -144,7 +153,7 @@ async fn an_immediate_write_whose_answer_is_lost_is_uncertain_and_shows_sent() {
     );
     assert_eq!(
         calls
-            .request_status(session_caller(1), request_id(&id))
+            .request_status(session_caller(1), status_query(&id))
             .await,
         RequestStatus::Sent
     );
@@ -189,7 +198,7 @@ async fn outbox_writes_wait_out_an_unavailable_central_and_send_after() {
     assert_eq!(calls.flush_on_mark(), 1);
     assert_eq!(
         calls
-            .request_status(session_caller(1), request_id(&id))
+            .request_status(session_caller(1), status_query(&id))
             .await,
         RequestStatus::Answered(conflict_reply())
     );

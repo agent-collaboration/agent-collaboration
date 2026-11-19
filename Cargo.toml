@@ -32,6 +32,7 @@ members = [
     "crates/collaboration-service",
     "crates/collaboration-application-test-support",
     "crates/collaboration-contracts",
+    "crates/collaboration-link-test-support",
     "crates/collaboration-runtime",
     "crates/collaboration-protocol",
     "crates/collaboration-central-admin-protocol",

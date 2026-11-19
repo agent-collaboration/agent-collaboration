@@ -11,7 +11,7 @@ pub(crate) async fn open_outbox(
         MachineLocalStore::open(path).await?,
     ))
 }
-use central_link_client::{FlushOutcomes, LinkCalls};
+use central_link_client::FlushOutcomes;
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, MachineTokenText, ReplyPayload, TokenRenewalResult,
     decode_text, encode_text,
@@ -23,7 +23,7 @@ use tokio::sync::{mpsc, watch};
 use workspace_model::{WorkspaceReply, WorkspaceResult};
 
 pub(crate) const MARK: i64 = 1_763_380_800_000;
-pub(crate) const INSTALLATION: &str = "019f0000-0000-7000-8000-0000000ea000";
+pub(crate) const MACHINE_ID: &str = "019f0000-0000-7000-8000-0000000ea000";
 
 pub(crate) fn uuid_v7(seed: u16) -> String {
     let mut random = [0_u8; 10];
@@ -35,26 +35,39 @@ pub(crate) fn uuid_v7(seed: u16) -> String {
 
 pub(crate) fn caller() -> Caller {
     serde_json::from_value(json!({"kind": "session", "value": {
-        "machineId": INSTALLATION, "sessionId": "s1"}}))
+        "machineId": MACHINE_ID, "sessionId": "s1"}}))
     .unwrap()
+}
+
+pub(crate) fn queued_thread_post(request: &str) -> central_link_client::QueuedWrite {
+    central_link_client::QueuedWrite::Workspace(
+        serde_json::from_value(json!({
+            "requestId": request, "workspaceId": uuid_v7(9000),
+            "operation": {"kind": "threadPost", "threadId": uuid_v7(9001), "body": "hi", "addressees": []}
+        })).unwrap()
+    )
 }
 
 pub(crate) fn thread_post(request: &str) -> RequestPayload {
-    serde_json::from_value(json!({"kind": "workspace", "request": {
-        "requestId": request, "workspaceId": uuid_v7(9000),
-        "operation": {"kind": "threadPost", "threadId": uuid_v7(9001), "body": "hi", "addressees": []}}}))
+    let central_link_client::QueuedWrite::Workspace(request) = queued_thread_post(request) else {
+        panic!("thread post fixture must be a workspace request");
+    };
+    RequestPayload::Workspace(request)
+}
+
+pub(crate) fn direct_message() -> workspace_model::central_mail::SendMessageRequest {
+    serde_json::from_value(json!({
+        "to": {"machineId": MACHINE_ID, "sessionId": "recipient"},
+        "body": "are you there", "delivery": "auto", "replyTo": null
+    }))
     .unwrap()
 }
 
-pub(crate) fn direct_message(request: &str) -> RequestPayload {
-    serde_json::from_value(
-        json!({"kind": "mail", "request": {"requestId": request, "operation": {
-        "kind": "sendMessage",
-        "to": {"machineId": INSTALLATION, "sessionId": "recipient"},
-        "body": "are you there", "delivery": "auto", "replyTo": null,
-        "sentAt": "2030-01-01T00:00:00Z"}}}),
-    )
-    .unwrap()
+pub(crate) fn status_query(request: &str) -> central_link_protocol::RequestStatusQuery {
+    central_link_protocol::RequestStatusQuery {
+        request_id: request.parse().unwrap(),
+        scope: thread_post(request).request_scope(),
+    }
 }
 
 pub(crate) fn list_areas() -> RequestPayload {
@@ -111,7 +124,7 @@ impl CentralEnd {
     }
     pub(crate) fn welcome(&self) {
         self.send(LinkFrame::Data(DataFrame::Welcome {
-            machine_id: INSTALLATION.parse().unwrap(),
+            machine_id: MACHINE_ID.parse().unwrap(),
             central_time: chrono::DateTime::from_timestamp_millis(MARK).unwrap(),
         }));
     }
@@ -231,6 +244,8 @@ impl FlushJitter for NoJitter {
 pub(crate) struct RecordedOutcomes(
     pub(crate) StdMutex<Vec<FlushOutcomes>>,
     pub(crate) StdMutex<Vec<central_link_client::EndedWrite>>,
+    pub(crate) StdMutex<Vec<central_link_client::SenderDeliveryOutcome>>,
+    pub(crate) tokio::sync::Notify,
 );
 impl FlushOutcomeSink for RecordedOutcomes {
     fn deliver(&self, outcomes: FlushOutcomes) {
@@ -238,6 +253,10 @@ impl FlushOutcomeSink for RecordedOutcomes {
     }
     fn ended(&self, ended: Vec<central_link_client::EndedWrite>) {
         self.1.lock().unwrap().extend(ended);
+    }
+    fn delivery_outcome(&self, _: &Caller, outcome: &central_link_client::SenderDeliveryOutcome) {
+        self.2.lock().unwrap().push(outcome.clone());
+        self.3.notify_one();
     }
 }
 
@@ -278,7 +297,7 @@ impl Harness {
         store: Arc<Mutex<dyn OutboxStorage>>,
     ) -> Self {
         let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
-        Self::launch(root, clock, store, ready)
+        Self::launch(root, clock, store, ready, None)
     }
 
     /// Starts on a fresh store with the token source in `availability`.
@@ -292,7 +311,17 @@ impl Harness {
                 .await
                 .unwrap(),
         ));
-        Self::launch(root, clock, store, availability)
+        Self::launch(root, clock, store, availability, None)
+    }
+
+    pub(crate) fn start_with_inbox(
+        root: tempfile::TempDir,
+        clock: Arc<ManualClock>,
+        store: Arc<Mutex<dyn OutboxStorage>>,
+        inbox: CentralInbox,
+    ) -> Self {
+        let ready = TokenAvailability::Ready(fixture_token("fixture.machine.token"));
+        Self::launch(root, clock, store, ready, Some(inbox))
     }
 
     fn launch(
@@ -300,6 +329,7 @@ impl Harness {
         clock: Arc<ManualClock>,
         store: Arc<Mutex<dyn OutboxStorage>>,
         availability: TokenAvailability,
+        inbox: Option<CentralInbox>,
     ) -> Self {
         let (sender, connections) = mpsc::unbounded_channel();
         let outcomes = Arc::new(RecordedOutcomes::default());
@@ -308,7 +338,8 @@ impl Harness {
         let tasks = TaskTracker::new();
         let calls = RouterLinkCalls::start(
             CentralLinkParts {
-                installation: INSTALLATION.parse().unwrap(),
+                inbox,
+                machine_id: MACHINE_ID.parse().unwrap(),
                 clock: clock.clone(),
                 store: store.clone(),
                 transport: Arc::new(ChannelTransport {
@@ -337,12 +368,27 @@ impl Harness {
     pub(crate) async fn connected(&mut self) -> CentralEnd {
         let central = self.connections.recv().await.expect("a connection");
         central.welcome();
-        // A status read is a round trip through the driver's loop.
-        let _ = self
-            .calls
-            .request_status(caller(), uuid_v7(1).parse().unwrap())
-            .await;
-        central
+        for _ in 0..64 {
+            if matches!(
+                self.calls.link_status().await,
+                Some(central_link_client::LinkStatus::Connected { .. })
+            ) {
+                return central;
+            }
+        }
+        panic!("the driver did not observe Welcome");
+    }
+
+    pub(crate) async fn local_status(
+        &self,
+        request_id: &str,
+    ) -> central_link_client::RequestStatus {
+        self.store
+            .lock()
+            .await
+            .request_status(&caller(), &request_id.parse().unwrap())
+            .await
+            .unwrap()
     }
 
     pub(crate) async fn stop(self) {

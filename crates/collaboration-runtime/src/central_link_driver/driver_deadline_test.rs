@@ -5,7 +5,7 @@
 //! second time.
 use super::super::super::driver_test_support::*;
 use super::super::super::*;
-use central_link_client::{LinkCalls, OutboxCancellation, RequestStatus};
+use central_link_client::{LinkCalls, OutboxCancellation, QueuedWrite, RequestStatus};
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, RequestPayload, decode_text,
 };
@@ -46,7 +46,7 @@ async fn reopened(database: &std::path::Path) -> Arc<Mutex<dyn OutboxStorage>> {
 /// Runs the scenario for one write and returns how it ended and how many
 /// times central received it.
 async fn committed_then_lost_then_restarted_after(
-    payload: RequestPayload,
+    payload: QueuedWrite,
     id: &str,
     restart_after_ms: i64,
 ) -> (RequestStatus, Vec<central_link_client::EndedWrite>, usize) {
@@ -60,7 +60,24 @@ async fn committed_then_lost_then_restarted_after(
         reopened(&database).await,
     );
     let mut central = first.connected().await;
-    first.calls.submit(caller(), payload).await;
+    let scope = payload.request_scope();
+    match payload {
+        QueuedWrite::Workspace(request) => {
+            first
+                .calls
+                .submit(caller(), RequestPayload::Workspace(request))
+                .await
+        }
+        QueuedWrite::SendMessage {
+            request_id,
+            message,
+        } => {
+            first
+                .calls
+                .submit_message(caller(), request_id, message)
+                .await
+        }
+    };
     advance_to_next_mark(&first);
     for batch in batches_now(&first, &mut central).await {
         received += batch.len();
@@ -98,7 +115,13 @@ async fn committed_then_lost_then_restarted_after(
     }
     let status = second
         .calls
-        .request_status(caller(), id.parse().unwrap())
+        .request_status(
+            caller(),
+            central_link_protocol::RequestStatusQuery {
+                request_id: id.parse().unwrap(),
+                scope,
+            },
+        )
         .await;
     let ended = second.outcomes.1.lock().unwrap().clone();
     second.stop().await;
@@ -109,12 +132,13 @@ async fn committed_then_lost_then_restarted_after(
 async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes() {
     let id = uuid_v7(40);
     let (status, ended, received) =
-        committed_then_lost_then_restarted_after(thread_post(&id), &id, 16 * 60 * 1000).await;
+        committed_then_lost_then_restarted_after(queued_thread_post(&id), &id, 16 * 60 * 1000)
+            .await;
 
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
         status,
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );
@@ -131,13 +155,20 @@ async fn a_committed_post_whose_answer_was_lost_is_never_resent_after_15_minutes
 #[tokio::test]
 async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minutes() {
     let id = uuid_v7(41);
-    let (status, ended, received) =
-        committed_then_lost_then_restarted_after(direct_message(&id), &id, 16 * 60 * 1000).await;
+    let (status, ended, received) = committed_then_lost_then_restarted_after(
+        QueuedWrite::SendMessage {
+            request_id: id.parse().unwrap(),
+            message: direct_message(),
+        },
+        &id,
+        16 * 60 * 1000,
+    )
+    .await;
 
     assert_eq!(received, 1, "no second send past the deadline");
     assert_eq!(
         status,
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotConfirmedWithin15Minutes
         }
     );
@@ -152,7 +183,8 @@ async fn a_direct_message_whose_answer_was_lost_ends_unconfirmed_after_15_minute
 async fn a_write_restarted_before_its_deadline_is_resent_under_the_same_id() {
     let id = uuid_v7(42);
     let (status, ended, received) =
-        committed_then_lost_then_restarted_after(thread_post(&id), &id, 10 * 60 * 1000).await;
+        committed_then_lost_then_restarted_after(queued_thread_post(&id), &id, 10 * 60 * 1000)
+            .await;
 
     assert_eq!(received, 2, "inside the window the replay goes out again");
     assert_eq!(status, RequestStatus::Answered(reply()));
@@ -192,7 +224,7 @@ async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
     }
     let status = second
         .calls
-        .request_status(caller(), id.parse().unwrap())
+        .request_status(caller(), status_query(&id))
         .await;
     let ended = second.outcomes.1.lock().unwrap().clone();
     second.stop().await;
@@ -200,7 +232,7 @@ async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
     assert_eq!(received, 0, "an overdue write is never sent");
     assert_eq!(
         status,
-        RequestStatus::Cancelled {
+        RequestStatus::Ended {
             reason: OutboxCancellation::NotSentWithin15Minutes
         }
     );
@@ -211,4 +243,50 @@ async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
             .collect::<Vec<_>>(),
         vec![(id, OutboxCancellation::NotSentWithin15Minutes)]
     );
+}
+
+#[tokio::test]
+async fn an_offline_router_ends_waiting_writes_at_the_exact_deadline() {
+    let database_root = tempfile::tempdir().unwrap();
+    let database = database_root.path().join("machine_local.sqlite");
+    // Use a creation time between minute marks, so the minute flush could
+    // not satisfy this deadline even if it were running.
+    let harness = Harness::start_with_store(
+        tempfile::tempdir().unwrap(),
+        clock_at(MARK - 18_765),
+        reopened(&database).await,
+    );
+    let post = uuid_v7(44);
+    let message = uuid_v7(45);
+    harness.calls.submit(caller(), thread_post(&post)).await;
+    harness
+        .calls
+        .submit_message(caller(), message.parse().unwrap(), direct_message())
+        .await;
+
+    harness
+        .clock
+        .advance(Duration::from_millis(15 * 60 * 1000 - 1))
+        .unwrap();
+    let _ = harness.calls.link_status().await;
+    assert!(harness.outcomes.1.lock().unwrap().is_empty());
+
+    harness.clock.advance(Duration::from_millis(1)).unwrap();
+    // The first command can wake an already pending select before the time
+    // branch is polled. The next command runs after the loop drains the due work.
+    let _ = harness.calls.link_status().await;
+    let _ = harness.calls.link_status().await;
+    let mut ended = harness.outcomes.1.lock().unwrap().clone();
+    ended.sort_by_key(|outcome| outcome.request_id.clone());
+    assert_eq!(
+        ended
+            .iter()
+            .map(|outcome| (outcome.request_id.as_str(), outcome.reason))
+            .collect::<Vec<_>>(),
+        [
+            (post.as_str(), OutboxCancellation::NotSentWithin15Minutes),
+            (message.as_str(), OutboxCancellation::NotSentWithin15Minutes),
+        ],
+    );
+    harness.stop().await;
 }

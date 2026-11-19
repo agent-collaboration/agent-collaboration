@@ -17,27 +17,27 @@ use runtime_primitives::SyncTime;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_ids::SessionRef;
+use workspace_ids::{MachineId, SessionRef};
 use workspace_model::{Caller, WorkspaceOperation, WorkspaceRequest};
 
-pub(super) const ROUTER_HOST: &str = "router";
-pub(super) const INSTALLATION: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
+pub const ROUTER_HOST: &str = "router";
+pub const MACHINE_ID: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
 
 /// When the router posts, restarts, and how long it waits for the answers.
 #[derive(Clone, Debug)]
-pub(super) struct RouterPlan {
-    pub(super) posts_at: Vec<Duration>,
-    pub(super) restart_at: Option<Duration>,
-    pub(super) answers_by: Duration,
+pub struct RouterPlan {
+    pub posts_at: Vec<Duration>,
+    pub restart_at: Option<Duration>,
+    pub answers_by: Duration,
 }
 
 /// Each posted request id and the last status the router read for it.
 #[derive(Default)]
-pub(super) struct RouterReport {
-    pub(super) statuses: BTreeMap<String, RequestStatus>,
+pub struct RouterReport {
+    pub statuses: BTreeMap<String, RequestStatus>,
 }
 
-pub(super) type SharedRouterReport = Rc<RefCell<RouterReport>>;
+pub type SharedRouterReport = Rc<RefCell<RouterReport>>;
 
 struct ReadyToken;
 impl MachineTokenSource for ReadyToken {
@@ -62,23 +62,24 @@ struct IgnoredOutcomes;
 impl FlushOutcomeSink for IgnoredOutcomes {
     fn deliver(&self, _outcomes: FlushOutcomes) {}
     fn ended(&self, _ended: Vec<central_link_client::EndedWrite>) {}
+    fn delivery_outcome(&self, _: &Caller, _: &central_link_client::SenderDeliveryOutcome) {}
 }
 
-fn installation() -> MachineId {
+fn machine_id() -> MachineId {
     #[expect(clippy::unwrap_used, reason = "a fixed UUIDv7")]
-    INSTALLATION.parse().unwrap()
+    MACHINE_ID.parse().unwrap()
 }
 
-pub(super) fn caller() -> Caller {
+pub fn caller() -> Caller {
     #[expect(clippy::unwrap_used, reason = "fixed valid session fields")]
     Caller::Session(SessionRef {
-        machine_id: installation(),
+        machine_id: machine_id(),
         session_id: "simulated-session".to_owned().try_into().unwrap(),
     })
 }
 
 /// The `index`th post's request id, a UUIDv7.
-pub(super) fn post_id(index: usize) -> String {
+pub fn post_id(index: usize) -> String {
     format!("01890f2e-7b4c-7cc0-98c5-{index:012x}")
 }
 
@@ -106,13 +107,11 @@ fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<dyn OutboxStorage>>
     let stop = CancellationToken::new();
     let calls = RouterLinkCalls::start(
         CentralLinkParts {
-            installation: installation(),
+            inbox: None,
+            machine_id: machine_id(),
             clock,
             store,
-            transport: Arc::new(TurmoilLinkTransport {
-                central: CENTRAL_HOST,
-                port: LINK_PORT,
-            }),
+            transport: Arc::new(TurmoilLinkTransport::new(CENTRAL_HOST, LINK_PORT, "/link")),
             tokens: Arc::new(ReadyToken),
             jitter: Arc::new(OnTheMark),
             outcomes: Arc::new(IgnoredOutcomes),
@@ -132,7 +131,7 @@ impl RunningLink {
 }
 
 /// Host software for "router".
-pub(super) async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil::Result {
+pub async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil::Result {
     let clock: Arc<dyn RuntimeClock> = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
     // In memory, so a store call never leaves the simulated host (Lead A's
     // call): sqlx-sqlite's worker thread turned real I/O latency into
@@ -171,7 +170,13 @@ pub(super) async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> 
             #[expect(clippy::unwrap_used, reason = "ids minted as UUIDv7 above")]
             let status = link
                 .calls
-                .request_status(caller(), id.parse().unwrap())
+                .request_status(
+                    caller(),
+                    central_link_protocol::RequestStatusQuery {
+                        request_id: id.parse().unwrap(),
+                        scope: thread_post(&id).request_scope(),
+                    },
+                )
                 .await;
             all_answered &= matches!(status, RequestStatus::Answered(_));
             report.borrow_mut().statuses.insert(id, status);
@@ -186,5 +191,3 @@ pub(super) async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> 
     link.stop().await;
     Ok(())
 }
-
-use workspace_ids::MachineId;

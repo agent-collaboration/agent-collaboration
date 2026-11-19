@@ -105,8 +105,8 @@ impl PendingLocalCancelFixture {
             .prefix("crlc-")
             .tempdir_in("/tmp")?;
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-        let service = collaboration_runtime::load_service_identity(directory.path())?;
-        let peer = collaboration_runtime::load_installation_peer(directory.path())?;
+        let service = crate::machine_identity_fixture::machine_id(directory.path()).await?;
+        let peer = crate::machine_identity_fixture::board_peer(directory.path()).await?;
         let registry = directory.path().join("peer-registry");
         std::fs::create_dir(&registry)?;
         let socket = registry.join("peer.sock");

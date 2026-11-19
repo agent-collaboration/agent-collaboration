@@ -12,6 +12,7 @@ test-support = []
 
 [dependencies]
 serde.workspace = true
+schemars.workspace = true
 central-link-protocol.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true

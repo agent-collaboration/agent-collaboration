@@ -31,7 +31,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         .expect("private Host root");
     let route_project = route_project_requests();
     let identity = collaboration_contracts::MachineIdentity::new(
-        collaboration_runtime::load_service_identity(root.path()).expect("Host service identity"),
+        crate::machine_identity_fixture::machine_id(root.path())
+            .await
+            .expect("Host service identity"),
         None,
     )
     .expect("Host machine label");
@@ -48,7 +50,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                 .try_into()
                 .expect("origin label"),
         },
-        collaboration_runtime::load_installation_peer(root.path()).expect("installation peer"),
+        crate::machine_identity_fixture::board_peer(root.path())
+            .await
+            .expect("installation peer"),
     )
     .await
     .expect("real route central enrollment");

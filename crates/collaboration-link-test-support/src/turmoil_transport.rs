@@ -4,12 +4,26 @@ use collaboration_runtime::{
     LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError, TransportFuture,
 };
 use futures_util::{SinkExt, StreamExt};
-use tokio_tungstenite::{WebSocketStream, client_async, tungstenite::Message};
+use tokio_tungstenite::{
+    WebSocketStream, client_async,
+    tungstenite::{Message, client::IntoClientRequest, http::header::AUTHORIZATION},
+};
 use turmoil::net::TcpStream;
 
-pub(super) struct TurmoilLinkTransport {
-    pub(super) central: &'static str,
-    pub(super) port: u16,
+pub struct TurmoilLinkTransport {
+    central: &'static str,
+    port: u16,
+    path: String,
+}
+
+impl TurmoilLinkTransport {
+    pub fn new(central: &'static str, port: u16, path: impl Into<String>) -> Self {
+        Self {
+            central,
+            port,
+            path: path.into(),
+        }
+    }
 }
 
 struct TurmoilLinkSocket(WebSocketStream<TcpStream>);
@@ -17,14 +31,21 @@ struct TurmoilLinkSocket(WebSocketStream<TcpStream>);
 impl LinkTransport for TurmoilLinkTransport {
     fn connect<'call>(
         &'call self,
-        _token: &'call MachineTokenText,
+        token: &'call MachineTokenText,
     ) -> TransportFuture<'call, Result<Box<dyn LinkSocket>, LinkTransportError>> {
         Box::pin(async move {
             let stream = TcpStream::connect((self.central, self.port))
                 .await
                 .map_err(|_| LinkTransportError::Connect)?;
-            let url = format!("ws://{}:{}/link", self.central, self.port);
-            let (socket, _) = client_async(url, stream)
+            let url = format!("ws://{}:{}{}", self.central, self.port, self.path);
+            let mut request = url
+                .into_client_request()
+                .map_err(|_| LinkTransportError::Connect)?;
+            let bearer = format!("Bearer {}", token.expose())
+                .parse()
+                .map_err(|_| LinkTransportError::Connect)?;
+            request.headers_mut().insert(AUTHORIZATION, bearer);
+            let (socket, _) = client_async(request, stream)
                 .await
                 .map_err(|_| LinkTransportError::Connect)?;
             Ok(Box::new(TurmoilLinkSocket(socket)) as Box<dyn LinkSocket>)
