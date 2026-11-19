@@ -6,12 +6,12 @@ use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_workspace_access::WorkspaceAccess;
 use workspace_model as m;
 
-pub struct ResolvedOperation {
+pub(crate) struct ResolvedOperation {
     pub command: m::WorkspaceCommand,
     pub tag_ids: Vec<m::WorkLogTagId>,
     pub read_mark_id: m::ReadMarkId,
 }
-pub async fn resolve_command<Host: CentralStore, Stores: WorkspaceStores>(
+pub(crate) async fn resolve_command<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &FleetRuntime<Host, Stores>,
     op: &m::WorkspaceOperation,
     actor: &m::ActorIdentityId,

@@ -6,6 +6,7 @@ use crate::{
     person_request::{AdminOperation, PersonRequestInput, PersonRequestRefusal},
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceDirectory;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub async fn admin_person_request(
@@ -92,11 +93,12 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                     .map_err(|_| {
                         fleet_runtime_ports::workspace_decode_error::corrupt("workspace_id")
                     })?;
-                let found =
-                    fleet_workspace_directory::read_by_id(self.statement_host(), &workspace)
-                        .await?
-                        .map(crate::organization_workspace_plans::workspace_view)
-                        .transpose()?;
+                let directory = self.workspace_directory();
+                let found = directory
+                    .read_by_id(&workspace)
+                    .await?
+                    .map(|row| directory.workspace_view(row))
+                    .transpose()?;
                 OrganizationAdminResult::Found { workspace: found }
             }
             AdminOperation::ReadChangeRecords(request) => OrganizationAdminResult::Records {
@@ -150,7 +152,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 #[cfg(feature = "test-support")]
                 if operation
                     .as_ref()
-                    .is_some_and(|id| self.take_lost_reply(id))
+                    .is_some_and(|id| self.fleet_runtime.take_lost_reply(id))
                 {
                     return Err(StoreFailure::AnswerLost);
                 }

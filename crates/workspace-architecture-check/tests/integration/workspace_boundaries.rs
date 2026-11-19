@@ -23,6 +23,7 @@ const PURE_CRATES: [(&str, &[&str]); 8] = [
             "central-engine-model",
             "workspace-model",
             "fleet-identity-protocol",
+            "message-board",
         ],
     ),
     ("workspace-rules", &["workspace-model", "central-storage"]),

@@ -192,7 +192,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             Err(error) => return Err(error),
         }
         #[cfg(feature = "test-support")]
-        if self.take_lost_reply(&request.request_id) {
+        if self.fleet_runtime.take_lost_reply(&request.request_id) {
             return Ok(Result::OutcomeUnknown);
         }
         Ok(answer)

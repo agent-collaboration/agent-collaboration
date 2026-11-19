@@ -15,3 +15,4 @@ central-storage.workspace = true
 fleet-contracts.workspace = true
 fleet-runtime-ports.workspace = true
 workspace-model.workspace = true
+message-board = { path = "../message-board", version = "0.1.96" }

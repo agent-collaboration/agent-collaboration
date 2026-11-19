@@ -4,7 +4,7 @@ use fleet_workspace_access::WorkspaceRows;
 use workspace_model as m;
 use workspace_rules as rules;
 
-pub fn run_rule(
+pub(crate) fn run_rule(
     context: &rules::WriteContext,
     resolved: &ResolvedOperation,
     rows: &WorkspaceRows,

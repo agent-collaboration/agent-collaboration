@@ -1,20 +1,8 @@
 //! Closed answers from a verified organization admin operation.
 use crate::{organization_authority::OrganizationChangeRecord, person_request::AdmissionRefusal};
-use message_board::{Description, ResourceName, WorkspaceId, WorkspaceState};
+use fleet_contracts::WorkspaceView;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-
-/// The verified admin view of the org-owned workspace directory.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorkspaceView {
-    pub workspace_id: WorkspaceId,
-    pub name: ResourceName,
-    #[serde(deserialize_with = "crate::person_request::deserialize_description")]
-    #[schemars(schema_with = "crate::person_request::description_schema")]
-    pub description: Description,
-    pub state: WorkspaceState,
-}
 
 /// The closed set of engine kinds an admin sees; test-support machines are hidden.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

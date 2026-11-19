@@ -27,6 +27,8 @@ pub struct FleetRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     observer: Arc<dyn fleet_runtime_ports::Observer<CentralObservation>>,
     #[cfg(feature = "test-support")]
     pauses: crate::PausePoints,
+    #[cfg(feature = "test-support")]
+    lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
 }
 
 impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
@@ -53,6 +55,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
             central_turn: CentralTurn::default(),
             #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
+            #[cfg(feature = "test-support")]
+            lost_answers: Default::default(),
         }
     }
 
@@ -151,5 +155,19 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
     #[cfg(feature = "test-support")]
     pub fn pause_points(&self) -> &crate::PausePoints {
         &self.pauses
+    }
+    #[cfg(feature = "test-support")]
+    pub fn lose_reply_after_apply(&self, request: workspace_model::RequestId) {
+        self.lost_answers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(request);
+    }
+    #[cfg(feature = "test-support")]
+    pub fn take_lost_reply(&self, request: &workspace_model::RequestId) -> bool {
+        self.lost_answers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(request)
     }
 }

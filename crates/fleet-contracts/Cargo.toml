@@ -18,3 +18,5 @@ workspace-model.workspace = true
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 thiserror.workspace = true
 serde.workspace = true
+schemars.workspace = true
+message-board = { path = "../message-board", version = "0.1.96" }

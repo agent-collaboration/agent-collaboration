@@ -12,7 +12,7 @@ workspace = true
 [features]
 conformance = []
 # Test seams (pause points, the storage conformance schema); never in a production build.
-test-support = ["sqlx-core/migrate", "fleet-runtime/test-support", "fleet-storage-schema/test-support"]
+test-support = ["sqlx-core/migrate", "fleet-runtime/test-support", "fleet-storage-schema/test-support", "fleet-workspace-requests/test-support"]
 
 [dependencies]
 central-storage.workspace = true
@@ -20,7 +20,6 @@ central-engine-model.workspace = true
 agent-automation = {path="../agent-automation",version="0.1.149"}
 workspace-model.workspace = true
 workspace-ids.workspace = true
-workspace-rules = {path="../workspace-rules",version="0.1.149"}
 serde_json_canonicalizer.workspace = true
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 schemars.workspace = true

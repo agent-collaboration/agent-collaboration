@@ -1837,7 +1837,6 @@ dependencies = [
  "uuid",
  "workspace-ids",
  "workspace-model",
- "workspace-rules",
 ]
 
 [[package]]
@@ -2893,6 +2892,8 @@ dependencies = [
  "central-storage",
  "fleet-identity-protocol",
  "fleet-runtime-ports",
+ "message-board",
+ "schemars 1.2.2",
  "serde",
  "thiserror 2.0.18",
  "workspace-model",
@@ -3184,6 +3185,7 @@ dependencies = [
  "central-storage",
  "fleet-contracts",
  "fleet-runtime-ports",
+ "message-board",
  "workspace-model",
 ]
 
@@ -3192,6 +3194,8 @@ name = "fleet-workspace-requests"
 version = "0.1.156"
 dependencies = [
  "central-storage",
+ "chrono",
+ "fleet-contracts",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-workspace-access",

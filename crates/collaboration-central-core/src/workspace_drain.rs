@@ -235,3 +235,19 @@ fn position_value(position: ChangePosition) -> Result<SqlValue, StoreFailure> {
         value.try_into().map_err(|_| corrupt("position"))?,
     ))
 }
+
+impl<Host: CentralStore, Stores: WorkspaceStores> fleet_contracts::WorkspaceDrain
+    for WorkspaceRuntime<Host, Stores>
+{
+    async fn preset_workspace_drain(
+        &self,
+        workspace: &WorkspaceId,
+        now: Timestamp,
+    ) -> Result<(), StoreFailure> {
+        self.preset_workspace_drain(workspace, now).await
+    }
+
+    async fn drain_after_request(&self, workspace: &WorkspaceId) -> Result<(), StoreFailure> {
+        self.drain_after_request(workspace).await
+    }
+}

@@ -17,6 +17,7 @@ const LAYER_POLICY: [(&str, &[&str]); 34] = [
         "fleet-workspace-requests",
         &[
             "central-storage",
+            "fleet-contracts",
             "fleet-runtime",
             "fleet-runtime-ports",
             "fleet-workspace-access",

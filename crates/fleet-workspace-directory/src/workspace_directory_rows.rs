@@ -1,18 +1,13 @@
 //! Shared modern directory rows; each caller retains its own decision and replay contract.
 use central_storage::{GuardedStatement, ReadOutcome, RowExpectation, Statement, StoreFailure};
-use fleet_contracts::MAXIMUM_DESCRIPTION_BYTES;
+use fleet_contracts::{
+    DirectoryWorkspace, MAXIMUM_DESCRIPTION_BYTES, WorkspaceDirectory, WorkspaceView,
+};
 use fleet_runtime_ports::CentralStore;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model::{Description, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
-
-pub struct DirectoryWorkspace {
-    pub workspace_id: WorkspaceId,
-    pub name: ResourceName,
-    pub description: Description,
-    pub state: WorkspaceState,
-}
 
 fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
     if rows.rows.len() > 1 {
@@ -54,56 +49,95 @@ fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure
     }))
 }
 
-pub async fn read_by_id(
-    host: &impl CentralStore,
-    workspace_id: &WorkspaceId,
-) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
-    let rows = host.read(Statement {
+pub struct CentralWorkspaceDirectory<'store, Host: CentralStore> {
+    host: &'store Host,
+}
+
+impl<'store, Host: CentralStore> CentralWorkspaceDirectory<'store, Host> {
+    pub fn new(host: &'store Host) -> Self {
+        Self { host }
+    }
+}
+
+impl<Host: CentralStore> WorkspaceDirectory for CentralWorkspaceDirectory<'_, Host> {
+    async fn read_by_id(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
+        let rows = self.host.read(Statement {
         sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM workspaces WHERE workspace_id=?",
         args: vec![text(workspace_id)],
     }).await?;
-    let workspace = decode(&rows)?;
-    if workspace
-        .as_ref()
-        .is_some_and(|workspace| workspace.workspace_id != *workspace_id)
-    {
-        return Err(corrupt("workspaces.workspace_id"));
+        let workspace = decode(&rows)?;
+        if workspace
+            .as_ref()
+            .is_some_and(|workspace| workspace.workspace_id != *workspace_id)
+        {
+            return Err(corrupt("workspaces.workspace_id"));
+        }
+        Ok(workspace)
     }
-    Ok(workspace)
-}
 
-pub async fn read_by_name(
-    host: &impl CentralStore,
-    name: &ResourceName,
-) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
-    // Match workspaces_canonical_name exactly: SQLite folds ASCII only and trim()
-    // removes surrounding ASCII spaces. No Rust/Unicode comparison substitutes.
-    let rows = host.read(Statement {
+    async fn read_by_name(
+        &self,
+        name: &ResourceName,
+    ) -> Result<Option<DirectoryWorkspace>, StoreFailure> {
+        // Match workspaces_canonical_name exactly: SQLite folds ASCII only and trim()
+        // removes surrounding ASCII spaces. No Rust/Unicode comparison substitutes.
+        let rows = self.host.read(Statement {
         sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM workspaces WHERE lower(trim(name))=lower(trim(?))",
         args: vec![text(name.as_str())],
     }).await?;
-    decode(&rows)
-}
+        decode(&rows)
+    }
 
-pub fn insert(
-    workspace_id: &WorkspaceId,
-    name: &ResourceName,
-    description: &Description,
-    now: Timestamp,
-) -> Result<GuardedStatement, StoreFailure> {
-    Ok(GuardedStatement {
-        statement: Statement {
-            sql: "INSERT INTO workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'active',?,?)",
-            args: vec![
-                text(workspace_id),
-                text(name.as_str()),
-                text(description.as_str()),
-                text(now.to_rfc3339()),
-                text(now.to_rfc3339()),
-            ],
-        },
-        expect: RowExpectation::Exactly(1),
-    })
+    fn plan_guarded_insert(
+        &self,
+        workspace_id: &WorkspaceId,
+        name: &ResourceName,
+        description: &Description,
+        now: Timestamp,
+    ) -> Result<GuardedStatement, StoreFailure> {
+        Ok(GuardedStatement {
+            statement: Statement {
+                sql: "INSERT INTO workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,?,?,'active',?,?)",
+                args: vec![
+                    text(workspace_id),
+                    text(name.as_str()),
+                    text(description.as_str()),
+                    text(now.to_rfc3339()),
+                    text(now.to_rfc3339()),
+                ],
+            },
+            expect: RowExpectation::Exactly(1),
+        })
+    }
+
+    fn workspace_view(&self, row: DirectoryWorkspace) -> Result<WorkspaceView, StoreFailure> {
+        Ok(WorkspaceView {
+            workspace_id: row
+                .workspace_id
+                .to_string()
+                .try_into()
+                .map_err(|_| corrupt("workspaces.workspace_id"))?,
+            name: row
+                .name
+                .as_str()
+                .to_owned()
+                .try_into()
+                .map_err(|_| corrupt("workspaces.name"))?,
+            description: row
+                .description
+                .as_str()
+                .to_owned()
+                .try_into()
+                .map_err(|_| corrupt("workspaces.description"))?,
+            state: match row.state {
+                WorkspaceState::Active => message_board::WorkspaceState::Active,
+                WorkspaceState::Archived => message_board::WorkspaceState::Archived,
+            },
+        })
+    }
 }
 
 #[cfg(test)]

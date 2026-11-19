@@ -22,8 +22,6 @@ pub struct WorkspaceRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     pub(crate) legacy_invocations: std::sync::Mutex<LegacyUnitInvocations>,
-    #[cfg(feature = "test-support")]
-    lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
 }
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub fn from_runtime(
@@ -52,8 +50,6 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             legacy_invocations: Default::default(),
             #[cfg(feature = "test-support")]
             lost_provisioning_reply: Default::default(),
-            #[cfg(feature = "test-support")]
-            lost_answers: Default::default(),
         })
     }
     #[cfg(feature = "test-support")]
@@ -66,6 +62,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         self.lost_provisioning_reply
             .swap(false, std::sync::atomic::Ordering::SeqCst)
     }
+    pub(crate) fn workspace_directory(&self) -> impl fleet_contracts::WorkspaceDirectory + '_ {
+        fleet_workspace_directory::CentralWorkspaceDirectory::new(self.statement_host())
+    }
+
     pub fn statement_host(&self) -> &Host {
         self.fleet_runtime.statement_host()
     }
@@ -149,19 +149,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     pub fn workspace_turns(&self) -> &fleet_runtime::WorkspaceTurns {
         self.fleet_runtime.workspace_turns()
     }
+
     #[cfg(feature = "test-support")]
     pub fn lose_reply_after_apply(&self, request: workspace_model::RequestId) {
-        self.lost_answers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(request);
-    }
-    #[cfg(feature = "test-support")]
-    pub(crate) fn take_lost_reply(&self, request: &workspace_model::RequestId) -> bool {
-        self.lost_answers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(request)
+        self.fleet_runtime.lose_reply_after_apply(request);
     }
     #[cfg(feature = "test-support")]
     pub async fn inspect_workspace(

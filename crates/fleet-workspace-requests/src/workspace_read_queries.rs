@@ -4,7 +4,7 @@ use workspace_model::{ActorIdentityId, ItemRef, WorkspaceOperation};
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
 }
-pub fn read_statement(
+pub(crate) fn read_statement(
     workspace: &workspace_model::WorkspaceId,
     actor: &ActorIdentityId,
     operation: &WorkspaceOperation,

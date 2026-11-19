@@ -1,7 +1,7 @@
 //! Verified setup decisions share one org-owned directory, ledger and audit batch.
 use crate::{
     AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
-    organization_admin_contract::{RetainedOrganizationAdminAnswer, WorkspaceView},
+    organization_admin_contract::RetainedOrganizationAdminAnswer,
     organization_change_rows::{
         self, ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
         OrganizationChangeRecord,
@@ -9,11 +9,11 @@ use crate::{
     person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
 };
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_contracts::{DirectoryWorkspace, WorkspaceDirectory};
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
-use fleet_workspace_directory::DirectoryWorkspace;
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
     WorkspaceId, WorkspaceState,
@@ -28,32 +28,6 @@ pub(crate) struct WorkspaceCreatePlan {
 
 fn refused(reason: AdminRefusal) -> OrganizationAdminResult {
     OrganizationAdminResult::Refused { reason }
-}
-
-pub(crate) fn workspace_view(row: DirectoryWorkspace) -> Result<WorkspaceView, StoreFailure> {
-    Ok(WorkspaceView {
-        workspace_id: row
-            .workspace_id
-            .to_string()
-            .try_into()
-            .map_err(|_| corrupt("workspaces.workspace_id"))?,
-        name: row
-            .name
-            .as_str()
-            .to_owned()
-            .try_into()
-            .map_err(|_| corrupt("workspaces.name"))?,
-        description: row
-            .description
-            .as_str()
-            .to_owned()
-            .try_into()
-            .map_err(|_| corrupt("workspaces.description"))?,
-        state: match row.state {
-            WorkspaceState::Active => message_board::WorkspaceState::Active,
-            WorkspaceState::Archived => message_board::WorkspaceState::Archived,
-        },
-    })
 }
 
 fn retained_result(
@@ -153,10 +127,8 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             .try_into()
             .map_err(|_| corrupt("workspace.description"))?;
         let mut statements = actor.statements;
-        let result = if fleet_workspace_directory::read_by_name(self.statement_host(), &name)
-            .await?
-            .is_some()
-        {
+        let directory = self.workspace_directory();
+        let result = if directory.read_by_name(&name).await?.is_some() {
             refused(AdminRefusal::NameInUse)
         } else {
             let workspace_id: WorkspaceId = request
@@ -165,7 +137,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 .to_owned()
                 .try_into()
                 .map_err(|_| corrupt("workspace_id"))?;
-            statements.push(fleet_workspace_directory::insert(
+            statements.push(directory.plan_guarded_insert(
                 &workspace_id,
                 &name,
                 &description,
@@ -187,7 +159,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 },
             )?);
             OrganizationAdminResult::Applied {
-                workspace: workspace_view(DirectoryWorkspace {
+                workspace: directory.workspace_view(DirectoryWorkspace {
                     workspace_id,
                     name,
                     description,

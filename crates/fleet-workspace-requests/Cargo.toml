@@ -10,8 +10,13 @@ description = "Workspace read and write request planning"
 [lints]
 workspace = true
 
+[features]
+test-support = ["fleet-runtime/test-support"]
+
 [dependencies]
 central-storage.workspace = true
+chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
+fleet-contracts.workspace = true
 fleet-runtime.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-workspace-access.workspace = true

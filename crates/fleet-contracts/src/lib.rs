@@ -7,7 +7,9 @@ mod event_completion;
 mod issuer_refusals;
 mod statement_refusal;
 mod workspace_caller;
-mod workspace_description;
+pub mod workspace_description;
+mod workspace_directory;
+mod workspace_drain;
 
 pub use central_observation::CentralObservation;
 pub use event_completion::{AlarmNotPublished, AlarmResult, EventCompletion, EventCompletionHook};
@@ -15,3 +17,5 @@ pub use issuer_refusals::{IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerSi
 pub use statement_refusal::FleetOrganizationStatementRefusal;
 pub use workspace_caller::WorkspaceCaller;
 pub use workspace_description::MAXIMUM_DESCRIPTION_BYTES;
+pub use workspace_directory::{DirectoryWorkspace, WorkspaceDirectory, WorkspaceView};
+pub use workspace_drain::WorkspaceDrain;
