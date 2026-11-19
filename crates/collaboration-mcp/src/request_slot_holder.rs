@@ -58,7 +58,6 @@ impl RequestSlotHolder {
                 created_by: owner.clone().into(),
                 approver: owner.into(),
                 updated_at_ms: 1,
-                resume: Default::default(),
             })
             .await
             .map_err(io::Error::other)?;

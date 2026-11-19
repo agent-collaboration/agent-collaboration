@@ -1,20 +1,16 @@
 //! CLI producers and recipient observations for the isolated push matrix.
-use super::owned_resources::OwnedMatrixResources;
 use super::{OBSERVATION_TIMEOUT, ProofContext, ProofResult};
 use collaboration_client::{
     ConversationActor, ConversationClient, ConversationCreateInput,
     protocol::{
-        ConversationCreateOutcome, DestinationPreparation, EndpointRef, ExecutionDestination,
-        InstructionCreateParams, OperationId, PushRecordListParams, PushRecordShowParams,
-        RouterAccess, RunListRequest, ScheduleCreateRequest, ScheduleDefinition,
-        ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest, WakeupId,
+        ConversationCreateOutcome, EndpointRef, OperationId, PushRecordListParams,
+        PushRecordShowParams, RouterAccess, SessionRef,
     },
 };
 use collaboration_protocol::{
-    MachineLabel, PushLineInput, PushRecord, PushRecordNotice, PushRecordShowResult, RouterLink,
-    RouterOriginRef, render_push_line,
+    MachineLabel, PushLineInput, PushRecordNotice, PushRecordShowResult, RouterLink,
+    render_push_line,
 };
-use interaction_storage::InteractionStore;
 use owned_process_test_support::owned_cli_process::run_cli_output;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
@@ -378,172 +374,6 @@ pub(super) async fn wait_for_codex_input(
         }
         if tokio::time::Instant::now() >= deadline {
             return Err(format!("thread/read did not observe push marker {marker}").into());
-        }
-    }
-}
-
-pub(super) async fn cli_wake_send(
-    proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
-    body: &str,
-    resources: &mut OwnedMatrixResources,
-) -> ProofResult<Value> {
-    let sender_json = serde_json::to_string(sender)?;
-    let target_json = serde_json::to_string(target)?;
-    let operation_id = OperationId::generate();
-    let operation_text = String::from(operation_id.clone());
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
-    command
-        .args([
-            "wake",
-            "send",
-            "--from",
-            &sender_json,
-            "--to",
-            &target_json,
-            "--text",
-            body,
-            "--after",
-            "1s",
-            "--wait-until-first-fire",
-            "--operation-id",
-            &operation_text,
-        ])
-        .arg("--service-directory")
-        .arg(&proof.service_directory)
-        .arg("--json");
-    resources.record_wake_submission(operation_id.clone())?;
-    let output = run_cli_output(command, OBSERVATION_TIMEOUT).await?;
-    let response: Value = serde_json::from_slice(&output.stdout)?;
-    retain_created_wake(resources, &operation_id, &response)?;
-    if !output.status.success()
-        || response.pointer("/result/record/firstFire/kind") != Some(&json!("wakeFired"))
-    {
-        return Err(format!("wake did not report first fire: {response}").into());
-    }
-    Ok(response)
-}
-
-fn retain_created_wake(
-    resources: &mut OwnedMatrixResources,
-    operation_id: &OperationId,
-    response: &Value,
-) -> ProofResult<()> {
-    let mut returned_id: Option<WakeupId> = None;
-    for path in [
-        "/result/record/definition/wakeupId",
-        "/wakeupId",
-        "/created/definition/wakeupId",
-    ] {
-        if let Some(value) = response.pointer(path) {
-            let observed: WakeupId = serde_json::from_value(value.clone())?;
-            if returned_id.as_ref().is_some_and(|known| known != &observed) {
-                // Conflicting identities remain submission-only; no guessed cleanup target.
-                return Err("wake receipt returned conflicting resource identities".into());
-            }
-            returned_id = Some(observed);
-        }
-    }
-    if let Some(wakeup_id) = returned_id {
-        resources.record_wake_receipt(operation_id, wakeup_id)?;
-    }
-    Ok(())
-}
-
-pub(super) async fn create_existing_session_schedule(
-    proof: &mut ProofContext,
-    target: &SessionRef,
-    body: &str,
-    resources: &mut OwnedMatrixResources,
-) -> ProofResult<agent_automation::ScheduleId> {
-    let instruction_operation = OperationId::generate();
-    resources.record_instruction_submission(instruction_operation.clone())?;
-    let instruction = proof
-        .client
-        .create_instruction(InstructionCreateParams {
-            operation_id: instruction_operation.clone(),
-            text: body.to_owned().try_into()?,
-        })
-        .await?;
-    resources
-        .record_instruction_receipt(&instruction_operation, instruction.instruction_id.clone())?;
-    let schedule_operation = OperationId::generate();
-    resources.record_schedule_submission(schedule_operation.clone())?;
-    let schedule = proof
-        .client
-        .create_schedule(ScheduleCreateRequest {
-            operation_id: schedule_operation.clone(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRequest::After {
-                    seconds: 5.try_into()?,
-                },
-                enabled: false,
-                destination: ExecutionDestination::Unprepared,
-                execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-luna".to_owned()),
-                effort: Some("low".to_owned()),
-            },
-        })
-        .await?;
-    resources.record_schedule_receipt(&schedule_operation, schedule.schedule_id.clone())?;
-    proof
-        .client
-        .prepare_schedule(SchedulePrepareRequest {
-            operation_id: OperationId::generate(),
-            schedule_id: schedule.schedule_id.clone(),
-            destination: DestinationPreparation::Existing {
-                target: target.clone(),
-                cwd: proof.workspace.to_string_lossy().into_owned(),
-            },
-        })
-        .await?;
-    let enabled = proof
-        .client
-        .enable_schedule(ScheduleEnableRequest {
-            operation_id: OperationId::generate(),
-            schedule_id: schedule.schedule_id.clone(),
-        })
-        .await?;
-    if enabled.next_due_at.is_none() {
-        return Err("existing-session schedule has no next due time".into());
-    }
-    Ok(schedule.schedule_id)
-}
-
-pub(super) async fn wait_for_schedule_push(
-    proof: &mut ProofContext,
-    interactions: &InteractionStore,
-    schedule_id: agent_automation::ScheduleId,
-    timeout: Duration,
-) -> ProofResult<(RouterOriginRef, PushRecord)> {
-    let deadline = tokio::time::Instant::now() + timeout;
-    let mut observation = tokio::time::interval(Duration::from_millis(250));
-    loop {
-        observation.tick().await;
-        let runs = proof
-            .client
-            .list_runs(RunListRequest {
-                schedule_id: schedule_id.clone(),
-                cursor: None,
-                limit: 25_u32.try_into()?,
-            })
-            .await?;
-        if let Some(run) = runs.records.first() {
-            let origin = RouterOriginRef::ScheduleRun {
-                schedule_id: schedule_id.clone(),
-                run_id: run.run_id.clone(),
-            };
-            if let Some(record) = interactions
-                .get_push_record_by_origin_reference(&origin)
-                .await?
-            {
-                return Ok((origin, record));
-            }
-        }
-        if tokio::time::Instant::now() >= deadline {
-            return Err("existing-session schedule produced no stored run push".into());
         }
     }
 }

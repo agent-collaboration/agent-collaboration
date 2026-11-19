@@ -20,14 +20,6 @@ pub fn at<'a>(value: &'a Value, pointer: &str) -> FixtureResult<&'a Value> {
         .ok_or_else(|| format!("missing {pointer}: {value}").into())
 }
 
-pub fn set_field(object: &mut Value, field: &str, value: Value) -> FixtureResult {
-    let _previous = object
-        .as_object_mut()
-        .ok_or("fixture fields require an object")?
-        .insert(field.to_owned(), value);
-    Ok(())
-}
-
 pub struct MailFixture {
     pub root: tempfile::TempDir,
     pub directory: PathBuf,
@@ -152,10 +144,6 @@ impl MailFixture {
             request.insert("itemId".to_owned(), json!(item));
         }
         Value::Object(request)
-    }
-
-    pub fn session(&self, name: &str) -> FixtureResult<Value> {
-        Ok(json!({"endpoint":at(&self.target, "/endpoint")?,"sessionId":name}))
     }
 
     async fn shutdown(mut self) -> FixtureResult {

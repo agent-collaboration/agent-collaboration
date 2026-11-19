@@ -1,20 +1,14 @@
-//! One-pass cleanup mutations followed by reads of the existing M2 state owners.
+//! One-pass Unsubscribe/Unwatch cleanup followed by Board readback of each owned pair.
 #[path = "owned_resource_cleanup_readback.rs"]
 pub(super) mod readback;
-use super::owned_resources::{CleanupIntent, MatrixCleanupPlan, UnresolvedCreation};
+use super::owned_resources::{CleanupIntent, MatrixCleanupPlan};
 use collaboration_client::{
-    BoardClientError, ClientError, CollaborationClient, ScheduleClientError, WakeClientError,
+    BoardClientError, ClientError, CollaborationClient,
     board::{
         BoardFailureKind, BoardFailureStage, Identity, SubscriptionScope, ThreadId,
         ThreadUnwatchRequest,
     },
-    protocol::{
-        ChangeId, DeliveryDisposition, DeliveryId, LocalMutationEvidence, LocalMutationState,
-        ObservationTimestamp, OperationId, RunId, ScheduleEffects, ScheduleEnableRequest,
-        ScheduleFailureKind, ScheduleFailureStage, ScheduleId, ThreadSubscriptionState,
-        ThreadSubscriptionsRequest, ThreadUnsubscribeRequest, WakeFailureReason, WakeFailureStage,
-        WakeMutationRequest, WakeMutationResult, WakeState, WakeupId,
-    },
+    protocol::{ThreadSubscriptionState, ThreadSubscriptionsRequest, ThreadUnsubscribeRequest},
 };
 
 /// C retains this same client and owner outside its caught scenario, before first mutation.
@@ -37,23 +31,14 @@ impl OwnedMatrixScope {
         // All actual attempts/history survive the scenario error/panic reduction as metadata.
         let reporting_error =
             writeln!(std::io::stderr(), "matrix resource cleanup: {report:?}").err();
-        let returned_local_retirement = report.unresolved.is_empty()
-            && report.attempts.iter().all(|attempt| {
-                matches!(
-                    &attempt.outcome,
-                    CleanupOutcome::Returned(CleanupObservation::Wake {
-                        state: WakeState::Cancelled | WakeState::Expired | WakeState::Finished,
-                        next_due_at: None,
-                        ..
-                    }) | CleanupOutcome::Returned(CleanupObservation::Schedule {
-                        enabled: false,
-                        next_due_at: None,
-                        ..
-                    }) | CleanupOutcome::Returned(CleanupObservation::Subscription {
-                        delivery_eligible: false,
-                    }) | CleanupOutcome::Returned(CleanupObservation::Watch { watching: false })
-                )
-            });
+        let returned_local_retirement = report.attempts.iter().all(|attempt| {
+            matches!(
+                &attempt.outcome,
+                CleanupOutcome::Returned(CleanupObservation::Subscription {
+                    delivery_eligible: false,
+                }) | CleanupOutcome::Returned(CleanupObservation::Watch { watching: false })
+            )
+        });
         if returned_local_retirement && reporting_error.is_none() {
             Ok(())
         } else {
@@ -84,26 +69,18 @@ impl std::error::Error for MatrixCleanupFailure {}
 
 #[derive(Debug)]
 pub(super) struct MatrixCleanupReport {
-    pub(super) unresolved: Vec<UnresolvedCreation>,
     pub(super) attempts: Vec<CleanupAttempt>,
 }
 
 #[derive(Debug)]
 pub(super) struct CleanupAttempt {
+    #[expect(dead_code, reason = "Read only through the Debug cleanup report.")]
     pub(super) action: CleanupAction,
     pub(super) outcome: CleanupOutcome,
 }
 
 #[derive(Debug)]
 pub(super) enum CleanupAction {
-    CancelWake {
-        operation_id: OperationId,
-        wakeup_id: WakeupId,
-    },
-    DisableSchedule {
-        operation_id: OperationId,
-        schedule_id: ScheduleId,
-    },
     Unsubscribe {
         actor: Identity,
         root_message_id: ThreadId,
@@ -125,93 +102,16 @@ pub(super) enum CleanupOutcome {
 
 #[derive(Debug)]
 pub(super) enum CleanupObservation {
-    Wake {
-        state: WakeState,
-        next_due_at: Option<ObservationTimestamp>,
-        pending_delivery_id: Option<DeliveryId>,
-        discarded_delivery_ids: Vec<DeliveryId>,
-        retained_deliveries: Vec<RetainedDeliveryObservation>,
-    },
-    Schedule {
-        change_id: ChangeId,
-        enabled: bool,
-        next_due_at: Option<ObservationTimestamp>,
-        active_run_id: Option<RunId>,
-        waiting_run_id: Option<RunId>,
-    },
-    Subscription {
-        delivery_eligible: bool,
-    },
-    Watch {
-        watching: bool,
-    },
-}
-
-#[derive(Debug)]
-pub(super) struct RetainedDeliveryObservation {
-    pub(super) delivery_id: DeliveryId,
-    pub(super) disposition: DeliveryDisposition,
+    Subscription { delivery_eligible: bool },
+    Watch { watching: bool },
 }
 
 #[derive(Debug)]
 pub(super) enum ReportedCleanupFailure {
-    Wake {
-        kind: WakeCleanupFailureKind,
-        stage: WakeFailureStage,
-        operation_id: Option<OperationId>,
-        wakeup_id: Option<WakeupId>,
-        mutation: LocalMutationState,
-    },
-    Schedule {
-        kind: ScheduleFailureKind,
-        stage: ScheduleFailureStage,
-        operation_id: Option<OperationId>,
-        schedule_id: Option<ScheduleId>,
-        current_change_id: Option<ChangeId>,
-        effect: ReportedCleanupEffect,
-    },
     Board {
         kind: BoardFailureKind,
         stage: BoardFailureStage,
     },
-}
-
-/// The wire InvalidField variant also carries arbitrary strings; retain its closed tag only.
-pub(super) enum WakeCleanupFailureKind {
-    Refused(collaboration_protocol::WakeRefusal),
-    InvalidField,
-    OperationConflict,
-    AutomationUnavailable,
-    ResourceNotFound,
-    InvalidRecord,
-    LifecycleConflict,
-    Overloaded,
-    RemoteUnavailable,
-    DeadlineExpired,
-}
-
-impl std::fmt::Debug for WakeCleanupFailureKind {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Refused(reason) => formatter.debug_tuple("Refused").field(reason).finish(),
-            Self::InvalidField => formatter.write_str("InvalidField"),
-            Self::OperationConflict => formatter.write_str("OperationConflict"),
-            Self::AutomationUnavailable => formatter.write_str("AutomationUnavailable"),
-            Self::ResourceNotFound => formatter.write_str("ResourceNotFound"),
-            Self::InvalidRecord => formatter.write_str("InvalidRecord"),
-            Self::LifecycleConflict => formatter.write_str("LifecycleConflict"),
-            Self::Overloaded => formatter.write_str("Overloaded"),
-            Self::RemoteUnavailable => formatter.write_str("RemoteUnavailable"),
-            Self::DeadlineExpired => formatter.write_str("DeadlineExpired"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(super) enum ReportedCleanupEffect {
-    Local(LocalMutationState),
-    /// Retain the reported category without copying route payloads or claiming cessation.
-    Route,
 }
 
 #[derive(Debug)]
@@ -242,32 +142,20 @@ pub(super) async fn cleanup_owned_resources(
 ) -> MatrixCleanupReport {
     let MatrixCleanupPlan {
         intents,
-        unresolved,
         history: _,
     } = plan;
     let mut attempts = Vec::with_capacity(intents.len());
     for intent in intents {
-        // The owned action, including any generated operation ID, exists before dispatch.
+        // The owned action exists before dispatch.
         let action = prepare_cleanup_action(intent);
         let outcome = execute_cleanup_action(client, &action).await;
         attempts.push(CleanupAttempt { action, outcome });
     }
-    MatrixCleanupReport {
-        unresolved,
-        attempts,
-    }
+    MatrixCleanupReport { attempts }
 }
 
 fn prepare_cleanup_action(intent: CleanupIntent) -> CleanupAction {
     match intent {
-        CleanupIntent::CancelWake(wakeup_id) => CleanupAction::CancelWake {
-            operation_id: OperationId::generate(),
-            wakeup_id,
-        },
-        CleanupIntent::DisableSchedule(schedule_id) => CleanupAction::DisableSchedule {
-            operation_id: OperationId::generate(),
-            schedule_id,
-        },
         CleanupIntent::Unsubscribe {
             actor,
             root_message_id,
@@ -290,45 +178,6 @@ async fn execute_cleanup_action(
     action: &CleanupAction,
 ) -> CleanupOutcome {
     match action {
-        CleanupAction::CancelWake {
-            operation_id,
-            wakeup_id,
-        } => {
-            match client
-                .cancel_wakeup(WakeMutationRequest {
-                    operation_id: operation_id.clone(),
-                    wakeup_id: wakeup_id.clone(),
-                })
-                .await
-            {
-                Ok(result) => project_wake_result(wakeup_id, result),
-                Err(error) => project_wake_failure(error),
-            }
-        }
-        CleanupAction::DisableSchedule {
-            operation_id,
-            schedule_id,
-        } => {
-            match client
-                .disable_schedule(ScheduleEnableRequest {
-                    operation_id: operation_id.clone(),
-                    schedule_id: schedule_id.clone(),
-                })
-                .await
-            {
-                Ok(result) if &result.schedule_id == schedule_id => {
-                    CleanupOutcome::Returned(CleanupObservation::Schedule {
-                        change_id: result.change_id,
-                        enabled: result.definition.enabled,
-                        next_due_at: result.next_due_at,
-                        active_run_id: result.active_run_id,
-                        waiting_run_id: result.waiting_run_id,
-                    })
-                }
-                Ok(_) => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
-                Err(error) => project_schedule_failure(error),
-            }
-        }
         CleanupAction::Unsubscribe {
             actor,
             root_message_id,
@@ -429,80 +278,6 @@ async fn read_subscription_cleanup(
             CleanupOutcome::Returned(CleanupObservation::Subscription { delivery_eligible })
         }
         Err(error) => project_board_failure(error),
-    }
-}
-
-fn project_wake_result(wakeup_id: &WakeupId, result: WakeMutationResult) -> CleanupOutcome {
-    match result {
-        result if &result.wakeup.definition.wakeup_id == wakeup_id => {
-            CleanupOutcome::Returned(CleanupObservation::Wake {
-                state: result.wakeup.state,
-                next_due_at: result.wakeup.next_due_at,
-                pending_delivery_id: result.wakeup.pending_delivery_id,
-                discarded_delivery_ids: result.discarded_delivery_ids,
-                retained_deliveries: result
-                    .dispatched_deliveries
-                    .into_iter()
-                    .map(|delivery| RetainedDeliveryObservation {
-                        delivery_id: delivery.delivery_id,
-                        disposition: delivery.disposition,
-                    })
-                    .collect(),
-            })
-        }
-        _ => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
-    }
-}
-
-fn project_wake_failure(error: WakeClientError) -> CleanupOutcome {
-    match error {
-        WakeClientError::Rejected(failure) => {
-            let failure = *failure;
-            let kind = match failure.reason {
-                WakeFailureReason::InvalidField { .. } => WakeCleanupFailureKind::InvalidField,
-                WakeFailureReason::OperationConflict => WakeCleanupFailureKind::OperationConflict,
-                WakeFailureReason::AutomationUnavailable => {
-                    WakeCleanupFailureKind::AutomationUnavailable
-                }
-                WakeFailureReason::ResourceNotFound => WakeCleanupFailureKind::ResourceNotFound,
-                WakeFailureReason::InvalidRecord => WakeCleanupFailureKind::InvalidRecord,
-                WakeFailureReason::LifecycleConflict => WakeCleanupFailureKind::LifecycleConflict,
-                WakeFailureReason::Overloaded => WakeCleanupFailureKind::Overloaded,
-                WakeFailureReason::RemoteUnavailable => WakeCleanupFailureKind::RemoteUnavailable,
-                WakeFailureReason::DeadlineExpired => WakeCleanupFailureKind::DeadlineExpired,
-                WakeFailureReason::Refused(reason) => WakeCleanupFailureKind::Refused(reason),
-            };
-            let LocalMutationEvidence::Local { mutation } = failure.effects;
-            CleanupOutcome::Rejected(ReportedCleanupFailure::Wake {
-                kind,
-                stage: failure.stage,
-                operation_id: failure.operation_id,
-                wakeup_id: failure.wakeup_id,
-                mutation,
-            })
-        }
-        WakeClientError::Connection(error) => project_client_failure(error),
-    }
-}
-
-fn project_schedule_failure(error: ScheduleClientError) -> CleanupOutcome {
-    match error {
-        ScheduleClientError::Rejected(failure) => {
-            let failure = *failure;
-            let effect = match failure.effects {
-                ScheduleEffects::Local { mutation } => ReportedCleanupEffect::Local(mutation),
-                ScheduleEffects::Route { .. } => ReportedCleanupEffect::Route,
-            };
-            CleanupOutcome::Rejected(ReportedCleanupFailure::Schedule {
-                kind: failure.kind,
-                stage: failure.stage,
-                operation_id: failure.operation_id,
-                schedule_id: failure.schedule_id,
-                current_change_id: failure.current_change_id,
-                effect,
-            })
-        }
-        ScheduleClientError::Connection(error) => project_client_failure(error),
     }
 }
 

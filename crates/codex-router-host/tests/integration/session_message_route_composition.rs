@@ -14,7 +14,7 @@ use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
 use route_fixture::{
     create_provider_target, load_provider_target, message, prompt_and_approve_from_peer_provider,
-    provider_fixture, publish_peer, send_and_wait_wake, wait_for_completed_provider_prompts,
+    provider_fixture, publish_peer, wait_for_completed_provider_prompts,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
@@ -247,8 +247,6 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     );
     assert!(!cursor_loads.exists(), "held Cursor was loaded again");
 
-    send_and_wait_wake(&client, held_claude.clone()).await;
-    send_and_wait_wake(&client, held_cursor.clone()).await;
     prompt_and_approve_from_peer_provider(
         &client,
         held_claude.clone(),

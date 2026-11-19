@@ -405,21 +405,6 @@ export const section: LedgerSection = {
       "SessionObservation::observe_bounded, provider endpoint branch -> tools/call events_observe (collaboration-client provider_session_observation.rs:128-154,345)",
     ),
     mcp(
-      "instruction_commands.rs",
-      159,
-      "CollaborationClient::create_instruction -> tools/call instruction_create",
-    ),
-    mcp(
-      "instruction_commands.rs",
-      160,
-      "CollaborationClient::update_instruction -> tools/call instruction_update",
-    ),
-    mcp(
-      "instruction_commands.rs",
-      161,
-      "CollaborationClient::read_instruction -> tools/call instruction_show",
-    ),
-    mcp(
       "journal_read_commands.rs",
       106,
       "CollaborationClient::read_journal -> tools/call journal_read",
@@ -527,53 +512,6 @@ export const section: LedgerSection = {
       161,
       "CollaborationClient::list_questions -> tools/call question_list",
     ),
-    mcp("run_commands.rs", 158, "CollaborationClient::read_run -> tools/call run_show"),
-    mcp(
-      "run_commands.rs",
-      159,
-      "CollaborationClient::retry_summary -> tools/call run_summary_retry",
-    ),
-    mcp("run_commands.rs", 160, "CollaborationClient::skip_summary -> tools/call run_summary_skip"),
-    mcp(
-      "schedule_commands.rs",
-      200,
-      "CollaborationClient::import_schedule -> tools/call schedule_import",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      203,
-      "CollaborationClient::export_schedule -> tools/call schedule_export",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      211,
-      "CollaborationClient::prepare_schedule -> tools/call schedule_prepare",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      219,
-      "CollaborationClient::create_schedule -> tools/call schedule_create",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      222,
-      "CollaborationClient::update_schedule -> tools/call schedule_update",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      225,
-      "CollaborationClient::read_schedule -> tools/call schedule_show",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      228,
-      "CollaborationClient::enable_schedule -> tools/call schedule_enable",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      231,
-      "CollaborationClient::disable_schedule -> tools/call schedule_disable",
-    ),
     mcp(
       "session_inventory_commands.rs",
       202,
@@ -588,22 +526,6 @@ export const section: LedgerSection = {
       "session_inventory_commands.rs",
       217,
       "CollaborationClient::list_provider_sessions -> tools/call provider_sessions_list",
-    ),
-    mcp("wakeup_commands.rs", 166, "CollaborationClient::send_wakeup -> tools/call wake_send"),
-    mcp("wakeup_commands.rs", 191, "CollaborationClient::read_wakeup -> tools/call wake_show"),
-    mcp("wakeup_commands.rs", 194, "CollaborationClient::list_wakeups -> tools/call wake_list"),
-    mcp("wakeup_commands.rs", 197, "CollaborationClient::pause_wakeup -> tools/call wake_pause"),
-    mcp("wakeup_commands.rs", 198, "CollaborationClient::resume_wakeup -> tools/call wake_resume"),
-    mcp("wakeup_commands.rs", 199, "CollaborationClient::cancel_wakeup -> tools/call wake_cancel"),
-    mcp(
-      "wakeup_wait_output.rs",
-      17,
-      "CollaborationClient::subscribe_wakeup -> tools/call wake_show",
-    ),
-    mcp(
-      "wakeup_wait_output.rs",
-      19,
-      "WakeWaitConnection::wait_until_first_fire -> tools/call wake_wait_until_first_fire",
     ),
     mcp(
       "whoami_command.rs",

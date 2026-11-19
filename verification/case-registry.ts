@@ -4,9 +4,6 @@ import { ObservationOpen, type Receipt } from "./receipt.ts";
 import { messagesAndNotifications, messageNotificationCase } from "./cases/message-notification.ts";
 import { centralOutage, centralOutageCase } from "./cases/central-outage.ts";
 import { heldCopy, heldCopyCase } from "./cases/held-copy.ts";
-import { remoteWakes, remoteWakesCase } from "./cases/remote-wakes.ts";
-import { remoteWakeLimits, remoteWakeLimitsCase } from "./cases/remote-wake-limits.ts";
-import { remoteWakeExpiry, remoteWakeExpiryCase } from "./cases/remote-wake-expiry.ts";
 import { forwardedPosts, forwardedPostsCase } from "./cases/forwarded-posts.ts";
 
 export interface RunnableCase extends CaseRegistration {
@@ -36,9 +33,6 @@ export function casesFor(): readonly RunnableCase[] {
     run: heldCopy,
   });
   cases.push(
-    { ...remoteWakesCase, run: remoteWakes },
-    { ...remoteWakeLimitsCase, run: remoteWakeLimits },
-    { ...remoteWakeExpiryCase, run: remoteWakeExpiry },
     // F observes delivery; its native and Worker non-retention proof is separate.
     { ...forwardedPostsCase, run: forwardedPosts },
   );

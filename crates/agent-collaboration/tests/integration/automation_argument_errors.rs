@@ -1,111 +1,84 @@
 //! Argument rejection is machine-readable before service discovery or native dispatch.
+
+/// The local wake and schedule command groups this build no longer carries, each with a
+/// command it once accepted.
+const RETIRED_GROUP_COMMANDS: [[&str; 2]; 8] = [
+    ["wake", "send"],
+    ["schedule", "create"],
+    ["instruction", "show"],
+    ["run", "show"],
+    ["automation", "status"],
+    ["delivery", "list"],
+    ["revision", "list"],
+    ["operation", "show"],
+];
+
 #[test]
-fn json_argument_errors_report_validation_and_no_effects() {
-    for group in [
-        "wake",
-        "schedule",
-        "instruction",
-        "run",
-        "automation",
-        "delivery",
-        "revision",
-        "operation",
-    ] {
+fn retired_command_groups_answer_not_available_in_json_and_never_reach_the_picker() {
+    for [group, leaf] in RETIRED_GROUP_COMMANDS {
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-            .args([group, "invalid-action", "--json"])
+            .args([group, leaf, "--json"])
             .output()
             .expect("CLI executes");
-        assert_eq!(output.status.code(), Some(2), "{group}");
+        assert_eq!(output.status.code(), Some(2), "{group} {leaf}");
+        // The session picker never answers JSON; this one decodes or the command fell through.
         let value: serde_json::Value =
             serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
                 panic!(
-                    "{group} must return JSON: {error}; stderr={}",
+                    "{group} {leaf} must return JSON: {error}; stderr={}",
                     String::from_utf8_lossy(&output.stderr)
                 )
             });
+        assert_eq!(value["kind"], "error", "{group} {leaf}: {value}");
+        assert_eq!(value["error"]["kind"], "invalidUsage", "{group} {leaf}");
+        assert_eq!(value["error"]["stage"], "validation", "{group} {leaf}");
         assert_eq!(
-            value
-                .pointer("/error/kind")
-                .and_then(serde_json::Value::as_str),
-            Some("invalidField")
+            value["error"]["message"], "not available in this build",
+            "{group} {leaf}"
         );
         assert_eq!(
-            value
-                .pointer("/error/stage")
-                .and_then(serde_json::Value::as_str),
-            Some("validation")
-        );
-        assert_eq!(
-            value
-                .pointer("/error/effects/mutation")
-                .and_then(serde_json::Value::as_str),
-            Some("none")
-        );
-        assert_eq!(
-            value
-                .pointer("/error/nextAction")
-                .and_then(serde_json::Value::as_str),
-            Some("correctRequest")
+            value["error"]["nextAction"], "correctRequest",
+            "{group} {leaf}"
         );
     }
 }
 
 #[test]
-fn help_remains_successful_without_connecting_to_a_service() {
-    for group in [
-        "wake",
-        "schedule",
-        "instruction",
-        "run",
-        "automation",
-        "delivery",
-        "revision",
-        "operation",
-    ] {
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-            .args([group, "--help"])
-            .output()
-            .expect("CLI executes");
-        assert!(output.status.success(), "{group}");
-        assert!(
-            String::from_utf8_lossy(&output.stdout).contains("Usage:"),
-            "{group}"
-        );
+fn retired_command_groups_and_their_help_refuse_in_plain_output() {
+    for [group, leaf] in RETIRED_GROUP_COMMANDS {
+        for arguments in [[group, leaf], [group, "--help"]] {
+            let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+                .args(arguments)
+                .output()
+                .expect("CLI executes");
+            assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+            assert!(output.stdout.is_empty(), "{arguments:?} printed usage");
+            assert_eq!(
+                String::from_utf8_lossy(&output.stderr),
+                format!("agent-collaboration {group}: not available in this build\n"),
+                "{arguments:?}"
+            );
+        }
     }
 }
 
 #[test]
-fn invalid_run_identity_reports_field_and_no_dispatch() {
+fn top_level_help_no_longer_lists_retired_command_groups() {
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args(["run", "show", "--run-id", "invalid", "--json"])
+        .arg("--help")
         .output()
         .expect("CLI executes");
-    assert_eq!(output.status.code(), Some(2));
-    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON error");
-    assert_eq!(
-        value
-            .pointer("/error/stage")
-            .and_then(serde_json::Value::as_str),
-        Some("validation")
-    );
-    assert_eq!(
-        value
-            .pointer("/error/field")
-            .and_then(serde_json::Value::as_str),
-        Some("--run-id")
-    );
-    assert_eq!(
-        value
-            .pointer("/error/effects/mutation")
-            .and_then(serde_json::Value::as_str),
-        Some("none")
-    );
-    assert_eq!(
-        value
-            .pointer("/error/nextAction")
-            .and_then(serde_json::Value::as_str),
-        Some("correctRequest")
-    );
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    for [group, _] in RETIRED_GROUP_COMMANDS {
+        assert!(
+            !help
+                .lines()
+                .any(|line| line.starts_with(&format!("  {group} "))),
+            "help still lists {group}: {help}"
+        );
+    }
+    assert!(help.contains("  conversation operation show|wait|reconcile"));
 }
 
 #[test]

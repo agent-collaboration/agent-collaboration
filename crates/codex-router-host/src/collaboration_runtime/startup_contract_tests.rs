@@ -1,6 +1,5 @@
 //! Consumer proofs over the actual Host composition, with weak test-only observers.
 use super::{CollaborationRuntime, CollaborationRuntimeInputs};
-use collaboration_client::CollaborationClient;
 use collaboration_protocol::SessionRef;
 use std::{os::unix::fs::PermissionsExt as _, sync::Arc, time::Duration};
 
@@ -14,8 +13,6 @@ mod observation_recheck_tests;
 mod scheduler_completion_tests;
 #[path = "startup_contract_tests/status_cancellation_test.rs"]
 mod status_cancellation_test;
-#[path = "startup_contract_tests/wake_capacity_tests.rs"]
-mod wake_capacity_tests;
 
 #[tokio::test]
 async fn whole_host_shutdown_retains_the_native_failure_when_link_observation_fails() {
@@ -94,12 +91,6 @@ fn target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
         "sessionId":session
     }))
     .expect("local target")
-}
-
-async fn client(fixture: &StartupFixture) -> CollaborationClient {
-    CollaborationClient::connect(fixture.directory.path(), "host-contract-tests", "1")
-        .await
-        .expect("actual Host API")
 }
 
 /// Starts the actual Host runtime in `directory` with these provider entries.

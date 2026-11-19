@@ -4,11 +4,9 @@ use crate::api_test_harness::{
     ServedApi, TEST_PROTOCOL_VERSION, TEST_SERVICE_ID, api_config, test_identity,
 };
 use crate::request_slot_holder::RequestSlotHolder;
-use collaboration_service::CollaborationApplication;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 
 fn private_directory() -> tempfile::TempDir {
     use std::os::unix::fs::PermissionsExt as _;
@@ -17,20 +15,6 @@ fn private_directory() -> tempfile::TempDir {
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private directory permissions");
     directory
-}
-
-async fn automation_store(
-    directory: &std::path::Path,
-) -> Arc<Mutex<automation_storage::AutomationStore>> {
-    let automation =
-        automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .expect("automation store");
-    Arc::new(Mutex::new(automation))
-}
-
-async fn wake_application(directory: &std::path::Path) -> CollaborationApplication {
-    (test_identity().with_automation_store(automation_store(directory).await)).build()
 }
 
 /// One application clock, held still, so every read stamps the same time.
@@ -48,79 +32,6 @@ fn structured(result: &rmcp::model::CallToolResult) -> Value {
         .structured_content
         .clone()
         .expect("structured tool result")
-}
-
-fn wake_send_arguments() -> Value {
-    json!({
-        "operationId": collaboration_protocol::OperationId::generate(),
-        "message": {
-            "target": {
-                "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "codex-local"},
-                "sessionId": "wake-target"
-            },
-            "content": {"kind": "humanUser", "text": "wake proof"},
-            "delivery": "auto",
-            "generationGuard": null
-        },
-        "timing": {"kind": "after", "seconds": 600},
-        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
-    })
-}
-
-#[tokio::test]
-async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change() {
-    // Arrange
-    let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
-    let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let wake = api.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
-    let first = api
-        .call_tool(
-            "wake_wait_until_first_fire",
-            json!({"wakeupId": wakeup_id, "timeoutSeconds": 1}),
-        )
-        .await;
-    let cursor = structured(&first)["cursor"].clone();
-    // The wake pauses and resumes between the two waits: only the cursor still sees it.
-    for operation in ["wake_pause", "wake_resume"] {
-        let changed = api
-            .call_tool(
-                operation,
-                json!({
-                    "operationId": collaboration_protocol::OperationId::generate(),
-                    "wakeupId": wakeup_id
-                }),
-            )
-            .await;
-        assert_eq!(changed.is_error, Some(false), "{operation}: {changed:?}");
-    }
-
-    // Act
-    let resumed = api
-        .call_tool(
-            "wake_wait_until_first_fire",
-            json!({"wakeupId": wakeup_id, "after": cursor, "timeoutSeconds": 1}),
-        )
-        .await;
-    let fresh = api
-        .call_tool(
-            "wake_wait_until_first_fire",
-            json!({"wakeupId": wakeup_id, "timeoutSeconds": 1}),
-        )
-        .await;
-
-    // Assert
-    assert_eq!(structured(&first)["outcome"]["kind"], "timedOut");
-    assert!(cursor.is_string(), "the bounded wait returns its cursor");
-    assert_eq!(structured(&resumed)["outcome"]["kind"], "paused");
-    assert_ne!(structured(&resumed)["cursor"], cursor);
-    assert_eq!(
-        structured(&fresh)["outcome"]["kind"],
-        "timedOut",
-        "a wait without the cursor starts from the current state and never sees the pause"
-    );
-    api.stop().await;
 }
 
 #[tokio::test]
@@ -348,12 +259,6 @@ async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
             !encoded.contains("missing field") && !encoded.contains("requires "),
             "{name} rejected the schema-required input as incomplete: {encoded}"
         );
-        if name == "wake_send" {
-            assert!(
-                !encoded.contains("explicit nullable generationGuard"),
-                "wake_send must accept an omitted optional generationGuard: {encoded}"
-            );
-        }
     }
     api.stop().await;
 }

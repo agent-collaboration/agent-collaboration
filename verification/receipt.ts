@@ -9,7 +9,8 @@ export class ObservationFailure extends Error {}
 export type RowOutcome =
   | { readonly kind: "observed"; readonly cases: readonly string[] }
   | { readonly kind: "failed"; readonly case: string; readonly reason: string }
-  | { readonly kind: "open"; readonly reason: string };
+  | { readonly kind: "open"; readonly reason: string }
+  | { readonly kind: "retired"; readonly reason: string };
 export class Receipt {
   readonly directory: string;
   constructor(directory: string) {

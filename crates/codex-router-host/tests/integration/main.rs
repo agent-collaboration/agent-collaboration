@@ -22,14 +22,11 @@ mod session_follow_fixture;
 mod acp_client_dependency_structure;
 mod acp_metadata_projection;
 mod auth_file_reload;
-mod automation_composition;
-mod automation_configuration_rpc;
 mod automation_retention_runtime;
 mod automation_settings_recovery;
 mod backend_publication;
 mod board_failure_isolation;
 mod claude_code_peer_delivery_route;
-mod claude_code_peer_scheduled_runs;
 mod claude_peer_not_running_dm;
 mod claude_peer_subscription_resume;
 mod collaboration_runtime;
@@ -75,7 +72,6 @@ mod shared_fleet_store;
 mod singleton_authority;
 mod stale_endpoint_sockets;
 mod update_reexec;
-mod wakeup_timer_composition;
 
 /// Qualify a former libtest name with its retained Cargo-root namespace.
 fn child_test_selector(caller_module: &str, case_name: &str) -> String {
