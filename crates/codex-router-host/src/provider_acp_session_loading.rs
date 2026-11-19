@@ -23,6 +23,10 @@ pub(crate) enum ProviderSessionLoadOutcome {
     Unavailable {
         reason: String,
     },
+    /// The admitted restore failed, so the original input ends unsent.
+    RestoreFailed {
+        reason: String,
+    },
     /// A close of the session won while this load was in flight: the
     /// connection dropped the restored session, and the work that asked for
     /// the load ends not sent. A later load starts a new run.
@@ -167,7 +171,7 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
         } => {
             let correlation_id = match DeliveryCorrelationId::try_from(correlation_id.to_string()) {
                 Ok(correlation_id) => correlation_id,
-                Err(_) => return unavailable("provider error reference was invalid"),
+                Err(_) => return restore_failed("provider error reference was invalid"),
             };
             ProviderSessionLoadOutcome::Rejected {
                 reason: ProviderSessionLoadRejection::SessionNotFound {
@@ -190,7 +194,7 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
         } => {
             let correlation_id = match DeliveryCorrelationId::try_from(correlation_id.to_string()) {
                 Ok(correlation_id) => correlation_id,
-                Err(_) => return unavailable("provider error reference was invalid"),
+                Err(_) => return restore_failed("provider error reference was invalid"),
             };
             ProviderSessionLoadOutcome::Rejected {
                 reason: ProviderSessionLoadRejection::ProviderRejected {
@@ -202,11 +206,11 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
         ExternalProviderRuntimeError::ResourceNotFound {
             code,
             correlation_id,
-        } => provider_error_unavailable("provider resource was not found", code, correlation_id),
+        } => provider_error_restore_failed("provider resource was not found", code, correlation_id),
         ExternalProviderRuntimeError::RestoreFailed {
             code,
             correlation_id,
-        } => provider_error_unavailable(
+        } => provider_error_restore_failed(
             "the provider failed while restoring this session, so retry it",
             code,
             correlation_id,
@@ -214,18 +218,28 @@ fn load_error_outcome(error: ExternalProviderRuntimeError) -> ProviderSessionLoa
         ExternalProviderRuntimeError::UnsupportedMethod {
             code,
             correlation_id,
-        } => provider_error_unavailable("provider ACP method is unsupported", code, correlation_id),
+        } => provider_error_restore_failed(
+            "provider ACP method is unsupported",
+            code,
+            correlation_id,
+        ),
         ExternalProviderRuntimeError::InvalidParams {
             code,
             correlation_id,
-        } => {
-            provider_error_unavailable("provider ACP parameters are invalid", code, correlation_id)
-        }
+        } => provider_error_restore_failed(
+            "provider ACP parameters are invalid",
+            code,
+            correlation_id,
+        ),
         ExternalProviderRuntimeError::RequestCancelled {
             code,
             correlation_id,
-        } => provider_error_unavailable("provider ACP request was cancelled", code, correlation_id),
-        error => unavailable(error.to_string()),
+        } => provider_error_restore_failed(
+            "provider ACP request was cancelled",
+            code,
+            correlation_id,
+        ),
+        error => restore_failed(error.to_string()),
     }
 }
 
@@ -243,7 +257,8 @@ pub(crate) fn load_error_reason(error: ExternalProviderRuntimeError) -> String {
             "provider session record is missing".to_owned()
         }
         ProviderSessionLoadOutcome::LiveElsewhere => "session is live elsewhere".to_owned(),
-        ProviderSessionLoadOutcome::Unavailable { reason } => reason,
+        ProviderSessionLoadOutcome::Unavailable { reason }
+        | ProviderSessionLoadOutcome::RestoreFailed { reason } => reason,
         ProviderSessionLoadOutcome::Rejected { reason } => reason.safe_detail(),
         ProviderSessionLoadOutcome::ClosedWhileLoading => {
             crate::provider_acp_message_fifo::SESSION_CLOSED.to_owned()
@@ -300,19 +315,25 @@ fn unavailable(reason: impl Into<String>) -> ProviderSessionLoadOutcome {
     }
 }
 
-fn provider_error_unavailable(
+fn provider_error_restore_failed(
     explanation: &'static str,
     provider_code: i64,
     correlation_id: acp_client_runtime::ProviderErrorCorrelationId,
 ) -> ProviderSessionLoadOutcome {
     let correlation_id = match DeliveryCorrelationId::try_from(correlation_id.to_string()) {
         Ok(correlation_id) => correlation_id,
-        Err(_) => return unavailable("provider error reference was invalid"),
+        Err(_) => return restore_failed("provider error reference was invalid"),
     };
-    unavailable(format!(
+    restore_failed(format!(
         "{explanation} (ACP code {provider_code}; reference {})",
         correlation_id.as_str()
     ))
+}
+
+fn restore_failed(reason: impl Into<String>) -> ProviderSessionLoadOutcome {
+    ProviderSessionLoadOutcome::RestoreFailed {
+        reason: reason.into(),
+    }
 }
 
 fn unavailable_loadability(reason: impl Into<String>) -> ProviderSessionLoadability {

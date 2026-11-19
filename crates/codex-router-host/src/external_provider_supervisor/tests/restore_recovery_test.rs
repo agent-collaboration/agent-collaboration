@@ -1,11 +1,16 @@
 //! Local restore retirement and admission, through the real owning store.
 
 use super::*;
-use collaboration_protocol::{
-    ConversationLoadRequest, ConversationOperationShowRequest, ConversationPromptRequest,
-    MessageContent, MessageDelivery,
+use collaboration_contracts::{
+    DeliveryPrecondition, LoadPolicy, SessionDeliveryRoute, UnstoredAttemptEvidenceSink,
+    layer_zero::{DeliveryRequest, PreparedPush},
 };
-use collaboration_runtime::{ProviderSessionEventHub, ProviderSessionRecord};
+use collaboration_protocol::{
+    AttemptId, ChannelDescription, ConversationLoadRequest, ConversationOperationShowRequest,
+    ConversationPromptRequest, DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability,
+    EndpointDescription, MessageContent, MessageDelivery, ObservationTimestamp,
+};
+use collaboration_runtime::{EndpointDirectory, ProviderSessionEventHub, ProviderSessionRecord};
 use router_clock::{ClockInstant, ManualClock};
 
 struct RestoreRig {
@@ -67,6 +72,7 @@ impl RestoreRig {
                     "cursor".into(),
                     "no-directories".into(),
                     "advertise-restore".into(),
+                    "plain-prompts".into(),
                     behavior.into(),
                 ],
             ),
@@ -130,6 +136,144 @@ fn wait_request(operation_id: OperationId) -> ConversationOperationWaitRequest {
         operation_id,
         timeout_seconds: PositiveSeconds::try_from(5).expect("wait budget"),
     }
+}
+
+fn auto_message(target: SessionRef, text: &str, load_policy: LoadPolicy) -> DeliveryRequest {
+    let push_id = PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("push ID");
+    let correlation =
+        DeliveryCorrelationId::try_from(push_id.as_str().to_owned()).expect("correlation");
+    DeliveryRequest {
+        payload: PreparedPush {
+            line: MessageText::try_from(format!(
+                "✉️ sender · \"{text}\" · router://{}/push/{}",
+                String::from(target.endpoint.service_id.clone()),
+                push_id.as_str()
+            ))
+            .expect("prepared input"),
+            push_id,
+            load_policy,
+        },
+        target,
+        mode: MessageDelivery::Auto,
+        precondition: DeliveryPrecondition::Unpinned,
+        correlation,
+        attempt: AttemptId::generate(),
+    }
+}
+
+#[tokio::test]
+async fn a_cold_auto_restore_timeout_finishes_the_input_without_holding_it() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = Arc::new(rig.open_host("silent-first-restore").await);
+    let directory = EndpointDirectory::new(rig.target.endpoint.service_id.clone());
+    let binding = binding();
+    directory
+        .publish(EndpointDescription {
+            endpoint: rig.target.endpoint.clone(),
+            label: NonEmptyText::try_from("Cursor fixture".to_owned()).expect("label"),
+            availability: EndpointAvailability::Available {
+                observed_at: ObservationTimestamp::try_from("2026-11-19T12:00:00Z".to_owned())
+                    .expect("timestamp"),
+            },
+            channels: vec![ChannelDescription::ExternalProvider {
+                transport: binding.transport,
+                binding_id: binding.binding_id,
+                binding_generation: binding.generation.generation,
+                runtime: binding.runtime,
+                capabilities: binding.capabilities,
+                auto_realization: None,
+            }],
+        })
+        .expect("endpoint");
+    let route = crate::ProviderAcpDeliveryRoute::new(
+        rig.target.endpoint.service_id.clone(),
+        std::iter::once(rig.target.endpoint.clone()).collect(),
+        directory,
+        host.clone(),
+        host.inner.store.clone(),
+        Arc::new(NoLivePeer),
+        rig.clock.clone(),
+    );
+    let not_loaded = route
+        .deliver(
+            auto_message(rig.target.clone(), "load forbidden", LoadPolicy::LoadedOnly),
+            &UnstoredAttemptEvidenceSink,
+        )
+        .await
+        .expect("loaded-only receipt");
+    assert!(matches!(
+        not_loaded.receipt().outcome,
+        DeliveryOutcome::NotSubmitted {
+            retryable: true,
+            ..
+        }
+    ));
+    assert!(
+        !rig.root.path().join("wire.json").exists(),
+        "the loaded-only attempt reached ACP"
+    );
+
+    let cold_delivery = route.deliver(
+        auto_message(rig.target.clone(), "retire this input", LoadPolicy::MayLoad),
+        &UnstoredAttemptEvidenceSink,
+    );
+    tokio::pin!(cold_delivery);
+    let timeout = std::time::Duration::from_secs(30);
+    tokio::select! {
+        () = rig.clock.not_due_check_now(ClockInstant::ZERO.after(timeout)) => {},
+        receipt = &mut cold_delivery => panic!("cold load ended before its deadline: {receipt:?}"),
+    }
+    rig.clock.advance(timeout).expect("reach restore deadline");
+    let actual = cold_delivery.await.expect("terminal cold delivery receipt");
+    assert!(
+        matches!(actual.receipt().outcome, DeliveryOutcome::NotSubmitted { ref reason, retryable: false } if reason.contains("did not answer the restore in time, so retry this session")),
+        "{actual:?}"
+    );
+
+    rig.assert_loads(&host).await;
+    let next = auto_message(
+        rig.target.clone(),
+        "deliver this newer input",
+        LoadPolicy::MayLoad,
+    );
+    let next_id =
+        OperationId::try_from(next.attempt.as_str().to_owned()).expect("next operation ID");
+    let sent = route
+        .deliver(next, &UnstoredAttemptEvidenceSink)
+        .await
+        .expect("later input delivered");
+    assert!(
+        matches!(sent.receipt().outcome, DeliveryOutcome::Started),
+        "{sent:?}"
+    );
+    let completed = host
+        .wait(wait_request(next_id))
+        .await
+        .expect("later input settles");
+    assert!(matches!(
+        completed.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. }
+        }
+    ));
+    let observed: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(rig.root.path().join("wire.json")).expect("wire receipt"),
+    )
+    .expect("wire JSON");
+    assert_eq!(
+        observed["restores"]
+            .as_array()
+            .expect("restore requests")
+            .len(),
+        2
+    );
+    assert_eq!(
+        observed["prompts"],
+        serde_json::json!([rig.target.session_id])
+    );
+    route.shutdown_queue().await;
+    host.shutdown().await.expect("stop Host");
 }
 
 #[tokio::test]

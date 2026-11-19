@@ -278,7 +278,8 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
                             uncertain: false,
                         })
                     }
-                    ProviderSessionLoadOutcome::Unavailable { reason } => {
+                    ProviderSessionLoadOutcome::Unavailable { reason }
+                    | ProviderSessionLoadOutcome::RestoreFailed { reason } => {
                         SchedulePreparationOutcome::Failed(SchedulePreparationFailure {
                             kind: ScheduleFailureKind::OutcomeUnknown,
                             explanation: reason,

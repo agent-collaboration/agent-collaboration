@@ -349,6 +349,18 @@ impl ProviderAcpDeliveryRoute {
                     )
                     .await;
             }
+            ProviderSessionLoadOutcome::RestoreFailed { reason } => {
+                return self
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        reason,
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::NativeUnavailable),
+                    )
+                    .await;
+            }
             ProviderSessionLoadOutcome::Unavailable { reason } => {
                 return self
                     .finish_known_none(
