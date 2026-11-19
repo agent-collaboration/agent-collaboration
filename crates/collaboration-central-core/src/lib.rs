@@ -519,6 +519,10 @@ pub use core_contract::*;
 
 mod central_mail_ack;
 pub use central_mail_ack::{MailAckIgnored, MailAckSettlement};
+mod central_mail_delivery_read;
+pub use central_mail_delivery_read::{
+    WELCOME_PAGE_SIZE, WelcomeDeliveryCursor, WelcomeDeliveryPage, WindowedDelivery,
+};
 mod central_mail_requests;
 mod central_mail_rows;
 mod central_mail_store;

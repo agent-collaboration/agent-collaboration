@@ -7,6 +7,7 @@ mod direct_message_cancel;
 mod requests;
 mod stored_row_use;
 mod wakes;
+mod welcome_backlog;
 
 mod alarm_admission;
 mod alarm_cadence;
