@@ -384,3 +384,73 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
     wait_for_completed_provider_prompts(&requester_prompts, 1).await;
     runtime.shutdown().await.expect("Host shutdown");
 }
+
+/// Local messages need only the interaction store: a Host whose automation store cannot open
+/// still delivers a direct message to a running Claude Code peer.
+#[tokio::test]
+async fn host_delivers_a_local_message_while_automation_storage_is_unreadable() {
+    // Arrange: an unreadable automation store and one running peer.
+    let root = tempfile::tempdir().expect("Host root");
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private Host root");
+    std::fs::write(root.path().join("automation.sqlite"), b"not a database")
+        .expect("unreadable automation store");
+    let registry = root.path().join("peer-registry");
+    std::fs::create_dir(&registry).expect("peer registry");
+    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
+        directory: root.path().to_owned(),
+        codex_home: root.path().to_owned(),
+        backend_socket: root.path().join("backend.sock"),
+        mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+        native_schema: None,
+        peer_registry_directory: Some(registry.clone()),
+        remote_control_server_name: None,
+        owner_human_id: None,
+    })
+    .await
+    .expect("Host startup");
+    let client = CollaborationClient::connect(root.path(), "local-message", "1")
+        .await
+        .expect("collaboration API client");
+    let target = SessionRef {
+        endpoint: EndpointRef {
+            service_id: runtime.service_id().clone(),
+            endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("peer endpoint"),
+        },
+        session_id: SessionId::try_from("running-peer".to_owned()).expect("peer session"),
+    };
+    let peer_socket = registry.join("peer.sock");
+    publish_peer(&registry, &target.session_id, 1, &peer_socket);
+    let listener = tokio::net::UnixListener::bind(&peer_socket).expect("peer socket");
+    let receiver = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("peer accepted");
+        let mut lines = BufReader::new(stream).lines();
+        let _auth = lines.next_line().await.expect("auth line").expect("auth");
+        let user: Value =
+            serde_json::from_str(&lines.next_line().await.expect("user line").expect("user"))
+                .expect("user JSON");
+        user
+    });
+
+    // Act
+    let sent = client
+        .send_message(message(target))
+        .await
+        .expect("local message admitted");
+
+    // Assert: the peer received the message the Router stored under the returned id.
+    let collaboration_protocol::MessageSendResult::Local(sent) = sent else {
+        panic!("local route returned remote sender custody");
+    };
+    assert_eq!(sent.receipt.outcome, DeliveryOutcome::PeerMessageWritten);
+    let received = receiver.await.expect("peer receiver");
+    let content = received["message"]["content"]
+        .as_str()
+        .expect("peer content");
+    assert!(content.contains("routed message"), "{content}");
+    assert!(content.contains(sent.push_id.as_str()), "{content}");
+    std::fs::remove_file(registry.join(format!("{}.json", std::process::id())))
+        .expect("remove peer registry record");
+    runtime.shutdown().await.expect("Host shutdown");
+}
