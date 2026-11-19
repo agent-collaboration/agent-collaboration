@@ -739,8 +739,8 @@ async fn legacy_approval_record_is_stored_and_delivered_as_an_interaction_push()
     );
 }
 
-pub(super) fn session(service_id: &UuidIdentity, id: &str) -> SessionRef {
-    SessionRef {
+pub(super) fn session(service_id: &workspace_ids::MachineId, id: &str) -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned())
@@ -816,6 +816,9 @@ async fn fixture_broker_with_requester_name(
     requester_name: Option<&str>,
 ) -> (Arc<ServiceInteractionBroker>, CodexGeneration, PathBuf) {
     let service_id = crate::new_service_uuid().unwrap_or_else(|error| panic!("service: {error}"));
+    let service_id = String::from(service_id)
+        .parse::<workspace_ids::MachineId>()
+        .unwrap();
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))

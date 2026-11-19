@@ -263,8 +263,8 @@ async fn provider_inventory_adds_loaded_native_claude_without_collapsing_managed
 #[tokio::test]
 async fn hosted_refresh_keeps_equal_provider_and_codex_ids_as_two_rows() {
     use collaboration_client::protocol::{
-        EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-        SessionRef,
+        EndpointDescription, HarnessSessionRef, ProviderRequestedPolicy, ProviderWorkingDirectory,
+        RouterAccess,
     };
     use collaboration_runtime::ProviderOperationStore;
     use collaboration_runtime::ProviderSessionRecord;
@@ -278,11 +278,11 @@ async fn hosted_refresh_keeps_equal_provider_and_codex_ids_as_two_rows() {
         .expect("service root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private root");
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"shared-id"
     }))
     .expect("provider target");
-    let creator: SessionRef = serde_json::from_value(json!({
+    let creator: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":endpoint(),"sessionId":"creator"
     }))
     .expect("creator");

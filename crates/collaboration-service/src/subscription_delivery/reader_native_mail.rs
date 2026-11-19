@@ -11,7 +11,7 @@ use crate::subscription_delivery::subscription_service::OwnerObservation;
 impl ReaderDeliveryOwner {
     pub(super) async fn resume_native_held_mail(
         &mut self,
-        target: &collaboration_protocol::SessionRef,
+        target: &collaboration_protocol::HarnessSessionRef,
     ) -> Result<bool, BoardError> {
         let Some(runtime) = self.native_mail.get().and_then(std::sync::Weak::upgrade) else {
             self.native_checked.clear();

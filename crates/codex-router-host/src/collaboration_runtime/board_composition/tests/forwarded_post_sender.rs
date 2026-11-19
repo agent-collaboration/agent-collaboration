@@ -41,7 +41,7 @@ impl SenderFixture {
         let board = open_board_admission(
             &directory,
             MachineIdentity::new(
-                UuidIdentity::try_from(origin.installation.as_str().to_owned())?,
+                workspace_ids::MachineId::try_from(origin.installation.as_str().to_owned())?,
                 Some(origin.machine.as_str()),
             )?,
             Some(machine.session_inputs()?),
@@ -100,7 +100,7 @@ fn post_request(
     // A declared actor is independent of the machine's verified provenance.
     Ok(serde_json::from_value(serde_json::json!({
         "requestId": RequestId::generate(), "projectId": project, "protocolVersion": 1,
-        "actor": {"kind":"session","session":{"endpoint":{"serviceId":"550e8400-e29b-41d4-a716-446655440999","endpointId":"codex-local"},"sessionId":"forwarding-declared-session"}}, "actingFor": null,
+        "actor": {"kind":"session","session":{"endpoint":{"serviceId":"550e8400-e29b-71d4-a716-446655440999","endpointId":"codex-local"},"sessionId":"forwarding-declared-session"}}, "actingFor": null,
         "operation": {"kind":"threadCreate","postId": PostId::generate(),
             "about":{"kind":"project","subject":{"line":"forwarding fixture"}},
             "text":"synthetic forwarding fixture", "references":[], "participation":"participant",

@@ -17,7 +17,7 @@ use collaboration_contracts::{
     SchedulePreparationRequest, ScheduleSupport, ScheduledRunExecution, ScheduledRunSubmission,
     StopRequestOutcome,
 };
-use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef};
 use router_clock::ManualClock;
 use router_clock::RuntimeClock;
 use runtime_primitives::{Clock, SyncTime};
@@ -91,7 +91,7 @@ impl ScheduledRunExecution for ControlledRoute {
     fn initial_evidence(
         &self,
         destination: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, agent_automation::RouteEffectEvidence<SessionRef, CodexGeneration>>
+    ) -> DeliveryFuture<'_, agent_automation::RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>
     {
         self.preparations.lock().unwrap().push(self.clock.now());
         if self.initial_evidence_unreachable.load(Ordering::Acquire) {
@@ -113,7 +113,7 @@ impl ScheduledRunExecution for ControlledRoute {
 
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {
@@ -240,15 +240,15 @@ impl SchedulerFixture {
         let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
             lifecycle_observation::ObservationJournal::open(
                 &root.path().join("session-registry.sqlite"),
-                "00000000-0000-4000-8000-000000000001"
+                "00000000-0000-7000-8000-000000000001"
                     .to_owned()
                     .try_into()?,
             )
             .await?,
         ));
         journal.prepare(BASE_MS / 1_000).await?;
-        let service = "00000000-0000-4000-8000-000000000001";
-        let target: SessionRef = serde_json::from_value(json!({
+        let service = "00000000-0000-7000-8000-000000000001";
+        let target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},
             "sessionId":"scheduled-worker"
         }))?;
@@ -308,7 +308,7 @@ impl SchedulerFixture {
         self.store
             .lock()
             .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+            .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
                 operation_id: OperationId::generate(),
                 definition: ScheduleDefinition {
                     instruction_id: instruction.instruction_id,
@@ -361,7 +361,7 @@ impl SchedulerFixture {
             backend,
             crate::AutomationConfigurationHandle::default(),
             collaboration_contracts::MachineIdentity::new(
-                "00000000-0000-4000-8000-000000000001"
+                "00000000-0000-7000-8000-000000000001"
                     .to_owned()
                     .try_into()?,
                 Some("Schedule Fixture"),
@@ -389,7 +389,7 @@ impl SchedulerFixture {
             .store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(id)
             .await?;
         Ok(Some((id.clone(), record.phase)))
     }
@@ -399,7 +399,7 @@ impl SchedulerFixture {
             .store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(id)
             .await?
             .phase)
     }
@@ -444,11 +444,11 @@ fn thread_observation(
     change: serde_json::Value,
 ) -> TestResult<collaboration_protocol::LifecycleObservation> {
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"});
     Ok(serde_json::from_value(json!({
         "observedAt":"2027-01-15T08:01:00.000Z","source":"nativeNotification",
         "scope":{"endpoint":endpoint,
-            "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+            "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
             "observerId":"00000000-0000-4000-8000-000000000003"},
         "subject":{"kind":"thread","address":{"endpoint":endpoint,"nativeThreadId":"scheduled-worker"}},
         "change":change,

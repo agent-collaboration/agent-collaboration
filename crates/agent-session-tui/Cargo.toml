@@ -13,6 +13,7 @@ workspace = true
 quota-reset-test-harness = ["agent-collaboration-tui/test-support", "dep:serde", "dep:rustix"]
 
 [dependencies]
+workspace-ids.workspace = true
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
 futures-util.workspace = true
 chrono.workspace = true

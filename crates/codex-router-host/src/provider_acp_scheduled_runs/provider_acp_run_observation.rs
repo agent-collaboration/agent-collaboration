@@ -8,15 +8,16 @@ use collaboration_contracts::RunReconciliation;
 use collaboration_contracts::RunSettlement;
 use collaboration_protocol::{
     CodexGeneration, ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, OperationId, PositiveSeconds, ProviderOperationEffect,
-    ProviderOperationStage, ProviderPromptStopReason, SessionRef,
+    ConversationOperationWaitRequest, HarnessSessionRef, OperationId, PositiveSeconds,
+    ProviderOperationEffect, ProviderOperationStage, ProviderPromptStopReason,
 };
 
 impl ProviderAcpScheduledRuns {
     pub(super) fn recorded_provider(
         &self,
         context: &RunObservationContext,
-    ) -> Result<ProviderAcpEffectEvidence<SessionRef, CodexGeneration>, DeliveryContractError> {
+    ) -> Result<ProviderAcpEffectEvidence<HarnessSessionRef, CodexGeneration>, DeliveryContractError>
+    {
         let RouteEffectEvidence::ProviderAcp(provider) = &context.recorded else {
             return Err(DeliveryContractError::InvalidEvidence);
         };
@@ -27,7 +28,7 @@ impl ProviderAcpScheduledRuns {
     }
 
     pub(super) fn operation_id(
-        provider: &ProviderAcpEffectEvidence<SessionRef, CodexGeneration>,
+        provider: &ProviderAcpEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> Result<OperationId, DeliveryContractError> {
         OperationId::try_from(provider.attempt_id.as_str().to_owned())
             .map_err(|_| DeliveryContractError::InvalidEvidence)

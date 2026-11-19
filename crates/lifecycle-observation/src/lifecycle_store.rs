@@ -309,7 +309,7 @@ mod tests {
     }
 
     fn identity() -> collaboration_protocol::UuidIdentity {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap_or_else(|error| panic!("test identity should parse: {error}"))
@@ -321,7 +321,7 @@ mod tests {
             "source": "observerLifecycle",
             "scope": {
                 "endpoint": {
-                    "serviceId": "00000000-0000-4000-8000-000000000001",
+                    "serviceId": "00000000-0000-7000-8000-000000000001",
                     "endpointId": "codex-local"
                 },
                 "generation": null,

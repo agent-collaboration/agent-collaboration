@@ -8,6 +8,7 @@ publish.workspace = true
 [lints]
 workspace = true
 [dependencies]
+workspace-ids.workspace = true
 router-clock.workspace = true
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 reqwest = { workspace = true, features = ["json"] }

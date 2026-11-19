@@ -1,15 +1,15 @@
 //! Boundary identity for conversation creation and control across native and provider clients.
 
 use crate::conversation_client::{ConversationClientError, ConversationCreateInput, unsupported};
-use collaboration_protocol::{ProviderIdentity, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, ProviderIdentity};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, de};
 
-/// Accepts the established SessionRef shape and typed Human or Session identities.
+/// Accepts the established HarnessSessionRef shape and typed Human or Session identities.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize)]
 #[serde(untagged)]
 pub enum ConversationActor {
-    Session(SessionRef),
+    Session(HarnessSessionRef),
     Typed(message_board::Identity),
 }
 
@@ -31,14 +31,14 @@ impl<'de> Deserialize<'de> for ConversationActor {
     }
 }
 
-impl From<SessionRef> for ConversationActor {
-    fn from(session: SessionRef) -> Self {
+impl From<HarnessSessionRef> for ConversationActor {
+    fn from(session: HarnessSessionRef) -> Self {
         Self::Session(session)
     }
 }
 
 impl ConversationActor {
-    pub(crate) fn session(&self) -> Result<Option<SessionRef>, ConversationClientError> {
+    pub(crate) fn session(&self) -> Result<Option<HarnessSessionRef>, ConversationClientError> {
         Ok(self.provider_identity()?.session().cloned())
     }
 
@@ -53,7 +53,7 @@ impl ConversationActor {
 
 pub(crate) fn codex_create_actors(
     input: &ConversationCreateInput,
-) -> Result<(SessionRef, Option<SessionRef>), ConversationClientError> {
+) -> Result<(HarnessSessionRef, Option<HarnessSessionRef>), ConversationClientError> {
     let provider_only = "Human creators and Approvers are supported for provider endpoints only";
     let created_by = input
         .created_by

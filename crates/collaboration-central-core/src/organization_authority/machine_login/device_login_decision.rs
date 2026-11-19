@@ -24,16 +24,20 @@ pub(crate) fn decide_device_login(
     let refuse = |reason| Ok(Decided::unchanged(DeviceLoginDecision::Refused { reason }));
     if request.organization_id != facts.organization_id
         || time.now_ms.saturating_sub(received_at_ms) > SD8_MILLIS
-        || request.peer.to_string() != request.installation.as_str()
     {
         return refuse(DeviceLoginRefusal::NotPermitted {});
     }
+    let machine_id = request
+        .installation
+        .as_str()
+        .parse::<workspace_ids::MachineId>()
+        .map_err(|_| crate::workspace_decode_error::corrupt("issuer.installation"))?;
     // N03: after admission and SD8, request identity owns the first snapshot
-    // for its original installation.
+    // for its original machine_id.
     // Mutable labels, workspaces, factor freshness and enrollment state cannot
     // replace that answer or create another effect.
     if let Some(earlier) = &facts.prior_approval {
-        if earlier.installation != request.installation {
+        if earlier.machine_id != machine_id {
             return refuse(DeviceLoginRefusal::NotPermitted {});
         }
         return Ok(Decided::unchanged(approved(earlier)));
@@ -63,8 +67,7 @@ pub(crate) fn decide_device_login(
     let mut machine = match &facts.machine {
         Some(machine) => machine.clone(),
         None => MachineRow {
-            id: ids.next()?,
-            installation: request.installation.clone(),
+            machine_id: machine_id.clone(),
             label: request.label.clone(),
             allowed_workspaces: Vec::new(),
             generation: EnrollmentGeneration::default(),
@@ -88,8 +91,7 @@ pub(crate) fn decide_device_login(
     let enrollment = StoredEnrollment {
         id: EnrollmentId::try_from(ids.next()?.to_string())
             .map_err(|_| StoreFailure::Unavailable)?,
-        machine_id: machine.id,
-        installation: request.installation.clone(),
+        machine_id,
         request_id: request.request_id.clone(),
         approved_by: request.approver.clone(),
         label: request.label.clone(),

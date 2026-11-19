@@ -20,29 +20,29 @@ fn label(value: &str, field: &str) -> Result<message_board::MachineLabel, StoreF
 }
 
 pub(crate) fn machine(rows: &ReadOutcome, row: &[SqlValue]) -> Result<MachineRow, StoreFailure> {
-    values::row_millis(rows, row, "created_at").map_err(|_| corrupt("machines.created_at"))?;
-    values::row_millis(rows, row, "updated_at").map_err(|_| corrupt("machines.updated_at"))?;
+    values::row_millis(rows, row, "created_at")
+        .map_err(|_| corrupt("login_machines.created_at"))?;
+    values::row_millis(rows, row, "updated_at")
+        .map_err(|_| corrupt("login_machines.updated_at"))?;
     let generation = values::nonnegative_integer(rows, row, "enrollment_generation")
-        .map_err(|_| corrupt("machines.enrollment_generation"))?;
+        .map_err(|_| corrupt("login_machines.enrollment_generation"))?;
     Ok(MachineRow {
-        id: values::private_id(string(rows, row, "machine_id")?, "machines.machine_id")?,
-        installation: values::identifier(
-            string(rows, row, "installation_id")?,
-            "machines.installation_id",
-        )?,
-        label: label(string(rows, row, "label")?, "machines.label")?,
+        machine_id: string(rows, row, "machine_id")?
+            .parse()
+            .map_err(|_| corrupt("login_machines.machine_id"))?,
+        label: label(string(rows, row, "label")?, "login_machines.label")?,
         allowed_workspaces: json(
             string(rows, row, "allowed_workspaces")?,
-            "machines.allowed_workspaces",
+            "login_machines.allowed_workspaces",
         )?,
         generation: EnrollmentGeneration::try_from(
             u64::try_from(generation.get())
-                .map_err(|_| corrupt("machines.enrollment_generation"))?,
+                .map_err(|_| corrupt("login_machines.enrollment_generation"))?,
         )?,
         state: match string(rows, row, "state")? {
             "enrolled" => MachineState::Enrolled,
             "revoked" => MachineState::Revoked,
-            _ => return Err(corrupt("machines.state")),
+            _ => return Err(corrupt("login_machines.state")),
         },
     })
 }
@@ -52,19 +52,19 @@ pub(crate) fn enrollment(
     row: &[SqlValue],
 ) -> Result<StoredEnrollment, StoreFailure> {
     let approved_at_ms = values::row_millis(rows, row, "created_at")
-        .map_err(|_| corrupt("machine_approvals.created_at"))?;
+        .map_err(|_| corrupt("login_machine_approvals.created_at"))?;
     values::row_millis(rows, row, "updated_at")
-        .map_err(|_| corrupt("machine_approvals.updated_at"))?;
+        .map_err(|_| corrupt("login_machine_approvals.updated_at"))?;
     let base = values::nonnegative_integer(rows, row, "base_generation")
-        .map_err(|_| corrupt("machine_approvals.base_generation"))?;
+        .map_err(|_| corrupt("login_machine_approvals.base_generation"))?;
     let client: Option<ClientId> = values::optional_text(rows, row, "machine_client_id")?
-        .map(|value| values::identifier(value, "machine_approvals.machine_client_id"))
+        .map(|value| values::identifier(value, "login_machine_approvals.machine_client_id"))
         .transpose()?;
     let last_grant = values::optional_text(rows, row, "last_grant_at")?
-        .map(|value| values::seconds(value, "machine_approvals.last_grant_at"))
+        .map(|value| values::seconds(value, "login_machine_approvals.last_grant_at"))
         .transpose()?;
     let ended_at_ms = values::optional_text(rows, row, "ended_at")?
-        .map(|value| values::millis(value, "machine_approvals.ended_at"))
+        .map(|value| values::millis(value, "login_machine_approvals.ended_at"))
         .transpose()?;
     let reason = values::optional_text(rows, row, "end_reason")?;
     let state = match (
@@ -97,45 +97,41 @@ pub(crate) fn enrollment(
         ("ended", Some("idle"), Some(client_id), None, Some(_)) => {
             StoredEnrollmentState::Expired { client_id }
         }
-        _ => return Err(corrupt("machine_approvals.state")),
+        _ => return Err(corrupt("login_machine_approvals.state")),
     };
     if string(rows, row, "permission_checked")? != "machine:enroll" {
-        return Err(corrupt("machine_approvals.permission_checked"));
+        return Err(corrupt("login_machine_approvals.permission_checked"));
     }
     let allowed_workspaces: AllowedWorkspaces = json(
         string(rows, row, "allowed_workspaces")?,
-        "machine_approvals.allowed_workspaces",
+        "login_machine_approvals.allowed_workspaces",
     )?;
     Ok(StoredEnrollment {
         id: values::identifier(
             string(rows, row, "approval_id")?,
-            "machine_approvals.approval_id",
+            "login_machine_approvals.approval_id",
         )?,
-        machine_id: values::private_id(
-            string(rows, row, "machine_id")?,
-            "machine_approvals.machine_id",
-        )?,
-        installation: values::identifier(
-            string(rows, row, "installation_id")?,
-            "machines.installation_id",
-        )?,
+        machine_id: string(rows, row, "machine_id")?
+            .parse()
+            .map_err(|_| corrupt("login_machine_approvals.machine_id"))?,
         request_id: values::identifier(
             string(rows, row, "request_id")?,
-            "machine_approvals.request_id",
+            "login_machine_approvals.request_id",
         )?,
         approved_by: values::identifier(
             string(rows, row, "approved_by_person_id")?,
-            "machine_approvals.approved_by_person_id",
+            "login_machine_approvals.approved_by_person_id",
         )?,
-        label: label(string(rows, row, "label")?, "machine_approvals.label")?,
+        label: label(string(rows, row, "label")?, "login_machine_approvals.label")?,
         allowed_workspaces,
         base_generation: EnrollmentGeneration::try_from(
-            u64::try_from(base.get()).map_err(|_| corrupt("machine_approvals.base_generation"))?,
+            u64::try_from(base.get())
+                .map_err(|_| corrupt("login_machine_approvals.base_generation"))?,
         )?,
         approved_at_ms,
         code_expires_at: values::seconds(
             string(rows, row, "code_expires_at")?,
-            "machine_approvals.code_expires_at",
+            "login_machine_approvals.code_expires_at",
         )?,
         state,
         ended_at_ms,

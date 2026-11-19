@@ -34,17 +34,58 @@ pub use codex_conversation_operation_recorder::{
     CodexConversationOperationRecorder, CodexPermissionModes,
     UnavailableConversationOperationRecorder,
 };
+mod central_link_driver;
+mod machine_local_store;
+pub use machine_local_store::{MACHINE_LOCAL_DATABASE, MachineLocalStore, MachineLocalStoreError};
+mod outbox_deadline;
+mod outbox_item_state;
+mod outbox_storage;
+#[cfg(test)]
+mod outbox_storage_contract;
+mod outbox_store;
+pub use outbox_storage::{MachineLocalOutbox, OutboxFuture, OutboxStorage};
+#[cfg(feature = "test-support")]
+mod memory_outbox;
+pub use central_link_driver::{
+    AUTHORITY_LAPSED_CLOSE,
+    CentralLinkParts,
+    CentralLinkRefusal,
+    // The link's status vocabulary, for the Host and tools that report it.
+    CentralLinkStatus,
+    ConfiguredCentralLink,
+    FlushJitter,
+    InstallationFlushJitter,
+    LinkClosed,
+    LinkInbound,
+    LinkSocket,
+    LinkTransport,
+    LinkTransportError,
+    MachineTokenSource,
+    NotEnrolledTokens,
+    OutboxReadError,
+    RouterLinkCalls,
+    TokenAvailability,
+    TransportFuture,
+    UnconfiguredLinkTransport,
+    WebSocketLinkTransport,
+    open_installation_link,
+    start_installation_link,
+};
+#[cfg(feature = "test-support")]
+pub use memory_outbox::MemoryOutbox;
 mod provider_session_event_hub;
 mod provider_session_record;
+pub use outbox_store::{
+    ClaimedBatch, MacOutbox, NewOutboxItem, OutboxInsert, OutboxStoreError, StoredOutboxWrite,
+};
 pub use provider_operation_store::{
     PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,
     ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,
-    ProviderOperationStoreError, provider_operation_retention_cutoff_ms,
+    ProviderOperationStoreError, ProviderSessionRecord, provider_operation_retention_cutoff_ms,
 };
 mod delivery_acceptance_effect;
 pub mod delivery_route_projection;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
-pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
 mod app_server_item_metadata;
 mod app_server_item_translation;

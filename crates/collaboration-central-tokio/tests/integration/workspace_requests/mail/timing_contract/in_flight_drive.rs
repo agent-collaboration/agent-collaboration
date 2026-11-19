@@ -35,7 +35,7 @@ pub(super) async fn exercise_dispatch_settles_an_in_flight_drive(f: &Fixture) {
         };
         wakes.push(wake_id);
     }
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     // Every due batch reaches the drain unit's control clear; hold the drive
     // the jump past the first wake starts there.
     let mut held = r
@@ -97,7 +97,7 @@ pub(super) async fn exercise_a_clock_move_settles_an_in_flight_drive(f: &Fixture
     let Result::Done(Answer::WakeSet { wake_id, .. }) = set else {
         panic!("wake: {set:?}")
     };
-    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut held = r
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");

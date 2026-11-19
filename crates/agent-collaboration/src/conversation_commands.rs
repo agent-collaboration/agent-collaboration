@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use collaboration_client::protocol::{
     CodexGeneration, ConversationCreateOutcome, ConversationOperationFailure,
     ConversationOperationFailureKind, ConversationRecord, ConversationTerminalReason, EndpointRef,
-    OperationId, RouterAccess, SessionId, SessionRef,
+    HarnessSessionRef, OperationId, RouterAccess, SessionId,
 };
 use collaboration_client::{
     AcpConversation, ClientError, CollaborationClient, ConversationActor, ConversationCancelInput,
@@ -39,9 +39,9 @@ struct ConversationArguments {
 }
 #[derive(Subcommand)]
 enum ConversationCommand {
-    /// Create a conversation and return its stable SessionRef without submitting a prompt.
+    /// Create a conversation and return its stable HarnessSessionRef without submitting a prompt.
     #[command(
-        long_about = "Create a conversation and return its stable SessionRef without submitting a prompt. --model and --effort are required for Codex endpoints; provider endpoints accept advertised --mode, --model and --effort values. Example: agent-collaboration conversation create --endpoint codex-local --model gpt-5.6 --effort medium --access workspace-write --cwd /path/to/project"
+        long_about = "Create a conversation and return its stable HarnessSessionRef without submitting a prompt. --model and --effort are required for Codex endpoints; provider endpoints accept advertised --mode, --model and --effort values. Example: agent-collaboration conversation create --endpoint codex-local --model gpt-5.6 --effort medium --access workspace-write --cwd /path/to/project"
     )]
     Create(CreateArguments),
     /// Run an ACP prompt and wait up to the caller deadline. A detached Codex turn
@@ -86,10 +86,10 @@ struct CreateArguments {
     operation_id: Option<String>,
     #[arg(long)]
     access: ConversationAccess,
-    /// SessionRef or typed Identity JSON for this creator. Defaults to the active agent Session.
+    /// HarnessSessionRef or typed Identity JSON for this creator. Defaults to the active agent Session.
     #[arg(long)]
     from: Option<String>,
-    /// SessionRef or typed Identity JSON for the Approver. Defaults to this creator.
+    /// HarnessSessionRef or typed Identity JSON for the Approver. Defaults to this creator.
     #[arg(long, conflicts_with = "approver_owner")]
     approver: Option<String>,
     /// Use the local OS owner as the Human Approver for a provider Session.
@@ -130,10 +130,10 @@ struct PromptArguments {
     prompt_operation_id: Option<String>,
     #[arg(long)]
     access: Option<ConversationAccess>,
-    /// Exact SessionRef JSON for this caller. Defaults to the unique active Codex, Claude Code, or Cursor harness.
+    /// Exact HarnessSessionRef JSON for this caller. Defaults to the unique active Codex, Claude Code, or Cursor harness.
     #[arg(long)]
     from: Option<String>,
-    /// Exact SessionRef JSON for the client approval authority. Defaults to this caller.
+    /// Exact HarnessSessionRef JSON for the client approval authority. Defaults to this caller.
     #[arg(long)]
     approver: Option<String>,
     /// Board root message ID used to share owner-private scratch across sessions.
@@ -321,10 +321,10 @@ fn run_prompt(args: PromptArguments) -> i32 {
                 }
             };
             let creator = if args.new_session || args.fork.is_some() {
-                Some(current_session_ref(&client.endpoint().service_id, args.from.as_deref()).map_err(|_| ClientError::Protocol("current session identity unavailable; run agent-collaboration whoami --json or pass --from SessionRef JSON"))?)
+                Some(current_session_ref(&client.endpoint().service_id, args.from.as_deref()).map_err(|_| ClientError::Protocol("current session identity unavailable; run agent-collaboration whoami --json or pass --from HarnessSessionRef JSON"))?)
             } else { None };
             let approver = if let Some(value) = args.approver.as_deref() {
-                Some(serde_json::from_str::<collaboration_client::protocol::SessionRef>(value).map_err(|_| ClientError::Protocol("invalid --approver SessionRef"))?)
+                Some(serde_json::from_str::<collaboration_client::protocol::HarnessSessionRef>(value).map_err(|_| ClientError::Protocol("invalid --approver HarnessSessionRef"))?)
             } else { creator.clone() };
             let selected = if args.new_session { None } else { Some(conversation_target(&args).map_err(|_| ClientError::Protocol("invalid session target"))?.resolve(&client.endpoint().service_id).map_err(|_| ClientError::Protocol("session target belongs to another service"))?) };
             let selected_id = selected.as_ref().map(|target| String::from(target.session_id.clone()));
@@ -362,7 +362,7 @@ fn run_prompt(args: PromptArguments) -> i32 {
                 mode: None,
             };
             let sender = current_session_ref(&client.endpoint().service_id, args.from.as_deref())
-                .map_err(|_| ClientError::Protocol("current sender identity unavailable; run agent-collaboration whoami --json or pass --from SessionRef JSON"))?;
+                .map_err(|_| ClientError::Protocol("current sender identity unavailable; run agent-collaboration whoami --json or pass --from HarnessSessionRef JSON"))?;
             let message = PublicPromptContent::Agent {
                 sender,
                 text: text
@@ -555,9 +555,9 @@ fn prepare(args: &PromptArguments) -> Result<(PathBuf, String), String> {
 }
 
 fn current_session_ref(
-    service_id: &collaboration_client::protocol::UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     from: Option<&str>,
-) -> Result<collaboration_client::protocol::SessionRef, String> {
+) -> Result<collaboration_client::protocol::HarnessSessionRef, String> {
     resolve_current_session_ref(
         service_id,
         from,
@@ -567,13 +567,13 @@ fn current_session_ref(
 
 /// An explicit `--from` wins; otherwise the calling harness names the session.
 fn resolve_current_session_ref(
-    service_id: &collaboration_client::protocol::UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     from: Option<&str>,
     read_harness: impl FnOnce() -> Result<
         crate::current_session_identity::HarnessSessionIdentity,
         crate::current_session_identity::CurrentSessionIdentityError,
     >,
-) -> Result<collaboration_client::protocol::SessionRef, String> {
+) -> Result<collaboration_client::protocol::HarnessSessionRef, String> {
     if let Some(value) = from {
         return serde_json::from_str(value)
             .map_err(|_| crate::message_input_arguments::session_ref_guidance("--from"));
@@ -728,7 +728,7 @@ fn emit_record(event: ConversationEvent, machine: bool) -> Result<(), ClientErro
 }
 
 fn settlement_record(
-    target: collaboration_client::protocol::SessionRef,
+    target: collaboration_client::protocol::HarnessSessionRef,
     terminal_reason: ConversationTerminalReason,
     result: serde_json::Value,
 ) -> ConversationRecord {
@@ -914,7 +914,7 @@ mod tests {
 
     #[test]
     fn cancelled_acp_settlement_without_success_settings_keeps_target_and_terminal_exit() {
-        let target: collaboration_client::protocol::SessionRef = serde_json::from_value(
+        let target: collaboration_client::protocol::HarnessSessionRef = serde_json::from_value(
             serde_json::json!({
                 "endpoint":{"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"codex-local"},
                 "sessionId":"cancelled-thread"

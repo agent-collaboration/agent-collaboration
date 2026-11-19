@@ -2,8 +2,8 @@
 use super::served_api::ServedApi;
 use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
 use collaboration_protocol::{
-    EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionRef,
+    EndpointDescription, HarnessSessionRef, ProviderRequestedPolicy, ProviderWorkingDirectory,
+    RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
-pub(super) const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+pub(super) const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 pub(super) const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 pub(super) const SESSION: &str = "00000000-0000-4000-8000-000000000042";
 pub(super) type TestResult<T> = Result<T, Box<dyn std::error::Error>>;
@@ -26,7 +26,7 @@ pub(super) fn job(id: &str, session: &str, state: &str) -> Value {
 pub(super) struct CatalogueFixture {
     pub api: ServedApi,
     pub client: collaboration_client::CollaborationClient,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub output: PathBuf,
     pub executable: PathBuf,
     pub peers: PathBuf,
@@ -54,7 +54,7 @@ impl CatalogueFixture {
         let description: EndpointDescription = serde_json::from_value(
             json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"label":"Native Claude independent of ACP","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"No ACP provider"},"channels":[]}),
         )?;
-        let target: SessionRef =
+        let target: HarnessSessionRef =
             serde_json::from_value(json!({"endpoint":description.endpoint,"sessionId":SESSION}))?;
         let store = Arc::new(Mutex::new(
             ProviderOperationStore::open(&root.path().join("operations.sqlite")).await?,

@@ -1,7 +1,7 @@
 use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{
-    CodexGeneration, EndpointId, EndpointRef, NonEmptyText, OperationId, SessionId, SessionRef,
-    UuidIdentity,
+    CodexGeneration, EndpointId, EndpointRef, HarnessSessionRef, NonEmptyText, OperationId,
+    SessionId,
 };
 use collaboration_runtime::CodexConversationOperationRecorder;
 use collaboration_service::ApplicationFixture;
@@ -54,7 +54,8 @@ async fn codex_create_operation_is_inspectable_and_reconcilable_through_the_api(
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&path).await?,
     ));
-    let service_id = UuidIdentity::try_from("019f0000-0000-7000-8000-000000000001".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("019f0000-0000-7000-8000-000000000001".to_owned())?;
     let endpoint = EndpointRef {
         service_id: service_id.clone(),
         endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
@@ -129,7 +130,7 @@ async fn codex_create_operation_is_inspectable_and_reconcilable_through_the_api(
         .await
         .record_target(
             &recovered_id,
-            &SessionRef {
+            &HarnessSessionRef {
                 endpoint,
                 session_id: SessionId::try_from("recovered-thread".to_owned())?,
             },

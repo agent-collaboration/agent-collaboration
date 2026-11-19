@@ -16,7 +16,7 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
     ));
     let mut store = AutomationStore::open(&path).await?;
     let message: SavedMessage = serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"},
         "content":{"kind":"humanUser","text":"Reminder"},"delivery":"auto","generationGuard":null
     }))?;
     let wake = store
@@ -42,7 +42,7 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
     }
     let store = Arc::new(tokio::sync::Mutex::new(store));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?

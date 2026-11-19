@@ -1,7 +1,8 @@
 //! Submit exactly one SDK Poll callback to its session's existing reader owner.
 use super::super::reader_delivery_owner::poll_unsent;
 use super::{
-    ReaderDeliveryCommand, SessionRef, SubscriptionDeliveryService, oneshot, reader_for_target,
+    HarnessSessionRef, ReaderDeliveryCommand, SubscriptionDeliveryService, oneshot,
+    reader_for_target,
 };
 
 impl SubscriptionDeliveryService {
@@ -9,7 +10,7 @@ impl SubscriptionDeliveryService {
         &self,
         item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
     ) -> collaboration_contracts::NativeDeliveryResult {
-        let target: SessionRef = match item.recipient().address.clone().try_into() {
+        let target: HarnessSessionRef = match item.recipient().address.clone().try_into() {
             Ok(target) => target,
             Err(_) => return poll_unsent("invalid Poll recipient"),
         };

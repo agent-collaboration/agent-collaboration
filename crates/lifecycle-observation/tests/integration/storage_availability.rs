@@ -6,7 +6,7 @@ use sqlx::Connection;
 async fn failed_append_disables_journal_publication_until_successful_recovery() {
     // Arrange: a real journal whose committed accounting reaches its logical capacity.
     let path = std::env::temp_dir().join(format!("journal-capacity-{}.sqlite", std::process::id()));
-    let identity = "00000000-0000-4000-8000-000000000001"
+    let identity = "00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()
         .unwrap_or_else(|error| panic!("identity: {error}"));
@@ -14,7 +14,7 @@ async fn failed_append_disables_journal_publication_until_successful_recovery() 
         .await
         .unwrap_or_else(|error| panic!("open: {error}"));
     let store = LifecycleStore::new(journal);
-    let observation: LifecycleObservation = serde_json::from_value(serde_json::json!({"observedAt":"2026-09-05T12:00:00Z","source":"observerLifecycle","scope":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},"subject":{"kind":"backend"},"change":{"kind":"coverageLost"}})).unwrap_or_else(|error| panic!("observation: {error}"));
+    let observation: LifecycleObservation = serde_json::from_value(serde_json::json!({"observedAt":"2026-09-05T12:00:00Z","source":"observerLifecycle","scope":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},"subject":{"kind":"backend"},"change":{"kind":"coverageLost"}})).unwrap_or_else(|error| panic!("observation: {error}"));
     let mut accounting = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
     )

@@ -11,7 +11,7 @@ use collaboration_protocol::{
     AttemptHistoryCoverage, AttemptHistoryPage, AttemptInspection, AutomationEventsPage,
     AutomationEventsRequest, AutomationInspectionFailureKind, AutomationInspectionNextAction,
     AutomationInspectionStage, DeliveryAttemptsRequest, EarlierAttempts, RunSummariesRequest,
-    SummaryInspection, UuidIdentity,
+    SummaryInspection,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -300,7 +300,7 @@ struct AttemptSelection {
 
 fn decode_attempt_position(
     value: &str,
-    service: &UuidIdentity,
+    service: &workspace_ids::MachineId,
     scope: &str,
     digest: &str,
 ) -> Result<AttemptHistoryPosition, ()> {

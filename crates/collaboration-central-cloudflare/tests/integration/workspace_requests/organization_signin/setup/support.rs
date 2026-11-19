@@ -54,10 +54,10 @@ pub(super) async fn submit(
 pub(super) async fn stable_effects(f: &Fixture) -> Vec<Vec<Vec<central_storage::SqlValue>>> {
     let mut rows = Vec::new();
     for sql in [
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM request_log ORDER BY request_id",
-        "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM runtime_request_log ORDER BY request_id",
+        "SELECT * FROM signin_change_records ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
     ] {
         rows.push(f.read(sql).await.rows);
     }

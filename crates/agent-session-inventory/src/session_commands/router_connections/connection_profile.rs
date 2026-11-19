@@ -1,5 +1,4 @@
 //! Registry DTOs and validated machine connection names, addresses and references.
-use collaboration_client::protocol::UuidIdentity;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -203,7 +202,7 @@ pub struct NativeCodexConnection {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RouterConnectionProfile {
     pub name: RouterConnectionName,
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub transport: RouterConnectionTransport,
     pub default_remote_cwd: Option<AbsoluteRemoteCwd>,
 }
@@ -257,7 +256,7 @@ pub struct RouterConnectionProfileDto {
 enum RemoteConnectionDto {
     Remote {
         #[serde(rename = "serviceId")]
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         #[serde(rename = "mcpUrl")]
         mcp_url: String,
         credential: Option<CredentialReferenceDto>,
@@ -266,7 +265,7 @@ enum RemoteConnectionDto {
     },
     Ssh {
         #[serde(rename = "serviceId")]
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         destination: String,
         executable: String,
         #[serde(rename = "serviceDirectory")]

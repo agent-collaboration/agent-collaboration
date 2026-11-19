@@ -13,7 +13,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn seed_unacknowle
     central: &mut TestFleet,
 ) -> Result<NotificationSeed, Box<dyn std::error::Error + Send + Sync>> {
     let enrollment = IntentRecipientEnrollment {
-        service: "00000000-0000-4000-8000-000000000099"
+        service: "00000000-0000-7000-8000-000000000099"
             .to_owned()
             .try_into()?,
         peer: PeerId::new(durable_steps::Uuid::now_v7())?,
@@ -26,7 +26,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn seed_unacknowle
     central: &mut TestFleet,
 ) -> Result<NotificationSeed, Box<dyn std::error::Error + Send + Sync>> {
     let enrollment = IntentRecipientEnrollment {
-        service: "00000000-0000-4000-8000-000000000001"
+        service: "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         peer: central.peer,
@@ -40,7 +40,7 @@ async fn seed_notification_for_recipient(
     enrollment: IntentRecipientEnrollment,
 ) -> Result<NotificationSeed, Box<dyn std::error::Error + Send + Sync>> {
     let machine = MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         Some("notice fixture"),

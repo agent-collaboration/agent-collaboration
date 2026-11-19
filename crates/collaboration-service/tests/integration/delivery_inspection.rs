@@ -12,7 +12,7 @@ async fn missing_delivery_show_names_the_id_and_push_show_command() {
         .await
         .expect("automation store");
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .expect("service identity")

@@ -1,7 +1,7 @@
 //! Client-neutral completion and pending evidence for conversation work.
 use collaboration_protocol::{
-    ConversationOutputUnavailableReason, EffectiveProviderSettings, MessageText, OperationId,
-    SessionRef,
+    ConversationOutputUnavailableReason, EffectiveProviderSettings, HarnessSessionRef, MessageText,
+    OperationId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -18,18 +18,18 @@ use serde_json::Value;
 // string payload but do not justify boxing every existing settlement caller.
 pub enum ConversationOperationResult {
     Completed {
-        target: SessionRef,
+        target: HarnessSessionRef,
         #[serde(skip_serializing_if = "Option::is_none")]
         operation_id: Option<OperationId>,
         settlement: ConversationSettlement,
     },
     Pending {
         operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     /// The caller detached from a Codex turn that remains active.
     Running {
-        target: SessionRef,
+        target: HarnessSessionRef,
         #[serde(skip_serializing_if = "Option::is_none")]
         turn_id: Option<String>,
         follow_up: String,
@@ -38,7 +38,7 @@ pub enum ConversationOperationResult {
 
 impl ConversationOperationResult {
     #[must_use]
-    pub fn running_codex_turn(target: SessionRef) -> Self {
+    pub fn running_codex_turn(target: HarnessSessionRef) -> Self {
         let endpoint = String::from(target.endpoint.endpoint_id.clone());
         let session = String::from(target.session_id.clone());
         Self::Running {
@@ -64,7 +64,7 @@ pub enum ConversationCreatePromptOutcome {
     },
     CreatedWithoutSettings {
         operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         applied: Vec<collaboration_protocol::AppliedProviderSetting>,
         failed: Vec<collaboration_protocol::FailedProviderSetting>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -79,7 +79,7 @@ pub enum ConversationCreatePromptOutcome {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationSettlement {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<ConversationStopReason>,
     pub detail: ConversationSettlementDetail,

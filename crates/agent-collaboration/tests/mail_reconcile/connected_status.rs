@@ -4,7 +4,7 @@ use super::{
 };
 use board_central_test_support::MailWireEvent;
 use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
-use collaboration_client::protocol::{EndpointRef, SessionRef};
+use collaboration_client::protocol::{EndpointRef, HarnessSessionRef};
 use fleet_sync_protocol::{DeliveryStatus, ItemId};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
@@ -62,7 +62,7 @@ pub async fn lost_live_callback(
 
 pub(super) async fn start_peer(
     second: &SecondHost,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> FixtureResult<PeerFixture> {
     use std::os::unix::fs::DirBuilderExt as _;
     let registry = second.directory.join("absent-peer-registry");
@@ -79,8 +79,8 @@ pub(super) async fn start_peer(
     .await
 }
 
-pub(super) fn target(second: &SecondHost) -> FixtureResult<SessionRef> {
-    Ok(SessionRef {
+pub(super) fn target(second: &SecondHost) -> FixtureResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: second.service_id()?.try_into()?,
             endpoint_id: "claude-local".to_owned().try_into()?,

@@ -3,7 +3,6 @@ use super::support::Fixture;
 use central_storage::{SqlValue, Statement, StoreFailure};
 use collaboration_central_conformance::ConformanceResult as TestResult;
 use collaboration_central_conformance::signin_fixtures as signed;
-use collaboration_central_core::WorkspaceCaller;
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use workspace_model as m;
@@ -12,7 +11,6 @@ use workspace_model::central_mail::{
 };
 
 const A: &str = super::support::ORG;
-const MACHINE: &str = "019f0000-0000-7000-8000-00000000b302";
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
 }
@@ -31,17 +29,11 @@ async fn prepare(f: &Fixture) -> TestResult<(m::Timestamp, Value)> {
     }
     // Existing owning fixture writes establish local machine/credential facts.
     // No timer is planted: the real admitted APIs create the session and wake.
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'Alarm HTTP fixture','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(MACHINE),text("019f0000-0000-7000-8000-00000000b303")]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'signin-fixture-hash','2033-05-18T03:33:20Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text("019f0000-0000-7000-8000-00000000b304"),text(MACHINE)]).await;
-    let target = m::SessionAddress {
-        machine_id: MACHINE.to_owned().try_into()?,
-        endpoint: "codex-local".to_owned().try_into()?,
-        session_id: "private-digest-alarm-recovery".to_owned().try_into()?,
-    };
-    let caller = WorkspaceCaller {
-        organization_id: f.org.clone(),
-        caller: m::Caller::Session(target.clone()),
-        credential_hash: "signin-fixture-hash".to_owned(),
+    let caller = f
+        .enrolled_session_caller("Alarm HTTP fixture", "private-digest-alarm-recovery")
+        .await;
+    let m::Caller::Session(target) = caller.caller.clone() else {
+        return Err("session caller fixture".into());
     };
     let created = f
         .host
@@ -94,7 +86,7 @@ async fn digest(f: &Fixture) -> TestResult<(u16, Value)> {
 async fn timer_rows(f: &Fixture) -> TestResult<Vec<Vec<SqlValue>>> {
     let runtime = f.runtime().await;
     Ok(runtime.statement_host().read(Statement {
-        sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM wakes ORDER BY wake_id",
+        sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM automation_wakes ORDER BY wake_id",
         args:vec![],
     }).await?.rows)
 }

@@ -11,7 +11,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -78,7 +78,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT wake_id,state FROM wakes ORDER BY due_at",
+            sql: "SELECT wake_id,state FROM automation_wakes ORDER BY due_at",
             args: vec![],
         })
         .await
@@ -93,7 +93,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM messages WHERE message_kind='wake'",
+            sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'",
             args: vec![],
         })
         .await

@@ -241,7 +241,7 @@ async fn stopped_native_claude_fixture_reaches_open_and_records_the_captured_res
     .unwrap();
     assert_eq!(
         receipt,
-        serde_json::json!({"kind":"resume","identity":{"kind":"nativeClaude","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000011"}}})
+        serde_json::json!({"kind":"resume","identity":{"kind":"nativeClaude","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000011"}}})
     );
 }
 

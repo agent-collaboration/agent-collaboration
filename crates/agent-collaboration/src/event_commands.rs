@@ -1,6 +1,6 @@
 //! Scoped Session event output; attachment is explicit and cancellation only closes observation.
 use clap::{Parser, Subcommand};
-use collaboration_client::protocol::{EndpointId, EndpointRef, SessionId, SessionRef};
+use collaboration_client::protocol::{EndpointId, EndpointRef, HarnessSessionRef, SessionId};
 use collaboration_client::{BoundedObservationRequest, CollaborationClient, SessionObservation};
 use serde_json::json;
 use std::{
@@ -329,7 +329,7 @@ async fn observe(directory: &std::path::Path, input: ObserveInput) -> i32 {
             });
         }
     };
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: client.identity().service_id.clone(),
             endpoint_id,

@@ -55,7 +55,7 @@ async fn batch(store: &ObjectStorage, sql: &'static str, args: Vec<central_stora
 async fn assert_untouched(store: &ObjectStorage, wake_id: &workspace_ids::WakeId) {
     let rows = store
         .read(Statement {
-            sql: "SELECT state,(SELECT COUNT(*) FROM messages) FROM wakes WHERE wake_id=?",
+            sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages) FROM automation_wakes WHERE wake_id=?",
             args: vec![text(wake_id)],
         })
         .await
@@ -74,7 +74,7 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let (wake_id, due) = set_wake(&fixture, 1500).await;
@@ -84,7 +84,7 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
     );
     batch(
         runtime.statement_host(),
-        "DELETE FROM organization_identity",
+        "DELETE FROM signin_organization_identity",
         vec![],
     )
     .await;
@@ -123,13 +123,13 @@ async fn matching_stamp_restores_timer_on_startup() {
     fixture.reopen().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT id,organization_statement FROM organization_identity",
+            sql: "SELECT id,organization_statement FROM signin_organization_identity",
             args: vec![],
         })
         .await
@@ -137,8 +137,14 @@ async fn matching_stamp_restores_timer_on_startup() {
     assert_eq!(
         rows.rows,
         vec![vec![
-            text(fixture.caller.organization_id.as_str()),
-            text("fixture organization statement")
+            text(fixture.caller.organization_id().as_str()),
+            text(
+                signed::stamp(
+                    organization().as_str(),
+                    fixture.clock.utc_now().timestamp() - 3600
+                )
+                .unwrap()
+            )
         ]]
     );
     assert_eq!(
@@ -154,33 +160,33 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
     for (number, sql, args, expected_column) in [
         (
             1510,
-            "UPDATE organization_identity SET id=?",
+            "UPDATE signin_organization_identity SET id=?",
             vec![text(id::<workspace_model::WorkspaceId>(1514))],
-            "organization_identity.id",
+            "signin_organization_identity.id",
         ),
         (
             1511,
-            "INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'fixture second statement',0,0)",
+            "INSERT INTO signin_organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'fixture second statement',0,0)",
             vec![text(id::<workspace_model::WorkspaceId>(1515))],
-            "organization_identity.id",
+            "signin_organization_identity.id",
         ),
         (
             1512,
-            "UPDATE organization_identity SET id='not-an-id'",
+            "UPDATE signin_organization_identity SET id='not-an-id'",
             vec![],
-            "organization_identity.id",
+            "signin_organization_identity.id",
         ),
         (
             1513,
-            "UPDATE organization_identity SET organization_statement=''",
+            "UPDATE signin_organization_identity SET organization_statement=''",
             vec![],
-            "organization_identity.organization_statement",
+            "signin_organization_identity.organization_statement",
         ),
     ] {
         let fixture = Fixture::new().await;
         let runtime = fixture
             .host
-            .central(&fixture.caller.organization_id)
+            .central(fixture.caller.organization_id())
             .await
             .unwrap();
         let (wake_id, due) = set_wake(&fixture, number).await;
@@ -189,7 +195,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         let stamp_before = runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id",
+                sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
             })
             .await
@@ -208,12 +214,16 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         fixture.host.close().await;
         // Isolation (O4): opening the host no longer fails for every organization;
         // the invalid one is still refused with no business effects.
-        let reopened = TokioWorkspaceHost::open(fixture.root.path(), fixture.shared_for_runtime())
-            .await
-            .unwrap();
+        let reopened = TokioWorkspaceHost::open_with_signin(
+            fixture.root.path(),
+            fixture.shared_for_runtime(),
+            settings(&fixture.keys.url),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             reopened
-                .central(&fixture.caller.organization_id)
+                .central(fixture.caller.organization_id())
                 .await
                 .err(),
             Some(expected.clone())
@@ -222,14 +232,14 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         let raw = ObjectStorage::new(
             fixture.root.path().join("central").join(format!(
                 "{}.sqlite",
-                fixture.caller.organization_id.as_str()
+                fixture.caller.organization_id().as_str()
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         );
         assert_untouched(&raw, &wake_id).await;
         let stamp_after = raw
             .read(Statement {
-                sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id",
+                sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
             })
             .await

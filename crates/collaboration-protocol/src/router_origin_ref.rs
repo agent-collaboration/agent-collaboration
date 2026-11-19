@@ -1,6 +1,6 @@
 //! Canonical typed identities for Router-authored push events.
 
-use crate::{NonEmptyText, PushKind, SessionRef};
+use crate::{HarnessSessionRef, NonEmptyText, PushKind};
 use agent_automation::{OccurrenceId, RunId, ScheduleId, WakeupId};
 use message_board::{BatchId, SubscriptionGeneration, SubscriptionScope};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -26,11 +26,11 @@ pub enum RouterOriginRef {
         presentation_id: InteractionPresentationId,
     },
     SubscriptionActivity {
-        target: SessionRef,
+        target: HarnessSessionRef,
         batch_id: BatchId,
     },
     SubscriptionExpiry {
-        target: SessionRef,
+        target: HarnessSessionRef,
         scope: SubscriptionScope,
         subscription_generation: SubscriptionGeneration,
     },
@@ -146,11 +146,11 @@ enum RouterOriginRefWire {
         presentation_id: InteractionPresentationId,
     },
     SubscriptionActivity {
-        target: SessionRef,
+        target: HarnessSessionRef,
         batch_id: BatchId,
     },
     SubscriptionExpiry {
-        target: SessionRef,
+        target: HarnessSessionRef,
         scope: SubscriptionScope,
         subscription_generation: SubscriptionGeneration,
     },
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn every_origin_variant_round_trips_through_its_canonical_string() {
-        let target: SessionRef = serde_json::from_value(json!({
+        let target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint": {
                 "serviceId": "018f47d2-24d5-7a68-b9ec-6f759c39458f",
                 "endpointId": "codex-local"

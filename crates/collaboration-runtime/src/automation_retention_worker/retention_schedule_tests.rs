@@ -187,13 +187,15 @@ async fn a_commit_that_makes_nothing_due_reads_due_times_and_deletes_nothing() {
 #[tokio::test]
 async fn a_terminal_push_goes_at_its_strict_cutoff_and_a_pending_one_holds_no_timer() {
     use collaboration_protocol::{
-        EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft,
-        SessionId, SessionRef, UuidIdentity,
+        EndpointId, EndpointRef, HarnessSessionRef, PushHeaderFacts, PushId, PushKind, PushOrigin,
+        PushRecordDraft, SessionId,
     };
-    let session = |endpoint: &str, id: &str| SessionRef {
+    let session = |endpoint: &str, id: &str| HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
-                .unwrap(),
+            service_id: workspace_ids::MachineId::try_from(
+                "018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned(),
+            )
+            .unwrap(),
             endpoint_id: EndpointId::try_from(endpoint.to_owned()).unwrap(),
         },
         session_id: SessionId::try_from(id.to_owned()).unwrap(),

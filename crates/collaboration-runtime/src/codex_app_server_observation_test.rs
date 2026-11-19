@@ -6,7 +6,7 @@ use agent_automation::{CapturedRunInputs, RunId, RunPhase};
 use collaboration_contracts::{
     DeliveryContractError, RunObservationContext, RunSettlement, ScheduledRunExecution,
 };
-use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef};
 use futures_util::{SinkExt as _, StreamExt as _};
 use router_clock::{ClockInstant, ManualClock, RuntimeClock};
 use serde_json::{Value, json};
@@ -15,7 +15,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 
 /// What the fake app-server does with one connection.
 enum Answer {
@@ -78,8 +78,8 @@ async fn serve(listener: tokio::net::UnixListener, answers: Vec<Answer>) -> Test
 fn route(
     socket: std::path::PathBuf,
     clock: Arc<dyn RuntimeClock>,
-) -> TestResult<(CodexAppServerScheduledRuns, SessionRef)> {
-    let target: SessionRef = serde_json::from_value(json!({
+) -> TestResult<(CodexAppServerScheduledRuns, HarnessSessionRef)> {
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},
         "sessionId":"worker-thread"
     }))?;
@@ -124,19 +124,20 @@ fn manual_clock() -> Arc<ManualClock> {
     Arc::new(ManualClock::new("2001-01-01T00:00:00Z".parse().unwrap()))
 }
 
-fn running_context(target: &SessionRef) -> TestResult<RunObservationContext> {
+fn running_context(target: &HarnessSessionRef) -> TestResult<RunObservationContext> {
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":SERVICE,"generation":1}))?;
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
-        "scheduleChangeId":agent_automation::ChangeId::generate(),
-        "instructionRevisionId":agent_automation::RevisionId::generate(),
-        "instructionText":"Check work",
-        "continuity":{"kind":"none"},
-        "executionConfiguration":{
-            "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
-            "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-        }
-    }))?;
+    let inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef> =
+        serde_json::from_value(json!({
+            "scheduleChangeId":agent_automation::ChangeId::generate(),
+            "instructionRevisionId":agent_automation::RevisionId::generate(),
+            "instructionText":"Check work",
+            "continuity":{"kind":"none"},
+            "executionConfiguration":{
+                "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
+                "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
+            }
+        }))?;
     Ok(RunObservationContext {
         run_id: RunId::generate(),
         phase: RunPhase::Executing,

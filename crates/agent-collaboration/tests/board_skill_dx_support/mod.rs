@@ -4,7 +4,7 @@ mod trace_evidence;
 use crate::proof_context::{ProofContext, ProofResult};
 use collaboration_client::board::*;
 use collaboration_client::protocol::{
-    MessageContent, MessageDelivery, SessionMessageSendParams, SessionRef,
+    HarnessSessionRef, MessageContent, MessageDelivery, SessionMessageSendParams,
 };
 use serde_json::{Value, json};
 use std::{io::Write, os::unix::fs::OpenOptionsExt, path::Path, time::Duration};
@@ -239,7 +239,7 @@ pub async fn exercise() -> ProofResult<()> {
 
 async fn run_operator(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     task: &str,
     completion_marker: &str,
 ) -> ProofResult<Vec<Value>> {
@@ -286,7 +286,7 @@ fn write_task_context(
     filename: &str,
     skill_path: &Path,
     fixture_path: &Path,
-    session: &SessionRef,
+    session: &HarnessSessionRef,
 ) -> ProofResult<std::path::PathBuf> {
     let path = proof.workspace.join(filename);
     let value = json!({
@@ -338,7 +338,7 @@ fn copy_directory(source: &Path, destination: &Path) -> ProofResult<()> {
     Ok(())
 }
 
-pub(super) fn board_identity(session: &SessionRef) -> ProofResult<Identity> {
+pub(super) fn board_identity(session: &HarnessSessionRef) -> ProofResult<Identity> {
     let session = serde_json::from_value(serde_json::to_value(session)?)?;
     Ok(Identity::Session { session })
 }

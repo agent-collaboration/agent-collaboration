@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 fn registry_document() -> Value {
     json!({"version":1,"routers":[{
         "name":"Sunbook", "connection":{"kind":"remote",
-            "serviceId":"00000000-0000-4000-8000-000000000001",
+            "serviceId":"00000000-0000-7000-8000-000000000001",
             "mcpUrl":"https://machine.example.invalid:443/mcp",
             "credential":{"kind":"environment","variable":"ROUTER_TEST_AUTH"},
             "nativeCodex":{"address":"wss://machine.example.invalid:443/",
@@ -19,7 +19,7 @@ fn registry_accepts_comments_trailing_commas_and_preserves_explicit_native_port(
         // Human-owned ordering and notes survive reads.
         "version":1, "routers":[{
             "name":"Sunbook", "connection":{"kind":"remote",
-                "serviceId":"00000000-0000-4000-8000-000000000001",
+                "serviceId":"00000000-0000-7000-8000-000000000001",
                 "mcpUrl":"https://machine.example.invalid:443/mcp",
                 "nativeCodex":{"address":"wss://machine.example.invalid:443/",},
             }, "defaultRemoteCwd":"/remote/only/project",
@@ -175,7 +175,7 @@ fn registry_reader_keeps_missing_empty_and_invalid_distinct_without_writing() {
 fn registry_accepts_source_ssh_without_exposed_mcp_address() {
     let document = json!({"version":1,"routers":[{
         "name":"Sunbook", "connection":{
-            "kind":"ssh", "serviceId":"00000000-0000-4000-8000-000000000001",
+            "kind":"ssh", "serviceId":"00000000-0000-7000-8000-000000000001",
             "destination":"developer@100.64.0.2",
             "executable":"/opt/router/bin/agent-sessions",
             "serviceDirectory":"/private/router/collaboration",
@@ -203,7 +203,7 @@ fn registry_accepts_source_ssh_without_exposed_mcp_address() {
 fn registry_rejects_source_ssh_option_injection_and_nonabsolute_source_paths() {
     let base = json!({"version":1,"routers":[{
         "name":"Sunbook", "connection":{
-            "kind":"ssh", "serviceId":"00000000-0000-4000-8000-000000000001",
+            "kind":"ssh", "serviceId":"00000000-0000-7000-8000-000000000001",
             "destination":"100.64.0.2",
             "executable":"/opt/router/bin/agent-sessions",
             "serviceDirectory":"/private/router/collaboration",
@@ -259,7 +259,7 @@ fn picker_lists_machines_from_agent_sessions_jsonc() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(
         root.path().join("agent-sessions.jsonc"),
-        machine_list("New machine", "00000000-0000-4000-8000-000000000002"),
+        machine_list("New machine", "00000000-0000-7000-8000-000000000002"),
     )
     .unwrap();
 
@@ -274,7 +274,7 @@ fn picker_does_not_read_the_old_routers_jsonc_and_names_the_update() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(
         root.path().join("routers.jsonc"),
-        machine_list("Old machine", "00000000-0000-4000-8000-000000000001"),
+        machine_list("Old machine", "00000000-0000-7000-8000-000000000001"),
     )
     .unwrap();
 
@@ -296,12 +296,12 @@ fn picker_uses_neither_file_when_both_are_present_and_names_both() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(
         root.path().join("routers.jsonc"),
-        machine_list("Old machine", "00000000-0000-4000-8000-000000000001"),
+        machine_list("Old machine", "00000000-0000-7000-8000-000000000001"),
     )
     .unwrap();
     std::fs::write(
         root.path().join("agent-sessions.jsonc"),
-        machine_list("New machine", "00000000-0000-4000-8000-000000000002"),
+        machine_list("New machine", "00000000-0000-7000-8000-000000000002"),
     )
     .unwrap();
 

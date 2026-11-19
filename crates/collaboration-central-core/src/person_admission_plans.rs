@@ -50,34 +50,33 @@ pub(crate) async fn prepare_person_admission(
     };
     let marker = host
         .read(Statement {
-            sql: "SELECT id FROM organization_used_requests WHERE id=?",
+            sql: "SELECT id FROM admin_used_requests WHERE id=?",
             args: vec![text(request.request_id)],
         })
         .await?;
     if marker.rows.len() > 1 {
-        return Err(corrupt("organization_used_requests.id"));
+        return Err(corrupt("admin_used_requests.id"));
     }
     if let Some(row) = marker.rows.first() {
         if string(&marker, row, "id")? != request.request_id.to_string() {
-            return Err(corrupt("organization_used_requests.id"));
+            return Err(corrupt("admin_used_requests.id"));
         }
         return Ok(Err(AdmissionRefusal::RequestReused));
     }
-    let organization =
-        organization.ok_or_else(|| corrupt("organization_authorization_floors.id"))?;
-    let person = person.ok_or_else(|| corrupt("person_organization_authorization_floors.id"))?;
+    let organization = organization.ok_or_else(|| corrupt("signin_authorization_floors.id"))?;
+    let person = person.ok_or_else(|| corrupt("signin_person_authorization_floors.id"))?;
     let now_ms = admitted.now_ms;
     let statements = vec![
         organization_guard(organization_id, &organization)?,
         person_guard(organization_id, &request.person_id, &person)?,
         exact(
-            "INSERT INTO organization_used_requests(id,organization_id,request_time_ms,operation_id,actor_person_id,actor_session_id,intent_digest,proof_key_thumbprint,created_at,updated_at) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?9 WHERE ?9<?10 AND ?3>?9-65000 AND ?3<=?9+5000 AND ?11>?9-65000 AND ?11<=?9+5000 AND (?13=0 OR (?12 IS NOT NULL AND ?12*1000<=?9 AND ?9-?12*1000<=900000)) AND ?3>(SELECT request_reject_through_ms FROM organization_authorization_floors WHERE id=?2) AND NOT EXISTS(SELECT 1 FROM organization_used_requests WHERE id=?1)",
+            "INSERT INTO admin_used_requests(id,organization_id,request_time_ms,operation_id,actor_person_id,actor_session_id,intent_digest,proof_key_thumbprint,created_at,updated_at) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?9 WHERE ?9<?10 AND ?3>?9-65000 AND ?3<=?9+5000 AND ?11>?9-65000 AND ?11<=?9+5000 AND (?13=0 OR (?12 IS NOT NULL AND ?12*1000<=?9 AND ?9-?12*1000<=900000)) AND ?3>(SELECT request_reject_through_ms FROM signin_authorization_floors WHERE id=?2) AND NOT EXISTS(SELECT 1 FROM admin_used_requests WHERE id=?1)",
             vec![
                 text(request.request_id),
                 text(organization_id),
                 integer(
                     request.request_time_ms,
-                    "organization_used_requests.request_time_ms",
+                    "admin_used_requests.request_time_ms",
                 )?,
                 request
                     .operation
@@ -87,7 +86,7 @@ pub(crate) async fn prepare_person_admission(
                 text(&request.session_id),
                 text(&request.intent_digest),
                 text(&request.proof_key_thumbprint),
-                integer(now_ms, "organization_used_requests.created_at")?,
+                integer(now_ms, "admin_used_requests.created_at")?,
                 integer(
                     request.effective_expiry_ms,
                     "person_request.effective_expiry_ms",

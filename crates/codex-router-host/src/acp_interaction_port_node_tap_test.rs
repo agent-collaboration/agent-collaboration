@@ -12,13 +12,13 @@ use codex_router_test_support::node_taps::{
     TapCase,
 };
 use collaboration_protocol::{
-    CodexGeneration, EndpointId, EndpointRef, GenerationNumber, ProviderIdentity, SessionId,
-    SessionRef, UuidIdentity,
+    CodexGeneration, EndpointId, EndpointRef, GenerationNumber, HarnessSessionRef,
+    ProviderIdentity, SessionId,
 };
 use collaboration_runtime::{NativeControlBackend, NativeGenerationGate, TypedInteractionDecision};
 use tokio::sync::mpsc;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 
 struct ChannelEventSink(mpsc::UnboundedSender<SessionEvent>);
 
@@ -51,15 +51,16 @@ struct BrokerRig {
     broker: Arc<ServiceInteractionBroker>,
     port: Arc<HostInteractionPort>,
     events: mpsc::UnboundedReceiver<SessionEvent>,
-    target: SessionRef,
-    requester: SessionRef,
+    target: HarnessSessionRef,
+    requester: HarnessSessionRef,
     approver: ProviderIdentity,
     actor: Identity,
 }
 
 async fn broker_rig() -> BrokerRig {
     let root = tempfile::tempdir().expect("rig root");
-    let service_id: UuidIdentity = SERVICE_ID.to_owned().try_into().expect("service ID");
+    let service_id: workspace_ids::MachineId =
+        SERVICE_ID.to_owned().try_into().expect("service ID");
     let provider_endpoint = EndpointRef {
         service_id: service_id.clone(),
         endpoint_id: EndpointId::try_from("fixture-provider".to_owned()).expect("endpoint"),
@@ -98,11 +99,11 @@ async fn broker_rig() -> BrokerRig {
         broker,
         port,
         events,
-        target: SessionRef {
+        target: HarnessSessionRef {
             endpoint: provider_endpoint,
             session_id: SessionId::try_from("session-one".to_owned()).expect("session"),
         },
-        requester: SessionRef {
+        requester: HarnessSessionRef {
             endpoint: approver_endpoint,
             session_id: SessionId::try_from("requester".to_owned()).expect("requester"),
         },
@@ -119,7 +120,10 @@ impl BrokerRig {
             target: self.target.clone(),
             operation_id: OperationId::generate(),
             binding_generation: CodexGeneration {
-                service_epoch: UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("epoch"),
+                service_epoch: collaboration_protocol::UuidIdentity::try_from(
+                    SERVICE_ID.to_owned(),
+                )
+                .expect("epoch"),
                 generation: GenerationNumber::try_from(1).expect("generation"),
             },
             binding_retirement: CancellationToken::new(),

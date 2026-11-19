@@ -4,8 +4,7 @@ use fleet_identity_protocol::UnixSeconds;
 
 fn machine() -> MachineRow {
     MachineRow {
-        id: values::private_id("019a3dce-2000-7000-8000-000000000002", "machine_id").unwrap(),
-        installation: "019a3dce-2000-7000-8000-000000000003"
+        machine_id: "019a3dce-2000-7000-8000-000000000003"
             .to_owned()
             .try_into()
             .unwrap(),
@@ -21,8 +20,7 @@ fn enrollment() -> StoredEnrollment {
             .to_owned()
             .try_into()
             .unwrap(),
-        machine_id: machine().id,
-        installation: machine().installation,
+        machine_id: machine().machine_id,
         request_id: "019a3dce-2000-7000-8000-000000000004"
             .to_owned()
             .try_into()
@@ -84,7 +82,7 @@ fn activation_guards_the_same_applying_time_and_never_updates_approval_metadata(
         plan[1].statement.args.last(),
         Some(&integer(1_900_000_001_234, "now").unwrap())
     );
-    assert!(plan[2].statement.sql.starts_with("UPDATE machine_approvals SET state=?,end_reason=?,machine_client_id=?,last_grant_at=?,ended_at=?,updated_at=? WHERE"));
+    assert!(plan[2].statement.sql.starts_with("UPDATE login_machine_approvals SET state=?,end_reason=?,machine_client_id=?,last_grant_at=?,ended_at=?,updated_at=? WHERE"));
     assert!(!plan[2].statement.sql.contains("SET label="));
     assert!(
         plan.iter()
@@ -98,7 +96,7 @@ fn changing_any_first_approval_reply_field_is_not_a_lifecycle_write() {
     changed.label = "Replacement label".to_owned().try_into().unwrap();
     assert_eq!(
         replace_enrollment(&enrollment(), &changed, "2030-03-17T17:46:41.000Z"),
-        Err(corrupt("machine_approvals.immutable_approval"))
+        Err(corrupt("login_machine_approvals.immutable_approval"))
     );
     let mut changed = enrollment();
     changed.allowed_workspaces = vec![
@@ -111,7 +109,7 @@ fn changing_any_first_approval_reply_field_is_not_a_lifecycle_write() {
     .unwrap();
     assert_eq!(
         replace_enrollment(&enrollment(), &changed, "2030-03-17T17:46:41.000Z"),
-        Err(corrupt("machine_approvals.immutable_approval"))
+        Err(corrupt("login_machine_approvals.immutable_approval"))
     );
 }
 
@@ -119,16 +117,16 @@ fn changing_any_first_approval_reply_field_is_not_a_lifecycle_write() {
 fn new_machine_keys_and_generation_are_never_rewritten_or_wrapped() {
     let before = machine();
     let mut rekeyed = before.clone();
-    rekeyed.id = values::private_id("019a3dce-2000-7000-8000-000000000009", "machine_id").unwrap();
+    rekeyed.machine_id = "019a3dce-2000-7000-8000-000000000009".parse().unwrap();
     assert_eq!(
         put_machine(Some(&before), &rekeyed, "2030-03-17T17:46:41.000Z"),
-        Err(corrupt("machines.machine_id"))
+        Err(corrupt("login_machines.machine_id"))
     );
     let mut skipped = before.clone();
     skipped.generation = EnrollmentGeneration::try_from(5).unwrap();
     assert_eq!(
         put_machine(Some(&before), &skipped, "2030-03-17T17:46:41.000Z"),
-        Err(corrupt("machines.enrollment_generation"))
+        Err(corrupt("login_machines.enrollment_generation"))
     );
     let mut new = before;
     new.generation = EnrollmentGeneration::default();
@@ -138,7 +136,7 @@ fn new_machine_keys_and_generation_are_never_rewritten_or_wrapped() {
             .unwrap()
             .statement
             .sql
-            .starts_with("INSERT INTO machines")
+            .starts_with("INSERT INTO login_machines")
     );
     assert!(
         statements(&facts(), &[], 1_900_000_000_000)

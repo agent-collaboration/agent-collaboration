@@ -18,7 +18,7 @@ async fn sdk_creates_disabled_schedule_without_native_backend()
         automation_storage::AutomationStore::open(&path).await?,
     ));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
@@ -80,7 +80,7 @@ async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback
         automation_storage::AutomationStore::open(&path).await?,
     ));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
@@ -94,7 +94,7 @@ async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback
         })
         .await?;
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"});
     let created = client.create_schedule(serde_json::from_value(json!({
         "operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,
         "timing":{"kind":"interval","seconds":60},"enabled":false,
@@ -140,7 +140,7 @@ async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback
         }
         served.stop().await?;
     }
-    let current = store.lock().await.inspect_schedule::<collaboration_protocol::SessionRef, collaboration_protocol::EndpointRef>(&created.schedule_id).await?;
+    let current = store.lock().await.inspect_schedule::<collaboration_protocol::HarnessSessionRef, collaboration_protocol::EndpointRef>(&created.schedule_id).await?;
     if current.record.change_id != created.change_id
         || current.active_run_id.is_some()
         || current.waiting_run_id.is_some()

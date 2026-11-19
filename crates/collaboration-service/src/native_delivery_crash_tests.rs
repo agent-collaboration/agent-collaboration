@@ -32,7 +32,7 @@ const ROOT_ENV: &str = "NATIVE_DELIVERY_TEST_CRASH_ROOT";
 const STAGE_ENV: &str = "NATIVE_DELIVERY_TEST_CRASH_STAGE";
 const ID_ENV: &str = "NATIVE_DELIVERY_TEST_CRASH_ID";
 const GENERIC_QUEUE_ENV: &str = "NATIVE_DELIVERY_TEST_GENERIC_QUEUE";
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const OLD_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 const NEW_EPOCH: &str = "00000000-0000-4000-8000-000000000003";
 const CRASH_EXIT: i32 = 93;
@@ -113,7 +113,7 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
         let before = store
             .lock()
             .await
-            .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
+            .read_delivery::<HarnessSessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
             .await?;
         let before_attempt = before.attempt.ok_or("persisted attempt missing")?;
         if before.status != agent_automation::DeliveryStatus::Dispatching
@@ -175,7 +175,7 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
         let recovered = store
             .lock()
             .await
-            .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
+            .read_delivery::<HarnessSessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
             .await?;
         if recovered.receipt.is_some() {
             return Err("recovery fabricated a lost native acceptance receipt".into());
@@ -292,7 +292,7 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
     let before = store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(
+        .read_delivery::<HarnessSessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(
             &delivery_id,
         )
         .await?;
@@ -337,7 +337,7 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
         .lock()
         .await
         .read_delivery::<
-            SessionRef,
+            HarnessSessionRef,
             CodexGeneration,
             collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
         >(&delivery_id)
@@ -618,7 +618,7 @@ async fn identity(
         .map_err(std::io::Error::other)?;
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
         identity.runtime_clock(),
-        collaboration_protocol::UuidIdentity::try_from(SERVICE.to_owned())?,
+        workspace_ids::MachineId::try_from(SERVICE.to_owned())?,
         identity.endpoint_directory(),
         backend,
         Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),

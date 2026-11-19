@@ -3,7 +3,7 @@ use session_event_model::{ProviderSkill, SkillInvocationName};
 
 fn bound(id: &str, cwd: &str) -> Result<BoundSkillView, Box<dyn std::error::Error>> {
     let session = serde_json::from_value(
-        json!({"endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},"sessionId":id}),
+        json!({"endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},"sessionId":id}),
     )?;
     let snapshot = SkillView::Available {
         skills: vec![ProviderSkill {

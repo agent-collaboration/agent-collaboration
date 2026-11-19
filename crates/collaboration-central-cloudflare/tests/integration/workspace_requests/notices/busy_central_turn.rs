@@ -1,5 +1,9 @@
-//! V12 (P5 change 7) on the workerd host: a due batch's notice-window unit
-//! holding the central turn never makes another instance's engine request wait.
+//! V12 (P5 change 7) on the workerd host, with C2 machine admission. A due
+//! batch's notice-window unit holds the central turn. (1) An already admitted
+//! request's due-batch claim never waits on it. (2) A frame that still needs
+//! admission waits for that hold, because admission stays under the central
+//! turn (revocation never passes an admitted effect), and proceeds as soon as
+//! the unit releases, with no further wait.
 use super::super::engine_evidence::{
     assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
 };
@@ -18,17 +22,17 @@ async fn count(runtime: &Runtime, sql: &'static str) -> SqlValue {
         .rows[0][0]
         .clone()
 }
-const NOTICES: &str = "SELECT COUNT(*) FROM messages WHERE message_kind='notice'";
-const WINDOWS: &str = "SELECT COUNT(*) FROM notification_windows";
+const NOTICES: &str = "SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice'";
+const WINDOWS: &str = "SELECT COUNT(*) FROM mail_notification_windows";
 const WINDOW_RECORDS: &str =
-    "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_notice_windows'";
+    "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows'";
 async fn central_control(runtime: &Runtime, operation: &str, point: &str) {
     let _: bool = runtime.control(operation, &point).await.unwrap();
 }
 
 #[tokio::test]
 async fn a_held_window_unit_never_delays_another_instances_engine_request() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     witness_fixture_attempt_ids(&f).await;
     let area = f.area(9700).await;
     let thread = f.thread(9701, area).await;
@@ -42,7 +46,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     let due: String = match &runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT due_at FROM notification_windows",
+            sql: "SELECT due_at FROM mail_notification_windows",
             args: vec![],
         })
         .await
@@ -71,26 +75,28 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
         central_storage::BatchOutcome::Applied { .. }
     ));
 
+    set_now(&f, due);
+    f.caller = super::super::support::fresh_auth(&f.host, &f.caller);
+    // The probe caller is admitted before the hold, as an open link already is.
+    assert!(runtime.admit_probe_caller(&f.caller).await);
+
     // Due batch A starts at the window's due instant and is held inside its
     // window unit, before the commit, while it holds the central turn.
     central_control(&runtime, "hold-central", "beforeTimerCommit").await;
-    set_now(&f, due);
     let batch = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
     });
     central_control(&runtime, "until-held-central", "beforeTimerCommit").await;
 
-    // 31 s later a probe request on another instance claims a new due batch.
+    // (1) 31 s later an admitted probe request on another instance claims a new
+    // due batch; that claim never waits on the held window unit.
     set_now(&f, due + chrono::Duration::seconds(31));
-    let request = runtime.request_probe(
-        &f.caller,
-        ProbeRequest {
-            request_id: id(9705),
-            key: InstanceKey(item.to_string()),
-            event: ProbeEvent::Run,
-        },
-    );
+    let request = runtime.request_probe_admitted(ProbeRequest {
+        request_id: id(9705),
+        key: InstanceKey(item.to_string()),
+        event: ProbeEvent::Run,
+    });
     let central_waiting = runtime.control::<bool>("until-central-waiting", &1_usize);
     let answer = tokio::select! {
         answer = request => answer.unwrap(),
@@ -114,6 +120,34 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
         "a skipped window unit is not a failure"
     );
 
+    // (2) A frame that still needs admission waits for the held unit, and only
+    // for it: admission takes the central turn the unit holds.
+    f.caller = super::super::support::fresh_auth(&f.host, &f.caller);
+    let framed = tokio::spawn({
+        let runtime = runtime.clone();
+        let caller = f.caller.clone();
+        async move {
+            runtime
+                .request_probe(
+                    &caller,
+                    ProbeRequest {
+                        request_id: id(9706),
+                        key: InstanceKey(item.to_string()),
+                        event: ProbeEvent::Run,
+                    },
+                )
+                .await
+        }
+    });
+    let _: bool = runtime
+        .control("until-admission-waiting", &1_usize)
+        .await
+        .unwrap();
+    assert!(
+        !framed.is_finished(),
+        "admission waits while the unit holds the central turn"
+    );
+
     // Released, A delivers the window once; a later batch finds nothing.
     central_control(&runtime, "hold-central", "afterTimerCommit").await;
     central_control(&runtime, "release-central", "beforeTimerCommit").await;
@@ -121,7 +155,19 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     assert_eq!(count(&runtime, NOTICES).await, windows);
     central_control(&runtime, "release-central", "afterTimerCommit").await;
     batch.await.unwrap().unwrap();
+    // Released, with the clock unchanged, the waiting frame is admitted at once.
+    let framed = framed.await.unwrap().unwrap();
+    assert!(
+        !matches!(framed, EngineRequestOutcome::NotPermitted { .. }),
+        "the frame was admitted after the release: {framed:?}"
+    );
+    let waiting: usize = runtime.control("admission-waiting", &()).await.unwrap();
+    assert_eq!(
+        waiting, 0,
+        "no admission is still waiting after the release"
+    );
     set_now(&f, due + chrono::Duration::seconds(65));
+    f.caller = super::super::support::fresh_auth(&f.host, &f.caller);
     runtime.after_event().await.unwrap();
     assert_eq!(count(&runtime, NOTICES).await, windows, "no duplicate");
     assert_eq!(count(&runtime, WINDOWS).await, integer(0));

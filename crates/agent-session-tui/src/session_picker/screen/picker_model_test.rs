@@ -8,25 +8,25 @@ use crate::session_picker::screen::picker_model::SessionsPickerModel;
 use crate::session_picker::screen::picker_model::SessionsPickerRuntimeView;
 use agent_session_inventory::picker_runtime_status::PickerRuntimeStatus;
 use agent_session_inventory::sessions::SessionPickerIdentity;
+use collaboration_client::protocol::HarnessSessionRef;
 use collaboration_client::protocol::ProviderSessionSummary;
-use collaboration_client::protocol::SessionRef;
 use serde_json::json;
 
 #[test]
 fn hosted_picker_keeps_equal_codex_and_provider_ids_distinct_and_provider_read_only() {
     let mut request = picker_request();
-    let codex_target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+    let codex_target: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"thread-a"
     }))
     .expect("Codex target");
     let provider: ProviderSessionSummary = serde_json::from_value(json!({
         "origin":"hostedProvider",
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"thread-a"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"thread-a"},
         "workingDirectory":"/repo/project-a","updatedAt":3,
         "state":"unloaded","requestedPolicy":{"access":"write-restricted"},
         "approver":{"kind":"human","humanId":"owner"},
-        "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
+        "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     }))
     .expect("provider row");
     let mut codex = request.records.remove(0);

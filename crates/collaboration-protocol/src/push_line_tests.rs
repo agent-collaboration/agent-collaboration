@@ -1,12 +1,12 @@
 use crate::{
-    EndpointId, EndpointRef, SessionDisplayName, SessionId, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, SessionDisplayName, SessionId,
     push_line::{
-        MAX_PUSH_LINE_BYTES, MachineId, MachineLabel, ParsedPushLineHeader, PushHeaderFacts,
-        PushId, PushKind, PushLineInput, PushOrigin, RouterLink, parse_push_line_header,
-        render_push_line,
+        MAX_PUSH_LINE_BYTES, MachineLabel, ParsedPushLineHeader, PushHeaderFacts, PushId, PushKind,
+        PushLineInput, PushOrigin, RouterLink, parse_push_line_header, render_push_line,
     },
 };
 use agent_automation::{RunId, ScheduleId};
+use workspace_ids::MachineId;
 
 const MACHINE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 const PUSH_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
@@ -23,10 +23,11 @@ fn router_link() -> RouterLink {
     RouterLink::new(machine_id(), push_id())
 }
 
-fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
-    SessionRef {
+fn session(endpoint_id: &str, session_id: &str) -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from(MACHINE_ID.to_owned()).expect("valid service id"),
+            service_id: workspace_ids::MachineId::try_from(MACHINE_ID.to_owned())
+                .expect("valid service id"),
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("valid endpoint id"),
         },
         session_id: SessionId::try_from(session_id.to_owned()).expect("valid session id"),

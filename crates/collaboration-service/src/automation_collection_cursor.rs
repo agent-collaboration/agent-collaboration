@@ -1,13 +1,12 @@
 //! One closed cursor encoding for automation collections; navigation is scoped, never authorization.
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use collaboration_protocol::UuidIdentity;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CollectionCursor {
     pub version: u8,
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub collection: String,
     pub upper_key: (i64, String),
     pub last_key: (i64, String),
@@ -24,7 +23,7 @@ pub(crate) fn encode(cursor: &CollectionCursor) -> Result<String, ()> {
 }
 pub(crate) fn decode(
     value: &str,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     collection: &str,
     digest: &str,
 ) -> Result<CollectionCursor, ()> {

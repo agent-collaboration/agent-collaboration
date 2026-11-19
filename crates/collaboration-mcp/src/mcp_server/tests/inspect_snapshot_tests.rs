@@ -132,7 +132,7 @@ fn inspect_tool_exposes_native_rejection_message() {
 #[tokio::test]
 async fn inspect_without_a_codex_backend_is_a_typed_unavailable_error() {
     let server = CollaborationMcpServer::catalog_only();
-    let target: collaboration_protocol::SessionRef =
+    let target: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(fixture_session("codex-local", "requested-thread")).expect("target");
 
     let result = server

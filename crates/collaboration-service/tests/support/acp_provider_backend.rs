@@ -63,7 +63,7 @@ pub(crate) struct ScriptedProviderBackend {
 impl ScriptedProviderBackend {
     pub(crate) fn new() -> Result<Self, serde_json::Error> {
         let endpoint = serde_json::from_value(serde_json::json!({
-            "serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"
+            "serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"
         }))?;
         let session = serde_json::from_value(serde_json::json!({
             "endpoint":endpoint,"sessionId":"claude-session-1"

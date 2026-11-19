@@ -29,7 +29,7 @@ fn workspace_lookup_result_wire_contract() {
     contract_artifacts::assert_contract::<WorkspaceLookupResult>(
         "WorkspaceLookupResult",
         vec![
-            json!({"result":"workspace","workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}]}),
+            json!({"result":"workspace","workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"allowedMachines":[{"machineId":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}]}),
             json!({"result":"unknown"}),
             json!({"result":"refused","reason":{"kind":"notOwner"}}),
         ],
@@ -42,7 +42,7 @@ fn machine_lookup_result_wire_contract() {
     contract_artifacts::assert_contract::<MachineLookupResult>(
         "MachineLookupResult",
         vec![
-            json!({"result":"machine","installation":"019a3dce-2000-7000-8000-000000000001","organizationId":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","enrollment":{"state":"enrolled","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002"},"approvedAt":1793448000000_i64,"allowedWorkspaces":[{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}],"sharedBucket":[{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}]}),
+            json!({"result":"machine","machineId":"019a3dce-2000-7000-8000-000000000001","organizationId":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","enrollment":{"state":"enrolled","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002"},"approvedAt":1793448000000_i64,"allowedWorkspaces":[{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}],"sharedBucket":[{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}]}),
             json!({"result":"unknown"}),
             json!({"result":"refused","reason":{"kind":"notOwner"}}),
         ],
@@ -68,9 +68,7 @@ fn command_status_result_wire_contract() {
 fn allowed_machine_row_wire_contract() {
     contract_artifacts::assert_contract::<AllowedMachineRow>(
         "AllowedMachineRow",
-        vec![
-            json!({"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}),
-        ],
+        vec![json!({"machineId":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"})],
         false,
     );
 }

@@ -19,8 +19,9 @@ use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequ
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
-    MessageInputKind, MessageRepresentation, MessageText, PushId, SessionRef, UuidIdentity,
+    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription,
+    HarnessSessionRef, MessageDelivery, MessageInputKind, MessageRepresentation, MessageText,
+    PushId,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::EndpointDirectory;
@@ -78,19 +79,19 @@ struct CountingEvidenceSink(AtomicUsize);
 impl AttemptEvidenceSink for CountingEvidenceSink {
     fn record(
         &self,
-        _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(()) })
     }
 }
 
-struct RecordingEvidenceSink(Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
+struct RecordingEvidenceSink(Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>);
 
 impl AttemptEvidenceSink for RecordingEvidenceSink {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         let result = self
             .0
@@ -102,7 +103,7 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
 }
 
 fn prepared_request(
-    target: SessionRef,
+    target: HarnessSessionRef,
     body: &str,
     mode: MessageDelivery,
 ) -> Result<PreparedDeliveryRequest, Box<dyn std::error::Error + Send + Sync>> {
@@ -203,8 +204,9 @@ async fn exercise_held_empty_thread(
     std::fs::DirBuilder::new().mode(0o700).create(&scratch)?;
     let socket_path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"empty-thread"
     }))?;
     let generation: CodexGeneration =
@@ -405,13 +407,13 @@ async fn exercise_held_empty_thread(
         use collaboration_contracts::RunSubmission;
         use collaboration_contracts::ScheduledRunExecution;
         struct ScheduledEvidenceSink {
-            records: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+            records: Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
             refuse_dispatch: bool,
         }
         impl RunEvidenceSink for ScheduledEvidenceSink {
             fn record(
                 &self,
-                evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+                evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
             ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
                 let dispatching = matches!(&evidence, RouteEffectEvidence::CodexAppServer(native) if native.submission == SubmissionEffect::Dispatching);
                 if self
@@ -595,8 +597,8 @@ async fn exercise_held_empty_thread(
     );
     subscription_delivery.start().await?;
     let identity = collaboration_service::ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(Arc::clone(&automation_store))

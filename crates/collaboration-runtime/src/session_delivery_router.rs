@@ -14,8 +14,8 @@ use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
-    DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, MessageDelivery,
-    SessionReachability, SessionRef,
+    DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, HarnessSessionRef,
+    MessageDelivery, SessionReachability,
 };
 use futures_util::future::join_all;
 use std::sync::Arc;
@@ -48,7 +48,7 @@ impl SessionDeliveryRouter {
 
     async fn select_route(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<RouteDecision, DeliveryContractError> {
         let claims = join_all(self.routes.iter().map(|route| route.claim(target)))
             .await
@@ -216,7 +216,7 @@ impl SessionDeliveryRouter {
 }
 
 impl SessionMessageDelivery for SessionDeliveryRouter {
-    fn supports_delivery_mode(&self, target: &SessionRef, mode: MessageDelivery) -> bool {
+    fn supports_delivery_mode(&self, target: &HarnessSessionRef, mode: MessageDelivery) -> bool {
         self.routes
             .iter()
             .all(|route| route.supports_delivery_mode(target, mode))
@@ -253,7 +253,7 @@ impl SessionMessageDelivery for SessionDeliveryRouter {
 }
 
 impl TargetPresenceProbe for SessionDeliveryRouter {
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence> {
         let target = target.clone();
         Box::pin(async move {
             let presences = join_all(self.routes.iter().map(|route| route.presence(&target)))

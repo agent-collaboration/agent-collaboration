@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 #[tokio::test]
 async fn reader_wakes_after_commit_without_holding_writer_lock() {
     let path = std::path::PathBuf::from(format!("/tmp/journal-wait-{}.sqlite", std::process::id()));
-    let id = "00000000-0000-4000-8000-000000000001"
+    let id = "00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()
         .unwrap_or_else(|e| panic!("id: {e}"));
@@ -19,7 +19,7 @@ async fn reader_wakes_after_commit_without_holding_writer_lock() {
     };
     let store = Arc::new(LifecycleStore::new(journal));
     let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"});
     let target =
         serde_json::from_value(endpoint.clone()).unwrap_or_else(|e| panic!("endpoint: {e}"));
     let reader_store = Arc::clone(&store);

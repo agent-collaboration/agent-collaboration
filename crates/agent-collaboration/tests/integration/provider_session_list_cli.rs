@@ -2,8 +2,8 @@ use std::{os::unix::fs::PermissionsExt, sync::Arc};
 
 use claude_code_peer_messaging::ClaudeCodeSessionRegistry;
 use collaboration_client::protocol::{
-    EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionRef,
+    EndpointDescription, HarnessSessionRef, ProviderRequestedPolicy, ProviderWorkingDirectory,
+    RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
@@ -33,12 +33,12 @@ async fn cli_dispatches_provider_session_list_by_endpoint_channel() {
         .to_string(),
     )
     .expect("fixture registry record");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"claude-local"},"sessionId":"provider-session"
     })).expect("target");
-    let creator: SessionRef = serde_json::from_value(json!({
+    let creator: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"creator"
     }))
     .expect("creator");

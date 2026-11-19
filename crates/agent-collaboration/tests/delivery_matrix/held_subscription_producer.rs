@@ -8,13 +8,13 @@ use collaboration_client::board::{
     SubscriptionScope, SubscriptionTimingPatch, ThreadCreateRequest, ThreadJoinRequest,
     ThreadPostRequest, WhenIdle, WorkspaceCreateRequest, WorkspaceId,
 };
-use collaboration_client::protocol::{SessionRef, ThreadSubscribeRequest};
+use collaboration_client::protocol::{HarnessSessionRef, ThreadSubscribeRequest};
 use serde_json::json;
 
 pub(super) async fn board_two_thread_subscription_push(
     client: &CollaborationClient,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     markers: [&str; 2],
     resources: &mut super::owned_resources::OwnedMatrixResources,
 ) -> ProofResult<Vec<message_board::ThreadId>> {

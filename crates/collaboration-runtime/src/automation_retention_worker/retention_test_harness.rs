@@ -203,13 +203,15 @@ impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for RetentionLog {
 
 pub(super) fn aging_push(created_at: DateTime<Utc>) -> collaboration_protocol::PushRecordDraft {
     use collaboration_protocol::{
-        EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft,
-        SessionId, SessionRef, UuidIdentity,
+        EndpointId, EndpointRef, HarnessSessionRef, PushHeaderFacts, PushId, PushKind, PushOrigin,
+        PushRecordDraft, SessionId,
     };
-    let session = |endpoint: &str, id: &str| SessionRef {
+    let session = |endpoint: &str, id: &str| HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
-                .unwrap(),
+            service_id: workspace_ids::MachineId::try_from(
+                "018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned(),
+            )
+            .unwrap(),
             endpoint_id: EndpointId::try_from(endpoint.to_owned()).unwrap(),
         },
         session_id: SessionId::try_from(id.to_owned()).unwrap(),

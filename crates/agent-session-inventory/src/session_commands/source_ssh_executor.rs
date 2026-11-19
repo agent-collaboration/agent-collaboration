@@ -4,9 +4,7 @@ use super::source_ssh_protocol::{
     MAX_SOURCE_REPLY_BYTES, MAX_SOURCE_REQUEST_BYTES, PreparedSourceLaunch, SourceOperation,
     SourceRejection, SourceReply, SourceRequest, SourceResponse, SourceSessionAction,
 };
-use collaboration_client::protocol::{
-    ChannelDescription, EndpointAvailability, EndpointRef, UuidIdentity,
-};
+use collaboration_client::protocol::{ChannelDescription, EndpointAvailability, EndpointRef};
 use collaboration_client::{CollaborationClient, NativeTransportConnection};
 use std::{
     ffi::OsString,
@@ -21,7 +19,7 @@ pub async fn inspect_local_clients(
     codex_home: Option<&Path>,
     home_directory: Option<&Path>,
     executable_path: Option<&str>,
-) -> Result<(UuidIdentity, SourceReply), super::source_ssh_protocol::SourceReadError> {
+) -> Result<(workspace_ids::MachineId, SourceReply), super::source_ssh_protocol::SourceReadError> {
     use super::source_ssh_protocol::SourceReadError;
     let launch = super::claude_launch_target::ClaudeLaunchTarget::resolve_for_service(
         home_directory,
@@ -337,7 +335,10 @@ pub async fn execute_client_mutation(
     }
 }
 
-fn verify_service(endpoint: &EndpointRef, service: &UuidIdentity) -> Result<(), SourceRejection> {
+fn verify_service(
+    endpoint: &EndpointRef,
+    service: &workspace_ids::MachineId,
+) -> Result<(), SourceRejection> {
     if endpoint.service_id == *service {
         Ok(())
     } else {
@@ -349,7 +350,7 @@ async fn prepare_source(
     client: &CollaborationClient,
     action: &SourceSessionAction,
     profile: SourceClientProfile,
-    service: &UuidIdentity,
+    service: &workspace_ids::MachineId,
     codex_home: Option<&Path>,
 ) -> Result<PreparedSourceLaunch, SourceRejection> {
     action.validate(service)?;

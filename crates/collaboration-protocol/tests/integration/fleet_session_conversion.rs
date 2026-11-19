@@ -1,5 +1,5 @@
 //! Fleet registration uses the existing mail boundary without changing provider identities.
-use collaboration_protocol::{EndpointId, SessionId, SessionRef, UuidIdentity};
+use collaboration_protocol::{EndpointId, HarnessSessionRef, SessionId, UuidIdentity};
 use proptest::prelude::*;
 use serde_json::{Value, json};
 
@@ -25,7 +25,7 @@ fn exported_identity_patterns_reject_a_trailing_linefeed() {
 
 #[cfg(test)]
 fn assert_lossless_session(wire: Value) {
-    let router: SessionRef = serde_json::from_value(wire.clone()).unwrap();
+    let router: HarnessSessionRef = serde_json::from_value(wire.clone()).unwrap();
     let fleet: message_board::SessionRef = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(&router).unwrap(), wire);
     assert_eq!(serde_json::to_value(&fleet).unwrap(), wire);
@@ -37,22 +37,33 @@ fn assert_lossless_session(wire: Value) {
         message_board::SessionRef::try_from(router.clone()).unwrap(),
         fleet
     );
-    assert_eq!(SessionRef::try_from(fleet).unwrap(), router);
+    assert_eq!(HarnessSessionRef::try_from(fleet).unwrap(), router);
+}
+
+fn assert_legacy_session_is_refused(wire: Value) {
+    let fleet: message_board::SessionRef = serde_json::from_value(wire.clone()).unwrap();
+    assert!(serde_json::from_value::<HarnessSessionRef>(wire).is_err());
+    assert!(HarnessSessionRef::try_from(fleet).is_err());
 }
 
 #[test]
-fn existing_uuid_versions_variants_and_utf8_boundaries_survive_both_conversions() {
+fn only_machine_uuid_v7_crosses_the_harness_boundary_and_provider_ids_round_trip() {
     for version in "0123456789abcdef".chars() {
         for variant in "0123456789abcdef".chars() {
             for endpoint in ["a".to_owned(), "a".repeat(64)] {
                 for session in ["a".to_owned(), "😀".repeat(1024)] {
-                    assert_lossless_session(json!({
+                    let wire = json!({
                         "endpoint": {
                             "serviceId": format!("00000000-0000-{version}000-{variant}000-000000000001"),
                             "endpointId": endpoint
                         },
                         "sessionId": session
-                    }));
+                    });
+                    if version == '7' && matches!(variant, '8' | '9' | 'a' | 'b') {
+                        assert_lossless_session(wire);
+                    } else {
+                        assert_legacy_session_is_refused(wire);
+                    }
                 }
             }
         }
@@ -61,7 +72,7 @@ fn existing_uuid_versions_variants_and_utf8_boundaries_survive_both_conversions(
         "00000000-0000-0000-0000-000000000000",
         "ffffffff-ffff-ffff-ffff-ffffffffffff",
     ] {
-        assert_lossless_session(json!({
+        assert_legacy_session_is_refused(json!({
             "endpoint": {"serviceId": service, "endpointId": "codex-local"},
             "sessionId": "provider:opaque/thread#1"
         }));
@@ -122,7 +133,7 @@ proptest! {
     }
 
     #[test]
-    fn arbitrary_valid_provider_identity_round_trips(session in "[^\\x00]{1,256}", endpoint in "[a-z][a-z0-9-]{0,63}", service in "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}") {
+    fn arbitrary_valid_provider_identity_round_trips(session in "[^\\x00]{1,256}", endpoint in "[a-z][a-z0-9-]{0,63}", service in "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}") {
         assert_lossless_session(json!({"endpoint":{"serviceId":service,"endpointId":endpoint},"sessionId":session}));
     }
 }

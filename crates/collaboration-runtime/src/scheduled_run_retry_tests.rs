@@ -6,7 +6,7 @@ use agent_automation::{RouteEffectEvidence, RunPhase};
 use automation_storage::StorageError;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryRejection,
-    DeliveryRejectionReason, EndpointRef, PushDeliveryState, PushHeaderFacts, SessionRef,
+    DeliveryRejectionReason, EndpointRef, HarnessSessionRef, PushDeliveryState, PushHeaderFacts,
 };
 use std::sync::Arc;
 
@@ -60,7 +60,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         let busy = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
             .await?;
         if busy.phase != RunPhase::Preparing || busy.evidence.timing.is_some() {
             return Err("not-started-busy consumed a dispatch budget".into());
@@ -81,7 +81,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         let settled = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
             .await?;
         if settled.phase != expected_phase {
             return Err(format!(
@@ -150,7 +150,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
                 .lock()
                 .await
                 .read_run::<
-                    SessionRef,
+                    HarnessSessionRef,
                     EndpointRef,
                     CodexGeneration,
                     crate::stored_run_receipt::StoredRunReceipt,
@@ -260,7 +260,7 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         .lock()
         .await
         .read_run::<
-            SessionRef,
+            HarnessSessionRef,
             EndpointRef,
             CodexGeneration,
             crate::stored_run_receipt::StoredRunReceipt,
@@ -296,7 +296,7 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         .lock()
         .await
         .read_run::<
-            SessionRef,
+            HarnessSessionRef,
             EndpointRef,
             CodexGeneration,
             crate::stored_run_receipt::StoredRunReceipt,
@@ -389,7 +389,7 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     let accepted_run = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await?;
     if accepted_run.phase != RunPhase::Executing {
         return Err("known rejection retry did not advance the Run after acceptance".into());

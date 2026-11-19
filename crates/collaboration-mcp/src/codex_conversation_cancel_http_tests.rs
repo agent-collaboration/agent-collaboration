@@ -10,7 +10,7 @@ async fn codex_conversation_cancel_names_turn_interrupt_without_sending_acp_canc
     let root = tempfile::tempdir().expect("temporary service directory");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private service directory");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let description = serde_json::from_value(json!({

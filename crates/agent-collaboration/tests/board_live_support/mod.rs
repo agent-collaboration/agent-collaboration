@@ -12,7 +12,7 @@ use collaboration_client::board::{
     ThreadShowRequest, WorkspaceCreateRequest, WorkspaceId,
 };
 use collaboration_client::protocol::{
-    MessageContent, MessageDelivery, SessionMessageSendParams, SessionRef,
+    HarnessSessionRef, MessageContent, MessageDelivery, SessionMessageSendParams,
 };
 use serde_json::{Value, json};
 
@@ -247,7 +247,7 @@ pub async fn verify_persistence_after_host_restart() -> ProofResult<()> {
 
 async fn send_task(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     task: &str,
     event: &str,
 ) -> ProofResult<()> {
@@ -268,7 +268,7 @@ async fn send_task(
     Ok(())
 }
 
-fn board_identity(session: &SessionRef) -> ProofResult<Identity> {
+fn board_identity(session: &HarnessSessionRef) -> ProofResult<Identity> {
     let session: BoardSessionRef = serde_json::from_value(serde_json::to_value(session)?)?;
     Ok(Identity::Session { session })
 }

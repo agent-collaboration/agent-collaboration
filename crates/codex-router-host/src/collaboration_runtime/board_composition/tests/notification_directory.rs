@@ -13,7 +13,7 @@ async fn a_live_installation_lookup_freezes_its_peer_outside_the_project_lock_an
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
-    let service: ServiceId = "00000000-0000-4000-8000-000000000111"
+    let service: ServiceId = "00000000-0000-7000-8000-000000000111"
         .to_owned()
         .try_into()?;
     let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
@@ -99,7 +99,7 @@ async fn an_unknown_installation_lookup_refuses_the_actual_intent_without_freezi
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
-    let service: ServiceId = "00000000-0000-4000-8000-000000000112"
+    let service: ServiceId = "00000000-0000-7000-8000-000000000112"
         .to_owned()
         .try_into()?;
     fixture

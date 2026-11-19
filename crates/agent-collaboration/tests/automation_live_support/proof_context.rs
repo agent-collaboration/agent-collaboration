@@ -7,7 +7,7 @@ use codex_native_integration::{
 };
 use collaboration_client::CollaborationClient;
 use collaboration_client::protocol::{
-    ChannelDescription, CodexGeneration, EndpointRef, SessionRef,
+    ChannelDescription, CodexGeneration, EndpointRef, HarnessSessionRef,
 };
 use serde_json::{Value, json};
 use std::{
@@ -167,7 +167,7 @@ impl ProofContext {
             private_codex_home,
         })
     }
-    pub async fn start_thread(&mut self, role: &str) -> ProofResult<SessionRef> {
+    pub async fn start_thread(&mut self, role: &str) -> ProofResult<HarnessSessionRef> {
         self.start_thread_with_instructions(
             role,
             format!(
@@ -179,7 +179,7 @@ impl ProofContext {
 
     // Shared helper is also compiled by scripted acceptance binaries without DX tasks.
 
-    pub async fn start_skill_thread(&mut self, role: &str) -> ProofResult<SessionRef> {
+    pub async fn start_skill_thread(&mut self, role: &str) -> ProofResult<HarnessSessionRef> {
         self.start_thread_with_instructions(
             role,
             format!(
@@ -193,7 +193,7 @@ impl ProofContext {
         &mut self,
         role: &str,
         working_directory: &std::path::Path,
-    ) -> ProofResult<SessionRef> {
+    ) -> ProofResult<HarnessSessionRef> {
         let owned_working_directory = working_directory.canonicalize()?;
         if !owned_working_directory.starts_with(self.workspace.canonicalize()?) {
             return Err(
@@ -214,7 +214,7 @@ impl ProofContext {
         &mut self,
         role: &str,
         developer_instructions: String,
-    ) -> ProofResult<SessionRef> {
+    ) -> ProofResult<HarnessSessionRef> {
         let workspace = self.workspace.clone();
         self.start_thread_with_context(role, developer_instructions, &workspace)
             .await
@@ -225,7 +225,7 @@ impl ProofContext {
         role: &str,
         developer_instructions: String,
         working_directory: &std::path::Path,
-    ) -> ProofResult<SessionRef> {
+    ) -> ProofResult<HarnessSessionRef> {
         let reservation = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
         let proxy_port = reservation.local_addr()?.port();
         let control_socket = self.service_directory.join("control.sock").canonicalize()?;
@@ -263,7 +263,7 @@ impl ProofContext {
                     .into(),
             );
         }
-        let target = SessionRef {
+        let target = HarnessSessionRef {
             endpoint: self.endpoint.clone(),
             session_id: response
                 .pointer("/thread/id")
@@ -278,7 +278,7 @@ impl ProofContext {
         )?;
         Ok(target)
     }
-    pub async fn turns(&mut self, target: &SessionRef) -> ProofResult<Vec<Value>> {
+    pub async fn turns(&mut self, target: &HarnessSessionRef) -> ProofResult<Vec<Value>> {
         while let Some(message) = self.native.take_buffered_message() {
             if let Some(diagnostic) = native_notification_diagnostics::for_target(
                 &message,
@@ -377,7 +377,7 @@ impl ProofContext {
     }
     pub async fn wait_for_text(
         &mut self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         text: &str,
     ) -> ProofResult<Vec<Value>> {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
@@ -402,7 +402,7 @@ impl ProofContext {
     }
     pub async fn wait_for_arranged_wake(
         &mut self,
-        origin: &SessionRef,
+        origin: &HarnessSessionRef,
         turn_id: &str,
         marker: &str,
     ) -> ProofResult<()> {

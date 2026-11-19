@@ -14,9 +14,9 @@ use collaboration_contracts::SchedulePreparationRequest;
 use collaboration_contracts::ScheduledRunExecution;
 
 use collaboration_protocol::{
-    CodexGeneration, DestinationPreparation, EndpointRef, ScheduleEffects, ScheduleFailure,
-    ScheduleFailureKind, ScheduleFailureStage, ScheduleNextAction, SchedulePrepareRequest,
-    ScheduleSnapshot, SessionRef,
+    CodexGeneration, DestinationPreparation, EndpointRef, HarnessSessionRef, ScheduleEffects,
+    ScheduleFailure, ScheduleFailureKind, ScheduleFailureStage, ScheduleNextAction,
+    SchedulePrepareRequest, ScheduleSnapshot,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -28,7 +28,7 @@ type PreparationResult = Result<ScheduleSnapshot, ScheduleOperationFailure>;
 #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 pub(crate) async fn prepare_schedule(
     configuration: &collaboration_runtime::AutomationConfigurationHandle,
-    service_id: &collaboration_protocol::UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     execution: Option<&Arc<dyn ScheduledRunExecution>>,
     store: Option<&Arc<Mutex<AutomationStore>>>,
     params: SchedulePrepareRequest,
@@ -84,7 +84,7 @@ pub(crate) async fn prepare_schedule(
     let inspected = store
         .lock()
         .await
-        .inspect_schedule::<SessionRef, EndpointRef>(&params.schedule_id)
+        .inspect_schedule::<HarnessSessionRef, EndpointRef>(&params.schedule_id)
         .await;
     let inspected = match inspected {
         Ok(inspected) => inspected,
@@ -146,7 +146,7 @@ pub(crate) async fn prepare_schedule(
     let admitted = store
         .lock()
         .await
-        .admit_schedule_preparation::<_, ScheduleInspection<SessionRef, EndpointRef>>(
+        .admit_schedule_preparation::<_, ScheduleInspection<HarnessSessionRef, EndpointRef>>(
             &ExternalAdmission {
                 operation_id: params.operation_id.clone(),
                 schedule_id: params.schedule_id.clone(),
@@ -337,7 +337,7 @@ fn destination_cwd(destination: &DestinationPreparation) -> &str {
 fn reject_choice_field(
     params: &SchedulePrepareRequest,
     field: &str,
-    effects: Option<&RouteEffectEvidence<SessionRef, CodexGeneration>>,
+    effects: Option<&RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>,
 ) -> PreparationResult {
     let failure = ScheduleFailure {
         kind: ScheduleFailureKind::InvalidField,
@@ -363,7 +363,7 @@ fn reject_preselection(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
     message: &str,
-    effects: Option<&RouteEffectEvidence<SessionRef, CodexGeneration>>,
+    effects: Option<&RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>,
 ) -> PreparationResult {
     if let Some(effects) = effects {
         return reject(params, kind, message, effects.clone());
@@ -393,7 +393,7 @@ fn error(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
     message: &str,
-    effects: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> ScheduleFailure {
     ScheduleFailure {
         kind,
@@ -419,7 +419,7 @@ fn reject(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
     message: &str,
-    effects: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> PreparationResult {
     Err(ScheduleOperationFailure::Preparation(error(
         params, kind, message, effects,
@@ -431,7 +431,7 @@ async fn finish_failure(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
     message: &str,
-    effects: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    effects: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     uncertain: bool,
 ) -> PreparationResult {
     let failure = error(params, kind, message, effects.clone());
@@ -461,7 +461,9 @@ async fn finish_failure(
     Err(ScheduleOperationFailure::Preparation(failure))
 }
 
-fn public_effects(effects: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> ScheduleEffects {
+fn public_effects(
+    effects: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
+) -> ScheduleEffects {
     match collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(effects) {
         Ok(evidence) => ScheduleEffects::Route {
             evidence: Box::new(evidence),
@@ -494,7 +496,7 @@ fn reject_without_route(params: &SchedulePrepareRequest, message: &str) -> Prepa
 
 struct PreparationDependencies<'a> {
     configuration: &'a collaboration_runtime::AutomationConfigurationHandle,
-    service_id: &'a collaboration_protocol::UuidIdentity,
+    service_id: &'a workspace_ids::MachineId,
     execution: Option<&'a Arc<dyn ScheduledRunExecution>>,
     store: Option<&'a Arc<Mutex<AutomationStore>>>,
 }

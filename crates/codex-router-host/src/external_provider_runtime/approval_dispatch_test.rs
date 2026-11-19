@@ -6,8 +6,8 @@ use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecision, CodexGeneration, DeliveryOutcome, DeliveryReceipt,
-    EndpointId, EndpointRef, GenerationNumber, OperationId, SessionId, SessionReachability,
-    SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, GenerationNumber, HarnessSessionRef, OperationId, SessionId,
+    SessionReachability,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -21,7 +21,7 @@ use super::approval_push_fixture;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-fn approval_actor(session: &SessionRef) -> message_board::Identity {
+fn approval_actor(session: &HarnessSessionRef) -> message_board::Identity {
     message_board::Identity::Session {
         session: serde_json::from_value(serde_json::to_value(session).expect("session JSON"))
             .expect("board session"),
@@ -209,11 +209,11 @@ async fn observed_typed_approvals(
 }
 
 fn session_ref(
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     endpoint_id: &str,
     session_id: &str,
-) -> TestResult<SessionRef> {
-    Ok(SessionRef {
+) -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned())?,
@@ -224,7 +224,7 @@ fn session_ref(
 
 async fn approval_broker_fixture(
     root: &tempfile::TempDir,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     generation: &CodexGeneration,
 ) -> TestResult<(Arc<ServiceInteractionBroker>, Arc<Notify>)> {
     let gate = NativeGenerationGate::default();
@@ -268,9 +268,10 @@ async fn approval_broker_fixture(
 async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let (broker, notice) = approval_broker_fixture(&root, &service_id, &generation).await?;
@@ -335,9 +336,10 @@ async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
 async fn self_approver_offer_records_actionable_refusal() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let (broker, _) = approval_broker_fixture(&root, &service_id, &generation).await?;
@@ -389,9 +391,10 @@ async fn self_approver_offer_records_actionable_refusal() -> TestResult {
 async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let (broker, _) = approval_broker_fixture(&root, &service_id, &generation).await?;
@@ -439,9 +442,10 @@ async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
 async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progresses() -> TestResult
 {
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(
@@ -518,9 +522,10 @@ async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progre
     reason = "Contract asserts; setup may fail."
 )]
 async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> TestResult {
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(
@@ -577,9 +582,10 @@ async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> Tes
 async fn peer_cancellation_and_binding_retirement_settle_permission_history_once() -> TestResult {
     for cancellation_source in ["peer", "retirement"] {
         let root = tempfile::tempdir()?;
-        let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+        let service_id =
+            workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
         let generation = CodexGeneration {
-            service_epoch: service_id.clone(),
+            service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
             generation: GenerationNumber::try_from(1)?,
         };
         let runtime = ExternalProviderRuntime::initialize(
@@ -641,9 +647,10 @@ async fn peer_cancellation_and_binding_retirement_settle_permission_history_once
 )]
 async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult {
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(
@@ -711,9 +718,10 @@ async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult 
 )]
 async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestResult {
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(
@@ -768,9 +776,10 @@ async fn permission_arriving_after_router_cancel_is_answered_cancelled() -> Test
     let root = tempfile::tempdir()?;
     let event_socket = root.path().join("prompt-event.sock");
     let listener = tokio::net::UnixListener::bind(&event_socket)?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = Arc::new(

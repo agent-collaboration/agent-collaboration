@@ -22,9 +22,9 @@ mod proof_context {
 }
 
 use collaboration_client::protocol::{
-    ConversationCreateOutcome, DestinationPreparation, ExecutionDestination,
+    ConversationCreateOutcome, DestinationPreparation, ExecutionDestination, HarnessSessionRef,
     InstructionCreateParams, OperationId, RouterAccess, ScheduleCreateRequest, ScheduleDefinition,
-    ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest,
+    ScheduleEnableRequest, SchedulePrepareRequest, TimingRequest,
 };
 use collaboration_client::{ConversationActor, ConversationClient, ConversationCreateInput};
 #[path = "../delivery_matrix/approval.rs"]
@@ -368,11 +368,11 @@ fn user_text_contains_marker(text: &str, marker: &str) -> bool {
 fn recipient_observer_finds_composite_approval_request_id_in_user_text() {
     let request_id = "[\"matrix-provider-codex\",91]";
     let sender = json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"sender"
     });
     let recipient = json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"recipient"
     });
     let notice = format!(
@@ -384,7 +384,7 @@ fn recipient_observer_finds_composite_approval_request_id_in_user_text() {
     ]}]})];
     assert!(turns_contain_input(&turns, request_id));
     let peer_message = format!(
-        "{}\n\nFor follow-up messages, use `agent-collaboration message send --to <SessionRef> --from <SessionRef> --text <TEXT>` as this Claude session.",
+        "{}\n\nFor follow-up messages, use `agent-collaboration message send --to <HarnessSessionRef> --from <HarnessSessionRef> --text <TEXT>` as this Claude session.",
         json!({"kind":"externalProviderPermission","requestId":request_id})
     );
     assert!(user_text_contains_marker(&peer_message, request_id));
@@ -392,8 +392,8 @@ fn recipient_observer_finds_composite_approval_request_id_in_user_text() {
 
 async fn create_empty_conversation(
     proof: &ProofContext,
-    creator: &SessionRef,
-) -> ProofResult<SessionRef> {
+    creator: &HarnessSessionRef,
+) -> ProofResult<HarnessSessionRef> {
     let conversation = ConversationClient::connect(
         &collaboration_client::CollaborationAccess::api(&proof.service_directory),
         &proof.endpoint,
@@ -433,8 +433,8 @@ async fn create_empty_conversation(
 )]
 async fn cli_codex_create_then_prompt_load_route(
     proof: &ProofContext,
-    creator: &SessionRef,
-) -> ProofResult<SessionRef> {
+    creator: &HarnessSessionRef,
+) -> ProofResult<HarnessSessionRef> {
     let creator_json = serde_json::to_string(creator)?;
     let create = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
@@ -466,7 +466,7 @@ async fn cli_codex_create_then_prompt_load_route(
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .find(|line| line["kind"] == "created")
         .ok_or("CLI conversation create did not return a target")?;
-    let target: SessionRef = serde_json::from_value(created["target"].clone())?;
+    let target: HarnessSessionRef = serde_json::from_value(created["target"].clone())?;
     let target_json = serde_json::to_string(&target)?;
     let prompt = tokio::time::timeout(
         Duration::from_secs(35),
@@ -516,7 +516,7 @@ async fn cli_codex_create_then_prompt_load_route(
 
 async fn wait_for_input_marker(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     marker: &str,
     timeout: Duration,
 ) -> ProofResult<String> {
@@ -535,8 +535,8 @@ async fn wait_for_input_marker(
 
 async fn cli_send(
     proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     text: &str,
 ) -> ProofResult<()> {
     let _receipt = cli_send_receipt(proof, sender, target, text).await?;
@@ -549,8 +549,8 @@ async fn cli_send(
 )]
 async fn cli_send_receipt(
     proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     text: &str,
 ) -> ProofResult<Value> {
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
@@ -586,8 +586,8 @@ async fn cli_send_receipt(
 )]
 async fn wake_send(
     proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     text: &str,
 ) -> ProofResult<()> {
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
@@ -627,7 +627,7 @@ async fn wake_send(
 
 async fn schedule_send(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     text: &str,
 ) -> ProofResult<()> {
     let instruction = proof

@@ -312,7 +312,7 @@ async fn stale_request_and_foreign_service_rows_are_rejected_before_publication(
                     "cli",
                 );
                 row.identity = SessionPickerIdentity::HostedCodex(serde_json::from_value(serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000099","endpointId":"codex-local"},
+                "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000099","endpointId":"codex-local"},
                 "sessionId":"same-native-id",
             })).unwrap());
                 if stale_request {

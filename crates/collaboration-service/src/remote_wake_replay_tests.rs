@@ -19,8 +19,8 @@ use router_clock::RuntimeClock;
 use serde_json::json;
 use std::sync::Arc;
 
-pub(super) fn service(last: u8) -> collaboration_protocol::UuidIdentity {
-    format!("00000000-0000-4000-8000-{last:012}")
+pub(super) fn service(last: u8) -> workspace_ids::MachineId {
+    format!("00000000-0000-7000-8000-{last:012}")
         .try_into()
         .unwrap()
 }

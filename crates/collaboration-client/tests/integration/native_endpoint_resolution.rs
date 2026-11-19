@@ -7,8 +7,8 @@ use std::{
     os::unix::{fs::PermissionsExt, net::UnixListener},
 };
 
-const FIRST_SERVICE: &str = "00000000-0000-4000-8000-000000000001";
-const SECOND_SERVICE: &str = "00000000-0000-4000-8000-000000000002";
+const FIRST_SERVICE: &str = "00000000-0000-7000-8000-000000000001";
+const SECOND_SERVICE: &str = "00000000-0000-7000-8000-000000000002";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000003";
 
 fn source_endpoint(service_id: &str, endpoint_id: &str) -> Result<EndpointRef, serde_json::Error> {

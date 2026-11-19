@@ -1,12 +1,10 @@
 //! One CLI grammar for exact session targets.
 use clap::Args;
-use collaboration_client::protocol::{
-    EndpointId, EndpointRef, SessionId, SessionRef, UuidIdentity,
-};
+use collaboration_client::protocol::{EndpointId, EndpointRef, HarnessSessionRef, SessionId};
 
 #[derive(Args, Clone)]
 pub(crate) struct SessionTargetArguments {
-    /// Exact SessionRef JSON; copy `.target` from `sessions list --json`. nativeThreadId is not accepted.
+    /// Exact HarnessSessionRef JSON; copy `.target` from `sessions list --json`. nativeThreadId is not accepted.
     #[arg(long, conflicts_with_all = ["endpoint", "session"])]
     pub(crate) to: Option<String>,
     #[arg(long, conflicts_with = "to")]
@@ -16,7 +14,7 @@ pub(crate) struct SessionTargetArguments {
 }
 
 pub(crate) enum ParsedSessionTarget {
-    Exact(SessionRef),
+    Exact(HarnessSessionRef),
     Pair {
         endpoint_id: EndpointId,
         session_id: SessionId,
@@ -41,13 +39,16 @@ impl SessionTargetArguments {
                     .try_into()
                     .map_err(|_| "--session must be a non-empty session id, for example target-session".to_owned())?,
             }),
-            _ => Err("Provide either --to SessionRef JSON or both --endpoint and --session; for example --to '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'".into()),
+            _ => Err("Provide either --to HarnessSessionRef JSON or both --endpoint and --session; for example --to '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'".into()),
         }
     }
 }
 
 impl ParsedSessionTarget {
-    pub(crate) fn resolve(self, service_id: &UuidIdentity) -> Result<SessionRef, String> {
+    pub(crate) fn resolve(
+        self,
+        service_id: &workspace_ids::MachineId,
+    ) -> Result<HarnessSessionRef, String> {
         let target = self.into_mail_recipient(service_id);
         if &target.endpoint.service_id == service_id {
             Ok(target)
@@ -55,13 +56,16 @@ impl ParsedSessionTarget {
             Err("--to addresses a different collaboration service".into())
         }
     }
-    pub(crate) fn into_mail_recipient(self, local_service: &UuidIdentity) -> SessionRef {
+    pub(crate) fn into_mail_recipient(
+        self,
+        local_service: &workspace_ids::MachineId,
+    ) -> HarnessSessionRef {
         match self {
             Self::Exact(target) => target,
             Self::Pair {
                 endpoint_id,
                 session_id,
-            } => SessionRef {
+            } => HarnessSessionRef {
                 endpoint: EndpointRef {
                     service_id: local_service.clone(),
                     endpoint_id,
@@ -79,5 +83,5 @@ impl ParsedSessionTarget {
 }
 
 fn guidance() -> String {
-    "--to must be compact SessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --to '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'. nativeThreadId is a lifecycle address, not a SessionRef. Copy .target from sessions list --json.".into()
+    "--to must be compact HarnessSessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --to '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'. nativeThreadId is a lifecycle address, not a HarnessSessionRef. Copy .target from sessions list --json.".into()
 }

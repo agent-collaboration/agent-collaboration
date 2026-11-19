@@ -13,6 +13,7 @@ use collaboration_client::protocol::ClaudeCodeInteractiveStatus;
 use collaboration_client::protocol::EndpointAvailability;
 use collaboration_client::protocol::EndpointDescription;
 use collaboration_client::protocol::EndpointRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use collaboration_client::protocol::HostedProviderOrigin;
 use collaboration_client::protocol::ProviderCapabilities;
 use collaboration_client::protocol::ProviderCapability;
@@ -25,11 +26,10 @@ use collaboration_client::protocol::ProviderRuntimeIdentity;
 use collaboration_client::protocol::ProviderSessionState;
 use collaboration_client::protocol::ProviderSessionSummary;
 use collaboration_client::protocol::ProviderTransport;
-use collaboration_client::protocol::SessionRef;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-pub(crate) const FIXTURE_SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+pub(crate) const FIXTURE_SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 pub(crate) const SHARED_SESSION: &str = "00000000-0000-4000-8000-000000000011";
 
 pub(crate) fn apply_storyboard_variant(
@@ -126,7 +126,7 @@ pub(crate) fn apply_storyboard_variant(
                 let profile = registry.routers.pop().ok_or_else(|| {
                     std::io::Error::other("source-qualified fixture profile missing")
                 })?;
-                let target:SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service,"endpointId":endpoint},"sessionId":SHARED_SESSION})).map_err(std::io::Error::other)?;
+                let target:HarnessSessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service,"endpointId":endpoint},"sessionId":SHARED_SESSION})).map_err(std::io::Error::other)?;
                 let mut record = original.clone();
                 record.identity =
                     agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(target);
@@ -190,7 +190,7 @@ pub(crate) fn provider_filter_storyboard_request() -> std::io::Result<SessionsPi
     let native_claude_endpoint = fixture_endpoint("claude-local")?;
     let claude_delta = ProviderSessionSummary::ClaudeCodeInteractive {
         origin: ClaudeCodeInteractiveOrigin::ClaudeCodeInteractive,
-        target: SessionRef {
+        target: HarnessSessionRef {
             endpoint: native_claude_endpoint.clone(),
             session_id: "00000000-0000-4000-8000-000000000014"
                 .to_owned()
@@ -257,7 +257,7 @@ fn managed_summary(
     session_id: &str,
     observed_seconds: i64,
 ) -> std::io::Result<ProviderSessionSummary> {
-    let creator = ProviderIdentity::Session(SessionRef {
+    let creator = ProviderIdentity::Session(HarnessSessionRef {
         endpoint: fixture_endpoint("codex-fixture")?,
         session_id: "fixture-creator"
             .to_owned()
@@ -266,7 +266,7 @@ fn managed_summary(
     });
     Ok(ProviderSessionSummary::HostedProvider {
         origin: Some(HostedProviderOrigin::HostedProvider),
-        target: SessionRef {
+        target: HarnessSessionRef {
             endpoint,
             session_id: session_id
                 .to_owned()

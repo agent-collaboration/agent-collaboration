@@ -400,11 +400,11 @@ async fn probe(
             .find(|endpoint| String::from(endpoint.endpoint.endpoint_id.clone()) == "codex-local")
             .ok_or("missing endpoint")?
             .endpoint;
-        let target = collaboration_protocol::SessionRef {
+        let target = collaboration_protocol::HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id: second.clone().try_into()?,
         };
-        let sender = collaboration_protocol::SessionRef {
+        let sender = collaboration_protocol::HarnessSessionRef {
             endpoint,
             session_id: first.clone().try_into()?,
         };
@@ -444,11 +444,11 @@ async fn probe(
             .find(|e| String::from(e.endpoint.endpoint_id.clone()) == "codex-local")
             .ok_or("missing endpoint")?
             .endpoint;
-        let first_ref = collaboration_protocol::SessionRef {
+        let first_ref = collaboration_protocol::HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id: first.clone().try_into()?,
         };
-        let second_ref = collaboration_protocol::SessionRef {
+        let second_ref = collaboration_protocol::HarnessSessionRef {
             endpoint,
             session_id: second.clone().try_into()?,
         };

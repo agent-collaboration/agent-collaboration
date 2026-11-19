@@ -66,7 +66,7 @@ mod tests {
             .mode(0o700)
             .create(&root)
             .unwrap_or_else(|error| panic!("fixture directory: {error}"));
-        let service_id = "00000000-0000-4000-8000-000000000001";
+        let service_id = "00000000-0000-7000-8000-000000000001";
         let endpoint = serde_json::from_value(json!({
             "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
             "label":"ACP rejection fixture",

@@ -75,7 +75,7 @@ impl<R: EngineHost> Engine<'_, R> {
         let now = self.now()?;
         let cutoff = now
             .checked_sub_signed(chrono::Duration::hours(24))
-            .ok_or_else(|| corrupt("request_log.cutoff"))?;
+            .ok_or_else(|| corrupt("runtime_request_log.cutoff"))?;
         let digest = crate::workspace_request_log::digest(
             &serde_json::json!({"machine":M::KIND.0,"key":&key.0,"event":&event}),
         )?;

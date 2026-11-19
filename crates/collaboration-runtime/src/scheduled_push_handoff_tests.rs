@@ -4,7 +4,7 @@ use crate::scheduled_route_fixture::{
 };
 use agent_automation::RunPhase;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryOutcome, EndpointRef, PushDeliveryState, SessionRef,
+    CodexGeneration, DeliveryOutcome, EndpointRef, HarnessSessionRef, PushDeliveryState,
 };
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use sqlx_turso::{TursoConnectOptions, TursoConnection};
@@ -60,7 +60,7 @@ async fn committed_schedule_outcome_replays_lost_ack_before_another_native_attem
     let run = automation
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await?;
     let attempted = worker
         .interactions
@@ -318,7 +318,7 @@ async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_an
             .store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
             .await?
             .schedule_id,
         &run_id,

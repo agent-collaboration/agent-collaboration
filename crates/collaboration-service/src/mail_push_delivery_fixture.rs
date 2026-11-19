@@ -14,7 +14,7 @@ use collaboration_mail_protocol::{
 };
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
-    DeliveryRejectionReason, PushId, SessionRef,
+    DeliveryRejectionReason, HarnessSessionRef, PushId,
 };
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope, turso_store::TursoScope};
 pub(super) use fixture::{Fixture, ProjectionHost, ProjectionStore, ProjectionTask, recorded_at};
@@ -130,7 +130,7 @@ impl SessionMessageDelivery for NativeClient {
 }
 struct Running;
 impl TargetPresenceProbe for Running {
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+    fn presence(&self, _: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence> {
         Box::pin(async { Ok(TargetPresence::Running) })
     }
 }
@@ -223,7 +223,7 @@ impl Runtime {
         ));
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
+                "00000000-0000-7000-8000-000000000001".to_owned(),
             )
             .unwrap(),
             machine: message_board::MachineLabel::try_from("Recipient".to_owned()).unwrap(),
@@ -393,7 +393,7 @@ impl Runtime {
 }
 fn machine() -> MachineIdentity {
     MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap(),
@@ -412,7 +412,7 @@ pub(super) fn follow(
     from: u64,
     through: u64,
 ) -> DeliveryItem<RouterDeliveryTypes> {
-    let address:message_board::SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"remote-without-project"})).unwrap();
+    let address:message_board::SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"remote-without-project"})).unwrap();
     let project: message_board::ProjectId = "01900000-0000-7000-8000-000000000020"
         .to_owned()
         .try_into()

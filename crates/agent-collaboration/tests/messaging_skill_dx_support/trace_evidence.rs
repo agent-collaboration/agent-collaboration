@@ -1,13 +1,13 @@
 use crate::proof_context::{ProofContext, ProofResult, agent_text};
 use collaboration_client::protocol::{
-    DeliveryOutcome, MachineId, MachineLabel, PushDeliveryState, PushHeaderFacts, PushId,
-    PushLineInput, PushMessageSendResult, PushOrigin, RouterLink, SessionRef,
-    parse_push_line_header, render_push_line, session_identity,
+    DeliveryOutcome, HarnessSessionRef, MachineLabel, PushDeliveryState, PushHeaderFacts, PushId,
+    PushLineInput, PushMessageSendResult, PushOrigin, RouterLink, parse_push_line_header,
+    render_push_line, session_identity,
 };
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 
-pub(super) fn trace_value(target: &SessionRef, turns: Vec<Value>) -> Value {
+pub(super) fn trace_value(target: &HarnessSessionRef, turns: Vec<Value>) -> Value {
     json!({"target":target,"turns":turns})
 }
 
@@ -29,7 +29,7 @@ pub(super) fn require_terminal(turns: &[Value], role: &str) -> ProofResult<()> {
 
 pub(super) async fn wait_for_terminal_with_text(
     proof: &mut ProofContext,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     required_text: Option<&str>,
 ) -> ProofResult<Vec<Value>> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(600);
@@ -97,8 +97,8 @@ pub(super) fn read_skill_and_messaging_reference(turns: &[Value]) -> bool {
 
 pub(super) fn has_incoming_message_followed_by_agent_text(
     turns: &[Value],
-    sender: &SessionRef,
-    recipient: &SessionRef,
+    sender: &HarnessSessionRef,
+    recipient: &HarnessSessionRef,
     expected: &PushMessageSendResult,
     marker: &str,
 ) -> bool {
@@ -194,10 +194,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn session(session_id: &str) -> SessionRef {
+    fn session(session_id: &str) -> HarnessSessionRef {
         serde_json::from_value(json!({
             "endpoint": {
-                "serviceId": "00000000-0000-4000-8000-000000000001",
+                "serviceId": "00000000-0000-7000-8000-000000000001",
                 "endpointId": "codex-local"
             },
             "sessionId": session_id
@@ -231,10 +231,7 @@ mod tests {
         let recipient = session("00000000-0000-4000-8000-000000000003");
         let push_id =
             PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned()).expect("push id");
-        let link = RouterLink::new(
-            MachineId::from(recipient.endpoint.service_id.clone()),
-            push_id.clone(),
-        );
+        let link = RouterLink::new(recipient.endpoint.service_id.clone(), push_id.clone());
         let receipt = json!({
             "kind":"result",
             "result":{

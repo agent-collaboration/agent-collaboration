@@ -451,7 +451,7 @@ async fn session_role_witness_and_implicit_trail_use_their_own_scoped_operands()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, stream) = fixture.project().await?;
-    let actor = json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"m2b-scoped-role-fixture"}});
+    let actor = json!({"kind":"session","session":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"m2b-scoped-role-fixture"}});
     board_fixture::accepted(&fixture.api.call("role_grant", fixture.request(&project, json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"operator","holder":actor,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}))).await?);
     let mut root = create(
         &fixture,

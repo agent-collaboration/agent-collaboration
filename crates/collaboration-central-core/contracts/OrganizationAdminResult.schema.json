@@ -113,6 +113,7 @@
       "enum": [
         "wake_timer",
         "automation_timer",
+        "direct_message",
         "legacy_notice_windows",
         "legacy_workspace_drains",
         "engine_source"

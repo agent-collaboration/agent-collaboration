@@ -42,7 +42,7 @@ pub async fn held_follow_survives_history_pruning(fixture: &mut BoardFixture) ->
 
 async fn hold_and_prune(
     fixture: &mut BoardFixture,
-    target: &collaboration_protocol::SessionRef,
+    target: &collaboration_protocol::HarnessSessionRef,
     control: &PushRecord,
 ) -> FixtureResult<PushRecord> {
     // The reader is declared but now truly absent; whenIdle=hold preserves its batch.

@@ -21,6 +21,7 @@ test-support = [
 ]
 
 [dependencies]
+workspace-ids.workspace = true
 chrono.workspace = true
 tokio-util.workspace = true
 futures-util.workspace = true

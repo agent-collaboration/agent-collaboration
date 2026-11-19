@@ -42,7 +42,7 @@ async fn publish_without_a_batch_at(fixture: &Fixture, runtime: &Runtime, time: 
 async fn done_wakes(runtime: &Runtime) -> i64 {
     count(
         runtime,
-        "SELECT COUNT(*) FROM wakes WHERE state='done'",
+        "SELECT COUNT(*) FROM automation_wakes WHERE state='done'",
         vec![],
     )
     .await
@@ -52,7 +52,7 @@ async fn done_wakes(runtime: &Runtime) -> i64 {
 async fn done_wakes_due_by(runtime: &Runtime, through: Time) -> i64 {
     count(
         runtime,
-        "SELECT COUNT(*) FROM wakes WHERE state='done' AND due_at<=?",
+        "SELECT COUNT(*) FROM automation_wakes WHERE state='done' AND due_at<=?",
         vec![stamp(through)],
     )
     .await
@@ -72,7 +72,7 @@ async fn six_hundred_due_wakes_drain_earliest_first_in_capped_batches_thirty_sec
     let statements = (0..599)
         .map(|number| GuardedStatement {
             statement: Statement {
-                sql: "INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) SELECT ?1,target,?2,text,'active',?3,?3 FROM wakes WHERE wake_id=?4",
+                sql: "INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) SELECT ?1,target,?2,text,'active',?3,?3 FROM automation_wakes WHERE wake_id=?4",
                 args: vec![
                     text(bulk_wake_id(number)),
                     stamp(due(number)),
@@ -97,7 +97,7 @@ async fn six_hundred_due_wakes_drain_earliest_first_in_capped_batches_thirty_sec
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM wakes WHERE state='active'",
+            "SELECT COUNT(*) FROM automation_wakes WHERE state='active'",
             vec![]
         )
         .await,
@@ -127,7 +127,7 @@ async fn six_hundred_due_wakes_drain_earliest_first_in_capped_batches_thirty_sec
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM messages WHERE message_kind='wake'",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'",
             vec![]
         )
         .await,
@@ -153,7 +153,7 @@ async fn an_only_unreadable_wake_publishes_the_next_mark_before_any_batch_fails_
     assert_eq!(alarm_ms(&runtime), ms(at(start, 15, 0)));
     raw(
         &runtime,
-        "UPDATE wakes SET due_at='not-a-time' WHERE wake_id=?",
+        "UPDATE automation_wakes SET due_at='not-a-time' WHERE wake_id=?",
         vec![text(&wake)],
     )
     .await;
@@ -168,7 +168,7 @@ async fn an_only_unreadable_wake_publishes_the_next_mark_before_any_batch_fails_
     assert_eq!(
         rows(
             &runtime,
-            "SELECT state FROM wakes WHERE wake_id=?",
+            "SELECT state FROM automation_wakes WHERE wake_id=?",
             vec![text(&wake)]
         )
         .await,
@@ -184,7 +184,7 @@ async fn an_only_unreadable_wake_publishes_the_next_mark_before_any_batch_fails_
             integer(1),
             stamp(at(start, 10, 0)),
             text("corrupt_row"),
-            text("wakes.due_at")
+            text("automation_wakes.due_at")
         ]]
     );
     assert_eq!(alarm_ms(&runtime), ms(at(start, 10, 0)));
@@ -201,7 +201,7 @@ async fn a_failing_record_with_an_out_of_range_retry_publishes_the_next_mark_and
     let planted = "01890f2e-7b4c-7cc0-98c4-000000014201";
     raw(
         &runtime,
-        "INSERT INTO central_work_attempts(attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at) VALUES (?,'wake_timer',?,'failing',1,'2262-04-11T23:47:17.854Z','statement_rejected',NULL,?,?,NULL,?,?)",
+        "INSERT INTO engine_work_attempts(attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at) VALUES (?,'wake_timer',?,'failing',1,'2262-04-11T23:47:17.854Z','statement_rejected',NULL,?,?,NULL,?,?)",
         vec![
             text(planted),
             text(&wake),
@@ -226,7 +226,7 @@ async fn a_failing_record_with_an_out_of_range_retry_publishes_the_next_mark_and
     let visited = (
         rows(
             &runtime,
-            "SELECT state FROM wakes WHERE wake_id=?",
+            "SELECT state FROM automation_wakes WHERE wake_id=?",
             vec![text(&wake)],
         )
         .await,
@@ -243,7 +243,7 @@ async fn a_failing_record_with_an_out_of_range_retry_publishes_the_next_mark_and
                 integer(1),
                 stamp(at(start, 10, 0)),
                 text("corrupt_row"),
-                text("central_work_attempts.next_try_at\n2262-04-11T23:47:17.854Z")
+                text("engine_work_attempts.next_try_at\n2262-04-11T23:47:17.854Z")
             ]]
         ),
         "the 10:05 batch visited the subject and replaced its unreadable record"

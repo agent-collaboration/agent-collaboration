@@ -36,7 +36,7 @@ fn managed_binding_for(
         collaboration_client::protocol::ProviderKind::Cursor => "cursor-local",
         collaboration_client::protocol::ProviderKind::ClaudeCode => "claude-local",
     };
-    serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":endpoint},
+    serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":endpoint},
         "bindingId":"actual-cursor-binding","runtime":{"provider":provider,"runtimeName":"fixture"},"transport":"stdioAcp",
         "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":7},
         "capabilities":[{"name":"load","status":"supported","evidence":"advertised"}]})).unwrap()
@@ -156,7 +156,7 @@ async fn managed_details_load_is_explicit_once_and_keeps_captured_source_target_
         collaboration_client::protocol::ProviderKind::ClaudeCode,
     ] {
         let binding = managed_binding_for(provider);
-        let target: collaboration_client::protocol::SessionRef = serde_json::from_value(
+        let target: collaboration_client::protocol::HarnessSessionRef = serde_json::from_value(
             serde_json::json!({"endpoint":binding.endpoint,"sessionId":"captured-stored-cursor"}),
         )
         .unwrap();
@@ -250,7 +250,7 @@ async fn managed_details_load_is_explicit_once_and_keeps_captured_source_target_
         assert_eq!(effect.source, PickerSourceContext::DefaultHosted);
         assert_eq!(
             String::from(effect.service_id.clone()),
-            "00000000-0000-4000-8000-000000000001"
+            "00000000-0000-7000-8000-000000000001"
         );
         assert!(
             matches!(&effect.effect,SessionClientEffect::Managed {binding:actual,action:SourceManagedAction::Load {target:actual_target},..} if *actual==binding&&*actual_target==target)
@@ -267,7 +267,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
     use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeBinding;
     use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeClaudeAction;
     for fork in [true, false] {
-        let target:collaboration_client::protocol::SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"})).unwrap();
+        let target:collaboration_client::protocol::HarnessSessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"})).unwrap();
         let summary=serde_json::from_value(serde_json::json!({"origin":"claudeCodeInteractive","target":target,"workingDirectory":"/source/native-directory","name":"Captured native Claude","status":"idle","startedAt":1,"updatedAt":2,"statusUpdatedAt":2,"kind":"interactive","entrypoint":"cli"})).unwrap();
         let mut record = SessionPickerRecord::from_provider_summary(&summary, "Native Claude");
         record.source_context = Some(PickerSourceContext::DefaultHosted);
@@ -280,7 +280,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
             Box::pin(async {
                 Ok(DetailsClientCapabilities::Native {
                     source: SourceNativeBinding {
-                        service_id: "00000000-0000-4000-8000-000000000001"
+                        service_id: "00000000-0000-7000-8000-000000000001"
                             .to_owned()
                             .try_into()
                             .unwrap(),
@@ -388,7 +388,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
         assert_eq!(effect.source, PickerSourceContext::DefaultHosted);
         assert_eq!(
             String::from(effect.service_id.clone()),
-            "00000000-0000-4000-8000-000000000001"
+            "00000000-0000-7000-8000-000000000001"
         );
         let SessionClientEffect::Native {
             service_epoch,

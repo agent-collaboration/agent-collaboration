@@ -3,10 +3,10 @@ use crate::inventory_failures::ProviderInventoryFailure;
 use claude_code_peer_messaging::{NativeClaudeJobReadError, PeerSessionSummary};
 use collaboration_protocol::{
     ClaudeCodeBackgroundOrigin, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
-    EndpointRef, NativeClaudeConflictReason, NativeClaudeInventoryCoverage,
+    EndpointRef, HarnessSessionRef, NativeClaudeConflictReason, NativeClaudeInventoryCoverage,
     NativeClaudeInventoryPart, NativeClaudePeerObservation, NativeClaudeSessionConflict,
     NativeInventoryInvalidReason, NativeInventorySource, NativeInventoryUnavailableReason,
-    NativeSessionView, ProviderSessionSummary, ProviderWorkingDirectory, SessionId, SessionRef,
+    NativeSessionView, ProviderSessionSummary, ProviderWorkingDirectory, SessionId,
 };
 use std::collections::BTreeMap;
 
@@ -75,7 +75,7 @@ pub(crate) async fn read_native_catalogue(
                 .conflicting_session_claims()
                 .into_iter()
                 .map(|(session_id, claims)| NativeClaudeSessionConflict {
-                    target: SessionRef {
+                    target: HarnessSessionRef {
                         endpoint: endpoint.clone(),
                         session_id,
                     },
@@ -150,7 +150,7 @@ pub(crate) async fn read_native_catalogue(
                 if visible {
                     sessions.push(ProviderSessionSummary::ClaudeCodeBackground {
                         origin: ClaudeCodeBackgroundOrigin::ClaudeCodeBackground,
-                        target: SessionRef {
+                        target: HarnessSessionRef {
                             endpoint: endpoint.clone(),
                             session_id: job.session_id,
                         },
@@ -181,7 +181,7 @@ pub(crate) async fn read_native_catalogue(
         }
         sessions.push(ProviderSessionSummary::ClaudeCodeInteractive {
             origin: ClaudeCodeInteractiveOrigin::ClaudeCodeInteractive,
-            target: SessionRef {
+            target: HarnessSessionRef {
                 endpoint: endpoint.clone(),
                 session_id: peer.session_id,
             },

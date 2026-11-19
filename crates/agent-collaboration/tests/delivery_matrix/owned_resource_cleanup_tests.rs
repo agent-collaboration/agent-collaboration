@@ -3,9 +3,9 @@ use super::super::{owned_resources::OwnedMatrixResources, proof_context::ProofRe
 use super::{CleanupAction, CleanupObservation, CleanupOutcome, cleanup_owned_resources};
 use automation_storage::AutomationStore;
 use collaboration_client::protocol::{
-    EndpointRef, InstructionCreateParams, OperationId, SavedMessage, ScheduleCreateRequest,
-    ScheduleId, ScheduleShowRequest, SessionRef, WakeSendRequest, WakeShowRequest, WakeState,
-    WakeupId,
+    EndpointRef, HarnessSessionRef, InstructionCreateParams, OperationId, SavedMessage,
+    ScheduleCreateRequest, ScheduleId, ScheduleShowRequest, WakeSendRequest, WakeShowRequest,
+    WakeState, WakeupId,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;
@@ -22,7 +22,7 @@ async fn known_timer_cleanup_reaches_real_service_and_sqlite() -> ProofResult<()
     let database_path = directory.path().join("automation.sqlite");
     let store = Arc::new(Mutex::new(AutomationStore::open(&database_path).await?));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000401",
+        "00000000-0000-7000-8000-000000000401",
         "00000000-0000-4000-8000-000000000402",
     )
     .map_err(std::io::Error::other)?
@@ -57,7 +57,7 @@ async fn exercise_real_timer_cleanup(
         "message": {
             "target": {
                 "endpoint": {
-                    "serviceId": "00000000-0000-4000-8000-000000000401",
+                    "serviceId": "00000000-0000-7000-8000-000000000401",
                     "endpointId": "codex-local"
                 },
                 "sessionId": "cleanup-fixture-only-target"
@@ -182,7 +182,7 @@ async fn check_stored_timer_retirement(
 ) -> ProofResult<()> {
     let wake = store.read_wakeup::<SavedMessage>(wakeup_id).await?;
     let schedule = store
-        .inspect_schedule::<SessionRef, EndpointRef>(schedule_id)
+        .inspect_schedule::<HarnessSessionRef, EndpointRef>(schedule_id)
         .await?;
     if wake.definition.wakeup_id != *wakeup_id
         || wake.state != agent_automation::WakeState::Cancelled
@@ -464,20 +464,20 @@ fn wake_response_projection_keeps_retained_delivery_identity_and_disposition() -
     let result: WakeMutationResult = serde_json::from_value(json!({
         "wakeup":{"definition":{"wakeupId":"019f0000-0000-7000-8000-000000009011",
             "changeId":"019f0000-0000-7000-8000-000000009013","createdBy":{"kind":"owner"},
-            "message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
+            "message":{"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
                 "content":{"kind":"humanUser","text":"Synthetic retained-delivery boundary"},"delivery":"queue"},
             "timing":{"kind":"after","seconds":600},"anchorAt":"2026-10-15T00:00:00Z","expiresAt":null,"createdAt":"2026-10-15T00:00:00Z"},
             "state":"cancelled","nextDueAt":null,"firstFire":null,"pendingDeliveryId":null,"latestEventCursor":"synthetic:7"},
         "discardedDeliveryIds":["019f0000-0000-7000-8000-000000009023"],
         "dispatchedDeliveries":[
             {"deliveryId":"019f0000-0000-7000-8000-000000009021",
-             "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
+             "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
              "mode":"queue","source":{"kind":"wake","wakeupId":"019f0000-0000-7000-8000-000000009011","occurrenceId":"019f0000-0000-7000-8000-000000009020"},
              "eligibleAt":"2026-10-15T00:00:01Z","expiresAt":null,"disposition":"accepted",
              "evidence":{"kind":"accepted","attemptId":"019f0000-0000-7000-8000-000000009031",
                  "receipt":{"outcome":{"kind":"queued"},"reachability":"codexAppServer","client":null}}},
             {"deliveryId":"019f0000-0000-7000-8000-000000009022",
-             "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
+             "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
              "mode":"auto","source":{"kind":"wake","wakeupId":"019f0000-0000-7000-8000-000000009011","occurrenceId":"019f0000-0000-7000-8000-000000009020"},
              "eligibleAt":"2026-10-15T00:00:01Z","expiresAt":null,"disposition":"uncertain",
              "evidence":{"kind":"outcomeUnknown","attemptId":"019f0000-0000-7000-8000-000000009032",

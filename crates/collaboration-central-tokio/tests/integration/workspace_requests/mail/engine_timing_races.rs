@@ -25,7 +25,7 @@ fn set(time: Time) -> AlarmPublication {
 async fn window_due_at(runtime: &Runtime, due: Time) {
     raw(
         runtime,
-        "UPDATE notification_windows SET due_at=?",
+        "UPDATE mail_notification_windows SET due_at=?",
         vec![stamp(due)],
     )
     .await;
@@ -207,7 +207,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         ObjectStorage::new(
             fixture.root.path().join("central").join(format!(
                 "{}.sqlite",
-                fixture.caller.organization_id.as_str()
+                fixture.caller.organization_id().as_str()
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
@@ -222,7 +222,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
     let runtime = Arc::new(WorkspaceRuntime::new(
-        fixture.caller.organization_id.clone(),
+        fixture.caller.organization_id().clone(),
         central.clone(),
         WorkspaceStore(workspace.clone()),
         fixture.shared_for_runtime(),
@@ -340,7 +340,7 @@ async fn a_wake_due_with_a_window_fires_early_and_the_window_waits_for_its_slot(
     let wake = set_wake(&fixture, 32410, at(start, 15, 0, 0)).await;
     let windows = count(
         &runtime,
-        "SELECT COUNT(*) FROM notification_windows",
+        "SELECT COUNT(*) FROM mail_notification_windows",
         vec![],
     )
     .await;
@@ -389,13 +389,13 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
     assert_eq!(other.get_version_num(), 7);
     raw(
         &runtime,
-        "UPDATE organization_identity SET id=?",
+        "UPDATE signin_organization_identity SET id=?",
         vec![text(other)],
     )
     .await;
     let refused = StoreFailure::Corrupt {
         reason: CorruptReason::BadValue {
-            column: "organization_identity.id".to_owned(),
+            column: "signin_organization_identity.id".to_owned(),
         },
     };
     driver_settled(&fixture, &runtime).await;
@@ -427,7 +427,7 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
     assert_eq!(
         count(
             &runtime,
-            "SELECT COUNT(*) FROM central_work_attempts",
+            "SELECT COUNT(*) FROM engine_work_attempts",
             vec![]
         )
         .await,
@@ -436,7 +436,7 @@ async fn another_valid_stamp_refuses_every_event_and_touches_nothing() {
     );
     assert_eq!(alarm_ms(&runtime), previous);
 
-    raw(&runtime, "DELETE FROM organization_identity", vec![]).await;
+    raw(&runtime, "DELETE FROM signin_organization_identity", vec![]).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
         alarm_ms(&runtime),

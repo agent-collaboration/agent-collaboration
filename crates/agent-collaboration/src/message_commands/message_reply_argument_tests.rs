@@ -91,10 +91,10 @@ fn inbox_and_history_are_message_subcommands() {
 fn reply_confirmation_names_the_recipient_push_and_delivery_outcome() {
     const PUSH_ID: &str = "019f0000-0000-7000-8000-000000000101";
     const PUSH_LINK: &str =
-        "router://00000000-0000-4000-8000-000000000001/push/019f0000-0000-7000-8000-000000000101";
-    let target: collaboration_client::protocol::SessionRef = serde_json::from_value(
+        "router://00000000-0000-7000-8000-000000000001/push/019f0000-0000-7000-8000-000000000101";
+    let target: collaboration_client::protocol::HarnessSessionRef = serde_json::from_value(
         serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "sessionId":"reply-target"
         }),
     )

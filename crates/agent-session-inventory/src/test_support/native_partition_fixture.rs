@@ -68,7 +68,7 @@ pub(super) async fn reply(
                 let mut description = json!({"endpoint":endpoint,"label":"Managed source","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":channels});
                 if matches!(scenario, NativeScenario::WrongService) {
                     description["endpoint"]["serviceId"] =
-                        json!("00000000-0000-4000-8000-000000000003");
+                        json!("00000000-0000-7000-8000-000000000003");
                 }
                 endpoints.push(description.clone());
                 if matches!(scenario, NativeScenario::DuplicateEndpoint) {

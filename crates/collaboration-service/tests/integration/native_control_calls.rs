@@ -4,7 +4,7 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
-use collaboration_protocol::{CodexGeneration, EndpointDescription, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointDescription, HarnessSessionRef};
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
@@ -44,12 +44,12 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     let backend_path = root.join("backend.sock");
     let listener = tokio::net::UnixListener::bind(&backend_path)
         .unwrap_or_else(|error| panic!("backend: {error}"));
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":epoch,"generation":1}))
             .unwrap_or_else(|error| panic!("generation: {error}"));
-    let target: SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"proof-thread"})).unwrap_or_else(|error| panic!("target: {error}"));
+    let target: HarnessSessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"proof-thread"})).unwrap_or_else(|error| panic!("target: {error}"));
     let mut description: EndpointDescription = serde_json::from_value(json!({"endpoint":target.endpoint,"label":"Fixture Codex","availability":{"state":"available","observedAt":"2026-09-05T12:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":null,"generation":generation}]})).unwrap_or_else(|error| panic!("description: {error}"));
     let mut definitions = serde_json::Map::new();
     for name in [
@@ -679,13 +679,13 @@ async fn inspect_control_response_preserves_native_fake_rejection_message() {
     let backend_path = root.join("backend.sock");
     let backend_listener = tokio::net::UnixListener::bind(&backend_path)
         .unwrap_or_else(|error| panic!("backend: {error}"));
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch":epoch,"generation":1
     }))
     .unwrap_or_else(|error| panic!("generation: {error}"));
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"unreadable-thread"
     }))

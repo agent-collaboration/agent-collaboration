@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE outbox_items\n           SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?\n           WHERE request_id = ? AND item_state IN (?, ?) AND expires_at_ms > ?\n           RETURNING request_id AS \"request_id!\", caller_json, payload_json,\n                     item_state, flush_at_ms, outcome_json, created_at",
+  "describe": {
+    "columns": [
+      {
+        "name": "request_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "name": "caller_json",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "caller_json"
+          }
+        }
+      },
+      {
+        "name": "payload_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "payload_json"
+          }
+        }
+      },
+      {
+        "name": "item_state",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "item_state"
+          }
+        }
+      },
+      {
+        "name": "flush_at_ms",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "flush_at_ms"
+          }
+        }
+      },
+      {
+        "name": "outcome_json",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "outcome_json"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "outbox_items",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "a86b1aa8f9a0db73167a338a7b7d6707678349086a98d12ab9eab103594bc25d"
+}

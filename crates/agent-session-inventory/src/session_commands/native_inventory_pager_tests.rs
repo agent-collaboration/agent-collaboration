@@ -274,7 +274,7 @@ async fn stored_and_runtime_observations_cannot_be_mixed_or_retried() {
 #[tokio::test]
 async fn foreign_endpoint_and_service_pages_are_rejected_by_the_public_client() {
     for foreign in [
-        json!({"serviceId":"00000000-0000-4000-8000-000000000003","endpointId":"codex-local"}),
+        json!({"serviceId":"00000000-0000-7000-8000-000000000003","endpointId":"codex-local"}),
         json!({"serviceId":SERVICE,"endpointId":"codex-other"}),
     ] {
         let mut response = stored_page("equal-id", Value::Null);

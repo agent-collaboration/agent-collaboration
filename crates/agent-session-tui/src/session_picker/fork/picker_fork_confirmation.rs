@@ -48,7 +48,7 @@ pub(crate) struct ForkDestination {
 pub(crate) struct NativeForkSelection {
     pub(crate) source: PickerSourceContext,
     pub(crate) binding: agent_session_inventory::sessions::source_ssh_protocol::SourceNativeBinding,
-    pub(crate) target: collaboration_client::protocol::SessionRef,
+    pub(crate) target: collaboration_client::protocol::HarnessSessionRef,
     pub(crate) directory:
         agent_session_inventory::sessions::router_connection_registry::AbsoluteRemoteCwd,
     pub(crate) arguments: Vec<std::ffi::OsString>,

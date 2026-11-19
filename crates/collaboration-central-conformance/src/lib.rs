@@ -4,6 +4,8 @@
 mod admin_import_scenario;
 #[cfg(all(feature = "signin-test-support", not(target_arch = "wasm32")))]
 pub mod signin_fixtures;
+#[cfg(feature = "signin-test-support")]
+pub mod workspace_schema_fixture;
 #[cfg(feature = "client")]
 pub use admin_import_scenario::AdminImportScenario;
 #[cfg(feature = "client")]

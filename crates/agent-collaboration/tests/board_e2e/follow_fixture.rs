@@ -5,7 +5,7 @@ use super::{
 };
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use codex_router_test_support::FixtureResult;
-use collaboration_protocol::{PushRecordShowResult, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, PushRecordShowResult};
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem};
 use message_board::SubscriptionMembership;
 use serde_json::{Value, json};
@@ -14,13 +14,13 @@ use std::time::Duration;
 pub const BOUND: Duration = Duration::from_secs(30);
 
 pub struct FollowMembership {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub thread: String,
     pub membership: SubscriptionMembership,
 }
 
 impl FollowMembership {
-    pub async fn arrange(fixture: &BoardFixture, target: SessionRef) -> FixtureResult<Self> {
+    pub async fn arrange(fixture: &BoardFixture, target: HarnessSessionRef) -> FixtureResult<Self> {
         let thread = fixture.thread(&fixture.project, &fixture.owner).await?;
         let actor = json!({"kind":"session","session":target});
         fixture
@@ -151,7 +151,7 @@ pub fn only_item(
 
 pub async fn delivered(
     host: &BoardHost,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     item: &str,
 ) -> FixtureResult<PushRecordShowResult> {
     native_state(
@@ -165,7 +165,7 @@ pub async fn delivered(
 
 pub async fn native_state(
     host: &BoardHost,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     item: &str,
     state: collaboration_protocol::PushDeliveryState,
 ) -> FixtureResult<PushRecordShowResult> {

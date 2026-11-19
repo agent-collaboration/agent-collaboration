@@ -1,6 +1,6 @@
 use crate::session_picker::details::details_client_inventory::*;
 use serde_json::json;
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 #[test]
 fn unknown_native_history_cannot_acquire_restore_capability_from_launch_availability() {

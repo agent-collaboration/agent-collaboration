@@ -1,40 +1,11 @@
 //! Durable provider session metadata needed for load-on-demand and approvals.
 use crate::provider_operation_store::OneStatementWrite;
-use crate::{ProviderOperationStore, ProviderOperationStoreError};
+use crate::{ProviderOperationStore, ProviderOperationStoreError, ProviderSessionRecord};
 use collaboration_protocol::{
-    ConversationBindingIdentity, EndpointRef, OperationId, ProviderIdentity,
+    ConversationBindingIdentity, EndpointRef, HarnessSessionRef, OperationId,
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
-    ProviderReconciliationState, ProviderRequestedPolicy, ProviderWorkingDirectory, SessionId,
-    SessionRef,
+    ProviderReconciliationState, ProviderWorkingDirectory, SessionId,
 };
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProviderSessionRecord {
-    pub target: SessionRef,
-    pub working_directory: ProviderWorkingDirectory,
-    pub requested_policy: ProviderRequestedPolicy,
-    pub created_by: ProviderIdentity,
-    pub approver: ProviderIdentity,
-    pub updated_at_ms: i64,
-}
-
-impl ProviderSessionRecord {
-    fn validate(&self) -> Result<(), ProviderOperationStoreError> {
-        let endpoint_id = String::from(self.target.endpoint.endpoint_id.clone());
-        if !matches!(endpoint_id.as_str(), "claude-local" | "cursor-local")
-            || self.created_by.session().is_some_and(|session| {
-                session.endpoint.service_id != self.target.endpoint.service_id
-            })
-            || self.approver.session().is_some_and(|session| {
-                session.endpoint.service_id != self.target.endpoint.service_id
-            })
-            || self.updated_at_ms < 0
-        {
-            return Err(ProviderOperationStoreError::InvalidRecord);
-        }
-        Ok(())
-    }
-}
 
 impl ProviderOperationStore {
     /// Atomically settle create/load/resume and make its target loadable after a restart.
@@ -170,7 +141,7 @@ impl ProviderOperationStore {
 
     pub async fn session_record(
         &mut self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Option<ProviderSessionRecord>, ProviderOperationStoreError> {
         let target_service_id = String::from(target.endpoint.service_id.clone());
         let target_endpoint_id = String::from(target.endpoint.endpoint_id.clone());
@@ -229,7 +200,7 @@ impl ProviderOperationStore {
         .await?;
         rows.into_iter()
             .map(|row| {
-                let target = SessionRef {
+                let target = HarnessSessionRef {
                     endpoint: endpoint.clone(),
                     session_id: SessionId::try_from(row.target_session_id)
                         .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,

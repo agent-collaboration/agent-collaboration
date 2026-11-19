@@ -31,11 +31,11 @@ use collaboration_protocol::{
     ConversationOperationSnapshot, ConversationOperationSubmission,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest,
     ConversationOperationWaitResult, ConversationOutputUnavailableReason,
-    ConversationPromptRequest, ConversationResumeRequest, EndpointRef, NonEmptyText, OperationId,
-    ProviderBindingIdentity, ProviderIdentity, ProviderOperationEffect, ProviderOperationKind,
-    ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
-    ProviderSessionInspectRequest, ProviderSettingsAcceptRequest, ProviderSettingsSetRequest,
-    SessionId, SessionRef,
+    ConversationPromptRequest, ConversationResumeRequest, EndpointRef, HarnessSessionRef,
+    NonEmptyText, OperationId, ProviderBindingIdentity, ProviderIdentity, ProviderOperationEffect,
+    ProviderOperationKind, ProviderOperationStage, ProviderPromptStopReason,
+    ProviderReconciliationState, ProviderSessionInspectRequest, ProviderSettingsAcceptRequest,
+    ProviderSettingsSetRequest, SessionId,
 };
 use collaboration_runtime::ProviderOperationAdmission;
 use collaboration_runtime::ProviderOperationAdmissionResult;
@@ -84,12 +84,13 @@ struct SupervisorInner {
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
     /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
     scratch_root: Option<PathBuf>,
-    history_unavailable: Mutex<HashSet<SessionRef>>,
-    settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
+    history_unavailable: Mutex<HashSet<HarnessSessionRef>>,
+    settings_catalogs:
+        Arc<Mutex<HashMap<HarnessSessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
     /// The mode each session created here was asked for, and why its actual
     /// mode differs (R3). In memory: after a Host restart show reports only the
     /// agent's actual mode.
-    requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
+    requested_modes: Mutex<HashMap<HarnessSessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
     #[cfg(test)]
@@ -267,7 +268,7 @@ impl ExternalProviderSupervisor {
                     let Ok(session_id) = SessionId::try_from(session_id) else {
                         continue;
                     };
-                    let target = SessionRef {
+                    let target = HarnessSessionRef {
                         endpoint: task_endpoint.clone(),
                         session_id,
                     };
@@ -322,7 +323,7 @@ impl ExternalProviderSupervisor {
         &self,
         endpoint: &EndpointRef,
         operation_id: &OperationId,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
     ) -> Result<(ProviderBindingIdentity, Arc<ExternalProviderRuntime>), ConversationOperationFailure>
     {
         let binding = self.inner.bindings.get(endpoint).ok_or_else(|| {
@@ -357,7 +358,7 @@ impl ExternalProviderSupervisor {
         operation_id: OperationId,
         operation_kind: ProviderOperationKind,
         binding: ProviderBindingIdentity,
-        known_target: Option<&SessionRef>,
+        known_target: Option<&HarnessSessionRef>,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
         let admitted_at_ms = now_ms();
         let failure_target = known_target.cloned();
@@ -558,13 +559,13 @@ enum PreparedOperation {
 impl SupervisorInner {
     async fn record_settings_catalog(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         catalog: acp_client_runtime::ProviderSettingsCatalog,
     ) {
         self.settings_catalogs.lock().await.insert(target, catalog);
     }
 
-    async fn record_requested_mode(&self, target: SessionRef, record: RequestedModeRecord) {
+    async fn record_requested_mode(&self, target: HarnessSessionRef, record: RequestedModeRecord) {
         self.requested_modes.lock().await.insert(target, record);
     }
 
@@ -699,7 +700,7 @@ impl SupervisorInner {
 )]
 fn retain_operation<T, F>(
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     operation: F,
 ) -> ProviderConversationFuture<'static, T>
 where
@@ -744,7 +745,7 @@ fn admitted_submission(
 
 fn unavailable_failure(
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
 ) -> ConversationOperationFailure {
     failure(
         ConversationOperationFailureKind::Unavailable,
@@ -758,7 +759,7 @@ fn unavailable_failure(
 
 fn applied_storage_failure(
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
 ) -> ConversationOperationFailure {
     failure(
         ConversationOperationFailureKind::Unavailable,
@@ -794,7 +795,7 @@ fn failure(
     effect: ProviderOperationEffect,
     message: &str,
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
 ) -> ConversationOperationFailure {
     ConversationOperationFailure {
         kind,
@@ -817,7 +818,7 @@ fn failure_with_provider_code(
     effect: ProviderOperationEffect,
     message: &'static str,
     operation_id: OperationId,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     provider_code: Option<i64>,
 ) -> ConversationOperationFailure {
     let mut operation_failure = failure(kind, stage, effect, message, operation_id, target);

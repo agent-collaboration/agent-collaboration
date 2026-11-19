@@ -13,8 +13,8 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
-const SOURCE_SERVICE: &str = "00000000-0000-4000-8000-000000000021";
-const SOURCE_EPOCH: &str = "00000000-0000-4000-8000-000000000022";
+const SOURCE_SERVICE: &str = "00000000-0000-7000-8000-000000000021";
+const SOURCE_EPOCH: &str = "00000000-0000-7000-8000-000000000022";
 const INITIALIZE_FRAME: &str = "{\"id\":\"source-proof\",\"method\":\"initialize\"}";
 const INITIALIZE_REPLY: &str = "{\"id\":\"source-proof\",\"result\":{}}";
 
@@ -200,7 +200,7 @@ async fn source_native_prepare_reads_actual_api_source_directory_and_rejects_wro
         "Prepare cannot attach native work"
     );
     let mut wrong = fixture.request.clone();
-    wrong.expected_service = "00000000-0000-4000-8000-000000000023"
+    wrong.expected_service = "00000000-0000-7000-8000-000000000023"
         .to_owned()
         .try_into()
         .unwrap();

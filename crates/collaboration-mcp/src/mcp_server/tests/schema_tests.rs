@@ -79,7 +79,7 @@ fn advertised_native_bundle_is_loaded_into_discovered_tool_schema() {
     assert!(!encoded.contains("codexNativeUnrelated"));
     let validator = jsonschema::validator_for(&schema).expect("advertised native schema compiles");
     let result = serde_json::json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread"},
         "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},
         "effectiveAccess":null,
         "settingsObservation":{"kind":"unavailable","reason":"threadReadOmitsSettings"},
@@ -266,7 +266,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
 
     let position = serde_json::json!({"kind":"project","position":{
         "cursor":{"epoch":1,"position":1},
-        "origin":{"installation":"00000000-0000-4000-8000-000000000001","machine":"schema-test"}
+        "origin":{"installation":"00000000-0000-7000-8000-000000000001","machine":"schema-test"}
     }});
     let message = serde_json::json!({
         "postId":"019f0000-0000-7000-8000-000000000001",
@@ -295,7 +295,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         "kind":"ranges","held":true,"heldSince":"2026-10-01T00:00:00Z","draining":false,"roots":[pending_root]
     }}});
     let provider_endpoint = serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"
+        "serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"
     });
     let provider_target =
         serde_json::json!({"endpoint":provider_endpoint,"sessionId":"provider-session"});
@@ -310,7 +310,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
             "endpoint":provider_endpoint,"bindingId":"binding-1",
             "runtime":{"provider":"claudeCode","runtimeName":"claude-agent-acp"},
             "transport":"stdioAcp",
-            "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+            "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
             "capabilities":[{"name":"prompt","status":"supported","evidence":"advertised"}]
         }},
         "target":provider_target,"stage":"mayHaveDispatched","effect":"unknown",
@@ -354,7 +354,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         (
             "conversation_load",
             serde_json::json!({"kind":"pending","operationId":OperationId::generate(),
-                "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"}}),
+                "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"}}),
         ),
         (
             "conversation_close",
@@ -369,7 +369,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         (
             "conversation_prompt",
             serde_json::json!({"kind":"pending","operationId":OperationId::generate(),
-                "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"}}),
+                "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"}}),
         ),
         (
             "journal_status",
@@ -415,7 +415,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
             "events_observe",
             serde_json::json!({
                 "target":provider_target,
-                "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+                "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
                 "attached":true,"events":[],"endReason":"deadlineReached","continuationGap":false,"epoch":1
             }),
         ),
@@ -458,13 +458,13 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         }
         if name.as_ref() == "approval_list" {
             let requester = serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+                "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
                 "sessionId":"requester"
             });
             for result in [
                 serde_json::json!({"approvals":[{
                     "requestId":"legacy", "requester":requester, "approver":requester,
-                    "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+                    "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
                     "state":"pendingClientDecision", "decision":null, "operation":{},
                     "expiresAt":"2026-09-27T00:00:00Z"
                 }]}),
@@ -510,7 +510,7 @@ fn advertised_load_input_accepts_established_human_or_session_identity_shapes() 
         .expect("public Load tool");
     let schema = serde_json::to_value(&tool.input_schema).expect("Load input schema");
     let validator = jsonschema::validator_for(&schema).expect("Load schema compiles");
-    let endpoint = serde_json::json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"});
+    let endpoint = serde_json::json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"});
     let target = serde_json::json!({"endpoint":endpoint,"sessionId":"stored-session"});
     for requester in [
         serde_json::json!({"humanId":"source-human"}),

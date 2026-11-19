@@ -155,7 +155,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                     json!({"thread":{"id":THREAD,"cwd":cwd,"status":{"type":"idle"}}})
                 }
                 "thread/resume" => {
-                    let record=native_store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&native_id).await?;
+                    let record=native_store.lock().await.read_delivery::<HarnessSessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&native_id).await?;
                     let RouteEffectEvidence::CodexAppServer(effects) = record
                         .attempt
                         .ok_or("intent missing")?
@@ -224,7 +224,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         sender.dispatch(store.clone(), delivery_id.clone()),
     )
     .await??;
-    let record=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
+    let record=store.lock().await.read_delivery::<HarnessSessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
     let RouteEffectEvidence::CodexAppServer(effects) = record
         .attempt
         .as_ref()
@@ -257,7 +257,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
             record,
         )
         .await?;
-        let settled=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
+        let settled=store.lock().await.read_delivery::<HarnessSessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
         let inspection = crate::delivery_projection::snapshot(settled)
             .map_err(|_| "settled public inspection failed")?;
         match inspection.evidence {
@@ -291,7 +291,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let stored_receipt = store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, Value>(&delivery_id)
+        .read_delivery::<HarnessSessionRef, CodexGeneration, Value>(&delivery_id)
         .await?
         .receipt;
     let storage = Arc::try_unwrap(store)
@@ -301,7 +301,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let mut reopened =
         AutomationStore::open(&fixture.directory.path().join("automation.sqlite")).await?;
     let reopened_record = reopened
-        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id)
+        .read_delivery::<HarnessSessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id)
         .await?;
     if matches!(case, QueueProbeCase::MatchingItem) {
         let effects = reopened_record
@@ -327,7 +327,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         _ => return Err("unexpected reopened queue public outcome".into()),
     };
     let reopened_stored = reopened
-        .read_delivery::<SessionRef, CodexGeneration, Value>(&delivery_id)
+        .read_delivery::<HarnessSessionRef, CodexGeneration, Value>(&delivery_id)
         .await?
         .receipt;
     assert_eq!(
@@ -495,7 +495,7 @@ async fn policy_queue_invalid_effects_never_inspect_or_accept_a_queue_item() {
             push.as_str().into()
         });
         if wrong_target {
-            effects.target = Some(SessionRef {
+            effects.target = Some(HarnessSessionRef {
                 endpoint: target().endpoint,
                 session_id: "unrelated-thread".to_owned().try_into().unwrap(),
             });

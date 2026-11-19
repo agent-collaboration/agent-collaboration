@@ -1,7 +1,7 @@
 //! Provider-neutral external ACP conversation and operation contracts.
 use crate::{
-    CodexGeneration, EndpointRef, MessageContent, MessageText, NonEmptyText, ObservationTimestamp,
-    PositiveSeconds, ProviderIdentity, RouterAccess, SessionRef,
+    CodexGeneration, EndpointRef, HarnessSessionRef, MessageContent, MessageText, NonEmptyText,
+    ObservationTimestamp, PositiveSeconds, ProviderIdentity, RouterAccess,
 };
 use agent_automation::OperationId;
 use fleet_identity_protocol::{RemoteLaunchAccess, RemoteLaunchPolicy};
@@ -505,7 +505,7 @@ pub struct ConversationOperationSnapshot {
     pub operation: ProviderOperationKind,
     pub binding: ConversationBindingIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     pub stage: ProviderOperationStage,
     pub effect: ProviderOperationEffect,
     pub reconciliation: ProviderReconciliationState,
@@ -553,7 +553,7 @@ pub struct ConversationCreateRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationLoadRequest {
     pub operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     pub working_directory: ProviderWorkingDirectory,
@@ -566,7 +566,7 @@ pub struct ConversationLoadRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationResumeRequest {
     pub operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     pub working_directory: ProviderWorkingDirectory,
@@ -579,7 +579,7 @@ pub struct ConversationResumeRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationCloseRequest {
     pub operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     pub requested_by: ProviderIdentity,
@@ -592,7 +592,7 @@ pub struct ConversationPromptRequest {
     pub operation_id: OperationId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_id: Option<session_event_model::InputId>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     pub requested_by: ProviderIdentity,
@@ -605,7 +605,7 @@ pub struct ConversationPromptRequest {
 pub struct ConversationCancelRequest {
     pub operation_id: OperationId,
     pub target_operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     pub requested_by: ProviderIdentity,
@@ -651,36 +651,36 @@ pub enum ProviderPromptStopReason {
 )]
 pub enum ConversationOperationSettlement {
     Created {
-        target: SessionRef,
+        target: HarnessSessionRef,
         effective_settings: EffectiveProviderSettings,
     },
     CreatedWithoutSettings {
-        target: SessionRef,
+        target: HarnessSessionRef,
         applied: Vec<AppliedProviderSetting>,
         failed: Vec<FailedProviderSetting>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         not_applied: Vec<NotAppliedProviderSetting>,
     },
     Loaded {
-        target: SessionRef,
+        target: HarnessSessionRef,
         effective_settings: EffectiveProviderSettings,
     },
     Resumed {
-        target: SessionRef,
+        target: HarnessSessionRef,
         effective_settings: EffectiveProviderSettings,
         history: crate::ProviderHistoryAvailability,
     },
     Closed {
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     PromptCompleted {
-        target: SessionRef,
+        target: HarnessSessionRef,
         stop_reason: ProviderPromptStopReason,
         #[serde(skip_serializing_if = "Option::is_none")]
         response: Option<MessageText>,
     },
     CancelRequested {
-        target: SessionRef,
+        target: HarnessSessionRef,
         target_operation_id: OperationId,
     },
 }
@@ -760,7 +760,7 @@ pub struct ConversationOperationFailure {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_code: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<EndpointRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

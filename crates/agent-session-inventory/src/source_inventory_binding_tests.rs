@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::{Value, json};
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 
 fn native(service: &str) -> Value {
     json!({"endpoint":{"serviceId":service,"endpointId":"codex-local"},"label":"Native","availability":{"state":"unprobed"},
@@ -29,13 +29,13 @@ fn invalid_machine_membership_never_becomes_an_empty_qualified_catalog() {
             SourceInventoryRejection::EndpointUnqualified,
         ),
         (
-            inventory(vec![native("00000000-0000-4000-8000-000000000003")]),
+            inventory(vec![native("00000000-0000-7000-8000-000000000003")]),
             SourceInventoryRejection::InvalidInventory,
         ),
         (
             inventory(vec![
                 native(SERVICE),
-                native("00000000-0000-4000-8000-000000000003"),
+                native("00000000-0000-7000-8000-000000000003"),
             ]),
             SourceInventoryRejection::InvalidInventory,
         ),
@@ -79,7 +79,7 @@ fn stored_binding_uses_observed_service_and_epoch_without_requiring_live_native_
     assert!(binding.contains(&endpoint, InventoryEndpointKind::NativeCodex));
     assert!(!binding.contains(&endpoint, InventoryEndpointKind::ExternalProvider));
     let mut foreign = endpoint;
-    foreign.service_id = "00000000-0000-4000-8000-000000000003"
+    foreign.service_id = "00000000-0000-7000-8000-000000000003"
         .to_owned()
         .try_into()
         .unwrap();
@@ -116,7 +116,7 @@ fn canonical_native_claude_membership_qualifies_without_a_managed_channel() {
         ),
         (
             inventory(vec![unavailable_native_claude(
-                "00000000-0000-4000-8000-000000000003",
+                "00000000-0000-7000-8000-000000000003",
                 "claude-local",
             )]),
             SourceInventoryRejection::InvalidInventory,

@@ -33,7 +33,7 @@ pub fn change_work_log(
                 });
             }
             let mut statements = vec![exact(
-                "INSERT INTO work_log_entries (entry_id,project_id,author,body,redacted,created_at,updated_at) VALUES (?,?,?,?,0,?,?)",
+                "INSERT INTO workspace_work_log_entries (entry_id,project_id,author,body,redacted,created_at,updated_at) VALUES (?,?,?,?,0,?,?)",
                 vec![
                     text(entry_id),
                     text(project_id),
@@ -44,7 +44,7 @@ pub fn change_work_log(
                 ],
             )];
             for (tag, id) in tags.iter().zip(reads.tag_ids) {
-                statements.push(exact("INSERT INTO work_log_tags (work_log_tag_id,entry_id,tag,created_at,updated_at) VALUES (?,?,?,?,?)",vec![text(id),text(entry_id),text(tag.as_str()),now(),now()]));
+                statements.push(exact("INSERT INTO workspace_work_log_tags (work_log_tag_id,entry_id,tag,created_at,updated_at) VALUES (?,?,?,?,?)",vec![text(id),text(entry_id),text(tag.as_str()),now(),now()]));
             }
             (
                 ItemRef::WorkLogEntry(entry_id.clone()),
@@ -63,7 +63,7 @@ pub fn change_work_log(
                 "redacted",
                 &entry.project_id,
                 vec![exact(
-                    "UPDATE work_log_entries SET body=NULL,redacted=1,updated_at=? WHERE entry_id=?",
+                    "UPDATE workspace_work_log_entries SET body=NULL,redacted=1,updated_at=? WHERE entry_id=?",
                     vec![now(), text(entry_id)],
                 )],
             )

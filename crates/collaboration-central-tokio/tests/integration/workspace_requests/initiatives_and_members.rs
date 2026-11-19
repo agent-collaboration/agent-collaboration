@@ -133,11 +133,15 @@ async fn closed_initiative_guards_reopening_and_references_never_move_projects()
 async fn only_creator_adds_or_promotes_members_and_posts_require_active_participation() {
     let f = Fixture::new().await;
     let area = f.area(530).await;
-    let thread = f.thread(531, area).await;
+    let thread = f.thread(531, area.clone()).await;
     let mut other = f.caller.clone();
     let mut other_session = session(&other);
     other_session.session_id = "other-participant".to_owned().try_into().unwrap();
-    other.caller = m::Caller::Session(other_session);
+    other = collaboration_central_core::WorkspaceCaller::new(
+        other.connection().clone(),
+        m::Caller::Session(other_session),
+    )
+    .unwrap();
     let join = m::WorkspaceOperation::JoinThread {
         thread_id: thread.clone(),
         role: m::MemberRole::Observer,
@@ -173,13 +177,17 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             Some(f.workspace.clone()),
             0,
             m::WorkspaceOperation::Inbox {
+                scope: m::InboxScope::Area {
+                    area_id: area.clone(),
+                },
+                read_mode: m::InboxReadMode::Unread,
                 after: None,
                 limit: 100.try_into().unwrap(),
             },
         )
         .await;
         assert!(
-            matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,..}) if entries.is_empty()==(setting==m::NotificationSetting::Off))
+            matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{items:entries,..}) if entries.is_empty()==(setting==m::NotificationSetting::Off))
         );
     }
     let post = m::WorkspaceOperation::ThreadPost {
@@ -201,11 +209,11 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             thread_id: thread.clone()
         })
     );
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -257,7 +265,8 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             Some(f.workspace.clone()),
             537,
             m::WorkspaceOperation::ResolveThread {
-                thread_id: thread.clone()
+                thread_id: thread.clone(),
+                closing_post: None,
             }
         )
         .await

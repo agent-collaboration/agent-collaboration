@@ -1,15 +1,14 @@
 use super::WakeOperations;
 use automation_storage::AutomationStore;
 use collaboration_protocol::{
-    OperationId, UuidIdentity, WakeMutationRequest, WakeSendRequest, WakeWaitOutcome,
-    WakeWaitRequest,
+    OperationId, WakeMutationRequest, WakeSendRequest, WakeWaitOutcome, WakeWaitRequest,
 };
 use router_clock::{ManualClock, RuntimeClock};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, Semaphore};
 
-fn service() -> UuidIdentity {
+fn service() -> workspace_ids::MachineId {
     "00000000-0000-4000-8000-000000000001"
         .to_owned()
         .try_into()

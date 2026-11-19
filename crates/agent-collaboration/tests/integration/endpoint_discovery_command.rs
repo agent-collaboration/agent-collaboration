@@ -59,7 +59,7 @@ async fn executable_discovers_an_isolated_published_service() {
     .unwrap_or_else(|error| panic!("journal: {error}"));
     let store = std::sync::Arc::new(lifecycle_observation::LifecycleStore::new(journal));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|e| panic!("identity: {e}"))
@@ -85,7 +85,7 @@ async fn executable_discovers_an_isolated_published_service() {
     assert_eq!(result["result"]["page"]["records"], serde_json::json!([]));
     assert!(output.stderr.is_empty());
     let endpoint = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "label":"Local fixture", "availability":{"state":"unavailable","observedAt":"2026-09-05T12:00:00Z","reason":"No runtime"},
         "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":null,"generation":null}]
     })).unwrap_or_else(|error| panic!("endpoint: {error}"));
@@ -94,8 +94,8 @@ async fn executable_discovers_an_isolated_published_service() {
         .unwrap_or_else(|error| panic!("endpoint publication: {error}"));
     let observation = serde_json::from_value(serde_json::json!({
         "observedAt":"2026-09-05T12:00:00Z","source":"inventoryRead",
-        "scope":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000004"},
-        "subject":{"kind":"thread","address":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":"remembered-thread"}},
+        "scope":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000004"},
+        "subject":{"kind":"thread","address":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"nativeThreadId":"remembered-thread"}},
         "change":{"kind":"threadDiscovered"}
     })).unwrap_or_else(|error| panic!("observation: {error}"));
     store

@@ -7,8 +7,9 @@ use central_engine_model::{
 use central_storage::{GuardedStatement, SqlValue};
 use sqlx::{Connection, Row, SqliteConnection};
 
-const WAKE_WRITE: &str =
-    guarded_attempt_sql!("EXISTS(SELECT 1 FROM wakes WHERE wake_id=?20 AND state='active')");
+const WAKE_WRITE: &str = guarded_attempt_sql!(
+    "EXISTS(SELECT 1 FROM automation_wakes WHERE wake_id=?20 AND state='active')"
+);
 const KEY: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
 
 fn text(value: &str) -> SqlValue {
@@ -56,7 +57,7 @@ async fn apply(connection: &mut SqliteConnection, statement: GuardedStatement) -
 }
 async fn guard(connection: &mut SqliteConnection) -> AttemptGuard {
     let row = sqlx::query(
-        "SELECT attempt_id,state,failure_count,last_failure,updated_at FROM central_work_attempts",
+        "SELECT attempt_id,state,failure_count,last_failure,updated_at FROM engine_work_attempts",
     )
     .fetch_one(connection)
     .await
@@ -106,7 +107,7 @@ async fn an_old_attempt_count_cannot_replace_the_newer_record() {
         .await,
         0
     );
-    let row = sqlx::query("SELECT state,failure_count,next_try_at FROM central_work_attempts")
+    let row = sqlx::query("SELECT state,failure_count,next_try_at FROM engine_work_attempts")
         .fetch_one(&mut connection)
         .await
         .unwrap();
@@ -133,7 +134,7 @@ async fn a_deleted_control_record_is_not_recreated_by_an_old_failure() {
         1
     );
     let prior = guard(&mut connection).await;
-    sqlx::query("DELETE FROM central_work_attempts")
+    sqlx::query("DELETE FROM engine_work_attempts")
         .execute(&mut connection)
         .await
         .unwrap();
@@ -147,7 +148,7 @@ async fn a_deleted_control_record_is_not_recreated_by_an_old_failure() {
         0
     );
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM central_work_attempts")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM engine_work_attempts")
             .fetch_one(&mut connection)
             .await
             .unwrap(),
@@ -158,8 +159,8 @@ async fn a_deleted_control_record_is_not_recreated_by_an_old_failure() {
 #[tokio::test]
 async fn a_failure_can_be_recorded_without_retriggering_the_subject_and_cannot_resurrect_it() {
     let mut connection = database().await;
-    sqlx::query("INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,'not-json','1970-01-01T00:05:00.000Z','broken','active','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')").bind(KEY).execute(&mut connection).await.unwrap();
-    sqlx::query("CREATE TRIGGER reject_subject_update BEFORE UPDATE ON wakes BEGIN SELECT RAISE(ABORT,'reject subject'); END").execute(&mut connection).await.unwrap();
+    sqlx::query("INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,'not-json','1970-01-01T00:05:00.000Z','broken','active','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')").bind(KEY).execute(&mut connection).await.unwrap();
+    sqlx::query("CREATE TRIGGER reject_subject_update BEFORE UPDATE ON automation_wakes BEGIN SELECT RAISE(ABORT,'reject subject'); END").execute(&mut connection).await.unwrap();
     let subject = subject("wake_timer", KEY);
     let first = failure(None, 300_000);
     assert_eq!(
@@ -175,12 +176,12 @@ async fn a_failure_can_be_recorded_without_retriggering_the_subject_and_cannot_r
         .execute(&mut connection)
         .await
         .unwrap();
-    sqlx::query("UPDATE wakes SET state='disabled' WHERE wake_id=?")
+    sqlx::query("UPDATE automation_wakes SET state='disabled' WHERE wake_id=?")
         .bind(KEY)
         .execute(&mut connection)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM central_work_attempts")
+    sqlx::query("DELETE FROM engine_work_attempts")
         .execute(&mut connection)
         .await
         .unwrap();
@@ -194,7 +195,7 @@ async fn a_failure_can_be_recorded_without_retriggering_the_subject_and_cannot_r
         0
     );
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM central_work_attempts")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM engine_work_attempts")
             .fetch_one(&mut connection)
             .await
             .unwrap(),

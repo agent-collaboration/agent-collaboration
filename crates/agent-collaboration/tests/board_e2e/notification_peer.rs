@@ -2,7 +2,7 @@
 #![deny(clippy::too_many_lines)]
 use super::owned_host::artifact_command;
 use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
-use collaboration_client::protocol::{EndpointRef, SessionId, SessionRef};
+use collaboration_client::protocol::{EndpointRef, HarnessSessionRef, SessionId};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::OpenOptions,
@@ -24,7 +24,7 @@ const BOUND: Duration = Duration::from_secs(20);
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PeerInput {
     registry: PathBuf,
-    target: SessionRef,
+    target: HarnessSessionRef,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
@@ -36,14 +36,14 @@ enum PeerCommand {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 enum PeerObservation {
-    Ready { pid: u32, target: SessionRef },
+    Ready { pid: u32, target: HarnessSessionRef },
     Received { text: String },
     Count { total: u64 },
     Stopped,
 }
 
 pub struct NotificationPeer {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub pid: u32,
     child: Child,
     input: Option<ChildStdin>,
@@ -75,7 +75,7 @@ impl NotificationPeer {
     ) -> FixtureResult<Self> {
         let configuration = PeerInput {
             registry: directory.join("absent-peer-registry"),
-            target: SessionRef {
+            target: HarnessSessionRef {
                 endpoint,
                 session_id: session,
             },

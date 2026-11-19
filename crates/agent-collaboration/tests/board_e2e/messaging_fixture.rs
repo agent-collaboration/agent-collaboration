@@ -3,7 +3,7 @@ use super::owned_host::StoppedHost;
 use super::{central_pair, fixture::BoardFixture};
 use board_central_test_support::{ObjectAddress, RuntimeControl};
 use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
-use collaboration_protocol::{EndpointRef, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 use std::{ops::AsyncFnOnce, os::unix::fs::DirBuilderExt};
@@ -12,7 +12,7 @@ pub struct MessagingCase<'fixture> {
     pub sender: &'fixture mut BoardFixture,
     pub recipient: &'fixture mut central_pair::SecondHost,
     peer: Option<PeerFixture>,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
 }
 
 impl MessagingCase<'_> {
@@ -38,7 +38,7 @@ impl MessagingCase<'_> {
         self.peer.as_mut().ok_or_else(|| "rule peer absent".into())
     }
 
-    pub fn recipient_target(&self) -> FixtureResult<SessionRef> {
+    pub fn recipient_target(&self) -> FixtureResult<HarnessSessionRef> {
         self.target
             .clone()
             .ok_or_else(|| "rule target absent".into())

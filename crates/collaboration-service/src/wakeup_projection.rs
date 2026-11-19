@@ -1,13 +1,13 @@
 //! Domain timestamps and records become the language-independent public wake snapshot here.
 use agent_automation::WakeRecord;
 use collaboration_protocol::{
-    FireKind, FireReceipt, SavedMessage, UuidIdentity, WakeDefinition, WakeSnapshot, WakeState,
+    FireKind, FireReceipt, SavedMessage, WakeDefinition, WakeSnapshot, WakeState,
 };
 use collaboration_runtime::observation_timestamp::timestamp;
 
 pub(crate) fn snapshot(
     record: WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     observed_at_ms: i64,
 ) -> Result<WakeSnapshot, ()> {
     let definition = record.definition;
@@ -64,7 +64,7 @@ pub(crate) fn snapshot(
 /// Projects a lifecycle mutation with the deliveries it retained or discarded.
 pub(crate) fn project_mutation(
     result: automation_storage::WakeMutationResult<collaboration_protocol::SavedMessage>,
-    service_id: &collaboration_protocol::UuidIdentity,
+    service_id: &workspace_ids::MachineId,
 ) -> Result<collaboration_protocol::WakeMutationResult, ()> {
     let wakeup = snapshot(result.wake, service_id, result.observed_at_ms)?;
     let dispatched_deliveries = result

@@ -9,11 +9,11 @@ use crate::{
     workspace_decode_error::corrupt,
 };
 use central_storage::{ReadOutcome, SafeInteger, SqlValue, StoreFailure};
-use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_identity_protocol::EnrollmentId;
 use message_board::WorkspaceId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use uuid::Uuid;
+use workspace_ids::MachineId;
 
 #[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,8 +25,7 @@ pub enum ObservedMachineState {
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ObservedMachine {
-    pub machine_id: Uuid,
-    pub installation_id: InstallationId,
+    pub machine_id: MachineId,
     pub state: ObservedMachineState,
     pub allowed_workspaces: Vec<WorkspaceId>,
     pub enrollment_generation: u64,
@@ -55,7 +54,7 @@ pub enum ObservedApprovalEndReason {
 pub struct ObservedMachineApproval {
     pub approval_id: EnrollmentId,
     pub request_id: DeviceLoginRequestId,
-    pub machine_id: Uuid,
+    pub machine_id: MachineId,
     pub state: ObservedApprovalState,
     pub end_reason: Option<ObservedApprovalEndReason>,
     pub allowed_workspaces: AllowedWorkspaces,
@@ -113,8 +112,7 @@ pub(super) fn decode_machine_observation(
         .ok_or_else(|| corrupt("signin_observation.machine"))?;
     let checked = machine_login_rows::machine(&rows, row)?;
     Ok(ObservedMachine {
-        machine_id: checked.id,
-        installation_id: checked.installation,
+        machine_id: checked.machine_id,
         state: match checked.state {
             MachineState::Enrolled => ObservedMachineState::Enrolled,
             MachineState::Revoked => ObservedMachineState::Revoked,
@@ -144,7 +142,7 @@ pub(super) fn decode_approval_observation(
             Some(client_id),
             Some(seconds_timestamp(
                 last_grant_at,
-                "machine_approvals.last_grant_at",
+                "login_machine_approvals.last_grant_at",
             )?),
         ),
         StoredEnrollmentState::Lapsed => (
@@ -183,15 +181,15 @@ pub(super) fn decode_approval_observation(
             base_generation: checked.base_generation.get(),
             code_expires_at: seconds_timestamp(
                 checked.code_expires_at,
-                "machine_approvals.code_expires_at",
+                "login_machine_approvals.code_expires_at",
             )?,
             machine_client_id,
             last_grant_at,
             ended_at: checked
                 .ended_at_ms
-                .map(|value| timestamp(value, "machine_approvals.ended_at"))
+                .map(|value| timestamp(value, "login_machine_approvals.ended_at"))
                 .transpose()?,
-            created_at: timestamp(checked.approved_at_ms, "machine_approvals.created_at")?,
+            created_at: timestamp(checked.approved_at_ms, "login_machine_approvals.created_at")?,
         },
     ))
 }

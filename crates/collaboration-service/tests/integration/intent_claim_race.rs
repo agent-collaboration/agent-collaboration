@@ -15,7 +15,7 @@ fn session(name: String) -> Result<Identity, TestError> {
         session: SessionRef {
             endpoint: SessionEndpointRef {
                 endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
-                service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+                service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             },
             session_id: SessionId::try_from(name)?,
         },

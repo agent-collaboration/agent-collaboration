@@ -13,7 +13,7 @@ async fn owned_listener_is_private_and_shutdown_removes_only_its_socket() {
         .unwrap_or_else(|e| panic!("directory: {e}"));
     let socket = directory.join("control.sock");
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|e| panic!("identity: {e}"));

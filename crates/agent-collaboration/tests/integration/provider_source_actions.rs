@@ -6,8 +6,8 @@ use codex_router_host::{
 };
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    OperationId, ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionRef,
+    HarnessSessionRef, OperationId, ProviderIdentity, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
@@ -84,7 +84,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
             .into_iter()
             .find(|entry| String::from(entry.endpoint.endpoint_id.clone()) == endpoint_id)
             .ok_or("Cursor fixture endpoint missing")?;
-        let target = SessionRef {
+        let target = HarnessSessionRef {
             endpoint: endpoint.endpoint.clone(),
             session_id: "saved-session".to_owned().try_into()?,
         };
@@ -201,7 +201,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
             // Restore operations require an unloaded stored target. A loaded target
             // is tested separately as a real busy rejection, not silently retried.
             let target = if action == "resume" {
-                let target = SessionRef {
+                let target = HarnessSessionRef {
                     endpoint: endpoint.endpoint.clone(),
                     session_id: "unloaded-resume-session".to_owned().try_into()?,
                 };
@@ -229,7 +229,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                 for (field, value, expected_reason) in [
                     (
                         "/expectedService",
-                        json!("00000000-0000-4000-8000-000000000099"),
+                        json!("00000000-0000-7000-8000-000000000099"),
                         "wrongService",
                     ),
                     (
@@ -458,7 +458,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
         assert_eq!(receipt["kind"], "managedCreate", "{reply}");
         assert_eq!(receipt["result"]["kind"], "created", "{reply}");
         assert_eq!(receipt["result"]["operationId"], json!(create_id));
-        let created: SessionRef = serde_json::from_value(receipt["result"]["target"].clone())?;
+        let created: HarnessSessionRef = serde_json::from_value(receipt["result"]["target"].clone())?;
         assert_eq!(
             String::from(created.session_id.clone()),
             "created-by-source"
@@ -499,7 +499,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
         );
         assert_eq!(requests[2]["method"], "session/new");
         assert_eq!(requests[2]["params"]["cwd"], json!(new_directory));
-        let explicit_target = SessionRef {
+        let explicit_target = HarnessSessionRef {
             endpoint: endpoint.endpoint.clone(),
             session_id: "explicit-human-cli-load".to_owned().try_into()?,
         };

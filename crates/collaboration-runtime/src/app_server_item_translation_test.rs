@@ -7,7 +7,7 @@ use uuid::Uuid;
 fn replay_session() -> SessionRef {
     serde_json::from_value(json!({
         "endpoint":{
-            "serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89",
+            "serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89",
             "endpointId":"claude-local"
         },
         "sessionId":"provider-session-1"
@@ -148,7 +148,7 @@ fn confirmed_compaction_promotes_same_item_id_without_duplicate_start_or_complet
     use crate::app_server_event_forwarding::AppServerEventForwarding;
     use collaboration_contracts::HubEvent;
     use session_event_model::{InputId, SessionEvent, StopReason, TurnOutcome};
-    let session: message_board::SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"compact-session"})).expect("session");
+    let session: message_board::SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"compact-session"})).expect("session");
     let actor = message_board::Identity::Session {
         session: session.clone(),
     };

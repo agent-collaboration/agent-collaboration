@@ -1,7 +1,7 @@
 //! Exact turn observation through bounded native history pages.
 use crate::NativeAdmission;
 use codex_native_integration::{NativeConnectionError, NativeOperation, NativeProtocolConnection};
-use collaboration_protocol::SessionRef;
+use collaboration_protocol::HarnessSessionRef;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 pub(crate) struct ObservedTurn {
@@ -11,7 +11,7 @@ pub(crate) struct ObservedTurn {
 }
 pub(crate) async fn read_turn(
     admission: &NativeAdmission,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     turn_id: &str,
 ) -> Result<Option<Value>, NativeConnectionError> {
     let schemas = admission
@@ -28,7 +28,7 @@ pub(crate) async fn read_turn(
 }
 pub(crate) async fn read_turn_and_choice(
     admission: &NativeAdmission,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     turn_id: &str,
 ) -> Result<Option<ObservedTurn>, NativeConnectionError> {
     let schemas = admission

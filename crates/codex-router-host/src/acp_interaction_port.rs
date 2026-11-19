@@ -402,7 +402,7 @@ fn typed_participants(
     Some((requester, approver))
 }
 
-fn board_session_ref(value: &collaboration_protocol::SessionRef) -> Option<BoardSessionRef> {
+fn board_session_ref(value: &collaboration_protocol::HarnessSessionRef) -> Option<BoardSessionRef> {
     serde_json::to_value(value)
         .ok()
         .and_then(|value| serde_json::from_value(value).ok())

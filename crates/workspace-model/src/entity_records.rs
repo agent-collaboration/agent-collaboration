@@ -1,18 +1,18 @@
 use crate::{
-    ActorIdentityId, AreaId, BacklogDescription, BacklogItemId, ChangeId, ChangePosition,
-    DeliverableId, DeliverableRoleId, DependencyId, Description, EndpointId, InitiativeId, IssueId,
-    IssueTitle, ItemRef, MachineId, PersonId, PostId, PostText, ProjectId, ProjectRoleId,
-    ReadMarkId, ResourceName, SessionId, ThreadId, ThreadMemberId, TrailTag, TrailText,
-    WorkLogEntryId, WorkspaceId,
+    ActorIdentityId, AreaId, BacklogItemId, ChangeId, ChangePosition, DeliverableId,
+    DeliverableRoleId, DependencyId, Description, InitiativeId, IssueId, IssueTitle, ItemRef,
+    PersonId, PostId, PostText, ProjectId, ProjectRoleId, ReadMarkId, RequiredDescription,
+    ResourceName, ThreadId, ThreadMemberId, TrailTag, TrailText, WorkLogEntryId, WorkspaceId,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use workspace_ids::SessionRef;
 
 pub type Timestamp = DateTime<Utc>;
 
 macro_rules! closed_states {
     ($name:ident { $($variant:ident),+ }) => {
-        #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
         #[serde(rename_all = "camelCase")]
         pub enum $name { $($variant),+ }
     };
@@ -40,7 +40,7 @@ closed_states!(MemberRole {
 });
 closed_states!(NotificationSetting { On, Off });
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "role",
@@ -52,13 +52,13 @@ pub enum RoleName {
     Deliverable(DeliverableRole),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum AssignmentState {
     Active,
     Ended { at: Timestamp },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MembershipState {
     Joined,
@@ -67,18 +67,17 @@ pub enum MembershipState {
 
 macro_rules! records {
     ($($name:ident { $($field:ident: $value:ty),* $(,)? }),+ $(,)?) => {$ (
-        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
         pub struct $name { $(pub $field: $value),* }
     )+};
 }
 records! {
-    Workspace { workspace_id: WorkspaceId, name: ResourceName, state: WorkspaceState },
-    Area { area_id: AreaId, workspace_id: WorkspaceId, name: ResourceName, state: AreaState },
-    Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, status: WorkStatus, lead: ActorIdentityId },
+    Workspace { workspace_id: WorkspaceId, name: ResourceName, description: Description, state: WorkspaceState },
+    Area { area_id: AreaId, workspace_id: WorkspaceId, name: ResourceName, description: RequiredDescription, state: AreaState },
+    Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, description: RequiredDescription, status: WorkStatus, lead: ActorIdentityId },
     Initiative { initiative_id: InitiativeId, name: ResourceName, description: Description, status: WorkStatus },
     ActorIdentity { actor_identity_id: ActorIdentityId, identity: Identity },
-    SessionAddress { machine_id: MachineId, endpoint: EndpointId, session_id: SessionId },
     ProjectRoleAssignment { project_role_id: ProjectRoleId, project_id: ProjectId, role: ProjectRole, holder: ActorIdentityId, granted_at: Timestamp, state: AssignmentState },
     Deliverable { deliverable_id: DeliverableId, project_id: ProjectId, title: ResourceName },
     DeliverableRoleAssignment { deliverable_role_id: DeliverableRoleId, deliverable_id: DeliverableId, role: DeliverableRole, holder: ActorIdentityId, granted_at: Timestamp, state: AssignmentState },
@@ -88,12 +87,12 @@ records! {
     ThreadMember { thread_member_id: ThreadMemberId, thread_id: ThreadId, actor_identity_id: ActorIdentityId, role: MemberRole, notifications: NotificationSetting, state: MembershipState },
     Post { post_id: PostId, thread_id: ThreadId, author: ActorIdentityId, body: PostText, addressees: Vec<Addressee> },
     WorkLogEntry { entry_id: WorkLogEntryId, project_id: ProjectId, author: ActorIdentityId, body: WorkLogBody, tags: Vec<TrailTag> },
-    BacklogItem { item_id: BacklogItemId, area_id: AreaId, title: ResourceName, description: BacklogDescription, creator: ActorIdentityId, status: BacklogStatus, closing_note: Option<String> },
+    BacklogItem { item_id: BacklogItemId, area_id: AreaId, title: ResourceName, description: RequiredDescription, creator: ActorIdentityId, status: BacklogStatus, closing_note: Option<String> },
     Change { change_id: ChangeId, position: ChangePosition, item: ItemRef, actor: ActorIdentityId, event: ChangeEvent },
     ReadMark { read_mark_id: ReadMarkId, actor_identity_id: ActorIdentityId, scope: ReadScope, through_position: ChangePosition }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -102,7 +101,7 @@ records! {
 )]
 pub enum Identity {
     AgentSession {
-        session: SessionAddress,
+        session: SessionRef,
     },
     RouterComponent {
         machine_id: MachineId,
@@ -112,7 +111,18 @@ pub enum Identity {
         person_id: PersonId,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+impl Identity {
+    /// The `actor_identities.identity_kind` text stored beside the identity.
+    #[must_use]
+    pub fn stored_kind(&self) -> &'static str {
+        match self {
+            Self::AgentSession { .. } => "agentSession",
+            Self::RouterComponent { .. } => "routerComponent",
+            Self::Person { .. } => "person",
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "body",
@@ -123,7 +133,7 @@ pub enum WorkLogBody {
     Visible(TrailText),
     Redacted,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -143,15 +153,24 @@ pub enum Addressee {
         role: DeliverableRole,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReadScope {
-    Inbox,
-    Thread { thread_id: ThreadId },
+    /// One inbox mark per area and per project, so reading one scope never
+    /// marks another scope's items read.
+    InboxArea {
+        area_id: AreaId,
+    },
+    InboxProject {
+        project_id: ProjectId,
+    },
+    Thread {
+        thread_id: ThreadId,
+    },
 }
 
 /// A subject exists only for events about a holder/member; there is no nullable bag.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -195,3 +214,5 @@ pub enum ChangeEvent {
         role: DeliverableRole,
     },
 }
+
+use workspace_ids::MachineId;

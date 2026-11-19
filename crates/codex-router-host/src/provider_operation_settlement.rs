@@ -1,10 +1,11 @@
 //! Persist applied provider effects and session metadata at one settlement boundary.
 use collaboration_protocol::{
     AppliedProviderSetting, ConversationOperationFailure, ConversationOperationSettlement,
-    EffectiveProviderSettings, FailedProviderSetting, MessageText, NotAppliedProviderSetting,
-    OperationId, ProviderAuthenticationState, ProviderIdentity, ProviderOperationEffect,
-    ProviderPromptStopReason, ProviderReconciliationState, ProviderRequestedPolicy,
-    ProviderSettingName, ProviderSettingsMappingStatus, ProviderWorkingDirectory, SessionRef,
+    EffectiveProviderSettings, FailedProviderSetting, HarnessSessionRef, MessageText,
+    NotAppliedProviderSetting, OperationId, ProviderAuthenticationState, ProviderIdentity,
+    ProviderOperationEffect, ProviderPromptStopReason, ProviderReconciliationState,
+    ProviderRequestedPolicy, ProviderSettingName, ProviderSettingsMappingStatus,
+    ProviderWorkingDirectory,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderOperationStoreError;
@@ -13,7 +14,7 @@ use collaboration_runtime::ProviderSessionRecord;
 pub(crate) enum ProviderOperationCompletion {
     Success {
         settlement: ConversationOperationSettlement,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         session_record: Option<Box<ProviderSessionRecord>>,
     },
     Failure(ConversationOperationFailure),
@@ -26,7 +27,7 @@ pub(crate) enum ProviderOperationCompletion {
 pub(crate) async fn persist_provider_success(
     store: &mut ProviderOperationStore,
     operation_id: &OperationId,
-    target: Option<&SessionRef>,
+    target: Option<&HarnessSessionRef>,
     session_record: Option<&ProviderSessionRecord>,
     terminal_stop_reason: Option<ProviderPromptStopReason>,
 ) -> Result<(), ProviderOperationStoreError> {
@@ -116,7 +117,7 @@ pub(crate) fn optional_message_text(output: String) -> Result<Option<MessageText
 }
 
 pub(crate) fn provider_session_record(
-    target: SessionRef,
+    target: HarnessSessionRef,
     working_directory: ProviderWorkingDirectory,
     requested_policy: ProviderRequestedPolicy,
     created_by: ProviderIdentity,

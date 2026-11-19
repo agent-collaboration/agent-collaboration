@@ -4,8 +4,8 @@ use board_central_test_support::{EnrolledTestMachine, TestCentral};
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    OperationId, SessionRef, WakeFailureReason, WakeMutationRequest, WakeRefusal, WakeSendRequest,
-    WakeShowRequest, WakeState,
+    HarnessSessionRef, OperationId, WakeFailureReason, WakeMutationRequest, WakeRefusal,
+    WakeSendRequest, WakeShowRequest, WakeState,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -44,14 +44,17 @@ async fn start(
     .await?)
 }
 
-fn target(runtime: &CollaborationRuntime, session: &str) -> TestResult<SessionRef> {
+fn target(runtime: &CollaborationRuntime, session: &str) -> TestResult<HarnessSessionRef> {
     Ok(serde_json::from_value(json!({
         "endpoint":{"serviceId":runtime.service_id(),"endpointId":"claude-local"},
         "sessionId":session
     }))?)
 }
 
-fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendRequest> {
+fn request(
+    creator: &HarnessSessionRef,
+    recipient: &HarnessSessionRef,
+) -> TestResult<WakeSendRequest> {
     Ok(serde_json::from_value(json!({
         "operationId":OperationId::generate(),"requestedBy":{"kind":"session", "endpoint":creator.endpoint,"sessionId":creator.session_id},
         "replace":false,"message":{"target":recipient,
@@ -317,7 +320,7 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
 
 async fn peer_record(
     client: &CollaborationClient,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     frame: &str,
 ) -> TestResult<collaboration_protocol::PushRecord> {
     let message: serde_json::Value = serde_json::from_str(frame)?;

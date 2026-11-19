@@ -3,21 +3,21 @@ use crate::{DeliveryFuture, DeliveryPrecondition};
 use agent_automation::{CapturedRunInputs, RouteEffectEvidence, RunId, RunPhase};
 use collaboration_protocol::{
     ChangeId, CodexGeneration, DeliveryReceipt, DeliveryRejection, DestinationPreparation,
-    EndpointRef, MessageText, NonEmptyText, OperationId, RunExecution, ScheduleFailure,
-    ScheduleFailureKind, ScheduleId, SessionRef,
+    EndpointRef, HarnessSessionRef, MessageText, NonEmptyText, OperationId, RunExecution,
+    ScheduleFailure, ScheduleFailureKind, ScheduleId,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub enum ScheduleDestination {
     Existing {
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     Fresh {
         endpoint: EndpointRef,
     },
     Fork {
-        source: SessionRef,
+        source: HarnessSessionRef,
         through_turn_id: NonEmptyText,
     },
 }
@@ -27,13 +27,13 @@ pub struct FreshSessionRequest {
     pub endpoint: EndpointRef,
     pub working_directory: String,
     pub message: MessageText,
-    pub inputs: CapturedRunInputs<SessionRef, EndpointRef>,
+    pub inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PreparedTarget {
-    pub target: SessionRef,
-    pub evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    pub target: HarnessSessionRef,
+    pub evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 }
 
 #[derive(Clone, Debug)]
@@ -51,7 +51,7 @@ pub struct SchedulePreparationRequest {
 pub struct SchedulePreparationFailure {
     pub kind: ScheduleFailureKind,
     pub explanation: String,
-    pub evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    pub evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     pub uncertain: bool,
 }
 
@@ -64,18 +64,18 @@ pub enum SchedulePreparationOutcome {
 pub trait PreparationEvidenceSink: Send + Sync {
     fn record_intent(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, bool>;
 
     fn record_prepared<'a>(
         &'a self,
         prepared: &'a PreparedTarget,
-    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<SessionRef, EndpointRef>>;
+    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<HarnessSessionRef, EndpointRef>>;
 
     fn record_failure<'a>(
         &'a self,
         failure: &'a ScheduleFailure,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         uncertain: bool,
     ) -> DeliveryFuture<'a, ()>;
 }
@@ -83,11 +83,11 @@ pub trait PreparationEvidenceSink: Send + Sync {
 #[derive(Clone, Debug)]
 pub struct ScheduledRunSubmission {
     pub run_id: RunId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub payload: ScheduledRunPayload,
     pub precondition: DeliveryPrecondition,
-    pub inputs: CapturedRunInputs<SessionRef, EndpointRef>,
-    pub recorded: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    pub inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef>,
+    pub recorded: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 }
 
 #[derive(Clone, Debug)]
@@ -120,8 +120,8 @@ pub enum RunSubmission {
 pub struct RunObservationContext {
     pub run_id: RunId,
     pub phase: RunPhase,
-    pub recorded: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    pub inputs: CapturedRunInputs<SessionRef, EndpointRef>,
+    pub recorded: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
+    pub inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -152,7 +152,7 @@ pub enum ScheduleSupport {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeTurnRef {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub turn_id: NonEmptyText,
 }
 
@@ -198,7 +198,7 @@ pub enum RunReconciliation {
 pub trait RunEvidenceSink: Send + Sync {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, RunEvidenceDisposition>;
     fn record_stop_intent(&self) -> DeliveryFuture<'_, RunEvidenceDisposition>;
 }
@@ -216,7 +216,7 @@ pub trait ScheduledRunExecution: Send + Sync {
     fn initial_evidence(
         &self,
         destination: &ScheduleDestination,
-    ) -> DeliveryFuture<'_, RouteEffectEvidence<SessionRef, CodexGeneration>>;
+    ) -> DeliveryFuture<'_, RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>;
     fn prepare_destination<'a>(
         &'a self,
         request: SchedulePreparationRequest,
@@ -224,7 +224,7 @@ pub trait ScheduledRunExecution: Send + Sync {
     ) -> DeliveryFuture<'a, SchedulePreparationOutcome>;
     fn prepare_existing_target<'a>(
         &'a self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget>;

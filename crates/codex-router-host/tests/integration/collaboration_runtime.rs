@@ -190,7 +190,9 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     assert!(manifest.mcp.url.starts_with("http://127.0.0.1:"));
     assert!(manifest.mcp.url.ends_with("/mcp"));
     assert_eq!(
-        minted_version(&manifest.service_id),
+        uuid::Uuid::parse_str(manifest.service_id.as_str())
+            .unwrap()
+            .get_version_num(),
         7,
         "fresh-root service id"
     );
@@ -480,6 +482,9 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
     std::fs::remove_file(root.join("provider-operations.sqlite"))
         .unwrap_or_else(|error| panic!("provider operation database cleanup: {error}"));
+    // The Router core's own database: the central link's outbox.
+    std::fs::remove_file(root.join("machine_local.sqlite"))
+        .unwrap_or_else(|error| panic!("machine-local database cleanup: {error}"));
     std::fs::remove_dir(root).unwrap_or_else(|e| panic!("directory cleanup: {e}"));
 }
 

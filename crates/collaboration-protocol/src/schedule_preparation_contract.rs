@@ -1,5 +1,5 @@
 //! Explicit destination preparation; native addresses are returned by the selected backend.
-use crate::{EndpointRef, NonEmptyText, OperationId, ScheduleId, SessionRef};
+use crate::{EndpointRef, HarnessSessionRef, NonEmptyText, OperationId, ScheduleId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -15,12 +15,12 @@ pub enum DestinationPreparation {
         cwd: String,
     },
     Fork {
-        source: SessionRef,
+        source: HarnessSessionRef,
         through_turn_id: NonEmptyText,
         cwd: String,
     },
     Existing {
-        target: SessionRef,
+        target: HarnessSessionRef,
         cwd: String,
     },
 }

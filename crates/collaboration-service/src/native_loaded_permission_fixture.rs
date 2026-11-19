@@ -180,7 +180,7 @@ pub(super) fn policy_server(
                     }
                     "turn/start" => {
                         if let Some((store, run_id)) = &scenario.stored_run {
-                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
+                            let record=store.lock().await.read_run::<HarnessSessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
                             if record.evidence.timing.is_none()
                                 || !matches!(record.evidence.route,Some(RouteEffectEvidence::CodexAppServer(effects)) if effects.submission==agent_automation::SubmissionEffect::Dispatching && effects.resume==agent_automation::PreparationEffect::Accepted)
                             {
@@ -228,13 +228,13 @@ pub(super) fn policy_server(
 /// Deterministic sink stand-in: no storage admission, persistence or real timing.
 /// Stored-run tests use StoredRunEvidenceSink and AutomationStore instead.
 pub(super) struct CapturingRunSink {
-    pub(super) evidence: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    pub(super) evidence: Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
     pub(super) turn_intent: Arc<AtomicBool>,
 }
 impl RunEvidenceSink for CapturingRunSink {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> collaboration_contracts::DeliveryFuture<'_, RunEvidenceDisposition> {
         if matches!(&evidence, RouteEffectEvidence::CodexAppServer(effects) if effects.submission == agent_automation::SubmissionEffect::Dispatching)
         {

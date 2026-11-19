@@ -4,35 +4,14 @@ use crate::{
     DeliverableId, DeliverableRole, DependencyId, Description, ExternalLink, Identity,
     InitiativeId, IssueId, IssueTitle, ItemRef, ItemView, LinkId, ListQuery, MemberRole,
     NotificationSetting, PostText, ProjectId, ProjectRole, ReadScope, ReferenceId, ReferenceSource,
-    ReferenceTarget, RefusalReason, RequestId, ResourceName, SessionAddress, ThreadId, TrailTag,
-    TrailText, WorkLogEntryId, WorkStatus, Workspace,
+    ReferenceTarget, RefusalReason, RequestId, ResourceName, ThreadId, TrailTag, TrailText,
+    WorkLogEntryId, WorkStatus, Workspace,
 };
 use serde::{Deserialize, Serialize};
-
-/// A session's thread notices share one cadence across all workspaces.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub enum NoticeCadence {
-    #[default]
-    #[serde(rename = "m15")]
-    M15,
-    #[serde(rename = "m25")]
-    M25,
-    #[serde(rename = "m55")]
-    M55,
-}
-impl NoticeCadence {
-    #[must_use]
-    pub const fn seconds(self) -> u32 {
-        match self {
-            Self::M15 => 900,
-            Self::M25 => 1500,
-            Self::M55 => 3300,
-        }
-    }
-}
+use workspace_ids::SessionRef;
 
 /// Authenticated origin stamped by the Host, outside semantic tool input.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -41,15 +20,15 @@ impl NoticeCadence {
     deny_unknown_fields
 )]
 pub enum Caller {
-    Session(SessionAddress),
+    Session(SessionRef),
     Person {
-        machine_id: crate::MachineId,
+        machine_id: workspace_ids::MachineId,
         person_id: crate::PersonId,
     },
 }
 impl Caller {
     #[must_use]
-    pub fn machine_id(&self) -> &crate::MachineId {
+    pub fn machine_id(&self) -> &workspace_ids::MachineId {
         match self {
             Self::Session(session) => &session.machine_id,
             Self::Person { machine_id, .. } => machine_id,
@@ -57,7 +36,7 @@ impl Caller {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -67,10 +46,10 @@ impl Caller {
 pub enum ActorRef {
     Me,
     Actor(ActorIdentityId),
-    Session(SessionAddress),
+    Session(SessionRef),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -81,16 +60,39 @@ pub enum WorkspaceOperation {
     CreateWorkspace {
         name: ResourceName,
     },
+    /// Targets the request's workspace. The canonical name stays unique per organization.
+    UpdateWorkspace {
+        name: ResourceName,
+        description: Description,
+    },
+    /// Targets the request's workspace.
+    ArchiveWorkspace,
+    /// The description is required and must not be blank.
     CreateArea {
         name: ResourceName,
+        description: Description,
     },
     ArchiveArea {
         area_id: AreaId,
     },
+    /// An omitted description stays as it is; a given one must not be blank.
+    UpdateArea {
+        area_id: AreaId,
+        name: ResourceName,
+        description: Option<Description>,
+    },
+    /// The description is required and must not be blank.
     CreateProject {
         area_id: AreaId,
         title: ResourceName,
+        description: Description,
         lead: Option<ActorRef>,
+    },
+    /// An omitted description stays as it is; a given one must not be blank.
+    UpdateProject {
+        project_id: ProjectId,
+        title: ResourceName,
+        description: Option<Description>,
     },
     CreateInitiative {
         name: ResourceName,
@@ -107,6 +109,10 @@ pub enum WorkspaceOperation {
     },
     CreateIssue {
         deliverable_id: DeliverableId,
+        title: IssueTitle,
+    },
+    UpdateIssue {
+        issue_id: IssueId,
         title: IssueTitle,
     },
     GrantProjectRole {
@@ -127,9 +133,12 @@ pub enum WorkspaceOperation {
         deliverable_id: DeliverableId,
         role: DeliverableRole,
     },
+    /// The thread, its creator's membership and its first post are one change set.
     CreateThread {
         area_id: AreaId,
         title: ResourceName,
+        body: PostText,
+        addressees: Vec<Addressee>,
     },
     JoinThread {
         thread_id: ThreadId,
@@ -152,8 +161,10 @@ pub enum WorkspaceOperation {
         body: PostText,
         addressees: Vec<Addressee>,
     },
+    /// An optional closing post commits atomically with the resolution.
     ResolveThread {
         thread_id: ThreadId,
+        closing_post: Option<PostText>,
     },
     AddDependency {
         blocking: DeliverableId,
@@ -222,10 +233,12 @@ pub enum WorkspaceOperation {
     },
     List {
         query: ListQuery,
-        after: ChangePosition,
+        cursor: crate::ListCursor,
         limit: crate::PageLimit,
     },
     Inbox {
+        scope: crate::InboxScope,
+        read_mode: crate::InboxReadMode,
         after: Option<ChangePosition>,
         limit: crate::PageLimit,
     },
@@ -244,7 +257,7 @@ impl WorkspaceOperation {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -252,7 +265,14 @@ impl WorkspaceOperation {
     deny_unknown_fields
 )]
 pub enum WorkspaceAnswer {
+    MessageStatus {
+        status: crate::central_mail::MessageStatus,
+    },
     WorkspaceCreated {
+        workspace: Workspace,
+    },
+    /// The workspace after an update or archive.
+    WorkspaceUpdated {
         workspace: Workspace,
     },
     Created {
@@ -275,27 +295,33 @@ pub enum WorkspaceAnswer {
     },
     Page {
         items: Vec<ItemView>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     References {
         items: Vec<crate::Reference>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     Links {
         items: Vec<ExternalLink>,
-        next_after_position: Option<ChangePosition>,
+        next_cursor: Option<crate::ListCursor>,
     },
     Inbox {
-        entries: Vec<crate::InboxEntry>,
+        scope: crate::InboxScope,
+        read_mode: crate::InboxReadMode,
+        order: crate::ListOrder,
+        items: Vec<crate::InboxItem>,
+        /// The workspace's latest change position when the page was read.
+        high_water: ChangePosition,
+        /// Projects in scope whose items could not be read for this page.
+        unavailable_projects: Vec<ProjectId>,
         next_after_position: Option<ChangePosition>,
-        read_through: ChangePosition,
     },
     Marked {
         scope: ReadScope,
         through: ChangePosition,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "answer",
@@ -314,7 +340,7 @@ pub enum WorkspaceResult {
     OutcomeUnknown,
     CentralUnavailable,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ActorView {
     pub actor_identity_id: ActorIdentityId,
@@ -328,13 +354,13 @@ impl From<ActorIdentity> for ActorView {
         }
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceReply {
     pub result: WorkspaceResult,
     pub actors: Vec<ActorView>,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceRequest {
     pub request_id: Option<RequestId>,

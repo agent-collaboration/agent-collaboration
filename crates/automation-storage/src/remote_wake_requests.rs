@@ -3,7 +3,7 @@ use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, StorageError, WakeListPosition};
 use agent_automation::{OperationId, WakeupId};
 use collaboration_mail_protocol::WakeBody;
-use collaboration_protocol::{SessionRef, WakeSnapshot};
+use collaboration_protocol::{HarnessSessionRef, WakeSnapshot};
 struct StoredWakeRequest {
     target_json: String,
     canonical_request: Vec<u8>,
@@ -29,7 +29,7 @@ struct StoredWakeKey {
 #[derive(Clone)]
 pub struct RemoteWakeMail {
     pub operation_id: OperationId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub canonical_request: Vec<u8>,
     pub body: WakeBody,
     pub valid_until_ms: i64,
@@ -124,10 +124,10 @@ impl AutomationStore {
     pub async fn remote_wake_target(
         &mut self,
         wakeup: &WakeupId,
-    ) -> Result<Option<SessionRef>, StorageError> {
+    ) -> Result<Option<HarnessSessionRef>, StorageError> {
         let row = sqlx::query_as!(StoredWakeBinding,"SELECT target_json,snapshot_json as \"snapshot_json!\" FROM remote_wake_requests WHERE wakeup_id=?",wakeup.as_str()).fetch_optional(&mut self.connection).await?;
         row.map(|row| {
-            let target: SessionRef =
+            let target: HarnessSessionRef =
                 serde_json::from_str(&row.target_json).map_err(|_| StorageError::InvalidRecord)?;
             let snapshot: WakeSnapshot = serde_json::from_str(&row.snapshot_json)
                 .map_err(|_| StorageError::InvalidRecord)?;

@@ -22,12 +22,14 @@ pub struct WorkspaceView {
 pub enum EngineKindName {
     WakeTimer,
     AutomationTimer,
+    DirectMessage,
+    SystemMessageExpiry,
     LegacyNoticeWindows,
     LegacyWorkspaceDrains,
     EngineSource,
 }
 
-/// The closed failure classes of central_work_attempts.last_failure.
+/// The closed failure classes of engine_work_attempts.last_failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineFailureClass {

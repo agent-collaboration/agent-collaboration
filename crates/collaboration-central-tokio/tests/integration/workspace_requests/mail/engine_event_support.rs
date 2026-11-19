@@ -96,7 +96,7 @@ pub(super) async fn count(runtime: &Runtime, sql: &'static str, args: Vec<SqlVal
 pub(super) async fn notices(runtime: &Runtime) -> i64 {
     count(
         runtime,
-        "SELECT COUNT(*) FROM messages WHERE message_kind='notice'",
+        "SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice'",
         vec![],
     )
     .await
@@ -105,7 +105,7 @@ pub(super) async fn wake_state(runtime: &Runtime, wake: &workspace_ids::WakeId) 
     runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state FROM wakes WHERE wake_id=?",
+            sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
             args: vec![text(wake)],
         })
         .await
@@ -123,7 +123,11 @@ pub(super) async fn open_notice_window(fixture: &Fixture, first_request: u32) {
     let mut observer = fixture.caller.clone();
     let mut address = session(&observer);
     address.session_id = "event-observer".to_owned().try_into().unwrap();
-    observer.caller = m::Caller::Session(address);
+    observer = collaboration_central_core::WorkspaceCaller::new(
+        observer.connection().clone(),
+        m::Caller::Session(address),
+    )
+    .unwrap();
     let joined = call(
         &fixture.host,
         &observer,
@@ -156,7 +160,7 @@ pub(super) async fn window_due(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
     runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT DISTINCT due_at FROM notification_windows",
+            sql: "SELECT DISTINCT due_at FROM mail_notification_windows",
             args: vec![],
         })
         .await

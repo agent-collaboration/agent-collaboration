@@ -5,7 +5,7 @@ use collaboration_protocol::{MailItemId, MessageSendResult, QueuedMessageSend};
 async fn enqueue_with_answer(
     adapter: &NativeStore,
     item: DeliveryItem<BoardDeliveryTypes>,
-    target: collaboration_protocol::SessionRef,
+    target: collaboration_protocol::HarnessSessionRef,
 ) -> Result<(), StoreError> {
     adapter
         .transaction(move |scope| {

@@ -22,7 +22,7 @@ fn as_mail_item(push_id: &collaboration_protocol::PushId) -> MailItemId {
 
 fn queued_answer(
     item: MailItemId,
-    target: collaboration_protocol::SessionRef,
+    target: collaboration_protocol::HarnessSessionRef,
 ) -> MessageSendResult {
     MessageSendResult::Queued {
         queued: QueuedMessageSend {
@@ -36,7 +36,7 @@ fn queued_answer(
 async fn record_answer(
     store: &NativeStore,
     item_id: MailItemId,
-    target: collaboration_protocol::SessionRef,
+    target: collaboration_protocol::HarnessSessionRef,
     now: chrono::DateTime<chrono::Utc>,
 ) {
     let answer = queued_answer(item_id.clone(), target);

@@ -19,7 +19,7 @@ fn has_bumped(commits: &mut watch::Receiver<u64>) -> bool {
 )]
 fn saved_message() -> SavedMessage {
     serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-local"},"sessionId":"recipient"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-local"},"sessionId":"recipient"},
         "content":{"kind":"humanUser","text":"saved"},"delivery":"auto"
     }))
     .unwrap()

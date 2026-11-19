@@ -7,8 +7,8 @@ use codex_router_host::{
 };
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    EndpointId, EndpointRef, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionId, SessionRef, ThreadSubscriptionsRequest,
+    EndpointId, EndpointRef, HarnessSessionRef, ProviderRequestedPolicy, ProviderWorkingDirectory,
+    RouterAccess, SessionId, ThreadSubscriptionsRequest,
 };
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionRecord};
 use message_board::{SubscriptionDeliveryOutcome, WhenIdle};
@@ -64,7 +64,7 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
     )
     .await
     .expect("Host startup");
-    let actor = SessionRef {
+    let actor = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("actor endpoint"),
@@ -72,7 +72,7 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
         session_id: SessionId::try_from("shutdown-test-actor".to_owned()).expect("actor"),
     };
     // A recorded but unloaded session: a follow batch with Wake must load it first.
-    let unloaded = SessionRef {
+    let unloaded = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("Cursor endpoint"),

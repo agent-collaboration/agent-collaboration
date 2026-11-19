@@ -47,7 +47,7 @@ fn installation_peer_is_stable_uuidv7_and_preserves_the_existing_service_file() 
     let path = directory.path().join("service-identity.json");
     std::fs::write(
         &path,
-        br#"{"version":1,"serviceId":"00000000-0000-4000-8000-000000000001"}"#,
+        br#"{"version":1,"serviceId":"00000000-0000-7000-8000-000000000001"}"#,
     )
     .expect("existing UUIDv4 service fixture");
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
@@ -85,7 +85,7 @@ fn installation_peer_is_stable_uuidv7_and_preserves_the_existing_service_file() 
 fn corrupt_or_non_v7_installation_peer_refuses_without_replacement() {
     for content in [
         b"broken".as_slice(),
-        br#"{"version":1,"peerId":"00000000-0000-4000-8000-000000000001"}"#,
+        br#"{"version":1,"peerId":"00000000-0000-7000-8000-000000000001"}"#,
         br#"{"version":2,"peerId":"01900000-0000-7000-8000-000000000001"}"#,
         br#"{"version":1,"peerId":"01900000-0000-7000-8000-000000000001","extra":true}"#,
     ] {
@@ -140,7 +140,7 @@ fn configured_service_identity_cannot_replace_its_installation_peer() {
     let second = load_installation_peer(second_root.path()).expect("different installation peer");
     assert_ne!(first, second);
     let identity = collaboration_service::ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .expect("query identity")

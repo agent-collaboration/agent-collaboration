@@ -5,13 +5,20 @@ use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
 use workspace_model as m;
 
-fn reply(result: m::WorkspaceResult) -> m::WorkspaceReply {
+fn invalid(field: &str) -> m::WorkspaceReply {
+    reply(m::WorkspaceResult::Refused(
+        m::RefusalReason::InvalidInput {
+            field: field.to_owned(),
+        },
+    ))
+}
+pub(crate) fn reply(result: m::WorkspaceResult) -> m::WorkspaceReply {
     m::WorkspaceReply {
         result,
         actors: vec![],
     }
 }
-fn store_result(
+pub(crate) fn store_result(
     result: Result<BatchOutcome, StoreFailure>,
 ) -> Result<Option<m::WorkspaceResult>, StoreFailure> {
     match result {
@@ -34,32 +41,46 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     caller: &WorkspaceCaller,
     request: m::WorkspaceRequest,
 ) -> Result<m::WorkspaceReply, StoreFailure> {
-    let invalid_field = if request.operation.is_write() && request.request_id.is_none() {
-        Some("requestId")
-    } else if matches!(
-        request.operation,
-        m::WorkspaceOperation::CreateWorkspace { .. }
-    ) {
-        request.workspace_id.as_ref().map(|_| "workspaceId")
-    } else if request.workspace_id.is_none() {
-        Some("workspaceId")
-    } else {
-        None
-    };
-    if let Some(field) = invalid_field {
-        return Ok(reply(m::WorkspaceResult::Refused(
-            m::RefusalReason::InvalidInput {
-                field: field.to_owned(),
-            },
-        )));
+    if request.operation.is_write() && request.request_id.is_none() {
+        return Ok(invalid("requestId"));
     }
-    if let Err(refusal) = runtime
-        .admit_workspace(caller, request.workspace_id.as_ref())
-        .await?
+    if let m::WorkspaceOperation::List {
+        query: m::ListQuery::MessageStatus { message_id },
+        ..
+    } = &request.operation
     {
-        return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        if request.workspace_id.is_some() {
+            return Ok(invalid("workspaceId"));
+        }
+        let result = match runtime.direct_message_status(caller, message_id).await? {
+            Ok(status) => m::WorkspaceResult::Done(m::WorkspaceAnswer::MessageStatus { status }),
+            Err(refusal) => m::WorkspaceResult::Refused(refusal),
+        };
+        return Ok(reply(result));
     }
-    let identity = match &caller.caller {
+    match crate::workspace_directory_requests::classify(&request) {
+        Err(field) => return Ok(invalid(field)),
+        Ok(Some(directory)) => {
+            return crate::workspace_directory_requests::execute(
+                runtime, caller, &request, directory,
+            )
+            .await;
+        }
+        Ok(None) => {}
+    }
+    if request.workspace_id.is_none() {
+        return Ok(invalid("workspaceId"));
+    }
+    {
+        let _central = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime
+            .admit_workspace(caller, request.workspace_id.as_ref())
+            .await?
+        {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
+    }
+    let identity = match caller.caller() {
         m::Caller::Session(session) => m::Identity::AgentSession {
             session: session.clone(),
         },
@@ -67,76 +88,16 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             person_id: person_id.clone(),
         },
     };
-    if let m::WorkspaceOperation::CreateWorkspace { name } = &request.operation {
-        let request_id = request
-            .request_id
-            .as_ref()
-            .ok_or_else(|| corrupt("request_id"))?;
-        let _turn = runtime.take_central_turn().await;
-        let now = runtime.now()?;
-        let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
-        let digest = crate::workspace_request_log::digest(&request.operation)?;
-        let actor_plan = runtime.prepare_identity(&identity, now).await?;
-        let actor = actor_plan.actor;
-        let logged = runtime
-            .host
-            .read(crate::workspace_request_log::lookup(request_id, &cutoff))
-            .await?;
-        if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
-            return Ok(reply(answer));
-        }
-        let mut statements = actor_plan.statements;
-        let answer = if crate::workspace_directory_rows::read_by_name(runtime.host.as_ref(), name)
-            .await?
-            .is_some()
-        {
-            m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse { name: name.clone() })
-        } else {
-            let workspace = m::Workspace {
-                workspace_id: runtime.mint()?,
-                name: name.clone(),
-                state: m::WorkspaceState::Active,
-            };
-            let description = m::Description::try_from(String::new())
-                .map_err(|_| corrupt("workspaces.description"))?;
-            statements.push(crate::workspace_directory_rows::insert(
-                &workspace.workspace_id,
-                name,
-                &description,
-                now,
-            )?);
-            m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace })
-        };
-        statements.extend(crate::workspace_request_log::retain(
-            request_id,
-            &actor,
-            &digest,
-            &answer,
-            &now.to_rfc3339(),
-            &cutoff,
-        )?);
-        let outcome = runtime
-            .host
-            .run_batch(StatementBatch {
-                statements,
-                alarm: AlarmUpdate::Unchanged,
-            })
-            .await;
-        if let Some(result) = store_result(outcome)? {
-            return Ok(reply(result));
-        }
-        #[cfg(feature = "test-support")]
-        if runtime.take_lost_reply(request_id) {
-            return Ok(reply(m::WorkspaceResult::OutcomeUnknown));
-        }
-        return Ok(reply(answer));
-    }
     let actor = {
         let _turn = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime
+            .admit_workspace(caller, request.workspace_id.as_ref())
+            .await?
+        {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
         runtime.resolve_identity(&identity).await?
     };
-    let now = runtime.now()?;
-    let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     let digest = crate::workspace_request_log::digest(&request.operation)?;
     let workspace = request
         .workspace_id
@@ -147,6 +108,12 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     } else {
         None
     };
+    let admission_turn = runtime.take_central_turn().await;
+    if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+        return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+    }
+    let now = runtime.now()?;
+    let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     if request.operation.is_write() {
         let request_id = request
             .request_id
@@ -155,10 +122,15 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         let logged = runtime
             .read_workspace(
                 workspace,
-                crate::workspace_request_log::lookup(request_id, &cutoff),
+                crate::workspace_request_log::lookup(
+                    crate::workspace_request_log::RequestLogStore::Workspace,
+                    request_id,
+                    &cutoff,
+                ),
             )
             .await?;
         if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+            drop(admission_turn);
             if let Err(error) = runtime.drain_after_request(workspace).await {
                 return drain_failure(error);
             }
@@ -191,6 +163,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         )
         .await;
     }
+    drop(admission_turn);
     #[cfg(feature = "test-support")]
     runtime
         .pauses
@@ -240,19 +213,10 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .request_id
         .as_ref()
         .ok_or_else(|| corrupt("request_id"))?;
-    if matches!(
-        answer,
-        m::WorkspaceResult::Done(
-            m::WorkspaceAnswer::Created { .. }
-                | m::WorkspaceAnswer::Updated { .. }
-                | m::WorkspaceAnswer::Removed { .. }
-        )
-    ) {
-        runtime.preset_workspace_drain(workspace, now).await?;
-    }
     batch
         .statements
         .extend(crate::workspace_request_log::retain(
+            crate::workspace_request_log::RequestLogStore::Workspace,
             request_id,
             &actor,
             &digest,
@@ -260,8 +224,26 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             &now.to_rfc3339(),
             &cutoff,
         )?);
-    if let Some(result) = store_result(runtime.batch_workspace(workspace, batch).await)? {
-        return Ok(reply(result));
+    {
+        // The workspace turn precedes central, matching the drain's lock order.
+        // Revocation and the admitted batch cannot pass each other inside this turn.
+        let _central = runtime.take_central_turn().await;
+        if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+            return Ok(reply(m::WorkspaceResult::Refused(refusal)));
+        }
+        if matches!(
+            answer,
+            m::WorkspaceResult::Done(
+                m::WorkspaceAnswer::Created { .. }
+                    | m::WorkspaceAnswer::Updated { .. }
+                    | m::WorkspaceAnswer::Removed { .. }
+            )
+        ) {
+            runtime.preset_workspace_drain_held(workspace, now).await?;
+        }
+        if let Some(result) = store_result(runtime.batch_workspace(workspace, batch).await)? {
+            return Ok(reply(result));
+        }
     }
     #[cfg(feature = "test-support")]
     runtime

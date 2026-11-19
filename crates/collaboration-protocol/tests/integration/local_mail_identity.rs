@@ -4,7 +4,7 @@ use serde_json::json;
 
 #[test]
 fn supplied_mail_identity_round_trips_and_malformed_identity_is_refused() {
-    let base = json!({"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"target"},"message":{"kind":"humanUser","text":"identity control"}});
+    let base = json!({"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"target"},"message":{"kind":"humanUser","text":"identity control"}});
     let id = "01900000-0000-7000-8000-000000000001";
     let mut supplied = base.clone();
     supplied["itemId"] = json!(id);

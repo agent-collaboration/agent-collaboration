@@ -7,10 +7,9 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
+    DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, MessageDelivery,
     MessageText, PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind,
-    PushLineInput, PushOrigin, PushRecordDraft, RouterLink, RouterOriginRef, SessionRef,
-    render_push_line,
+    PushLineInput, PushOrigin, PushRecordDraft, RouterLink, RouterOriginRef, render_push_line,
 };
 use interaction_storage::InteractionStore;
 use message_board::{
@@ -64,7 +63,7 @@ impl SubscriptionPushStore {
 
     pub(super) async fn activity(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         batch: &SubscriptionBatch,
         load_policy: LoadPolicy,
     ) -> Result<PreparedPush, BoardError> {
@@ -112,7 +111,7 @@ impl SubscriptionPushStore {
 
     pub(super) async fn expiry(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         scope: &SubscriptionScope,
         subscription_generation: SubscriptionGeneration,
     ) -> Result<PreparedPush, BoardError> {
@@ -142,7 +141,7 @@ impl SubscriptionPushStore {
 
     fn draft(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         kind: PushKind,
         origin_router_ref: RouterOriginRef,
         header_facts: PushHeaderFacts,
@@ -180,10 +179,7 @@ impl SubscriptionPushStore {
             .into_pending()
             .map_err(|_| BoardError::board_unavailable())?;
         let line = render_push_line(&PushLineInput {
-            link: RouterLink::new(
-                MachineId::from(self.machine.service_id().clone()),
-                record.push_id.clone(),
-            ),
+            link: RouterLink::new(self.machine.service_id().clone(), record.push_id.clone()),
             machine_label: self.machine.machine_label().clone(),
             origin: record.origin,
             header_facts: record.header_facts,
@@ -213,7 +209,7 @@ impl SubscriptionPushStore {
 
     pub(super) async fn deliver(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         prepared: PreparedPush,
     ) -> Result<(), BoardError> {
         self.mark_attempted(&prepared).await?;
@@ -292,7 +288,7 @@ impl SubscriptionPushStore {
     }
 }
 
-pub(super) fn target_session(reader: &Identity) -> Result<SessionRef, BoardError> {
+pub(super) fn target_session(reader: &Identity) -> Result<HarnessSessionRef, BoardError> {
     let Identity::Session { session } = reader else {
         return Err(BoardError::invalid_field(
             "reader",
@@ -302,5 +298,5 @@ pub(super) fn target_session(reader: &Identity) -> Result<SessionRef, BoardError
     serde_json::from_value(
         serde_json::to_value(session).map_err(|_| BoardError::board_unavailable())?,
     )
-    .map_err(|_| BoardError::invalid_field("reader", "must contain a valid SessionRef"))
+    .map_err(|_| BoardError::invalid_field("reader", "must contain a valid HarnessSessionRef"))
 }

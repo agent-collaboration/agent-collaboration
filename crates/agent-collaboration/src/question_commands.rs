@@ -32,7 +32,7 @@ enum QuestionCommand {
     Answer {
         #[arg(long)]
         request_id: String,
-        /// Exact typed Identity or SessionRef JSON for the designated Approver.
+        /// Exact typed Identity or HarnessSessionRef JSON for the designated Approver.
         #[arg(long)]
         actor: String,
         /// JSON object of field IDs to typed values; choices use selectedOptionIds.
@@ -77,7 +77,7 @@ pub fn run_question_command(arguments: Vec<OsString>) -> i32 {
                 Err(_) => {
                     return crate::endpoint_commands::report_failure(
                         "invalidField",
-                        "--actor must be typed Identity or exact SessionRef JSON",
+                        "--actor must be typed Identity or exact HarnessSessionRef JSON",
                         2,
                         output.json,
                     );

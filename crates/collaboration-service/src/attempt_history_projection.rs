@@ -1,17 +1,17 @@
 //! Historical attempt output preserves exact identity; only the current safely stopped summary can retry.
 use automation_storage::{AutomationStore, StorageError};
 use collaboration_protocol::{
-    AttemptInspection, CodexGeneration, DeliveryEvidence, SessionRef, SummaryInspection,
+    AttemptInspection, CodexGeneration, DeliveryEvidence, HarnessSessionRef, SummaryInspection,
 };
 
 pub(crate) async fn delivery(
     store: &mut AutomationStore,
     delivery_id: &agent_automation::DeliveryId,
-    attempt: agent_automation::DeliveryAttempt<SessionRef, CodexGeneration>,
+    attempt: agent_automation::DeliveryAttempt<HarnessSessionRef, CodexGeneration>,
     archived_receipt: Option<collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>,
 ) -> Result<AttemptInspection, StorageError> {
     let current = store
-        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(delivery_id)
+        .read_delivery::<HarnessSessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(delivery_id)
         .await?;
     let receipt = archived_receipt
         .or_else(|| {
@@ -89,7 +89,7 @@ pub(crate) async fn delivery(
 }
 pub(crate) fn summary(
     run_id: &agent_automation::RunId,
-    attempt: agent_automation::SummaryAttempt<SessionRef, CodexGeneration>,
+    attempt: agent_automation::SummaryAttempt<HarnessSessionRef, CodexGeneration>,
     retry_allowed: bool,
 ) -> Result<SummaryInspection, StorageError> {
     let safely_stopped = attempt.effects.cessation

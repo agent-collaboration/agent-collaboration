@@ -15,10 +15,10 @@ mod support;
 async fn admission_rows(fixture: &Fixture) -> Result<Vec<Vec<Vec<central_storage::SqlValue>>>> {
     let mut snapshots = Vec::new();
     for sql in [
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM request_log ORDER BY request_id",
-        "SELECT * FROM organization_used_requests ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM runtime_request_log ORDER BY request_id",
+        "SELECT * FROM admin_used_requests ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
     ] {
         snapshots.push(fixture.rows(A, sql, vec![]).await?);
     }
@@ -56,7 +56,7 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() -> Result {
         }})
     );
     let rows = fixture.rows(A,
-        "SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated')", vec![]).await?;
+        "SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records WHERE kind='workspaceCreated')", vec![]).await?;
     assert_eq!(rows, vec![vec![number(1)?, number(1)?, number(1)?]]);
     let member = signed::Person::member(A, signed::NOW_SECONDS)?;
     let lookup = fixture
@@ -114,7 +114,7 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() -> Result {
         same_name.value()?,
         json!({"result":"refused","reason":"nameInUse"})
     );
-    assert_eq!(fixture.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM organization_used_requests)",vec![]).await?,vec![vec![number(1)?,number(2)?,number(1)?,number(5)?]]);
+    assert_eq!(fixture.rows(A,"SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM admin_used_requests)",vec![]).await?,vec![vec![number(1)?,number(2)?,number(1)?,number(5)?]]);
     let records = fixture
         .person(
             signed::RECORDS,

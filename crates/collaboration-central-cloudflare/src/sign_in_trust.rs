@@ -1,6 +1,7 @@
 //! Worker sign-in trust configured explicitly for org-scoped central runtimes.
 
 use crate::sign_in_crypto::{WorkerEd25519, WorkerEs256};
+use collaboration_central_core::machine_token::{MachineTokenPolicy, MachineTokenVerifier};
 use collaboration_central_core::{
     IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier, KeyFetchFailure, RawJwks,
     SignInTrustSettings,
@@ -36,6 +37,9 @@ impl CloudflareSignInTrust {
         organization: OrganizationId,
         clock: Arc<dyn Clock>,
     ) -> Result<Arc<dyn SignInVerification>, FleetOrganizationStatementRefusal> {
+        if !self.settings.machine_audience_is_valid() {
+            return Err(FleetOrganizationStatementRefusal::InvalidConfiguration);
+        }
         let trust = FleetOrganizationStatementTrust::new(
             self.settings.issuer.clone(),
             self.settings.audience.clone(),
@@ -60,11 +64,24 @@ impl CloudflareSignInTrust {
                     clock.clone(),
                 ),
                 WorkerEs256,
-                clock,
+                clock.clone(),
                 PersonRequestPolicy {
                     issuer: self.settings.issuer.clone(),
                     audience: self.settings.admin_audience.clone(),
                     public_origin: self.settings.public_origin.clone(),
+                },
+            ),
+            machines: MachineTokenVerifier::new(
+                IssuerSignatureVerifier::new(
+                    WorkerEd25519,
+                    keys(),
+                    self.cache.clone(),
+                    clock.clone(),
+                ),
+                clock,
+                MachineTokenPolicy {
+                    issuer: self.settings.issuer.clone(),
+                    audience: self.settings.machine_audience.clone(),
                 },
             ),
             sign_in_service: self.settings.service_id.clone(),

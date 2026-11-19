@@ -3,8 +3,8 @@
 use super::{
     ApprovalDecision, ApprovalDecisionError, ApprovalOfferedOption, ApprovalOptionEffect,
     ApprovalOptionScope, ApprovalOptionView, ApprovalOptionViewScope, ApprovalPresentation,
-    ApprovalRequestRecord, ApprovalState, InteractionHistoryRecord, InteractionHistoryState,
-    SessionRef,
+    ApprovalRequestRecord, ApprovalState, HarnessSessionRef, InteractionHistoryRecord,
+    InteractionHistoryState,
 };
 
 pub(super) fn typed_cancel_approval_state(
@@ -40,7 +40,8 @@ pub(super) fn project_typed_legacy_approval(
         Some(collaboration_protocol::ProviderIdentity::Session(session)) => session.clone(),
         Some(collaboration_protocol::ProviderIdentity::Human { .. }) | None => return None,
     };
-    let approver: SessionRef = serde_json::from_value(serde_json::to_value(approver).ok()?).ok()?;
+    let approver: HarnessSessionRef =
+        serde_json::from_value(serde_json::to_value(approver).ok()?).ok()?;
     let (state, reason, decision) = match state {
         InteractionHistoryState::Pending => (ApprovalState::PendingClientDecision, None, None),
         InteractionHistoryState::Cancelled { reason } => (

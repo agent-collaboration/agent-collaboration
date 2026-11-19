@@ -63,7 +63,7 @@ impl HandoffFixture {
     /// Commits one owed push admission: a wake-up due now, evaluated.
     async fn owe_one_push(&self) -> TestResult {
         let message: SavedMessage = serde_json::from_value(json!({
-            "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"woken-session"},
+            "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"woken-session"},
             "content":{"kind":"humanUser","text":"wake fixture"},
             "delivery":"auto"
         }))?;

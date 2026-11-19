@@ -37,17 +37,17 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
         panic!("second workspace");
     };
     let other = other.workspace_id;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(serde_json::to_string(&[&f.workspace, &other]).unwrap()),
-                            text(f.caller.caller.machine_id())
+                            text(id::<m::WorkspaceId>(3))
                         ],
                     },
                     expect: RowExpectation::Exactly(1)
@@ -66,6 +66,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
             2102,
             m::WorkspaceOperation::CreateArea {
                 name: name("Foreign area"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -95,7 +96,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
         before
     );
     let effects = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM item_references),(SELECT COUNT(*) FROM changes WHERE change_kind='stateChanged')", args: vec![],
+        sql: "SELECT (SELECT COUNT(*) FROM workspace_item_references),(SELECT COUNT(*) FROM workspace_changes WHERE change_kind='stateChanged')", args: vec![],
     }).await.unwrap();
     assert_eq!(
         effects.rows,
@@ -126,17 +127,21 @@ async fn r21_invalid_stored_status_and_closing_note_fail_show_and_list_decode() 
         panic!("backlog");
     };
     for (status, note, expected_column) in [
-        ("done", None, "backlog_items"),
+        ("done", None, "workspace_backlog_items"),
         (
             "open",
             Some("Invalid open note"),
-            "backlog_items.closing_note",
+            "workspace_backlog_items.closing_note",
         ),
-        ("closed", None, "backlog_items.closing_note"),
-        ("closed", Some(" \t "), "backlog_items.closing_note"),
+        ("closed", None, "workspace_backlog_items.closing_note"),
+        (
+            "closed",
+            Some(" \t "),
+            "workspace_backlog_items.closing_note",
+        ),
     ] {
         f.workspace_batch(
-            "UPDATE backlog_items SET status=?,closing_note=? WHERE item_id=?",
+            "UPDATE workspace_backlog_items SET status=?,closing_note=? WHERE item_id=?",
             vec![
                 text(status),
                 note.map_or(SqlValue::Null, text),
@@ -150,7 +155,7 @@ async fn r21_invalid_stored_status_and_closing_note_fail_show_and_list_decode() 
                 query: m::ListQuery::Backlog {
                     area_id: area.clone(),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 10.try_into().unwrap(),
             },
         ] {
@@ -200,7 +205,7 @@ async fn r21_stored_closing_note_uses_description_utf8_byte_bound() {
         "é".repeat(8_193),
     ] {
         f.workspace_batch(
-            "UPDATE backlog_items SET status='closed',closing_note=? WHERE item_id=?",
+            "UPDATE workspace_backlog_items SET status='closed',closing_note=? WHERE item_id=?",
             vec![text(&note), text(item_id)],
         )
         .await;
@@ -210,7 +215,7 @@ async fn r21_stored_closing_note_uses_description_utf8_byte_bound() {
                 query: m::ListQuery::Backlog {
                     area_id: area.clone(),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 10.try_into().unwrap(),
             },
         ] {
@@ -227,7 +232,7 @@ async fn r21_stored_closing_note_uses_description_utf8_byte_bound() {
                 .await;
             if note.len() > 16_384 {
                 assert!(
-                    matches!(result, Err(StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } }) if column=="backlog_items.closing_note"),
+                    matches!(result, Err(StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } }) if column=="workspace_backlog_items.closing_note"),
                     "oversized stored closing note must fail decode"
                 );
             } else {

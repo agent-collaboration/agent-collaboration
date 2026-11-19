@@ -245,7 +245,7 @@ async fn ineligible_fork_destination_cannot_replace_the_captured_source() {
 }
 
 fn add_other_machine(request: &mut crate::session_picker::SessionsPickerRequest) {
-    request.router_registry=agent_session_inventory::sessions::RouterRegistryRead::Ready(agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(&serde_json::json!({"version":1,"routers":[{"name":"Other machine","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000002","mcpUrl":"https://fixture.invalid/mcp"}}]}).to_string()).unwrap());
+    request.router_registry=agent_session_inventory::sessions::RouterRegistryRead::Ready(agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(&serde_json::json!({"version":1,"routers":[{"name":"Other machine","connection":{"kind":"remote","serviceId":"00000000-0000-7000-8000-000000000002","mcpUrl":"https://fixture.invalid/mcp"}}]}).to_string()).unwrap());
 }
 
 async fn assert_fixed_context(surface: ContextSurface) {

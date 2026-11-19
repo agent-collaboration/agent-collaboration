@@ -18,7 +18,7 @@ fn local_state(shown: ProjectShowResult) -> Result<ProjectState, TestError> {
 
 fn editor() -> Result<Identity, TestError> {
     Ok(serde_json::from_value(json!({"kind":"session","session":{
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"fixture-description-editor-without-a-role"
     }}))?)
 }

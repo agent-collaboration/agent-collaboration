@@ -7,10 +7,11 @@ use workspace_model::central_mail::{
 };
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
+    let caller = fixture.fresh_caller(&fixture.caller).await;
     fixture
         .host
         .request_central(
-            &fixture.caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,
@@ -20,7 +21,7 @@ async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result
         .unwrap()
 }
 
-fn wake(target: workspace_model::SessionAddress, due_at: workspace_model::Timestamp) -> Operation {
+fn wake(target: workspace_ids::SessionRef, due_at: workspace_model::Timestamp) -> Operation {
     Operation::SetWake {
         target,
         due_at,
@@ -40,7 +41,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let now = fixture.clock.utc_now();
@@ -129,7 +130,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
     let messages = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body FROM messages WHERE message_kind='wake'",
+            sql: "SELECT sender,target_session,body FROM mail_messages WHERE message_kind='wake'",
             args: vec![],
         })
         .await
@@ -150,7 +151,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
             workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
-            serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
+            serde_json::from_str::<workspace_ids::SessionRef>(address).unwrap(),
             target
         );
         let workspace_model::central_mail::MessageBody::Wake {
@@ -166,7 +167,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
     observed.sort();
     ids.sort();
     assert_eq!(observed, ids);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='wake'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM wakes WHERE state='disabled')", args: vec![] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM automation_wakes WHERE state='disabled')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -184,7 +185,7 @@ async fn native_driver_fires_after_manual_clock_advance() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
@@ -198,7 +199,7 @@ async fn native_driver_fires_after_manual_clock_advance() {
         .await;
     fixture.advance(Duration::from_secs(300)).await;
     held.until_held().await;
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT state, (SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(id)] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT state, (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -215,7 +216,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     let mut fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
@@ -238,7 +239,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM wakes WHERE state='active'",
+            sql: "SELECT COUNT(*) FROM automation_wakes WHERE state='active'",
             args: vec![],
         })
         .await
@@ -256,7 +257,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     fixture.reopen().await;
     let reopened = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     assert!(reopened.statement_host().alarm().is_some());
@@ -269,7 +270,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
         .await;
     fixture.advance(Duration::from_secs(300)).await;
     held.until_held().await;
-    let rows = reopened.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
+    let rows = reopened.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![

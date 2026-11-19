@@ -30,7 +30,7 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
         epoch: fixture.seed_epoch,
     };
     let writer = fixture.harness.projects.ensure(&seed.project).await?;
-    let local_service: ServiceId = "00000000-0000-4000-8000-000000000001"
+    let local_service: ServiceId = "00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()?;
     let origin = ActorOrigin {
@@ -47,7 +47,7 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
             peer: PeerId::new(durable_steps::Uuid::now_v7())?,
             address: SessionRef {
                 endpoint: SessionEndpointRef {
-                    service_id: "00000000-0000-4000-8000-000000000099"
+                    service_id: "00000000-0000-7000-8000-000000000099"
                         .to_owned()
                         .try_into()?,
                     endpoint_id: "codex-local".to_owned().try_into()?,
@@ -146,7 +146,7 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
     let mut write = writer
         .store
         .begin_admission(ActorOrigin {
-            installation: "00000000-0000-4000-8000-000000000001"
+            installation: "00000000-0000-7000-8000-000000000001"
                 .to_owned()
                 .try_into()?,
             machine: "notice fixture".to_owned().try_into()?,

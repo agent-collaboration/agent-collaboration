@@ -13,8 +13,8 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, MailItemId, MessageContent, MessageDelivery,
-    PushDeliveryState, SessionMessageSendParams, SessionRef,
+    DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, MailItemId, MessageContent,
+    MessageDelivery, PushDeliveryState, SessionMessageSendParams,
 };
 use collaboration_service::ApplicationFixture;
 
@@ -37,7 +37,7 @@ use tokio::sync::Mutex;
 #[derive(Default)]
 struct UnloadedTarget(AtomicUsize);
 impl TargetPresenceProbe for UnloadedTarget {
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+    fn presence(&self, _: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence> {
         Box::pin(async { Ok(TargetPresence::Wakeable) })
     }
 }
@@ -67,7 +67,10 @@ fn held() -> DeliveryReceipt {
         client: None,
     }
 }
-fn held_input(target: &SessionRef, text: &str) -> Result<SessionMessageSendParams, TestError> {
+fn held_input(
+    target: &HarnessSessionRef,
+    text: &str,
+) -> Result<SessionMessageSendParams, TestError> {
     Ok(SessionMessageSendParams {
         item_id: Some(MailItemId::generate()),
         target: target.clone(),
@@ -81,7 +84,7 @@ fn held_input(target: &SessionRef, text: &str) -> Result<SessionMessageSendParam
 
 async fn admit_held(
     app: &CollaborationApplication,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     text: &str,
 ) -> Result<(), TestError> {
     let result = app
@@ -178,7 +181,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
     ));
     let route = Arc::new(UnloadedTarget::default());
     let machine = MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         Some("P1 real-store fixture"),
@@ -203,7 +206,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
     });
     service.start().await?;
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_automation_store(automation.clone())
@@ -220,8 +223,8 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
         },
     )?;
     let app = (identity).build();
-    let target: SessionRef = serde_json::from_value(
-        json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"held-depth-target"}),
+    let target: HarnessSessionRef = serde_json::from_value(
+        json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"held-depth-target"}),
     )?;
     let reader = message_board::Identity::Session {
         session: target.clone().try_into()?,

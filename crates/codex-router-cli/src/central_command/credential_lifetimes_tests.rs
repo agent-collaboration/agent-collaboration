@@ -1,12 +1,42 @@
 use super::{
-    arguments::{CredentialKind, MintArguments, ServeArguments},
+    arguments::{CredentialKind, MintArguments},
     configuration, mint,
 };
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{
+    Engine,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use codex_router_secret_store::{
     SecretStore,
     central_credentials::{CentralCredential, CentralSecretKind},
 };
+
+fn seed_legacy_credentials(root: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    let secret_root = root.join("secrets");
+    #[cfg(debug_assertions)]
+    crate::secret_store_factory::initialize_plaintext_debug_root(&secret_root)?;
+
+    let config = configuration::CentralConfiguration {
+        policy: collaboration_central_core::AccessPolicy {
+            issuer: "http://127.0.0.1:29843".into(),
+            jwks_url: "http://127.0.0.1:29843/.well-known/jwks.json".into(),
+            session_audience: "codex-router-session".into(),
+            admin_audience: "codex-router-admin".into(),
+            owner_identity: "local-owner".into(),
+        },
+        receiver: fleet_sync_protocol::ReceiverId::new(
+            "019f0000-0000-7000-8000-000000000001".parse()?,
+        )?,
+        relay: fleet_sync_protocol::PeerId::new("019f0000-0000-7000-8000-000000000002".parse()?)?,
+    };
+    let key = collaboration_central_tokio::SelfHostedIssuer::generate_signing_key()?;
+    crate::secret_store_factory::open_cli_secret_store(&secret_root)?.write_staged(
+        &CentralSecretKind::SigningKey.secret_key()?,
+        &codex_router_core::redaction::SecretString::new(STANDARD.encode(key)),
+    )?;
+    std::fs::write(root.join("central.json"), serde_json::to_vec(&config)?)?;
+    Ok(())
+}
 
 #[derive(serde::Deserialize)]
 struct AssertionLifetime {
@@ -23,14 +53,7 @@ fn reported_credential_expiry_matches_the_signed_jwt_and_its_adopted_lifetime()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let root = directory.path().to_owned();
-    configuration::initialize(&ServeArguments {
-        root: root.clone(),
-        listen: "127.0.0.1:29843".parse()?,
-        public_url: None,
-        owner_identity: None,
-        #[cfg(debug_assertions)]
-        allow_plaintext_file_secrets: true,
-    })?;
+    seed_legacy_credentials(&root)?;
     let store = crate::secret_store_factory::open_cli_secret_store(&root.join("secrets"))?;
     for (kind, secret, seconds) in [
         (
@@ -87,14 +110,7 @@ fn minted_enrollment_credential_names_a_uuidv7_access_client()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let root = directory.path().to_owned();
-    configuration::initialize(&ServeArguments {
-        root: root.clone(),
-        listen: "127.0.0.1:29844".parse()?,
-        public_url: None,
-        owner_identity: None,
-        #[cfg(debug_assertions)]
-        allow_plaintext_file_secrets: true,
-    })?;
+    seed_legacy_credentials(&root)?;
     let store = crate::secret_store_factory::open_cli_secret_store(&root.join("secrets"))?;
 
     mint(MintArguments {

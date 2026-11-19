@@ -259,6 +259,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -327,6 +328,7 @@ dependencies = [
  "tokio-util",
  "toml 1.1.6+spec-1.1.0",
  "url",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -352,6 +354,7 @@ dependencies = [
  "tokio",
  "ui-preference-store",
  "unicode-width 0.2.2",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -698,6 +701,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -1097,10 +1101,15 @@ name = "central-link-client"
 version = "0.1.154"
 dependencies = [
  "central-link-protocol",
+ "hegeltest",
  "router-clock",
+ "runtime-primitives",
+ "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -1108,6 +1117,7 @@ dependencies = [
 name = "central-link-protocol"
 version = "0.1.154"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1397,6 +1407,7 @@ dependencies = [
  "futures-util",
  "indicatif",
  "iocraft",
+ "jsonc-parser",
  "message-board",
  "message-board-storage",
  "nix",
@@ -1406,6 +1417,7 @@ dependencies = [
  "opentelemetry_sdk",
  "owned-process-test-support",
  "reqwest 0.12.28",
+ "router-clock",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -1546,6 +1558,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -1809,6 +1822,8 @@ version = "0.1.154"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "central-link-client",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "collaboration-central-conformance",
@@ -1824,6 +1839,7 @@ dependencies = [
  "js-sys",
  "message-board",
  "reqwest 0.12.28",
+ "reqwest-websocket",
  "router-clock",
  "runtime-primitives",
  "rustix 1.1.6",
@@ -1884,6 +1900,7 @@ dependencies = [
  "base64 0.22.1",
  "board-sync-protocol",
  "central-engine-model",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "collaboration-central-admin-protocol",
@@ -1933,6 +1950,8 @@ dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
  "board-sync-protocol",
+ "central-link-client",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "collaboration-central-admin-protocol",
@@ -2015,6 +2034,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2039,6 +2059,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2101,6 +2122,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2123,6 +2145,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2135,6 +2158,8 @@ dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
  "board-sync-protocol",
+ "central-link-client",
+ "central-link-protocol",
  "chrono",
  "codex-acp-adapter",
  "codex-native-integration",
@@ -2142,6 +2167,7 @@ dependencies = [
  "collaboration-contracts",
  "collaboration-mail-protocol",
  "collaboration-protocol",
+ "collaboration-runtime",
  "durable-steps",
  "fleet-admission",
  "fleet-sync-delivery",
@@ -2151,11 +2177,13 @@ dependencies = [
  "fleet-sync-writer",
  "futures-util",
  "getrandom 0.3.4",
+ "hegeltest",
  "interaction-storage",
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
  "nix",
+ "rand 0.9.4",
  "router-clock",
  "runtime-primitives",
  "serde",
@@ -2171,7 +2199,10 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "turmoil",
  "uuid",
+ "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]
@@ -2231,6 +2262,7 @@ dependencies = [
  "tracing-subscriber",
  "turso_parser",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -4076,6 +4108,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -4231,6 +4264,7 @@ version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ecded084f9b9a718d39668a42657c32253663d1f6afb3fbb9134f0305f73f48"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 
@@ -4735,6 +4769,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -5323,6 +5358,16 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "rand_distr"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463"
+dependencies = [
+ "num-traits",
+ "rand 0.9.4",
+]
 
 [[package]]
 name = "rand_pcg"
@@ -7223,6 +7268,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "turmoil"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0061c28f1469e94771bb8aa626ce6b29265c2fb5034115046a170b0cba2e33d2"
+dependencies = [
+ "bytes",
+ "indexmap 2.14.0",
+ "rand 0.9.4",
+ "rand_distr",
+ "scoped-tls",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "turso"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8069,6 +8129,8 @@ dependencies = [
 name = "workspace-ids"
 version = "0.1.154"
 dependencies = [
+ "hegeltest",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -8081,8 +8143,13 @@ version = "0.1.154"
 dependencies = [
  "agent-automation",
  "chrono",
+ "collaboration-mail-protocol",
+ "message-board",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "workspace-ids",
 ]
@@ -8092,6 +8159,7 @@ name = "workspace-rules"
 version = "0.1.154"
 dependencies = [
  "central-storage",
+ "hegeltest",
  "proptest",
  "workspace-model",
 ]

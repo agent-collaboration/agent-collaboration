@@ -15,8 +15,8 @@ use tokio::{
     task::JoinHandle,
 };
 
-pub const SCRIPTED_SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-pub const SCRIPTED_SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+pub const SCRIPTED_SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
+pub const SCRIPTED_SERVICE_EPOCH: &str = "00000000-0000-7000-8000-000000000002";
 
 /// How long a test waits for the client's next call before failing.
 const CALL_WAIT: Duration = Duration::from_secs(5);

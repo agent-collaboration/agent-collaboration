@@ -11,13 +11,13 @@ use agent_session_inventory::sessions::source_ssh_protocol::PreparedSourceLaunch
 use agent_session_inventory::sessions::source_ssh_protocol::SourceReadError;
 use agent_session_inventory::sessions::source_ssh_protocol::SourceRejection;
 use agent_session_inventory::sessions::source_ssh_protocol::SourceSessionAction;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use std::sync::Arc;
 
 #[derive(Clone)]
 struct FixtureForkPreparation {
     profile: RouterConnectionProfile,
-    target: SessionRef,
+    target: HarnessSessionRef,
     directory: AbsoluteRemoteCwd,
 }
 

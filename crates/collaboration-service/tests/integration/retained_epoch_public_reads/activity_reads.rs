@@ -6,16 +6,16 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{human_reader, inbox_post_ids, inbox_request, post_at_placement};
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
-    EndpointRef, MessageShowResult, PushActivityRange, PushActivitySnapshot, PushHeaderFacts,
-    PushId, PushKind, PushOrigin, PushRecordDraft, PushRecordShowParams, RouterOriginRef,
-    SessionRef as RouterSessionRef,
+    EndpointRef, HarnessSessionRef as RouterSessionRef, MessageShowResult, PushActivityRange,
+    PushActivitySnapshot, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft,
+    PushRecordShowParams, RouterOriginRef,
 };
 use collaboration_service::ApplicationFixture;
 use message_board::*;
 use serde_json::json;
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 
 async fn push_api(
     fixture: &BoardFixture,

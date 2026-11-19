@@ -23,7 +23,7 @@ fn message(
     text: &str,
 ) -> Result<DeliveryEnvelope<BoardDeliveryTypes>, TestError> {
     let address: message_board::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"pushed-recipient"
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"pushed-recipient"
     }))?;
     Ok(DeliveryEnvelope::Item(DeliveryItem::new(
         id,

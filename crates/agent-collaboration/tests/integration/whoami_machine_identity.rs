@@ -1,6 +1,5 @@
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_protocol::UuidIdentity;
 use collaboration_service::ApplicationFixture;
 
 use serde_json::Value;
@@ -18,7 +17,7 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
         .expect("private service directory");
     // The CLI reads the machine label from the version 3 manifest the API publishes.
     let machine_identity = MachineIdentity::new(
-        UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service id"),
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service id"),
         Some("Sunbook-Pro-M4"),
     )
     .expect("machine label");
@@ -68,7 +67,7 @@ async fn whoami_refuses_an_installation_rpc_from_a_different_service_identity() 
     let path = root.path().join("service.json");
     let mut manifest: Value =
         serde_json::from_slice(&std::fs::read(&path).expect("manifest")).expect("manifest JSON");
-    manifest["serviceId"] = serde_json::json!("00000000-0000-4000-8000-000000000003");
+    manifest["serviceId"] = serde_json::json!("00000000-0000-7000-8000-000000000003");
     std::fs::write(
         &path,
         serde_json::to_vec(&manifest).expect("mismatched manifest"),

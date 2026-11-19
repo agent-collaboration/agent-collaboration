@@ -11,7 +11,7 @@ async fn native_bridge_preserves_wire_payload_through_public_discovery() {
         .create(&root)
         .unwrap_or_else(|e| panic!("directory: {e}"));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|e| panic!("identity: {e}"));
@@ -41,7 +41,7 @@ async fn native_bridge_preserves_wire_payload_through_public_discovery() {
             .unwrap_or_else(|e| panic!("echo: {e}"));
         let _close = socket.next().await;
     });
-    let endpoint=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"label":"fixture","availability":{"state":"available","observedAt":"2026-09-05T12:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap_or_else(|e|panic!("endpoint: {e}"));
+    let endpoint=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"label":"fixture","availability":{"state":"available","observedAt":"2026-09-05T12:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap_or_else(|e|panic!("endpoint: {e}"));
     let identity = identity
         .with_endpoints(vec![endpoint])
         .unwrap_or_else(|e| panic!("register: {e}"));

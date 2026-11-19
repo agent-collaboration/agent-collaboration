@@ -34,7 +34,7 @@ async fn drain_commit_crash_retries_through_cold_platform_alarm() {
             }
         });
         let _: bool = runtime.control("until-held", &pause).await.unwrap();
-        let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+        let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             rows.rows,
             vec![vec![SqlValue::Integer(before.try_into().unwrap())]]
@@ -46,7 +46,7 @@ async fn drain_commit_crash_retries_through_cold_platform_alarm() {
         f.clock.0.fetch_add(5_000, Ordering::SeqCst);
         let cold = f.host.cold_runtime(&f.caller.organization_id);
         cold.cold_alarm().await.unwrap();
-        let rows = cold.read(Statement { sql: "SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+        let rows = cold.read(Statement { sql: "SELECT COUNT(*) FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             rows.rows,
             vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
@@ -59,7 +59,7 @@ async fn drain_commit_crash_retries_through_cold_platform_alarm() {
 async fn applied_write_recovers_by_cold_alarm_without_another_request() {
     let f = Fixture::new().await;
     let area = f.area(7130).await;
-    let thread = f.thread(7131, area).await;
+    let thread = f.thread(7131, area.clone()).await;
     let (_, actor) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(&f.caller.organization_id).await;
     let pause = serde_json::json!({"workspace":f.workspace,"point":"afterStoreApplied"});
@@ -90,7 +90,7 @@ async fn applied_write_recovers_by_cold_alarm_without_another_request() {
     let _: bool = runtime.control("until-held", &pause).await.unwrap();
     let before = runtime
         .read(Statement {
-            sql: "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
@@ -103,7 +103,7 @@ async fn applied_write_recovers_by_cold_alarm_without_another_request() {
     f.clock.0.fetch_add(5_000, Ordering::SeqCst);
     let cold = f.host.cold_runtime(&f.caller.organization_id);
     assert_eq!(cold.cold_alarm().await.unwrap().workspaces_drained, 1);
-    let rows = cold.read(Statement { sql: "SELECT drain_due_at,(SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&actor), text(&thread), text(&f.workspace)] }).await.unwrap();
+    let rows = cold.read(Statement { sql: "SELECT drain_due_at,(SELECT COUNT(*) FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?) FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&actor), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -125,13 +125,13 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     let later: m::ChangeId = id(1);
     assert!(later.to_string() < earlier.to_string());
     f.workspace_batch(
-        "UPDATE changes SET change_id=? WHERE item_kind='area' AND item_id=?",
+        "UPDATE workspace_changes SET change_id=? WHERE item_kind='area' AND item_id=?",
         vec![text(&earlier), text(&area)],
     )
     .await;
     let prior = runtime
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
@@ -143,7 +143,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     let _: bool = runtime.control("hold", &pause).await.unwrap();
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = super::super::support::fresh_auth(&f.host, &f.caller);
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -166,7 +166,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     });
     let _: bool = runtime.control("until-held", &pause).await.unwrap();
     f.workspace_batch(
-        "UPDATE changes SET change_id=? WHERE thread_id=? AND change_kind='posted'",
+        "UPDATE workspace_changes SET change_id=? WHERE change_id=(SELECT change_id FROM workspace_changes WHERE thread_id=? AND change_kind='posted' ORDER BY position DESC LIMIT 1)",
         vec![text(&later), text(&thread)],
     )
     .await;
@@ -181,7 +181,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT position FROM changes WHERE change_id=?",
+                sql: "SELECT position FROM workspace_changes WHERE change_id=?",
                 args: vec![text(&later)],
             },
         )
@@ -195,34 +195,41 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
     assert!(position.get() > previous.get());
     let cursor = cold
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
         .unwrap();
     assert_eq!(cursor.rows[0][0], stored.rows[0][0]);
-    let notice = cold.read(Statement { sql: "SELECT i.change_id FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let notice = cold.read(Statement { sql: "SELECT i.change_id FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(notice.rows, vec![vec![text(&later)]]);
     let posted_position: m::ChangePosition =
         u64::try_from(position.get()).unwrap().try_into().unwrap();
+    // The observer's token predates the clock moving back; mint one for now.
+    let observer = super::super::support::fresh_auth(&f.host, &observer);
     let inbox = call(
         &f.host,
         &observer,
         Some(f.workspace.clone()),
         0,
         m::WorkspaceOperation::Inbox {
+            scope: m::InboxScope::Area {
+                area_id: area.clone(),
+            },
+            read_mode: m::InboxReadMode::Unread,
             after: None,
             limit: 100.try_into().unwrap(),
         },
     )
     .await;
-    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { entries, .. }) = inbox.result else {
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox { items: entries, .. }) = inbox.result
+    else {
         panic!("inbox refused")
     };
     assert!(
         entries
             .iter()
-            .any(|entry| entry.position == posted_position)
+            .any(|entry| entry.position() == posted_position)
     );
     f.host.close().await;
 }
@@ -236,7 +243,7 @@ async fn drain_crash_cuts_keep_three_change_positions_and_notice_identities_atom
         let (_, recipient) = joined_observer(&f, &thread).await;
         let runtime = f.host.central(&f.caller.organization_id).await;
         let cursor_query = || Statement {
-            sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         };
         let prior = runtime.read(cursor_query()).await.unwrap();
@@ -276,7 +283,7 @@ async fn drain_crash_cuts_keep_three_change_positions_and_notice_identities_atom
             pending.abort();
             let _ = pending.await;
         }
-        let changes = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT position,change_id FROM changes WHERE position>? ORDER BY position", args: vec![SqlValue::Integer(previous)] }).await.unwrap();
+        let changes = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT position,change_id FROM workspace_changes WHERE position>? ORDER BY position", args: vec![SqlValue::Integer(previous)] }).await.unwrap();
         assert_eq!(changes.rows.len(), 3);
         for (offset, row) in changes.rows.iter().enumerate() {
             assert_eq!(
@@ -298,7 +305,7 @@ async fn drain_crash_cuts_keep_three_change_positions_and_notice_identities_atom
         let _: bool = runtime.control("until-held", &pause).await.unwrap();
         let at_cut = runtime.read(cursor_query()).await.unwrap();
         let messages_query = || Statement {
-            sql: "SELECT i.window_item_id,i.change_id,w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND w.recipient_actor=? ORDER BY i.change_id",
+            sql: "SELECT i.window_item_id,i.change_id,w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND w.recipient_actor=? ORDER BY i.change_id",
             args: vec![text(&thread), text(&recipient)],
         };
         let at_cut_messages = runtime.read(messages_query()).await.unwrap();

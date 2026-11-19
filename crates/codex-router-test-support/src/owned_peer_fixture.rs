@@ -1,6 +1,6 @@
 //! Owned scripted peer socket lifetime for the opt-in delivery matrix.
 use crate::FixtureResult as ProofResult;
-use collaboration_client::protocol::{EndpointId, EndpointRef, SessionId, SessionRef};
+use collaboration_client::protocol::{EndpointId, EndpointRef, HarnessSessionRef, SessionId};
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{
@@ -27,7 +27,7 @@ enum PeerPublication {
 }
 
 pub struct PeerFixture {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     socket: PathBuf,
     received: tokio::sync::mpsc::Receiver<String>,
     stop: tokio_util::sync::CancellationToken,
@@ -81,7 +81,7 @@ impl PeerFixture {
         socket: PathBuf,
         publication: PeerPublication,
     ) -> ProofResult<Self> {
-        let mut target = SessionRef {
+        let mut target = HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id: session,
         };
@@ -195,7 +195,7 @@ impl PeerFixture {
 fn prepare_registry(
     registry: &Path,
     socket: &Path,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     publication: PeerPublication,
 ) -> ProofResult<(tokio::net::UnixListener, Vec<PathBuf>)> {
     let mut created_artifacts = Vec::new();

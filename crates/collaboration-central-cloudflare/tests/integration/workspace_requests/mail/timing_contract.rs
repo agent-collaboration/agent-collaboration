@@ -1,6 +1,5 @@
 //! R34 through admitted requests, owning storage and the host's actual alarm driver.
 use super::super::{Statement, support::*};
-use collaboration_central_core::WorkspaceCaller;
 use std::sync::atomic::Ordering;
 use workspace_model as m;
 use workspace_model::central_mail::{
@@ -28,10 +27,11 @@ async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
         count + 1
     );
 }
-async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: Op) -> Result {
+async fn request(f: &Fixture, caller: &FixtureCaller, number: u32, operation: Op) -> Result {
+    let caller = fresh_auth(&f.host, caller);
     f.host
         .request_central(
-            caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,
@@ -39,6 +39,16 @@ async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: 
         )
         .await
         .unwrap()
+}
+async fn call(
+    host: &super::super::workerd_host::WorkerdHost,
+    caller: &FixtureCaller,
+    workspace: Option<m::WorkspaceId>,
+    number: u32,
+    operation: m::WorkspaceOperation,
+) -> m::WorkspaceReply {
+    let caller = fresh_auth(host, caller);
+    super::super::support::call(host, &caller, workspace, number, operation).await
 }
 fn body() -> m::PostText {
     "timing contract".to_owned().try_into().unwrap()
@@ -280,6 +290,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
             Op::SendMessage {
                 to: target.clone(),
                 body: format!("direct {index}").try_into().unwrap(),
+                delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                reply_to: None,
+                sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
             },
         )
         .await;
@@ -295,6 +308,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         Op::SendMessage {
             to: second_target.clone(),
             body: "second recipient".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
         },
     )
     .await;
@@ -305,12 +321,30 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         panic!("second target send")
     };
     let r = f.host.central(&f.caller.organization_id).await;
-    assert!(
+    let earliest_cancel = r
+        .statement_host()
+        .read(super::super::Statement {
+            sql: "SELECT MIN(cancel_due_at) FROM mail_messages WHERE state='queued'",
+            args: vec![],
+        })
+        .await
+        .unwrap()
+        .rows[0][0]
+        .clone();
+    let central_storage::SqlValue::Text(earliest_cancel) = earliest_cancel else {
+        panic!("each direct message stores its cancel mark")
+    };
+    assert_eq!(
         r.control::<Option<i64>>("raw-alarm-time", &())
             .await
-            .unwrap()
-            .is_none(),
-        "direct messages never schedule an alarm"
+            .unwrap(),
+        Some(
+            earliest_cancel
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .unwrap()
+                .timestamp_millis()
+        ),
+        "delivery never arms the alarm; only the earliest cancel mark does"
     );
     let immediate = r.queued_for_session(&target).await.unwrap();
     assert_eq!(immediate.messages.len(), 4);
@@ -339,7 +373,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     assert_eq!(
         second_queue.messages[0].body,
         MessageBody::Direct {
-            body: "second recipient".to_owned().try_into().unwrap()
+            body: "second recipient".to_owned().try_into().unwrap(),
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
         }
     );
     let direct: Vec<_> = queue
@@ -363,7 +399,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         assert_eq!(
             message.body,
             MessageBody::Direct {
-                body: format!("direct {index}").try_into().unwrap()
+                body: format!("direct {index}").try_into().unwrap(),
+                delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                reply_to: None,
             }
         );
     }
@@ -375,12 +413,17 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         queue
     );
     assert_eq!(r.queued_for_session(&target).await.unwrap(), queue);
-    assert!(
+    assert_eq!(
         r.control::<Option<i64>>("raw-alarm-time", &())
             .await
-            .unwrap()
-            .is_none(),
-        "Queued rows must not spin the alarm"
+            .unwrap(),
+        Some(
+            earliest_cancel
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .unwrap()
+                .timestamp_millis()
+        ),
+        "queued rows must not spin the alarm: it stays at the earliest cancel mark"
     );
     let idle_callbacks: u64 = r.control("raw-alarm-count", &()).await.unwrap();
     assert!(r.dispatch_due_alarm().await.unwrap().is_none());
@@ -428,7 +471,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     )
     .await;
     assert!(!matches!(refused.result, m::WorkspaceResult::Done(_)));
-    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence FROM actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
+    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence FROM access_actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
     assert_eq!(policy.rows, vec![vec![text("m25")]]);
     drop(r);
     notices::exercise_notice_cadences(f).await;
@@ -467,7 +510,7 @@ async fn exercise_expiry(f: &mut Fixture) {
     let row = r
         .statement_host()
         .read(Statement {
-            sql: "SELECT expires_at FROM automations WHERE automation_id=?",
+            sql: "SELECT expires_at FROM automation_schedules WHERE automation_id=?",
             args: vec![text(&automation_id)],
         })
         .await
@@ -486,7 +529,7 @@ async fn exercise_expiry(f: &mut Fixture) {
     )
     .await;
     let r = f.host.central(&f.caller.organization_id).await;
-    let row=r.statement_host().read(Statement{sql:"SELECT state,next_due_at,(SELECT COUNT(*) FROM messages WHERE json_extract(body,'$.automation_id')=? OR json_extract(body,'$.automationId')=?) FROM automations WHERE automation_id=?",args:vec![text(&automation_id),text(&automation_id),text(&automation_id)]}).await.unwrap();
+    let row=r.statement_host().read(Statement{sql:"SELECT state,next_due_at,(SELECT COUNT(*) FROM mail_messages WHERE json_extract(body,'$.automation_id')=? OR json_extract(body,'$.automationId')=?) FROM automation_schedules WHERE automation_id=?",args:vec![text(&automation_id),text(&automation_id),text(&automation_id)]}).await.unwrap();
     assert_eq!(
         row.rows,
         vec![vec![

@@ -113,7 +113,7 @@ impl CollaborationMcpServer {
 pub(super) fn message_failure_result(
     rejection: &MessageFailure,
     field: &str,
-    session: collaboration_protocol::SessionRef,
+    session: collaboration_protocol::HarnessSessionRef,
 ) -> CallToolResult {
     if rejected_before_submission(rejection) {
         failure_naming(

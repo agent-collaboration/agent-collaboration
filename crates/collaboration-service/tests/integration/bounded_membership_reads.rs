@@ -47,7 +47,7 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
         fixture._directory.path(),
         &fixture._admission,
         collaboration_service::ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(fixture._admission.clone()),

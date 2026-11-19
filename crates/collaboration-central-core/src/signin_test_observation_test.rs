@@ -111,7 +111,7 @@ async fn writes(connection: &mut TursoConnection) -> i64 {
 }
 async fn stamped_store(records: usize) -> TursoConnection {
     let mut connection = empty_store().await;
-    query::<Turso>("INSERT INTO organization_identity VALUES(?,?,?,?)")
+    query::<Turso>("INSERT INTO signin_organization_identity VALUES(?,?,?,?)")
         .bind(ORGANIZATION)
         .bind(statement())
         .bind(NOW)
@@ -120,10 +120,10 @@ async fn stamped_store(records: usize) -> TursoConnection {
         .await
         .unwrap();
     for index in 0..records {
-        query::<Turso>("INSERT INTO organization_change_records VALUES(?,?,'organizationProvisioned','signInProvisioning',NULL,NULL,?,?,?)")
+        query::<Turso>("INSERT INTO signin_change_records VALUES(?,?,'organizationProvisioned','signInProvisioning',NULL,NULL,?,?,?)")
             .bind(fixture_id(0x1000+index)).bind(format!("request-{index}")).bind(ORGANIZATION).bind(NOW).bind(NOW).execute(&mut connection).await.unwrap();
     }
-    query::<Turso>("INSERT INTO organization_authorization_floors VALUES(?,7,'active',?,0,?,?)")
+    query::<Turso>("INSERT INTO signin_authorization_floors VALUES(?,7,'active',?,0,?,?)")
         .bind(ORGANIZATION)
         .bind(POLICY)
         .bind(NOW)
@@ -131,32 +131,28 @@ async fn stamped_store(records: usize) -> TursoConnection {
         .execute(&mut connection)
         .await
         .unwrap();
-    query::<Turso>(
-        "INSERT INTO person_organization_authorization_floors VALUES(?,?,?,4,'active',?,?)",
-    )
-    .bind(SUBJECT)
-    .bind(ORGANIZATION)
-    .bind(PERSON)
-    .bind(NOW)
-    .bind(NOW)
-    .execute(&mut connection)
-    .await
-    .unwrap();
-    query::<Turso>(
-        "INSERT INTO organization_used_requests VALUES(?,?,?,NULL,?,?,?,'thumbprint',?,?)",
-    )
-    .bind(fixture_id(0x3000))
-    .bind(ORGANIZATION)
-    .bind(NOW)
-    .bind(PERSON)
-    .bind(SESSION)
-    .bind("intent-observed")
-    .bind(NOW)
-    .bind(NOW)
-    .execute(&mut connection)
-    .await
-    .unwrap();
-    query::<Turso>("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES(?,'alpha','active',?,?)")
+    query::<Turso>("INSERT INTO signin_person_authorization_floors VALUES(?,?,?,4,'active',?,?)")
+        .bind(SUBJECT)
+        .bind(ORGANIZATION)
+        .bind(PERSON)
+        .bind(NOW)
+        .bind(NOW)
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    query::<Turso>("INSERT INTO admin_used_requests VALUES(?,?,?,NULL,?,?,?,'thumbprint',?,?)")
+        .bind(fixture_id(0x3000))
+        .bind(ORGANIZATION)
+        .bind(NOW)
+        .bind(PERSON)
+        .bind(SESSION)
+        .bind("intent-observed")
+        .bind(NOW)
+        .bind(NOW)
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    query::<Turso>("INSERT INTO directory_workspaces(workspace_id,name,state,created_at,updated_at) VALUES(?,'alpha','active',?,?)")
         .bind(fixture_id(0x9000))
         .bind(TIME)
         .bind(TIME)
@@ -270,12 +266,12 @@ async fn empty_existing_store_is_a_complete_read_only_observation() {
 #[tokio::test]
 async fn malformed_stored_domains_and_foreign_binding_never_become_complete_observations() {
     for sql in [
-        "UPDATE organization_authorization_floors SET minimum_revision=0",
-        "UPDATE organization_authorization_floors SET state='paused'",
-        "UPDATE person_organization_authorization_floors SET state='gone'",
-        "UPDATE organization_used_requests SET actor_session_id='not-a-session'",
-        "UPDATE workspaces SET state='archiving'",
-        "UPDATE workspaces SET name=' alpha '",
+        "UPDATE signin_authorization_floors SET minimum_revision=0",
+        "UPDATE signin_authorization_floors SET state='paused'",
+        "UPDATE signin_person_authorization_floors SET state='gone'",
+        "UPDATE admin_used_requests SET actor_session_id='not-a-session'",
+        "UPDATE directory_workspaces SET state='archiving'",
+        "UPDATE directory_workspaces SET name=' alpha '",
     ] {
         let mut connection = stamped_store(1).await;
         connection.execute(sql).await.unwrap();
@@ -302,9 +298,8 @@ async fn malformed_stored_domains_and_foreign_binding_never_become_complete_obse
 
 async fn machine_store() -> TursoConnection {
     let mut connection = stamped_store(1).await;
-    query::<Turso>("INSERT INTO machines VALUES(?,?,'Observed machine','enrolled',?,7,?,?)")
+    query::<Turso>("INSERT INTO login_machines VALUES(?,'Observed machine','enrolled',?,7,?,?)")
         .bind(fixture_id(0xe000))
-        .bind(fixture_id(0xe001))
         .bind(serde_json::to_string(&vec![fixture_id(0x9000)]).unwrap())
         .bind(TIME)
         .bind(TIME)
@@ -312,10 +307,9 @@ async fn machine_store() -> TursoConnection {
         .await
         .unwrap();
     query::<Turso>(
-        "INSERT INTO machines VALUES(?,?,'Second observed machine','revoked','[]',0,?,?)",
+        "INSERT INTO login_machines VALUES(?,'Second observed machine','revoked','[]',0,?,?)",
     )
     .bind(fixture_id(0xe040))
-    .bind(fixture_id(0xe041))
     .bind(TIME)
     .bind(TIME)
     .execute(&mut connection)
@@ -351,7 +345,7 @@ async fn machine_store() -> TursoConnection {
             Some(TIME),
         ),
     ] {
-        query::<Turso>("INSERT INTO machine_approvals VALUES(?,?,?,'Approval snapshot','[]',?,?,?,?,7,?,?,?,?,?,?)")
+        query::<Turso>("INSERT INTO login_machine_approvals VALUES(?,?,?,'Approval snapshot','[]',?,?,?,?,7,?,?,?,?,?,?)")
             .bind(fixture_id(0xe010 + index)).bind(fixture_id(0xe020 + index)).bind(fixture_id(0xe000))
             .bind(state).bind(reason).bind(PERSON).bind("machine:enroll")
             .bind("2027-01-15T08:10:00+00:00").bind(client).bind(last).bind(ended).bind(created).bind(created)
@@ -375,10 +369,10 @@ async fn machine_snapshot_exports_checked_lifecycle_fields_in_creation_order() {
     assert_eq!(
         Value::Array(machines),
         json!([{
-            "machineId":fixture_id(0xe000),"installationId":fixture_id(0xe001),
+            "machineId":fixture_id(0xe000),
             "state":"enrolled","allowedWorkspaces":[fixture_id(0x9000)],"enrollmentGeneration":7
         },{
-            "machineId":fixture_id(0xe040),"installationId":fixture_id(0xe041),
+            "machineId":fixture_id(0xe040),
             "state":"revoked","allowedWorkspaces":[],"enrollmentGeneration":0
         }])
     );
@@ -406,14 +400,14 @@ async fn machine_snapshot_exports_checked_lifecycle_fields_in_creation_order() {
 #[tokio::test]
 async fn corrupt_machine_columns_refuse_instead_of_becoming_complete_observations() {
     for sql in [
-        "UPDATE machines SET enrollment_generation=-1",
-        "UPDATE machines SET state='paused'",
-        "UPDATE machines SET label=' Observed machine '",
-        "UPDATE machine_approvals SET allowed_workspaces='invalid-json'",
-        "UPDATE machine_approvals SET code_expires_at='not-a-timestamp'",
-        "UPDATE machine_approvals SET permission_checked='machine:other'",
-        "UPDATE machine_approvals SET last_grant_at=NULL WHERE state='enrolled'",
-        "UPDATE machine_approvals SET ended_at=NULL WHERE state='ended'",
+        "UPDATE login_machines SET enrollment_generation=-1",
+        "UPDATE login_machines SET state='paused'",
+        "UPDATE login_machines SET label=' Observed machine '",
+        "UPDATE login_machine_approvals SET allowed_workspaces='invalid-json'",
+        "UPDATE login_machine_approvals SET code_expires_at='not-a-timestamp'",
+        "UPDATE login_machine_approvals SET permission_checked='machine:other'",
+        "UPDATE login_machine_approvals SET last_grant_at=NULL WHERE state='enrolled'",
+        "UPDATE login_machine_approvals SET ended_at=NULL WHERE state='ended'",
     ] {
         // Arrange: a single corrupt persisted field in an otherwise valid store.
         let mut connection = machine_store().await;
@@ -432,7 +426,7 @@ async fn corrupt_machine_columns_refuse_instead_of_becoming_complete_observation
 async fn automatic_idle_records_observe_with_exact_origin_validation() {
     // Arrange: the same legitimate origin shape emitted by idle expiry.
     let mut connection = stamped_store(0).await;
-    query::<Turso>("INSERT INTO organization_change_records VALUES(?,?,'machineExpired','automatic',NULL,NULL,?,?,?)")
+    query::<Turso>("INSERT INTO signin_change_records VALUES(?,?,'machineExpired','automatic',NULL,NULL,?,?,?)")
         .bind(fixture_id(0xf001)).bind("idle-expiry-record").bind(fixture_id(0xe013)).bind(NOW).bind(NOW)
         .execute(&mut connection).await.unwrap();
     let before = writes(&mut connection).await;
@@ -445,13 +439,13 @@ async fn automatic_idle_records_observe_with_exact_origin_validation() {
         json!("machineExpired")
     );
     assert_eq!(writes(&mut connection).await, before);
-    query::<Turso>("UPDATE organization_change_records SET actor_person_id=?")
+    query::<Turso>("UPDATE signin_change_records SET actor_person_id=?")
         .bind(PERSON)
         .execute(&mut connection)
         .await
         .unwrap();
     assert!(decode_snapshot(&stored_snapshot(&mut connection).await, &organization()).is_err());
-    connection.execute("UPDATE organization_change_records SET actor_person_id=NULL,permission_checked='machine:enroll'").await.unwrap();
+    connection.execute("UPDATE signin_change_records SET actor_person_id=NULL,permission_checked='machine:enroll'").await.unwrap();
     let invalid_permission = stored_snapshot(&mut connection).await;
     assert!(decode_snapshot(&invalid_permission, &organization()).is_err());
 }
@@ -466,11 +460,11 @@ async fn approval_order_uses_checked_instants_across_valid_timestamp_forms_and_i
         (0xe012, "2027-01-15T08:00:00.001+00:00"),
         (0xe013, "2027-01-15T08:00:00.001Z"),
     ] {
-        query::<Turso>("UPDATE machine_approvals SET created_at=?,updated_at='2027-01-15T08:00:02Z' WHERE approval_id=?")
+        query::<Turso>("UPDATE login_machine_approvals SET created_at=?,updated_at='2027-01-15T08:00:02Z' WHERE approval_id=?")
             .bind(created).bind(fixture_id(id)).execute(&mut connection).await.unwrap();
     }
     connection
-        .execute("UPDATE machine_approvals SET ended_at='2027-01-15T08:00:02Z' WHERE state='ended'")
+        .execute("UPDATE login_machine_approvals SET ended_at='2027-01-15T08:00:02Z' WHERE state='ended'")
         .await
         .unwrap();
     let before = writes(&mut connection).await;

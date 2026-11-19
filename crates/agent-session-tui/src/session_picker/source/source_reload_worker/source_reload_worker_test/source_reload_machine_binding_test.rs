@@ -1,7 +1,7 @@
 //! Machine membership is service-scoped; the read producer is outside this unit proof.
 use crate::session_picker::source::source_reload_worker::source_reload_worker_test::*;
 use collaboration_client::protocol::EndpointRef;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 
 #[tokio::test]
 async fn configured_machine_keeps_native_and_provider_rows_on_their_own_endpoints() {
@@ -29,7 +29,7 @@ async fn configured_machine_keeps_native_and_provider_rows_on_their_own_endpoint
         "",
         "cli",
     );
-    provider_row.identity = SessionPickerIdentity::HostedProvider(SessionRef {
+    provider_row.identity = SessionPickerIdentity::HostedProvider(HarnessSessionRef {
         endpoint: provider_endpoint.clone(),
         session_id: "shared-id".to_owned().try_into().unwrap(),
     });

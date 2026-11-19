@@ -61,7 +61,7 @@ fn route_claims_and_preconditions_keep_tagged_meaning() -> Result<(), Box<dyn st
     if !matches!(decoded, RouteClaim::Rejected { .. }) {
         return Err("terminal rejection claim changed variant".into());
     }
-    let generation = json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1});
+    let generation = json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1});
     let decoded: DeliveryPrecondition = serde_json::from_value(json!({
         "kind":"endpointGeneration","expected":generation
     }))?;
@@ -80,7 +80,7 @@ fn settled_run_records_summary_source_only_when_available() -> Result<(), Box<dy
     let native_turn = serde_json::from_value(json!({
         "target": {
             "endpoint": {
-                "serviceId": "00000000-0000-4000-8000-000000000001",
+                "serviceId": "00000000-0000-7000-8000-000000000001",
                 "endpointId": "codex-local"
             },
             "sessionId": "thread-one"

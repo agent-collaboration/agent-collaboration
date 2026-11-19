@@ -6,7 +6,7 @@ use super::{
     role_checks::Roles,
 };
 use codex_router_test_support::FixtureResult;
-use collaboration_client::protocol::{EndpointId, EndpointRef, RouterLink, SessionRef};
+use collaboration_client::protocol::{EndpointId, EndpointRef, HarnessSessionRef, RouterLink};
 use owned_process_test_support::{
     owned_cli_process::run_cli_output, scenario_finalization::run_scenario,
 };
@@ -250,7 +250,7 @@ fn injected_reference(text: &str) -> FixtureResult<String> {
 
 async fn cli_show_for_session(
     fixture: &BoardFixture,
-    caller: &SessionRef,
+    caller: &HarnessSessionRef,
     reference: &str,
 ) -> FixtureResult<Value> {
     let mut command =
@@ -281,7 +281,7 @@ async fn cli_show_for_session(
 
 async fn assert_cli_matches(
     fixture: &BoardFixture,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     reference: &str,
     record: &Value,
 ) -> FixtureResult {

@@ -106,7 +106,7 @@ pub fn run_approval_command(arguments: Vec<OsString>) -> i32 {
                 Err(_) => {
                     return crate::endpoint_commands::report_failure(
                         "invalidField",
-                        "--actor must be typed Identity or exact SessionRef JSON",
+                        "--actor must be typed Identity or exact HarnessSessionRef JSON",
                         2,
                         output.json,
                     );

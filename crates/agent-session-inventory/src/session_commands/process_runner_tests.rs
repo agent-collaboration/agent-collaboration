@@ -79,7 +79,7 @@ fn hosted_selection_cannot_fall_back_to_a_local_process_for_resume_or_fork() {
     let selection = crate::sessions::SessionActionSelection {
         identity: crate::sessions::SessionPickerIdentity::HostedCodex(
             serde_json::from_value(serde_json::json!({
-                "endpoint": {"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+                "endpoint": {"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
                 "sessionId": SESSION_ID,
             })).unwrap(),
         ),
@@ -111,7 +111,7 @@ fn configured_source_context_cannot_be_reinterpreted_as_a_default_native_launch(
     let registry = crate::sessions::router_connection_registry::RouterConnectionRegistry::parse(
         r#"{
         "version":1,"routers":[{"name":"Configured machine", "connection":{"kind":"remote",
-        "serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"http://127.0.0.1:18788/mcp"}}]
+        "serviceId":"00000000-0000-7000-8000-000000000001","mcpUrl":"http://127.0.0.1:18788/mcp"}}]
     }"#,
     )
     .unwrap();

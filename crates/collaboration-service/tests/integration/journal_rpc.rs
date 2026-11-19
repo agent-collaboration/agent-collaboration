@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 #[tokio::test]
 async fn pending_journal_read_does_not_block_status_and_wakes_after_append() {
     let path = std::path::PathBuf::from(format!("/tmp/journal-rpc-{}.sqlite", std::process::id()));
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let journal = ObservationJournal::open(
         &path,
         service

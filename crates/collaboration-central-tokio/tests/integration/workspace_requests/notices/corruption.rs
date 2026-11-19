@@ -5,7 +5,7 @@ use central_storage::{
 };
 
 async fn execute(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let result = runtime
         .statement_host()
         .run_batch(StatementBatch {
@@ -24,16 +24,16 @@ async fn execute(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
 async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() {
     for (sql, expected_column) in [
         (
-            "UPDATE notification_windows SET due_at='not-a-timestamp' WHERE recipient_actor=?",
-            "notification_windows.due_at",
+            "UPDATE mail_notification_windows SET due_at='not-a-timestamp' WHERE recipient_actor=?",
+            "mail_notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET due_at='2026-11-13T12:05:00Z' WHERE recipient_actor=?",
-            "notification_windows.due_at",
+            "UPDATE mail_notification_windows SET due_at='2026-11-13T12:05:00Z' WHERE recipient_actor=?",
+            "mail_notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET recipient_actor='invalid-uuid' WHERE recipient_actor=?",
-            "notification_windows.recipient_actor",
+            "UPDATE mail_notification_windows SET recipient_actor='invalid-uuid' WHERE recipient_actor=?",
+            "mail_notification_windows.recipient_actor",
         ),
     ] {
         let f = Fixture::new().await;
@@ -41,9 +41,9 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         let thread = f.thread(7501, area).await;
         let (_, actor) = joined_observer(&f, &thread).await;
         created(f.call(7502, post(&thread, vec![])).await);
-        let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+        let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
         let read = || Statement {
-            sql: "SELECT (SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')",
+            sql: "SELECT (SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?),(SELECT COUNT(*) FROM mail_notification_windows WHERE window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM mail_notification_window_items),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice')",
             args: vec![text(&f.workspace), text(&thread)],
         };
         let before = runtime.statement_host().read(read()).await.unwrap();
@@ -70,7 +70,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
                 .map(|time| time.unix_millis()),
             Some((start + chrono::Duration::minutes(5)).timestamp_millis())
         );
-        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![] }).await.unwrap();
+        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![] }).await.unwrap();
         assert_eq!(
             &record.rows[0][..3],
             &[
@@ -82,7 +82,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         assert!(
             matches!(&record.rows[0][3], SqlValue::Text(detail) if detail.contains(expected_column))
         );
-        let recipient = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND message_kind='notice'", args: vec![text(actor)] }).await.unwrap();
+        let recipient = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM mail_messages WHERE recipient_actor=? AND message_kind='notice'", args: vec![text(actor)] }).await.unwrap();
         assert_eq!(
             recipient.rows,
             vec![vec![SqlValue::Integer(0.try_into().unwrap())]]
@@ -97,12 +97,12 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let area = f.area(7510).await;
     let thread = f.thread(7511, area).await;
     let (_, observer) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     // Addressing the author adds a second recipient while the observer remains in the same batch window.
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -120,12 +120,12 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let prior = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
         .unwrap();
-    let baseline = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items)", args: vec![text(&thread), text(&thread)] }).await.unwrap();
+    let baseline = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM mail_notification_windows WHERE window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM mail_notification_window_items)", args: vec![text(&thread), text(&thread)] }).await.unwrap();
     assert_eq!(
         baseline.rows,
         vec![vec![
@@ -139,7 +139,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = f.fresh_caller(&f.caller).await;
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -164,12 +164,12 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     pending.abort();
     let _ = pending.await;
     drop(held);
-    execute(&f, "CREATE TRIGGER reject_drain_cursor BEFORE UPDATE ON workspace_drains WHEN NEW.drained_through_position != OLD.drained_through_position BEGIN SELECT RAISE(ABORT,'reject drain cursor'); END", vec![]).await;
+    execute(&f, "CREATE TRIGGER reject_drain_cursor BEFORE UPDATE ON mail_workspace_drains WHEN NEW.drained_through_position != OLD.drained_through_position BEGIN SELECT RAISE(ABORT,'reject drain cursor'); END", vec![]).await;
     assert!(matches!(
         runtime.drain_workspace(&f.workspace).await,
         Err(StoreFailure::Unavailable)
     ));
-    let after_failure = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&thread), text(&f.workspace)] }).await.unwrap();
+    let after_failure = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM mail_notification_windows WHERE window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM mail_notification_window_items) FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(after_failure.rows[0][0], prior.rows[0][0]);
     assert!(matches!(&after_failure.rows[0][1], SqlValue::Text(_)));
     assert_eq!(&after_failure.rows[0][2..], &baseline.rows[0][..]);
@@ -180,7 +180,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let again = runtime.drain_workspace(&f.workspace).await.unwrap();
     assert_eq!(again.notices_queued, 0);
     assert_eq!(again.window_items_added, 0);
-    let after_retry = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND recipient_actor=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?) AND recipient_actor=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&author), text(&thread), text(&observer), text(&f.workspace)] }).await.unwrap();
+    let after_retry = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND recipient_actor=? AND message_kind='notice'),(SELECT COUNT(*) FROM mail_notification_windows WHERE window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?) AND recipient_actor=?),(SELECT COUNT(*) FROM mail_notification_window_items) FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&author), text(&thread), text(&observer), text(&f.workspace)] }).await.unwrap();
     assert_ne!(after_retry.rows[0][0], prior.rows[0][0]);
     assert_eq!(after_retry.rows[0][1], SqlValue::Null);
     assert_eq!(
@@ -192,7 +192,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         ]
     );
     let duplicate = runtime.statement_host().run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement {
-        sql: "INSERT INTO notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) SELECT ?,i.window_id,i.workspace_id,i.thread_id,i.change_id,i.created_at,i.updated_at FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(id::<m::WorkspaceId>(7513)), text(&observer), text(&thread)],
+        sql: "INSERT INTO mail_notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) SELECT ?,i.window_id,i.workspace_id,i.thread_id,i.change_id,i.created_at,i.updated_at FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(id::<m::WorkspaceId>(7513)), text(&observer), text(&thread)],
     }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await;
     assert!(matches!(
         duplicate,
@@ -222,14 +222,14 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
         )
         .await,
     );
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     f.advance(std::time::Duration::from_secs(900)).await;
     runtime.after_event().await.unwrap();
-    let before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
+    let before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND message_kind='notice') FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(before.rows[0][1], SqlValue::Integer(2.try_into().unwrap()));
     execute(
         &f,
-        "UPDATE messages SET body='not-json' WHERE source_thread_id=? AND message_kind='notice'",
+        "UPDATE mail_messages SET body='not-json' WHERE source_thread_id=? AND message_kind='notice'",
         vec![text(&thread)],
     )
     .await;
@@ -238,7 +238,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = f.fresh_caller(&f.caller).await;
         let workspace = f.workspace.clone();
         let operation = post(
             &thread,
@@ -265,9 +265,9 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
     drop(held);
     let error = runtime.drain_workspace(&f.workspace).await.unwrap_err();
     assert!(
-        matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == "messages.body")
+        matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == "mail_messages.body")
     );
-    let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),drain_due_at FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
+    let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND message_kind='notice'),drain_due_at FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(&after.rows[0][..2], &before.rows[0][..]);
     assert!(matches!(&after.rows[0][2], SqlValue::Text(_)));
     f.host.close().await;
@@ -275,7 +275,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
 
 #[tokio::test]
 async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_back_drain() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     let area = f.area(7530).await;
     let thread = f.thread(7531, area).await;
     let (_, recipient) = joined_observer(&f, &thread).await;
@@ -293,23 +293,17 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         .result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    execute(
-        &f,
-        "UPDATE machine_credentials SET expires_at='9999-12-31T23:59:59Z' WHERE machine_id=?",
-        vec![text(f.caller.caller.machine_id())],
-    )
-    .await;
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let prior = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await
         .unwrap();
     let effects_before = runtime.statement_host().read(Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice')",
+        sql: "SELECT (SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM mail_notification_window_items),(SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND message_kind='notice')",
         args: vec![text(&recipient), text(&thread), text(&thread)],
     }).await.unwrap();
     assert_eq!(
@@ -324,7 +318,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         collaboration_central_core::MAX_ALARM_UNIX_MILLIS - 30_000,
     )
     .unwrap();
-    f.set_utc(near_ceiling).await;
+    f.relocate_authority(near_ceiling).await;
     let mut held = runtime
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
@@ -351,29 +345,30 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
     let _ = pending.await;
     drop(held);
     let applied = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM changes WHERE thread_id=? AND change_kind='posted'),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",
+        sql: "SELECT (SELECT COUNT(*) FROM workspace_changes WHERE thread_id=? AND change_kind='posted'),(SELECT COUNT(*) FROM workspace_request_log WHERE request_id=?)",
         args: vec![text(&thread), text(id::<m::RequestId>(7532))],
     }).await.unwrap();
     assert_eq!(
         applied.rows,
         vec![vec![
-            SqlValue::Integer(1.try_into().unwrap()),
+            // The thread's first post and this one.
+            SqlValue::Integer(2.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap())
         ]]
     );
-    let pending_before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
+    let pending_before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
     assert_eq!(pending_before.rows[0][0], prior.rows[0][0]);
     assert!(matches!(&pending_before.rows[0][1], SqlValue::Text(_)));
     let error = runtime.drain_workspace(&f.workspace).await.unwrap_err();
     assert!(
-        matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == "notification_windows.due_at")
+        matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == "mail_notification_windows.due_at")
     );
     let after = runtime.statement_host().read(Statement {
-        sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?",
+        sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM mail_notification_window_items),(SELECT COUNT(*) FROM mail_messages WHERE source_thread_id=? AND message_kind='notice') FROM mail_workspace_drains WHERE workspace_id=?",
         args: vec![text(&recipient), text(&thread), text(&thread), text(&f.workspace)],
     }).await.unwrap();
     assert_eq!(&after.rows[0][..2], &pending_before.rows[0][..]);
     assert_eq!(&after.rows[0][2..], &effects_before.rows[0][..]);
-    assert_eq!(runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT (SELECT COUNT(*) FROM changes WHERE thread_id=? AND change_kind='posted'),(SELECT COUNT(*) FROM request_log WHERE request_id=?)", args: vec![text(&thread), text(id::<m::RequestId>(7532))] }).await.unwrap().rows, applied.rows);
+    assert_eq!(runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT (SELECT COUNT(*) FROM workspace_changes WHERE thread_id=? AND change_kind='posted'),(SELECT COUNT(*) FROM workspace_request_log WHERE request_id=?)", args: vec![text(&thread), text(id::<m::RequestId>(7532))] }).await.unwrap().rows, applied.rows);
     f.host.close().await;
 }

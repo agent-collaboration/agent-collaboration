@@ -11,8 +11,8 @@ use crate::sessions::{
     },
 };
 use collaboration_client::protocol::{
-    NativeSessionScope, NativeSessionSource, ProviderSessionListParams, ProviderSessionSummary,
-    SessionRef, UuidIdentity,
+    HarnessSessionRef, NativeSessionScope, NativeSessionSource, ProviderSessionListParams,
+    ProviderSessionSummary, UuidIdentity,
 };
 use std::{
     collections::BTreeSet,
@@ -162,7 +162,7 @@ pub async fn execute_native_claude(
 
 async fn validate_source(
     launch: &ClaudeLaunchTarget,
-    service: &UuidIdentity,
+    service: &workspace_ids::MachineId,
     epoch: &UuidIdentity,
 ) -> Result<(), SourceRejection> {
     let manifest = launch
@@ -256,7 +256,7 @@ pub(super) async fn prepare_terminal_command(
 async fn validate_native_target(
     request: &SourceRequest,
     epoch: &UuidIdentity,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     directory: &str,
 ) -> Result<ProviderSessionSummary, SourceRejection> {
     if target.endpoint.service_id != request.expected_service {
@@ -302,7 +302,7 @@ async fn validate_native_target(
 
 async fn native_target_in_view(
     client: &collaboration_client::CollaborationClient,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     directory: &str,
     view: crate::picker_runtime_status::NativeCatalogueView,
     require_complete_loaded: bool,

@@ -18,12 +18,12 @@ fn prepared_launch(directory: &Path, action: &str) -> PreparedSourceLaunch {
     let action = match action {
         "new" => json!({"kind":"new","directory":directory}),
         kind => json!({"kind":kind,"target":{
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000021","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000021","endpointId":"codex-local"},
             "sessionId":"source-session-id"},"storedModel":{"model":"stored-model","reasoningEffort":"high"}}),
     };
     serde_json::from_value(json!({
         "action":action,
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000021","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000021","endpointId":"codex-local"},
         "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000022","generation":1},
         "schemaDigest":format!("sha256:{}", "b".repeat(64)),
         "workingDirectory":directory,"clientProfile":"routerDebug"

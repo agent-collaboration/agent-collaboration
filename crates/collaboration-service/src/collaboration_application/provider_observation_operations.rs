@@ -8,8 +8,8 @@ use collaboration_contracts::SessionEventAttachment;
 use collaboration_contracts::SessionEventHubError;
 use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
-    EndpointAvailability, ObservationEndReason, ObservationEventNotification,
-    ProviderObservationEventTooLarge, ProviderObservationEventTooLargeKind, SessionRef,
+    EndpointAvailability, HarnessSessionRef, ObservationEndReason, ObservationEventNotification,
+    ProviderObservationEventTooLarge, ProviderObservationEventTooLargeKind,
 };
 use serde_json::{Value, json};
 use session_event_model::SessionEvent;
@@ -220,7 +220,7 @@ impl CollectedEvents {
 }
 
 async fn attach(
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     operations: &ObservationOperations,
 ) -> Result<(SessionEventAttachment, CodexGeneration), ObservationFailure> {
     if target.endpoint.service_id != *operations.identity.service_id() {

@@ -12,9 +12,9 @@ const CONFLICTED_SESSION: &str = "00000000-0000-4000-8000-000000000043";
 fn resume_request(fixture: &ClaudeProcessFixture, session_id: &str) -> serde_json::Value {
     json!({
         "serviceDirectory":fixture.root.path().join("router/agent-communication"),
-        "expectedService":"00000000-0000-4000-8000-000000000001",
+        "expectedService":"00000000-0000-7000-8000-000000000001",
         "operation":{"kind":"nativeClaude","serviceEpoch":"00000000-0000-4000-8000-000000000002",
-            "action":{"kind":"resume","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":session_id},
+            "action":{"kind":"resume","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":session_id},
                 "directory":fixture.working_directory,"arguments":[]}}
     })
 }
@@ -215,7 +215,7 @@ async fn unavailable_loaded_read_cannot_resume_a_known_stopped_job() {
     };
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let mut api = FakeCollaborationApi::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap();
@@ -229,10 +229,10 @@ async fn unavailable_loaded_read_cannot_resume_a_known_stopped_job() {
     .unwrap();
     let serving = api.serve(vec![
         FakeReply::Result(json!({"serviceEpoch":"00000000-0000-4000-8000-000000000002","sequence":1,"endpoints":[{
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","channels":[],"availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"}}]})),
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","channels":[],"availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"}}]})),
         FakeReply::Error(json!({"code":-32050,"message":"Provider session inventory unavailable","data":{"kind":"unavailable","stage":"discovery","message":"Provider session inventory unavailable"}})),
-        FakeReply::Result(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"observedAt":"2026-10-18T00:00:00Z","nativeCoverage":{"peer":{"kind":"notRequested"},"background":{"kind":"complete"}},"sessions":[{
-            "origin":"claudeCodeBackground","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":SESSION},"workingDirectory":fixture.working_directory,
+        FakeReply::Result(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"observedAt":"2026-10-18T00:00:00Z","nativeCoverage":{"peer":{"kind":"notRequested"},"background":{"kind":"complete"}},"sessions":[{
+            "origin":"claudeCodeBackground","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":SESSION},"workingDirectory":fixture.working_directory,
             "jobHandle":"deadbeef","startedAt":1790162100,"state":{"kind":"stopped"}}]})),
     ]);
     let output = attach_command(&fixture)

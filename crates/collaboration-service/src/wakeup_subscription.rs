@@ -2,14 +2,13 @@
 use agent_automation::{SubscriptionId, WakeupId};
 use automation_storage::AutomationStore;
 use collaboration_protocol::{
-    FireKind, FireReceipt, SavedMessage, UuidIdentity, WakeChange, WakeChanged, WakeShowRequest,
-    WakeSubscription,
+    FireKind, FireReceipt, SavedMessage, WakeChange, WakeChanged, WakeShowRequest, WakeSubscription,
 };
 use std::{io, sync::Arc};
 use tokio::sync::{Mutex, OwnedSemaphorePermit};
 pub(crate) struct WakeSubscriptionState {
     pub store: Arc<Mutex<AutomationStore>>,
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub wakeup_id: WakeupId,
     pub subscription_id: SubscriptionId,
     pub sequence: i64,
@@ -18,7 +17,7 @@ pub(crate) struct WakeSubscriptionState {
 }
 pub(crate) async fn start(
     store: Arc<Mutex<AutomationStore>>,
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     request: WakeShowRequest,
     permit: OwnedSemaphorePermit,
 ) -> Result<(WakeSubscriptionState, WakeSubscription), automation_storage::StorageError> {
@@ -65,14 +64,14 @@ impl WakeSubscriptionState {
     /// wait returned. The wake-up must still exist.
     pub(crate) async fn resume(
         store: Arc<Mutex<AutomationStore>>,
-        service_id: UuidIdentity,
+        service_id: workspace_ids::MachineId,
         wakeup_id: WakeupId,
         cursor: &str,
         permit: OwnedSemaphorePermit,
     ) -> Result<Self, WakeResumeError> {
         let (version, cursor_service, collection, sequence, observed_at_ms): (
             u8,
-            UuidIdentity,
+            workspace_ids::MachineId,
             String,
             i64,
             i64,

@@ -1,8 +1,8 @@
 //! Resolve a running Session turn, then use the operation-bound cancel path.
 
 use super::{
-    OperationId, ProviderAcpDeliveryRoute, ProviderConversationBackend, ProviderIdentity,
-    SessionRef,
+    HarnessSessionRef, OperationId, ProviderAcpDeliveryRoute, ProviderConversationBackend,
+    ProviderIdentity,
 };
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationOperationFailureKind, ConversationOperationSubmission,
@@ -23,7 +23,7 @@ pub enum ProviderCancelActiveTurnError {
 impl ProviderAcpDeliveryRoute {
     pub async fn cancel_active_turn(
         &self,
-        target: SessionRef,
+        target: HarnessSessionRef,
         actor: ProviderIdentity,
     ) -> Result<ConversationOperationSubmission, ProviderCancelActiveTurnError> {
         if !self.serves(&target) {

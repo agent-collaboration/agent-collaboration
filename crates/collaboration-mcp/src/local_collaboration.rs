@@ -8,7 +8,7 @@ use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ConversationCancelRequest,
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationSubmission,
     ConversationOperationWaitRequest, ConversationOperationWaitResult, ConversationPromptRequest,
-    EndpointInventory, UuidIdentity,
+    EndpointInventory,
 };
 use collaboration_service::CollaborationApplication;
 use collaboration_service::collaboration_rejection::CollaborationRejection;
@@ -33,7 +33,7 @@ fn rejected(rejection: &impl CollaborationRejection) -> ClientError {
 }
 
 impl LocalCollaboration for ApplicationCollaboration {
-    fn service_id(&self) -> UuidIdentity {
+    fn service_id(&self) -> workspace_ids::MachineId {
         self.application.service_id().clone()
     }
 

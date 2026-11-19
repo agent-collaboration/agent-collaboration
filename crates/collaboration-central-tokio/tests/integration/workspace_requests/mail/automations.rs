@@ -9,10 +9,11 @@ use workspace_model::central_mail::{
 };
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
+    let caller = fixture.fresh_caller(&fixture.caller).await;
     fixture
         .host
         .request_central(
-            &fixture.caller,
+            &caller,
             CentralMailRequest {
                 request_id: id(number),
                 operation,
@@ -28,7 +29,7 @@ async fn interval_catches_up_once_and_after_finishes() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -61,7 +62,7 @@ async fn interval_catches_up_once_and_after_finishes() {
     let anchored = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM messages WHERE message_kind='automation'",
+            sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation'",
             args: vec![],
         })
         .await
@@ -82,7 +83,7 @@ async fn interval_catches_up_once_and_after_finishes() {
             runtime.after_event().await.unwrap().work.automations_fired,
             0
         );
-        let rows = runtime.statement_host().read(Statement { sql: "SELECT state,next_due_at,evaluated_through_at,(SELECT COUNT(*) FROM messages WHERE message_kind='automation') FROM automations WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
+        let rows = runtime.statement_host().read(Statement { sql: "SELECT state,next_due_at,evaluated_through_at,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation') FROM automation_schedules WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
         assert_eq!(
             rows.rows,
             vec![vec![
@@ -101,7 +102,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         let after_rows = runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT state,next_due_at FROM automations WHERE automation_id=?",
+                sql: "SELECT state,next_due_at FROM automation_schedules WHERE automation_id=?",
                 args: vec![text(&after_id)],
             })
             .await
@@ -119,7 +120,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         runtime.after_event().await.unwrap().work.automations_fired,
         0
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT state, next_due_at, evaluated_through_at FROM automations WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT state, next_due_at, evaluated_through_at FROM automation_schedules WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -134,7 +135,7 @@ async fn interval_catches_up_once_and_after_finishes() {
             )
         ]]
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT state,next_due_at,(SELECT COUNT(*) FROM messages WHERE message_kind='automation') FROM automations WHERE automation_id=?", args: vec![text(&after_id)] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT state,next_due_at,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation') FROM automation_schedules WHERE automation_id=?", args: vec![text(&after_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -146,7 +147,7 @@ async fn interval_catches_up_once_and_after_finishes() {
     let messages = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body FROM messages WHERE message_kind='automation'",
+            sql: "SELECT sender,target_session,body FROM mail_messages WHERE message_kind='automation'",
             args: vec![],
         })
         .await
@@ -168,7 +169,7 @@ async fn interval_catches_up_once_and_after_finishes() {
             workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
-            serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
+            serde_json::from_str::<workspace_ids::SessionRef>(address).unwrap(),
             session(&fixture.caller)
         );
         let workspace_model::central_mail::MessageBody::Automation {
@@ -276,7 +277,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         runtime.after_event().await.unwrap().work.automations_fired,
         0
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automations WHERE state='disabled'),(SELECT COUNT(*) FROM automations WHERE state='done'),(SELECT COUNT(*) FROM messages WHERE message_kind='automation')", args: vec![] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_schedules WHERE state='disabled'),(SELECT COUNT(*) FROM automation_schedules WHERE state='done'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -301,7 +302,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -340,7 +341,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     let messages = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM messages WHERE message_kind='automation'",
+            sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation'",
             args: vec![],
         })
         .await
@@ -354,7 +355,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state, COUNT(*) FROM automations GROUP BY state ORDER BY state",
+            sql: "SELECT state, COUNT(*) FROM automation_schedules GROUP BY state ORDER BY state",
             args: vec![],
         })
         .await
@@ -387,7 +388,7 @@ async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let timing =
@@ -406,7 +407,7 @@ async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
         request(&fixture, 1220, operation).await,
         Result::Refused(Refusal::NoOccurrence)
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automations), (SELECT COUNT(*) FROM messages), (SELECT COUNT(*) FROM request_log WHERE request_id=?)", args: vec![text(id::<workspace_model::RequestId>(1220))] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_schedules), (SELECT COUNT(*) FROM mail_messages), (SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)", args: vec![text(id::<workspace_model::RequestId>(1220))] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![

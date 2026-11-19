@@ -10,9 +10,9 @@ use codex_native_integration::{
 use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{
     AcceptedResumeEffect, ChannelDescription, CodexGeneration, EndpointDescription,
-    MessageDelivery, MessageInputKind, MessageRepresentation, MessageText,
+    HarnessSessionRef, MessageDelivery, MessageInputKind, MessageRepresentation, MessageText,
     NativeDeliveryFailureCause, NativeInputDisposition, NativeInputOperation, NativeSendAcceptance,
-    NativeSendReceipt, NonEmptyText, RenderedMessage, SessionRef, UuidIdentity,
+    NativeSendReceipt, NonEmptyText, RenderedMessage,
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -120,7 +120,7 @@ pub struct NativeMessageRequest<'a> {
     pub attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     pub params: NativeMessageParams,
     pub id: Value,
-    pub service_id: &'a UuidIdentity,
+    pub service_id: &'a workspace_ids::MachineId,
     pub backend: &'a NativeControlBackend,
     pub endpoints: &'a [EndpointDescription],
     pub held_connection: Option<&'a mut NativeProtocolConnection>,
@@ -132,7 +132,7 @@ pub struct NativeMessageRequest<'a> {
 }
 
 pub struct NativeMessageParams {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub body: NativeMessageBody,
     pub delivery: MessageDelivery,

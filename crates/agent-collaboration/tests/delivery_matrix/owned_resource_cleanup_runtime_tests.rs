@@ -13,7 +13,7 @@ use collaboration_client::{
     CollaborationClient,
     board::{EndReason, SubscriptionState, ThreadShowRequest},
     protocol::{
-        EndpointRef, SavedMessage, ScheduleShowRequest, SessionRef, ThreadSubscriptionState,
+        EndpointRef, HarnessSessionRef, SavedMessage, ScheduleShowRequest, ThreadSubscriptionState,
         ThreadSubscriptionsRequest, WakeShowRequest, WakeState,
     },
 };

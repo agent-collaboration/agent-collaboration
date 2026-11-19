@@ -123,6 +123,19 @@
           "run",
           "--ignore-missing",
           "--source",
+          "crates/collaboration-runtime/machine_local_migrations"
+        ],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "<root>/tmp/rust-tools/bin/sqlx",
+          "migrate",
+          "run",
+          "--ignore-missing",
+          "--source",
           "crates/automation-storage/migrations"
         ],
         "environment": {

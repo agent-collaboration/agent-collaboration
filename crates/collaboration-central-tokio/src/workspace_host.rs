@@ -1,5 +1,8 @@
 //! Native composition of org cores over the statement-only SQLite capability.
-use crate::{object_storage::ObjectStorage, sign_in_trust::NativeSignInTrust};
+use crate::{
+    machine_push_registry::MachinePushRegistry, object_storage::ObjectStorage,
+    sign_in_trust::NativeSignInTrust,
+};
 #[path = "workspace_alarm_owner.rs"]
 mod workspace_alarm_owner;
 use central_storage::{
@@ -94,6 +97,7 @@ pub struct TokioWorkspaceHost {
     orgs:
         Mutex<BTreeMap<OrganizationId, Arc<WorkspaceRuntime<ObjectStorage, TokioWorkspaceStores>>>>,
     alarms: Mutex<Vec<WorkspaceAlarmOwner>>,
+    pub(crate) push_registry: MachinePushRegistry,
 }
 impl TokioWorkspaceHost {
     pub async fn open(root: &Path, clock: Arc<dyn RuntimeClock>) -> Result<Self, StoreFailure> {
@@ -128,6 +132,7 @@ impl TokioWorkspaceHost {
             },
             orgs: Default::default(),
             alarms: Default::default(),
+            push_registry: MachinePushRegistry::default(),
         };
         let mut entries = tokio::fs::read_dir(root.join("central"))
             .await
@@ -196,8 +201,15 @@ impl TokioWorkspaceHost {
             },
             None => runtime,
         };
-        let runtime =
-            Arc::new(runtime.with_sign_in_observer(Arc::new(crate::native_logging::observe)));
+        let registry = self.push_registry.clone();
+        let organization_key = organization.clone();
+        let runtime = Arc::new(
+            runtime
+                .with_sign_in_observer(Arc::new(crate::native_logging::observe))
+                .with_mail_delivery_observer(Arc::new(move |delivery| {
+                    registry.offer(&organization_key, &delivery.machine_id, delivery.message_id);
+                })),
+        );
         runtime.recompute_alarm().await?;
         self.alarms.lock().await.push(WorkspaceAlarmOwner::start(
             runtime.clone(),
@@ -206,12 +218,20 @@ impl TokioWorkspaceHost {
         orgs.insert(organization.clone(), runtime.clone());
         Ok(runtime)
     }
+    pub fn current_time(&self) -> SyncTime {
+        self.clock.now()
+    }
+
+    pub(crate) fn shared_clock(&self) -> Arc<dyn Clock> {
+        Arc::new(ClockHandle(self.clock.clone()))
+    }
+
     pub async fn request(
         &self,
         caller: &WorkspaceCaller,
         request: WorkspaceRequest,
     ) -> Result<WorkspaceReply, StoreFailure> {
-        self.central(&caller.organization_id)
+        self.central(caller.organization_id())
             .await?
             .request(caller, request)
             .await
@@ -221,7 +241,7 @@ impl TokioWorkspaceHost {
         caller: &WorkspaceCaller,
         request: CentralMailRequest,
     ) -> Result<CentralMailResult, StoreFailure> {
-        self.central(&caller.organization_id)
+        self.central(caller.organization_id())
             .await?
             .request_central(caller, request)
             .await

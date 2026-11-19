@@ -150,14 +150,14 @@ async fn assert_statement_refusal(f: &Fixture, index: usize, cache: &str) {
     );
     assert_safe_logs(&after.join("\n"), &[case.statement], &label);
     assert!(
-        f.read("SELECT id FROM organization_identity")
+        f.read("SELECT id FROM signin_organization_identity")
             .await
             .rows
             .is_empty(),
         "{label}: organization identity written"
     );
     assert!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .is_empty(),

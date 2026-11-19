@@ -4,9 +4,9 @@ use super::ExternalProviderSupervisor;
 use crate::ExternalProviderRuntimeError;
 use crate::provider_operation_settlement::effective_settings;
 use collaboration_protocol::{
-    ProviderIdentity, ProviderSettingName, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsFailureKind, ProviderSettingsMappingStatus, ProviderSettingsResult,
-    ProviderSettingsSetRequest, SessionRef,
+    HarnessSessionRef, ProviderIdentity, ProviderSettingName, ProviderSettingsAcceptRequest,
+    ProviderSettingsFailure, ProviderSettingsFailureKind, ProviderSettingsMappingStatus,
+    ProviderSettingsResult, ProviderSettingsSetRequest,
 };
 use collaboration_runtime::ProviderSessionRecord;
 
@@ -41,8 +41,8 @@ pub(super) async fn set(
 
 pub(super) enum SettingControlFailure {
     Provider(Box<ProviderSettingsFailure>),
-    ContextChanged(SessionRef),
-    Unresolved(SessionRef),
+    ContextChanged(HarnessSessionRef),
+    Unresolved(HarnessSessionRef),
 }
 impl From<ProviderSettingsFailure> for SettingControlFailure {
     fn from(error: ProviderSettingsFailure) -> Self {
@@ -142,7 +142,7 @@ pub(super) async fn accept(
 )]
 async fn authorized_session(
     supervisor: &ExternalProviderSupervisor,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     actor: &ProviderIdentity,
 ) -> Result<ProviderSessionRecord, ProviderSettingsFailure> {
     let record = supervisor
@@ -177,7 +177,7 @@ async fn authorized_session(
 }
 
 fn result(
-    target: SessionRef,
+    target: HarnessSessionRef,
     record: ProviderSessionRecord,
     observed: acp_client_runtime::EffectiveProviderSettings,
 ) -> ProviderSettingsResult {
@@ -239,7 +239,7 @@ fn setting_error(
 }
 
 fn plain_error(
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     error: ExternalProviderRuntimeError,
 ) -> ProviderSettingsFailure {
     let (kind, message) = match error {
@@ -267,7 +267,7 @@ fn plain_error(
 
 fn failure(
     kind: ProviderSettingsFailureKind,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     message: &str,
 ) -> ProviderSettingsFailure {
     ProviderSettingsFailure {

@@ -6,7 +6,7 @@ async fn held_pair(
     second: m::WorkspaceOperation,
     second_caller: WorkspaceCaller,
 ) -> (m::WorkspaceReply, m::WorkspaceReply) {
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let seam = f.workspace.clone();
     let mut first_hold = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
@@ -92,7 +92,11 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
     let mut second = f.caller.clone();
     let mut next_session = session(&second);
     next_session.session_id = "next-lead".to_owned().try_into().unwrap();
-    second.caller = m::Caller::Session(next_session);
+    second = collaboration_central_core::WorkspaceCaller::new(
+        second.connection().clone(),
+        m::Caller::Session(next_session),
+    )
+    .unwrap();
     let mut third = session(&second);
     third.session_id = "last-lead".to_owned().try_into().unwrap();
     let (first, second) = held_pair(
@@ -119,12 +123,12 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
             "{reply:?}"
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let rows = runtime
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT ended_at FROM project_roles WHERE project_id=? AND role='lead'",
+                sql: "SELECT ended_at FROM workspace_project_roles WHERE project_id=? AND role='lead'",
                 args: vec![text(project)],
             },
         )
@@ -184,8 +188,8 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
             "{reply:?}"
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
+    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM workspace_deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
     assert_eq!(
         rows.rows
             .iter()

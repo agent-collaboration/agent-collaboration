@@ -29,11 +29,11 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         let store = Arc::new(Mutex::new(
             AutomationStore::open(&root.join("automation.sqlite")).await?,
         ));
-        let service = "00000000-0000-4000-8000-000000000001";
+        let service = "00000000-0000-7000-8000-000000000001";
         let interactions = Arc::new(
             interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
         );
-        let target: SessionRef = serde_json::from_value(json!({
+        let target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},
             "sessionId":match kind { FakeRouteKind::Provider => "provider-worker", FakeRouteKind::Peer => "peer-worker" }
         }))?;
@@ -63,7 +63,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         let schedule = store
             .lock()
             .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+            .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
                 operation_id: OperationId::generate(),
                 definition: ScheduleDefinition {
                     instruction_id: instruction.instruction_id,
@@ -84,13 +84,13 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         let run_id = store
             .lock()
             .await
-            .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+            .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
             .await?
             .ok_or("run missing")?;
         store
             .lock()
             .await
-            .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+            .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
             .await?;
         let worker = ScheduledRunWorker {
             store: Arc::clone(&store),
@@ -111,7 +111,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
                 let current = store
                     .lock()
                     .await
-                    .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
+                    .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
                     .await?;
                 return Err(format!(
                     "fake {route_name} stage {stage}: {error}; phase={:?}, route={:?}, timing={:?}",
@@ -183,8 +183,8 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
-    let service = "00000000-0000-4000-8000-000000000001";
-    let target: SessionRef = serde_json::from_value(json!({
+    let service = "00000000-0000-7000-8000-000000000001";
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service,"endpointId":"claude-local"},
         "sessionId":"prepared-provider"
     }))?;
@@ -219,7 +219,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
         let schedule = store
             .lock()
             .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+            .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
                 operation_id: OperationId::generate(),
                 definition: ScheduleDefinition {
                     instruction_id: instruction.instruction_id.clone(),

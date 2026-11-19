@@ -1,5 +1,5 @@
 //! Reply to one stored direct message using its push id or Router link.
-use crate::{DeliveryReceipt, MessageText, PushDeliveryState, PushId, SessionRef};
+use crate::{DeliveryReceipt, HarnessSessionRef, MessageText, PushDeliveryState, PushId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SessionMessageReplyParams {
     /// Session receiving the earlier Agent communication and issuing this reply.
-    pub caller: SessionRef,
+    pub caller: HarnessSessionRef,
     /// Local push id or router:// machine/push/id link being answered.
     pub reference: String,
     pub text: MessageText,
@@ -17,7 +17,7 @@ pub struct SessionMessageReplyParams {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SessionMessageReplyResult {
     /// Sender of the selected direct message.
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub target_identity: String,
     pub push_id: PushId,
     pub link: String,

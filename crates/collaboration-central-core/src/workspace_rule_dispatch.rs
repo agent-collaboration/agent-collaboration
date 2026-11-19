@@ -9,6 +9,21 @@ pub(crate) struct ResolvedOperation {
     pub tag_ids: Vec<m::WorkLogTagId>,
     pub read_mark_id: m::ReadMarkId,
 }
+/// Areas and projects require a description; a blank one is invalid input.
+fn required_description(
+    description: &m::Description,
+) -> Result<m::RequiredDescription, m::RefusalReason> {
+    m::RequiredDescription::try_from(description.as_str().to_owned()).map_err(|_| {
+        m::RefusalReason::InvalidInput {
+            field: "description".to_owned(),
+        }
+    })
+}
+fn optional_description(
+    description: Option<&m::Description>,
+) -> Result<Option<m::RequiredDescription>, m::RefusalReason> {
+    description.map(required_description).transpose()
+}
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_command(
         &self,
@@ -18,10 +33,15 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         use m::WorkspaceOperation as Op;
         let mut tags = Vec::new();
         let command = match op {
-            Op::CreateArea { name } => {
+            Op::CreateArea { name, description } => {
+                let description = match required_description(description) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateArea {
                     area_id: self.mint()?,
                     name: name.clone(),
+                    description,
                 })
             }
             Op::ArchiveArea { area_id } => {
@@ -29,11 +49,52 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     area_id: area_id.clone(),
                 })
             }
+            Op::UpdateArea {
+                area_id,
+                name,
+                description,
+            } => {
+                let description = match optional_description(description.as_ref()) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
+                m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateArea {
+                    area_id: area_id.clone(),
+                    name: name.clone(),
+                    description,
+                })
+            }
+            Op::UpdateProject {
+                project_id,
+                title,
+                description,
+            } => {
+                let description = match optional_description(description.as_ref()) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
+                m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateProject {
+                    project_id: project_id.clone(),
+                    title: title.clone(),
+                    description,
+                })
+            }
+            Op::UpdateIssue { issue_id, title } => {
+                m::WorkspaceCommand::Organization(m::OrganizationCommand::UpdateIssue {
+                    issue_id: issue_id.clone(),
+                    title: title.clone(),
+                })
+            }
             Op::CreateProject {
                 area_id,
                 title,
+                description,
                 lead,
             } => {
+                let description = match required_description(description) {
+                    Ok(description) => description,
+                    Err(refusal) => return Ok(Err(refusal)),
+                };
                 let holder = match lead {
                     Some(reference) => match self.resolve_actor_ref(reference, actor).await? {
                         Ok(holder) => holder,
@@ -45,6 +106,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     project_id: self.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
+                    description,
                     lead: holder,
                     role_id: self.mint()?,
                 })
@@ -125,12 +187,26 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 deliverable_id: deliverable_id.clone(),
                 role: *role,
             }),
-            Op::CreateThread { area_id, title } => {
+            Op::CreateThread {
+                area_id,
+                title,
+                body,
+                addressees,
+            } => {
+                if let Err(refusal) = self.named_actor_addressees(addressees).await? {
+                    return Ok(Err(refusal));
+                }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::CreateThread {
                     thread_id: self.mint()?,
                     member_id: self.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
+                    first_post: m::ThreadPostDraft {
+                        post_id: self.mint()?,
+                        change_id: self.mint()?,
+                        body: body.clone(),
+                        addressees: addressees.clone(),
+                    },
                 })
             }
             Op::JoinThread { thread_id, role } => {
@@ -173,14 +249,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 body,
                 addressees,
             } => {
-                for addressee in addressees {
-                    if let m::Addressee::Actor { actor_identity_id } = addressee
-                        && !self.named_actor(actor_identity_id).await?
-                    {
-                        return Ok(Err(m::RefusalReason::UnknownActor {
-                            actor_identity_id: actor_identity_id.clone(),
-                        }));
-                    }
+                if let Err(refusal) = self.named_actor_addressees(addressees).await? {
+                    return Ok(Err(refusal));
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ThreadPost {
                     post_id: self.mint()?,
@@ -189,9 +259,22 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     addressees: addressees.clone(),
                 })
             }
-            Op::ResolveThread { thread_id } => {
+            Op::ResolveThread {
+                thread_id,
+                closing_post,
+            } => {
+                let closing_post = match closing_post {
+                    Some(body) => Some(m::ThreadPostDraft {
+                        post_id: self.mint()?,
+                        change_id: self.mint()?,
+                        body: body.clone(),
+                        addressees: vec![],
+                    }),
+                    None => None,
+                };
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ResolveThread {
                     thread_id: thread_id.clone(),
+                    closing_post,
                 })
             }
             Op::AddDependency { blocking, blocked } => {
@@ -342,7 +425,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 scope: scope.clone(),
                 through: *through,
             },
-            Op::Show { .. } | Op::List { .. } | Op::Inbox { .. } | Op::CreateWorkspace { .. } => {
+            Op::Show { .. }
+            | Op::List { .. }
+            | Op::Inbox { .. }
+            | Op::CreateWorkspace { .. }
+            | Op::UpdateWorkspace { .. }
+            | Op::ArchiveWorkspace => {
                 return Err(corrupt("operation dispatch"));
             }
         };
@@ -351,5 +439,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             tag_ids: tags,
             read_mark_id: self.mint()?,
         }))
+    }
+    /// Actor addressees must name known actors; role addressees are checked by the rule.
+    async fn named_actor_addressees(
+        &self,
+        addressees: &[m::Addressee],
+    ) -> Result<Result<(), m::RefusalReason>, StoreFailure> {
+        for addressee in addressees {
+            if let m::Addressee::Actor { actor_identity_id } = addressee
+                && !self.named_actor(actor_identity_id).await?
+            {
+                return Ok(Err(m::RefusalReason::UnknownActor {
+                    actor_identity_id: actor_identity_id.clone(),
+                }));
+            }
+        }
+        Ok(Ok(()))
     }
 }

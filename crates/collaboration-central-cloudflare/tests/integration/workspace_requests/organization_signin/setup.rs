@@ -16,12 +16,12 @@ mod support;
 pub(super) async fn owned_rows(fixture: &Fixture) -> Vec<Vec<Vec<SqlValue>>> {
     let mut snapshots = Vec::new();
     for sql in [
-        "SELECT * FROM organization_identity ORDER BY id",
-        "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM request_log ORDER BY request_id",
-        "SELECT * FROM organization_used_requests ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM signin_organization_identity ORDER BY id",
+        "SELECT * FROM signin_change_records ORDER BY id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM runtime_request_log ORDER BY request_id",
+        "SELECT * FROM admin_used_requests ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
     ] {
         snapshots.push(fixture.read(sql).await.rows);
     }
@@ -54,7 +54,7 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() {
             "workspaceId":OPERATION,"name":"Research","description":"","state":"active"
         }})
     );
-    let rows = fixture.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated')").await;
+    let rows = fixture.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records WHERE kind='workspaceCreated')").await;
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -121,7 +121,7 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() {
         collision,
         (200, json!({"result":"refused","reason":"nameInUse"}))
     );
-    assert_eq!(fixture.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated')").await.rows,vec![vec![support::number(1),support::number(2),support::number(1)]]);
+    assert_eq!(fixture.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records WHERE kind='workspaceCreated')").await.rows,vec![vec![support::number(1),support::number(2),support::number(1)]]);
     let collision_before = support::stable_effects(&fixture).await;
     assert_eq!(
         fixture

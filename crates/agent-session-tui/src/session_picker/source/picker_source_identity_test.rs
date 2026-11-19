@@ -4,7 +4,7 @@ use crate::session_picker::screen::fixtures::fixture_data::picker_request;
 use crate::session_picker::screen::picker_actions::SessionsPickerOutcome;
 use crate::session_picker::screen::picker_model::SessionsPickerModel;
 use agent_session_inventory::sessions::SessionPickerIdentity;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde_json::json;
 
 #[test]
@@ -17,7 +17,7 @@ fn picker_action_outcomes_keep_equal_native_ids_on_different_routers_distinct() 
         "00000000-0000-4000-8000-000000000002",
     ] {
         let mut record = template.clone();
-        let target: SessionRef = serde_json::from_value(json!({
+        let target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint": {"serviceId": service, "endpointId": "codex-local"},
             "sessionId": record.session_id,
         }))
@@ -77,8 +77,8 @@ fn full_uuid_paste_keeps_shared_matching_and_source_action_identity() {
     let mut request = picker_request();
     let mut record = request.records.remove(0);
     record.session_id = session_id.to_owned();
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint": {"serviceId":"00000000-0000-4000-8000-000000000008","endpointId":"codex-local"},
+    let target: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint": {"serviceId":"00000000-0000-7000-8000-000000000008","endpointId":"codex-local"},
         "sessionId": session_id,
     }))
     .unwrap();

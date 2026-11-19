@@ -10,7 +10,7 @@ use serde_json::json;
 fn snapshot(id: &str, created: &str) -> WakeSnapshot {
     serde_json::from_value(json!({
         "definition":{"wakeupId":id,"changeId":"019f0000-0000-7000-8000-000000000009","createdBy":{"kind":"owner"},
-        "message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-local"},"sessionId":"recipient"},"content":{"kind":"humanUser","text":"saved"},"delivery":"auto"},
+        "message":{"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-local"},"sessionId":"recipient"},"content":{"kind":"humanUser","text":"saved"},"delivery":"auto"},
         "timing":{"kind":"after","seconds":60},"anchorAt":created,"expiresAt":"1970-01-01T00:05:00.000Z","createdAt":created},
         "state":"active","nextDueAt":"1970-01-01T00:01:00.000Z","firstFire":null,"pendingDeliveryId":null,"latestEventCursor":"owning cursor"
     })).unwrap()

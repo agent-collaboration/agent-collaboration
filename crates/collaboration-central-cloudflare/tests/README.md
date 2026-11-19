@@ -44,22 +44,24 @@ From the repository root:
 ```sh
 pnpm --dir verification install --frozen-lockfile
 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --features link,test-support,conformance
 cargo nextest run -p collaboration-central-cloudflare --features test-support --test integration
 ```
 
 Each case owns one workerd child and private SQLite persistence. Nextest reserves
 the existing process-runtime group so these children retain per-case isolation
 without competing for all of the host's memory. The bridge's imported loader keeps
-the pinned Miniflare/workerd versions. Its default mode refuses external fetches.
+the pinned Miniflare/workerd versions. The modern fixture maps only its configured
+JWKS URL to the Rust-owned key server and refuses other outbound fetches.
 
 Cases cover admission/org/workspace boundaries, caller and actor identities, all
 workspace rule families, scoped views/search/paging, persistent logs/redaction,
 request replay/expiry, corruption/migration rollback, controlled time, held-turn
-races and lost replies after actual apply. Person context is fixture-stamped;
-the verified-person sign-in cases use their separate private-link suite below.
-Machine-token verification and Router Host admission retain their later-slice
-boundaries. The existing generic storage and driver cases stay in the verification
-package.
+races and lost replies after actual apply. Modern fixture requests verify signed
+machine tokens and read live enrollment before constructing their caller context.
+The Rust fixture supplies the semantic session or person; verified-person admin
+cases use the private-link suite below. Router Host caller stamping remains C3.
+The existing generic storage and driver cases stay in the verification package.
 
 `organization_signin::launcher_controls` drives the actual bridge child over stdin
 and stderr: unknown-org observation stays read-only, signed provisioning and renewal
@@ -230,3 +232,34 @@ These cases come from the paused reliability branch and mirror the native ones:
 - `workspace_requests::organization_signin::engine_unit_revival`: V2 notice units and
   `engine_source` on workerd; recovery, the restarted 60-day period, retirement, stopped
   while retired, and EngineRetry revival.
+
+## Authenticated central link
+
+`workspace_requests::machine_link` drives the real compiled CentralObject through
+`GET /v1/organizations/{organization}/link` with an Authorization bearer header.
+An ordinary C1 client knows its installation identity and checks Welcome against
+it. Cases require matching organization, valid machine JWTs and live enrollment,
+then exercise correlated Request/Reply, original-grant expiry, revocation and
+supersession on the same socket.
+
+The hibernation cases evict the real object, require three literal ping/pong
+exchanges without added constructor or handler witnesses, and send the deciding
+semantic frame on the original socket. A single CreateArea is followed by Show
+and an independent owning-SQLite read. A three-write Batch requires ordered
+success, a FutureTime rule refusal and later success, with two exact area rows
+and an actual zero wake count. Every member has its own correlation, request ID,
+live-admission read interval and Reply. Batches contain one to 64 writes; reads
+stay single and immediate.
+
+The optional external witnesses and controls are verification-only and require
+non-default test-support. See the [hibernation runbook](../../../.agents/skills/verify-codex-router/references/durable-object-hibernation.md)
+for declared-source and compiled-artifact requirements and the exact receipt
+interface. Local forced eviction does not establish natural idle behavior or
+deployed billing. Router outbox/minute flushing is C3; delivery, Ack and message
+status semantics remain C4/D.
+
+The warm reconnect cases use the shared raw alarm controls to remove only the
+platform alarm, preserving the object instance and healthy wake row. Their first
+post-Welcome read inspects the actual platform alarm before querying core. A
+publication failure still delivers Welcome and reports its typed failure without
+retrying or changing the stored wake.

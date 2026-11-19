@@ -145,7 +145,7 @@ pub struct CollaborationRuntime {
     /// `nativeSchemaDigest`.
     native_digest: Option<SchemaDigest>,
     payload_cache: crate::native_schema_cache::NativeSchemaCache,
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
     installation_peer: fleet_sync_protocol::PeerId,
     service_epoch: UuidIdentity,
     publication: BackendPublication,
@@ -158,6 +158,9 @@ pub struct CollaborationRuntime {
     schedule_task: Option<tokio::task::JoinHandle<()>>,
     automation_maintenance: Option<tokio::task::JoinHandle<()>>,
     fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
+    /// The central link: tools submit through it; its driver runs on these tasks.
+    central_link: Option<collaboration_runtime::RouterLinkCalls>,
+    central_link_tasks: tokio_util::task::TaskTracker,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
     /// One re-check per observation retry while lifecycle observation is unavailable.
@@ -174,6 +177,12 @@ pub struct CollaborationRuntime {
 pub(crate) use fleet_observation::FleetObservationFuture;
 
 impl CollaborationRuntime {
+    /// The central link for this installation, when its store opened.
+    #[must_use]
+    pub fn central_link(&self) -> Option<collaboration_runtime::RouterLinkCalls> {
+        self.central_link.clone()
+    }
+
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     #[must_use]
     pub fn runtime_test_sleep_was_checked(&self, delay: std::time::Duration) -> bool {
@@ -269,7 +278,7 @@ impl CollaborationRuntime {
     }
 
     #[must_use]
-    pub fn service_id(&self) -> &UuidIdentity {
+    pub fn service_id(&self) -> &workspace_ids::MachineId {
         &self.service_id
     }
     #[must_use]

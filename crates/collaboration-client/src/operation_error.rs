@@ -2,7 +2,7 @@
 
 use crate::ClientError;
 use collaboration_protocol::{AdapterOperationFailure, OperationEffect, OperationFailureKind};
-use collaboration_protocol::{NonEmptyText, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, NonEmptyText};
 use serde_json::Value;
 
 #[derive(Debug, thiserror::Error)]
@@ -10,7 +10,7 @@ use serde_json::Value;
 pub struct OperationError {
     stage: &'static str,
     effect: OperationEffect,
-    target: Option<Box<SessionRef>>,
+    target: Option<Box<HarnessSessionRef>>,
     turn_id: Option<NonEmptyText>,
     #[source]
     source: Box<ClientError>,
@@ -20,7 +20,7 @@ impl OperationError {
     #[must_use]
     pub fn before_dispatch(
         stage: &'static str,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         source: ClientError,
     ) -> Self {
         Self {
@@ -35,7 +35,7 @@ impl OperationError {
     #[must_use]
     pub fn after_dispatch(
         stage: &'static str,
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         turn_id: Option<NonEmptyText>,
         source: ClientError,
     ) -> Self {
@@ -53,7 +53,7 @@ impl OperationError {
         self,
     ) -> (
         AdapterOperationFailure,
-        Option<SessionRef>,
+        Option<HarnessSessionRef>,
         Option<NonEmptyText>,
     ) {
         let mut failure = operation_failure_from_client_error(*self.source, self.effect);
@@ -73,7 +73,7 @@ impl OperationError {
 
     /// Adds caller-known recovery identity without changing the recorded stage/effect.
     #[must_use]
-    pub fn with_known_target(mut self, target: SessionRef) -> Self {
+    pub fn with_known_target(mut self, target: HarnessSessionRef) -> Self {
         if self.target.is_none() {
             self.target = Some(Box::new(target));
         }

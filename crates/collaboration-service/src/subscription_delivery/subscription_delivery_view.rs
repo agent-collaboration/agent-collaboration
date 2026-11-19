@@ -13,7 +13,7 @@ use message_board_storage::MailHandoffItem;
 struct FrozenMemberAllocation {
     sequence: HandoffSeq,
     item: fleet_sync_protocol::ItemId,
-    recipient: collaboration_protocol::SessionRef,
+    recipient: collaboration_protocol::HarnessSessionRef,
     mode: SubscriptionMode,
 }
 

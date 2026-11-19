@@ -4,13 +4,13 @@ use super::*;
 use agent_session_inventory::sessions::SessionPickerRecord;
 use agent_session_inventory::source_inventory_request::PickerSourceContext;
 use agent_session_tui::session_picker::details_client_inventory::DetailsClientQuery;
-use collaboration_client::protocol::{ProviderKind, SessionRef};
+use collaboration_client::protocol::{HarnessSessionRef, ProviderKind};
 use serde_json::{Value, json};
 use std::time::Duration;
 
 use agent_session_inventory::test_support::fake_api_support::{FakeCollaborationApi, FakeReply};
 
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
 fn provider_endpoint(provider: ProviderKind) -> &'static str {
@@ -175,7 +175,7 @@ async fn production_details_inspector_uses_actual_source_capability_and_loaded_s
             );
             assert_eq!(calls[2]["arguments"]["view"], "stored");
             assert_eq!(calls[2]["arguments"]["source"], "all");
-            let target: SessionRef =
+            let target: HarnessSessionRef =
                 serde_json::from_value(calls[3]["arguments"]["target"].clone()).unwrap();
             assert_eq!(String::from(target.session_id), "source-stored-target");
         }

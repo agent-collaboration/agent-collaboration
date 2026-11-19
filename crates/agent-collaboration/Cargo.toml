@@ -17,6 +17,7 @@ name = "agent-sessions"
 path = "src/bin/agent-sessions.rs"
 
 [dependencies]
+workspace-ids.workspace = true
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
 agent-session-tui = { version = "0.1.105", path = "../agent-session-tui" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }

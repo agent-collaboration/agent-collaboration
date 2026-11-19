@@ -1,7 +1,7 @@
 //! Stored and runtime discovery are distinct observations of one endpoint-scoped session.
 use crate::{
-    CodexGeneration, EndpointRef, NativeThreadStatus, NonEmptyText, ObservationTimestamp,
-    SessionRef,
+    CodexGeneration, EndpointRef, HarnessSessionRef, NativeThreadStatus, NonEmptyText,
+    ObservationTimestamp,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -70,7 +70,7 @@ pub enum NativeSessionObservation {
 #[derive(JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeSessionSummary {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub name: Option<String>,
     pub title: String,
     pub source: NativeSessionSource,

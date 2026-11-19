@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE outbox_items\n             SET item_state = CASE item_state WHEN ? THEN ? ELSE ? END, updated_at = ?\n             WHERE request_id = ? AND item_state IN (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "c9e6595cc7610b841107a39781a01868bd706069a97aeea4f1f06590019a2e6d"
+}

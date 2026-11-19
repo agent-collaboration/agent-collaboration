@@ -23,14 +23,14 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         json!({"result":"approved","enrollmentId":enrollment_id,"label":"Original label","allowedWorkspaces":[WORKSPACE,WORKSPACE_TWO]})
     );
     assert_eq!(
-        f.rows("SELECT state,enrollment_generation FROM machines")
+        f.rows("SELECT state,enrollment_generation FROM login_machines")
             .await?,
         vec![vec![text("revoked"), number(0)]],
         "approval admits nothing"
     );
     assert_eq!(
         f.rows(
-            "SELECT state,base_generation,machine_client_id,last_grant_at FROM machine_approvals"
+            "SELECT state,base_generation,machine_client_id,last_grant_at FROM login_machine_approvals"
         )
         .await?,
         vec![vec![
@@ -41,7 +41,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         ]]
     );
     assert!(
-        f.rows("SELECT * FROM machine_credentials")
+        f.rows("SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'")
             .await?
             .is_empty()
     );
@@ -79,7 +79,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         "owning reopen and a day beyond code expiry retain the exact three-field approval"
     );
     assert!(snapshot(&f).await? == activated);
-    let rows=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE kind='allowanceChanged' ORDER BY target_id").await?;
+    let rows=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE kind='allowanceChanged' ORDER BY target_id").await?;
     assert_eq!(
         rows,
         vec![
@@ -106,7 +106,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "A retained request belongs to its original installation, while same-installation N03 replay retains the first snapshot after expiry and reopen."
+    reason = "A retained request belongs to its original machine_id, while same-machine_id N03 replay retains the first snapshot after expiry and reopen."
 )]
 #[tokio::test]
 async fn retained_approval_refuses_another_installation_but_preserves_same_installation_replay_after_expiry()
@@ -115,7 +115,7 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
     let original = approval(
         0xd501,
         INSTALLATION,
-        "Original installation",
+        "Original machine_id",
         &[WORKSPACE],
         f.now(),
     );
@@ -124,7 +124,7 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
     let enrollment_id = enrollment(&first.1);
     assert_eq!(
         first.1,
-        json!({"result":"approved","enrollmentId":enrollment_id,"label":"Original installation","allowedWorkspaces":[WORKSPACE]})
+        json!({"result":"approved","enrollmentId":enrollment_id,"label":"Original machine_id","allowedWorkspaces":[WORKSPACE]})
     );
     assert_eq!(
         f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
@@ -135,8 +135,8 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
 
     let mut another_installation = original.clone();
     another_installation["installation"] = json!(INSTALLATION_TWO);
-    another_installation["peer"] = json!(INSTALLATION_TWO);
-    // The new installation/peer pair is internally consistent. Only ownership
+
+    // The new machine_id/peer pair is internally consistent. Only ownership
     // of the already-retained request differs.
     let before = snapshot(&f).await?;
     assert_eq!(
@@ -148,7 +148,7 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
     );
     assert!(
         snapshot(&f).await? == before,
-        "foreign-installation replay changed owning rows"
+        "foreign-machine_id replay changed owning rows"
     );
 
     f.reopen().await?;
@@ -161,7 +161,7 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
     assert_eq!(
         f.post(DEVICE, &same_installation).await?,
         first,
-        "same-installation N03 replay precedes new-approval deadline and mutable-input checks"
+        "same-machine_id N03 replay precedes new-approval deadline and mutable-input checks"
     );
     assert!(snapshot(&f).await? == before);
     another_installation["codeExpiresAt"] = json!(f.now() + 600);
@@ -171,7 +171,7 @@ async fn retained_approval_refuses_another_installation_but_preserves_same_insta
             200,
             json!({"result":"refused","reason":{"kind":"notPermitted"}})
         ),
-        "retained installation ownership survives owning reopen and original code expiry"
+        "retained machine_id ownership survives owning reopen and original code expiry"
     );
     assert!(snapshot(&f).await? == before);
     f.close().await
@@ -332,12 +332,10 @@ async fn first_machine_factor_exemption_and_later_900_second_factor_boundary_are
     reason = "Closed request/profile validation and unknown workspace refusals must leave all login effects unchanged."
 )]
 #[tokio::test]
-async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_fields()
--> Result<()> {
+async fn approval_uses_only_the_issuer_machine_id_and_refuses_invalid_requests() -> Result<()> {
     let f = MachineFixture::new().await?;
     let original = approval(0xc301, INSTALLATION, "Checked", &[WORKSPACE], f.now());
     for (case, expected_status) in [
-        ("peer", 200),
         ("workspace", 200),
         ("permission", 400),
         ("former", 400),
@@ -346,7 +344,6 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
     ] {
         let mut request = original.clone();
         match case {
-            "peer" => request["peer"] = json!(INSTALLATION_TWO),
             "workspace" => request["allowedWorkspaces"] = json!([id(0xc399)]),
             "permission" => request["permissionChecked"] = json!("machine:revoke"),
             "former" => {
@@ -368,12 +365,6 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
         let before = snapshot(&f).await?;
         let response = f.post(DEVICE, &request).await?;
         assert_eq!(response.0, expected_status, "{case}");
-        if case == "peer" {
-            assert_eq!(
-                response.1,
-                json!({"result":"refused","reason":{"kind":"notPermitted"}})
-            );
-        }
         if case == "workspace" {
             assert_eq!(
                 response.1,
@@ -382,5 +373,15 @@ async fn approval_rejects_peer_mismatch_unknown_workspace_and_wrong_closed_wire_
         }
         assert!(snapshot(&f).await? == before, "{case} changed owning rows");
     }
+    // The pinned issuer still sends a peer. Only the issued machine ID owns approval.
+    let mut approval = original;
+    approval["peer"] = json!(INSTALLATION_TWO);
+    let (status, reply) = f.post(DEVICE, &approval).await?;
+    assert_eq!(status, 200);
+    assert_eq!(reply["result"], "approved");
+    assert_eq!(
+        f.rows("SELECT machine_id FROM login_machines").await?,
+        vec![vec![text(INSTALLATION)]]
+    );
     f.close().await
 }

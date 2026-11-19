@@ -771,6 +771,17 @@ impl CollaborationRuntime {
             tracing::warn!(%error, "project creation recovery unavailable; unrelated collaboration remains available");
         }
         let shutdown = CancellationToken::new();
+        // The central link for this installation (stand-in until B3: not enrolled).
+        let central_link_tasks = tokio_util::task::TaskTracker::new();
+        let central_link = collaboration_runtime::open_installation_link(
+            &inputs.directory,
+            machine_identity.service_id(),
+            worker_clock.clone(),
+            None,
+            &central_link_tasks,
+            shutdown.clone(),
+        )
+        .await;
         if let Some(service) = &subscription_delivery
             && let Err(error) = service.start().await
         {
@@ -913,6 +924,8 @@ impl CollaborationRuntime {
             schedule_task,
             automation_maintenance,
             fleet_outbox_maintenance,
+            central_link,
+            central_link_tasks,
             current_generation: None,
             observer_task: None,
             observation_rechecks,

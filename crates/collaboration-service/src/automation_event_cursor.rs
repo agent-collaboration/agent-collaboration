@@ -1,7 +1,9 @@
 //! Event cursors retain the existing sequence/time encoding and are scoped to one service.
 use automation_storage::EventPosition;
-use collaboration_protocol::UuidIdentity;
-pub(crate) fn encode(service: &UuidIdentity, position: &EventPosition) -> Result<String, ()> {
+pub(crate) fn encode(
+    service: &workspace_ids::MachineId,
+    position: &EventPosition,
+) -> Result<String, ()> {
     serde_json::to_string(&(
         1_u8,
         service,
@@ -11,12 +13,17 @@ pub(crate) fn encode(service: &UuidIdentity, position: &EventPosition) -> Result
     ))
     .map_err(|_| ())
 }
-pub(crate) fn decode(service: &UuidIdentity, value: &str) -> Result<EventPosition, ()> {
+pub(crate) fn decode(service: &workspace_ids::MachineId, value: &str) -> Result<EventPosition, ()> {
     if value.len() > 4096 {
         return Err(());
     }
-    let (version, selected, collection, sequence, observed): (u8, UuidIdentity, String, i64, i64) =
-        serde_json::from_str(value).map_err(|_| ())?;
+    let (version, selected, collection, sequence, observed): (
+        u8,
+        workspace_ids::MachineId,
+        String,
+        i64,
+        i64,
+    ) = serde_json::from_str(value).map_err(|_| ())?;
     if version != 1
         || selected != *service
         || collection != "automation-events"

@@ -20,7 +20,7 @@ struct CountingStopSink {
 impl RunEvidenceSink for CountingStopSink {
     fn record(
         &self,
-        _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
         Box::pin(async { Ok(RunEvidenceDisposition::Recorded { timing: None }) })
     }
@@ -34,8 +34,8 @@ impl RunEvidenceSink for CountingStopSink {
 #[tokio::test]
 async fn unavailable_stop_connection_never_calls_intent_sink()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let service = "00000000-0000-4000-8000-000000000001";
-    let target: SessionRef = serde_json::from_value(json!({
+    let service = "00000000-0000-7000-8000-000000000001";
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service,"endpointId":"codex-local"},
         "sessionId":"worker-thread"
     }))?;
@@ -88,16 +88,17 @@ async fn unavailable_stop_connection_never_calls_intent_sink()
         "nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested",
         "submission":"accepted","cessation":"unconfirmed"
     }))?;
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
-        "scheduleChangeId":agent_automation::ChangeId::generate(),
-        "instructionRevisionId":agent_automation::RevisionId::generate(),
-        "instructionText":"Check work",
-        "continuity":{"kind":"none"},
-        "executionConfiguration":{
-            "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
-            "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-        }
-    }))?;
+    let inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef> =
+        serde_json::from_value(json!({
+            "scheduleChangeId":agent_automation::ChangeId::generate(),
+            "instructionRevisionId":agent_automation::RevisionId::generate(),
+            "instructionText":"Check work",
+            "continuity":{"kind":"none"},
+            "executionConfiguration":{
+                "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
+                "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
+            }
+        }))?;
     let sink = CountingStopSink {
         writes: AtomicUsize::new(0),
     };

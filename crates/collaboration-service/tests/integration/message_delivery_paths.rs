@@ -276,7 +276,7 @@ async fn recorded_loaded_queue_receipt_reaches_public_client() {
     assert_eq!(
         public.link,
         format!(
-            "router://00000000-0000-4000-8000-000000000001/push/{}",
+            "router://00000000-0000-7000-8000-000000000001/push/{}",
             public.push_id.as_str()
         )
     );
@@ -301,7 +301,7 @@ async fn recorded_loaded_steer_receipt_reaches_public_client() {
     assert_eq!(
         public.link,
         format!(
-            "router://00000000-0000-4000-8000-000000000001/push/{}",
+            "router://00000000-0000-7000-8000-000000000001/push/{}",
             public.push_id.as_str()
         )
     );
@@ -409,7 +409,7 @@ fn assert_recorded_loaded_receipt(witness: &RecordedReceiptWitness, mode: Messag
     );
     assert!(
         text.is_some_and(|text| text.ends_with(&format!(
-            "router://00000000-0000-4000-8000-000000000001/push/{}",
+            "router://00000000-0000-7000-8000-000000000001/push/{}",
             stored.push_id.as_str()
         ))),
         "native text must retain the complete exact link"
@@ -493,7 +493,7 @@ fn assert_native_failure(shown: &Value, operation: &str, stage: &str, cause: &st
             "operation": operation,
             "stage": stage,
             "cause": cause,
-            "generation": {"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+            "generation": {"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
             "resume": resume,
             "submission":"notDispatched"
         }))
@@ -577,7 +577,7 @@ async fn upstream_method_not_found_keeps_unsupported_capability_and_native_failu
         outcome["nativeFailure"],
         json!({
             "operation":"turn/start", "stage":"start", "cause":"nativeRejected",
-            "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+            "generation":{"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1},
             "resume":"notRequested", "submission":"rejected"
         })
     );

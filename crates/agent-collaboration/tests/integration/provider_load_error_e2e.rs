@@ -5,8 +5,8 @@ use codex_router_host::{
     ExternalProviderStartup,
 };
 use collaboration_protocol::{
-    EndpointId, EndpointRef, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionId, SessionRef,
+    EndpointId, EndpointRef, HarnessSessionRef, ProviderRequestedPolicy, ProviderWorkingDirectory,
+    RouterAccess, SessionId,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
@@ -110,14 +110,14 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     .await
     .expect("real Host startup");
 
-    let caller = SessionRef {
+    let caller = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("caller endpoint"),
         },
         session_id: SessionId::try_from(SENDER_SESSION_ID.to_owned()).expect("caller session"),
     };
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("target endpoint"),
@@ -308,8 +308,8 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
 )]
 async fn record_unloaded_provider_session(
     directory: &Path,
-    target: &SessionRef,
-    caller: &SessionRef,
+    target: &HarnessSessionRef,
+    caller: &HarnessSessionRef,
 ) {
     let mut store = ProviderOperationStore::open(&directory.join("provider-operations.sqlite"))
         .await

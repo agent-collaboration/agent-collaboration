@@ -10,7 +10,7 @@ fn source_owned_projection_does_not_resolve_paths_on_the_invoking_machine() {
     let mut source_record = search_consistency_record(None, None);
     source_record.cwd = Some(source_alias.display().to_string());
     let summary = serde_json::from_value(serde_json::json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000003","endpointId":"source-native"},"sessionId":source_record.session_id},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000003","endpointId":"source-native"},"sessionId":source_record.session_id},
         "name":null,"title":"Source title","source":"interactive","gitBranch":null,
         "workingDirectory":source_record.cwd,"observation":{"kind":"stored","updatedAt":"2026-10-06T00:00:00Z"},"idleSeconds":0
     })).unwrap();

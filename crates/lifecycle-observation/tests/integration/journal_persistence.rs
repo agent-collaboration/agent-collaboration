@@ -8,7 +8,7 @@ async fn invalid_coverage_restore_does_not_commit_or_consume_sequence() {
         "/tmp/invalid-coverage-{}.sqlite",
         std::process::id()
     ));
-    let identity = "00000000-0000-4000-8000-000000000001"
+    let identity = "00000000-0000-7000-8000-000000000001"
         .to_owned()
         .try_into()
         .unwrap_or_else(|error| panic!("identity: {error}"));
@@ -24,7 +24,7 @@ async fn invalid_coverage_restore_does_not_commit_or_consume_sequence() {
         "observedAt": "2026-09-05T12:00:00Z",
         "source": "observerLifecycle",
         "scope": {
-            "endpoint": {"serviceId": "00000000-0000-4000-8000-000000000001", "endpointId": "codex-local"},
+            "endpoint": {"serviceId": "00000000-0000-7000-8000-000000000001", "endpointId": "codex-local"},
             "generation": null,
             "observerId": "00000000-0000-4000-8000-000000000002"
         },
@@ -64,12 +64,12 @@ async fn journal_reopens_without_reusing_sequence_and_keeps_retention_monotonic(
         std::process::id()
     ));
     let id = || {
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap_or_else(|e| panic!("id: {e}"))
     };
-    let observation:LifecycleObservation=serde_json::from_str(r#"{"observedAt":"2026-09-05T12:00:00Z","source":"observerLifecycle","scope":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},"subject":{"kind":"backend"},"change":{"kind":"coverageLost"}}"#).unwrap_or_else(|e|panic!("observation: {e}"));
+    let observation:LifecycleObservation=serde_json::from_str(r#"{"observedAt":"2026-09-05T12:00:00Z","source":"observerLifecycle","scope":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":null,"observerId":"00000000-0000-4000-8000-000000000002"},"subject":{"kind":"backend"},"change":{"kind":"coverageLost"}}"#).unwrap_or_else(|e|panic!("observation: {e}"));
     let mut journal = ObservationJournal::open(&path, id())
         .await
         .unwrap_or_else(|e| panic!("open: {e}"));

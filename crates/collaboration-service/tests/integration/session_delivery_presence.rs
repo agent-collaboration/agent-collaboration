@@ -12,8 +12,8 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
-    MessageText, PushId, SessionRef, UuidIdentity,
+    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription,
+    HarnessSessionRef, MessageDelivery, MessageText, PushId,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::EndpointDirectory;
@@ -28,12 +28,12 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::Message;
 
-struct RecordingEvidenceSink(Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
+struct RecordingEvidenceSink(Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>);
 
 impl AttemptEvidenceSink for RecordingEvidenceSink {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         let result = self
             .0
@@ -46,7 +46,7 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
 
 struct CodexRouteFixture {
     _root: tempfile::TempDir,
-    target: SessionRef,
+    target: HarnessSessionRef,
     listener: tokio::net::UnixListener,
     route: CodexAppServerDeliveryRoute,
 }
@@ -57,8 +57,9 @@ fn codex_route_fixture(
     let root = tempfile::tempdir()?;
     let socket_path = root.path().join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-    let target: SessionRef = serde_json::from_value(json!({
+    let service_id =
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"thread-one"
     }))?;
@@ -224,8 +225,8 @@ async fn codex_presence_reads_status_and_never_mutates_the_thread()
     );
     server.await??;
 
-    let wrong_endpoint: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},
+    let wrong_endpoint: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"},
         "sessionId":"thread-one"
     }))?;
     assert_eq!(

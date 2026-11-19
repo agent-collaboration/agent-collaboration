@@ -74,7 +74,7 @@ pub(super) fn commands_seen_at_n4(backend: &ScriptedSessionBackend) -> Vec<(Stri
 /// Literal session and actor, written independently of the scripted backend's own fixtures.
 fn literal_session() -> message_board::SessionRef {
     serde_json::from_value(json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"19e49a31-daa3-428c-b985-e0c7373a89ed"
     }))
     .expect("session")

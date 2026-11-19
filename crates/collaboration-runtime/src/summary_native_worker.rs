@@ -10,7 +10,7 @@ use automation_storage::{
     ThreadBindingClaim,
 };
 use codex_native_integration::{NativeConnectionError, NativeOperation, NativeProtocolConnection};
-use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -27,7 +27,7 @@ pub(crate) struct SummaryStep<'a> {
     pub summary_endpoint: EndpointRef,
     pub source: Option<collaboration_contracts::RunSummarySource>,
     pub record: RunRecord<
-        SessionRef,
+        HarnessSessionRef,
         EndpointRef,
         CodexGeneration,
         crate::stored_run_receipt::StoredRunReceipt,
@@ -59,7 +59,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<StepProgress, Storage
             .store
             .lock()
             .await
-            .begin_required_summary::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+            .begin_required_summary::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                 &SummaryAdmission {
                     run_id: id,
                     timeout_seconds: input.timeout_seconds,
@@ -134,7 +134,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<StepProgress, Storage
                     .store
                     .lock()
                     .await
-                    .complete_summary::<SessionRef, CodexGeneration>(SummaryCompletion {
+                    .complete_summary::<HarnessSessionRef, CodexGeneration>(SummaryCompletion {
                         run_id: id,
                         attempt_id: attempt.attempt_id,
                         native_turn_id: turn_id.clone(),
@@ -278,7 +278,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<StepProgress, Storage
             .and_then(Value::as_str)
             .and_then(|id| id.to_owned().try_into().ok());
         attempt.effects.allocation = PreparationEffect::Accepted;
-        let summary_target = summary_id.map(|session_id| SessionRef {
+        let summary_target = summary_id.map(|session_id| HarnessSessionRef {
             endpoint: input.summary_endpoint,
             session_id,
         });
@@ -429,7 +429,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<StepProgress, Storage
 async fn persist(
     store: &Arc<Mutex<AutomationStore>>,
     id: &agent_automation::RunId,
-    attempt: &SummaryAttempt<SessionRef, CodexGeneration>,
+    attempt: &SummaryAttempt<HarnessSessionRef, CodexGeneration>,
 ) -> Result<bool, StorageError> {
     store
         .lock()
@@ -448,7 +448,7 @@ async fn persist(
 async fn block(
     store: &Arc<Mutex<AutomationStore>>,
     id: agent_automation::RunId,
-    mut attempt: SummaryAttempt<SessionRef, CodexGeneration>,
+    mut attempt: SummaryAttempt<HarnessSessionRef, CodexGeneration>,
     unknown: bool,
     explanation: &str,
 ) -> Result<StepProgress, StorageError> {
