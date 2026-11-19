@@ -2,6 +2,49 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn delivery_resolves_sender_beside_the_unchanged_message_record() {
+    let id = "019f0000-0000-7000-8000-000000000001";
+    let mut wire = json!({
+        "kind":"deliver",
+        "message":{
+            "messageId":id,"sender":{"kind":"actor","value":id},
+            "target":{"machineId":id,"sessionId":"recipient"},
+            "body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},
+            "state":{"kind":"queued"},"source":null,
+            "createdAt":"2030-03-17T17:46:40Z","updatedAt":"2030-03-17T17:46:40Z"
+        },
+        "sender":{
+            "kind":"session","session":{"machineId":id,"sessionId":"sender"},
+            "displayName":"Session display","machineLabel":"Machine label"
+        }
+    });
+    for sender in [
+        wire["sender"].clone(),
+        json!({"kind":"person","personId":id,"displayName":"Person display"}),
+        json!({"kind":"central"}),
+    ] {
+        wire["sender"] = sender;
+        let frame = decode_text(&wire.to_string(), FrameDirection::ToRouter).unwrap();
+        let encoded = encode_text(&frame, FrameDirection::ToRouter).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+            wire
+        );
+        assert!(decode_text(&wire.to_string(), FrameDirection::ToCentral).is_err());
+    }
+    for sender in [
+        json!({"kind":"central","displayName":"extra"}),
+        json!({"kind":"person","personId":id,"displayName":"   "}),
+        json!({"kind":"session","session":{"machineId":id,"sessionId":"sender","endpoint":"codex-local"}}),
+    ] {
+        wire["sender"] = sender;
+        assert!(decode_text(&wire.to_string(), FrameDirection::ToRouter).is_err());
+    }
+    wire.as_object_mut().unwrap().remove("sender");
+    assert!(decode_text(&wire.to_string(), FrameDirection::ToRouter).is_err());
+}
+
+#[test]
 fn scoped_status_reads_round_trip_in_their_wire_directions() {
     let id = "019f0000-0000-7000-8000-000000000001";
     let frames = [
@@ -127,7 +170,7 @@ fn welcome_reply_deliver_and_ack_are_closed_and_directional() {
         ),
         (
             FrameDirection::ToRouter,
-            json!({"kind":"deliver","message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
+            json!({"kind":"deliver","sender":{"kind":"central"},"message":{"messageId":id,"sender":{"kind":"central"},"target":{"machineId":id,"sessionId":"s"},"body":{"kind":"direct","body":"hello","delivery":"auto","replyTo":null},"state":{"kind":"queued"},"source":null,"createdAt":"2030-01-01T00:00:00Z","updatedAt":"2030-01-01T00:00:00Z"}}),
         ),
         (
             FrameDirection::ToCentral,

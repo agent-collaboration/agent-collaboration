@@ -10,7 +10,7 @@ use central_link_protocol::{
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
 use workspace_ids::MachineId;
-use workspace_model::{Caller, central_mail::MessageRecord};
+use workspace_model::{Caller, ResolvedSender, central_mail::MessageRecord};
 
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 const CALL_DEADLINE: Duration = Duration::from_secs(30);
@@ -81,6 +81,7 @@ pub enum ClientEvent {
     /// A message central delivered to this Router (2c); repeats are safe.
     Deliver {
         message: MessageRecord,
+        sender: ResolvedSender,
     },
     /// Central's answer to a RenewMachineToken the Host sent.
     TokenRenewal {
@@ -259,9 +260,10 @@ impl LinkClient {
                 }),
                 ReplyDisposition::AlreadyResolved => Ok(ClientEvent::LateReply { correlation_id }),
             },
-            LinkFrame::Data(DataFrame::Deliver { message }) => {
-                Ok(ClientEvent::Deliver { message: *message })
-            }
+            LinkFrame::Data(DataFrame::Deliver { message, sender }) => Ok(ClientEvent::Deliver {
+                message: *message,
+                sender,
+            }),
             // The Host owns renewal correlation (it sent the frame); the client
             // only surfaces central's answer.
             LinkFrame::Data(DataFrame::MachineTokenRenewal {

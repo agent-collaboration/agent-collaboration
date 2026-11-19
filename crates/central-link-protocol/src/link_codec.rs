@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use workspace_ids::MachineId;
 use workspace_ids::MessageId;
-use workspace_model::{Caller, Timestamp, central_mail::MessageRecord};
+use workspace_model::{Caller, ResolvedSender, Timestamp, central_mail::MessageRecord};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameDirection {
@@ -56,6 +56,7 @@ pub enum DataFrame {
     /// once when it is accepted and again on reconnect while inside its window.
     Deliver {
         message: Box<MessageRecord>,
+        sender: ResolvedSender,
     },
     /// The recipient's Router to central: its answer to a delivered message,
     /// sent on its minute flush (owner, record:218).
