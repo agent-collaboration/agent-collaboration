@@ -8,51 +8,55 @@ trap 'rm -rf "$fixture_root"' EXIT
 writers_started_at=2026-10-27T01:00:00Z
 
 jq -n '
-  "v0-rust-wasm-Linux-x64-aaaaaaaa-" as $wasm_prefix
-  | ["v0-rust-static-", "v0-rust-test-", "v0-rust-e2e-", $wasm_prefix,
+  ["v0-rust-static-", "v0-rust-test-", "v0-rust-e2e-", "v0-rust-wasm-",
    "Linux-X64-rust-tools-",
    "Linux-X64-rust-tools-sqlx-", "Linux-X64-worker-build-"]
   | to_entries | map(
-      [{id: (100 + .key), key: (.value + (if .value == $wasm_prefix then "11111111" else "z-old" end)), ref: "refs/heads/main",
+      (.value | startswith("v0-rust-")) as $rust_cache
+      | [{id: (100 + .key), key: (.value + (if $rust_cache then "Linux-x64-aaaaaaaa-11111111" else "z-old" end)), ref: "refs/heads/main",
         createdAt: "2026-10-26T01:00:00Z", sizeInBytes: 10},
-       {id: (200 + .key), key: (.value + (if .value == $wasm_prefix then "22222222" else "a-new" end)), ref: "refs/heads/main",
+       {id: (200 + .key), key: (.value + (if $rust_cache then "Linux-x64-aaaaaaaa-22222222" else "a-new" end)), ref: "refs/heads/main",
         createdAt: "2026-10-27T01:00:01.2Z", sizeInBytes: 20}]) | add
   | . + [{id: 900, key: "v0-rust-static-pr", ref: "refs/pull/1/merge",
           createdAt: "2026-10-27T01:00:02Z", sizeInBytes: 30},
          {id: 901, key: "v0-rust-static-tag", ref: "refs/tags/v1.0.0",
           createdAt: "2026-10-26T01:00:00Z", sizeInBytes: 40},
-         {id: 902, key: "v0-rust-staticish-other", ref: "refs/heads/main",
+         {id: 902, key: "unrelated-cache", ref: "refs/heads/main",
           createdAt: "2026-10-26T01:00:00Z", sizeInBytes: 50}]
   | reverse
 ' > "$fixture_root/inventory.json"
 
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/inventory.json" > "$fixture_root/plan.json"
 jq -e 'length == 7 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]
-  and any(.[]; .keepKey == "v0-rust-wasm-Linux-x64-aaaaaaaa-22222222")
-  and ([.[] | select(.keepKey | endswith("a-new"))] | length) == 6' "$fixture_root/plan.json" > /dev/null
+  and all(.[]; .keepKey | endswith("-22222222") or endswith("a-new"))' "$fixture_root/plan.json" > /dev/null
 
 # An exact hit has only one key and creates no new archive.
-jq 'map(select(.id >= 200))' "$fixture_root/inventory.json" > "$fixture_root/hits.json"
-bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/hits.json" | jq -e '[.[].delete[]] == []' > /dev/null
+jq 'map(select(.id >= 200) | .createdAt = "2026-10-26T01:00:00Z")' "$fixture_root/inventory.json" > "$fixture_root/hits.json"
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/hits.json" |
+  jq -e 'length == 7 and all(.[]; .reason == "No key saved in this run" and .delete == [])' > /dev/null
 # Never delete an older cache version under the protected key either.
 jq '. + [(.[] | select(.id == 200)) + {id: 903, createdAt: "2026-10-26T00:00:00Z"}]' "$fixture_root/inventory.json" > "$fixture_root/versions.json"
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/versions.json" | jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]' > /dev/null
 
 # Compare fractional seconds accurately at the writer-start boundary.
 printf '%s\n' '[
-  {"id":1,"key":"v0-rust-static-old","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.09Z"},
-  {"id":2,"key":"v0-rust-static-new","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.2Z"}
-]' | bash "$prune_script" --plan 2026-10-27T01:00:00.100000001Z | jq -e '.[0].keepKey == "v0-rust-static-new" and [.[].delete[].id] == [1]' > /dev/null
+  {"id":1,"key":"v0-rust-static-Linux-x64-aaaaaaaa-11111111","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.09Z"},
+  {"id":2,"key":"v0-rust-static-Linux-x64-aaaaaaaa-22222222","ref":"refs/heads/main","createdAt":"2026-10-27T01:00:00.2Z"}
+]' | bash "$prune_script" --plan 2026-10-27T01:00:00.100000001Z | jq -e '.[0].keepKey == "v0-rust-static-Linux-x64-aaaaaaaa-22222222" and [.[].delete[].id] == [1]' > /dev/null
 
-# Unknown winners, multiple saves, invalid IDs and truncated inventories fail closed.
+# A run with exact hits can have several older keys in the same group.
+jq 'map(.createdAt = "2026-10-26T01:00:00Z")' "$fixture_root/inventory.json" > "$fixture_root/no-saves.json"
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/no-saves.json" > "$fixture_root/no-saves-plan.json"
+jq -e 'length == 7 and all(.[]; .keepKey == null and .reason == "No key saved in this run" and .delete == [])' \
+  "$fixture_root/no-saves-plan.json" > /dev/null
+
+# Multiple saves, invalid IDs and truncated inventories fail closed.
 expect_plan_failure() {
   if bash "$prune_script" --plan "$writers_started_at" < "$1" > /dev/null 2>&1; then
     echo "Expected selection to reject $2" >&2
     exit 1
   fi
 }
-jq 'map(.createdAt = "2026-10-26T01:00:00Z")' "$fixture_root/inventory.json" > "$fixture_root/ambiguous.json"
-expect_plan_failure "$fixture_root/ambiguous.json" 'an unidentifiable saved key'
 jq 'map(.createdAt = "2026-10-27T01:00:01Z")' "$fixture_root/inventory.json" > "$fixture_root/multiple.json"
 expect_plan_failure "$fixture_root/multiple.json" 'multiple saved keys'
 jq '.[0].id = "not-an-id"' "$fixture_root/inventory.json" > "$fixture_root/invalid.json"
@@ -62,34 +66,37 @@ expect_plan_failure "$fixture_root/duplicate.json" 'duplicate IDs'
 jq -n '[range(1000) | {id: (1 + .), key: "unrelated", ref: "refs/heads/main"}]' > "$fixture_root/truncated.json"
 expect_plan_failure "$fixture_root/truncated.json" 'a possibly truncated inventory'
 
-# Two Worker partitions can save different environment hashes in one run.
-jq '[.[] | select(.id == 103 or .id == 203)] + [
-  {id:204,key:"v0-rust-wasm-Linux-x64-bbbbbbbb-22222222",ref:"refs/heads/main",
-   createdAt:"2026-10-27T01:00:02Z",sizeInBytes:20}
-]' "$fixture_root/inventory.json" > "$fixture_root/wasm-split.json"
-bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/wasm-split.json" > "$fixture_root/wasm-plan.json"
-jq -e '([.[].keepKey] | sort) == ["v0-rust-wasm-Linux-x64-aaaaaaaa-22222222", "v0-rust-wasm-Linux-x64-bbbbbbbb-22222222"]
-  and [.[].delete[].id] == [103]' "$fixture_root/wasm-plan.json" > /dev/null
+# Different Rust environments save and prune independently in every CI family.
+jq '. + [.[] | select(.id >= 200 and .id <= 203)
+  | .id += 200 | .key |= sub("-aaaaaaaa-"; "-bbbbbbbb-")]' \
+  "$fixture_root/inventory.json" > "$fixture_root/rust-split.json"
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/rust-split.json" > "$fixture_root/rust-split-plan.json"
+jq -e 'length == 11 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]
+  and ([.[] | select(.keepKey | endswith("-bbbbbbbb-22222222"))] | length) == 4' \
+  "$fixture_root/rust-split-plan.json" > /dev/null
 
-jq 'map(if .id == 204 then .key = "v0-rust-wasm-Linux-x64-aaaaaaaa-33333333" else . end)' \
-  "$fixture_root/wasm-split.json" > "$fixture_root/wasm-ambiguous.json"
-expect_plan_failure "$fixture_root/wasm-ambiguous.json" 'two fresh WASM keys in one restore prefix'
-jq 'map(if .id == 204 then .key = "v0-rust-wasm-unrecognized" else . end)' \
-  "$fixture_root/wasm-split.json" > "$fixture_root/wasm-unknown.json"
-expect_plan_failure "$fixture_root/wasm-unknown.json" 'an unrecognized WASM key format'
+jq 'map(if .id == 403 then .key = "v0-rust-wasm-Linux-x64-aaaaaaaa-33333333" else . end)' \
+  "$fixture_root/rust-split.json" > "$fixture_root/rust-ambiguous.json"
+expect_plan_failure "$fixture_root/rust-ambiguous.json" 'two fresh Rust keys in one restore prefix'
+jq 'map(if .id == 403 then .key = "v0-rust-wasm-unrecognized" else . end)' \
+  "$fixture_root/rust-split.json" > "$fixture_root/rust-unknown.json"
+expect_plan_failure "$fixture_root/rust-unknown.json" 'an unrecognized rust-cache key format'
+jq 'map(if .id == 403 then .key = "v0-rust-unknown-Linux-x64-bbbbbbbb-22222222" else . end)' \
+  "$fixture_root/rust-split.json" > "$fixture_root/rust-unknown-family.json"
+expect_plan_failure "$fixture_root/rust-unknown-family.json" 'an unknown rust-cache family'
 
 # Release workflow caches: several main keys, none saved by this run, are left alone.
 jq '. + [
-  {id:400,key:"v0-rust-release-arm64-background-Darwin-arm64-old",ref:"refs/heads/main",createdAt:"2026-10-20T01:00:00Z",sizeInBytes:10},
-  {id:401,key:"v0-rust-release-arm64-background-Darwin-arm64-new",ref:"refs/heads/main",createdAt:"2026-10-25T01:00:00Z",sizeInBytes:20}
+  {id:400,key:"v0-rust-release-arm64-background-Darwin-arm64-aaaaaaaa-11111111",ref:"refs/heads/main",createdAt:"2026-10-20T01:00:00Z",sizeInBytes:10},
+  {id:401,key:"v0-rust-release-arm64-background-Darwin-arm64-aaaaaaaa-22222222",ref:"refs/heads/main",createdAt:"2026-10-27T01:00:01Z",sizeInBytes:20}
 ]' "$fixture_root/inventory.json" > "$fixture_root/with-release.json"
 if ! bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/with-release.json" |
-  jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106] and all(.[]; .family != "v0-rust-release-arm64-background-")' > /dev/null; then
+  jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106] and all(.[]; .family | startswith("v0-rust-release-") | not)' > /dev/null; then
   echo 'Release workflow caches must never be selected or block pruning' >&2
   exit 1
 fi
 
-# The pnpm writer is disabled: retire old main entries, preserving other refs.
+# pnpm follows the same save rule and protects other refs.
 jq '. + [
   {id:300,key:"node-cache-Linux-x64-pnpm-old-a",ref:"refs/heads/main",createdAt:"2026-10-26T01:00:00Z",sizeInBytes:10},
   {id:301,key:"node-cache-Linux-x64-pnpm-old-b",ref:"refs/heads/main",createdAt:"2026-10-26T02:00:00Z",sizeInBytes:20},
@@ -98,13 +105,13 @@ jq '. + [
   {id:932,key:"node-cache-Linux-x64-npm-other",ref:"refs/heads/main",createdAt:"2026-10-26T01:00:00Z",sizeInBytes:50}
 ]' "$fixture_root/inventory.json" > "$fixture_root/with-pnpm.json"
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/with-pnpm.json" > "$fixture_root/pnpm-plan.json"
-if ! jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,300,301]
-  and any(.[]; .family == "node-cache-Linux-x64-pnpm-" and .keepKey == null)' "$fixture_root/pnpm-plan.json" > /dev/null; then
-  echo 'Retired pnpm main entries must be selected; other refs must be protected' >&2
-  exit 1
-fi
+jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]
+  and any(.[]; .family == "node-cache-Linux-x64-pnpm-" and .reason == "No key saved in this run" and .delete == [])' \
+  "$fixture_root/pnpm-plan.json" > /dev/null
 jq 'map(if .id == 300 then .createdAt = "2026-10-27T01:00:01Z" else . end)' "$fixture_root/with-pnpm.json" > "$fixture_root/fresh-pnpm.json"
-expect_plan_failure "$fixture_root/fresh-pnpm.json" 'an unexpected pnpm writer in this run'
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/fresh-pnpm.json" |
+  jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,301]
+    and any(.[]; .family == "node-cache-Linux-x64-pnpm-" and .keepKey == "node-cache-Linux-x64-pnpm-old-a")' > /dev/null
 
 # Stub only the remote service; run the actual apply guard, plan and delete loop.
 cat > "$fixture_root/gh" <<'GH'
@@ -152,13 +159,13 @@ awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort ==
 
 : > "$GH_CALLS"
 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
-  GH_FIXTURE="$fixture_root/with-pnpm.json" bash "$prune_script" --apply > /dev/null
-awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort == [100,101,102,103,104,105,106,300,301]' > /dev/null
-[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 12 ]]
+  GH_FIXTURE="$fixture_root/no-saves.json" bash "$prune_script" --apply > /dev/null
+awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'length == 0' > /dev/null
+[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 3 ]]
 
 : > "$GH_CALLS"
 if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
-  GH_FIXTURE="$fixture_root/ambiguous.json" bash "$prune_script" --apply > /dev/null 2>&1; then
+  GH_FIXTURE="$fixture_root/multiple.json" bash "$prune_script" --apply > /dev/null 2>&1; then
   echo 'Ambiguous apply unexpectedly succeeded' >&2
   exit 1
 fi
@@ -173,7 +180,7 @@ set -e
 [[ "$delete_status" == 9 && "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 3 ]]
 
 # Report budget pressure instead of deleting the protected working set.
-jq -n '[{id:1,key:"v0-rust-static-current",ref:"refs/heads/main",
+jq -n '[{id:1,key:"v0-rust-static-Linux-x64-aaaaaaaa-22222222",ref:"refs/heads/main",
   createdAt:"2026-10-27T01:00:01Z",sizeInBytes:10000000001}]' > "$fixture_root/overbudget.json"
 : > "$GH_CALLS"
 if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
@@ -191,4 +198,4 @@ if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/r
   exit 1
 fi
 [[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 1 ]]
-printf 'Main cache pruning: 24 checks passed\n'
+printf 'Main cache pruning: 25 checks passed\n'
