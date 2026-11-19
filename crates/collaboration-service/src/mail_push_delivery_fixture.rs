@@ -137,7 +137,6 @@ impl TargetPresenceProbe for Running {
 pub(super) struct Runtime {
     pub(super) fixture: Fixture,
     pub(super) actors: SubscriptionDeliveryService,
-    pub(super) automation: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     pub(super) client: Arc<NativeClient>,
     publisher: Arc<crate::NotificationPublisher>,
     _directory: tempfile::TempDir,
@@ -175,18 +174,12 @@ impl Runtime {
     pub(super) async fn new() -> Self {
         let fixture = Fixture::new().await;
         let directory = tempfile::tempdir().unwrap();
-        let automation = Arc::new(tokio::sync::Mutex::new(
-            automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-                .await
-                .unwrap(),
-        ));
         let client = Arc::new(NativeClient::default());
         let (actors, publisher) = Self::start_actors(&fixture, &client, directory.path()).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
             actors,
-            automation,
             client,
             publisher,
             _directory: directory,
@@ -325,7 +318,6 @@ impl Runtime {
         let Self {
             fixture,
             actors,
-            automation,
             client,
             publisher,
             _directory,
@@ -341,7 +333,6 @@ impl Runtime {
         Self {
             fixture,
             actors,
-            automation,
             client,
             publisher,
             _directory,
@@ -351,7 +342,6 @@ impl Runtime {
         let Self {
             fixture,
             actors,
-            automation,
             client: _,
             publisher,
             _directory,
@@ -361,12 +351,6 @@ impl Runtime {
         fixture.host.consumer.native.lock().unwrap().take();
         drop(actors);
         drop(publisher);
-        Arc::try_unwrap(automation)
-            .unwrap_or_else(|_| panic!("automation actor retained"))
-            .into_inner()
-            .close()
-            .await
-            .unwrap();
         drop(fixture.close().await);
         drop(_directory);
     }

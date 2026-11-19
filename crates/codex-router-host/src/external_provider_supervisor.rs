@@ -87,8 +87,8 @@ struct SupervisorInner {
     /// Each binding's unknown outcomes: the one place admission asks
     /// whether an earlier send's outcome is unknown (design note §14.1).
     uncertainty: UncertaintyCells,
-    /// Moves each time a live operation publishes its result, so schedulers and
-    /// provider retention wake on an ACP completion that writes no row.
+    /// Moves each time a live operation publishes its result, so held mail and provider
+    /// retention wake on an ACP completion that writes no row.
     completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
     hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
@@ -196,14 +196,6 @@ impl ExternalProviderSupervisor {
             .bindings
             .get(endpoint)
             .map(|entry| Arc::clone(&entry.runtime))
-    }
-
-    /// Announces a completion as a live operation publishing its result does.
-    #[cfg(test)]
-    pub(crate) fn announce_completion(&self) {
-        self.inner
-            .completions
-            .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
     /// Records `operation_id` as an unknown outcome on its binding's

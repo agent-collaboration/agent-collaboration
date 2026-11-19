@@ -10,8 +10,6 @@ use codex_acp_adapter::test_support::native_permission_echo;
 mod read_cost_counter;
 #[path = "../support/served_api.rs"]
 mod served_api;
-#[path = "../support/wake_push_draft.rs"]
-mod wake_push_test_support;
 
 use board_fixture::native_mail_owner;
 use read_cost_counter::sql_cost_classification;
@@ -23,14 +21,11 @@ mod app_server_client_rejection;
 mod app_server_provider_interactions;
 mod codex_app_server_delivery_route;
 mod codex_app_server_held_thread_route;
-mod codex_app_server_wake_push_route;
 mod codex_conversation_operation_inspection;
 mod codex_detached_create_delivery;
 mod codex_empty_thread_recovery;
-mod codex_scheduled_existing_targets;
 mod codex_session_list_shape;
 mod collaboration_application_boundaries;
-mod delivery_inspection;
 mod endpoint_address_isolation;
 mod endpoint_publication;
 mod interaction_schema_ownership;
@@ -66,6 +61,5 @@ mod session_delivery_dependency_boundaries;
 mod session_delivery_presence;
 mod session_delivery_router;
 mod stored_inventory_journal;
-mod wakeup_repeating_delivery;
 
 mod machine_sender_binding;

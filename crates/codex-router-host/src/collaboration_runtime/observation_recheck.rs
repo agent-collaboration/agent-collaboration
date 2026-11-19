@@ -1,6 +1,5 @@
-//! While lifecycle observation is unavailable, nothing appends the native `turn/completed`
-//! a running scheduled Run waits for. Each observation retry instead re-checks once: the
-//! scheduler steps its running native Runs, and readers re-check held Codex mail.
+//! While lifecycle observation is unavailable, nothing reports a Codex thread loading. Each
+//! observation retry instead re-checks once: readers re-check held Codex mail.
 //!
 //! Observation is unavailable when the native observer exited on a connection error (it
 //! restarts with this backoff) or the lifecycle journal failed to open at start-up. A

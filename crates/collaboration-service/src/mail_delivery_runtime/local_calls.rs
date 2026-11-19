@@ -79,7 +79,7 @@ impl CallRouter for MailCallRouter {
         };
         let item = resolved.item();
         let delivery = if let board_sync_protocol::BoardDeliveryBody::Wake(body) = item.body() {
-            self.consumer.deliver_wake(item, body).await
+            self.consumer.deliver_wake(item, body)
         } else if collaboration_runtime::received_mail_push::is_poll_mail(item) {
             // The reader actor owns its input; retain the resolved custody value
             // here so its stored receipt bound still validates the returned answer.

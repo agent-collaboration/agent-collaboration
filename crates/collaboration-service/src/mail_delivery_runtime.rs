@@ -41,8 +41,6 @@ mod frozen_handoff_status;
 pub(crate) use frozen_cancel_outcome::{FrozenCancelSettlement, RemoteCancelReplay};
 mod custody_backfill;
 mod held_readiness;
-#[cfg(feature = "test-support")]
-mod inbound_wake_probe;
 mod installation_directory;
 mod sender_binding;
 pub use sender_binding::MachineSenderBinding;
@@ -55,9 +53,8 @@ mod project_admission;
 mod project_cancellation;
 mod pushed_mail;
 pub(crate) use project_cancellation::other_canonical_cancel;
+mod inbound_wake_refusal;
 mod remote_admission;
-mod remote_wakes;
-pub(crate) use remote_wakes::LocalWakeOwner;
 mod remote_calls;
 mod remote_status;
 pub(crate) use installation_directory::InstallationPeerResolutionError;
@@ -101,8 +98,6 @@ pub struct MailDeliveryRuntime {
     service: message_board::ServiceId,
     clock: Arc<dyn RuntimeClock>,
     session: Option<MailDeliverySession>,
-    /// Reports the remote-wake wait's reads and sleeps; production keeps nothing.
-    remote_wake_wait: collaboration_runtime::WorkerObservation,
 }
 
 impl MailDeliveryRuntime {
@@ -276,7 +271,6 @@ impl MailDeliveryRuntime {
         let consumer = Arc::new(MailConsumer {
             reader_actors: reader_actors.clone(),
             carrier: MailPushDelivery::new(props),
-            wakes: OnceLock::new(),
             clock: clock.clone(),
         });
         let project_replication = Arc::new(OnceLock::new());
@@ -340,7 +334,6 @@ impl MailDeliveryRuntime {
             service,
             clock,
             session,
-            remote_wake_wait: collaboration_runtime::WorkerObservation::default(),
         })
     }
 
@@ -416,7 +409,6 @@ struct MailConsumer {
     reader_actors: crate::SubscriptionDeliveryService,
     carrier: MailPushDelivery,
     clock: Arc<dyn RuntimeClock>,
-    wakes: OnceLock<LocalWakeOwner>,
 }
 impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
     type Protocol = RouterConsumerProtocol;

@@ -328,9 +328,7 @@ async fn exercise_message(
         },
     );
     owner.start().await?;
-    let identity = identity
-        .with_session_delivery(delivery)
-        .with_subscription_delivery_service(owner.clone(), presence.clone());
+    let identity = identity.with_subscription_delivery_service(owner.clone(), presence.clone());
 
     let (identity, native_mail) = native_mail_owner::start(
         identity,

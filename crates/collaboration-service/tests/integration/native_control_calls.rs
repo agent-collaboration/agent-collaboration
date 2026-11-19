@@ -179,7 +179,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .unwrap_or_else(|error| panic!("broker delivery: {error}"));
     let interactions = broker.interaction_store();
     let identity = identity
-        .with_session_delivery(delivery)
         .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone())
         .with_approval_broker(broker);
     let (identity, native_mail) = native_mail_owner::start(

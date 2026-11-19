@@ -265,7 +265,6 @@ fn api_command_families_share_permission_diagnostic() {
     let fixture = DeniedServiceDirectory::create("control-families")
         .unwrap_or_else(|error| panic!("fixture: {error}"));
     let directory = fixture.root.to_string_lossy().into_owned();
-    let uuid = "019f0000-0000-7000-8000-000000000003";
     let address = serde_json::json!({
         "endpoint": {
             "serviceId": "019f0000-0000-7000-8000-000000000004",

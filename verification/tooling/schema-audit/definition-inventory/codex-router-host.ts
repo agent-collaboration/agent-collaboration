@@ -108,30 +108,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: "crates/codex-router-host/src/claude_code_peer_scheduled_runs.rs",
-    line: 230,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "PeerSocketWriteOutcome to PeerWriteEffect and RunSubmission by hand match (230-263): every NotSubmitted cause becomes EndpointUnavailable/RetryLater, unlike the delivery route's per-cause mapping; an audience-specific projection into the scheduled run's RunSubmission, not an identical copy of the other outcome tables in this crate",
-    usedBy: [{ crate: "codex-router-host" }],
-    duplicateGroup: null,
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/codex-router-host/src/claude_code_peer_scheduled_runs.rs",
-    line: 328,
-    owner: "router-vocabulary",
-    kind: "content-parser",
-    defines:
-      "prepared_push_link_matches_id parses the last whitespace token of the prepared push line as a RouterLink to recover its push id instead of carrying the id typed",
-    usedBy: [{ crate: "codex-router-host" }],
-    duplicateGroup: "content-parsers",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
     file: "crates/codex-router-host/src/collaboration_runtime/native_backend.rs",
     line: 173,
     owner: "codex",

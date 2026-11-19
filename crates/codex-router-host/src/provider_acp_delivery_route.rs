@@ -50,7 +50,6 @@ use std::{
 use tokio::sync::Mutex;
 
 pub struct ProviderAcpDeliveryRoute {
-    service_id: UuidIdentity,
     claim: ProviderAcpRouteClaim,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
@@ -84,7 +83,7 @@ impl ProviderAcpDeliveryRoute {
         clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let claim = ProviderAcpRouteClaim::new(
-            service_id.clone(),
+            service_id,
             provider_endpoints,
             directory,
             Arc::clone(&supervisor),
@@ -99,7 +98,6 @@ impl ProviderAcpDeliveryRoute {
         // API prompts to a session that can't steer wait in this same line (D1 R12).
         supervisor.attach_message_fifo(&queue);
         Self {
-            service_id,
             claim,
             supervisor,
             store,

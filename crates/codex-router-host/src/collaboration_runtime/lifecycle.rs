@@ -133,25 +133,10 @@ impl CollaborationRuntime {
                 }
             }
         }
-        if let Some(task) = self.automation_task.take()
-            && task.await.is_err()
-        {
-            failure.get_or_insert(io::Error::other("automation worker shutdown failed"));
-        }
-        if let Some(task) = self.schedule_task.take()
-            && task.await.is_err()
-        {
-            failure.get_or_insert(io::Error::other("schedule worker shutdown failed"));
-        }
         if let Some(task) = self.journal_unavailable_rechecks.take()
             && task.await.is_err()
         {
             failure.get_or_insert(io::Error::other("observation re-check shutdown failed"));
-        }
-        if let Some(task) = self.automation_maintenance.take()
-            && task.await.is_err()
-        {
-            failure.get_or_insert(io::Error::other("automation maintenance shutdown failed"));
         }
         if let Some(task) = self.interaction_retention.take()
             && task.await.is_err()
@@ -172,20 +157,6 @@ impl CollaborationRuntime {
             && task.await.is_err()
         {
             failure.get_or_insert(io::Error::other("scratch sweep shutdown failed"));
-        }
-        if let Some(store) = self.automation_store.take() {
-            match std::sync::Arc::try_unwrap(store) {
-                Ok(store) => {
-                    if store.into_inner().close().await.is_err() {
-                        failure.get_or_insert(io::Error::other("automation storage close failed"));
-                    }
-                }
-                Err(_) => {
-                    failure.get_or_insert(io::Error::other(
-                        "automation storage still owned after listener shutdown",
-                    ));
-                }
-            }
         }
         if let Some(store) = self.provider_store.take() {
             match std::sync::Arc::try_unwrap(store) {

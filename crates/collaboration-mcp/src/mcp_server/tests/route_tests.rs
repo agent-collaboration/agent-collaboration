@@ -129,7 +129,7 @@ async fn message_server(
             .await
             .expect("native carrier owner"),
     );
-    let identity = crate::api_test_harness::test_identity().with_session_delivery(delivery.clone());
+    let identity = crate::api_test_harness::test_identity();
     let clock = identity.runtime_clock();
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {

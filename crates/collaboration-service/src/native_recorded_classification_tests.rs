@@ -93,9 +93,6 @@ async fn policy_captured_recorded_owner_expiry_refuses_before_resume_or_input() 
             cold: ReplyPolicy::Matching,
             loaded: ReplyPolicy::Matching,
             loaded_delivery: MessageDelivery::Auto,
-            turn_intent: None,
-            retire_loaded: None,
-            stored_run: None,
         },
     )
     .unwrap();

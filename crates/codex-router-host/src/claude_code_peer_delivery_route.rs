@@ -131,14 +131,6 @@ impl ClaudeCodePeerDeliveryRoute {
         ))
     }
 
-    pub(crate) async fn write_peer_message(
-        &self,
-        peer: &PeerSessionRecord,
-        prepared_line: &str,
-    ) -> PeerSocketWriteOutcome {
-        self.socket.write_user_message(peer, prepared_line).await
-    }
-
     async fn prepare_peer_delivery(
         &self,
         target: &SessionRef,
@@ -341,9 +333,6 @@ impl LiveSessionOwnershipCheck for ClaudeCodePeerDeliveryRoute {
 }
 
 impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
-    fn scheduled_runs(&self) -> Option<Arc<dyn collaboration_contracts::ScheduledRunRoute>> {
-        Some(Arc::new(self.clone()))
-    }
     fn reachability(&self) -> SessionReachability {
         SessionReachability::ClaudeCodePeer
     }

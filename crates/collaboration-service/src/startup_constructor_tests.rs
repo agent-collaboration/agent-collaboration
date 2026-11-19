@@ -1,4 +1,4 @@
-//! Startup attachments retain physical ownership, shared capacity and weak lifetimes.
+//! Startup attachments retain physical ownership and weak lifetimes, and refuse inbound wakes.
 use super::MailDeliveryRuntime;
 use crate::ApplicationFixture;
 use crate::BoardAvailability;
@@ -7,9 +7,9 @@ use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
 
 use collaboration_contracts::MachineIdentity;
-use collaboration_mail_protocol::{CarrierAcceptance, MailSender, RemoteWakeResult, WakeBody};
-use collaboration_protocol::{
-    OperationId, WakeMutationRequest, WakeSendRequest, WakeWaitOutcome, WakeWaitRequest,
+use collaboration_mail_protocol::{
+    CarrierAcceptance, MailSender, RemoteWakeMutationState, RemoteWakeRefusal, RemoteWakeResult,
+    WakeBody,
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use fleet_sync_delivery::LocalOutcome;
@@ -31,11 +31,6 @@ async fn fixture() -> (
             .await
             .expect("interaction owner"),
     );
-    let automation = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-            .await
-            .expect("automation owner"),
-    ));
     let machine = MachineIdentity::new(SERVICE.to_owned().try_into().expect("service"), None)
         .expect("machine");
     let router = Arc::new(SessionDeliveryRouter::new(Vec::new()));
@@ -67,14 +62,12 @@ async fn fixture() -> (
         )
         .expect("mail runtime"),
     );
-    let mut construction = ApplicationFixture::new(SERVICE, SERVICE)
+    let construction = ApplicationFixture::new(SERVICE, SERVICE)
         .expect("identity")
         .with_runtime_clock(actors.runtime_clock())
         .with_installation_peer(peer)
         .expect("installation")
-        .with_interaction_store(interactions)
-        .with_automation_store(automation);
-    construction.wake_wait_permits = Arc::new(tokio::sync::Semaphore::new(1));
+        .with_interaction_store(interactions);
     let construction = construction
         .with_mail_delivery_runtime(mail.clone())
         .expect("startup attachments");
@@ -107,33 +100,14 @@ async fn startup_mail_refuses_a_different_physical_interaction_store() {
 }
 
 #[tokio::test]
-async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
+async fn an_inbound_wake_request_is_refused_as_unavailable_with_no_local_mutation() {
+    // Arrange: a remote installation asks this one to act on a wake.
     let (_directory, construction, mail, actors) = fixture().await;
-    let application = construction.clone().build();
-    let request: WakeSendRequest = serde_json::from_value(json!({
-        "operationId":OperationId::generate(),"requestedBy":{"kind":"owner"},"replace":false,
-        "message":{"target":{"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"capacity"},"content":{"kind":"humanUser","text":"capacity"},"delivery":"auto"},
-        "timing":{"kind":"interval","seconds":300},"expiry":{"kind":"after","seconds":3600}
-    })).expect("wake request");
-    let saved = application.wakes().wake_send(request).await.expect("wake");
-    application
-        .wakes()
-        .wake_pause(WakeMutationRequest {
-            operation_id: OperationId::generate(),
-            wakeup_id: saved.definition.wakeup_id.clone(),
-        })
-        .await
-        .expect("paused wake answers immediately");
-    let wait = WakeWaitRequest {
-        wakeup_id: saved.definition.wakeup_id.clone(),
-        after: None,
-        timeout_seconds: Some(1),
-    };
     let body: WakeBody = serde_json::from_value(json!({
         "requestedBy":{"kind":"owner"},"request":{"kind":"wait",
-        "wakeupId":saved.definition.wakeup_id,"after":null,
+        "wakeupId":"019f0000-0000-7000-8000-0000000000aa","after":null,
         "deadline":(construction.runtime_clock().utc_now()+chrono::Duration::seconds(10)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}
-    })).expect("inbound wait");
+    })).expect("inbound wake request");
     let item = DeliveryItem::<collaboration_contracts::RouterDeliveryTypes>::new(
         ItemId::new(uuid::Uuid::now_v7()).expect("mail item"),
         MailSender::HumanUser {
@@ -141,9 +115,9 @@ async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
         },
         Recipient {
             peer: construction.installation_peer.expect("peer"),
-            address: serde_json::from_value(
-                serde_json::to_value(saved.definition.message.target).expect("target"),
-            )
+            address: serde_json::from_value(json!({
+                "endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"wake-target"
+            }))
             .expect("mail recipient"),
         },
         None,
@@ -151,38 +125,26 @@ async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
     )
     .expect("wake envelope");
 
-    assert!(matches!(
-        application
-            .wakes()
-            .wake_wait_until_first_fire(wait.clone())
-            .await
-            .expect("outbound wait")
-            .outcome,
-        WakeWaitOutcome::Paused
-    ));
-    let inbound = mail.consumer.deliver_wake(&item, &body).await;
-    assert!(
-        matches!(inbound.outcome, LocalOutcome::Delivered { acceptance: CarrierAcceptance::Wake(answer) } if matches!(*answer, RemoteWakeResult::Wait(_)))
-    );
+    // Act
+    let inbound = mail.consumer.deliver_wake(&item, &body);
 
-    let held = construction
-        .wake_wait_permits
-        .clone()
-        .try_acquire_owned()
-        .expect("single shared slot");
+    // Assert: a settled refusal with no local mutation, not a retried or lost item.
+    let LocalOutcome::Delivered {
+        acceptance: CarrierAcceptance::Wake(answer),
+    } = inbound.outcome
+    else {
+        panic!("an inbound wake must be answered with a wake acceptance");
+    };
     assert!(
-        application
-            .wakes()
-            .wake_wait_until_first_fire(wait)
-            .await
-            .is_err()
+        matches!(
+            *answer,
+            RemoteWakeResult::Refused {
+                reason: RemoteWakeRefusal::AutomationUnavailable,
+                mutation: RemoteWakeMutationState::None,
+            }
+        ),
+        "{answer:?}"
     );
-    let inbound = mail.consumer.deliver_wake(&item, &body).await;
-    assert!(
-        matches!(inbound.outcome, LocalOutcome::Delivered { acceptance: CarrierAcceptance::Wake(answer) } if matches!(*answer, RemoteWakeResult::Refused { .. }))
-    );
-    drop(held);
-    drop(application);
     drop(mail);
     drop(construction);
     actors.shutdown().await;

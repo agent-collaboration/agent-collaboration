@@ -9,8 +9,6 @@ const BOUND: Duration = Duration::from_secs(20);
 mod broker_context_tests;
 #[path = "startup_contract_tests/observation_recheck_tests.rs"]
 mod observation_recheck_tests;
-#[path = "startup_contract_tests/scheduler_completion_tests.rs"]
-mod scheduler_completion_tests;
 #[path = "startup_contract_tests/status_cancellation_test.rs"]
 mod status_cancellation_test;
 

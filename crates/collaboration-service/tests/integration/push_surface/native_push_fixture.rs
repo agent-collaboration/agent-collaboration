@@ -189,9 +189,7 @@ pub(super) async fn setup_with_retention() -> (
     )
     .expect("machine identity");
     let presence = Arc::new(RunningPresence);
-    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
-        .expect("service identity")
-        .with_session_delivery(delivery.clone());
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID).expect("service identity");
     let clock = identity.runtime_clock();
     let actors = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
@@ -253,9 +251,7 @@ pub(super) async fn setup_without_push_store() -> (
             .expect("stand-in native database"),
     );
     let delivery = Arc::new(RecordingDelivery::new(store.clone()));
-    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
-        .expect("service identity")
-        .with_session_delivery(delivery.clone());
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID).expect("service identity");
     let control = ControlHarness::start(identity);
     (directory, store, delivery, control)
 }

@@ -99,7 +99,7 @@ threads-required = "num-test-threads"
 # Real SIGKILL/reopen proofs share the native-process scheduling requirement
 # of the other crash/restart cases. Keep their one-second storage fence intact.
 [[profile.ci.overrides]]
-filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/))"
+filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/) | test(/^subscription_delivery::tests::direct_message_process_loss_proofs::a_direct_message_whose_process_dies_/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
@@ -153,7 +153,7 @@ filter = "(package(=collaboration-service) & binary(=integration) & test(=reques
 priority = 100
 
 [[profile.ci.overrides]]
-filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/))"
+filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/) | test(/^subscription_delivery::tests::direct_message_process_loss_proofs::a_direct_message_whose_process_dies_/))"
 priority = 100
 
 [[profile.ci.overrides]]
