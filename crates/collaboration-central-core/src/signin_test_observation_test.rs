@@ -40,12 +40,9 @@ async fn empty_store() -> SqliteConnection {
         .connect()
         .await
         .unwrap();
-    for migration in [
-        include_str!("../migrations/central/0001_workspace_requests.sql"),
-        include_str!("../migrations/central/0002_mail_notices_timers.sql"),
-        include_str!("../migrations/central/0003_signin_authority.sql"),
-    ] {
-        connection.execute(migration).await.unwrap();
+    let central = fleet_storage_schema::central_migrator();
+    for migration in central.iter().take(3) {
+        connection.execute(migration.sql.as_str()).await.unwrap();
     }
     connection
 }

@@ -1,9 +1,9 @@
 //! Stored queue rows are validated before they participate in a central decision.
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
-use fleet_runtime::stored_values::column;
-use fleet_runtime::stored_values::json;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::stored_values::column;
+use fleet_runtime_ports::stored_values::json;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, ChangeId, MachineId, ThreadId, WorkspaceId};
 fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T, StoreFailure> {

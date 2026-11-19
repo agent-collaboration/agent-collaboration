@@ -1,6 +1,7 @@
 use super::*;
-use collaboration_central_core::{storage_conformance, workspace_migrations};
+use collaboration_central_core::storage_conformance;
 use collaboration_central_tokio::ObjectStorage;
+use fleet_storage_schema as workspace_migrations;
 #[tokio::test]
 async fn business_migration_upgrade_failure_rolls_back_both_real_owners_and_all_history_columns() {
     let f = Fixture::new().await;

@@ -301,7 +301,7 @@ fn receipt_failure<State, Error>(failure: ApplyFailure) -> HandleOutcome<State, 
         ApplyFailure::Uncertain => HandleOutcome::Uncertain,
         ApplyFailure::StoreDown(failure) => HandleOutcome::StoreDown(failure),
         ApplyFailure::Rejected(_) => HandleOutcome::StoreDown(
-            fleet_runtime::workspace_decode_error::corrupt("request_log.claim"),
+            fleet_runtime_ports::workspace_decode_error::corrupt("request_log.claim"),
         ),
     }
 }

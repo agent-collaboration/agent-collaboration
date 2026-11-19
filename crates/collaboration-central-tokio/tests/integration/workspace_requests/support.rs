@@ -262,7 +262,7 @@ impl Fixture {
                 .path()
                 .join("workspace-stores")
                 .join(format!("{}.sqlite", self.workspace)),
-            Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrator()),
         );
         assert!(matches!(
             store

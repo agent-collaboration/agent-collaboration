@@ -4,9 +4,12 @@
 
 mod central_observer;
 mod central_store;
+pub mod guarded_statements;
 mod issuer_key_source;
 mod signature_crypto;
+pub mod stored_values;
 mod time_and_ids;
+pub mod workspace_decode_error;
 mod workspace_stores;
 
 pub use central_engine_model::EngineTime;

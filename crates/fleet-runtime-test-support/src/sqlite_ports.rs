@@ -92,8 +92,9 @@ impl CentralStore for InMemoryCentralStore {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .map(|at| {
-                EngineTime::from_timestamp_millis(at.unix_millis())
-                    .ok_or_else(|| fleet_runtime::workspace_decode_error::corrupt("alarm.deadline"))
+                EngineTime::from_timestamp_millis(at.unix_millis()).ok_or_else(|| {
+                    fleet_runtime_ports::workspace_decode_error::corrupt("alarm.deadline")
+                })
             })
             .transpose()
     }

@@ -3,12 +3,13 @@ use crate::central_timer_rows::decode_automations;
 use crate::{
     WorkspaceRuntime,
     central_mail_store::{encode, timestamp},
-    guarded_statements::{exact, text},
+    guarded_statements::exact,
 };
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, Statement, StoreFailure};
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::guarded_statements::text;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::Timestamp;

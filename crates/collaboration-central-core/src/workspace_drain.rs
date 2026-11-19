@@ -3,14 +3,15 @@ use crate::engine::legacy_units::LegacyUnitOutcome;
 use crate::{
     WorkspaceRuntime,
     central_mail_store::{alarm_update, applied, timestamp},
-    guarded_statements::{exact, text},
+    guarded_statements::exact,
     notification_windows::{parse, parse_time},
     workspace_notice_plans::DrainResult,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
-use fleet_runtime::stored_values::column;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::guarded_statements::text;
+use fleet_runtime_ports::stored_values::column;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_workspace_access::WorkspaceRows;
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};

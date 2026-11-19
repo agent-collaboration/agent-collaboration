@@ -16,6 +16,8 @@ export interface SqlitePreparationTarget {
   readonly databaseFilename: string;
 }
 
+// Fleet's central and workspace registries live in fleet-storage-schema.
+// Their statement ports use runtime SQL and produce no checked query metadata.
 export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
   {
     packageName: "automation-storage",

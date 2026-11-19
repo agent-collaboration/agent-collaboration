@@ -15,4 +15,5 @@ central-storage.workspace = true
 central-engine-model.workspace = true
 workspace-ids.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 uuid.workspace = true

@@ -34,11 +34,9 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         seed: SeedProbe,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::{
-            central_mail_store::timestamp,
-            guarded_statements::{any, exact, text},
-        };
-        use fleet_runtime::workspace_decode_error::corrupt;
+        use crate::{central_mail_store::timestamp, guarded_statements::exact};
+        use fleet_runtime_ports::guarded_statements::{any, text};
+        use fleet_runtime_ports::workspace_decode_error::corrupt;
         if !self.alarm_organization_is_provisioned().await? {
             return Err(corrupt("organization_identity.id"));
         }
@@ -68,7 +66,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         request: ProbeRequest,
     ) -> Result<EngineRequestOutcome<ProbeState, ProbeRefusal>, central_storage::StoreFailure> {
         if !self.alarm_organization_is_provisioned().await? {
-            return Err(fleet_runtime::workspace_decode_error::corrupt(
+            return Err(fleet_runtime_ports::workspace_decode_error::corrupt(
                 "organization_identity.id",
             ));
         }

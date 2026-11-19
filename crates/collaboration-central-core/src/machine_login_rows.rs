@@ -7,9 +7,9 @@ use crate::{
     },
 };
 use central_storage::{ReadOutcome, SqlValue, StoreFailure};
-use fleet_runtime::stored_values::json;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::stored_values::json;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 
 fn label(value: &str, field: &str) -> Result<message_board::MachineLabel, StoreFailure> {
     let parsed =

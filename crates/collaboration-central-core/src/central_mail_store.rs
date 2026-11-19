@@ -1,9 +1,9 @@
 //! Central-owned statement construction and validated mail rows.
 use crate::WorkspaceRuntime;
 pub(crate) use crate::central_mail_rows::{applied, encode, insert_message, timestamp};
-use crate::guarded_statements::text;
 use central_storage::{AlarmUpdate, Statement, StoreFailure};
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::guarded_statements::text;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, SessionAddress, Timestamp};

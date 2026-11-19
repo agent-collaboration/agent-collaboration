@@ -89,7 +89,9 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                     .as_str()
                     .to_owned()
                     .try_into()
-                    .map_err(|_| fleet_runtime::workspace_decode_error::corrupt("workspace_id"))?;
+                    .map_err(|_| {
+                        fleet_runtime_ports::workspace_decode_error::corrupt("workspace_id")
+                    })?;
                 let found =
                     crate::workspace_directory_rows::read_by_id(self.statement_host(), &workspace)
                         .await?

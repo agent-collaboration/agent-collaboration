@@ -347,11 +347,9 @@ pub(super) async fn control(
         "/test/central-failing-upgrade" => Response::from_json(
             &statement_store::migrate(
                 &object.connection,
-                std::sync::Arc::new(
-                    collaboration_central_core::workspace_migrations::failing_upgrade(
-                        collaboration_central_core::workspace_migrations::central_migrator(),
-                    ),
-                ),
+                std::sync::Arc::new(fleet_storage_schema::failing_upgrade(
+                    fleet_storage_schema::central_migrator(),
+                )),
             )
             .await
             .map_err(|error| error.to_string()),

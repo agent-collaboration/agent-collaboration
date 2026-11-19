@@ -170,7 +170,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
             root.path()
                 .join("central")
                 .join(format!("{}.sqlite", bad.organization_id.as_str())),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::central_migrator()),
         );
         assert!(
             bad_store

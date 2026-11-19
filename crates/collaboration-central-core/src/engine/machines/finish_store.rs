@@ -8,12 +8,13 @@ use crate::{
         port::EngineHost,
         store_adapter::{LoadFailure, StoreAdapter, Versioned, load_store_failure, raw_version},
     },
-    guarded_statements::{exact, text},
+    guarded_statements::exact,
 };
 use central_engine_model::{InstanceKey, ItemFailureClass};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
-use fleet_runtime::stored_values::string;
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::guarded_statements::text;
+use fleet_runtime_ports::stored_values::string;
 
 pub(crate) struct WakeFinishStore<'a, R: EngineHost>(pub &'a R);
 pub(crate) struct AutomationFinishStore<'a, R: EngineHost>(pub &'a R);

@@ -2,7 +2,7 @@
 use crate::WorkspaceRuntime;
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
 use fleet_contracts::WorkspaceCaller;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_workspace_access::WorkspaceRows;
 use workspace_model as m;

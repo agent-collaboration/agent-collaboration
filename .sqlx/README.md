@@ -19,4 +19,8 @@ Commit the resulting metadata changes alongside the queries and migrations.
 The preparation script uses separate disposable databases for account and board
 schemas; it does not prepare against user databases. CI runs the check command.
 
+The Fleet central and workspace migrations live in
+`crates/fleet-storage-schema/migrations`. Those stores execute statements
+through their ports, so they generate no checked-query files in this directory.
+
 This README is maintained manually and is preserved during regeneration.

@@ -5,9 +5,9 @@ use crate::{
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
 use fleet_contracts::WorkspaceCaller;
-use fleet_runtime::stored_values::json;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::stored_values::json;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 use workspace_model::central_mail as mail;
@@ -117,9 +117,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 let mut statements = vec![crate::guarded_statements::exact(
                     "UPDATE actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
                     vec![
-                        crate::guarded_statements::text(cadence_text),
-                        crate::guarded_statements::text(central_mail_store::timestamp(now)),
-                        crate::guarded_statements::text(&actor),
+                        fleet_runtime_ports::guarded_statements::text(cadence_text),
+                        fleet_runtime_ports::guarded_statements::text(
+                            central_mail_store::timestamp(now),
+                        ),
+                        fleet_runtime_ports::guarded_statements::text(&actor),
                     ],
                 )];
                 // Recompute the pending deadline from now on the new epoch cadence;
@@ -134,9 +136,13 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     statements.push(crate::guarded_statements::exact(
                         "UPDATE notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![
-                            crate::guarded_statements::text(central_mail_store::timestamp(due)),
-                            crate::guarded_statements::text(central_mail_store::timestamp(now)),
-                            crate::guarded_statements::text(&window.id),
+                            fleet_runtime_ports::guarded_statements::text(
+                                central_mail_store::timestamp(due),
+                            ),
+                            fleet_runtime_ports::guarded_statements::text(
+                                central_mail_store::timestamp(now),
+                            ),
+                            fleet_runtime_ports::guarded_statements::text(&window.id),
                         ],
                     ));
                 }

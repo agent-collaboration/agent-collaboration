@@ -49,7 +49,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
                 .path()
                 .join("central")
                 .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::central_migrator()),
         )
         .with_engine_publication(
             f.shared_for_runtime(),
@@ -61,7 +61,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             .path()
             .join("workspace-stores")
             .join(format!("{}.sqlite", f.workspace)),
-        Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        Arc::new(fleet_storage_schema::workspace_migrator()),
     ));
     let runtime = WorkspaceRuntime::from_runtime(
         fleet_runtime::FleetRuntime::open(

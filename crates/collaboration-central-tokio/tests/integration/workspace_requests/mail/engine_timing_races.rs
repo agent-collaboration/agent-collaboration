@@ -209,7 +209,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
                 "{}.sqlite",
                 fixture.caller.organization_id.as_str()
             )),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::central_migrator()),
         )
         .with_engine_publication(fixture.shared_for_runtime(), gated),
     );
@@ -219,7 +219,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
             .path()
             .join("workspace-stores")
             .join(format!("{}.sqlite", fixture.workspace)),
-        Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        Arc::new(fleet_storage_schema::workspace_migrator()),
     ));
     let runtime = Arc::new(
         WorkspaceRuntime::from_runtime(

@@ -101,7 +101,9 @@ impl LegacyUnitOutcome {
     /// Preserve the old request entry's result; the engine keeps the richer origin.
     pub(crate) fn into_request_failure(self) -> StoreFailure {
         match self {
-            Self::Corrupt { column, .. } => fleet_runtime::workspace_decode_error::corrupt(&column),
+            Self::Corrupt { column, .. } => {
+                fleet_runtime_ports::workspace_decode_error::corrupt(&column)
+            }
             Self::CentralDown(failure) => failure,
             Self::Uncertain => StoreFailure::AnswerLost,
             Self::Done

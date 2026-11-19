@@ -1,5 +1,5 @@
 use central_storage::{SqlValue, Statement, StoreFailure};
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model::{ActorIdentityId, ItemRef, WorkspaceOperation};
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())

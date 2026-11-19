@@ -10,13 +10,14 @@ publish.workspace = true
 workspace = true
 
 [features]
-test-support = ["collaboration-central-core/test-support", "router-clock/test-support"]
+test-support = ["collaboration-central-core/test-support", "fleet-storage-schema/test-support", "router-clock/test-support"]
 
 [dependencies]
 central-storage.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-contracts.workspace = true
 fleet-runtime.workspace = true
+fleet-storage-schema.workspace = true
 fleet-store-sqlx.workspace = true
 router-clock.workspace = true
 workspace-model.workspace = true
@@ -40,6 +41,7 @@ collaboration-central-core = { version = "0.1.96", path = "../collaboration-cent
 sqlx = { workspace = true, features = ["sqlite", "migrate"] }
 
 [dev-dependencies]
+fleet-storage-schema = { workspace = true, features = ["test-support"] }
 router-clock = { workspace = true, features = ["test-support"] }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core", features = ["test-support"] }
 uuid.workspace = true

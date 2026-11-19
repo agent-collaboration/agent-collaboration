@@ -1765,6 +1765,7 @@ dependencies = [
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-runtime-test-support",
+ "fleet-storage-schema",
  "futures-channel",
  "futures-util",
  "http",
@@ -1813,6 +1814,7 @@ dependencies = [
  "fleet-identity-protocol",
  "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-storage-schema",
  "fleet-workspace-access",
  "futures-util",
  "hegeltest",
@@ -1852,6 +1854,7 @@ dependencies = [
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-runtime-test-support",
+ "fleet-storage-schema",
  "fleet-store-sqlx",
  "hegeltest",
  "reqwest 0.12.28",
@@ -2932,6 +2935,7 @@ dependencies = [
  "central-engine-model",
  "central-storage",
  "serde",
+ "serde_json",
  "uuid",
  "workspace-ids",
 ]
@@ -2954,6 +2958,14 @@ dependencies = [
  "sqlx",
  "tokio",
  "workspace-ids",
+]
+
+[[package]]
+name = "fleet-storage-schema"
+version = "0.1.156"
+dependencies = [
+ "sqlx",
+ "sqlx-core",
 ]
 
 [[package]]

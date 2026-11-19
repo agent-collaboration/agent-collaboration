@@ -3,9 +3,9 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
 };
-use fleet_runtime::stored_values::json;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::stored_values::json;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason,

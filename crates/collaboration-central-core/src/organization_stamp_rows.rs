@@ -2,9 +2,9 @@
 use crate::organization_authority::{StoredOrganizationStamp, StoredStampRead};
 use central_storage::{GuardedStatement, RowExpectation, SqlValue, Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
 use fleet_runtime_ports::CentralStore;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 
 pub(crate) async fn read(host: &impl CentralStore) -> Result<StoredStampRead, StoreFailure> {
     let rows = host

@@ -69,7 +69,7 @@ impl TokioWorkspaceStores {
             .map_err(|_| StoreFailure::Unavailable)?;
         let store = Arc::new(ObjectStorage::new(
             self.root.join(format!("{id}.sqlite")),
-            Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrator()),
         ));
         stores.insert(id.clone(), store.clone());
         Ok(store)
@@ -177,7 +177,7 @@ impl TokioWorkspaceHost {
                 self.root
                     .join("central")
                     .join(format!("{}.sqlite", organization.as_str())),
-                Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+                Arc::new(fleet_storage_schema::central_migrator()),
             )
             .with_engine_publication(
                 clock.clone(),

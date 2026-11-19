@@ -1,5 +1,5 @@
 use central_storage::StoreFailure;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use serde::Deserialize;
 use workspace_model::{
     ActorIdentityId, Change, ChangeEvent, ChangeId, ChangePosition, ItemRef, ProjectId, RoleName,

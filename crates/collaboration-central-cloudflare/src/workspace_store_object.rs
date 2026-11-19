@@ -109,11 +109,9 @@ impl DurableObject for WorkspaceStoreObject {
             } else if request.headers().get("x-workspace-fixture")?.as_deref()
                 == Some("failingBusiness")
             {
-                std::sync::Arc::new(
-                    collaboration_central_core::workspace_migrations::failing_upgrade(
-                        collaboration_central_core::workspace_migrations::workspace_migrator(),
-                    ),
-                )
+                std::sync::Arc::new(fleet_storage_schema::failing_upgrade(
+                    fleet_storage_schema::workspace_migrator(),
+                ))
             } else {
                 migrator
             };

@@ -1,6 +1,6 @@
 //! Stored JSON stays opaque in SQL; this decoder owns syntax and field attribution.
 use central_storage::StoreFailure;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use serde::de::DeserializeOwned;
 
 pub(crate) fn decode<T: DeserializeOwned>(

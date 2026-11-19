@@ -1,9 +1,9 @@
 use crate::WorkspaceAccess;
 use central_storage::{SqlValue, Statement, StoreFailure};
 use fleet_contracts::WorkspaceCaller;
-use fleet_runtime::stored_values::json;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::stored_values::json;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{MachineId, RefusalReason, WorkspaceId};
 
@@ -42,7 +42,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stor
             if !allowed.contains(workspace) {
                 return Ok(Err(RefusalReason::WorkspaceNotAllowed));
             }
-            match fleet_runtime::stored_values::column(&rows, row, "workspace_state")? {
+            match fleet_runtime_ports::stored_values::column(&rows, row, "workspace_state")? {
                 SqlValue::Text(value) if value == "active" => {}
                 SqlValue::Text(value) if value == "archived" => {
                     return Ok(Err(RefusalReason::WorkspaceNotAllowed));

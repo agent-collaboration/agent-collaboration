@@ -9,10 +9,8 @@ mod due_batch_state;
 mod fleet_runtime;
 #[cfg(feature = "test-support")]
 mod pause_points;
-pub mod stored_values;
 #[cfg(feature = "test-support")]
 mod test_faults;
-pub mod workspace_decode_error;
 pub mod workspace_request_log;
 mod workspace_turns;
 

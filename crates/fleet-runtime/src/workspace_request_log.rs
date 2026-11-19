@@ -1,8 +1,8 @@
-use crate::stored_values::{json, string};
-use crate::workspace_decode_error::corrupt;
 use central_storage::{
     GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement, StoreFailure,
 };
+use fleet_runtime_ports::stored_values::{json, string};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model::{ActorIdentityId, RequestId, WorkspaceResult};
 
 pub fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {

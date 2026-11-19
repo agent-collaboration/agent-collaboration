@@ -201,7 +201,7 @@ impl CentralObject {
     async fn migrate(&self) -> std::result::Result<(), StoreFailure> {
         statement_store::migrate(
             &self.connection,
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::central_migrator()),
         )
         .await
         .map_err(|_| StoreFailure::Unavailable)

@@ -10,9 +10,9 @@ use crate::{
     workspace_directory_rows::{self, DirectoryWorkspace},
 };
 use central_storage::{GuardedStatement, StoreFailure};
-use fleet_runtime::stored_values::json;
-use fleet_runtime::stored_values::string;
-use fleet_runtime::workspace_decode_error::corrupt;
+use fleet_runtime_ports::stored_values::json;
+use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,

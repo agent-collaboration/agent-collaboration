@@ -1,7 +1,6 @@
 //! The injected capabilities and execution state for one organization.
 
 use crate::central_turn::{CentralTurn, TurnGuard};
-use crate::workspace_decode_error::corrupt;
 use crate::{AlarmSchedule, DueBatchState, WorkspaceTurns};
 use central_engine_model::EngineTime;
 use central_storage::{
@@ -11,6 +10,7 @@ use fleet_contracts::{
     AlarmNotPublished, CentralObservation, EventCompletion, EventCompletionHook,
 };
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, Clock, IdSource, WorkspaceStores};
 use std::sync::Arc;
 use workspace_ids::WorkspaceId;

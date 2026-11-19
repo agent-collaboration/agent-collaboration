@@ -29,7 +29,6 @@ pub use workspace_runtime::WorkspaceRuntime;
 mod organization_workspace_plans;
 mod workspace_directory_rows;
 mod workspace_item_reads;
-pub mod workspace_migrations;
 mod workspace_read_queries;
 mod workspace_request_gate;
 mod workspace_rule_dispatch;

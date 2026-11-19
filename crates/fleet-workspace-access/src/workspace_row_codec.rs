@@ -1,6 +1,6 @@
 //! Workspace model rows decoded from statement results.
 use central_storage::{CorruptReason, ReadOutcome, StoreFailure};
-use fleet_runtime::{
+use fleet_runtime_ports::{
     stored_values::{json, string},
     workspace_decode_error::corrupt,
 };

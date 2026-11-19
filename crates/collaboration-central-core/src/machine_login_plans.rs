@@ -108,7 +108,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             Some(at) => at != time.now_ms || decided.changes.is_empty(),
             None => !decided.changes.is_empty(),
         } {
-            return Err(fleet_runtime::workspace_decode_error::corrupt(
+            return Err(fleet_runtime_ports::workspace_decode_error::corrupt(
                 "machine_login.applying_time",
             ));
         }

@@ -224,7 +224,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
                 "{}.sqlite",
                 fixture.caller.organization_id.as_str()
             )),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::central_migrator()),
         );
         assert_untouched(&raw, &wake_id).await;
         let stamp_after = raw

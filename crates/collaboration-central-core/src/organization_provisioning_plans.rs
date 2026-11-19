@@ -28,7 +28,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             if let StoredStampRead::Stamped(stamp) = &stored
                 && stamp.organization_id() != self.fleet_runtime.organization()
             {
-                return Err(fleet_runtime::workspace_decode_error::corrupt(
+                return Err(fleet_runtime_ports::workspace_decode_error::corrupt(
                     "organization_identity.id",
                 ));
             }
