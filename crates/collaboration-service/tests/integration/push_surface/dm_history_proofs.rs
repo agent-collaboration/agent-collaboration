@@ -211,13 +211,7 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
             .pointer("/result/record/readAt")
             .is_some_and(|value| !value.is_null())
     );
-    assert_eq!(
-        retention
-            .prune_batch(now.timestamp_millis())
-            .await
-            .expect("real retained-content maintenance"),
-        1
-    );
+    assert_eq!(retention.prune_batch(now.timestamp_millis()).await, 1);
     assert!(
         pushes
             .get_push_record(&expired)

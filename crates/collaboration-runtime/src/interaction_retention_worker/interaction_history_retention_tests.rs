@@ -1,25 +1,20 @@
-//! Retention across native message/history rows and retained automation payload rows.
-use super::AutomationRetentionWorker;
+//! Retention across interaction push records and the broker's interaction history.
+use super::InteractionRetentionWorker;
 use crate::{
     InteractionHistoryRecord, NativeControlBackend, NativeGenerationGate, RefusedApprovalOption,
     RefusedTypedApproval, ServiceInteractionBroker,
 };
-use agent_automation::{
-    ChangeId, DeliveryId, FirstFire, OccurrenceId, TimingRule, WakeDefinition, WakeupId,
-};
-use automation_storage::AutomationStore;
 use chrono::{DateTime, SecondsFormat, Utc};
 use collaboration_protocol::{
-    EndpointId, EndpointRef, MessageContent, MessageDelivery, MessageText, PushHeaderFacts, PushId,
-    PushKind, PushOrigin, PushRecordDraft, SavedMessage, SessionId, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, MessageDelivery, PushHeaderFacts, PushId, PushKind, PushOrigin,
+    PushRecordDraft, SessionId, SessionRef, UuidIdentity,
 };
 use serde_json::{Value, json};
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx::Connection;
 use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
-use tokio::sync::Mutex;
 
-pub(super) type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
+pub(crate) type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 const SERVICE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 const INITIAL_REQUEST: &str = "initial-interaction";
 
@@ -31,7 +26,7 @@ fn ensure(condition: bool, detail: &'static str) -> TestResult {
     }
 }
 
-pub(super) fn session(session_id: &str) -> TestResult<SessionRef> {
+pub(crate) fn session(session_id: &str) -> TestResult<SessionRef> {
     Ok(SessionRef {
         endpoint: EndpointRef {
             service_id: UuidIdentity::try_from(SERVICE_ID.to_owned())?,
@@ -41,7 +36,7 @@ pub(super) fn session(session_id: &str) -> TestResult<SessionRef> {
     })
 }
 
-pub(super) fn history_value(
+pub(crate) fn history_value(
     request_id: &str,
     body: &str,
     created_at: Option<DateTime<Utc>>,
@@ -104,7 +99,7 @@ fn creation_stamp(history: &BTreeMap<String, Value>) -> TestResult<String> {
         .to_owned())
 }
 
-pub(super) async fn load_broker(
+pub(crate) async fn load_broker(
     directory: &Path,
     gate: &NativeGenerationGate,
 ) -> TestResult<Arc<ServiceInteractionBroker>> {
@@ -130,14 +125,11 @@ pub(super) async fn load_broker(
 struct StoredContent {
     push_id: PushId,
     push_body: String,
-    mailbox_id: DeliveryId,
-    mailbox_json: String,
 }
 
 async fn insert_content(
     store: &interaction_storage::InteractionStore,
     interaction_path: &Path,
-    observer: &mut SqliteConnection,
     label: &str,
     created_at_ms: i64,
 ) -> TestResult<StoredContent> {
@@ -145,14 +137,13 @@ async fn insert_content(
         DateTime::<Utc>::from_timestamp_millis(created_at_ms).ok_or("valid fixture timestamp")?;
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string())?;
     let push_body = format!("{label}-push-body");
-    let target = session("retention-target")?;
     store
         .insert_push_record(PushRecordDraft {
             push_id: push_id.clone(),
             kind: PushKind::DirectMessage,
             origin: PushOrigin::Session(session("retention-sender")?),
             origin_router_ref: None,
-            target: target.clone(),
+            target: session("retention-target")?,
             mode: Some(MessageDelivery::Auto),
             guard: None,
             reply_to_push_id: None,
@@ -174,89 +165,25 @@ async fn insert_content(
     .execute(&mut native_writer)
     .await?;
     native_writer.close().await?;
-    let wakeup_id = WakeupId::generate();
-    let change_id = ChangeId::generate();
-    let mailbox_id = DeliveryId::generate();
-    let occurrence_id = OccurrenceId::generate();
-    let content = MessageContent::HumanUser {
-        text: MessageText::try_from(format!("{label}-mailbox-body"))?,
-    };
-    let mailbox_json = serde_json::to_string(&content)?;
-    let definition = WakeDefinition {
-        created_by: collaboration_protocol::WakeCreator::Owner {},
-        wakeup_id: wakeup_id.clone(),
-        change_id: change_id.clone(),
-        message: SavedMessage {
-            target: target.clone(),
-            content,
-            delivery: MessageDelivery::Queue,
-            generation_guard: None,
-        },
-        timing: TimingRule::At { at: created_at },
-        anchor_at_ms: created_at_ms,
-        expires_at_ms: None,
-        created_at_ms,
-    };
-    let definition_json = serde_json::to_string(&definition)?;
-    let first_fire_json = serde_json::to_string(&FirstFire {
-        wakeup_id: wakeup_id.clone(),
-        occurrence_id: occurrence_id.clone(),
-        due_at_ms: created_at_ms,
-        fired_at_ms: created_at_ms,
-    })?;
-    let target_json = serde_json::to_string(&target)?;
-    sqlx::query("INSERT INTO wakeup_definitions (wakeup_id,change_id,wakeup_status,definition_json,anchor_at_ms,evaluated_through_ms,next_due_at_ms,expires_at_ms,first_fire_json,pending_delivery_id,created_at_ms,updated_at_ms) VALUES (?,?,'finished',?,?,?,NULL,NULL,?,NULL,?,?)")
-        .bind(wakeup_id.as_str()).bind(change_id.as_str()).bind(definition_json)
-        .bind(created_at_ms).bind(created_at_ms).bind(first_fire_json).bind(created_at_ms).bind(created_at_ms)
-        .execute(&mut *observer).await?;
-    sqlx::query("INSERT INTO mailbox_deliveries (delivery_id,wakeup_id,occurrence_id,due_at_ms,fired_at_ms,target_json,message_json,delivery_mode,generation_guard_json,delivery_status,eligible_at_ms,expires_at_ms,latest_attempt_json,outcome_receipt_json,created_at_ms) VALUES (?,?,?,?,?,?,?,'queue',NULL,'accepted',?,NULL,NULL,NULL,?)")
-        .bind(mailbox_id.as_str()).bind(wakeup_id.as_str()).bind(occurrence_id.as_str())
-        .bind(created_at_ms).bind(created_at_ms).bind(target_json).bind(&mailbox_json)
-        .bind(created_at_ms).bind(created_at_ms).execute(&mut *observer).await?;
-    Ok(StoredContent {
-        push_id,
-        push_body,
-        mailbox_id,
-        mailbox_json,
-    })
+    Ok(StoredContent { push_id, push_body })
 }
 
 async fn ensure_physical_contents(
     native_observer: &mut TursoConnection,
-    observer: &mut SqliteConnection,
     expected: &[&StoredContent],
 ) -> TestResult {
     let pushes: Vec<(String, String)> =
         sqlx::query_as("SELECT push_id,body FROM router_pushes ORDER BY push_id")
             .fetch_all(&mut *native_observer)
             .await?;
-    let mailboxes: Vec<(String, String)> = sqlx::query_as(
-        "SELECT delivery_id,message_json FROM mailbox_deliveries ORDER BY delivery_id",
-    )
-    .fetch_all(&mut *observer)
-    .await?;
     let mut expected_pushes = expected
         .iter()
         .map(|record| (record.push_id.as_str().to_owned(), record.push_body.clone()))
         .collect::<Vec<_>>();
-    let mut expected_mailboxes = expected
-        .iter()
-        .map(|record| {
-            (
-                record.mailbox_id.as_str().to_owned(),
-                record.mailbox_json.clone(),
-            )
-        })
-        .collect::<Vec<_>>();
     expected_pushes.sort();
-    expected_mailboxes.sort();
     ensure(
         pushes == expected_pushes,
         "retention must remove whole push rows and preserve retained bodies",
-    )?;
-    ensure(
-        mailboxes == expected_mailboxes,
-        "retention must remove whole settled mailbox rows and preserve retained bodies",
     )
 }
 
@@ -370,8 +297,6 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
         "broker reload must preserve the original creation stamp",
     )?;
 
-    let database_path = directory.path().join("automation.sqlite");
-    let store = AutomationStore::open(&database_path).await?;
     let native = broker.interaction_store();
     let mut native_observer = TursoConnection::connect_with(
         &TursoConnectOptions::new()
@@ -379,48 +304,23 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
             .read_only(true),
     )
     .await?;
-    let mut observer = SqliteConnection::connect_with(
-        &SqliteConnectOptions::new()
-            .filename(&database_path)
-            .foreign_keys(true),
-    )
-    .await?;
-    let expired_content = insert_content(
-        &native,
-        &history_path,
-        &mut observer,
-        "expired",
-        cutoff_ms - 1,
-    )
-    .await?;
-    let cutoff_content =
-        insert_content(&native, &history_path, &mut observer, "cutoff", cutoff_ms).await?;
-    let recent_content = insert_content(
-        &native,
-        &history_path,
-        &mut observer,
-        "recent",
-        cutoff_ms + 1,
-    )
-    .await?;
+    let expired_content = insert_content(&native, &history_path, "expired", cutoff_ms - 1).await?;
+    let cutoff_content = insert_content(&native, &history_path, "cutoff", cutoff_ms).await?;
+    let recent_content = insert_content(&native, &history_path, "recent", cutoff_ms + 1).await?;
     ensure_physical_contents(
         &mut native_observer,
-        &mut observer,
         &[&expired_content, &cutoff_content, &recent_content],
     )
     .await?;
-    let shared_store = Arc::new(Mutex::new(store));
-    let worker = AutomationRetentionWorker::new(
-        shared_store.clone(),
+    let worker = InteractionRetentionWorker::new(
+        broker.clone(),
         std::sync::Arc::new(
             router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
                 1792432800000,
             ))
             .unwrap(),
         ),
-    )
-    .with_interaction_broker(broker.clone())
-    .with_native_push_store(native.clone());
+    );
     let first_maintenance_ms = DateTime::<Utc>::from_timestamp_millis(cutoff_ms)
         .ok_or("valid retained cutoff")?
         .checked_add_months(chrono::Months::new(2))
@@ -428,15 +328,10 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
         .timestamp_millis();
 
     ensure(
-        worker.prune_batch(first_maintenance_ms).await? == 3,
-        "worker must prune the expired push, mailbox row and interaction independently",
+        worker.prune_batch(first_maintenance_ms).await == 2,
+        "worker must prune the expired push and interaction independently",
     )?;
-    ensure_physical_contents(
-        &mut native_observer,
-        &mut observer,
-        &[&cutoff_content, &recent_content],
-    )
-    .await?;
+    ensure_physical_contents(&mut native_observer, &[&cutoff_content, &recent_content]).await?;
     ensure_history_contents(
         &broker,
         &history_path,
@@ -454,10 +349,10 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     )?;
 
     ensure(
-        worker.prune_batch(first_maintenance_ms + 1).await? == 4,
+        worker.prune_batch(first_maintenance_ms + 1).await == 3,
         "creation stamp must age after two calendar months, without reload restamping",
     )?;
-    ensure_physical_contents(&mut native_observer, &mut observer, &[&recent_content]).await?;
+    ensure_physical_contents(&mut native_observer, &[&recent_content]).await?;
     ensure_history_contents(&broker, &history_path, &["recent-interaction"]).await?;
     ensure(
         !serde_json::to_string(&read_history(&history_path).await?)?
@@ -468,25 +363,12 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
         gate.acquire().is_err(),
         "retention must not activate a native generation",
     )?;
-    let retained_definitions: i64 = sqlx::query_scalar("SELECT count(*) FROM wakeup_definitions")
-        .fetch_one(&mut observer)
-        .await?;
-    ensure(
-        retained_definitions == 3,
-        "payload retention must not remove reusable wake definitions",
-    )?;
 
     drop(worker);
     drop(broker);
-    observer.close().await?;
     native_observer.close().await?;
     Arc::try_unwrap(native)
         .map_err(|_| "retention fixture retained the native owner")?
-        .close()
-        .await?;
-    Arc::try_unwrap(shared_store)
-        .map_err(|_| "retention worker must release its store")?
-        .into_inner()
         .close()
         .await?;
     Ok(())

@@ -157,6 +157,8 @@ pub struct CollaborationRuntime {
     automation_task: Option<tokio::task::JoinHandle<()>>,
     schedule_task: Option<tokio::task::JoinHandle<()>>,
     automation_maintenance: Option<tokio::task::JoinHandle<()>>,
+    /// Trims settled interaction records and history; runs for the Host's whole life.
+    interaction_retention: Option<tokio::task::JoinHandle<()>>,
     fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,

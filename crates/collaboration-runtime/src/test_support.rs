@@ -1,5 +1,4 @@
 //! Test-only hooks; the normal Host and CLI dependency graphs do not enable these.
-pub mod native_worker_faults;
 pub use crate::scheduled_route_fixture;
 pub use crate::scheduled_run_worker::ScheduledRunWorker;
 pub use crate::wakeup_delivery_sender::WakeDeliverySender;

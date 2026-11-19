@@ -188,7 +188,7 @@ pub(super) async fn setup_with_retention() -> (
     Arc<InteractionStore>,
     Arc<RecordingDelivery>,
     ControlHarness,
-    collaboration_runtime::AutomationRetentionWorker,
+    collaboration_runtime::InteractionRetentionWorker,
 ) {
     let directory = tempfile::tempdir().expect("isolated push store");
     let automation = Arc::new(TokioMutex::new(
@@ -237,9 +237,23 @@ pub(super) async fn setup_with_retention() -> (
         },
     )
     .expect("compose native mail");
-    let retention = identity
-        .automation_retention_worker()
-        .expect("real retention worker");
+    let broker = collaboration_runtime::ServiceInteractionBroker::load(
+        UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
+        collaboration_runtime::NativeControlBackend {
+            endpoint: collaboration_protocol::EndpointRef {
+                service_id: UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
+                endpoint_id: collaboration_protocol::EndpointId::try_from("codex-local".to_owned())
+                    .expect("endpoint id"),
+            },
+            gate: collaboration_runtime::NativeGenerationGate::default(),
+            codex_home: directory.path().join("unused-codex-home"),
+        },
+        store.clone(),
+    )
+    .await
+    .expect("real interaction broker over the push store");
+    let retention =
+        collaboration_runtime::InteractionRetentionWorker::new(broker, identity.runtime_clock());
     let mut control = ControlHarness::start(identity);
     control.lifetime = PushFixtureLifetime::NativeDelivery {
         actors,
