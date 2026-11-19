@@ -124,7 +124,6 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     };
     let runtime_clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         directory,
         backend_config.clone(),

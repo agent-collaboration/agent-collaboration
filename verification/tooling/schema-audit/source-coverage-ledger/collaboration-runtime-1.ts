@@ -343,16 +343,6 @@ export const section: LedgerSection = {
       coverage: noTap(DELIVERY_PATH),
     },
     {
-      file: `${R}wakeup_delivery_sender.rs`,
-      line: 199,
-      edge: "managed-codex",
-      sends:
-        "a due wake's push line through SessionMessageDelivery::deliver (session_delivery_router.rs:212)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(DELIVERY_PATH),
-    },
-    {
       file: `${R}interaction_broker/typed_interaction_notice.rs`,
       line: 196,
       edge: "managed-codex",
@@ -361,74 +351,6 @@ export const section: LedgerSection = {
       owner: { part: "N7" },
       origin: "product",
       coverage: noTap(DELIVERY_PATH),
-    },
-    {
-      file: `${R}delivery_reconciliation.rs`,
-      line: 60,
-      edge: "managed-codex",
-      sends:
-        "uncertain wake reconciliation through reconcile_attempt, which writes thread/queue/list at codex_queue_reconciliation.rs:97, :102",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}codex_app_server_scheduled_runs.rs`,
-      line: 102,
-      edge: "managed-codex",
-      sends:
-        "existing or fresh run target preparation through native_thread_preparation::prepare (writes at native_thread_preparation.rs:103, :117)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}codex_app_server_scheduled_runs.rs`,
-      line: 170,
-      edge: "managed-codex",
-      sends:
-        "run observation through read_turn_and_choice (writes at scheduled_native_observation.rs:37, :40, :78)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}codex_app_server_scheduled_runs.rs`,
-      line: 310,
-      edge: "managed-codex",
-      sends:
-        "schedule_prepare destination preparation thread/start, thread/fork or thread/read (writes at native_thread_preparation.rs:103, :117)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}codex_app_server_scheduled_runs.rs`,
-      line: 546,
-      edge: "managed-codex",
-      sends:
-        "scheduled submission on a held binding (writes at scheduled_native_dispatch.rs:228 without connect or thread/read)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}codex_app_server_scheduled_runs.rs`,
-      line: 567,
-      edge: "managed-codex",
-      sends: "scheduled submission (writes at scheduled_native_dispatch.rs:80, :95, :151, :228)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}codex_app_server_scheduled_runs.rs`,
-      line: 632,
-      edge: "managed-codex",
-      sends: "initialize and initialized on the stop-run connection",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
     },
     {
       file: `${R}codex_queue_reconciliation.rs`,
@@ -498,56 +420,6 @@ export const section: LedgerSection = {
       line: 611,
       edge: "managed-codex",
       sends: "turn/start through call()",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}summary_native_worker.rs`,
-      line: 95,
-      edge: "managed-codex",
-      sends:
-        "summary turn observation through read_turn (writes at scheduled_native_observation.rs:20, :78)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}summary_native_worker.rs`,
-      line: 180,
-      edge: "managed-codex",
-      sends:
-        "turn/interrupt {threadId, turnId} for an overdue summary through validated_call (:479)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}summary_native_worker.rs`,
-      line: 258,
-      edge: "managed-codex",
-      sends:
-        "thread/start {model gpt-5.6-luna, sandbox read-only, approvalPolicy never, ...} through validated_call (:479)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}summary_native_worker.rs`,
-      line: 324,
-      edge: "managed-codex",
-      sends:
-        "source worker turn read through read_turn (writes at scheduled_native_observation.rs:20, :78)",
-      owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(NATIVE_PATHS),
-    },
-    {
-      file: `${R}summary_native_worker.rs`,
-      line: 377,
-      edge: "managed-codex",
-      sends:
-        "turn/start {threadId, input, clientUserMessageId, effort low} through validated_call (:479)",
       owner: { crate: "collaboration-runtime" },
       origin: "product",
       coverage: noTap(NATIVE_PATHS),

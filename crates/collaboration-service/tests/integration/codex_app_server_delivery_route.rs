@@ -209,7 +209,6 @@ async fn exercise_held_empty_thread() -> Result<(), Box<dyn std::error::Error + 
     let runtime_clock =
         std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = Arc::new(CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         directory,
         backend_config,

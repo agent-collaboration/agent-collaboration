@@ -20,10 +20,7 @@ async fn stale_strict_generation_stops_before_evidence_or_native_io()
         std::path::PathBuf::from("/tmp/no-native-route.sock"),
         None,
     )?;
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         EndpointDirectory::new(service_id),
         NativeControlBackend {
@@ -144,10 +141,7 @@ async fn exercise_prepared_push_route(
     }))?;
 
     // A prepared push must reject an ID mismatch before route effects or native I/O.
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let mismatched_request_route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         EndpointDirectory::new(service_id.clone()),
         NativeControlBackend {
@@ -220,7 +214,6 @@ async fn exercise_prepared_push_route(
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path.clone(), Some(schemas))?;
     let route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         directory,
         NativeControlBackend {
@@ -580,10 +573,7 @@ async fn retiring_during_thread_read_returns_retryable_unavailable()
     }))?)?;
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path, Some(schemas))?;
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = Arc::new(CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id,
         directory,
         NativeControlBackend {
@@ -688,10 +678,7 @@ async fn malformed_prepared_push_suffixes_stop_before_evidence_or_native_io()
     let generation = serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path, None)?;
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         EndpointDirectory::new(service_id),
         NativeControlBackend {

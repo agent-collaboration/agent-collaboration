@@ -273,7 +273,6 @@ impl CollaborationRuntime {
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {
-                    clock: worker_clock.clone(),
                     provider_endpoints,
                     directory: endpoint_directory.clone(),
                     native_backend: native_backend.clone(),

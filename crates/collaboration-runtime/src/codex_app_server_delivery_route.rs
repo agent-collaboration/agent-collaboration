@@ -29,7 +29,6 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 pub struct CodexAppServerDeliveryRoute {
-    clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     service_id: UuidIdentity,
     endpoints: EndpointDirectory,
     backend: NativeControlBackend,
@@ -50,14 +49,12 @@ struct NativeRouteDeliveryRequest {
 impl CodexAppServerDeliveryRoute {
     #[must_use]
     pub fn new(
-        clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
         service_id: UuidIdentity,
         endpoints: EndpointDirectory,
         backend: NativeControlBackend,
         holder: std::sync::Arc<crate::UnmaterializedThreadHolder>,
     ) -> Self {
         Self {
-            clock,
             service_id,
             endpoints,
             backend,
@@ -393,19 +390,6 @@ impl CodexAppServerDeliveryRoute {
 }
 
 impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
-    fn scheduled_runs(
-        &self,
-    ) -> Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunRoute>> {
-        Some(std::sync::Arc::new(
-            crate::CodexAppServerScheduledRuns::new(
-                self.clock.clone(),
-                self.backend.clone(),
-                std::sync::Arc::clone(&self.holder),
-            )
-            .with_approval_broker(self.approval_broker.clone()),
-        ))
-    }
-
     fn reachability(&self) -> SessionReachability {
         SessionReachability::CodexAppServer
     }

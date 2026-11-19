@@ -55,7 +55,6 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
     let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
-        fixture.clock.clone(),
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),
