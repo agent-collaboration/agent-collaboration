@@ -15,7 +15,6 @@ mod codex_conversation_recording_composition;
 #[cfg(test)]
 mod host_manifest_publication_tests;
 pub use claude_code_peer_delivery_route::ClaudeCodePeerDeliveryRoute;
-mod claude_code_peer_scheduled_runs;
 mod codex_update_preparation;
 mod explicit_app_server_restart;
 mod explicit_router_restart;
@@ -33,7 +32,6 @@ pub use provider_acp_delivery_route::{
     ProviderAcpDeliveryRoute, ProviderCancelActiveTurnError, ProviderPromptContentsError,
     ProviderQueueAdmissionError, ProviderSteerContentsError,
 };
-mod provider_acp_scheduled_runs;
 mod provider_acp_session_loading;
 pub use external_provider_runtime::{
     ExternalProviderAdmission, ExternalProviderApprovalContext, ExternalProviderLaunch,
@@ -198,7 +196,5 @@ pub use collaboration_runtime::{
 
 mod native_schema_cache;
 
-mod automation_settings_file;
 mod debug_readiness_timing;
-pub use automation_settings_file::AutomationSettingsFile;
 pub use debug_readiness_timing::record as record_debug_readiness_timing;

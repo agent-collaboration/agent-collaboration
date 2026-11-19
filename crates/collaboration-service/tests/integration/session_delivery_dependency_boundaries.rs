@@ -35,14 +35,6 @@ fn message_features_do_not_import_client_routes() {
             "run reconciliation",
             include_str!("../../../collaboration-runtime/src/run_reconciliation.rs"),
         ),
-        (
-            "schedule activation",
-            include_str!("../../src/schedule_activation.rs"),
-        ),
-        (
-            "schedule preparation",
-            include_str!("../../src/schedule_preparation.rs"),
-        ),
     ];
     for (feature, source) in features {
         for forbidden in [

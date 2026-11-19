@@ -12,14 +12,6 @@ fn application_message_features_do_not_import_client_routes() {
             "board and subscription operations",
             include_str!("../../src/collaboration_application/board_operations.rs"),
         ),
-        (
-            "wake operations",
-            include_str!("../../src/collaboration_application/wake_operations.rs"),
-        ),
-        (
-            "schedule operations",
-            include_str!("../../src/collaboration_application/schedule_operations.rs"),
-        ),
     ];
     for (feature, source) in features {
         for forbidden in [

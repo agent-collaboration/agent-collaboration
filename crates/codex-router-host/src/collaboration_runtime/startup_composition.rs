@@ -145,12 +145,10 @@ impl CollaborationRuntime {
         .map_err(io::Error::other)?;
         let endpoint_directory = collaboration_runtime::EndpointDirectory::new(service_id.clone());
         let display_names = collaboration_runtime::SessionDisplayNameCache::default();
-        let wake_wait_permits = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
         let mut project_claim = None;
         let mut project_replication: std::sync::Arc<
             dyn collaboration_contracts::ProjectReplicationPosition,
         > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
-        let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
         let (opened_board, fleet_link) = board_composition::open_observed_board_admission(
             worker_clock.clone(),
             &inputs.directory,
@@ -179,34 +177,6 @@ impl CollaborationRuntime {
                 None
             }
         };
-        let mut automation_store = None;
-        let mut settings_backend = None;
-        match automation_storage::AutomationStore::open(&inputs.directory.join("automation.sqlite"))
-            .await
-        {
-            Ok(store) => {
-                let store = std::sync::Arc::new(tokio::sync::Mutex::new(store));
-                automation_store = Some(std::sync::Arc::clone(&store));
-                let handle = collaboration_runtime::AutomationConfigurationHandle::default();
-                handle.suspend().await;
-                let backend = std::sync::Arc::new(crate::AutomationSettingsFile::new(
-                    &inputs.directory,
-                    std::sync::Arc::clone(&store),
-                    handle.clone(),
-                ));
-                configuration = handle;
-                settings_backend = Some(backend);
-            }
-            Err(
-                error @ (automation_storage::StorageError::MessageUpgradeRequired { .. }
-                | automation_storage::StorageError::PreReleaseMailPresent { .. }),
-            ) => {
-                return Err(io::Error::other(error));
-            }
-            Err(_) => {
-                tracing::warn!("automation storage unavailable; collaboration remains independent")
-            }
-        }
         let provider_store = match collaboration_runtime::ProviderOperationStore::open(
             &inputs.directory.join("provider-operations.sqlite"),
         )
@@ -319,12 +289,9 @@ impl CollaborationRuntime {
         let subscription_presence: std::sync::Arc<
             dyn collaboration_contracts::TargetPresenceProbe,
         > = message_routes.router.clone();
-        let scheduled_run_execution: std::sync::Arc<
-            dyn collaboration_contracts::ScheduledRunExecution,
-        > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
         let interactions = approval_broker.interaction_store();
-        // Created before the readers and the scheduler that subscribe to it.
+        // Created before the readers that subscribe to it.
         let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
         // Local message delivery needs only the interaction store; it never waits on automation.
         // The value stays optional until the board composition (M1) no longer needs it so.
@@ -399,14 +366,6 @@ impl CollaborationRuntime {
         if let Some(mail) = &mail_delivery {
             mail.validate_owner(&identity, Some(&interactions))
                 .map_err(io::Error::other)?;
-            if let Some(store) = &automation_store {
-                mail.attach_wake_owner(
-                    service_id.clone(),
-                    store.clone(),
-                    wake_wait_permits.clone(),
-                )
-                .map_err(io::Error::other)?;
-            }
             mail.attach_reader_readiness().map_err(io::Error::other)?;
             mail.attach_project_replication(project_replication.clone())
                 .map_err(io::Error::other)?;
@@ -435,52 +394,7 @@ impl CollaborationRuntime {
                 std::sync::Arc::downgrade(publisher),
             );
         }
-        // The one wall clock every Host worker compares due times against.
-        let wake_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::WakeTimingWorker::new(
-                store.clone(),
-                session_delivery.clone(),
-                configuration.clone(),
-                machine_identity.clone(),
-                interactions.clone(),
-                std::sync::Arc::clone(&worker_clock),
-            )
-        });
-        let push_handoff_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::PushHandoffWorker::new(store.clone(), interactions.clone())
-        });
-        let schedule_worker = automation_store.as_ref().map(|store| {
-            let worker = collaboration_runtime::ScheduleTimingWorker::new(
-                store.clone(),
-                interactions.clone(),
-                scheduled_run_execution.clone(),
-                Some(native_backend.clone()),
-                configuration.clone(),
-                machine_identity.clone(),
-                std::sync::Arc::clone(&worker_clock),
-            );
-            // Subscribed here, before the scheduler starts, so no completion is missed.
-            let worker = worker.wake_on_completions(observation_rechecks.subscribe());
-            let worker = match &journal {
-                Some(journal) => worker.wake_on_completions(journal.subscribe_commits()),
-                None => worker,
-            };
-            match &external_provider_supervisor {
-                Some(supervisor) => worker.wake_on_completions(supervisor.subscribe_completions()),
-                None => worker,
-            }
-        });
-        #[cfg(test)]
-        let schedule_observation = schedule_worker
-            .as_ref()
-            .map(collaboration_runtime::ScheduleTimingWorker::observation);
-        let retention_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::AutomationRetentionWorker::new(
-                store.clone(),
-                std::sync::Arc::clone(&worker_clock),
-            )
-        });
-        // Interaction records and history are retained whether or not automation opened.
+        // Interaction records and history are retained for the Host's whole life.
         let interaction_retention_worker = collaboration_runtime::InteractionRetentionWorker::new(
             approval_broker.clone(),
             std::sync::Arc::clone(&worker_clock),
@@ -586,34 +500,10 @@ impl CollaborationRuntime {
                     }),
                     endpoint_directory.clone(),
                 );
-            let automation =
-                collaboration_service::collaboration_application::AutomationOperations::new(
-                    worker_clock.clone(),
-                    identity.clone(),
-                    automation_store.clone(),
-                    configuration.clone(),
-                    settings_backend.as_ref().map(|backend| {
-                        backend.clone()
-                            as std::sync::Arc<
-                                dyn collaboration_runtime::AutomationConfigurationBackend,
-                            >
-                    }),
-                    Some(session_delivery),
-                    Some(interactions.clone()),
-                    Some(scheduled_run_execution),
-                    Some(native_backend.clone()),
-                );
             let interactions =
                 collaboration_service::collaboration_application::InteractionOperations::new(Some(
                     approval_broker.clone(),
                 ));
-            let wakes = collaboration_service::collaboration_application::WakeOperations::new(
-                worker_clock.clone(),
-                &service_id.clone(),
-                automation_store.clone().as_ref(),
-            )
-            .with_wait_capacity(&wake_wait_permits.clone())
-            .with_remote(mail_delivery.clone().as_ref());
             collaboration_service::CollaborationApplication::new(
                 identity.clone(),
                 board,
@@ -621,8 +511,6 @@ impl CollaborationRuntime {
                 messages,
                 observation,
                 sessions,
-                automation,
-                wakes,
                 interactions,
             )
         };
@@ -737,18 +625,12 @@ impl CollaborationRuntime {
         let startup_test_broker = std::sync::Arc::downgrade(&approval_broker);
         drop(provider_session_hub);
         drop(message_routes.router);
+        drop(session_delivery);
         drop(subscription_presence);
         drop(approval_broker);
         let interactions_reader = std::sync::Arc::downgrade(&interactions);
         drop(interactions);
         let publication = publication.with_acp_listener()?;
-        if let Some(settings) = settings_backend
-            && settings.recover().await.is_err()
-        {
-            tracing::warn!(
-                "automation configuration recovery unavailable; new automation admission is paused"
-            );
-        }
         let manifest = collaboration_runtime::ManifestPublication::publish(
             &inputs.directory,
             &collaboration_protocol::ServiceManifest {
@@ -787,11 +669,6 @@ impl CollaborationRuntime {
             publisher.recover().await.map_err(io::Error::other)?;
         }
         // Binding above establishes this runtime owns the listeners before recovery can mutate state.
-        let automation_task = wake_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
-        let schedule_task =
-            schedule_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
-        let automation_maintenance =
-            retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let interaction_retention = Some(tokio::spawn(
             interaction_retention_worker.run(shutdown.clone()),
         ));
@@ -825,14 +702,6 @@ impl CollaborationRuntime {
         if let Some(mail) = mail_delivery {
             let mail_shutdown = shutdown.clone();
             tasks.spawn(async move { mail.run(mail_shutdown).await.map_err(io::Error::other) });
-        }
-        if let Some(worker) = push_handoff_worker {
-            let handoff_shutdown = shutdown.clone();
-            let clock = std::sync::Arc::clone(&worker_clock);
-            tasks.spawn(async move {
-                worker.run(clock, handoff_shutdown).await;
-                Ok(())
-            });
         }
         let mut provider_retirement_tasks = JoinSet::new();
         tasks.spawn(native.run(shutdown.clone()));
@@ -895,7 +764,6 @@ impl CollaborationRuntime {
             project_admission,
             subscription_delivery,
             provider_store,
-            automation_store,
             external_provider_supervisor,
             provider_delivery_route,
             provider_retention: None,
@@ -913,17 +781,12 @@ impl CollaborationRuntime {
             manifest: Some(manifest),
             journal,
             maintenance,
-            automation_task,
-            schedule_task,
-            automation_maintenance,
             interaction_retention,
             fleet_outbox_maintenance,
             current_generation: None,
             observer_task: None,
             observation_rechecks,
             journal_unavailable_rechecks,
-            #[cfg(test)]
-            schedule_observation,
             collaboration_api,
             tailscale_exposure: None,
         };

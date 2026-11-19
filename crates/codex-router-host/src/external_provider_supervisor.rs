@@ -76,8 +76,8 @@ struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
-    /// Moves each time a live operation publishes its result, so schedulers and
-    /// provider retention wake on an ACP completion that writes no row.
+    /// Moves each time a live operation publishes its result, so held mail and provider
+    /// retention wake on an ACP completion that writes no row.
     completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
     hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
@@ -156,14 +156,6 @@ impl ExternalProviderSupervisor {
             .bindings
             .get(endpoint)
             .map(|entry| Arc::clone(&entry.runtime))
-    }
-
-    /// Announces a completion as a live operation publishing its result does.
-    #[cfg(test)]
-    pub(crate) fn announce_completion(&self) {
-        self.inner
-            .completions
-            .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
     /// Holds `operation_id` live, as admitting it to a provider does.

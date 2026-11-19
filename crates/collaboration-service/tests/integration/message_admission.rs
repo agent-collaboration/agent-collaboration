@@ -26,9 +26,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             .await
             .unwrap(),
     );
-    let identity = ApplicationFixture::new(id, id)
-        .unwrap()
-        .with_session_delivery(delivery.clone());
+    let identity = ApplicationFixture::new(id, id).unwrap();
     let clock = identity.runtime_clock();
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
