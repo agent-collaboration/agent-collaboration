@@ -1,8 +1,21 @@
-use crate::{ProtocolError, RequestScope};
+use crate::ProtocolError;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
 use workspace_model::{Caller, RequestId, WorkspaceOperation, WorkspaceReply, WorkspaceRequest};
+
+/// The one ledger that can contain a request's retained decision.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "workspaceId",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RequestScope {
+    Organization,
+    Workspace(workspace_ids::WorkspaceId),
+}
 
 pub const MAX_LINK_REQUEST_BATCH_SIZE: usize = 64;
 

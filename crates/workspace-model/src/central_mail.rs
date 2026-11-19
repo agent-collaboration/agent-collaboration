@@ -7,6 +7,30 @@ use workspace_ids::{
     ActorIdentityId, AutomationId, ChangeId, MessageId, RequestId, ThreadId, WakeId, WorkspaceId,
 };
 
+/// A session's thread notices share one cadence across all workspaces.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+pub enum NoticeCadence {
+    #[default]
+    #[serde(rename = "m15")]
+    M15,
+    #[serde(rename = "m25")]
+    M25,
+    #[serde(rename = "m55")]
+    M55,
+}
+impl NoticeCadence {
+    #[must_use]
+    pub const fn seconds(self) -> u32 {
+        match self {
+            Self::M15 => 900,
+            Self::M25 => 1500,
+            Self::M55 => 3300,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CentralMailRequest {
@@ -35,7 +59,7 @@ pub struct SendMessageRequest {
 )]
 pub enum CentralMailOperation {
     SetNoticeCadence {
-        cadence: crate::NoticeCadence,
+        cadence: NoticeCadence,
     },
     SendMessage {
         to: SessionRef,
@@ -81,7 +105,7 @@ pub enum CentralMailOperation {
 )]
 pub enum CentralMailAnswer {
     NoticeCadenceSet {
-        cadence: crate::NoticeCadence,
+        cadence: NoticeCadence,
     },
     Queued {
         message_id: MessageId,

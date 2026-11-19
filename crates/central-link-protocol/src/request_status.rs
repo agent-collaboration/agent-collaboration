@@ -1,21 +1,9 @@
 //! The caller's reference to a request in one owning store.
-use crate::ReplyPayload;
+use crate::link_request::{ReplyPayload, RequestScope};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use workspace_ids::{RequestId, WorkspaceId};
+use workspace_ids::RequestId;
 use workspace_model::{RefusalReason, central_mail::CentralMailRefusal};
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    content = "workspaceId",
-    rename_all = "camelCase",
-    deny_unknown_fields
-)]
-pub enum RequestScope {
-    Organization,
-    Workspace(WorkspaceId),
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
