@@ -12,7 +12,30 @@ use central_storage::StoreFailure;
 use fleet_identity_protocol::EnrollmentId;
 use workspace_ids::MachineId;
 
+/// Live authority for one ordinary link request or one member of a write batch.
+pub enum MachineLinkRequestAuthority {
+    Admitted(ValidatedMachineConnection),
+    Refused,
+    TemporarilyUnavailable,
+}
+
 impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+    pub async fn restore_machine_link_request(
+        &self,
+        attachment: &MachineConnectionAttachment,
+    ) -> Result<MachineLinkRequestAuthority, StoreFailure> {
+        match self.restore_machine_connection(attachment).await {
+            Ok(Ok(connection)) => Ok(MachineLinkRequestAuthority::Admitted(connection)),
+            Ok(Err(_)) => Ok(MachineLinkRequestAuthority::Refused),
+            Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
+                Ok(MachineLinkRequestAuthority::TemporarilyUnavailable)
+            }
+            Err(
+                error @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }),
+            ) => Err(error),
+        }
+    }
+
     pub async fn admit_machine_connection(&self, token: &str) -> Admission {
         let check = self
             .signin_authority
@@ -124,7 +147,35 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         attachment: &MachineConnectionAttachment,
     ) -> Admission {
         let _turn = self.take_central_turn_for_admission().await;
+        #[cfg(feature = "test-support")]
+        if let Some(failure) = self.take_machine_restore_failure() {
+            return Err(failure);
+        }
         self.restore_machine_connection_held(attachment).await
+    }
+
+    /// Fail one restore after the specified number of successful fixture restores.
+    #[cfg(feature = "test-support")]
+    pub fn fail_machine_restore_after(&self, skip: usize, failure: StoreFailure) {
+        *self
+            .machine_restore_failure
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((skip, failure));
+    }
+
+    #[cfg(feature = "test-support")]
+    fn take_machine_restore_failure(&self) -> Option<StoreFailure> {
+        let mut next = self
+            .machine_restore_failure
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match next.as_mut() {
+            Some((remaining, _)) if *remaining > 0 => {
+                *remaining -= 1;
+                None
+            }
+            _ => next.take().map(|(_, failure)| failure),
+        }
     }
 
     /// Register socket ownership while the live authority check still holds

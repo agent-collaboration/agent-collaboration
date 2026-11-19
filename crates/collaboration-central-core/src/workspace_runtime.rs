@@ -95,6 +95,8 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) legacy_invocations: std::sync::Mutex<LegacyUnitInvocations>,
     #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
+    #[cfg(feature = "test-support")]
+    pub(crate) machine_restore_failure: std::sync::Mutex<Option<(usize, StoreFailure)>>,
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub fn new(
@@ -134,6 +136,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             pauses: crate::PausePoints::default(),
             #[cfg(feature = "test-support")]
             lost_answers: Default::default(),
+            #[cfg(feature = "test-support")]
+            machine_restore_failure: Default::default(),
         }
     }
     #[cfg(feature = "test-support")]

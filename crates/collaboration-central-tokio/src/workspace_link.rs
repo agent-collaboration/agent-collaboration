@@ -16,8 +16,9 @@ use central_link_protocol::{
     encode_text,
 };
 use collaboration_central_core::{
-    MailAckIgnored, MailAckSettlement, ValidatedMachineConnection, WELCOME_PAGE_SIZE,
-    WelcomeDeliveryPage, WindowedDeliveryDecision, WorkspaceCaller, WorkspaceRuntime,
+    MachineLinkRequestAuthority, MailAckIgnored, MailAckSettlement, ValidatedMachineConnection,
+    WELCOME_PAGE_SIZE, WelcomeDeliveryPage, WindowedDeliveryDecision, WorkspaceCaller,
+    WorkspaceRuntime,
 };
 use fleet_identity_protocol::OrganizationId;
 use futures_util::FutureExt;
@@ -229,7 +230,8 @@ async fn serve_link(
                 }
             }
             LinkFrame::Data(DataFrame::Request { request }) => {
-                match reply_to_request(&mut socket, &writes, &runtime, &connection, &request).await
+                match reply_to_request(&mut socket, &writes, &runtime, &connection, &request, false)
+                    .await
                 {
                     RequestOutcome::Replied => {}
                     RequestOutcome::AuthorityLapsed => {
@@ -244,8 +246,15 @@ async fn serve_link(
                 // refuses each member and closes the link after the batch.
                 let mut lapsed = false;
                 for request in requests.into_requests() {
-                    match reply_to_request(&mut socket, &writes, &runtime, &connection, &request)
-                        .await
+                    match reply_to_request(
+                        &mut socket,
+                        &writes,
+                        &runtime,
+                        &connection,
+                        &request,
+                        true,
+                    )
+                    .await
                     {
                         RequestOutcome::Replied => {}
                         RequestOutcome::AuthorityLapsed => lapsed = true,
@@ -461,6 +470,7 @@ async fn reply_to_request(
     runtime: &Runtime,
     connection: &ValidatedMachineConnection,
     request: &LinkRequest,
+    in_batch: bool,
 ) -> RequestOutcome {
     if writes.stop.is_cancelled() {
         return RequestOutcome::Stopped;
@@ -468,21 +478,27 @@ async fn reply_to_request(
     // Each request restores the connection against live rows first, as the
     // Worker does: after the deadline or a revocation it is refused.
     let (result, outcome) = match runtime
-        .restore_machine_connection(&connection.attachment())
+        .restore_machine_link_request(&connection.attachment())
         .await
     {
-        Ok(Ok(_)) => match dispatch_request(runtime, connection, request).await {
-            Ok(result) => (result, RequestOutcome::Replied),
-            Err(_) => {
-                writes.close(socket, close_code::ERROR, "central unavailable");
-                return RequestOutcome::Stopped;
+        Ok(MachineLinkRequestAuthority::Admitted(active)) => {
+            match dispatch_request(runtime, &active, request).await {
+                Ok(result) => (result, RequestOutcome::Replied),
+                Err(_) => {
+                    writes.close(socket, close_code::ERROR, "central unavailable");
+                    return RequestOutcome::Stopped;
+                }
             }
-        },
-        Ok(Err(_)) => (
+        }
+        Ok(MachineLinkRequestAuthority::Refused) => (
             refused_reply(request.payload(), RefusalReason::MachineRevoked),
             RequestOutcome::AuthorityLapsed,
         ),
-        Err(_) => {
+        Ok(MachineLinkRequestAuthority::TemporarilyUnavailable) if in_batch => (
+            ReplyPayload::central_unavailable(request.payload()),
+            RequestOutcome::Replied,
+        ),
+        Ok(MachineLinkRequestAuthority::TemporarilyUnavailable) | Err(_) => {
             writes.close(socket, close_code::ERROR, "central unavailable");
             return RequestOutcome::Stopped;
         }

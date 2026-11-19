@@ -158,6 +158,17 @@ pub enum ReplyPayload {
 }
 
 impl ReplyPayload {
+    #[must_use]
+    pub fn central_unavailable(request: &RequestPayload) -> Self {
+        match request {
+            RequestPayload::Workspace(_) => Self::Workspace(WorkspaceReply {
+                result: workspace_model::WorkspaceResult::CentralUnavailable,
+                actors: vec![],
+            }),
+            RequestPayload::Mail(_) => Self::Mail(CentralMailResult::CentralUnavailable),
+        }
+    }
+
     pub fn matches_request(&self, request: &RequestPayload) -> bool {
         match (self, request) {
             (Self::Workspace(_), RequestPayload::Workspace(_))

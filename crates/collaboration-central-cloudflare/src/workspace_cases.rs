@@ -174,6 +174,11 @@ pub(super) async fn control(
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
             Response::from_json(&true)
         }
+        "/test/machine-restore-failure" => {
+            let (skip, failure) = request.json().await?;
+            runtime.fail_machine_restore_after(skip, failure);
+            Response::from_json(&true)
+        }
         "/test/engine-probe-seed" => {
             Response::from_json(&runtime.seed_probe(request.json().await?).await)
         }

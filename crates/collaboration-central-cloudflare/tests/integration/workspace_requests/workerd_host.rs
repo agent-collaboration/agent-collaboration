@@ -446,6 +446,16 @@ pub(super) struct RemoteRuntime {
     lost_answers: Mutex<Vec<RequestId>>,
 }
 impl RemoteRuntime {
+    pub async fn fail_machine_restore_after(
+        &self,
+        skip: usize,
+        failure: StoreFailure,
+    ) -> Result<(), StoreFailure> {
+        let _: bool = self
+            .control("machine-restore-failure", &(skip, failure))
+            .await?;
+        Ok(())
+    }
     pub async fn inject_engine_commit_fault(
         &self,
         fault: collaboration_central_core::EngineCommitFault,

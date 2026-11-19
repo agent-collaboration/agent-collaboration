@@ -4,9 +4,9 @@ use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, LinkRequestBatch, ReplyPayload,
     RequestPayload, RequestRefusal, RequestStatusAnswer, RequestStatusQuery,
 };
-use central_storage::StoreFailure;
 use collaboration_central_core::{
-    MachineConnectionAttachment, MailAckIgnored, MailAckSettlement, WorkspaceCaller,
+    MachineConnectionAttachment, MachineLinkRequestAuthority, MailAckIgnored, MailAckSettlement,
+    WorkspaceCaller,
 };
 use runtime_primitives::Clock;
 use worker::{
@@ -257,7 +257,9 @@ impl CentralObject {
                             lapsed = true;
                             refused_reply(request.payload(), RefusalReason::MachineRevoked)
                         }
-                        MachineRequestResult::Unavailable => unavailable_reply(request.payload()),
+                        MachineRequestResult::Unavailable => {
+                            ReplyPayload::central_unavailable(request.payload())
+                        }
                     };
                     self.reply_to_machine(&socket, request, reply).await?;
                 }
@@ -375,28 +377,32 @@ impl CentralObject {
         attachment: &MachineConnectionAttachment,
         request: &LinkRequest,
     ) -> Result<MachineRequestResult> {
-        let restored = runtime.restore_machine_connection(attachment).await;
+        let restored = runtime.restore_machine_link_request(attachment).await;
         #[cfg(feature = "test-support")]
         self.witness_restored(
             request.correlation_id(),
             match &restored {
-                Ok(Ok(_)) => super::workspace_link_witness::RestoreOutcome::Admitted,
-                Ok(Err(_)) => super::workspace_link_witness::RestoreOutcome::Refused,
-                Err(_) => super::workspace_link_witness::RestoreOutcome::Unavailable,
+                Ok(MachineLinkRequestAuthority::Admitted(_)) => {
+                    super::workspace_link_witness::RestoreOutcome::Admitted
+                }
+                Ok(MachineLinkRequestAuthority::Refused) => {
+                    super::workspace_link_witness::RestoreOutcome::Refused
+                }
+                Ok(MachineLinkRequestAuthority::TemporarilyUnavailable) | Err(_) => {
+                    super::workspace_link_witness::RestoreOutcome::Unavailable
+                }
             },
         )
         .await?;
         let connection = match restored {
-            Ok(Ok(connection)) => connection,
-            Ok(Err(_)) => return Ok(MachineRequestResult::AuthorityRefused),
-            Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
+            Ok(MachineLinkRequestAuthority::Admitted(connection)) => connection,
+            Ok(MachineLinkRequestAuthority::Refused) => {
+                return Ok(MachineRequestResult::AuthorityRefused);
+            }
+            Ok(MachineLinkRequestAuthority::TemporarilyUnavailable) => {
                 return Ok(MachineRequestResult::Unavailable);
             }
-            Err(
-                error @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }),
-            ) => {
-                return Err(worker::Error::RustError(error.to_string()));
-            }
+            Err(error) => return Err(worker::Error::RustError(error.to_string())),
         };
         let caller = match WorkspaceCaller::from_machine_link(connection, request.caller().clone())
         {
@@ -458,15 +464,6 @@ fn refused_reply(payload: &RequestPayload, reason: RefusalReason) -> ReplyPayloa
         RequestPayload::Mail(_) => ReplyPayload::Mail(CentralMailResult::Refused(
             CentralMailRefusal::Workspace(reason),
         )),
-    }
-}
-fn unavailable_reply(payload: &RequestPayload) -> ReplyPayload {
-    match payload {
-        RequestPayload::Workspace(_) => ReplyPayload::Workspace(WorkspaceReply {
-            result: WorkspaceResult::CentralUnavailable,
-            actors: vec![],
-        }),
-        RequestPayload::Mail(_) => ReplyPayload::Mail(CentralMailResult::CentralUnavailable),
     }
 }
 fn send(socket: &WebSocket, frame: DataFrame) -> Result<()> {
