@@ -517,6 +517,8 @@ pub use wire_contract::*;
 
 pub use core_contract::*;
 
+mod central_mail_ack;
+pub use central_mail_ack::{MailAckIgnored, MailAckSettlement};
 mod central_mail_requests;
 mod central_mail_rows;
 mod central_mail_store;

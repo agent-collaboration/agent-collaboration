@@ -5,7 +5,9 @@ use central_link_protocol::{
     RequestPayload, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::StoreFailure;
-use collaboration_central_core::{MachineConnectionAttachment, WorkspaceCaller};
+use collaboration_central_core::{
+    MachineConnectionAttachment, MailAckIgnored, MailAckSettlement, WorkspaceCaller,
+};
 use runtime_primitives::Clock;
 use worker::{
     Request, Response, Result, WebSocket, WebSocketIncomingMessage, WebSocketPair,
@@ -25,6 +27,10 @@ enum IncomingRequests {
         correlation_id: central_link_protocol::CorrelationId,
         caller: workspace_model::Caller,
         query: RequestStatusQuery,
+    },
+    Ack {
+        message_id: workspace_ids::MessageId,
+        answer: central_link_protocol::DeliveryAnswer,
     },
 }
 enum MachineRequestResult {
@@ -105,6 +111,9 @@ impl CentralObject {
                 caller,
                 query,
             },
+            LinkFrame::Data(DataFrame::Ack { message_id, answer }) => {
+                IncomingRequests::Ack { message_id, answer }
+            }
             // Literal ping/pong is answered by the platform without calling this handler.
             LinkFrame::Ping
             | LinkFrame::Pong
@@ -113,7 +122,6 @@ impl CentralObject {
                 | DataFrame::Reply { .. }
                 | DataFrame::RequestStatusReply { .. }
                 | DataFrame::Deliver { .. }
-                | DataFrame::Ack { .. }
                 | DataFrame::MachineTokenRenewal { .. },
             ) => return close(&socket, "unsupported link event"),
         };
@@ -129,6 +137,18 @@ impl CentralObject {
         super::signin_launcher_controls::sample_clock(self, &organization).await?;
         let runtime = self.runtime(organization).await?;
         match requests {
+            IncomingRequests::Ack { message_id, answer } => {
+                match runtime
+                    .acknowledge_delivery(&attachment, &message_id, answer)
+                    .await
+                {
+                    Ok(MailAckSettlement::Ignored(MailAckIgnored::MachineAuthorityLapsed)) => {
+                        close(&socket, "machine authority expired or revoked")
+                    }
+                    Ok(_) => Ok(()),
+                    Err(_) => socket.close(Some(1011), Some("central unavailable")),
+                }
+            }
             IncomingRequests::Status {
                 correlation_id,
                 caller,
