@@ -9,7 +9,7 @@ use workspace_model as m;
 async fn generic(f: &Fixture, request: &str, name: &str) -> Result<m::WorkspaceReply> {
     Ok(f.host
         .request(
-            &caller()?,
+            &caller(f).await?,
             m::WorkspaceRequest {
                 request_id: Some(request.to_owned().try_into()?),
                 workspace_id: None,
@@ -54,20 +54,24 @@ async fn generic_create_defaults_description_and_shares_admin_name_uniqueness_an
     assert_eq!(
         f.rows(
             A,
-            "SELECT name,description,state FROM workspaces WHERE workspace_id=?",
+            "SELECT name,description,state FROM directory_workspaces WHERE workspace_id=?",
             vec![text(&workspace.workspace_id)]
         )
         .await?,
         vec![vec![text("Generic name"), text(""), text("active")]]
     );
     let directory_before = f
-        .rows(A, "SELECT * FROM workspaces ORDER BY workspace_id", vec![])
+        .rows(
+            A,
+            "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+            vec![],
+        )
         .await?;
     let audit_before = f.snapshot().await?.1;
     let actors_before = f
         .rows(
             A,
-            "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+            "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
             vec![],
         )
         .await?;
@@ -115,10 +119,14 @@ async fn generic_create_defaults_description_and_shares_admin_name_uniqueness_an
         duplicate.value()?,
         json!({"result":"refused","reason":"nameInUse"})
     );
-    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM request_log)",vec![]).await?,vec![vec![number(2)?,number(1)?,number(5)?]]);
+    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM runtime_request_log)",vec![]).await?,vec![vec![number(2)?,number(1)?,number(5)?]]);
     assert!(
-        f.rows(A, "SELECT * FROM workspaces ORDER BY workspace_id", vec![])
-            .await?
+        f.rows(
+            A,
+            "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+            vec![]
+        )
+        .await?
             == directory_before,
         "name refusals changed the directory"
     );
@@ -129,7 +137,7 @@ async fn generic_create_defaults_description_and_shares_admin_name_uniqueness_an
     assert!(
         f.rows(
             A,
-            "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+            "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
             vec![]
         )
         .await?
@@ -171,7 +179,11 @@ async fn descriptions_ascii_collision_index_and_non_ascii_names_keep_their_exact
         json!({"result":"applied","workspace":{"workspaceId":operation,"name":"Research","description":description,"state":"active"}})
     );
     let before = f
-        .rows(A, "SELECT * FROM workspaces ORDER BY workspace_id", vec![])
+        .rows(
+            A,
+            "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+            vec![],
+        )
         .await?;
     let collision = create(
         &f,
@@ -187,8 +199,12 @@ async fn descriptions_ascii_collision_index_and_non_ascii_names_keep_their_exact
         json!({"result":"refused","reason":"nameInUse"})
     );
     assert_eq!(
-        f.rows(A, "SELECT * FROM workspaces ORDER BY workspace_id", vec![])
-            .await?,
+        f.rows(
+            A,
+            "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+            vec![]
+        )
+        .await?,
         before
     );
     let unchanged = all_effects(&f).await?;
@@ -209,7 +225,7 @@ async fn descriptions_ascii_collision_index_and_non_ascii_names_keep_their_exact
     // Independently prove the SQL index itself rejects padded ASCII collisions.
     let result=f.runtime(A).await?.statement_host().run_batch(StatementBatch {
         statements:vec![GuardedStatement {statement:Statement {
-            sql:"INSERT INTO workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,' RESEARCH ','','active',?,?)",
+            sql:"INSERT INTO directory_workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,' RESEARCH ','','active',?,?)",
             args:vec![text("019f0000-0000-7000-8000-00000000d7a4"),text("2030-03-17T17:46:40Z"),text("2030-03-17T17:46:40Z")],
         },expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged,
     }).await?;
@@ -237,7 +253,8 @@ async fn descriptions_ascii_collision_index_and_non_ascii_names_keep_their_exact
         );
     }
     assert_eq!(
-        f.rows(A, "SELECT COUNT(*) FROM workspaces", vec![]).await?,
+        f.rows(A, "SELECT COUNT(*) FROM directory_workspaces", vec![])
+            .await?,
         vec![vec![number(3)?]]
     );
     f.close().await
@@ -261,13 +278,14 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
         machine_rows(&f).await? == before,
         "person create changed machine enrollment or credential state"
     );
-    assert_eq!(f.rows(A,"SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE kind='workspaceCreated'",vec![]).await?,vec![vec![text(operation),text("workspaceCreated"),text("person"),text(signed::OWNER),text("workspace:create"),text(operation)]]);
+    assert_eq!(f.rows(A,"SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE kind='workspaceCreated'",vec![]).await?,vec![vec![text(operation),text("workspaceCreated"),text("person"),text(signed::OWNER),text("workspace:create"),text(operation)]]);
     let request = |id: &str| -> Result<m::WorkspaceRequest> {
         Ok(m::WorkspaceRequest {
             request_id: Some(id.to_owned().try_into()?),
             workspace_id: Some(operation.to_owned().try_into()?),
             operation: m::WorkspaceOperation::CreateArea {
                 name: "Ordinary machine area".to_owned().try_into()?,
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         })
     };
@@ -282,7 +300,10 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
     );
     let denied = f
         .host
-        .request(&caller()?, request("019f0000-0000-7000-8000-00000000d7b2")?)
+        .request(
+            &caller(&f).await?,
+            request("019f0000-0000-7000-8000-00000000d7b2")?,
+        )
         .await?;
     assert_eq!(
         denied.result,
@@ -295,16 +316,19 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
     assert!(machine_rows(&f).await? == before);
     f.apply(
         A,
-        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+        "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             text(serde_json::to_string(&vec![operation])?),
-            text(MACHINE),
+            text(INSTALLATION),
         ],
     )
     .await?;
     let allowed = f
         .host
-        .request(&caller()?, request("019f0000-0000-7000-8000-00000000d7b3")?)
+        .request(
+            &caller(&f).await?,
+            request("019f0000-0000-7000-8000-00000000d7b3")?,
+        )
         .await?;
     assert!(
         matches!(
@@ -314,7 +338,8 @@ async fn person_create_records_checked_origin_without_machine_rights() -> Result
         "the same ordinary operation needs its explicit machine allowance"
     );
     assert_eq!(
-        f.rows(A, "SELECT COUNT(*) FROM machines", vec![]).await?,
+        f.rows(A, "SELECT COUNT(*) FROM login_machines", vec![])
+            .await?,
         vec![vec![number(1)?]]
     );
     f.close().await
@@ -374,7 +399,7 @@ async fn concurrent_same_name_creates_keep_the_first_workspace_and_retain_the_se
     assert_eq!(
         f.rows(
             A,
-            "SELECT workspace_id,name,description FROM workspaces",
+            "SELECT workspace_id,name,description FROM directory_workspaces",
             vec![]
         )
         .await?,
@@ -384,7 +409,7 @@ async fn concurrent_same_name_creates_keep_the_first_workspace_and_retain_the_se
             text("winner")
         ]]
     );
-    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM organization_used_requests)",vec![]).await?,vec![vec![number(2)?,number(1)?,number(2)?]]);
+    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM admin_used_requests)",vec![]).await?,vec![vec![number(2)?,number(1)?,number(2)?]]);
     assert_eq!(
         create(&f, &owner, second_id, "CONCURRENT NAME", "loser")
             .await?

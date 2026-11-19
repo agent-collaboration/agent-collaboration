@@ -15,7 +15,7 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let item = uuid(8600);
@@ -70,7 +70,7 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
         }
     );
     let rows=runtime.statement_host().read(Statement {
-        sql:"SELECT effect_count,(SELECT COUNT(*) FROM request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
+        sql:"SELECT effect_count,(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
         args:vec![text(id::<workspace_model::RequestId>(8602)),text(group)],
     }).await.unwrap();
     assert_eq!(
@@ -96,11 +96,11 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
 
 #[tokio::test]
 async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_millisecond_boundary() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
@@ -126,6 +126,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
         .await
         .unwrap();
     fixture.set_utc(start + chrono::Duration::hours(24)).await;
+    fixture.refresh_caller().await;
     assert_eq!(
         runtime.request_probe(&fixture.caller, first).await.unwrap(),
         original
@@ -150,6 +151,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
     fixture
         .set_utc(start + chrono::Duration::hours(24) + chrono::Duration::milliseconds(1))
         .await;
+    fixture.refresh_caller().await;
 
     let answer = runtime
         .request_probe(
@@ -172,7 +174,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
         }
     );
     let rows=runtime.statement_host().read(Statement {
-        sql:"SELECT effect_count,(SELECT state FROM engine_probe_items WHERE item_id=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
+        sql:"SELECT effect_count,(SELECT state FROM engine_probe_items WHERE item_id=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
         args:vec![text(uuid(8612)),text(id::<workspace_model::RequestId>(8614)),text(group)],
     }).await.unwrap();
     assert_eq!(
@@ -205,7 +207,7 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     for (number, kind, applied) in [
@@ -244,7 +246,7 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
         );
 
         let rows=runtime.statement_host().read(Statement {
-            sql:"SELECT effect_count,(SELECT COUNT(*) FROM central_work_attempts WHERE subject_key=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
+            sql:"SELECT effect_count,(SELECT COUNT(*) FROM engine_work_attempts WHERE subject_key=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
             args:vec![text(item),text(id::<workspace_model::RequestId>(number+2)),text(group)],
         }).await.unwrap();
         assert_eq!(
@@ -294,7 +296,7 @@ async fn a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let group = uuid(8630);
@@ -351,7 +353,7 @@ async fn a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_
         }
     ));
     let rows=runtime.statement_host().read(Statement {
-        sql:"SELECT state,(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),((SELECT COUNT(*) FROM central_work_attempts WHERE subject_key=?)),(SELECT COUNT(*) FROM request_log WHERE request_id=?) FROM engine_probe_items WHERE item_id=?",
+        sql:"SELECT state,(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),((SELECT COUNT(*) FROM engine_work_attempts WHERE subject_key=?)),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_items WHERE item_id=?",
         args:vec![text(group),text(uuid(8632)),text(id::<workspace_model::RequestId>(8642)),text(uuid(8632))],
     }).await.unwrap();
     assert_eq!(

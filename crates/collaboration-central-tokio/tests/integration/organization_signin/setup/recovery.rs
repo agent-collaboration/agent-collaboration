@@ -18,11 +18,11 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() -> Result {
     let lost = create(&f, &owner, operation, "Lost reply", "retained description").await?;
     assert_eq!(lost.status, 503);
     assert!(lost.body.is_empty());
-    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests)",vec![]).await?,vec![vec![number(1)?,number(1)?,number(2)?,number(1)?]],"the lost answer followed a real complete commit");
+    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests)",vec![]).await?,vec![vec![number(1)?,number(1)?,number(2)?,number(1)?]],"the lost answer followed a real complete commit");
     let retained = f
         .rows(
             A,
-            "SELECT answer FROM request_log WHERE request_id=?",
+            "SELECT answer FROM runtime_request_log WHERE request_id=?",
             vec![text(operation)],
         )
         .await?;
@@ -47,7 +47,7 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() -> Result {
         "recovery rewrote the directory, answer, actor or audit"
     );
     assert_eq!(
-        f.rows(A, "SELECT COUNT(*) FROM organization_used_requests", vec![])
+        f.rows(A, "SELECT COUNT(*) FROM admin_used_requests", vec![])
             .await?,
         vec![vec![number(2)?]]
     );
@@ -82,7 +82,7 @@ async fn last_ledger_statement_failure_rolls_back_create_record_marker_and_actor
     other.permissions = vec!["workspace:create".to_owned()];
     // This is the actual final Statement from request_log::retain. The expired
     // row exists because a real older Create committed, so DELETE must visit it.
-    f.apply(A,"CREATE TRIGGER setup_last_ledger_failure BEFORE DELETE ON request_log BEGIN SELECT RAISE(ABORT,'fixture last ledger cleanup failure'); END",vec![]).await?;
+    f.apply(A,"CREATE TRIGGER setup_last_ledger_failure BEFORE DELETE ON runtime_request_log BEGIN SELECT RAISE(ABORT,'fixture last ledger cleanup failure'); END",vec![]).await?;
     let before = all_effects(&f).await?;
     let operation = "019f0000-0000-7000-8000-00000000d782";
     let jti = signed::fresh_request_id(f.clock_time())?;
@@ -109,7 +109,7 @@ async fn last_ledger_statement_failure_rolls_back_create_record_marker_and_actor
         Some(&json!("applied")),
         "exact same proof remains fresh after rollback"
     );
-    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM actor_identities)",vec![]).await?,vec![vec![number(2)?,number(3)?,number(2)?,number(1)?,number(2)?]]);
+    assert_eq!(f.rows(A,"SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM access_actor_identities)",vec![]).await?,vec![vec![number(2)?,number(3)?,number(2)?,number(1)?,number(2)?]]);
     assert_eq!(
         create(
             &f,

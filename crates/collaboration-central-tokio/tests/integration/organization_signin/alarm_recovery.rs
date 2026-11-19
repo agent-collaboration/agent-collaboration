@@ -1,9 +1,8 @@
 //! The actual private digest HTTP route repairs a missing warm-owner alarm.
-use super::support::{Fixture, signed};
+use super::support::{Fixture, INSTALLATION, signed};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch};
 use central_storage::{SqlValue, Statement, StoreFailure};
 use collaboration_central_conformance::ConformanceResult as TestResult;
-use collaboration_central_core::WorkspaceCaller;
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -12,7 +11,6 @@ use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };
 const A: &str = signed::ORGANIZATION;
-const MACHINE: &str = "019f0000-0000-7000-8000-00000000b302";
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
 }
@@ -27,16 +25,11 @@ async fn prepare(f: &Fixture) -> TestResult<(m::Timestamp, Value)> {
     // Existing owning fixture writes establish local machine/credential facts.
     // No timer is planted: the real admitted APIs create the session and wake.
     f.seed_machine().await?;
-    let target = m::SessionAddress {
-        machine_id: MACHINE.to_owned().try_into()?,
-        endpoint: "codex-local".to_owned().try_into()?,
+    let target = workspace_ids::SessionRef {
+        machine_id: INSTALLATION.to_owned().try_into()?,
         session_id: "private-digest-alarm-recovery".to_owned().try_into()?,
     };
-    let caller = WorkspaceCaller {
-        organization_id: super::support::org(A)?,
-        caller: m::Caller::Session(target.clone()),
-        credential_hash: "signin-fixture-hash".to_owned(),
-    };
+    let caller = f.machine_caller("private-digest-alarm-recovery").await?;
     let created = f
         .host
         .request(
@@ -88,7 +81,7 @@ async fn digest(f: &Fixture) -> TestResult<(u16, Value)> {
 async fn timer_rows(f: &Fixture) -> TestResult<Vec<Vec<SqlValue>>> {
     let runtime = f.runtime(A).await?;
     Ok(runtime.statement_host().read(Statement {
-        sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM wakes ORDER BY wake_id",
+        sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM automation_wakes ORDER BY wake_id",
         args:vec![],
     }).await?.rows)
 }

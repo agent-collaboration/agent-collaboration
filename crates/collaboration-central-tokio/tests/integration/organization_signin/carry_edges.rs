@@ -23,7 +23,7 @@ async fn cold_tampered_stamp_refuses_valid_setup_and_keeps_an_unaffected_org_rea
     );
     f.apply(
         A,
-        "UPDATE organization_identity SET organization_statement=?",
+        "UPDATE signin_organization_identity SET organization_statement=?",
         vec![text(signed::tamper_signature(&original)?)],
     )
     .await?;
@@ -60,7 +60,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         f.rows(
             A,
-            "SELECT created_at,updated_at FROM organization_change_records ORDER BY id",
+            "SELECT created_at,updated_at FROM signin_change_records ORDER BY id",
             vec![]
         )
         .await?,
@@ -85,7 +85,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         f.rows(
             B,
-            "SELECT created_at,updated_at FROM organization_change_records ORDER BY id",
+            "SELECT created_at,updated_at FROM signin_change_records ORDER BY id",
             vec![]
         )
         .await?,
@@ -106,7 +106,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         f.rows(
             A,
-            "SELECT created_at,updated_at FROM organization_change_records ORDER BY id",
+            "SELECT created_at,updated_at FROM signin_change_records ORDER BY id",
             vec![]
         )
         .await?,
@@ -119,7 +119,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         f.rows(
             A,
-            "SELECT created_at,updated_at FROM organization_identity",
+            "SELECT created_at,updated_at FROM signin_organization_identity",
             vec![]
         )
         .await?,
@@ -128,7 +128,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         f.rows(
             B,
-            "SELECT created_at,updated_at FROM organization_identity",
+            "SELECT created_at,updated_at FROM signin_organization_identity",
             vec![]
         )
         .await?,
@@ -278,7 +278,7 @@ async fn cold_retired_key_refuses_exact_retry_and_new_org_but_preserves_the_rema
     let after = f.snapshot().await?;
     assert!(after == before, "the refused stamp stays exactly as stored");
     assert_eq!((after.0.len(), after.1.len()), (1, 1));
-    assert_eq!(f.rows(C,"SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records)",vec![]).await?,vec![vec![number(0)?,number(0)?]],"nothing is written for C");
+    assert_eq!(f.rows(C,"SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records)",vec![]).await?,vec![vec![number(0)?,number(0)?]],"nothing is written for C");
     f.close().await
 }
 
@@ -303,20 +303,20 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     let organization_before = f
         .rows(
             A,
-            "SELECT * FROM organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_authorization_floors ORDER BY id",
             vec![],
         )
         .await?;
     assert!(
         f.rows(
             A,
-            "SELECT id FROM person_organization_authorization_floors",
+            "SELECT id FROM signin_person_authorization_floors",
             vec![]
         )
         .await?
         .is_empty()
     );
-    f.apply(A,"CREATE TRIGGER fail_first_person_floor BEFORE INSERT ON person_organization_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture first person floor failure'); END",vec![]).await?;
+    f.apply(A,"CREATE TRIGGER fail_first_person_floor BEFORE INSERT ON signin_person_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture first person floor failure'); END",vec![]).await?;
     let request = person_floor(A, signed::OWNER, signed::OWNER_SUBJECT, 4, "active");
     let failed = f.post(REVISIONS, &request).await?;
     assert_eq!(failed.status, 503, "a rolled-back apply never acknowledges");
@@ -324,7 +324,7 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     assert!(
         f.rows(
             A,
-            "SELECT id FROM person_organization_authorization_floors",
+            "SELECT id FROM signin_person_authorization_floors",
             vec![]
         )
         .await?
@@ -334,7 +334,7 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     assert_eq!(
         f.rows(
             A,
-            "SELECT * FROM organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_authorization_floors ORDER BY id",
             vec![]
         )
         .await?,
@@ -346,11 +346,11 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     let retried = f.post(REVISIONS, &request).await?;
     assert_eq!(retried.status, 200);
     assert_eq!(retried.value()?, json!({"acknowledgedRevision":4}));
-    assert_eq!(f.rows(A,"SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM organization_authorization_floors o,person_organization_authorization_floors p",vec![]).await?,vec![vec![number(3)?,text("active"),number(4)?,text(signed::OWNER_SUBJECT)]]);
+    assert_eq!(f.rows(A,"SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM signin_authorization_floors o,signin_person_authorization_floors p",vec![]).await?,vec![vec![number(3)?,text("active"),number(4)?,text(signed::OWNER_SUBJECT)]]);
     let person_before = f
         .rows(
             A,
-            "SELECT * FROM person_organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_person_authorization_floors ORDER BY id",
             vec![],
         )
         .await?;
@@ -367,7 +367,7 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     assert_eq!(
         f.rows(
             A,
-            "SELECT * FROM person_organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_person_authorization_floors ORDER BY id",
             vec![]
         )
         .await?,
@@ -376,7 +376,7 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     assert_eq!(
         f.rows(
             A,
-            "SELECT * FROM organization_authorization_floors ORDER BY id",
+            "SELECT * FROM signin_authorization_floors ORDER BY id",
             vec![]
         )
         .await?,

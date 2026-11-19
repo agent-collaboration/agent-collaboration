@@ -55,14 +55,14 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
                 0,
                 m::WorkspaceOperation::List {
                     query: query.clone(),
-                    after: m::ChangePosition::ZERO,
+                    cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                     limit: 1.try_into().unwrap(),
                 },
             )
             .await;
         let m::WorkspaceResult::Done(m::WorkspaceAnswer::Page {
             items,
-            next_after_position: Some(after),
+            next_cursor: Some(after),
         }) = page.result
         else {
             panic!("first page");
@@ -76,16 +76,16 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
                 0,
                 m::WorkspaceOperation::List {
                     query,
-                    after,
+                    cursor: after,
                     limit: 1.try_into().unwrap(),
                 },
             )
             .await;
         assert!(
-            matches!(page.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Page{items,next_after_position:None}) if items.iter().map(m::ItemView::item_ref).collect::<Vec<_>>()==vec![second])
+            matches!(page.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Page{items,next_cursor:None}) if items.iter().map(m::ItemView::item_ref).collect::<Vec<_>>()==vec![second])
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     for item in [
         &first_reference,
         &second_reference,
@@ -97,7 +97,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
             .inspect_workspace(
                 &f.workspace,
                 Statement {
-                    sql: "SELECT item_kind,thread_id FROM changes WHERE item_id=?",
+                    sql: "SELECT item_kind,thread_id FROM workspace_changes WHERE item_id=?",
                     args: vec![text(id)],
                 },
             )
@@ -110,17 +110,17 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
     };
     f.call(947, m::WorkspaceOperation::RemoveReference { reference_id })
         .await;
-    let inbox = f
-        .call(
-            0,
-            m::WorkspaceOperation::Inbox {
-                after: None,
-                limit: 100.try_into().unwrap(),
+    // A removal is filed under the source's thread, like the creation was.
+    let removal = runtime
+        .inspect_workspace(
+            &f.workspace,
+            Statement {
+                sql: "SELECT change_kind,thread_id FROM workspace_changes WHERE item_id=? AND change_kind='removed'",
+                args: vec![text(first_reference.kind_and_id().1)],
             },
         )
-        .await;
-    assert!(
-        matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,..}) if entries.iter().any(|row|row.item==m::ItemView::Removed{item:first_reference.clone()}&&row.change.event==m::ChangeEvent::Removed))
-    );
+        .await
+        .unwrap();
+    assert_eq!(removal.rows, vec![vec![text("removed"), text(&thread)]]);
     f.host.close().await;
 }

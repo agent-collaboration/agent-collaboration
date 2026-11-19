@@ -12,7 +12,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     let area = f.area(7400).await;
     let thread = f.thread(7401, area).await;
     let (observer, recipient) = joined_observer(&f, &thread).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let posted = f.call(7402, post(&thread, vec![])).await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { position, .. }) = posted.result
     else {
@@ -27,6 +27,9 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
                 operation: CentralMailOperation::SendMessage {
                     to: session(&observer),
                     body: "Direct stays queued".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
+                    sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                 },
             },
         )
@@ -47,7 +50,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     f.advance(Duration::from_secs(900)).await;
     fired.until_held().await;
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT message_id,state,sender,body FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",
+        sql: "SELECT message_id,state,sender,body FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",
         args: vec![text(&recipient), text(&thread)],
     }).await.unwrap();
     assert_eq!(rows.rows.len(), 1);
@@ -67,7 +70,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].position, position);
     let notice_id = notice_id.clone();
-    let windows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM notification_window_items WHERE change_id=?)", args: vec![text(&recipient), text(&thread), text(&items[0].change_id)] }).await.unwrap();
+    let windows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM mail_notification_window_items WHERE change_id=?)", args: vec![text(&recipient), text(&thread), text(&items[0].change_id)] }).await.unwrap();
     assert_eq!(
         windows.rows,
         vec![vec![
@@ -76,6 +79,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         ]]
     );
     fired.release();
+    let observer = f.fresh_caller(&observer).await;
     let left = call(
         &f.host,
         &observer,
@@ -90,12 +94,12 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         left.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    let after = runtime.statement_host().read(Statement { sql: "SELECT message_id,state FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
+    let after = runtime.statement_host().read(Statement { sql: "SELECT message_id,state FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
     assert_eq!(after.rows, vec![vec![text(&notice_id), text("cancelled")]]);
     let direct = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT message_id,state,message_kind FROM messages WHERE message_id=?",
+            sql: "SELECT message_id,state,message_kind FROM mail_messages WHERE message_id=?",
             args: vec![text(&direct_id)],
         })
         .await

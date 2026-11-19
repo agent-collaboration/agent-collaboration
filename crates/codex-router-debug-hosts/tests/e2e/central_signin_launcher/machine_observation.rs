@@ -182,11 +182,12 @@ async fn private_observe_projects_machine_and_approval_fields_with_independent_a
         .and_then(Value::as_str)
         .ok_or("observed machine identity is missing")?
         .to_owned();
+    assert_eq!(machine_id, INSTALLATION);
     message_board::RecordId::try_from(machine_id.clone())
         .map_err(|_| "observed machine identity is not a canonical UUIDv7")?;
     assert!(
         machines
-            == json!([{"machineId":machine_id,"installationId":INSTALLATION,
+            == json!([{"machineId":machine_id,
         "state":"revoked","allowedWorkspaces":[FIRST_WORKSPACE],"enrollmentGeneration":0}]),
         "approved-only machine observation differs"
     );
@@ -236,7 +237,7 @@ async fn private_observe_projects_machine_and_approval_fields_with_independent_a
     let (machines, approvals) = machine_arrays(&child.observe(signed::ORGANIZATION).await?)?;
     assert!(
         machines
-            == json!([{"machineId":machine_id,"installationId":INSTALLATION,
+            == json!([{"machineId":machine_id,
         "state":"enrolled","allowedWorkspaces":[FIRST_WORKSPACE,SECOND_WORKSPACE],"enrollmentGeneration":2}]),
         "current machine allowance union or generation differs"
     );
@@ -287,7 +288,7 @@ async fn private_observe_projects_machine_and_approval_fields_with_independent_a
         .ok_or("first machine disappeared from observation")?;
     let second_machine = machine_rows
         .iter()
-        .find(|row| row.get("installationId") == Some(&json!(OTHER_INSTALLATION)))
+        .find(|row| row.get("machineId") == Some(&json!(OTHER_INSTALLATION)))
         .ok_or("second installation is absent from observation")?;
     let other_machine_id = second_machine
         .get("machineId")
@@ -302,13 +303,13 @@ async fn private_observe_projects_machine_and_approval_fields_with_independent_a
     // Machine rows are compared by identity; their array order is not contracted.
     assert!(
         first_machine
-            == &json!({"machineId":machine_id,"installationId":INSTALLATION,
+            == &json!({"machineId":machine_id,
         "state":"enrolled","allowedWorkspaces":[FIRST_WORKSPACE,SECOND_WORKSPACE],"enrollmentGeneration":2}),
         "second approval rewrote the first machine facts"
     );
     assert!(
         second_machine
-            == &json!({"machineId":other_machine_id,"installationId":OTHER_INSTALLATION,
+            == &json!({"machineId":other_machine_id,
         "state":"revoked","allowedWorkspaces":[SECOND_WORKSPACE],"enrollmentGeneration":0}),
         "second machine state or independent allowances differ"
     );
@@ -402,7 +403,7 @@ async fn private_observe_first_after_idle_expiry_accepts_automatic_records_and_p
         .ok_or("idle observation machine identity is missing")?;
     assert!(
         machines
-            == json!([{"machineId":machine_id,"installationId":INSTALLATION,
+            == json!([{"machineId":machine_id,
         "state":"revoked","allowedWorkspaces":[],"enrollmentGeneration":2}]),
         "idle observation omitted allowance withdrawal or generation fence"
     );

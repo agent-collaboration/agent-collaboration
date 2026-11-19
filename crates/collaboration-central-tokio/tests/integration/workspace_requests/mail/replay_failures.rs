@@ -10,7 +10,7 @@ use workspace_model::central_mail::{
 
 fn snapshot() -> Statement {
     Statement {
-        sql: "SELECT (SELECT json_group_array(json_array(wake_id,due_at,state,created_at,updated_at)) FROM wakes),(SELECT json_group_array(json_array(request_id,answer,created_at,updated_at)) FROM request_log),(SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM actor_identities)",
+        sql: "SELECT (SELECT json_group_array(json_array(wake_id,due_at,state,created_at,updated_at)) FROM automation_wakes),(SELECT json_group_array(json_array(request_id,answer,created_at,updated_at)) FROM runtime_request_log),(SELECT COUNT(*) FROM mail_messages),(SELECT COUNT(*) FROM access_actor_identities)",
         args: vec![],
     }
 }
@@ -29,7 +29,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
@@ -51,7 +51,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE wakes SET due_at=?",
+                        sql: "UPDATE automation_wakes SET due_at=?",
                         args: vec![text(
                             unsupported.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
                         )]
@@ -102,7 +102,7 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())

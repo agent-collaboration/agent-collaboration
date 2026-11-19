@@ -63,11 +63,13 @@ async fn a_move_waiting_on_one_organization_runs_before_another_organization_dri
     // Arrange: organizations A and B, both due at `due`, on one host and clock.
     let fixture = Fixture::new().await;
     let a = runtime(&fixture).await;
-    let mut other: WorkspaceCaller = caller();
-    other.organization_id =
-        serde_json::from_str(&format!("\"{}\"", id::<m::WorkspaceId>(91))).unwrap();
-    seed(&fixture.host, &other).await;
-    let b = fixture.host.central(&other.organization_id).await.unwrap();
+    let other_organization: fleet_identity_protocol::OrganizationId =
+        id::<m::WorkspaceId>(91).to_string().try_into().unwrap();
+    let other: WorkspaceCaller =
+        admitted_organization(&fixture.host, &other_organization, fixture.clock.as_ref())
+            .await
+            .unwrap();
+    let b = fixture.host.central(other.organization_id()).await.unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::minutes(5);
     arm(&a, 13410, due).await;
     arm(&b, 13420, due).await;

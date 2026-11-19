@@ -45,7 +45,7 @@ async fn corrupt_retained_answer_is_unavailable_without_any_replay_effect() -> R
         fixture
             .apply(
                 A,
-                "UPDATE request_log SET answer=? WHERE request_id=?",
+                "UPDATE runtime_request_log SET answer=? WHERE request_id=?",
                 vec![text(encoded), text(operation)],
             )
             .await?;
@@ -90,7 +90,7 @@ async fn validated_retained_answer_returns_its_original_json_text() -> Result {
     fixture
         .apply(
             A,
-            "UPDATE request_log SET answer=? WHERE request_id=?",
+            "UPDATE runtime_request_log SET answer=? WHERE request_id=?",
             vec![text(&retained), text(operation)],
         )
         .await?;
@@ -108,7 +108,7 @@ async fn validated_retained_answer_returns_its_original_json_text() -> Result {
     );
     assert_eq!(
         fixture
-            .rows(A, "SELECT COUNT(*) FROM organization_used_requests", vec![])
+            .rows(A, "SELECT COUNT(*) FROM admin_used_requests", vec![])
             .await?,
         vec![vec![number(2)?]]
     );
@@ -119,7 +119,7 @@ async fn validated_retained_answer_returns_its_original_json_text() -> Result {
     fixture
         .apply(
             A,
-            "UPDATE request_log SET answer=? WHERE request_id=?",
+            "UPDATE runtime_request_log SET answer=? WHERE request_id=?",
             vec![text(&extended_text), text(operation)],
         )
         .await?;

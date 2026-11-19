@@ -118,13 +118,16 @@ pub(crate) fn read_answer(
             cursor,
             limit,
         } => {
+            let items_by_ref: std::collections::BTreeMap<_, _> = items
+                .into_iter()
+                .map(|item| (item.item_ref(), item))
+                .collect();
             let positioned = rows
                 .listed
                 .iter()
                 .map(|listed| {
-                    let item = items
-                        .iter()
-                        .find(|item| item.item_ref() == listed.item)
+                    let item = items_by_ref
+                        .get(&listed.item)
                         .cloned()
                         .ok_or_else(|| corrupt("listed item"))?;
                     Ok(PositionedItem {

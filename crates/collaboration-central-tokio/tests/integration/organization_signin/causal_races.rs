@@ -35,7 +35,7 @@ async fn a_second_first_provision_commits_while_the_first_waits_and_identical_re
         assert!(
             f.rows(
                 A,
-                "SELECT organization_statement FROM organization_identity",
+                "SELECT organization_statement FROM signin_organization_identity",
                 vec![]
             )
             .await?[0][0]
@@ -76,7 +76,7 @@ async fn a_held_renewal_loses_to_the_committed_second_renewal_without_new_effect
     assert!(
         f.rows(
             A,
-            "SELECT organization_statement FROM organization_identity",
+            "SELECT organization_statement FROM signin_organization_identity",
             vec![]
         )
         .await?[0][0]

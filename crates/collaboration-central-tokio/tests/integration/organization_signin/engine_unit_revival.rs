@@ -23,7 +23,7 @@ fn days(count: i64) -> chrono::Duration {
 async fn notices(engine: &EngineOrg, recipient: &m::ActorIdentityId) -> i64 {
     engine
         .count(
-            "SELECT COUNT(*) FROM messages WHERE message_kind='notice' AND recipient_actor=?",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice' AND recipient_actor=?",
             vec![text(recipient)],
         )
         .await
@@ -31,7 +31,7 @@ async fn notices(engine: &EngineOrg, recipient: &m::ActorIdentityId) -> i64 {
 async fn automation_messages(engine: &EngineOrg, automation: &str) -> i64 {
     engine
         .count(
-            "SELECT COUNT(*) FROM messages WHERE message_kind='automation' AND json_extract(body,'$.automationId')=?",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation' AND json_extract(body,'$.automationId')=?",
             vec![text(automation)],
         )
         .await
@@ -40,7 +40,7 @@ async fn automation_messages(engine: &EngineOrg, automation: &str) -> i64 {
 async fn open_window(engine: &EngineOrg, recipient: &m::ActorIdentityId) -> (String, Time) {
     let rows = engine
         .rows(
-            "SELECT window_id,due_at FROM notification_windows WHERE recipient_actor=?",
+            "SELECT window_id,due_at FROM mail_notification_windows WHERE recipient_actor=?",
             vec![text(recipient)],
         )
         .await;
@@ -53,14 +53,14 @@ async fn open_window(engine: &EngineOrg, recipient: &m::ActorIdentityId) -> (Str
 async fn break_window(engine: &EngineOrg, window: &str) -> Vec<Vec<SqlValue>> {
     let items = engine
         .rows(
-            "SELECT window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at FROM notification_window_items WHERE window_id=?",
+            "SELECT window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at FROM mail_notification_window_items WHERE window_id=?",
             vec![text(window)],
         )
         .await;
     assert!(!items.is_empty());
     engine
         .raw(
-            "DELETE FROM notification_window_items WHERE window_id=?",
+            "DELETE FROM mail_notification_window_items WHERE window_id=?",
             vec![text(window)],
         )
         .await;
@@ -68,7 +68,7 @@ async fn break_window(engine: &EngineOrg, window: &str) -> Vec<Vec<SqlValue>> {
 }
 async fn repair_window(engine: &EngineOrg, items: Vec<Vec<SqlValue>>) {
     for row in items {
-        engine.raw("INSERT INTO notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)", row).await;
+        engine.raw("INSERT INTO mail_notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)", row).await;
     }
 }
 async fn unit_record(engine: &EngineOrg, kind: &str) -> Vec<Vec<SqlValue>> {
@@ -221,12 +221,12 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
 async fn undrained_post(engine: &EngineOrg, thread: &m::ThreadId) {
     let now = engine.now();
     let seed = engine.fresh();
-    engine.raw("INSERT INTO central_work_attempts VALUES (?,'legacy_workspace_drains','all','failing',1,?,'statement_rejected',NULL,?,?,NULL,?,?)",
+    engine.raw("INSERT INTO engine_work_attempts VALUES (?,'legacy_workspace_drains','all','failing',1,?,'statement_rejected',NULL,?,?,NULL,?,?)",
         vec![text(&seed), stamp(now + minutes(60)), stamp(now), stamp(now), stamp(now), stamp(now)]).await;
     engine.post(thread).await;
     engine
         .raw(
-            "DELETE FROM central_work_attempts WHERE attempt_id=?",
+            "DELETE FROM engine_work_attempts WHERE attempt_id=?",
             vec![text(&seed)],
         )
         .await;
@@ -234,7 +234,7 @@ async fn undrained_post(engine: &EngineOrg, thread: &m::ThreadId) {
 async fn drain_row(engine: &EngineOrg) -> Vec<SqlValue> {
     engine
         .rows(
-            "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
+            "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             vec![text(&engine.workspace)],
         )
         .await
@@ -248,7 +248,7 @@ async fn break_drain(engine: &EngineOrg) -> SqlValue {
     );
     engine
         .raw(
-            "UPDATE workspace_drains SET drained_through_position='bad' WHERE workspace_id=?",
+            "UPDATE mail_workspace_drains SET drained_through_position='bad' WHERE workspace_id=?",
             vec![text(&engine.workspace)],
         )
         .await;
@@ -257,7 +257,7 @@ async fn break_drain(engine: &EngineOrg) -> SqlValue {
 async fn repair_drain(engine: &EngineOrg, cursor: SqlValue) {
     engine
         .raw(
-            "UPDATE workspace_drains SET drained_through_position=? WHERE workspace_id=?",
+            "UPDATE mail_workspace_drains SET drained_through_position=? WHERE workspace_id=?",
             vec![cursor, text(&engine.workspace)],
         )
         .await;
@@ -265,7 +265,7 @@ async fn repair_drain(engine: &EngineOrg, cursor: SqlValue) {
 async fn window_items(engine: &EngineOrg, thread: &m::ThreadId) -> i64 {
     engine
         .count(
-            "SELECT COUNT(*) FROM notification_window_items WHERE thread_id=?",
+            "SELECT COUNT(*) FROM mail_notification_window_items WHERE thread_id=?",
             vec![text(thread)],
         )
         .await

@@ -27,6 +27,7 @@ fn settings(jwks_url: String) -> SignInTrustSettings {
         issuer: "https://sign-in.example.invalid".into(),
         audience: "https://central.example.invalid/identity".into(),
         admin_audience: "https://central.example.invalid/admin".into(),
+        machine_audience: "https://central.example.invalid/machine".into(),
         public_origin: "https://central.example.invalid".into(),
         jwks_url,
         service_id: None,

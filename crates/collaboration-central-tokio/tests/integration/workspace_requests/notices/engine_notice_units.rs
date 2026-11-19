@@ -17,14 +17,14 @@ async fn corrupt_drain(f: &Fixture, due: chrono::DateTime<chrono::Utc>) -> SqlVa
     let runtime = runtime(f).await;
     let cursor = rows(
         &runtime,
-        "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+        "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
         vec![text(&f.workspace)],
     )
     .await[0][0]
         .clone();
     raw(
         &runtime,
-        "UPDATE workspace_drains SET drained_through_position='bad',drain_due_at=? WHERE workspace_id=?",
+        "UPDATE mail_workspace_drains SET drained_through_position='bad',drain_due_at=? WHERE workspace_id=?",
         vec![stamp(due), text(&f.workspace)],
     )
     .await;
@@ -33,7 +33,7 @@ async fn corrupt_drain(f: &Fixture, due: chrono::DateTime<chrono::Utc>) -> SqlVa
 async fn repair_drain(f: &Fixture, cursor: SqlValue) {
     raw(
         &runtime(f).await,
-        "UPDATE workspace_drains SET drained_through_position=? WHERE workspace_id=?",
+        "UPDATE mail_workspace_drains SET drained_through_position=? WHERE workspace_id=?",
         vec![cursor, text(&f.workspace)],
     )
     .await;
@@ -41,7 +41,7 @@ async fn repair_drain(f: &Fixture, cursor: SqlValue) {
 async fn drain_due(f: &Fixture) -> SqlValue {
     rows(
         &runtime(f).await,
-        "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+        "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         vec![text(&f.workspace)],
     )
     .await[0][0]
@@ -130,6 +130,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
             8411,
             m::WorkspaceOperation::CreateArea {
                 name: name("Gated one"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -149,6 +150,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
             8412,
             m::WorkspaceOperation::CreateArea {
                 name: name("Gated two"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await,
@@ -208,6 +210,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
             8421,
             m::WorkspaceOperation::CreateArea {
                 name: name("Committed"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await;
@@ -235,7 +238,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
     );
     let whole = rows(
         &runtime,
-        "SELECT * FROM central_work_attempts WHERE machine_kind=? AND subject_key='all'",
+        "SELECT * FROM engine_work_attempts WHERE machine_kind=? AND subject_key='all'",
         vec![text(DRAINS)],
     )
     .await;
@@ -249,6 +252,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
             8422,
             m::WorkspaceOperation::CreateArea {
                 name: name("Drained"),
+                description: "Test description".to_owned().try_into().unwrap(),
             },
         )
         .await;
@@ -265,7 +269,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
     assert_eq!(
         rows(
             &runtime,
-            "SELECT * FROM central_work_attempts WHERE machine_kind=? AND subject_key='all'",
+            "SELECT * FROM engine_work_attempts WHERE machine_kind=? AND subject_key='all'",
             vec![text(DRAINS)],
         )
         .await,
