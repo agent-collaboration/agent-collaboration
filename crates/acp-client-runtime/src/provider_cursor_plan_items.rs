@@ -177,7 +177,7 @@ impl ProviderCursorTodoHandler {
         };
         let Some(crate::provider_connection_activity::ToolCallOwner {
             session_id,
-            generation: announced_in,
+            generation,
         }) = self.tool_registry.resolve_session(&update.tool_call_id)
         else {
             tracing::warn!("unresolved Cursor todo update");
@@ -190,8 +190,6 @@ impl ProviderCursorTodoHandler {
             SessionEvent::ItemStarted { item }
         };
         // In the run that announced the tool call (D1 R14; review F4).
-        let generation =
-            announced_in.unwrap_or_else(|| self.event_sink.current_generation(&session_id));
         if self
             .event_sink
             .publish_in(&session_id, generation, event)

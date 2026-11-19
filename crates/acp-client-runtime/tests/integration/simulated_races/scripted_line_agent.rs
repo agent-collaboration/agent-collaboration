@@ -32,6 +32,8 @@ pub(super) struct ScriptedLineAgent {
     restored_mode: Arc<Mutex<Option<String>>>,
     mode_sets: Arc<Mutex<Vec<String>>>,
     prompt_sessions: Arc<Mutex<Vec<String>>>,
+    hold_next_prompt: Arc<AtomicBool>,
+    held_prompt_reply: Arc<Mutex<Option<Value>>>,
     mode_reply: Arc<Mutex<Option<ModeReply>>>,
     writer: Arc<Mutex<Option<AgentWriter>>>,
     responses: Arc<Mutex<Vec<Value>>>,
@@ -185,6 +187,83 @@ impl ScriptedLineAgent {
             .clone()
     }
 
+    pub(super) fn hold_next_prompt(&self) {
+        self.hold_next_prompt.store(true, Ordering::SeqCst);
+    }
+
+    pub(super) async fn wait_for_held_prompt(&self) {
+        loop {
+            let changed = self.changed.notified();
+            if self
+                .held_prompt_reply
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_some()
+            {
+                return;
+            }
+            changed.await;
+        }
+    }
+
+    pub(super) async fn release_held_prompt(&self) {
+        let response = self
+            .held_prompt_reply
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .expect("held prompt reply");
+        self.send_frame(&response).await;
+    }
+
+    pub(super) async fn announce_replay_tool(&self, session_id: &str, tool_id: &str) {
+        self.send_frame(&json!({"jsonrpc":"2.0","method":"session/update","params":{
+            "sessionId":session_id,"update":{"sessionUpdate":"tool_call","toolCallId":tool_id,
+            "title":"Provisional tool","status":"pending"}
+        }}))
+        .await;
+    }
+
+    pub(super) async fn send_stale_tool_callbacks(&self, tool_id: &str) {
+        let todo = self.request_callback("stale-todo", "cursor/update_todos", json!({
+            "toolCallId":tool_id,"todos":[{"id":"stale","content":"expired restore todo sentinel","status":"pending"}],"merge":false,
+        })).await;
+        assert_eq!(todo["result"], json!({}));
+        let plan = self.request_callback("stale-plan", "cursor/create_plan", json!({
+            "toolCallId":tool_id,"name":"expired restore plan sentinel","plan":"do not apply",
+        })).await;
+        assert_eq!(plan["result"], json!({"outcome":"cancelled"}));
+    }
+
+    async fn send_frame(&self, frame: &Value) {
+        let writer = self
+            .writer
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .expect("the agent is serving");
+        assert!(write_line(&writer, frame).await, "the client end is open");
+    }
+
+    async fn request_callback(&self, request_id: &str, method: &str, params: Value) -> Value {
+        self.send_frame(&json!({"jsonrpc":"2.0","id":request_id,"method":method,"params":params}))
+            .await;
+        loop {
+            let changed = self.changed.notified();
+            if let Some(response) = self
+                .responses
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .find(|response| response.get("id") == Some(&json!(request_id)))
+                .cloned()
+            {
+                return response;
+            }
+            changed.await;
+        }
+    }
+
     /// Sends session/request_permission for `session_id` and answers the
     /// client's response: its result, or its error.
     pub(super) async fn request_permission(&self, session_id: &str) -> Value {
@@ -314,7 +393,17 @@ impl ScriptedLineAgent {
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .push(session_id.to_owned());
-                    json!({"jsonrpc": "2.0", "id": id, "result": {"stopReason": "end_turn"}})
+                    let reply =
+                        json!({"jsonrpc": "2.0", "id": id, "result": {"stopReason": "end_turn"}});
+                    if self.hold_next_prompt.swap(false, Ordering::SeqCst) {
+                        *self
+                            .held_prompt_reply
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner) = Some(reply);
+                        self.changed.notify_waiters();
+                        continue;
+                    }
+                    reply
                 }
                 "session/load" | "session/resume" => {
                     let restored = self

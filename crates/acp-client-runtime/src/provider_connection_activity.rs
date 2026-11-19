@@ -8,6 +8,8 @@ use std::{
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
 use provider_session_machines::SessionGeneration;
 
+use crate::session_cell_table::SessionCellTable;
+
 #[derive(Default)]
 pub(crate) struct ProviderConnectionActivity(Mutex<RegistryState>);
 
@@ -25,25 +27,24 @@ struct RunningTurn {
 #[derive(Clone)]
 struct ToolOwner {
     session_id: String,
-    run: Option<RunningTurn>,
+    generation: SessionGeneration,
+    turn_id: Option<String>,
     ended: bool,
 }
 
 impl ToolOwner {
     fn owns_turn(&self, turn: &RunningTurn) -> bool {
         !self.ended
-            && self.run.as_ref().is_some_and(|claimed| {
-                claimed.generation == turn.generation && claimed.turn_id == turn.turn_id
-            })
+            && self.generation == turn.generation
+            && self.turn_id.as_deref() == Some(&turn.turn_id)
     }
 }
 
-/// The session a tool-scoped callback belongs to, and the run it was
-/// announced in when known.
+/// The session and generation that own a tool-scoped callback.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ToolCallOwner {
     pub(crate) session_id: String,
-    pub(crate) generation: Option<SessionGeneration>,
+    pub(crate) generation: SessionGeneration,
 }
 
 #[derive(Default)]
@@ -55,11 +56,16 @@ struct RegistryState {
 impl RegistryState {
     /// The session's turn ended: its tool calls become tombstones.
     fn end_session_turn(&mut self, session_id: &str) {
-        self.running_sessions.remove(session_id);
+        if let Some(turn) = self.running_sessions.remove(session_id) {
+            self.retire_owners(session_id, turn.generation);
+        }
+    }
+
+    fn retire_owners(&mut self, session_id: &str, generation: SessionGeneration) {
         for owners in self.tool_owners.values_mut() {
             for owner in owners
                 .iter_mut()
-                .filter(|owner| owner.session_id == session_id)
+                .filter(|owner| owner.session_id == session_id && owner.generation == generation)
             {
                 owner.ended = true;
             }
@@ -90,10 +96,7 @@ impl ProviderConnectionActivity {
             owners.retain(|owner| {
                 !(owner.session_id == session_id
                     && owner.ended
-                    && owner
-                        .run
-                        .as_ref()
-                        .is_none_or(|run| run.generation.number() + 1 < generation.number()))
+                    && owner.generation.number().saturating_add(1) < generation.number())
             });
             !owners.is_empty()
         });
@@ -101,22 +104,32 @@ impl ProviderConnectionActivity {
 
     /// A first announcement can claim an ID for this session. A repeated
     /// announcement carries no turn identity and cannot replace that owner.
-    fn announce_tool_call(&self, session_id: &str, tool_call_id: &str) -> bool {
+    fn announce_tool_call(
+        &self,
+        session_id: &str,
+        tool_call_id: &str,
+        generation: SessionGeneration,
+    ) -> bool {
         let mut state = self
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let run = state.running_sessions.get(session_id).cloned();
+        let turn = state
+            .running_sessions
+            .get(session_id)
+            .filter(|turn| turn.generation == generation)
+            .cloned();
         let owners = state
             .tool_owners
             .entry(tool_call_id.to_owned())
             .or_default();
         if let Some(owner) = owners.iter().find(|owner| owner.session_id == session_id) {
-            return run.as_ref().is_none_or(|turn| owner.owns_turn(turn));
+            return turn.as_ref().is_none_or(|turn| owner.owns_turn(turn));
         }
         owners.push(ToolOwner {
             session_id: session_id.to_owned(),
-            run,
+            generation,
+            turn_id: turn.map(|turn| turn.turn_id),
             ended: false,
         });
         true
@@ -136,7 +149,10 @@ impl ProviderConnectionActivity {
         state.tool_owners.get(tool_call_id).is_none_or(|owners| {
             owners.iter().any(|owner| {
                 owner.session_id == session_id
-                    && (owner.owns_turn(turn) || (!owner.ended && owner.run.is_none()))
+                    && (owner.owns_turn(turn)
+                        || (!owner.ended
+                            && owner.generation == turn.generation
+                            && owner.turn_id.is_none()))
             })
         })
     }
@@ -159,7 +175,7 @@ impl ProviderConnectionActivity {
             }
             return live.last().map(|owner| ToolCallOwner {
                 session_id: owner.session_id.clone(),
-                generation: owner.run.as_ref().map(|run| run.generation),
+                generation: owner.generation,
             });
         }
         if state.running_sessions.len() != 1 {
@@ -171,15 +187,32 @@ impl ProviderConnectionActivity {
             .next()
             .map(|(session_id, run)| ToolCallOwner {
                 session_id: session_id.clone(),
-                generation: Some(run.generation),
+                generation: run.generation,
             })
     }
 
+    #[cfg(test)]
     pub(crate) fn turn_ended(&self, session_id: &str) {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .end_session_turn(session_id);
+    }
+
+    /// A failed restore, close, or lost actor retires every owner from its run.
+    pub(crate) fn retire_run(&self, session_id: &str, generation: SessionGeneration) {
+        let mut state = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state
+            .running_sessions
+            .get(session_id)
+            .is_some_and(|turn| turn.generation == generation)
+        {
+            state.running_sessions.remove(session_id);
+        }
+        state.retire_owners(session_id, generation);
     }
 
     pub(crate) fn claim_turn_end(&self, session_id: &str, turn_id: &str) -> bool {
@@ -215,11 +248,20 @@ impl ProviderConnectionActivity {
 
 /// Observe tool ownership before the SDK hands a session/update to its
 /// Session actor. Cursor may send a connection request immediately afterward.
-pub(crate) struct ToolCallOwnershipHandler(Arc<ProviderConnectionActivity>);
+pub(crate) struct ToolCallOwnershipHandler {
+    registry: Arc<ProviderConnectionActivity>,
+    session_cells: Arc<SessionCellTable>,
+}
 
 impl ToolCallOwnershipHandler {
-    pub(crate) fn new(registry: Arc<ProviderConnectionActivity>) -> Self {
-        Self(registry)
+    pub(crate) fn new(
+        registry: Arc<ProviderConnectionActivity>,
+        session_cells: Arc<SessionCellTable>,
+    ) -> Self {
+        Self {
+            registry,
+            session_cells,
+        }
     }
 }
 
@@ -246,10 +288,17 @@ impl HandleDispatchFrom<Agent> for ToolCallOwnershipHandler {
                 )
             {
                 let accepted = match kind {
-                    Some("tool_call") => self.0.announce_tool_call(session_id, tool_call_id),
-                    Some("tool_call_update") => {
-                        self.0.allows_tool_continuation(session_id, tool_call_id)
-                    }
+                    Some("tool_call") => self.session_cells.read(session_id, |cell| {
+                        // Keep the cell guard until ownership is recorded, so a
+                        // retired attempt can never register a live owner later.
+                        cell.run_generation().is_none_or(|generation| {
+                            self.registry
+                                .announce_tool_call(session_id, tool_call_id, generation)
+                        })
+                    }),
+                    Some("tool_call_update") => self
+                        .registry
+                        .allows_tool_continuation(session_id, tool_call_id),
                     _ => true,
                 };
                 if !accepted {

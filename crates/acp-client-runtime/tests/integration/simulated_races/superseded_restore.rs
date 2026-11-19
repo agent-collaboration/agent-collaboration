@@ -433,6 +433,7 @@ async fn an_unanswered_load_retires_its_queue_and_allows_a_same_session_retry() 
         agent
             .send_replay_chunk(&session, "expired restore replay sentinel")
             .await;
+        agent.announce_replay_tool(&session, "expired-tool").await;
         let queued_id = uuid::Uuid::now_v7().to_string();
         let queued = client
             .queue_enqueue(&session, &queued_id)
@@ -464,7 +465,16 @@ async fn an_unanswered_load_retires_its_queue_and_allows_a_same_session_retry() 
             .expect("deliberate same-ID retry succeeds while A is silent");
         assert!(later.earlier_restore_unanswered);
         assert!(later.generation.number() > queued.generation.number());
-        prompt_restored_session(&client, &session).await;
+        agent.hold_next_prompt();
+        let retry_input = prompt_restored_session(&client, &session);
+        tokio::pin!(retry_input);
+        tokio::select! {
+            () = agent.wait_for_held_prompt() => {},
+            () = &mut retry_input => panic!("the retry input ended before the callback barrier"),
+        }
+        agent.send_stale_tool_callbacks("expired-tool").await;
+        agent.release_held_prompt().await;
+        retry_input.await;
         agent.release_load_answers();
         agent.held_load_answer_sent().await;
         let barrier = agent.request_permission(&session).await;
@@ -478,6 +488,10 @@ async fn an_unanswered_load_retires_its_queue_and_allows_a_same_session_retry() 
             agent.prompt_sessions(),
             [independent.as_str(), session.as_str()]
         );
+        assert!(!observations.events.lock().expect("events").iter().any(|event| matches!(event,
+            session_event_model::SessionEvent::ItemStarted{ item } | session_event_model::SessionEvent::ItemUpdated{ item }
+                if item.text.as_deref().is_some_and(|text| text.contains("expired restore todo sentinel") || text.contains("expired restore plan sentinel"))
+        )), "the retry received a callback belonging to the expired load");
         assert!(!observations.events.lock().expect("events").iter().any(|event| matches!(event,
             session_event_model::SessionEvent::ItemStarted{ item } if item.text.as_deref() == Some("expired restore replay sentinel")
         )));

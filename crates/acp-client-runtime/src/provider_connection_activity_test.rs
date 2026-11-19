@@ -8,7 +8,7 @@ fn run(number: u64) -> SessionGeneration {
 fn owner(session_id: &str, generation: u64) -> Option<ToolCallOwner> {
     Some(ToolCallOwner {
         session_id: session_id.to_owned(),
-        generation: Some(run(generation)),
+        generation: run(generation),
     })
 }
 
@@ -22,11 +22,11 @@ fn resolves_only_unique_tool_ownership_or_one_running_turn() {
     assert_eq!(registry.resolve_session("unknown"), owner("first", 1));
     registry.turn_started("second", "turn-second", run(1));
     assert_eq!(registry.resolve_session("unknown"), None);
-    assert!(registry.announce_tool_call("first", "first-tool"));
-    assert!(registry.announce_tool_call("second", "second-tool"));
+    assert!(registry.announce_tool_call("first", "first-tool", run(1)));
+    assert!(registry.announce_tool_call("second", "second-tool", run(1)));
     assert_eq!(registry.resolve_session("first-tool"), owner("first", 1));
     assert_eq!(registry.resolve_session("second-tool"), owner("second", 1));
-    assert!(registry.announce_tool_call("second", "first-tool"));
+    assert!(registry.announce_tool_call("second", "first-tool", run(1)));
     assert_eq!(registry.resolve_session("first-tool"), None);
     registry.turn_ended("second");
     assert_eq!(registry.resolve_session("first-tool"), owner("first", 1));
@@ -49,14 +49,14 @@ fn a_late_callback_for_an_ended_runs_tool_call_is_dropped_in_the_next_run() {
     // Arrange: run 1 announces a tool call, then ends; run 2 starts a turn.
     let registry = ProviderConnectionActivity::default();
     registry.turn_started("session", "turn-one", run(1));
-    assert!(registry.announce_tool_call("session", "old-tool"));
+    assert!(registry.announce_tool_call("session", "old-tool", run(1)));
     assert!(registry.allows_tool_continuation("session", "old-tool"));
     registry.turn_ended("session");
     registry.turn_started("session", "turn-two", run(2));
 
     // Act
     let stale_continuation = registry.allows_tool_continuation("session", "old-tool");
-    let ambiguous_announcement = registry.announce_tool_call("session", "old-tool");
+    let ambiguous_announcement = registry.announce_tool_call("session", "old-tool", run(2));
     let late = registry.resolve_session("old-tool");
     let never_announced = registry.resolve_session("new-tool");
 
@@ -80,7 +80,7 @@ fn a_late_callback_for_an_ended_runs_tool_call_is_dropped_in_the_next_run() {
 fn a_tombstone_goes_once_the_run_after_next_starts() {
     let registry = ProviderConnectionActivity::default();
     registry.turn_started("session", "turn-one", run(1));
-    assert!(registry.announce_tool_call("session", "old-tool"));
+    assert!(registry.announce_tool_call("session", "old-tool", run(1)));
     registry.turn_ended("session");
     registry.turn_started("session", "turn-two", run(2));
     registry.turn_ended("session");

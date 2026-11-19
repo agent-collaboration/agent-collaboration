@@ -290,7 +290,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                             runtime_handles.sink_closed.cancel();
                             shutdown.cancel();
                             let _result = reply.send(Err(ExternalProviderRuntimeError::SinkClosed));
-                            runtime_handles.tool_registry.turn_ended(session.session_id().0.as_ref());
+                            runtime_handles.tool_registry.retire_run(session.session_id().0.as_ref(), runtime_handles.run_generation);
                             runtime_handles.todo_state.forget_session(session.session_id().0.as_ref());
                             return;
                         }
@@ -495,7 +495,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                             )).is_err() {
                                 runtime_handles.sink_closed.cancel();
                                 shutdown.cancel();
-                                runtime_handles.tool_registry.turn_ended(session.session_id().0.as_ref());
+                                runtime_handles.tool_registry.retire_run(session.session_id().0.as_ref(), runtime_handles.run_generation);
                                 runtime_handles.todo_state.forget_session(session.session_id().0.as_ref());
                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SinkClosed));
                                 return;

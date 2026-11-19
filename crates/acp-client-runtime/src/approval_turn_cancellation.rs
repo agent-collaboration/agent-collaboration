@@ -49,6 +49,7 @@ impl Drop for PermissionResponseGuard {
 
 pub(crate) struct ActiveApprovalContext<P: InteractionPort> {
     pub(crate) approval: P::Context,
+    pub(crate) generation: provider_session_machines::SessionGeneration,
     pub(crate) cancelling: CancellationToken,
     pub(crate) responses: Arc<PermissionResponseBarrier>,
 }
@@ -57,6 +58,7 @@ impl<P: InteractionPort> Clone for ActiveApprovalContext<P> {
     fn clone(&self) -> Self {
         Self {
             approval: self.approval.clone(),
+            generation: self.generation,
             cancelling: self.cancelling.clone(),
             responses: Arc::clone(&self.responses),
         }

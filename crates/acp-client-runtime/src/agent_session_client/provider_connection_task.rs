@@ -227,7 +227,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             let final_interaction_port = Arc::clone(&callback_interaction_port);
             let connection = Client.builder().name("codex-router-host")
                 .with_handler(ProviderRequestSessionGuard::new(request_known_sessions))
-                .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry)))
+                .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry), Arc::clone(&task_session_cells)))
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, connection| {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
@@ -544,6 +544,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
                                             }
                                             if result.is_err() {
+                                                task_tool_registry.retire_run(&provider_session_id, generation);
                                                 known_sessions.forget(&provider_session_id).await;
                                             } else if let Some(report) = report {
                                                 let report = report.with_auth_status(task_auth_status.read().await.clone());
@@ -603,8 +604,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 known_sessions.forget(&provider_session_id).await;
                                                 if let Some(generation) = closed_generation {
                                                     crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
+                                                    task_tool_registry.retire_run(&provider_session_id, generation);
                                                 }
-                                                task_tool_registry.turn_ended(&provider_session_id);
                                                 task_todo_state.forget_session(&provider_session_id);
                                             }
                                             let _result = reply.send(result);
@@ -621,7 +622,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                     if crate::session_cell_bookkeeping::report_actor_exit(&session_cells, task_event_sink.as_ref(), &exit.provider_session_id, exit.generation) {
                                         known_sessions.forget(&exit.provider_session_id).await;
                                         crate::run_owned_state::end_run_state(&exit.provider_session_id, exit.generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
-                                        task_tool_registry.turn_ended(&exit.provider_session_id);
+                                        task_tool_registry.retire_run(&exit.provider_session_id, exit.generation);
                                         task_todo_state.forget_session(&exit.provider_session_id);
                                     }
                                 }

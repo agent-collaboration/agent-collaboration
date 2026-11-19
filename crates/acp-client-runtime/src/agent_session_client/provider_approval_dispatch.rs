@@ -156,6 +156,10 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                 provider_session_id.clone(),
                 ActiveApprovalContext {
                     approval: context,
+                    generation: crate::SessionRuns::current_generation(
+                        self.session_cells.as_ref(),
+                        &provider_session_id,
+                    ),
                     cancelling: tokio_util::sync::CancellationToken::new(),
                     responses: Arc::new(PermissionResponseBarrier::default()),
                 },

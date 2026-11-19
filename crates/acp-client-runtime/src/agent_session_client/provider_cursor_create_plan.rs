@@ -147,18 +147,19 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         };
         let Some(crate::provider_connection_activity::ToolCallOwner {
             session_id,
-            generation: announced_in,
+            generation,
         }) = self.tool_registry.resolve_session(&plan.tool_call_id)
         else {
             tracing::warn!("unresolved Cursor create_plan request");
             responder.respond(json!({"outcome":"cancelled"}))?;
             return Ok(Handled::Yes);
         };
-        let context = self
-            .approval_contexts
-            .lock()
-            .ok()
-            .and_then(|contexts| contexts.get(&session_id).cloned());
+        let context = self.approval_contexts.lock().ok().and_then(|contexts| {
+            contexts
+                .get(&session_id)
+                .filter(|context| context.generation == generation)
+                .cloned()
+        });
         let Some(context) = context else {
             tracing::warn!("Cursor create_plan has no active Turn context");
             responder.respond(json!({"outcome":"cancelled"}))?;
@@ -183,15 +184,12 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         };
         // In the run the plan arrived in (D1 R14).
         // In the run that announced the tool call (review F4).
-        let generation =
-            announced_in.unwrap_or_else(|| self.event_sink.current_generation(&session_id));
-        if self
-            .event_sink
-            .publish_in(&session_id, generation, event)
-            .is_err()
-        {
+        let publication = self.event_sink.publish_in(&session_id, generation, event);
+        if publication.is_err() {
             self.sink_closed.cancel();
             self.shutdown.cancel();
+        }
+        if !matches!(publication, Ok(crate::GenerationPublication::Published)) {
             responder.respond(json!({"outcome":"cancelled"}))?;
             return Ok(Handled::Yes);
         }
