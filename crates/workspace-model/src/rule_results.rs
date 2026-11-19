@@ -6,27 +6,27 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NamedItem {
     pub item: ItemRef,
     pub name: String,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Blocker {
     pub item: ItemRef,
     pub title: String,
     pub status: BlockerStatus,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DeliverableView {
     pub deliverable: Deliverable,
     pub status: DeliverableStatus,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "status",
@@ -38,7 +38,9 @@ pub enum BlockerStatus {
     Deliverable(DeliverableStatus),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema, thiserror::Error,
+)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -103,7 +105,7 @@ pub enum RefusalReason {
     InvalidInput { field: String },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "item",
@@ -163,7 +165,7 @@ impl ItemView {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -187,7 +189,7 @@ pub enum RuleAnswer {
     },
 }
 /// The caller's own standing in a thread. Reading it moves no read mark.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadReaderView {
     pub role: crate::MemberRole,
@@ -195,7 +197,7 @@ pub struct ThreadReaderView {
     pub read_through: Option<ChangePosition>,
 }
 /// One workspace's inbox page covers an area's threads or a project's.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -206,7 +208,7 @@ pub enum InboxScope {
     Area { area_id: AreaId },
     Project { project_id: ProjectId },
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum InboxReadMode {
     /// Items after the reader's inbox read mark, oldest first.
@@ -214,7 +216,7 @@ pub enum InboxReadMode {
     /// The newest items, newest first, regardless of the read mark.
     Latest,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ListOrder {
     OldestFirst,
@@ -225,7 +227,7 @@ pub enum ListOrder {
 /// before it; without a position the page starts from that direction's end.
 /// Callers start with [`ListCursor::start`] and otherwise hand back the
 /// `next_cursor` of the previous page.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListCursor {
     order: ListOrder,
@@ -258,7 +260,7 @@ impl ListCursor {
 }
 /// One inbox item, with the names a reader needs to place it. Reading moves no
 /// read mark; `acknowledge` is what MarkRead takes for it.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",

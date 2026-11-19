@@ -7,6 +7,7 @@ publish = false
 autotests = false
 
 [dependencies]
+schemars.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
 serde.workspace = true

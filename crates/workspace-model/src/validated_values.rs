@@ -10,7 +10,17 @@ pub struct ValueValidationError {
 // Preserve message-board::board_metadata's UTF-8 bounds and control policy.
 macro_rules! bounded_text {
     ($name:ident, $min:expr, $max:expr, $trim:expr, $controls:expr) => {
-        #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+        #[derive(
+            Clone,
+            Debug,
+            Eq,
+            PartialEq,
+            Ord,
+            PartialOrd,
+            Serialize,
+            Deserialize,
+            schemars::JsonSchema,
+        )]
         #[serde(try_from = "String", into = "String")]
         pub struct $name(String);
         impl TryFrom<String> for $name {
@@ -60,7 +70,7 @@ bounded_text!(Description, 0, 16 * 1024, false, false);
 
 /// A description that must hold non-whitespace text: backlog items, areas and
 /// projects. Stored rows cannot deserialize without one.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 pub struct RequiredDescription(String);
 impl TryFrom<String> for RequiredDescription {
@@ -91,7 +101,7 @@ bounded_text!(TrailText, 1, 64 * 1024, false, true);
 bounded_text!(TrailTag, 1, 256, true, true);
 
 /// A page always returns at least one row when a matching row exists.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "u16", into = "u16")]
 pub struct PageLimit(std::num::NonZeroU16);
 impl PageLimit {
@@ -122,7 +132,9 @@ impl From<PageLimit> for u16 {
 }
 
 /// Durable ordering is independent of ids and time, within both hosts' integer range.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(try_from = "u64", into = "u64")]
 pub struct ChangePosition(u64);
 impl Default for ChangePosition {

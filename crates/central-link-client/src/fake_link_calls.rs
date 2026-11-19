@@ -198,6 +198,7 @@ fn immediate_submission(
         }
         (FakeCentral::AnswerLost, None) => Submission::ReadAnswerLost,
         (FakeCentral::AnswerLost, Some(request_id)) => {
+            let scope = payload.request_scope();
             state.requests.insert(
                 request_id.clone(),
                 FakeRequest {
@@ -208,6 +209,7 @@ fn immediate_submission(
             );
             Submission::Uncertain {
                 request: request_id,
+                scope,
             }
         }
         (FakeCentral::Answering, request_id) => {
@@ -249,6 +251,7 @@ fn resubmitted_outbox_write(
         | RequestStatus::Cancelled { .. }
         | RequestStatus::NotFound => Submission::Uncertain {
             request: request_id,
+            scope: existing.payload.request_scope(),
         },
     }
 }

@@ -80,7 +80,8 @@ pub fn workspace_list_answer(
             text,
             include_archived,
         } => (Some(text), *include_archived),
-        ListQuery::Areas { .. }
+        ListQuery::MessageStatus { .. }
+        | ListQuery::Areas { .. }
         | ListQuery::Initiatives
         | ListQuery::Projects { .. }
         | ListQuery::Threads { .. }

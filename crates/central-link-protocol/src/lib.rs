@@ -3,6 +3,9 @@ mod link_codec;
 mod link_delivery;
 mod link_renewal;
 mod link_request;
+mod request_status;
+
+pub use request_status::{RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 
 pub use link_codec::{DataFrame, FrameDirection, LinkFrame, decode_text, encode_text};
 pub use link_delivery::{DeliveryAnswer, MessageCancellation, MessageOutcome, MessageRefusal};

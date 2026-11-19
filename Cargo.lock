@@ -1117,6 +1117,7 @@ dependencies = [
 name = "central-link-protocol"
 version = "0.1.154"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -8138,6 +8139,7 @@ version = "0.1.154"
 dependencies = [
  "agent-automation",
  "chrono",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",

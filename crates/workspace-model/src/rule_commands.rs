@@ -257,7 +257,7 @@ pub enum WorkLogCommand {
         entry_id: WorkLogEntryId,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -265,6 +265,10 @@ pub enum WorkLogCommand {
     deny_unknown_fields
 )]
 pub enum ListQuery {
+    /// Delivery status for a message the caller sent.
+    MessageStatus {
+        message_id: crate::MessageId,
+    },
     /// The organization's workspaces; sent without a workspace id.
     Workspaces {
         include_archived: bool,
@@ -346,7 +350,7 @@ pub enum ListQuery {
 
 /// Where a post read looks, inside one workspace. Threads belong to areas, so
 /// there is no project scope.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -359,7 +363,7 @@ pub enum PostScope {
     Thread { thread_id: ThreadId },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchableKind {
     All,
