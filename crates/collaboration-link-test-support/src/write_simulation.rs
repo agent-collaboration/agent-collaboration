@@ -2,7 +2,7 @@
 use crate::{
     central_request_log::{CENTRAL_HOST, CentralLog, SharedCentralLog, serve_central},
     router_host::{
-        INSTALLATION, ROUTER_HOST, RouterPlan, RouterReport, SharedRouterReport, run_router,
+        MACHINE_ID, ROUTER_HOST, RouterPlan, RouterReport, SharedRouterReport, run_router,
     },
 };
 use std::{
@@ -55,7 +55,7 @@ pub fn run_write_simulation(seed: u64, plan: RouterPlan, partitions: &[Partition
         .build();
     let central = Rc::clone(&central_log);
     sim.host(CENTRAL_HOST, move || {
-        serve_central(INSTALLATION.parse().unwrap(), Rc::clone(&central))
+        serve_central(MACHINE_ID.parse().unwrap(), Rc::clone(&central))
     });
     let router_report = Rc::clone(&report);
     sim.client(ROUTER_HOST, run_router(plan, router_report));

@@ -61,6 +61,7 @@ pub(super) struct LinkDriver {
     /// serving calls, and the client's Welcome deadline abandons it.
     connecting: Option<PendingConnect>,
     immediate: BTreeMap<CorrelationId, ImmediateCall>,
+    status_waiters: BTreeMap<CorrelationId, oneshot::Sender<RequestStatus>>,
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
     outbox_deadline_at: Option<ClockInstant>,
@@ -93,6 +94,7 @@ impl LinkDriver {
             socket: None,
             connecting: None,
             immediate: BTreeMap::new(),
+            status_waiters: BTreeMap::new(),
             batch: None,
             flush_wake: None,
             outbox_deadline_at: None,
@@ -294,6 +296,22 @@ impl LinkDriver {
                 correlation_id,
                 result,
             } => self.reply_arrived(&correlation_id, result).await,
+            ClientEvent::RequestStatusReply {
+                correlation_id,
+                result,
+            } => {
+                if let Some(reply) = self.status_waiters.remove(&correlation_id) {
+                    use central_link_protocol::RequestStatusAnswer;
+                    let status = match result {
+                        RequestStatusAnswer::Answered(reply) => RequestStatus::Answered(reply),
+                        RequestStatusAnswer::Refused(reason) => RequestStatus::Refused(
+                            central_link_client::RequestStatusRefusal::Central(reason),
+                        ),
+                        RequestStatusAnswer::NotFound => RequestStatus::NotFound,
+                    };
+                    let _ = reply.send(status);
+                }
+            }
             // Pong resets the client's heartbeat; a late reply was settled.
             ClientEvent::TokenRenewal {
                 correlation_id,
@@ -326,7 +344,9 @@ impl LinkDriver {
     async fn settle_failed(&mut self, failed: Vec<FailedCall>) {
         let mut batch_member_failed = false;
         for call in failed {
-            if let Some(immediate) = self.immediate.remove(&call.correlation_id) {
+            if let Some(reply) = self.status_waiters.remove(&call.correlation_id) {
+                let _ = reply.send(RequestStatus::StatusUnavailable);
+            } else if let Some(immediate) = self.immediate.remove(&call.correlation_id) {
                 // The call was accepted, so its frame may have left: a read is
                 // ReadAnswerLost; a write the client knows was never sent is unavailable.
                 let submission = match (call.failure, immediate.request) {
@@ -394,10 +414,7 @@ impl LinkDriver {
                 caller,
                 query,
                 reply,
-            } => {
-                let status = self.read_request_status(&caller, &query).await;
-                let _ = reply.send(status);
-            }
+            } => self.read_request_status(caller, query, reply).await,
             DriverCommand::Pending { caller, reply } => {
                 if self.batch.is_some() {
                     self.deferred_pending.push((caller, reply));
@@ -422,20 +439,38 @@ impl LinkDriver {
 
     async fn read_request_status(
         &mut self,
-        caller: &Caller,
-        query: &central_link_protocol::RequestStatusQuery,
-    ) -> RequestStatus {
+        caller: Caller,
+        query: central_link_protocol::RequestStatusQuery,
+        reply: oneshot::Sender<RequestStatus>,
+    ) {
         let local = self
             .store
             .lock()
             .await
-            .request_status(caller, &query.request_id)
+            .request_status(&caller, &query.request_id)
             .await;
         match local {
-            // The central request-log read is pending the shared query contract.
-            // Without its answer an absent local row says nothing about central.
-            Ok(RequestStatus::NotFound) | Err(_) => RequestStatus::StatusUnavailable,
-            Ok(status) => status,
+            Ok(RequestStatus::NotFound) => {
+                let Ok(frame) = self.client.begin_request_status(caller, query) else {
+                    let _ = reply.send(RequestStatus::StatusUnavailable);
+                    return;
+                };
+                let LinkFrame::Data(DataFrame::RequestStatus { correlation_id, .. }) = &frame
+                else {
+                    let _ = reply.send(RequestStatus::StatusUnavailable);
+                    return;
+                };
+                self.status_waiters.insert(correlation_id.clone(), reply);
+                if !self.send(&frame).await {
+                    self.socket_closed().await;
+                }
+            }
+            Ok(status) => {
+                let _ = reply.send(status);
+            }
+            Err(_) => {
+                let _ = reply.send(RequestStatus::StatusUnavailable);
+            }
         }
     }
 
@@ -487,9 +522,9 @@ impl LinkDriver {
                     request,
                     scope: item.payload.request_scope(),
                 },
-                RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict) => {
-                    Submission::Refused(SubmitRefusal::RequestIdConflict)
-                }
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+                    LinkAdmissionRefusal::RequestIdConflict,
+                )) => Submission::Refused(SubmitRefusal::RequestIdConflict),
                 RequestStatus::Refused(_) | RequestStatus::Ended { .. } => Submission::Uncertain {
                     request,
                     scope: item.payload.request_scope(),
@@ -628,6 +663,9 @@ mod delivery_outcome_tests;
 mod driver_flush;
 #[path = "driver_tokens.rs"]
 mod driver_tokens;
+#[cfg(test)]
+#[path = "status_read_test.rs"]
+mod status_read_tests;
 
 #[cfg(test)]
 #[path = "store_faults_test.rs"]

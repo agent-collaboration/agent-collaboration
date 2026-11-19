@@ -56,7 +56,9 @@ impl Row {
             },
             RowState::Sent | RowState::Resent => RequestStatus::Sent,
             RowState::Answered(reply) => RequestStatus::Answered(reply.clone()),
-            RowState::Refused(reason) => RequestStatus::Refused(*reason),
+            RowState::Refused(reason) => {
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(*reason))
+            }
             RowState::Ended(reason) => RequestStatus::Ended { reason: *reason },
         }
     }

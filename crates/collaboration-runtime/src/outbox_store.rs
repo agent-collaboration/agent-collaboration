@@ -325,8 +325,11 @@ impl<'store> MacOutbox<'store> {
             };
             let outcome = match stored.status {
                 RequestStatus::Answered(reply) => OutgoingOutcome::Answered(reply),
-                RequestStatus::Refused(reason) => OutgoingOutcome::Refused(reason),
-                RequestStatus::StatusUnavailable
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(reason)) => {
+                    OutgoingOutcome::Refused(reason)
+                }
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Central(_))
+                | RequestStatus::StatusUnavailable
                 | RequestStatus::NotFound
                 | RequestStatus::InOutbox { .. }
                 | RequestStatus::Sent
@@ -840,10 +843,12 @@ fn decode_row(row: &OutboxRow) -> Result<DecodedRow, OutboxStoreError> {
         (OutboxItemState::Answered, Some(outcome)) => RequestStatus::Answered(
             serde_json::from_str::<ReplyPayload>(outcome).map_err(|_| corrupt("outcome_json"))?,
         ),
-        (OutboxItemState::Refused, Some(outcome)) => RequestStatus::Refused(
-            serde_json::from_str::<LinkAdmissionRefusal>(outcome)
-                .map_err(|_| corrupt("outcome_json"))?,
-        ),
+        (OutboxItemState::Refused, Some(outcome)) => {
+            RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+                serde_json::from_str::<LinkAdmissionRefusal>(outcome)
+                    .map_err(|_| corrupt("outcome_json"))?,
+            ))
+        }
         (ended @ (OutboxItemState::NotSent | OutboxItemState::Unconfirmed), None) => {
             RequestStatus::Ended {
                 reason: ended.end_reason().ok_or_else(|| corrupt("item_state"))?,

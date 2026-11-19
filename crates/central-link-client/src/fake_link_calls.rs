@@ -133,7 +133,7 @@ impl FakeLinkCalls {
     /// Central refuses a request it was sent or will be sent.
     pub fn refuse(&self, request: &RequestId, reason: crate::LinkAdmissionRefusal) {
         if let Some(entry) = self.lock().requests.get_mut(request) {
-            entry.status = RequestStatus::Refused(reason);
+            entry.status = RequestStatus::Refused(crate::RequestStatusRefusal::Link(reason));
         }
     }
 

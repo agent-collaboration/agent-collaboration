@@ -227,7 +227,9 @@ pub(crate) async fn returned_writes(store: &mut dyn OutboxStorage) {
             .request_status(&refused.caller, &refused.request)
             .await
             .unwrap(),
-        RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict)
+        RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+            LinkAdmissionRefusal::RequestIdConflict
+        ))
     );
 }
 

@@ -391,7 +391,9 @@ async fn unanswered_writes_return_with_their_receipt_mark_and_refusals_are_kept(
             .request_status(&second.caller, &second.request)
             .await
             .unwrap(),
-        RequestStatus::Refused(LinkAdmissionRefusal::MachineRevoked)
+        RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+            LinkAdmissionRefusal::MachineRevoked
+        ))
     );
 }
 
@@ -534,7 +536,11 @@ impl ModelWrite {
             },
             ModelState::Sent => RequestStatus::Sent,
             ModelState::Accepted => RequestStatus::Answered(accepted_reply()),
-            ModelState::Refused => RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict),
+            ModelState::Refused => {
+                RequestStatus::Refused(central_link_client::RequestStatusRefusal::Link(
+                    LinkAdmissionRefusal::RequestIdConflict,
+                ))
+            }
             ModelState::Ended(reason) => RequestStatus::Ended { reason },
         }
     }

@@ -21,7 +21,7 @@ use workspace_ids::{MachineId, SessionRef};
 use workspace_model::{Caller, WorkspaceOperation, WorkspaceRequest};
 
 pub const ROUTER_HOST: &str = "router";
-pub const INSTALLATION: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
+pub const MACHINE_ID: &str = "01890f2e-7b4c-7cc0-98c4-000000000002";
 
 /// When the router posts, restarts, and how long it waits for the answers.
 #[derive(Clone, Debug)]
@@ -65,15 +65,15 @@ impl FlushOutcomeSink for IgnoredOutcomes {
     fn delivery_outcome(&self, _: &Caller, _: &central_link_client::SenderDeliveryOutcome) {}
 }
 
-fn installation() -> MachineId {
+fn machine_id() -> MachineId {
     #[expect(clippy::unwrap_used, reason = "a fixed UUIDv7")]
-    INSTALLATION.parse().unwrap()
+    MACHINE_ID.parse().unwrap()
 }
 
 pub fn caller() -> Caller {
     #[expect(clippy::unwrap_used, reason = "fixed valid session fields")]
     Caller::Session(SessionRef {
-        machine_id: installation(),
+        machine_id: machine_id(),
         session_id: "simulated-session".to_owned().try_into().unwrap(),
     })
 }
@@ -108,7 +108,7 @@ fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<dyn OutboxStorage>>
     let calls = RouterLinkCalls::start(
         CentralLinkParts {
             inbox: None,
-            machine_id: installation(),
+            machine_id: machine_id(),
             clock,
             store,
             transport: Arc::new(TurmoilLinkTransport::new(CENTRAL_HOST, LINK_PORT, "/link")),

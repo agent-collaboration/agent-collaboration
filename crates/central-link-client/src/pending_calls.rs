@@ -28,8 +28,13 @@ pub(crate) enum ReplyDisposition {
 }
 
 struct PendingCall {
-    request: LinkRequest,
+    reply: ExpectedReply,
     expires_at: ClockInstant,
+}
+
+enum ExpectedReply {
+    Operation(Box<LinkRequest>),
+    RequestStatus,
 }
 
 #[derive(Default)]
@@ -53,17 +58,36 @@ impl PendingCalls {
         request: LinkRequest,
         expires_at: ClockInstant,
     ) -> Result<(), crate::ClientError> {
+        let correlation = request.correlation_id().clone();
+        self.insert_waiter(
+            correlation,
+            ExpectedReply::Operation(Box::new(request)),
+            expires_at,
+        )
+    }
+
+    pub(crate) fn insert_request_status(
+        &mut self,
+        correlation: CorrelationId,
+        expires_at: ClockInstant,
+    ) -> Result<(), crate::ClientError> {
+        self.insert_waiter(correlation, ExpectedReply::RequestStatus, expires_at)
+    }
+
+    fn insert_waiter(
+        &mut self,
+        correlation: CorrelationId,
+        reply: ExpectedReply,
+        expires_at: ClockInstant,
+    ) -> Result<(), crate::ClientError> {
         use std::collections::btree_map::Entry;
-        if self.resolved.contains(request.correlation_id()) {
+        if self.resolved.contains(&correlation) {
             return Err(crate::ClientError::DuplicateCorrelation);
         }
-        match self.active.entry(request.correlation_id().clone()) {
+        match self.active.entry(correlation) {
             Entry::Occupied(_) => Err(crate::ClientError::DuplicateCorrelation),
             Entry::Vacant(entry) => {
-                entry.insert(PendingCall {
-                    request,
-                    expires_at,
-                });
+                entry.insert(PendingCall { reply, expires_at });
                 Ok(())
             }
         }
@@ -74,6 +98,24 @@ impl PendingCalls {
         correlation: &CorrelationId,
         reply: &ReplyPayload,
     ) -> Result<ReplyDisposition, crate::ClientError> {
+        self.complete_if(correlation, |expected|
+            matches!(expected, ExpectedReply::Operation(request) if reply.matches_request(request.payload())))
+    }
+
+    pub(crate) fn complete_request_status(
+        &mut self,
+        correlation: &CorrelationId,
+    ) -> Result<ReplyDisposition, crate::ClientError> {
+        self.complete_if(correlation, |expected| {
+            matches!(expected, ExpectedReply::RequestStatus)
+        })
+    }
+
+    fn complete_if(
+        &mut self,
+        correlation: &CorrelationId,
+        matches: impl FnOnce(&ExpectedReply) -> bool,
+    ) -> Result<ReplyDisposition, crate::ClientError> {
         if self.resolved.contains(correlation) {
             return Ok(ReplyDisposition::AlreadyResolved);
         }
@@ -81,7 +123,7 @@ impl PendingCalls {
             .active
             .get(correlation)
             .ok_or(crate::ClientError::UnknownCorrelation)?;
-        if !reply.matches_request(call.request.payload()) {
+        if !matches(&call.reply) {
             return Err(crate::ClientError::WrongReplyFamily);
         }
         self.retire(correlation)?;
@@ -142,7 +184,11 @@ fn failed_call(
     call: PendingCall,
     receipt: SendFailure,
 ) -> FailedCall {
-    let failure = match (receipt, call.request.payload().write_request_id()) {
+    let request_id = match &call.reply {
+        ExpectedReply::Operation(request) => request.payload().write_request_id(),
+        ExpectedReply::RequestStatus => None,
+    };
+    let failure = match (receipt, request_id) {
         (SendFailure::MayHaveBeenSent, Some(request_id)) => CallFailure::OutcomeUnknown {
             request_id: request_id.clone(),
         },

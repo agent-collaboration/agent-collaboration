@@ -146,7 +146,7 @@ pub struct EndedWrite {
 }
 
 /// The sender's delivery notice. The inbox id is its idempotency key.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SenderDeliveryOutcome {
     pub inbox_message_id: workspace_model::MessageId,

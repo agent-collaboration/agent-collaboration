@@ -12,7 +12,7 @@ use collaboration_central_core::{
 use collaboration_central_tokio::TokioWorkspaceHost;
 use collaboration_link_test_support::{
     central_request_log::{CENTRAL_HOST, LINK_PORT},
-    router_host::{INSTALLATION, ROUTER_HOST},
+    router_host::{MACHINE_ID, ROUTER_HOST},
     simulated_clock::SimulatedClock,
     tokio_central::serve_tokio_central,
     turmoil_transport::TurmoilLinkTransport,
@@ -86,7 +86,7 @@ async fn provision_host(
     let approval = serde_json::from_value(json!({
         "organizationId": signed::ORGANIZATION, "approver": signed::OWNER,
         "permissionChecked": "machine:enroll", "requestId": "019f0000-0000-7000-8000-00000000df02",
-        "installation": INSTALLATION, "peer": INSTALLATION, "label": "Turmoil Router",
+        "installation": MACHINE_ID, "peer": MACHINE_ID, "label": "Turmoil Router",
         "allowedWorkspaces": [], "approverSecondFactorAt": now - 60,
         "codeExpiresAt": now + 600,
     }))?;
@@ -117,7 +117,7 @@ async fn provision_host(
     };
     let token = signed::machine_token(
         signed::ORGANIZATION,
-        INSTALLATION,
+        MACHINE_ID,
         enrollment_id.as_str(),
         clock.utc_now().timestamp(),
         grant_expires_at.0,
@@ -165,7 +165,7 @@ async fn write_workspace(
     name: &str,
 ) -> FixtureResult<WorkspaceResult> {
     let caller = Caller::Person {
-        machine_id: INSTALLATION.parse()?,
+        machine_id: MACHINE_ID.parse()?,
         person_id: signed::OWNER.parse()?,
     };
     let payload = RequestPayload::Workspace(serde_json::from_value(json!({
@@ -206,7 +206,7 @@ async fn run_router(
         format!("/v1/organizations/{}/link", signed::ORGANIZATION),
     );
     let mut socket = transport.connect(&token).await?;
-    let mut client = LinkClient::new(INSTALLATION.parse()?, clock);
+    let mut client = LinkClient::new(MACHINE_ID.parse()?, clock);
     let Some(ClientAction::Connect { attempt }) = client.poll_time() else {
         return Err("the Router did not begin a connection".into());
     };

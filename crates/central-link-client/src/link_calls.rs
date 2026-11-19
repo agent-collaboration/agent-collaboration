@@ -33,7 +33,50 @@ pub trait LinkCalls: Send + Sync {
         caller: Caller,
         query: RequestStatusQuery,
     ) -> LinkCallFuture<'_, RequestStatus>;
+
+    /// The sender's view of the message, independent of request acceptance.
+    fn message_status(
+        &self,
+        caller: Caller,
+        message_id: workspace_model::MessageId,
+    ) -> LinkCallFuture<
+        '_,
+        Result<Option<workspace_model::central_mail::MessageStatus>, MessageStatusUnavailable>,
+    > {
+        Box::pin(async move {
+            use workspace_model::{
+                ListCursor, ListOrder, ListQuery, RefusalReason, WorkspaceAnswer,
+                WorkspaceOperation, WorkspaceReply, WorkspaceRequest, WorkspaceResult,
+            };
+            let payload = RequestPayload::Workspace(WorkspaceRequest {
+                request_id: None,
+                workspace_id: None,
+                operation: WorkspaceOperation::List {
+                    query: ListQuery::MessageStatus { message_id },
+                    cursor: ListCursor::start(ListOrder::OldestFirst),
+                    limit: 1_u16.try_into().map_err(|_| MessageStatusUnavailable)?,
+                },
+            });
+            match self.submit(caller, payload).await {
+                Submission::Answered(ReplyPayload::Workspace(WorkspaceReply {
+                    result: WorkspaceResult::Done(WorkspaceAnswer::MessageStatus { status }),
+                    ..
+                })) => Ok(Some(status)),
+                Submission::Answered(ReplyPayload::Workspace(WorkspaceReply {
+                    result:
+                        WorkspaceResult::NotFound { .. }
+                        | WorkspaceResult::Refused(RefusalReason::NotFound { .. }),
+                    ..
+                })) => Ok(None),
+                _ => Err(MessageStatusUnavailable),
+            }
+        })
+    }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("message status is unavailable")]
+pub struct MessageStatusUnavailable;
 
 #[derive(Debug)]
 pub enum Submission {
@@ -85,7 +128,7 @@ pub enum RequestStatus {
     /// and CentralMailResult.
     Answered(ReplyPayload),
     /// Central never admitted the frame.
-    Refused(LinkAdmissionRefusal),
+    Refused(RequestStatusRefusal),
     /// The Router stopped trying to send it (owner, record:358).
     Ended {
         reason: OutboxCancellation,
@@ -106,6 +149,21 @@ pub enum OutboxCancellation {
     /// been applied. For a direct message, central's DeliveryOutcome, matched
     /// by the request id, later tells the truth (Lead A, 2026-11-18).
     NotConfirmedWithin15Minutes,
+}
+
+/// The refusal recorded locally or in the original request's owning store.
+#[derive(
+    Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+#[serde(
+    tag = "kind",
+    content = "reason",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RequestStatusRefusal {
+    Link(LinkAdmissionRefusal),
+    Central(central_link_protocol::RequestRefusal),
 }
 
 /// Why central never admitted a frame: the link's own admission, not a domain

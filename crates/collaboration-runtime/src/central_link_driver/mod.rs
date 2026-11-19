@@ -226,6 +226,20 @@ impl LinkCalls for RouterLinkCalls {
     fn submit(&self, caller: Caller, payload: RequestPayload) -> LinkCallFuture<'_, Submission> {
         Box::pin(async move {
             let (reply, answer) = oneshot::channel();
+            let unavailable = match central_link_client::submission_path(&payload) {
+                central_link_client::SubmissionPath::Outbox => SubmitRefusal::OutboxUnavailable,
+                central_link_client::SubmissionPath::Immediate => SubmitRefusal::CentralUnavailable,
+            };
+            let lost_reply =
+                payload
+                    .write_request_id()
+                    .cloned()
+                    .map_or(Submission::ReadAnswerLost, |request| {
+                        Submission::Uncertain {
+                            request,
+                            scope: payload.request_scope(),
+                        }
+                    });
             let sent = self
                 .commands
                 .send(DriverCommand::Submit {
@@ -235,10 +249,8 @@ impl LinkCalls for RouterLinkCalls {
                 })
                 .await;
             match sent {
-                Ok(()) => answer
-                    .await
-                    .unwrap_or(Submission::Refused(SubmitRefusal::CentralUnavailable)),
-                Err(_) => Submission::Refused(SubmitRefusal::CentralUnavailable),
+                Ok(()) => answer.await.unwrap_or(lost_reply),
+                Err(_) => Submission::Refused(unavailable),
             }
         })
     }

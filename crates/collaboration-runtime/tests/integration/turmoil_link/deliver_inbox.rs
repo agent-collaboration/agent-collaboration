@@ -6,7 +6,7 @@ use central_link_protocol::{
 };
 use collaboration_link_test_support::{
     central_request_log::{CENTRAL_HOST, LINK_PORT},
-    router_host::{INSTALLATION, ROUTER_HOST},
+    router_host::{MACHINE_ID, ROUTER_HOST},
     simulated_clock::SimulatedClock,
     turmoil_transport::TurmoilLinkTransport,
 };
@@ -121,7 +121,7 @@ fn fixture_message() -> MessageRecord {
         "messageId": "01890f2e-7b4c-7cc0-98c4-000000000009",
         "sender": {"kind": "central"},
         "target": {
-            "machineId": INSTALLATION, "sessionId": "recipient"
+            "machineId": MACHINE_ID, "sessionId": "recipient"
         },
         "body": {"kind": "direct", "body": "hello", "delivery": "auto", "replyTo": null},
         "state": {"kind": "queued"},
@@ -161,7 +161,7 @@ async fn serve_delivery(
     };
     let clock = SimulatedClock::for_host(CENTRAL_HOST);
     let welcome = LinkFrame::Data(DataFrame::Welcome {
-        machine_id: INSTALLATION.parse()?,
+        machine_id: MACHINE_ID.parse()?,
         central_time: clock.utc_now(),
     });
     if send(&mut socket, &welcome).await.is_err() {
@@ -265,7 +265,7 @@ fn run_delivery(fault: LinkFault) -> turmoil::Result {
         let calls = RouterLinkCalls::start(
             CentralLinkParts {
                 clock: clock.clone(),
-                machine_id: INSTALLATION.parse()?,
+                machine_id: MACHINE_ID.parse()?,
                 store: Arc::new(Mutex::new(MemoryOutbox::new())),
                 transport: Arc::new(TurmoilLinkTransport::new(CENTRAL_HOST, LINK_PORT, "/link")),
                 tokens: Arc::new(RouterFixture),

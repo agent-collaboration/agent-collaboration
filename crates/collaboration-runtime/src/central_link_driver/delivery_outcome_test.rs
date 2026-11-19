@@ -78,7 +78,7 @@ async fn the_late_delivery_outcome_recovers_acceptance_and_notifies_the_sink_onc
         message: Box::new(
             serde_json::from_value(serde_json::json!({
                 "messageId": notice_id,
-                "target": {"machineId": INSTALLATION, "sessionId": "s1"},
+                "target": {"machineId": MACHINE_ID, "sessionId": "s1"},
                 "sender": {"kind": "central"},
                 "body": {"kind": "deliveryOutcome", "messageId": original_message_id,
                     "requestId": query.request_id, "outcome": {"kind": "deliveredAfterAll"}},
