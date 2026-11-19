@@ -1749,6 +1749,9 @@ name = "collaboration-central-cloudflare"
 version = "0.1.156"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "central-link-client",
+ "central-link-protocol",
  "central-storage",
  "chrono",
  "collaboration-central-conformance",
@@ -1760,6 +1763,7 @@ dependencies = [
  "js-sys",
  "message-board",
  "reqwest 0.12.28",
+ "reqwest-websocket",
  "router-clock",
  "runtime-primitives",
  "rustix 1.1.6",

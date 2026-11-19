@@ -28,9 +28,9 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
     assert_eq!(lost.0, 503);
     assert!(lost.1.is_empty());
     let before = stable_effects(&f).await;
-    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests)").await.rows,vec![vec![number(1),number(1),number(2),number(1)]]);
+    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests)").await.rows,vec![vec![number(1),number(1),number(2),number(1)]]);
     let retained = f
-        .read("SELECT answer FROM request_log ORDER BY request_id")
+        .read("SELECT answer FROM runtime_request_log ORDER BY request_id")
         .await
         .rows;
     let Some(SqlValue::Text(retained)) = retained.first().and_then(|row| row.first()) else {
@@ -75,7 +75,7 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
         "replay changes no directory, ledger, actor or record"
     );
     assert_eq!(
-        f.read("SELECT COUNT(*) FROM organization_used_requests")
+        f.read("SELECT COUNT(*) FROM admin_used_requests")
             .await
             .rows,
         vec![vec![number(3)]]
@@ -86,44 +86,44 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
 #[tokio::test]
 async fn person_create_records_checked_origin_without_machine_rights() {
     let f = ready().await;
-    let machine = "019f0000-0000-7000-8000-00000000d751";
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'setup machine','enrolled','[]','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text(machine.into()),SqlValue::Text("019f0000-0000-7000-8000-00000000d752".into())]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'setup-machine-hash','2035-01-01T00:00:00Z','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text("019f0000-0000-7000-8000-00000000d753".into()),SqlValue::Text(machine.into())]).await;
-    let before = f.read("SELECT * FROM machines ORDER BY machine_id").await;
-    let credentials = f
-        .read("SELECT * FROM machine_credentials ORDER BY credential_id")
+    let caller = super::super::super::support::machine_caller(
+        f.org.clone(),
+        workspace_model::Caller::Session(workspace_ids::SessionRef {
+            machine_id: "019f0000-0000-7000-8000-00000000d752".parse().unwrap(),
+            session_id: "setup-origin-machine".to_owned().try_into().unwrap(),
+        }),
+        "019f0000-0000-7000-8000-00000000d753".to_owned(),
+        NOW_SECONDS,
+    );
+    super::super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
+    let before = f
+        .read("SELECT * FROM login_machines ORDER BY machine_id")
+        .await;
+    let approvals = f
+        .read("SELECT * FROM login_machine_approvals ORDER BY approval_id")
         .await;
     let operation = operation(0x742);
     assert_eq!(
         submit(&f, &f.owner(), &operation, "Person origin").await.1["result"],
         "applied"
     );
-    assert_eq!(f.read("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE kind='workspaceCreated'").await.rows,vec![vec![SqlValue::Text(operation.clone()),SqlValue::Text("workspaceCreated".into()),SqlValue::Text("person".into()),SqlValue::Text(signed::OWNER.into()),SqlValue::Text("workspace:create".into()),SqlValue::Text(operation.clone())]]);
+    assert_eq!(f.read("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE kind='workspaceCreated'").await.rows,vec![vec![SqlValue::Text(operation.clone()),SqlValue::Text("workspaceCreated".into()),SqlValue::Text("person".into()),SqlValue::Text(signed::OWNER.into()),SqlValue::Text("workspace:create".into()),SqlValue::Text(operation.clone())]]);
     assert_eq!(
-        f.read("SELECT * FROM machines ORDER BY machine_id").await,
+        f.read("SELECT * FROM login_machines ORDER BY machine_id")
+            .await,
         before
     );
     assert_eq!(
-        f.read("SELECT * FROM machine_credentials ORDER BY credential_id")
+        f.read("SELECT * FROM login_machine_approvals ORDER BY approval_id")
             .await,
-        credentials
+        approvals
     );
-    // B4b approval/generation columns and legacy originInstallation/originMachine
-    // do not exist in this modern schema; no synthetic observations are invented.
-    let caller = collaboration_central_core::WorkspaceCaller {
-        organization_id: f.org.clone(),
-        caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
-            machine_id: machine.to_owned().try_into().unwrap(),
-            endpoint: "codex-local".to_owned().try_into().unwrap(),
-            session_id: "setup-origin-machine".to_owned().try_into().unwrap(),
-        }),
-        credential_hash: "setup-machine-hash".into(),
-    };
     let request = workspace_model::WorkspaceRequest {
         request_id: Some(super::support::operation(0x754).try_into().unwrap()),
         workspace_id: Some(operation.clone().try_into().unwrap()),
         operation: workspace_model::WorkspaceOperation::CreateArea {
             name: "Allowed control".to_owned().try_into().unwrap(),
+            description: "Test description".to_owned().try_into().unwrap(),
         },
     };
     let denied = f.host.request(&caller, request.clone()).await.unwrap();
@@ -137,10 +137,10 @@ async fn person_create_records_checked_origin_without_machine_rights() {
         "person create grants no ordinary machine allowance"
     );
     f.execute(
-        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+        "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             SqlValue::Text(serde_json::to_string(&vec![&operation]).unwrap()),
-            SqlValue::Text(machine.into()),
+            SqlValue::Text(caller.caller.machine_id().to_string()),
         ],
     )
     .await;
@@ -155,18 +155,16 @@ async fn person_create_records_checked_origin_without_machine_rights() {
 #[tokio::test]
 async fn generic_create_trims_names_defaults_description_and_shares_name_uniqueness() {
     let f = ready().await;
-    let machine = "019f0000-0000-7000-8000-00000000d761";
-    f.execute("INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'generic machine','enrolled','[]','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text(machine.into()),SqlValue::Text("019f0000-0000-7000-8000-00000000d762".into())]).await;
-    f.execute("INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'generic-machine-hash','2035-01-01T00:00:00Z','2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')",vec![SqlValue::Text("019f0000-0000-7000-8000-00000000d763".into()),SqlValue::Text(machine.into())]).await;
-    let caller = collaboration_central_core::WorkspaceCaller {
-        organization_id: f.org.clone(),
-        caller: workspace_model::Caller::Session(workspace_model::SessionAddress {
-            machine_id: machine.to_owned().try_into().unwrap(),
-            endpoint: "codex-local".to_owned().try_into().unwrap(),
+    let caller = super::super::super::support::machine_caller(
+        f.org.clone(),
+        workspace_model::Caller::Session(workspace_ids::SessionRef {
+            machine_id: "019f0000-0000-7000-8000-00000000d762".parse().unwrap(),
             session_id: "generic-setup".to_owned().try_into().unwrap(),
         }),
-        credential_hash: "generic-machine-hash".into(),
-    };
+        "019f0000-0000-7000-8000-00000000d763".to_owned(),
+        NOW_SECONDS,
+    );
+    super::super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
     let request = |serial, name: &str| workspace_model::WorkspaceRequest {
         request_id: Some(operation(serial).try_into().unwrap()),
         workspace_id: None,
@@ -186,7 +184,9 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
         )
     ));
     assert_eq!(
-        f.read("SELECT name,description FROM workspaces").await.rows,
+        f.read("SELECT name,description FROM directory_workspaces")
+            .await
+            .rows,
         vec![vec![
             SqlValue::Text("Shared name".into()),
             SqlValue::Text("".into())
@@ -208,7 +208,9 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
         (200, json!({"result":"refused","reason":"nameInUse"}))
     );
     assert_eq!(
-        f.read("SELECT COUNT(*) FROM workspaces").await.rows,
+        f.read("SELECT COUNT(*) FROM directory_workspaces")
+            .await
+            .rows,
         vec![vec![number(1)]]
     );
     f.close().await;
@@ -235,7 +237,7 @@ async fn last_statement_failure_rolls_back_directory_actor_ledger_proof_and_chan
     let runtime = f.runtime().await;
     // request_log::retain ends with this DELETE. A real older create makes
     // its expired row eligible, so the final cleanup statement must visit it.
-    let outcome=runtime.run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER fail_setup_ledger BEFORE DELETE ON request_log BEGIN SELECT RAISE(ABORT,'fixture last setup statement failure'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap();
+    let outcome=runtime.run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER fail_setup_ledger BEFORE DELETE ON runtime_request_log BEGIN SELECT RAISE(ABORT,'fixture last setup statement failure'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
     let before = owned_rows(&f).await;
     let operation = operation(0x743);
@@ -271,7 +273,7 @@ async fn last_statement_failure_rolls_back_directory_actor_ledger_proof_and_chan
         "applied",
         "the exact same proof remains fresh after full rollback"
     );
-    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM actor_identities)").await.rows,vec![vec![number(2),number(3),number(2),number(1),number(2)]]);
+    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM access_actor_identities)").await.rows,vec![vec![number(2),number(3),number(2),number(1),number(2)]]);
     let replay = f
         .post_bytes(signed::CREATE, &body, &headers(&person, &intent, now))
         .await;

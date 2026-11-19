@@ -65,7 +65,7 @@ async fn fired_in_group(runtime: &Runtime, group: uuid::Uuid) -> SqlValue {
 }
 async fn source_attempt(runtime: &Runtime, kind: &str) -> Vec<Vec<SqlValue>> {
     runtime.statement_host().read(Statement {
-        sql: "SELECT state,failure_count,last_failure FROM central_work_attempts WHERE machine_kind='engine_source' AND subject_key=?",
+        sql: "SELECT state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='engine_source' AND subject_key=?",
         args: vec![text(kind)],
     }).await.unwrap().rows
 }
@@ -397,7 +397,7 @@ async fn a_failed_due_read_for_one_kind_still_handles_the_others() {
     let wakes = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state FROM wakes WHERE wake_id=?",
+            sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
             args: vec![text(&wake)],
         })
         .await

@@ -81,7 +81,7 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
                 request,
                 m::WorkspaceOperation::List {
                     query,
-                    after: m::ChangePosition::ZERO,
+                    cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                     limit: 10.try_into().unwrap(),
                 },
             )
@@ -96,11 +96,12 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
             0,
             m::WorkspaceOperation::List {
                 query: m::ListQuery::SearchPosts {
-                    area_id: Some(area.clone()),
-                    thread_id: Some(thread.clone()),
+                    scope: m::PostScope::Thread {
+                        thread_id: thread.clone(),
+                    },
                     text: "%_".to_owned().try_into().unwrap(),
                 },
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: 1.try_into().unwrap(),
             },
         )
@@ -188,18 +189,25 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
             "new-id missing removal caches refusal"
         );
     }
-    let inbox = f
-        .call(
-            0,
-            m::WorkspaceOperation::Inbox {
-                after: None,
-                limit: 100.try_into().unwrap(),
+    // Each removal leaves its own change; removals are not inbox items.
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let removals = runtime
+        .inspect_workspace(
+            &f.workspace,
+            Statement {
+                sql: "SELECT item_kind FROM workspace_changes WHERE change_kind='removed' ORDER BY position",
+                args: vec![],
             },
         )
-        .await;
-    assert!(
-        matches!(&inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,..}) if entries.iter().any(|entry|matches!(entry.item,m::ItemView::Removed{..}))),
-        "{inbox:?}"
+        .await
+        .unwrap();
+    assert_eq!(
+        removals.rows,
+        vec![
+            vec![text("reference")],
+            vec![text("link")],
+            vec![text("backlogItem")]
+        ]
     );
     f.host.close().await;
 }

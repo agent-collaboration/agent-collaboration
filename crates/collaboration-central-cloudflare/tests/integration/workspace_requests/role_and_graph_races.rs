@@ -1,10 +1,9 @@
 use super::*;
-use collaboration_central_core::WorkspaceCaller;
 async fn held_pair(
     f: &Fixture,
     first: m::WorkspaceOperation,
     second: m::WorkspaceOperation,
-    second_caller: WorkspaceCaller,
+    second_caller: FixtureCaller,
 ) -> (m::WorkspaceReply, m::WorkspaceReply) {
     let runtime = f.host.central(&f.caller.organization_id).await;
     let target = serde_json::json!({"workspace":f.workspace,"point":"afterReads"});
@@ -124,7 +123,7 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT ended_at FROM project_roles WHERE project_id=? AND role='lead'",
+                sql: "SELECT ended_at FROM workspace_project_roles WHERE project_id=? AND role='lead'",
                 args: vec![text(project)],
             },
         )
@@ -166,7 +165,7 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
     );
     let runtime = f.host.central(&f.caller.organization_id).await;
     let untouched_assignment = || Statement {
-        sql: "SELECT deliverable_role_id,deliverable_id,role,holder,granted_at,ended_at,created_at,updated_at FROM deliverable_roles WHERE deliverable_id=? AND role='implementer' ORDER BY deliverable_role_id",
+        sql: "SELECT deliverable_role_id,deliverable_id,role,holder,granted_at,ended_at,created_at,updated_at FROM workspace_deliverable_roles WHERE deliverable_id=? AND role='implementer' ORDER BY deliverable_role_id",
         args: vec![text(&untouched)],
     };
     let before = runtime
@@ -181,7 +180,7 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
     );
     let author = runtime
         .read(Statement {
-            sql: "SELECT identity FROM actor_identities WHERE actor_identity_id=?",
+            sql: "SELECT identity FROM access_actor_identities WHERE actor_identity_id=?",
             args: vec![before.rows[0][3].clone()],
         })
         .await
@@ -226,7 +225,7 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
         );
     }
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
+    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM workspace_deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
     assert_eq!(
         rows.rows
             .iter()

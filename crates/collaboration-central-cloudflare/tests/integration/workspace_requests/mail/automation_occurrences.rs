@@ -60,7 +60,7 @@ async fn automation_row(
 ) -> Vec<Vec<central_storage::SqlValue>> {
     rows(
         runtime,
-        "SELECT state,next_due_at,evaluated_through_at FROM automations WHERE automation_id=?",
+        "SELECT state,next_due_at,evaluated_through_at FROM automation_schedules WHERE automation_id=?",
         vec![text(automation)],
     )
     .await

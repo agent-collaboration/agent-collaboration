@@ -50,7 +50,7 @@ fn number(value: i64) -> SqlValue {
     SqlValue::Integer(value.try_into().unwrap())
 }
 async fn counts(f: &Fixture) -> ReadOutcome {
-    f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM request_log)").await
+    f.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM runtime_request_log)").await
 }
 async fn ready(f: &Fixture) {
     assert_eq!(f.provision().await.0, 200);

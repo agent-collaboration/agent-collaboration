@@ -5,7 +5,7 @@ async fn zero_page_limits_fail_at_the_typed_request_boundary() {
     let error = m::PageLimit::try_from(0).unwrap_err();
     assert_eq!(error.field, "limit");
     for operation in [
-        serde_json::json!({"kind":"list","query":{"kind":"areas"},"after":0,"limit":0}),
+        serde_json::json!({"kind":"list","query":{"kind":"areas","includeArchived":false},"cursor":{"order":"oldestFirst","position":null},"limit":0}),
         serde_json::json!({"kind":"inbox","after":null,"limit":0}),
     ] {
         let request = serde_json::json!({"workspaceId":id::<m::WorkspaceId>(1),"requestId":null,"operation":operation});
@@ -28,7 +28,7 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT area_id FROM areas",
+                sql: "SELECT area_id FROM workspace_areas",
                 args: vec![],
             },
         )
@@ -41,7 +41,7 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id FROM actor_identities",
+            sql: "SELECT actor_identity_id FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -49,29 +49,31 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
     let SqlValue::Text(actor) = &actors.rows[0][0] else {
         panic!("actor");
     };
-    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO areas(area_id,name,state,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),'A','open','2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![],RowExpectation::Any).await;
-    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO changes(change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',200000+n),n+1,'created','area',printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),NULL,NULL,?,NULL,NULL,'2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![text(actor)],RowExpectation::Any).await;
-    let query = m::ListQuery::Areas;
+    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO workspace_areas(area_id,name,description,state,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),'A','Test description','open','2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![],RowExpectation::Any).await;
+    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO workspace_changes(change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',200000+n),n+1,'created','area',printf('01890f2e-7b4c-7cc0-98c4-%012x',100000+n),NULL,NULL,?,NULL,NULL,'2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![text(actor)],RowExpectation::Any).await;
+    let query = m::ListQuery::Areas {
+        include_archived: false,
+    };
     let maximum = m::PageLimit::try_from(u16::MAX).unwrap();
     let first = f
         .call(
             0,
             m::WorkspaceOperation::List {
                 query: query.clone(),
-                after: m::ChangePosition::ZERO,
+                cursor: m::ListCursor::start(m::ListOrder::OldestFirst),
                 limit: maximum,
             },
         )
         .await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Page {
         items,
-        next_after_position: Some(after),
+        next_cursor: Some(after),
     }) = first.result
     else {
         panic!("maximum list must continue");
     };
     assert_eq!(items.len(), 65535);
-    assert_eq!(after.get(), 65535);
+    assert_eq!(after.position().map(m::ChangePosition::get), Some(65535));
     let ids = items
         .iter()
         .map(m::ItemView::item_ref)
@@ -83,14 +85,14 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
             0,
             m::WorkspaceOperation::List {
                 query,
-                after,
+                cursor: after,
                 limit: maximum,
             },
         )
         .await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Page {
         items,
-        next_after_position: None,
+        next_cursor: None,
     }) = tail.result
     else {
         panic!("list tail");
@@ -100,9 +102,17 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
     assert_eq!(items[0].item_ref(), m::ItemRef::Area(id(165535)));
     drop(ids);
     drop(items);
-    let thread = f.thread(1200, id(100000)).await;
+    // This pagination fixture seeds its followed thread without a first post,
+    // so every synthetic change keeps the original position used by the oracle.
+    let thread: m::ThreadId = id(1200);
+    f.workspace_execute(
+        "INSERT INTO workspace_threads(thread_id,area_id,title,creator,state,created_at,updated_at) VALUES (?,?,'Thread',?,'open','2026-11-13T00:00:00Z','2026-11-13T00:00:00Z')",
+        vec![text(&thread), text(id::<m::AreaId>(100000)), text(actor)],
+        RowExpectation::Exactly(1),
+    )
+    .await;
     let before = 65537_u64.try_into().unwrap();
-    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO changes(change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',300000+n),65538+n,'updated','thread',?,?,NULL,?,NULL,NULL,'2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![text(&thread),text(&thread),text(actor)],RowExpectation::Any).await;
+    f.workspace_execute("WITH RECURSIVE numbers(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n<65535) INSERT INTO workspace_changes(change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',300000+n),65538+n,'updated','thread',?,?,NULL,?,NULL,NULL,'2026-11-13T00:00:00Z','2026-11-13T00:00:00Z' FROM numbers",vec![text(&thread),text(&thread),text(actor)],RowExpectation::Any).await;
     let inbox = f
         .call(
             0,

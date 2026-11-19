@@ -40,7 +40,7 @@ async fn revision_routes_commit_before_ack_and_never_lower_or_revive_deleted_flo
         (200, json!({"acknowledgedRevision":5}))
     );
     let rows = f
-        .read("SELECT minimum_revision,state FROM organization_authorization_floors")
+        .read("SELECT minimum_revision,state FROM signin_authorization_floors")
         .await;
     assert_eq!(
         rows.rows,

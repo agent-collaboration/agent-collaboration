@@ -91,6 +91,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
         workspace_id: Some(f.workspace.clone()),
         operation: m::WorkspaceOperation::ResolveThread {
             thread_id: thread.clone(),
+            closing_post: None,
         },
     };
     let first = tokio::spawn({
@@ -133,7 +134,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
     );
     // Re-open only as a corruption/fault fixture, so replay must not re-run the rule.
     f.workspace_batch(
-        "UPDATE threads SET state='open' WHERE thread_id=?",
+        "UPDATE workspace_threads SET state='open' WHERE thread_id=?",
         vec![text(thread)],
     )
     .await;
@@ -148,7 +149,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
 async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
     let f = Fixture::new().await;
     let area = f.area(340).await;
-    let thread = f.thread(341, area).await;
+    let thread = f.thread(341, area.clone()).await;
     let m::ItemRef::Link(link) = created(
         f.call(
             342,
@@ -180,15 +181,18 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
         async move { runtime.request(&caller, request).await.unwrap() }
     });
     let _: bool = runtime.control("until-held", &target).await.unwrap();
-    f.workspace_batch("DELETE FROM links WHERE link_id=?", vec![text(&link)])
-        .await;
+    f.workspace_batch(
+        "DELETE FROM workspace_links WHERE link_id=?",
+        vec![text(&link)],
+    )
+    .await;
     let _: bool = runtime.control("release", &target).await.unwrap();
     assert_eq!(pending.await.unwrap().result, m::WorkspaceResult::Conflict);
     let logged = runtime
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT request_id FROM request_log WHERE request_id=?",
+                sql: "SELECT request_id FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(343))],
             },
         )
@@ -250,9 +254,10 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
 
 #[tokio::test]
 async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     let area = m::WorkspaceOperation::CreateArea {
         name: name("Same content"),
+        description: "Test description".to_owned().try_into().unwrap(),
     };
     let original = f.call(360, area.clone()).await;
     let central = m::WorkspaceOperation::CreateWorkspace {
@@ -268,17 +273,18 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     let directory = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT * FROM workspaces ORDER BY workspace_id",
+            sql: "SELECT * FROM directory_workspaces ORDER BY workspace_id",
             args: vec![],
         })
         .await
         .unwrap();
     let ledger_query = || Statement {
-        sql: "SELECT answer,created_at FROM request_log WHERE request_id=?",
+        sql: "SELECT answer,created_at FROM runtime_request_log WHERE request_id=?",
         args: vec![text(id::<m::RequestId>(361))],
     };
     let first_ledger = runtime.statement_host().read(ledger_query()).await.unwrap();
     f.clock.0.fetch_add(86_400_001, Ordering::SeqCst);
+    f.caller = fresh_auth(&f.host, &f.caller);
     let next = f.call(360, area).await;
     assert!(matches!(
         next.result,
@@ -298,7 +304,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT * FROM workspaces ORDER BY workspace_id",
+                sql: "SELECT * FROM directory_workspaces ORDER BY workspace_id",
                 args: vec![]
             })
             .await

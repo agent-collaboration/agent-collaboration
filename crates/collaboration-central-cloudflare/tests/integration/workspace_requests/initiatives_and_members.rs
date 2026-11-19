@@ -133,7 +133,7 @@ async fn closed_initiative_guards_reopening_and_references_never_move_projects()
 async fn only_creator_adds_or_promotes_members_and_posts_require_active_participation() {
     let f = Fixture::new().await;
     let area = f.area(530).await;
-    let thread = f.thread(531, area).await;
+    let thread = f.thread(531, area.clone()).await;
     let mut other = f.caller.clone();
     let mut other_session = session(&other);
     other_session.session_id = "other-participant".to_owned().try_into().unwrap();
@@ -205,7 +205,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -257,7 +257,8 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             Some(f.workspace.clone()),
             537,
             m::WorkspaceOperation::ResolveThread {
-                thread_id: thread.clone()
+                thread_id: thread.clone(),
+                closing_post: None,
             }
         )
         .await
