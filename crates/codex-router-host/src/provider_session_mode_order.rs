@@ -7,6 +7,7 @@
 //! another session's never does.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 
 /// Each session's turn for explicit mode changes; an entry lives only while
@@ -38,6 +39,21 @@ pub(crate) struct SessionModeTurn {
 }
 
 impl SessionModeOrder {
+    /// The caller owns the wait for the turn. Once it is acquired, settlement
+    /// owns the turn and the change even if the caller stops awaiting the task.
+    pub(crate) async fn settle_mode_change<Output: Send + 'static>(
+        self: &Arc<Self>,
+        session_id: &str,
+        change: impl Future<Output = Output> + Send + 'static,
+    ) -> Result<Output, tokio::task::JoinError> {
+        let turn = self.enter(session_id).await;
+        tokio::spawn(async move {
+            let _turn = turn;
+            change.await
+        })
+        .await
+    }
+
     /// Waits for the session's turn: operations enter in the order they asked.
     pub(crate) async fn enter(self: &Arc<Self>, session_id: &str) -> SessionModeTurn {
         let lock = {

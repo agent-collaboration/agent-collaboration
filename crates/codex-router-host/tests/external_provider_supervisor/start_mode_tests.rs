@@ -616,6 +616,50 @@ async fn a_restore_waits_for_an_applied_mode_change_still_being_recorded() -> Te
     Ok(())
 }
 
+/// R5: dropping B at the mode-turn wait sends no B request and leaves A's
+/// confirmed mode in the record. A later load of the still-live session
+/// joins the same mode turn, making the absence of B's write observable.
+#[cfg(all(unix, feature = "test-support"))]
+#[tokio::test]
+async fn a_mode_change_cancelled_while_waiting_sends_nothing() -> TestResult {
+    let fixture = ModeFixture::start("claude", &["advertise-restore"]).await?;
+    let target = fixture.create_in("default").await?;
+    let (a_held, release_a) = fixture
+        .backend
+        .pause_explicit_mode_record_of(&target, "plan");
+    let mut change_a = Box::pin(fixture.set_mode(&target, "plan"));
+    tokio::select! {
+        held = a_held => held.map_err(|_| "A's record pause was dropped")?,
+        result = &mut change_a => return Err(format!("A settled before its record pause: {result:?}").into()),
+    }
+
+    let b_waiting = fixture
+        .backend
+        .notice_next_explicit_mode_wait(&target)
+        .ok_or("the binding is known")?;
+    let mut change_b = Box::pin(fixture.set_mode(&target, "acceptEdits"));
+    tokio::select! {
+        waiting = b_waiting => waiting.map_err(|_| "B's mode-turn wait notice was dropped")?,
+        result = &mut change_b => return Err(format!("B settled before taking the turn: {result:?}").into()),
+    }
+    drop(change_b);
+    release_a.send(()).map_err(|_| "release A's record write")?;
+    change_a
+        .await
+        .map_err(|error| format!("A did not settle: {error}"))?;
+
+    let barrier = fixture.load(&target).await;
+    let recorded = fixture.recorded_mode(&target).await?;
+    let mode_values = fixture.mode_values_seen()?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    let refused_load = barrier.expect_err("the load reaches the still-live cell");
+    ensure!(refused_load.to_string().contains("Busy"));
+    ensure_eq!(mode_values, ["default", "plan"]);
+    ensure_eq!(recorded.as_deref(), Some("plan"));
+    Ok(())
+}
+
 /// Oracle: review F3, "the admitted change keeps ownership through its
 /// settlement (it survives a caller drop)" (wrong build: the change runs in
 /// its caller's future). A change to plan is applied and held before its

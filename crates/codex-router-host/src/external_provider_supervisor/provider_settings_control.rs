@@ -117,6 +117,8 @@ pub(super) async fn apply(
     };
     let records_mode = kind == provider_session_machines::ProviderSettingKind::Mode
         && intent == session_event_model::SettingApplicationIntent::ExplicitChange;
+    let mode_order =
+        records_mode.then(|| std::sync::Arc::clone(runtime.session_setup().mode_order()));
     let applying = apply_and_record(
         supervisor.clone(),
         runtime,
@@ -126,16 +128,19 @@ pub(super) async fn apply(
         expected_model,
         records_mode,
     );
-    let observed = if records_mode {
-        // An explicit mode change owns its turn, its apply and its record to
-        // the end, even when its caller stops waiting (review F3).
-        tokio::spawn(applying).await.map_err(|_| {
-            SettingControlFailure::Provider(Box::new(failure(
-                ProviderSettingsFailureKind::Unavailable,
-                &request.target,
-                "the mode change ended before it settled",
-            )))
-        })??
+    let observed = if let Some(mode_order) = mode_order {
+        // Dropping the caller while it waits sends nothing. After taking the
+        // turn, apply and record run together even when the caller stops waiting.
+        mode_order
+            .settle_mode_change(&String::from(request.target.session_id.clone()), applying)
+            .await
+            .map_err(|_| {
+                SettingControlFailure::Provider(Box::new(failure(
+                    ProviderSettingsFailureKind::Unavailable,
+                    &request.target,
+                    "the mode change ended before it settled",
+                )))
+            })??
     } else {
         applying.await?
     };
@@ -156,17 +161,6 @@ async fn apply_and_record(
     records_mode: bool,
 ) -> Result<acp_client_runtime::EffectiveProviderSettings, SettingControlFailure> {
     let session_id = String::from(request.target.session_id.clone());
-    let _mode_turn = if records_mode {
-        Some(
-            runtime
-                .session_setup()
-                .mode_order()
-                .enter(&session_id)
-                .await,
-        )
-    } else {
-        None
-    };
     let observed = runtime
         .set_setting(
             session_id.clone(),

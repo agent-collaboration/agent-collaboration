@@ -70,8 +70,8 @@ fn a_session_keeps_no_turn_once_no_change_holds_or_waits_on_it() {
 /// Oracle: the Lead's V6b lifetime ruling, "a waiter cancelled mid-await
 /// runs the same cleanup": A holds the turn and B waits on it; A ends, and the
 /// turn stays for B; B's request is then cancelled; no turn remains.
-#[test]
-fn a_waiting_change_cancelled_after_the_holder_ends_leaves_no_turn() {
+#[tokio::test]
+async fn a_waiting_change_cancelled_after_the_holder_ends_leaves_no_turn() {
     // Arrange
     let order = Arc::new(SessionModeOrder::default());
     let one = session("one");
@@ -79,8 +79,15 @@ fn a_waiting_change_cancelled_after_the_holder_ends_leaves_no_turn() {
         .enter(&one)
         .now_or_never()
         .expect("the first change enters");
-    let mut waiting = Box::pin(order.enter(&one));
-    assert!((&mut waiting).now_or_never().is_none(), "B waits for A");
+    let wait_notice = order.notice_next_wait();
+    let (entered, mut change_entered) = tokio::sync::oneshot::channel();
+    let mut waiting = Box::pin(order.settle_mode_change(&one, async move {
+        let _sent = entered.send(());
+    }));
+    tokio::select! {
+        result = wait_notice => result.expect("B waits for A"),
+        result = &mut waiting => panic!("B settled while A still held the turn: {result:?}"),
+    }
 
     // Act
     drop(first);
@@ -89,6 +96,11 @@ fn a_waiting_change_cancelled_after_the_holder_ends_leaves_no_turn() {
 
     // Assert
     assert_eq!(kept_while_one_waits, 1, "the turn stays while B waits");
+    assert_eq!(
+        change_entered.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Closed),
+        "the cancelled caller still owns the change future"
+    );
     assert_eq!(
         order.sessions_with_turns(),
         0,
