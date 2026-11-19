@@ -389,7 +389,10 @@ impl acp_client_runtime::SessionEventSink for RestoreObservations {
         _id: &str,
         event: session_event_model::SessionEvent,
     ) -> Result<(), acp_client_runtime::EventSinkClosed> {
-        self.events.lock().expect("events").push(event);
+        self.events
+            .lock()
+            .map_err(|_| acp_client_runtime::EventSinkClosed)?
+            .push(event);
         Ok(())
     }
 }
