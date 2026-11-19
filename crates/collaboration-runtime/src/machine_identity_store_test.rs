@@ -1,14 +1,21 @@
 use super::{MachineIdentityError, load_or_create_machine_id};
 use crate::{MACHINE_LOCAL_DATABASE, MachineLocalStore};
 use runtime_primitives::SyncTime;
+use std::os::unix::fs::PermissionsExt as _;
 
 const FIRST_START: i64 = 1_795_000_000_123;
 const OLD_SERVICE_ID: &str = "019a91a3-7000-7000-8000-000000000011";
 const OLD_PEER_ID: &str = "019a91a3-7000-7000-8000-000000000012";
 
+fn private_root() -> tempfile::TempDir {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    root
+}
+
 #[tokio::test]
 async fn first_start_mints_and_restart_reuses_the_id_without_touching_old_files() {
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let service_path = root.path().join("service-identity.json");
     let peer_path = root.path().join("installation-peer.json");
     let old_service = format!(r#"{{"version":1,"serviceId":"{OLD_SERVICE_ID}"}}"#);
@@ -42,7 +49,7 @@ async fn first_start_mints_and_restart_reuses_the_id_without_touching_old_files(
 
 #[tokio::test]
 async fn concurrent_first_starts_share_one_machine_id() {
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let (first, second) = tokio::join!(
         load_or_create_machine_id(root.path(), SyncTime::from_unix_millis(FIRST_START)),
         load_or_create_machine_id(root.path(), SyncTime::from_unix_millis(FIRST_START + 1)),
@@ -62,7 +69,7 @@ async fn concurrent_first_starts_share_one_machine_id() {
 
 #[tokio::test]
 async fn a_corrupt_machine_id_fails_reopen_without_reminting() {
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let now = SyncTime::from_unix_millis(FIRST_START);
     let path = root.path().join(MACHINE_LOCAL_DATABASE);
     load_or_create_machine_id(root.path(), now).await.unwrap();
