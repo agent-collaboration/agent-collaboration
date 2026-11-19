@@ -43,10 +43,11 @@ async fn a_caller_gone_before_admission_leaves_no_row_and_no_frame() {
     let_tasks_run().await;
     drop(held);
     first.await.unwrap();
-    let dropped_status = harness
+    let unresolved = harness
         .calls
         .request_status(caller(), dropped.parse().unwrap())
         .await;
+    let dropped_status = harness.local_status(&dropped).await;
     harness
         .clock
         .advance(Duration::from_millis(20_000))
@@ -58,6 +59,7 @@ async fn a_caller_gone_before_admission_leaves_no_row_and_no_frame() {
         RequestStatus::NotFound,
         "no row was written"
     );
+    assert_eq!(unresolved, RequestStatus::StatusUnavailable);
     let LinkFrame::Data(DataFrame::Batch { requests }) = frame else {
         panic!("the first frame is the minute batch, not the dropped read: {frame:?}");
     };

@@ -275,10 +275,8 @@ async fn a_flush_tick_prunes_writes_that_ended_60_days_ago() {
     let LinkFrame::Data(DataFrame::Batch { .. }) = central.frame().await else {
         panic!("the flush tick sends its batch");
     };
-    let after = harness
-        .calls
-        .request_status(caller(), old.parse().unwrap())
-        .await;
+    let _ = harness.calls.link_status().await;
+    let after = harness.local_status(&old).await;
 
     assert!(matches!(before, RequestStatus::Answered(_)));
     assert_eq!(after, RequestStatus::NotFound, "pruned at the tick");

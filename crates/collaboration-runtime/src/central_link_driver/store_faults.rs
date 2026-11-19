@@ -95,7 +95,21 @@ impl OutboxStorage for FaultyOutbox {
         item: &'call NewOutboxItem,
         now: SyncTime,
     ) -> OutboxFuture<'call, OutboxInsert> {
-        faulty!(self, "insert", self.inner.insert(item, now))
+        match self.plan.take("insert") {
+            None => self.inner.insert(item, now),
+            Some(FaultKind::BeforeCall) => Box::pin(async {
+                Err(OutboxStoreError::InsertNotStarted(
+                    sqlx::Error::PoolTimedOut,
+                ))
+            }),
+            Some(FaultKind::AfterCommit) => {
+                let call = self.inner.insert(item, now);
+                Box::pin(async move {
+                    let _committed = call.await;
+                    injected()
+                })
+            }
+        }
     }
     fn request_status<'call>(
         &'call mut self,
@@ -133,6 +147,9 @@ impl OutboxStorage for FaultyOutbox {
     }
     fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
         faulty!(self, "earliest_waiting", self.inner.earliest_waiting())
+    }
+    fn earliest_deadline(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        faulty!(self, "earliest_deadline", self.inner.earliest_deadline())
     }
     fn claim_next_batch(
         &mut self,

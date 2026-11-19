@@ -24,6 +24,7 @@ workspace = true
 
 [dependencies]
 workspace-ids.workspace = true
+workspace-model.workspace = true
 router-clock.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true

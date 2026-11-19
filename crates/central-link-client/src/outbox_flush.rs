@@ -38,6 +38,10 @@ pub enum LinkAvailability {
 /// read by the Host just before the event; None when nothing waits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FlushEvent {
+    /// The store changed the next waiting write's absolute expiry.
+    LocalDeadlineChanged {
+        deadline: Option<SyncTime>,
+    },
     /// The Host stored a write for this mark.
     Stored {
         flush_at: SyncTime,
@@ -94,6 +98,8 @@ impl MemberOutcome {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FlushEffect {
+    /// Schedule local expiry on the exact clock time, regardless of the link.
+    WakeAtLocalDeadline { deadline: Option<SyncTime> },
     /// Claim the next due writes (up to MAX_BATCH_WRITES) from the store and
     /// send them as one batch frame.
     SendBatch { mark: SyncTime },
@@ -132,6 +138,10 @@ pub fn transition(
     let mut effects = Vec::new();
     let mut tick_now = None;
     let earliest_due = match event {
+        FlushEvent::LocalDeadlineChanged { deadline } => {
+            effects.push(FlushEffect::WakeAtLocalDeadline { deadline });
+            return Ok((state, effects));
+        }
         FlushEvent::Stored { flush_at } => {
             // Something waits at least this early; keep an earlier armed wake.
             Some(

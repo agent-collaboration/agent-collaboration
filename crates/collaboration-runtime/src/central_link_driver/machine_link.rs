@@ -2,7 +2,7 @@
 //! Until the Router has a token source, immediate calls report not enrolled
 //! and outbox writes wait in the local store.
 use super::{
-    CentralLinkParts, InstallationFlushJitter, LinkSocket, LinkTransport, LinkTransportError,
+    CentralLinkParts, LinkSocket, LinkTransport, LinkTransportError, MachineFlushJitter,
     MachineTokenSource, RouterLinkCalls, TokenAvailability, TransportFuture,
 };
 use crate::{MachineLocalStore, OutboxStorage};
@@ -23,11 +23,12 @@ pub struct ConfiguredCentralLink {
 /// Opens the Router's machine_local.sqlite in `state_directory` and starts
 /// the link on it. None when the store does not open (the link is then not
 /// started; the rest of the Router runs).
-pub async fn open_installation_link(
+pub async fn open_machine_link(
     state_directory: &std::path::Path,
     machine_id: &MachineId,
     clock: Arc<dyn RuntimeClock>,
     configured: Option<ConfiguredCentralLink>,
+    inbox: Option<crate::CentralInbox>,
     tasks: &TaskTracker,
     stop: CancellationToken,
 ) -> Option<RouterLinkCalls> {
@@ -40,17 +41,18 @@ pub async fn open_installation_link(
             return None;
         }
     };
-    Some(start_installation_link(
-        machine_id, clock, store, configured, tasks, stop,
+    Some(start_machine_link(
+        machine_id, clock, store, configured, inbox, tasks, stop,
     ))
 }
 
 /// Starts the link driver with the Host machine identifier.
-pub fn start_installation_link(
+pub fn start_machine_link(
     machine_id: &MachineId,
     clock: Arc<dyn RuntimeClock>,
     store: Arc<Mutex<dyn OutboxStorage>>,
     configured: Option<ConfiguredCentralLink>,
+    inbox: Option<crate::CentralInbox>,
     tasks: &TaskTracker,
     stop: CancellationToken,
 ) -> RouterLinkCalls {
@@ -60,14 +62,14 @@ pub fn start_installation_link(
             transport: Arc::new(UnconfiguredLinkTransport),
         });
     let parts = CentralLinkParts {
-        jitter: Arc::new(InstallationFlushJitter::new(machine_id)),
-        installation: machine_id.clone(),
+        jitter: Arc::new(MachineFlushJitter::new(machine_id)),
+        machine_id: machine_id.clone(),
         clock,
         store,
         transport,
         tokens,
         outcomes: Arc::new(LoggedFlushOutcomes),
-        inbox: None,
+        inbox,
     };
     RouterLinkCalls::start(parts, tasks, stop)
 }
@@ -122,5 +124,5 @@ impl FlushOutcomeSink for LoggedFlushOutcomes {
 }
 
 #[cfg(test)]
-#[path = "installation_link_test.rs"]
+#[path = "machine_link_test.rs"]
 mod tests;

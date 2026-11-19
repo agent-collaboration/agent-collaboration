@@ -21,6 +21,24 @@ async fn faulty_store(root: &tempfile::TempDir) -> (Arc<Mutex<dyn OutboxStorage>
     (Arc::new(Mutex::new(store)), plan)
 }
 
+#[tokio::test]
+async fn a_failed_local_status_read_is_unavailable() {
+    let root = tempfile::tempdir().unwrap();
+    let (store, plan) = faulty_store(&root).await;
+    let harness = Harness::start_with_store(root, clock_at(MARK - 20_000), store);
+    plan.fail_once("request_status");
+    let status = harness
+        .calls
+        .request_status(caller(), uuid_v7(29).parse().unwrap())
+        .await;
+    assert_eq!(status, RequestStatus::StatusUnavailable);
+    assert!(
+        plan.pending().is_empty(),
+        "the status read hit the injected error"
+    );
+    harness.stop().await;
+}
+
 /// The batch central has received so far, if any; heartbeats are answered.
 /// Never blocks: a stranded write shows as None, not as a hang.
 async fn batch_now(harness: &Harness, central: &mut CentralEnd) -> Option<Vec<LinkRequest>> {

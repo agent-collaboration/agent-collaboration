@@ -6,8 +6,6 @@ use collaboration_protocol::{
     ObservationTimestamp, ProviderKind, RouterExecutableRelation, SchemaDigest, UuidIdentity,
 };
 use collaboration_runtime::NativeRelayListener;
-use collaboration_runtime::load_installation_peer;
-use collaboration_runtime::load_service_identity;
 use collaboration_runtime::new_service_uuid;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
@@ -296,6 +294,8 @@ mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
 #[path = "collaboration_runtime/board_composition.rs"]
 mod board_composition;
+#[path = "collaboration_runtime/central_recipient_directory.rs"]
+mod central_recipient_directory;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
 #[path = "collaboration_runtime/mail_delivery_composition.rs"]

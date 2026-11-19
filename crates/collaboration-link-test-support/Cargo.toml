@@ -24,6 +24,7 @@ tokio.workspace = true
 tokio-tungstenite.workspace = true
 tokio-util.workspace = true
 turmoil.workspace = true
+workspace-ids.workspace = true
 workspace-model.workspace = true
 
 [dev-dependencies]

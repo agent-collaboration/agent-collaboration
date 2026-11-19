@@ -1556,6 +1556,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]
@@ -2080,6 +2081,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "turmoil",
+ "workspace-ids",
  "workspace-model",
 ]
 

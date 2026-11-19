@@ -4,8 +4,8 @@ use super::{
     CollaborationRuntimeInputs, EndpointAvailability, EndpointId, EndpointRef,
     HostCollaborationInputs, JoinSet, NativeRelayListener, NonEmptyText, RemoteControlServerName,
     RouterExecutableRelation, SchemaDigest, SocketAddr, board_composition,
-    create_private_socket_directory, current_observation_timestamp, io, load_installation_peer,
-    load_service_identity, new_service_uuid, unix_seconds,
+    create_private_socket_directory, current_observation_timestamp, io, new_service_uuid,
+    unix_seconds,
 };
 
 impl CollaborationRuntime {
@@ -72,21 +72,18 @@ impl CollaborationRuntime {
         #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
         let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> =
             std::sync::Arc::new(router_clock::SystemRuntimeClock::new());
-        let service_id = load_service_identity(&inputs.directory)?;
-        let installation_peer = load_installation_peer(&inputs.directory)?;
-        if inputs
-            .board_session
-            .as_ref()
-            .is_some_and(|session| session.peer != installation_peer)
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "enrollment peer differs from this installation's persisted peer",
-            ));
-        }
+        let machine_id =
+            collaboration_runtime::load_or_create_machine_id(&inputs.directory, worker_clock.now())
+                .await
+                .map_err(io::Error::other)?;
+        // Old board transport only. Delete with the board store at the retrofit.
+        // This is a transport representation of the machine-local UUID.
+        let installation_peer =
+            fleet_sync_protocol::PeerId::try_from(machine_id.as_str().to_owned())
+                .map_err(io::Error::other)?;
         let service_epoch = new_service_uuid()?;
         let machine_identity = collaboration_contracts::MachineIdentity::new(
-            service_id.clone(),
+            machine_id.clone(),
             inputs
                 .remote_control_server_name
                 .as_ref()
@@ -137,13 +134,13 @@ impl CollaborationRuntime {
             }
         };
         let identity = collaboration_contracts::RouterIdentity::new(
-            service_id.clone(),
+            machine_id.clone(),
             service_epoch.clone(),
             Some(installation_peer),
             machine_identity.clone(),
         )
         .map_err(io::Error::other)?;
-        let endpoint_directory = collaboration_runtime::EndpointDirectory::new(service_id.clone());
+        let endpoint_directory = collaboration_runtime::EndpointDirectory::new(machine_id.clone());
         let display_names = collaboration_runtime::SessionDisplayNameCache::default();
         let wake_wait_permits = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
         let mut project_claim = None;
@@ -233,7 +230,7 @@ impl CollaborationRuntime {
         let startup = crate::provider_startup_composition::compose_provider_startup(
             provider_launches,
             provider_store.clone(),
-            &service_id,
+            &machine_id,
             &service_epoch,
             &mcp_url,
             inputs
@@ -257,7 +254,7 @@ impl CollaborationRuntime {
                 as std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>
         });
         let endpoint = EndpointRef {
-            service_id: service_id.clone(),
+            service_id: machine_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned())
                 .map_err(io::Error::other)?,
         };
@@ -280,7 +277,7 @@ impl CollaborationRuntime {
             .map_err(io::Error::other)?,
         );
         let approval_broker = collaboration_runtime::ServiceInteractionBroker::load(
-            service_id.clone(),
+            machine_id.clone(),
             native_backend.clone(),
             interaction_store,
         )
@@ -399,7 +396,7 @@ impl CollaborationRuntime {
                 .map_err(io::Error::other)?;
             if let Some(store) = &automation_store {
                 mail.attach_wake_owner(
-                    service_id.clone(),
+                    machine_id.clone(),
                     store.clone(),
                     wake_wait_permits.clone(),
                 )
@@ -483,7 +480,7 @@ impl CollaborationRuntime {
         let codex_recorder = crate::codex_conversation_recording_composition::recording_for_store(
             provider_store.as_ref(),
             &inputs.directory,
-            &service_id,
+            &machine_id,
         )?;
         let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
         let application = {
@@ -604,7 +601,7 @@ impl CollaborationRuntime {
                 ));
             let wakes = collaboration_service::collaboration_application::WakeOperations::new(
                 worker_clock.clone(),
-                &service_id.clone(),
+                &machine_id.clone(),
                 automation_store.clone().as_ref(),
             )
             .with_wait_capacity(&wake_wait_permits.clone())
@@ -630,7 +627,7 @@ impl CollaborationRuntime {
         .with_connection_budget(std::sync::Arc::clone(&permits));
         let stored = std::sync::Arc::new(codex_acp_adapter::NativeStoredSessions::new(
             inputs.codex_home.clone(),
-            String::from(service_id.clone()),
+            String::from(machine_id.clone()),
         ));
         let mut acp = collaboration_runtime::AcpChannelListener::bind(
             &inputs.directory.join("codex-acp.sock"),
@@ -771,13 +768,32 @@ impl CollaborationRuntime {
             tracing::warn!(%error, "project creation recovery unavailable; unrelated collaboration remains available");
         }
         let shutdown = CancellationToken::new();
-        // The central link for this installation (stand-in until B3: not enrolled).
+        // PR 3 owns durable admission. PR 4 provides the native handoff.
+        let inbox = collaboration_runtime::CentralInbox::open(
+            &inputs
+                .directory
+                .join(collaboration_runtime::MACHINE_LOCAL_DATABASE),
+            std::sync::Arc::new(
+                super::central_recipient_directory::CentralRecipientDirectory {
+                    machine_id: machine_id.clone(),
+                    endpoints: endpoint_directory.clone(),
+                    codex_home: inputs.codex_home.clone(),
+                    provider_store: provider_store.clone(),
+                    claude_sessions: claude_code_sessions.clone(),
+                },
+            ),
+            None,
+        )
+        .await
+        .map_err(io::Error::other)?;
+        // Link admission still waits for B3 to supply a machine token.
         let central_link_tasks = tokio_util::task::TaskTracker::new();
-        let central_link = collaboration_runtime::open_installation_link(
+        let central_link = collaboration_runtime::open_machine_link(
             &inputs.directory,
             machine_identity.service_id(),
             worker_clock.clone(),
             None,
+            Some(inbox),
             &central_link_tasks,
             shutdown.clone(),
         )
@@ -911,7 +927,7 @@ impl CollaborationRuntime {
             directory: inputs.directory,
             native_digest,
             payload_cache: crate::native_schema_cache::NativeSchemaCache::default(),
-            service_id,
+            service_id: machine_id,
             service_epoch,
             publication,
             shutdown,

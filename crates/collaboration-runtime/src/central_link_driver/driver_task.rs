@@ -62,6 +62,7 @@ pub(super) struct LinkDriver {
     immediate: BTreeMap<CorrelationId, ImmediateCall>,
     batch: Option<BatchInFlight>,
     flush_wake: Option<ClockInstant>,
+    outbox_deadline_at: Option<ClockInstant>,
     inbox_retry_at: Option<ClockInstant>,
     deferred_pending: Vec<(Caller, PendingReply)>,
     /// The token the open connection was admitted or last renewed with.
@@ -93,6 +94,7 @@ impl LinkDriver {
             immediate: BTreeMap::new(),
             batch: None,
             flush_wake: None,
+            outbox_deadline_at: None,
             inbox_retry_at: None,
             deferred_pending: Vec::new(),
             connected_token: None,
@@ -110,11 +112,13 @@ impl LinkDriver {
     ) {
         // Start-up: sent rows from before a stop go back to waiting.
         self.reconcile_sent().await;
+        self.refresh_outbox_deadline().await;
         loop {
             self.drive_time().await;
             let deadline = [
                 self.client.next_deadline(),
                 self.flush_wake,
+                self.outbox_deadline_at,
                 self.inbox_retry_at,
                 self.renew_retry_at,
             ]
@@ -146,6 +150,13 @@ impl LinkDriver {
             self.handle_action(action).await;
         }
         self.drive_renewal_retry().await;
+        if self
+            .outbox_deadline_at
+            .is_some_and(|wake| self.clock.monotonic_now() >= wake)
+        {
+            self.outbox_deadline_at = None;
+            self.expire_offline_writes().await;
+        }
         if self
             .inbox_retry_at
             .is_some_and(|wake| self.clock.monotonic_now() >= wake)
@@ -362,11 +373,7 @@ impl LinkDriver {
                 request,
                 reply,
             } => {
-                let mut store = self.store.lock().await;
-                let status = store
-                    .request_status(&caller, &request)
-                    .await
-                    .unwrap_or(RequestStatus::NotFound);
+                let status = self.read_request_status(&caller, &request).await;
                 let _ = reply.send(status);
             }
             DriverCommand::Pending { caller, reply } => {
@@ -388,6 +395,21 @@ impl LinkDriver {
                 let mut store = self.store.lock().await;
                 let _ = reply.send(store.outgoing_for(&caller, limit).await);
             }
+        }
+    }
+
+    async fn read_request_status(&mut self, caller: &Caller, request: &RequestId) -> RequestStatus {
+        let local = self
+            .store
+            .lock()
+            .await
+            .request_status(caller, request)
+            .await;
+        match local {
+            // The central request-log read is pending the shared query contract.
+            // Without its answer an absent local row says nothing about central.
+            Ok(RequestStatus::NotFound) | Err(_) => RequestStatus::StatusUnavailable,
+            Ok(status) => status,
         }
     }
 
@@ -420,6 +442,7 @@ impl LinkDriver {
         };
         Some(match inserted {
             Ok(OutboxInsert::Stored) => {
+                self.refresh_outbox_deadline().await;
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
                 Submission::InOutbox(OutboxReceipt {
                     id: request,
@@ -432,7 +455,9 @@ impl LinkDriver {
                     flush_at,
                 }),
                 RequestStatus::Answered(reply) => Submission::Answered(reply),
-                RequestStatus::Sent | RequestStatus::NotFound => Submission::Uncertain { request },
+                RequestStatus::Sent
+                | RequestStatus::NotFound
+                | RequestStatus::StatusUnavailable => Submission::Uncertain { request },
                 RequestStatus::Refused(LinkAdmissionRefusal::RequestIdConflict) => {
                     Submission::Refused(SubmitRefusal::RequestIdConflict)
                 }
@@ -443,13 +468,18 @@ impl LinkDriver {
             Ok(OutboxInsert::ConflictingContent) => {
                 Submission::Refused(SubmitRefusal::RequestIdConflict)
             }
+            Err(error @ OutboxStoreError::InsertNotStarted(_)) => {
+                tracing::warn!(%error, "outbox: could not begin inserting a write");
+                Submission::Refused(SubmitRefusal::OutboxUnavailable)
+            }
             Err(error) => {
                 // The insert may have committed with its acknowledgement lost;
                 // the store is the truth, so arm its mark anyway. If nothing
                 // was stored, that tick finds nothing due.
                 tracing::warn!(%error, "outbox: storing a write failed");
+                self.refresh_outbox_deadline().await;
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
-                Submission::Refused(SubmitRefusal::OutboxUnavailable)
+                Submission::Uncertain { request }
             }
         })
     }

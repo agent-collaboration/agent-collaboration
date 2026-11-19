@@ -162,6 +162,25 @@ impl InboxStore {
         Self { store }
     }
 
+    /// A repeat uses the first stored answer even when lookup is unavailable.
+    pub(crate) async fn reoffer_duplicate(
+        &mut self,
+        message_id: &MessageId,
+        mark: SyncTime,
+        now: SyncTime,
+    ) -> Result<bool, InboxStoreError> {
+        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let Some(mut delivery) = read_delivery(&mut transaction, message_id).await? else {
+            transaction.commit().await?;
+            return Ok(false);
+        };
+        if delivery.state.ack.reoffer(mark) {
+            update_delivery(&mut transaction, &delivery, now).await?;
+        }
+        transaction.commit().await?;
+        Ok(true)
+    }
+
     pub(crate) async fn record_delivery(
         &mut self,
         message: &MessageRecord,

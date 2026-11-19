@@ -203,23 +203,30 @@ impl OverlayModel {
             );
             model.settle();
         };
-        if tc.draw(gs::integers::<u8>().max_value(3)) == 0 {
+        let fault = if tc.draw(gs::integers::<u8>().max_value(3)) == 0 {
             let kind = fault_kind(&tc);
             self.inject_and_require("insert", kind, submit);
+            Some(kind)
         } else {
             submit(self);
-        }
+            None
+        };
         // request_status reads the store at once; pending_for would wait for a
         // batch this submit may have started.
-        let held = self.runtime.block_on(
-            self.harness
-                .calls
-                .request_status(caller(), id.parse().unwrap()),
-        ) != central_link_client::RequestStatus::NotFound;
-        match submission {
-            Some(Submission::InOutbox(_)) => assert!(held, "a receipt means it is stored"),
-            // Refused, but a commit whose acknowledgement was lost still holds it.
-            Some(Submission::Refused(central_link_client::SubmitRefusal::OutboxUnavailable)) => {}
+        let held = self.runtime.block_on(self.harness.local_status(&id))
+            != central_link_client::RequestStatus::NotFound;
+        match (fault, submission) {
+            (None, Some(Submission::InOutbox(_))) => {
+                assert!(held, "a receipt means the write is stored");
+            }
+            (
+                Some(FaultKind::BeforeCall),
+                Some(Submission::Refused(central_link_client::SubmitRefusal::OutboxUnavailable)),
+            ) => assert!(!held, "a definite refusal holds no row"),
+            (Some(FaultKind::AfterCommit), Some(Submission::Uncertain { request })) => {
+                assert!(held, "the answer was lost after the write committed");
+                assert_eq!(request.as_str(), id);
+            }
             other => panic!("unexpected submission {other:?}"),
         }
         if held {

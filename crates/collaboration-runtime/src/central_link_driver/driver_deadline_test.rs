@@ -212,3 +212,46 @@ async fn a_post_that_never_left_the_mac_ends_not_sent_after_15_minutes() {
         vec![(id, OutboxCancellation::NotSentWithin15Minutes)]
     );
 }
+
+#[tokio::test]
+async fn an_offline_router_ends_waiting_writes_at_the_exact_deadline() {
+    let database_root = tempfile::tempdir().unwrap();
+    let database = database_root.path().join("machine_local.sqlite");
+    // Use a creation time between minute marks, so the minute flush could
+    // not satisfy this deadline even if it were running.
+    let harness = Harness::start_with_store(
+        tempfile::tempdir().unwrap(),
+        clock_at(MARK - 18_765),
+        reopened(&database).await,
+    );
+    let post = uuid_v7(44);
+    let message = uuid_v7(45);
+    harness.calls.submit(caller(), thread_post(&post)).await;
+    harness
+        .calls
+        .submit(caller(), direct_message(&message))
+        .await;
+
+    harness
+        .clock
+        .advance(Duration::from_millis(15 * 60 * 1000 - 1))
+        .unwrap();
+    let _ = harness.calls.link_status().await;
+    assert!(harness.outcomes.1.lock().unwrap().is_empty());
+
+    harness.clock.advance(Duration::from_millis(1)).unwrap();
+    let _ = harness.calls.link_status().await;
+    let mut ended = harness.outcomes.1.lock().unwrap().clone();
+    ended.sort_by_key(|outcome| outcome.request_id.clone());
+    assert_eq!(
+        ended
+            .iter()
+            .map(|outcome| (outcome.request_id.as_str(), outcome.reason))
+            .collect::<Vec<_>>(),
+        [
+            (post.as_str(), OutboxCancellation::NotSentWithin15Minutes),
+            (message.as_str(), OutboxCancellation::NotSentWithin15Minutes),
+        ],
+    );
+    harness.stop().await;
+}

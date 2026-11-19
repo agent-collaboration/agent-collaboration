@@ -20,10 +20,11 @@ async fn an_unconfigured_link_reports_not_enrolled_and_keeps_outbox_writes_waiti
     let tasks = TaskTracker::new();
     let stop = CancellationToken::new();
 
-    let calls = start_installation_link(
+    let calls = start_machine_link(
         &machine_id,
         clock_at(MARK - 20_000),
         store,
+        None,
         None,
         &tasks,
         stop.clone(),

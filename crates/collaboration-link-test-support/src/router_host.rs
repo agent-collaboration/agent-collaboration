@@ -17,7 +17,7 @@ use runtime_primitives::SyncTime;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_ids::SessionRef;
+use workspace_ids::{MachineId, SessionRef};
 use workspace_model::{Caller, WorkspaceOperation, WorkspaceRequest};
 
 pub const ROUTER_HOST: &str = "router";
@@ -107,7 +107,7 @@ fn start_link(clock: Arc<dyn RuntimeClock>, store: Arc<Mutex<dyn OutboxStorage>>
     let calls = RouterLinkCalls::start(
         CentralLinkParts {
             inbox: None,
-            installation: installation(),
+            machine_id: installation(),
             clock,
             store,
             transport: Arc::new(TurmoilLinkTransport::new(CENTRAL_HOST, LINK_PORT, "/link")),
@@ -184,5 +184,3 @@ pub async fn run_router(plan: RouterPlan, report: SharedRouterReport) -> turmoil
     link.stop().await;
     Ok(())
 }
-
-use workspace_ids::MachineId;

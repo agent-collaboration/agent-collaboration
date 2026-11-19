@@ -298,6 +298,17 @@ impl OutboxStorage for MemoryOutbox {
         })
     }
 
+    fn earliest_deadline(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        Box::pin(async move {
+            Ok(self
+                .rows
+                .values()
+                .filter(|row| unsent(&row.state))
+                .map(|row| SyncTime::from_unix_millis(row.expires_at))
+                .min())
+        })
+    }
+
     fn claim_next_batch(
         &mut self,
         mark: SyncTime,

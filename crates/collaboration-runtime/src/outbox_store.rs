@@ -16,6 +16,8 @@ use workspace_model::{Caller, RequestId, operation_content_digest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OutboxStoreError {
+    #[error("the outbox insert did not start")]
+    InsertNotStarted(#[source] sqlx::Error),
     #[error("outbox storage unavailable")]
     Database(#[from] sqlx::Error),
     #[error("outbox write could not be encoded")]
@@ -140,7 +142,11 @@ impl<'store> MacOutbox<'store> {
         let state = OutboxItemState::InOutbox.as_str();
         let flush_at_ms = item.flush_at.unix_millis();
         let now_ms = now.unix_millis();
-        let mut transaction = self.store.transaction(TransactionStart::Immediate).await?;
+        let mut transaction = self
+            .store
+            .transaction(TransactionStart::Immediate)
+            .await
+            .map_err(OutboxStoreError::InsertNotStarted)?;
         let existing = sqlx::query_as!(
             OutboxRow,
             r#"SELECT request_id AS "request_id!", caller_json, payload_json, item_state,
@@ -326,7 +332,8 @@ impl<'store> MacOutbox<'store> {
             let outcome = match stored.status {
                 RequestStatus::Answered(reply) => OutgoingOutcome::Answered(reply),
                 RequestStatus::Refused(reason) => OutgoingOutcome::Refused(reason),
-                RequestStatus::NotFound
+                RequestStatus::StatusUnavailable
+                | RequestStatus::NotFound
                 | RequestStatus::InOutbox { .. }
                 | RequestStatus::Sent
                 | RequestStatus::Cancelled { .. } => {

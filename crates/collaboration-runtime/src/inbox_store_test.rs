@@ -10,14 +10,15 @@ use workspace_model::{
     central_mail::{DeliveryAnswer, MessageRecord, MessageRefusal},
 };
 
-struct UnavailableHandoff;
+struct KnownRecipient;
 
-impl crate::CentralMessageHandoff for UnavailableHandoff {
-    fn handoff<'call>(
+impl crate::CentralRecipientLookup for KnownRecipient {
+    fn answer<'call>(
         &'call self,
-        _: &'call MessageRecord,
-    ) -> crate::TransportFuture<'call, Result<(), crate::CentralHandoffUnavailable>> {
-        Box::pin(std::future::ready(Err(crate::CentralHandoffUnavailable)))
+        _: &'call workspace_ids::SessionRef,
+    ) -> crate::TransportFuture<'call, Result<DeliveryAnswer, crate::CentralRecipientUnavailable>>
+    {
+        Box::pin(std::future::ready(Ok(DeliveryAnswer::Accepted)))
     }
 }
 
@@ -156,7 +157,7 @@ async fn committed_inbox_is_ackable_before_handoff_and_reoffers_without_another_
 async fn failed_insert_has_no_ack_and_retries_the_held_frame_without_another_deliver() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("machine_local.sqlite");
-    let mut inbox = crate::CentralInbox::open(&path, std::sync::Arc::new(UnavailableHandoff))
+    let mut inbox = crate::CentralInbox::open(&path, std::sync::Arc::new(KnownRecipient), None)
         .await
         .unwrap();
     let mut fault_connection = MachineLocalStore::open(&path).await.unwrap();

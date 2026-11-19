@@ -11,8 +11,9 @@ use collaboration_link_test_support::{
     turmoil_transport::TurmoilLinkTransport,
 };
 use collaboration_runtime::{
-    CentralHandoffUnavailable, CentralInbox, CentralLinkParts, CentralMessageHandoff, FlushJitter,
-    MachineTokenSource, MemoryOutbox, RouterLinkCalls, TokenAvailability, TransportFuture,
+    CentralHandoffUnavailable, CentralInbox, CentralLinkParts, CentralMessageHandoff,
+    CentralRecipientLookup, CentralRecipientUnavailable, FlushJitter, MachineTokenSource,
+    MemoryOutbox, RouterLinkCalls, TokenAvailability, TransportFuture,
 };
 use futures_util::{SinkExt, StreamExt};
 use router_clock::RuntimeClock;
@@ -74,6 +75,15 @@ impl CentralMessageHandoff for Handoffs {
 }
 
 struct RouterFixture;
+
+impl CentralRecipientLookup for RouterFixture {
+    fn answer<'call>(
+        &'call self,
+        _: &'call workspace_ids::SessionRef,
+    ) -> TransportFuture<'call, Result<DeliveryAnswer, CentralRecipientUnavailable>> {
+        Box::pin(std::future::ready(Ok(DeliveryAnswer::Accepted)))
+    }
+}
 
 impl MachineTokenSource for RouterFixture {
     #[expect(clippy::unwrap_used, reason = "the fixed fixture token is well formed")]
@@ -240,7 +250,8 @@ fn run_delivery(fault: LinkFault) -> turmoil::Result {
         let clock = Arc::new(SimulatedClock::for_host(ROUTER_HOST));
         let inbox = CentralInbox::open(
             &root.path().join("machine_local.sqlite"),
-            client_handoffs.clone(),
+            Arc::new(RouterFixture),
+            Some(client_handoffs.clone()),
         )
         .await?;
         let tasks = TaskTracker::new();
@@ -248,7 +259,7 @@ fn run_delivery(fault: LinkFault) -> turmoil::Result {
         let calls = RouterLinkCalls::start(
             CentralLinkParts {
                 clock: clock.clone(),
-                installation: INSTALLATION.parse()?,
+                machine_id: INSTALLATION.parse()?,
                 store: Arc::new(Mutex::new(MemoryOutbox::new())),
                 transport: Arc::new(TurmoilLinkTransport::new(CENTRAL_HOST, LINK_PORT, "/link")),
                 tokens: Arc::new(RouterFixture),

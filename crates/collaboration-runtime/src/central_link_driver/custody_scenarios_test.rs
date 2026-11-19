@@ -66,12 +66,8 @@ impl Custody {
         self.next_seed += 1;
         let submission = self.harness.calls.submit(caller(), thread_post(&id)).await;
         self.settle().await;
-        let visible = self
-            .harness
-            .calls
-            .request_status(caller(), id.parse().unwrap())
-            .await
-            != central_link_client::RequestStatus::NotFound;
+        let visible =
+            self.harness.local_status(&id).await != central_link_client::RequestStatus::NotFound;
         // A write is accepted when the outbox holds it, whatever the caller
         // was told: a commit whose acknowledgement was lost still flushes.
         if matches!(submission, Submission::InOutbox(_)) || visible {

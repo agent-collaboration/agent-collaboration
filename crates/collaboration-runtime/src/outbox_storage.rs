@@ -41,6 +41,8 @@ pub trait OutboxStorage: Send {
     fn waiting(&mut self) -> OutboxFuture<'_, Vec<(SyncTime, RequestId)>>;
     /// The earliest receipt mark among waiting writes.
     fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>>;
+    /// The earliest expiry among waiting writes, even when the link is down.
+    fn earliest_deadline(&mut self) -> OutboxFuture<'_, Option<SyncTime>>;
     /// Up to `limit` writes due by `mark` and before their deadline, oldest
     /// first by (created_at, request_id), moved to sent in one transaction
     /// that first ends every overdue waiting write (outbox_deadline).
@@ -143,6 +145,21 @@ impl OutboxStorage for MachineLocalOutbox {
     }
     fn earliest_waiting(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
         Box::pin(async move { MacOutbox::new(&mut self.store).earliest_waiting().await })
+    }
+    fn earliest_deadline(&mut self) -> OutboxFuture<'_, Option<SyncTime>> {
+        Box::pin(async move {
+            let waiting = crate::outbox_item_state::OutboxItemState::InOutbox.as_str();
+            let answer_lost = crate::outbox_item_state::OutboxItemState::SentAnswerLost.as_str();
+            let deadline = sqlx::query_scalar!(
+                r#"SELECT min(expires_at_ms) AS "deadline?: i64" FROM outbox_items
+                   WHERE item_state IN (?, ?)"#,
+                waiting,
+                answer_lost
+            )
+            .fetch_one(&mut self.store.connection)
+            .await?;
+            Ok(deadline.map(SyncTime::from_unix_millis))
+        })
     }
     fn claim_next_batch(
         &mut self,

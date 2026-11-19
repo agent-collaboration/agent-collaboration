@@ -9,6 +9,7 @@ use runtime_primitives::SyncTime;
 use std::{collections::BTreeMap, future::Future, path::Path, pin::Pin, sync::Arc};
 use tokio::sync::{Mutex, Notify};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use workspace_ids::SessionRef;
 use workspace_model::{
     MessageId,
     central_mail::{DeliveryAnswer, MessageRecord},
@@ -17,6 +18,21 @@ use workspace_model::{
 #[derive(Debug, thiserror::Error)]
 #[error("central mail handoff is temporarily unavailable")]
 pub struct CentralHandoffUnavailable;
+
+#[derive(Debug, thiserror::Error)]
+#[error("recipient session lookup is temporarily unavailable")]
+pub struct CentralRecipientUnavailable;
+
+pub trait CentralRecipientLookup: Send + Sync {
+    fn answer<'call>(
+        &'call self,
+        target: &'call SessionRef,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<DeliveryAnswer, CentralRecipientUnavailable>> + Send + 'call,
+        >,
+    >;
+}
 
 pub trait CentralMessageHandoff: Send + Sync {
     /// Ensure the message is in the local delivery path under its central
@@ -30,7 +46,8 @@ pub trait CentralMessageHandoff: Send + Sync {
 pub struct CentralInbox {
     store: Arc<Mutex<InboxStore>>,
     changed: Arc<Notify>,
-    handoff: Arc<dyn CentralMessageHandoff>,
+    recipients: Arc<dyn CentralRecipientLookup>,
+    handoff: Option<Arc<dyn CentralMessageHandoff>>,
     uncommitted: BTreeMap<MessageId, MessageRecord>,
     replay_pending: bool,
 }
@@ -38,12 +55,14 @@ pub struct CentralInbox {
 impl CentralInbox {
     pub async fn open(
         path: &Path,
-        handoff: Arc<dyn CentralMessageHandoff>,
+        recipients: Arc<dyn CentralRecipientLookup>,
+        handoff: Option<Arc<dyn CentralMessageHandoff>>,
     ) -> Result<Self, MachineLocalStoreError> {
         let store = InboxStore::new(MachineLocalStore::open(path).await?);
         Ok(Self {
             store: Arc::new(Mutex::new(store)),
             changed: Arc::new(Notify::new()),
+            recipients,
             handoff,
             uncommitted: BTreeMap::new(),
             replay_pending: false,
@@ -59,7 +78,7 @@ impl CentralInbox {
         let handoff = LocalHandoff {
             store: Arc::clone(&self.store),
             changed: Arc::clone(&self.changed),
-            sink: Arc::clone(&self.handoff),
+            sink: self.handoff.clone(),
             clock,
         };
         tasks.spawn(async move {
@@ -79,11 +98,30 @@ impl CentralInbox {
     }
 
     async fn admit(&mut self, message: MessageRecord, mark: SyncTime, now: SyncTime) {
+        let duplicate = self
+            .store
+            .lock()
+            .await
+            .reoffer_duplicate(&message.message_id, mark, now)
+            .await;
+        match duplicate {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => {
+                tracing::warn!(%error, "inbox: unable to check custody");
+                self.uncommitted.insert(message.message_id.clone(), message);
+                return;
+            }
+        }
+        let Ok(answer) = self.recipients.answer(&message.target).await else {
+            self.uncommitted.insert(message.message_id.clone(), message);
+            return;
+        };
         let result = self
             .store
             .lock()
             .await
-            .record_delivery(&message, DeliveryAnswer::Accepted, mark, now)
+            .record_delivery(&message, answer, mark, now)
             .await;
         match result {
             Ok(RecordDelivery::Inserted) => self.changed.notify_one(),
@@ -153,7 +191,7 @@ impl CentralInbox {
 struct LocalHandoff {
     store: Arc<Mutex<InboxStore>>,
     changed: Arc<Notify>,
-    sink: Arc<dyn CentralMessageHandoff>,
+    sink: Option<Arc<dyn CentralMessageHandoff>>,
     clock: Arc<dyn RuntimeClock>,
 }
 
@@ -180,6 +218,11 @@ impl LocalHandoff {
     }
 
     async fn drain(&self, now: SyncTime) -> Result<Option<SyncTime>, InboxStoreError> {
+        let Some(sink) = &self.sink else {
+            let mut store = self.store.lock().await;
+            store.prune_ended(now).await?;
+            return store.next_prune().await;
+        };
         let messages = {
             let mut store = self.store.lock().await;
             store.prune_ended(now).await?;
@@ -187,7 +230,7 @@ impl LocalHandoff {
         };
         let mut handoff_retry = None;
         for message in messages {
-            if self.sink.handoff(&message).await.is_err() {
+            if sink.handoff(&message).await.is_err() {
                 handoff_retry = Some(next_mark_after(self.clock.now()));
                 continue;
             }

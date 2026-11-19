@@ -50,6 +50,8 @@ pub struct OutboxReceipt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RequestStatus {
+    /// The Router could not establish whether the caller's request is known.
+    StatusUnavailable,
     NotFound,
     InOutbox {
         flush_at: SyncTime,

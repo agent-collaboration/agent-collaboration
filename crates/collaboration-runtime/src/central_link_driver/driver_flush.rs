@@ -90,6 +90,36 @@ impl LinkDriver {
         }
     }
 
+    pub(super) async fn refresh_outbox_deadline(&mut self) {
+        let stored = self.store.lock().await.earliest_deadline().await;
+        let deadline = match stored {
+            Ok(deadline) => deadline,
+            Err(error) => {
+                tracing::warn!(%error, "outbox: could not read the local deadline, retrying next minute");
+                Some(central_link_client::next_mark_after(self.clock.now()))
+            }
+        };
+        self.apply_flush(FlushEvent::LocalDeadlineChanged { deadline })
+            .await;
+    }
+
+    pub(super) async fn expire_offline_writes(&mut self) {
+        let now = self.clock.now();
+        let overdue = self.store.lock().await.end_overdue(now).await;
+        match overdue {
+            Ok(ended) => {
+                self.tell_ended(ended);
+                self.refresh_outbox_deadline().await;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "outbox: ending overdue writes failed, retrying next minute");
+                let deadline = Some(central_link_client::next_mark_after(now));
+                self.apply_flush(FlushEvent::LocalDeadlineChanged { deadline })
+                    .await;
+            }
+        }
+    }
+
     /// A flush wake fired: reconcile when idle, end writes past their deadline,
     /// let the schedule decide, then prune writes that ended 60 days ago (a
     /// kept row is only a receipt).
@@ -139,6 +169,9 @@ impl LinkDriver {
         for effect in effects {
             match effect {
                 FlushEffect::SendBatch { mark } => Box::pin(self.send_batch(mark)).await,
+                FlushEffect::WakeAtLocalDeadline { deadline } => {
+                    self.outbox_deadline_at = deadline.map(|at| self.clock.wall_deadline(at));
+                }
                 FlushEffect::WakeAt { mark } => {
                     let jitter = self.jitter.jitter_millis(mark).clamp(-3_000, 3_000);
                     let at = SyncTime::from_unix_millis(mark.unix_millis().saturating_add(jitter));
@@ -296,6 +329,7 @@ impl LinkDriver {
     }
 
     async fn end_batch(&mut self) {
+        Box::pin(self.refresh_outbox_deadline()).await;
         if self.flush.batch_in_flight() {
             let earliest_due = self.earliest_due().await;
             self.apply_flush(FlushEvent::BatchEnded { earliest_due })

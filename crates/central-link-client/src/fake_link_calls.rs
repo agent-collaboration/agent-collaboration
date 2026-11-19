@@ -247,6 +247,7 @@ fn resubmitted_outbox_write(
         RequestStatus::Sent
         | RequestStatus::Refused(_)
         | RequestStatus::Cancelled { .. }
+        | RequestStatus::StatusUnavailable
         | RequestStatus::NotFound => Submission::Uncertain {
             request: request_id,
         },

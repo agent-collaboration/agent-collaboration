@@ -309,7 +309,7 @@ impl Harness {
         let calls = RouterLinkCalls::start(
             CentralLinkParts {
                 inbox: None,
-                installation: INSTALLATION.parse().unwrap(),
+                machine_id: INSTALLATION.parse().unwrap(),
                 clock: clock.clone(),
                 store: store.clone(),
                 transport: Arc::new(ChannelTransport {
@@ -344,6 +344,18 @@ impl Harness {
             .request_status(caller(), uuid_v7(1).parse().unwrap())
             .await;
         central
+    }
+
+    pub(crate) async fn local_status(
+        &self,
+        request_id: &str,
+    ) -> central_link_client::RequestStatus {
+        self.store
+            .lock()
+            .await
+            .request_status(&caller(), &request_id.parse().unwrap())
+            .await
+            .unwrap()
     }
 
     pub(crate) async fn stop(self) {

@@ -4,8 +4,8 @@
 mod driver_task;
 #[cfg(test)]
 mod driver_test_support;
-mod installation_link;
 mod link_transport;
+mod machine_link;
 #[cfg(test)]
 mod overlay_property_test;
 #[cfg(test)]
@@ -16,13 +16,13 @@ mod store_faults;
 pub use central_link_client::{
     LinkStatus as CentralLinkStatus, RefusalReason as CentralLinkRefusal,
 };
-pub use installation_link::{
-    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, open_installation_link,
-    start_installation_link,
-};
 pub use link_transport::{
     AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
+};
+pub use machine_link::{
+    ConfiguredCentralLink, NotEnrolledTokens, UnconfiguredLinkTransport, open_machine_link,
+    start_machine_link,
 };
 use workspace_ids::MachineId;
 
@@ -48,14 +48,14 @@ pub trait FlushJitter: Send + Sync {
 }
 
 /// Spreads Routers across the window by their installation, deterministically.
-pub struct InstallationFlushJitter {
+pub struct MachineFlushJitter {
     seed: u64,
 }
 
-impl InstallationFlushJitter {
+impl MachineFlushJitter {
     #[must_use]
-    pub fn new(installation: &MachineId) -> Self {
-        let seed = installation
+    pub fn new(machine_id: &MachineId) -> Self {
+        let seed = machine_id
             .as_str()
             .bytes()
             .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
@@ -65,7 +65,7 @@ impl InstallationFlushJitter {
     }
 }
 
-impl FlushJitter for InstallationFlushJitter {
+impl FlushJitter for MachineFlushJitter {
     fn jitter_millis(&self, mark: SyncTime) -> i64 {
         let mixed = self.seed ^ mark.unix_millis().cast_unsigned();
         i64::try_from(mixed % 6_001).unwrap_or(0) - 3_000
@@ -99,7 +99,7 @@ pub(crate) enum DriverCommand {
 
 /// Everything the driver needs, created once by the Host.
 pub struct CentralLinkParts {
-    pub installation: MachineId,
+    pub machine_id: MachineId,
     pub clock: Arc<dyn RuntimeClock>,
     pub store: Arc<Mutex<dyn OutboxStorage>>,
     pub transport: Arc<dyn LinkTransport>,
@@ -127,7 +127,7 @@ impl RouterLinkCalls {
     /// Starts the link driver on `tasks`; it stops when `stop` is cancelled.
     pub fn start(parts: CentralLinkParts, tasks: &TaskTracker, stop: CancellationToken) -> Self {
         let (commands, receiver) = mpsc::channel(256);
-        let client = LinkClient::new(parts.installation.clone(), parts.clock.clone());
+        let client = LinkClient::new(parts.machine_id.clone(), parts.clock.clone());
         let stop = stop.child_token();
         if let Some(inbox) = &parts.inbox {
             inbox.start_handoff(parts.clock.clone(), tasks, stop.clone());
@@ -218,8 +218,8 @@ impl LinkCalls for RouterLinkCalls {
                 })
                 .await;
             match sent {
-                Ok(()) => answer.await.unwrap_or(RequestStatus::NotFound),
-                Err(_) => RequestStatus::NotFound,
+                Ok(()) => answer.await.unwrap_or(RequestStatus::StatusUnavailable),
+                Err(_) => RequestStatus::StatusUnavailable,
             }
         })
     }
