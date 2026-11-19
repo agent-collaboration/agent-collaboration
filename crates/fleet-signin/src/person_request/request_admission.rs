@@ -102,7 +102,7 @@ pub struct AdmittedRequest {
 }
 
 /// Decide before constructing the atomic fresh-proof reservation.
-pub(crate) fn decide_admission(
+pub fn decide_admission(
     request: &VerifiedPersonRequest,
     now_ms: i64,
     organization_floor: Option<&OrganizationFloor>,
@@ -147,7 +147,7 @@ pub(crate) fn decide_admission(
     Ok(Ok(AdmittedRequest { now_ms }))
 }
 
-pub(crate) fn request_time_refusal(
+pub fn request_time_refusal(
     request: &VerifiedPersonRequest,
     now_ms: i64,
 ) -> Option<AdmissionRefusal> {
@@ -162,7 +162,7 @@ pub(crate) fn request_time_refusal(
     None
 }
 
-pub(crate) fn admission_before_person(
+pub fn admission_before_person(
     request: &VerifiedPersonRequest,
     now_ms: i64,
     organization_floor: Option<&OrganizationFloor>,

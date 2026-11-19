@@ -10,10 +10,11 @@ use crate::identity_contract::{
     DecideMachineToken, EndedMachineClient, EnrollmentRevocationReason, MachineTokenDecision,
     MachineTokenRefusal,
 };
-use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use central_storage::StoreFailure;
 use fleet_identity_protocol::UnixSeconds;
 use fleet_runtime_ports::IdSource;
+use fleet_signin::organization_change_rows::OrganizationChangeKind;
+use fleet_signin::organization_change_rows::OrganizationChangeOrigin;
 
 pub(crate) fn decide_machine_token(
     request: &DecideMachineToken,

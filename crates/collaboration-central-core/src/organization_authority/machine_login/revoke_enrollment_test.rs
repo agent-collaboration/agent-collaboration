@@ -9,7 +9,7 @@ use super::revoke_machine_enrollment;
 use crate::identity_contract::{
     EndedMachineClient, EnrollmentRevocationReason, MachineTokenRefusal,
 };
-use crate::organization_change_rows::OrganizationChangeOrigin as Origin;
+use fleet_signin::organization_change_rows::OrganizationChangeOrigin as Origin;
 
 #[test]
 fn owner_revocation_fences_pending_approvals_and_aba_without_a_public_route() {

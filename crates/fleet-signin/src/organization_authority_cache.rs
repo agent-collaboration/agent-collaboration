@@ -26,15 +26,17 @@ enum StampHealth {
 
 /// What a guarded call may rely on right now.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum StampStanding {
+pub enum StampStanding {
     Unprovisioned,
     Valid,
     Refused,
 }
 
-pub(crate) struct OrganizationAuthority {
+pub struct OrganizationAuthority {
     check: RwLock<Arc<dyn SignInVerification>>,
     health: Mutex<StampHealth>,
+    #[cfg(feature = "test-support")]
+    lost_provisioning_reply: std::sync::atomic::AtomicBool,
 }
 
 impl Default for OrganizationAuthority {
@@ -42,11 +44,39 @@ impl Default for OrganizationAuthority {
         Self {
             check: RwLock::new(Arc::new(UnconfiguredStatementCheck)),
             health: Mutex::new(StampHealth::Unchecked),
+            #[cfg(feature = "test-support")]
+            lost_provisioning_reply: Default::default(),
         }
     }
 }
 
 impl OrganizationAuthority {
+    pub fn open(
+        verification: Result<
+            Option<Arc<dyn SignInVerification>>,
+            FleetOrganizationStatementRefusal,
+        >,
+    ) -> Result<Self, central_storage::StoreFailure> {
+        let signin_authority = Self::default();
+        match verification {
+            Ok(Some(check)) => signin_authority.install_check(check),
+            Ok(None)
+            | Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => {}
+            Err(_) => return Err(central_storage::StoreFailure::Unavailable),
+        }
+        Ok(signin_authority)
+    }
+    #[cfg(feature = "test-support")]
+    pub fn lose_next_provisioning_reply(&self) {
+        self.lost_provisioning_reply
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    #[cfg(feature = "test-support")]
+    pub(crate) fn take_lost_provisioning_reply(&self) -> bool {
+        self.lost_provisioning_reply
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub(crate) fn install_check(&self, check: Arc<dyn SignInVerification>) {
         if let Ok(mut current) = self.check.write() {
             *current = check;
@@ -54,7 +84,7 @@ impl OrganizationAuthority {
         self.forget();
     }
 
-    pub(crate) fn check(&self) -> Option<Arc<dyn SignInVerification>> {
+    pub fn check(&self) -> Option<Arc<dyn SignInVerification>> {
         self.check.read().ok().map(|check| check.clone())
     }
 
@@ -100,7 +130,7 @@ impl OrganizationAuthority {
     }
 
     /// The stamp's standing at the caller's sampled time.
-    pub(crate) fn standing(&self, now: SyncTime) -> StampStanding {
+    pub fn standing(&self, now: SyncTime) -> StampStanding {
         let Ok(health) = self.health.lock() else {
             return StampStanding::Refused;
         };

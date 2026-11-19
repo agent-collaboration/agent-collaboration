@@ -10,19 +10,35 @@ description = "Fleet organization trust and sign-in verification"
 [lints]
 workspace = true
 
+[features]
+test-support = ["fleet-runtime/test-support"]
+
 [dependencies]
 base64 = "0.22.1"
 central-storage.workspace = true
 chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
 fleet-contracts.workspace = true
+fleet-runtime.workspace = true
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 fleet-runtime-ports.workspace = true
+futures-util.workspace = true
 message-board = { path = "../message-board", version = "0.1.93" }
 serde.workspace = true
 serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
+schemars.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+url.workspace = true
+uuid = { workspace = true, features = ["serde"] }
+workspace-model.workspace = true
 
 [dev-dependencies]
+fleet-runtime-test-support.workspace = true
+fleet-storage-schema.workspace = true
 ring = "=0.17.14"
 tokio.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

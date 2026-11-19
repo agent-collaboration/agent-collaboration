@@ -1,6 +1,7 @@
 //! Closed answers from a verified organization admin operation.
-use crate::{organization_authority::OrganizationChangeRecord, person_request::AdmissionRefusal};
 use fleet_contracts::WorkspaceView;
+use fleet_signin::organization_authority::OrganizationChangeRecord;
+use fleet_signin::person_request::AdmissionRefusal;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

@@ -1,10 +1,5 @@
 //! Private fixture IPC: one read-only snapshot of the modern org-owned sign-in rows.
 //! The raw compact statement is returned only to the fixture caller; never log it.
-use crate::{
-    identity_contract::{FenceRevision, OrganizationFenceState, PersonFenceState},
-    organization_change_rows::{ChangeRequestId, OrganizationChangeKind},
-    person_request::AdminOperationId,
-};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use central_storage::{ReadOutcome, SafeInteger, Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
@@ -12,6 +7,12 @@ use fleet_runtime_ports::CentralStore;
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_signin::identity_contract::FenceRevision;
+use fleet_signin::identity_contract::OrganizationFenceState;
+use fleet_signin::identity_contract::PersonFenceState;
+use fleet_signin::organization_change_rows::ChangeRequestId;
+use fleet_signin::organization_change_rows::OrganizationChangeKind;
+use fleet_signin::person_request::AdminOperationId;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;

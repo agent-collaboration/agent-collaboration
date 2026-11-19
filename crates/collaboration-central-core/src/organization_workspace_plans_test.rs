@@ -1,7 +1,9 @@
 //! Retained ledger text is validated against the admitted create before replay.
 use super::retained_result;
-use crate::{AdminRefusal, OrganizationAdminResult, person_request::CreateWorkspaceRequest};
+use crate::AdminRefusal;
+use crate::OrganizationAdminResult;
 use central_storage::{CorruptReason, StoreFailure};
+use fleet_signin::person_request::CreateWorkspaceRequest;
 use serde_json::{Value, json};
 
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000da01";

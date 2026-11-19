@@ -1410,6 +1410,7 @@ dependencies = [
  "fleet-contracts",
  "fleet-identity-protocol",
  "fleet-runtime-test-support",
+ "fleet-signin",
  "fleet-sync-protocol",
  "futures-util",
  "interaction-storage",
@@ -1767,6 +1768,7 @@ dependencies = [
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-runtime-test-support",
+ "fleet-signin",
  "fleet-storage-schema",
  "futures-channel",
  "futures-util",
@@ -1817,6 +1819,7 @@ dependencies = [
  "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-signin",
  "fleet-storage-schema",
  "fleet-workspace-access",
  "fleet-workspace-directory",
@@ -1858,6 +1861,7 @@ dependencies = [
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-runtime-test-support",
+ "fleet-signin",
  "fleet-storage-schema",
  "fleet-store-sqlx",
  "hegeltest",
@@ -2993,6 +2997,34 @@ dependencies = [
  "sqlx",
  "tokio",
  "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
+name = "fleet-signin"
+version = "0.1.156"
+dependencies = [
+ "base64 0.22.1",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-identity-protocol",
+ "fleet-runtime",
+ "fleet-runtime-ports",
+ "fleet-runtime-test-support",
+ "fleet-storage-schema",
+ "futures-util",
+ "message-board",
+ "ring",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "serde_json_canonicalizer",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+ "uuid",
  "workspace-model",
 ]
 

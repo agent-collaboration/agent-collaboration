@@ -1,13 +1,14 @@
 //! Literal T06 admin wire oracles and serializer-generated artifact freshness.
 use crate::contract_artifacts;
-use collaboration_central_core::{
-    OrganizationAdminResult,
-    identity_contract::{AuthorizationRevision, AuthorizationRevisionAcknowledgement},
-    person_request::{
-        AdminOperation, AdminRoute, CreateWorkspaceRequest, OrganizationAdminIntent,
-        ReadChangeRecordsRequest, WorkspaceLookupRequest,
-    },
-};
+use collaboration_central_core::OrganizationAdminResult;
+use fleet_signin::identity_contract::AuthorizationRevision;
+use fleet_signin::identity_contract::AuthorizationRevisionAcknowledgement;
+use fleet_signin::person_request::AdminOperation;
+use fleet_signin::person_request::AdminRoute;
+use fleet_signin::person_request::CreateWorkspaceRequest;
+use fleet_signin::person_request::OrganizationAdminIntent;
+use fleet_signin::person_request::ReadChangeRecordsRequest;
+use fleet_signin::person_request::WorkspaceLookupRequest;
 use serde_json::{Value, json};
 
 fn description_boundaries(literal: Value, pointer: &str) -> Vec<Value> {

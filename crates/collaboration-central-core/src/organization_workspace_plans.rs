@@ -1,19 +1,21 @@
 //! Verified setup decisions share one org-owned directory, ledger and audit batch.
-use crate::{
-    AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
-    organization_admin_contract::RetainedOrganizationAdminAnswer,
-    organization_change_rows::{
-        self, ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
-        OrganizationChangeRecord,
-    },
-    person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
-};
+use crate::AdminRefusal;
+use crate::OrganizationAdminResult;
+use crate::WorkspaceRuntime;
+use crate::organization_admin_contract::RetainedOrganizationAdminAnswer;
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::{DirectoryWorkspace, WorkspaceDirectory};
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_signin::organization_change_rows;
+use fleet_signin::organization_change_rows::ChangeRequestId;
+use fleet_signin::organization_change_rows::OrganizationChangeKind;
+use fleet_signin::organization_change_rows::OrganizationChangeOrigin;
+use fleet_signin::organization_change_rows::OrganizationChangeRecord;
+use fleet_signin::person_request::CreateWorkspaceRequest;
+use fleet_signin::person_request::VerifiedPersonRequest;
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
     WorkspaceId, WorkspaceState,

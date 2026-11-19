@@ -4,7 +4,7 @@ use collaboration_central_core::identity_contract::{
     DecideDeviceLogin, DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal,
     MachineTokenDecision, MachineTokenRefusal,
 };
-use collaboration_central_core::organization_authority::OrganizationChangeRecord;
+use fleet_signin::organization_authority::OrganizationChangeRecord;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use sha2::{Digest, Sha256};

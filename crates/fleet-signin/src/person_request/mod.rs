@@ -3,7 +3,7 @@ mod admin_operations;
 mod compact_jwt;
 pub(crate) mod floor_delivery;
 mod refusal;
-pub(crate) mod request_admission;
+pub mod request_admission;
 mod request_verifier;
 
 pub use admin_operations::{

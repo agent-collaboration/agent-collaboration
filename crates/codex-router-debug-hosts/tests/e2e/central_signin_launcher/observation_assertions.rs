@@ -1,10 +1,9 @@
 //! Literal consumer assertions for modern observation contents, never Debug dumps.
 use super::TestResult;
-use collaboration_central_core::{
-    identity_contract::{OrganizationFenceState, PersonFenceState},
-    signin_test_observation::SignInObservation,
-};
+use collaboration_central_core::signin_test_observation::SignInObservation;
 use fleet_runtime_test_support::signin_fixtures as signed;
+use fleet_signin::identity_contract::OrganizationFenceState;
+use fleet_signin::identity_contract::PersonFenceState;
 
 #[expect(
     clippy::panic_in_result_fn,

@@ -67,7 +67,7 @@ pub(crate) fn statements(
                 if record.created_at_millis != applying_ms {
                     return Err(corrupt("organization_change_records.created_at"));
                 }
-                statements.push(crate::organization_change_rows::insert(record)?);
+                statements.push(fleet_signin::organization_change_rows::insert(record)?);
             }
         }
     }
