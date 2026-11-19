@@ -1,6 +1,5 @@
 //! One native physical owner supplies delivery witnesses and public push readers.
 use super::{SERVICE_ID, native_delivery, native_mail_owner, served_api};
-use automation_storage::AutomationStore;
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_contracts::AttemptReconciliation;
 use collaboration_contracts::AttemptReconciliationContext;
@@ -19,7 +18,6 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
-use tokio::sync::Mutex as TokioMutex;
 
 pub(super) struct RecordingDelivery {
     pub(super) requests: Mutex<Vec<collaboration_contracts::layer_zero::DeliveryRequest>>,
@@ -89,7 +87,6 @@ pub(super) enum PushFixtureLifetime {
     NativeDelivery {
         actors: collaboration_service::SubscriptionDeliveryService,
         mail: native_mail_owner::NativeMailOwner,
-        automation: Arc<TokioMutex<AutomationStore>>,
     },
 }
 
@@ -123,21 +120,10 @@ impl ControlHarness {
         self.served.stop().await.expect("service exit");
         match self.lifetime {
             PushFixtureLifetime::NoDeliveryOwner => {}
-            PushFixtureLifetime::NativeDelivery {
-                actors,
-                mail,
-                automation,
-            } => {
+            PushFixtureLifetime::NativeDelivery { actors, mail } => {
                 actors.shutdown().await;
                 drop(actors);
                 mail.close().await.expect("close native message owner");
-                Arc::try_unwrap(automation)
-                    .ok()
-                    .expect("fixture retained automation owner")
-                    .into_inner()
-                    .close()
-                    .await
-                    .expect("close fixture automation store");
             }
         }
     }
@@ -191,11 +177,6 @@ pub(super) async fn setup_with_retention() -> (
     collaboration_runtime::InteractionRetentionWorker,
 ) {
     let directory = tempfile::tempdir().expect("isolated push store");
-    let automation = Arc::new(TokioMutex::new(
-        AutomationStore::open(&directory.path().join("automation.sqlite"))
-            .await
-            .expect("automation store"),
-    ));
     let store = Arc::new(
         InteractionStore::open(directory.path().join("interaction.sqlite"))
             .await
@@ -210,7 +191,6 @@ pub(super) async fn setup_with_retention() -> (
     let presence = Arc::new(RunningPresence);
     let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("service identity")
-        .with_automation_store(automation.clone())
         .with_session_delivery(delivery.clone());
     let clock = identity.runtime_clock();
     let actors = collaboration_service::SubscriptionDeliveryService::new(
@@ -255,11 +235,7 @@ pub(super) async fn setup_with_retention() -> (
     let retention =
         collaboration_runtime::InteractionRetentionWorker::new(broker, identity.runtime_clock());
     let mut control = ControlHarness::start(identity);
-    control.lifetime = PushFixtureLifetime::NativeDelivery {
-        actors,
-        mail,
-        automation,
-    };
+    control.lifetime = PushFixtureLifetime::NativeDelivery { actors, mail };
     (directory, store, delivery, control, retention)
 }
 

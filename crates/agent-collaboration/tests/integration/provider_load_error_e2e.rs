@@ -25,7 +25,7 @@ use tracing_subscriber::{fmt::MakeWriter, util::SubscriberInitExt};
 const PRIVATE_PROVIDER_MARKER: &str = "ACP_PROVIDER_PRIVATE_MARKER_8F39B1";
 const SENDER_SESSION_ID: &str = "provider-error-e2e-sender";
 const TARGET_SESSION_ID: &str = "provider-error-e2e-target";
-const WAKE_BODY: &str = "public wake sent through the real ACP route";
+const MESSAGE_BODY: &str = "public message sent through the real ACP route";
 const PROVIDER_ERROR_CODE: i64 = -32600;
 
 #[derive(Clone, Default)]
@@ -127,45 +127,16 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     record_unloaded_provider_session(root.path(), &target, &caller).await;
 
     let service_directory = root.path().display().to_string();
-    let configure = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "automation",
-            "configure",
-            "--execution-timeout-seconds",
-            "300",
-            "--summary-timeout-seconds",
-            "300",
-            "--json",
-            "--service-directory",
-            &service_directory,
-        ])
-        .env("CODEX_THREAD_ID", SENDER_SESSION_ID)
-        .env_remove("CLAUDE_CODE_SESSION_ID")
-        .env_remove("CURSOR_CONVERSATION_ID")
-        .output()
-        .await
-        .expect("enable isolated wake delivery");
-    assert_eq!(
-        configure.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&configure.stderr)
-    );
-
+    // An automatic message to the unloaded Session may load it; the provider refuses the load.
     let target_json = serde_json::to_string(&target).expect("target JSON");
-    let wake_send = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+    let message_send = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
-            "wake",
+            "message",
             "send",
             "--to",
             &target_json,
             "--text",
-            WAKE_BODY,
-            "--after",
-            "1s",
-            "--for",
-            "1h",
-            "--wait-until-first-fire",
+            MESSAGE_BODY,
             "--json",
             "--service-directory",
             &service_directory,
@@ -175,17 +146,17 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         .env_remove("CURSOR_CONVERSATION_ID")
         .output()
         .await
-        .expect("send one timed wake through the CLI");
+        .expect("send one message through the CLI");
+    let sent: Value = serde_json::from_slice(&message_send.stdout).unwrap_or_else(|error| {
+        panic!(
+            "message JSON: {error}; stderr={}",
+            String::from_utf8_lossy(&message_send.stderr)
+        )
+    });
     assert_eq!(
-        wake_send.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&wake_send.stderr)
-    );
-    let wake_result: Value = serde_json::from_slice(&wake_send.stdout).expect("wake JSON");
-    assert_eq!(
-        wake_result.pointer("/result/record/firstFire/kind"),
-        Some(&json!("wakeFired"))
+        sent.pointer("/result/record/receipt/outcome/kind"),
+        Some(&json!("rejected")),
+        "{sent}"
     );
 
     let interaction_database = root.path().join("interaction.sqlite");
@@ -200,10 +171,10 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
                 let row = sqlx::query_as::<_, (String, String, Option<String>)>(
                     "SELECT push_id, delivery_state, last_outcome_json FROM router_pushes WHERE body = ? ORDER BY created_at DESC LIMIT 1",
                 )
-                .bind(WAKE_BODY)
+                .bind(MESSAGE_BODY)
                 .fetch_optional(&mut connection)
                 .await
-                .expect("read stored wake push");
+                .expect("read stored message push");
                 if let Some((push_id, delivery_state, Some(stored_outcome))) = row
                     && delivery_state == "rejected"
                 {
@@ -214,7 +185,7 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         },
     )
     .await
-    .expect("wake provider failure was stored");
+    .expect("message provider failure was stored");
     connection.close().await.expect("close database connection");
     assert_eq!(delivery_state, "rejected");
 
@@ -231,7 +202,7 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
             reference: push_id,
         })
         .await
-        .expect("stored wake push inspection");
+        .expect("stored message push inspection");
     let collaboration_protocol::MessageShowResult::Local(stored) = stored else {
         panic!("native proof expected a stored local push");
     };
@@ -250,7 +221,7 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         .env_remove("CLAUDE_CODE_SESSION_ID")
         .output()
         .await
-        .expect("inspect the failed wake push by its inbox link");
+        .expect("inspect the failed message push by its inbox link");
     assert_eq!(show.status.code(), Some(0));
     let show_json = String::from_utf8(show.stdout).expect("show result is UTF-8");
     let show_result: Value = serde_json::from_str(&show_json).expect("show result JSON");

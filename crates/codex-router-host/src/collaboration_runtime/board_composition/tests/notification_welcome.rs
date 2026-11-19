@@ -57,7 +57,6 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     )?
     .with_project_admission(admission.clone())
     .with_project_replication(replication.clone())
-    .with_automation_store(harness.mail.automation.clone())
     .with_subscription_delivery_service(
         harness.mail.actors.clone(),
         Arc::new(SessionDeliveryRouter::new(Vec::new())),

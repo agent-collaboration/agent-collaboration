@@ -96,11 +96,6 @@ async fn stalled_session_notices_do_not_delay_turn_cancellation_or_resolution() 
     )
     .await
     .expect("broker");
-    let push_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.path().join("approval-pushes.sqlite"))
-            .await
-            .expect("approval push store"),
-    ));
     let machine_identity =
         collaboration_contracts::MachineIdentity::new(service_id.clone(), Some("fixture-host"))
             .expect("machine identity");
@@ -110,7 +105,6 @@ async fn stalled_session_notices_do_not_delay_turn_cancellation_or_resolution() 
             .expect("service identity")
             .with_machine_identity(machine_identity)
             .expect("machine identity belongs to service")
-            .with_automation_store(push_store)
             .with_approval_broker(Arc::clone(&broker));
     drop(broker_context);
     let notice_entered = Arc::new(tokio::sync::Notify::new());

@@ -17,11 +17,6 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
     // Arrange: the served API without a backend.
     let id = "00000000-0000-4000-8000-000000000001";
     let directory = tempfile::tempdir().unwrap();
-    let automation_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-            .await
-            .unwrap(),
-    ));
     let delivery_router = Arc::new(SessionDeliveryRouter::new(vec![]));
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = delivery_router;
@@ -33,7 +28,6 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
     );
     let identity = ApplicationFixture::new(id, id)
         .unwrap()
-        .with_automation_store(Arc::clone(&automation_store))
         .with_session_delivery(delivery.clone());
     let clock = identity.runtime_clock();
     let subscription_delivery =
@@ -76,12 +70,6 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
     native_mail.close().await.unwrap();
-    Arc::try_unwrap(automation_store)
-        .unwrap_or_else(|_| panic!("service retained automation store"))
-        .into_inner()
-        .close()
-        .await
-        .unwrap();
     // Assert: the tool exists and its rejection truthfully establishes no effects. The API
     // publishes a rejected delivery as a tool error carrying the stored push's receipt.
     let receipt = &last["error"]["data"]["receipt"];

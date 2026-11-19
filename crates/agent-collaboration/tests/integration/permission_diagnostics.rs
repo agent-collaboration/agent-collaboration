@@ -67,16 +67,25 @@ fn endpoint_discovery_reports_typed_permission_recovery_in_json_and_human_output
 }
 
 #[test]
-fn wake_permission_diagnostic_preserves_operation_id_and_pre_dispatch_exit() {
-    let fixture =
-        DeniedServiceDirectory::create("wake").unwrap_or_else(|error| panic!("fixture: {error}"));
+fn operation_permission_diagnostic_preserves_operation_id_and_pre_dispatch_exit() {
+    let fixture = DeniedServiceDirectory::create("operation")
+        .unwrap_or_else(|error| panic!("fixture: {error}"));
     let operation_id = "019f0000-0000-7000-8000-000000000001";
+    let cwd = fixture.root.to_string_lossy().into_owned();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
-            "wake",
-            "pause",
-            "--wakeup-id",
-            "019f0000-0000-7000-8000-000000000002",
+            "conversation",
+            "create",
+            "--endpoint",
+            "codex-local",
+            "--model",
+            "fixture-model",
+            "--effort",
+            "medium",
+            "--access",
+            "workspace-write",
+            "--cwd",
+            &cwd,
             "--operation-id",
             operation_id,
             "--json",
@@ -84,11 +93,11 @@ fn wake_permission_diagnostic_preserves_operation_id_and_pre_dispatch_exit() {
         ])
         .arg(&fixture.root)
         .output()
-        .unwrap_or_else(|error| panic!("wake command: {error}"));
+        .unwrap_or_else(|error| panic!("conversation command: {error}"));
 
     assert_eq!(output.status.code(), Some(3));
     let record: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("wake output: {error}"));
+        .unwrap_or_else(|error| panic!("conversation output: {error}"));
     assert_eq!(record["operationId"], operation_id);
     assert_eq!(record["error"]["kind"], "permissionDenied");
     assert_eq!(record["error"]["nextAction"], "requestApproval");

@@ -30,6 +30,10 @@ pub(super) struct ScriptedProviderBackend {
     calls: Arc<Mutex<Vec<RecordedCall>>>,
     /// Operations answered `{"hold": true}`: started, and dropped before they answered.
     held: Arc<(AtomicUsize, AtomicUsize)>,
+    /// Operations answered `{"gate": true, "result": ...}` wait here before they commit.
+    gate: Arc<tokio::sync::Mutex<()>>,
+    /// Gated operations that passed the gate and committed, in order.
+    committed: Arc<Mutex<Vec<RecordedCall>>>,
 }
 
 /// Counts a held operation as dropped when the Router stops waiting for it.
@@ -48,7 +52,20 @@ impl ScriptedProviderBackend {
             answers: Arc::default(),
             calls: Arc::default(),
             held: Arc::default(),
+            gate: Arc::default(),
+            committed: Arc::default(),
         }
+    }
+
+    /// The lock gated operations wait on before they commit; a test holds it to keep them
+    /// waiting.
+    pub(super) fn gate(&self) -> Arc<tokio::sync::Mutex<()>> {
+        Arc::clone(&self.gate)
+    }
+
+    /// Gated operations that passed the gate and committed.
+    pub(super) fn committed(&self) -> Vec<RecordedCall> {
+        self.committed.lock().expect("committed lock").clone()
     }
 
     /// Held operations that started, and those dropped without an answer.
@@ -80,10 +97,11 @@ impl ScriptedProviderBackend {
         operation: &'static str,
         request: &impl Serialize,
     ) -> ProviderConversationFuture<'_, TResult> {
-        self.calls.lock().expect("calls lock").push((
-            operation,
-            serde_json::to_value(request).expect("request JSON"),
-        ));
+        let request_json = serde_json::to_value(request).expect("request JSON");
+        self.calls
+            .lock()
+            .expect("calls lock")
+            .push((operation, request_json.clone()));
         let answer = self
             .answers
             .lock()
@@ -113,6 +131,19 @@ impl ScriptedProviderBackend {
                 None => Ok(serde_json::from_value(answer["result"].clone())
                     .expect("scripted provider result")),
             };
+        if answer.get("gate").is_some() {
+            // Commits only after the gate opens, as a store write waits for its store.
+            let gate = Arc::clone(&self.gate);
+            let committed = Arc::clone(&self.committed);
+            return Box::pin(async move {
+                let _open = gate.lock().await;
+                committed
+                    .lock()
+                    .expect("committed lock")
+                    .push((operation, request_json));
+                answered
+            });
+        }
         Box::pin(async move { answered })
     }
 }

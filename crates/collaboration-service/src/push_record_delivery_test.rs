@@ -9,7 +9,6 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_runtime::SessionDeliveryRouter;
 
-use automation_storage::AutomationStore;
 use collaboration_contracts::TargetPresenceProbe;
 
 use collaboration_protocol::{
@@ -18,8 +17,7 @@ use collaboration_protocol::{
 };
 
 use serde_json::{Value, json};
-use std::{path::Path, sync::Arc};
-use tokio::sync::Mutex;
+use std::sync::Arc;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
@@ -33,18 +31,9 @@ fn session(service_id: &UuidIdentity) -> SessionRef {
     }
 }
 
-async fn automation_store(directory: &Path) -> Arc<Mutex<AutomationStore>> {
-    Arc::new(Mutex::new(
-        AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .expect("automation store"),
-    ))
-}
-
 async fn identity_without_native_work(
     owner: Arc<interaction_storage::InteractionStore>,
     peer: fleet_sync_protocol::PeerId,
-    automation: Arc<Mutex<AutomationStore>>,
 ) -> ApplicationFixture {
     let router = Arc::new(SessionDeliveryRouter::new(Vec::new()));
     let delivery: Arc<dyn SessionMessageDelivery> = router.clone();
@@ -84,7 +73,6 @@ async fn identity_without_native_work(
     .without_registered_task_for_test();
     ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .unwrap()
-        .with_automation_store(automation)
         .with_subscription_delivery_service(actors, presence)
         .with_interaction_store(owner)
         .with_installation_peer(peer)
@@ -96,7 +84,6 @@ async fn identity_without_native_work(
 #[tokio::test]
 async fn committed_push_delivery_error_returns_outcome_unknown_with_its_link() {
     let directory = tempfile::tempdir().expect("isolated service directory");
-    let automation = automation_store(directory.path()).await;
     let owner = Arc::new(
         interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
             .await
@@ -105,7 +92,7 @@ async fn committed_push_delivery_error_returns_outcome_unknown_with_its_link() {
     let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap();
     // Native work is unavailable. The real SDK's missing registration is the
     // post-commit error; no synthetic MessageFailure or fake receipt is supplied.
-    let identity = identity_without_native_work(owner.clone(), peer, automation.clone()).await;
+    let identity = identity_without_native_work(owner.clone(), peer).await;
     let target = session(&identity.service_id);
     let sent = (identity.clone())
         .build()
@@ -173,20 +160,12 @@ async fn committed_push_delivery_error_returns_outcome_unknown_with_its_link() {
         .close()
         .await
         .unwrap();
-    Arc::try_unwrap(automation)
-        .unwrap_or_else(|_| panic!("automation owner retained"))
-        .into_inner()
-        .close()
-        .await
-        .unwrap();
 }
 #[tokio::test]
 async fn recorded_local_result_replays_without_a_delivery_owner_and_unknown_work_is_not_admitted() {
     use crate::mail_delivery_projection_tests::fixture::Fixture;
     use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, MailItemId};
     let fixture = Fixture::new().await;
-    let directory = tempfile::tempdir().expect("owned actor fixture");
-    let automation = automation_store(directory.path()).await;
     let mut draft = fixture.draft();
     draft.body = Some("retained answer".to_owned());
     let target = draft.target.clone();
@@ -217,12 +196,8 @@ async fn recorded_local_result_replays_without_a_delivery_owner_and_unknown_work
         .unwrap()
         .result
         .unwrap();
-    let identity = identity_without_native_work(
-        fixture.owner.clone(),
-        fixture.host.config.local.owner,
-        automation.clone(),
-    )
-    .await;
+    let identity =
+        identity_without_native_work(fixture.owner.clone(), fixture.host.config.local.owner).await;
     let app = (identity.clone()).build();
     let mut input = SessionMessageSendParams {
         item_id: Some(id.clone()),
@@ -275,29 +250,7 @@ async fn recorded_local_result_replays_without_a_delivery_owner_and_unknown_work
             .expect("mail read")
             .is_none()
     );
-    // The retired automation owner has no message tables to admit into.
-    use sqlx::Connection as _;
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(directory.path().join("automation.sqlite"))
-            .read_only(true),
-    )
-    .await
-    .expect("automation observer");
-    let legacy_tables: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('router_pushes','mail_items','subscription_delivery_progress','board_intent_progress','board_intent_scan_cursors')")
-        .fetch_one(&mut observer).await.expect("retired table inventory");
-    observer.close().await.expect("close observer");
-    assert_eq!(
-        legacy_tables, 0,
-        "message state returned to automation storage"
-    );
     drop(app);
     drop(identity);
     drop(fixture.close().await);
-    Arc::try_unwrap(automation)
-        .unwrap_or_else(|_| panic!("mail store retained"))
-        .into_inner()
-        .close()
-        .await
-        .expect("close");
 }

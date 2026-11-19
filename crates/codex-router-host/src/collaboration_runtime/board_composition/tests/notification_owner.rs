@@ -79,7 +79,6 @@ impl ProjectNotificationFixture {
         )?
         .with_project_admission(admission.clone())
         .with_project_replication(harness.projects.clone())
-        .with_automation_store(harness.mail.automation.clone())
         .with_subscription_delivery_service(
             harness.mail.actors.clone(),
             Arc::new(SessionDeliveryRouter::new(Vec::new())),

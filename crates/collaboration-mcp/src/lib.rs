@@ -17,6 +17,9 @@ pub use collaboration_api_router::{
 pub use loopback_bind_address::{LoopbackBindAddress, LoopbackBindAddressError};
 pub use native_schema_definitions::NativeSchemaDefinitions;
 pub use router_executable_check::{FixedRouterExecutableRelation, RouterExecutableCheck};
+/// One request slot held until a test releases it; for admission tests here and in other crates.
+#[cfg(any(test, feature = "test-support"))]
+pub mod request_slot_holder;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 

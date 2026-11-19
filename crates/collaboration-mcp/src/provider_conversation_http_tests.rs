@@ -19,6 +19,9 @@ mod human_control_test;
 #[path = "provider_conversation_http_tests/lifecycle_refusal_test.rs"]
 mod lifecycle_refusal_test;
 
+#[path = "provider_conversation_http_tests/abandoned_mutation_test.rs"]
+mod abandoned_mutation_test;
+
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 const CREATE_OPERATION: &str = "019f0000-0000-7000-8000-000000000001";

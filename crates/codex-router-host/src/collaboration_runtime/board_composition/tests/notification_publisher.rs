@@ -12,7 +12,6 @@ use collaboration_service::SubscriptionDeliveryServiceProps;
 
 use fleet_sync_protocol::{ItemId, PeerId};
 use interaction_storage::InteractionStore;
-use tokio::sync::Mutex;
 #[path = "notification_project_fixture.rs"]
 pub(in crate::collaboration_runtime::board_composition) mod project_fixture;
 
@@ -81,10 +80,6 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
         .ok_or("replication port")?
         .clone();
     let admission = board.admission.clone();
-    let progress = Arc::new(Mutex::new(
-        automation_storage::AutomationStore::open(&root.join("notification-progress.sqlite"))
-            .await?,
-    ));
     let carrier = Arc::new(SessionDeliveryRouter::new(Vec::new()));
     let interactions = Arc::new(InteractionStore::open(root.join("interaction.sqlite")).await?);
     let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
@@ -103,7 +98,6 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     )?
     .with_machine_identity(machine.clone())
     .map_err(io::Error::other)?
-    .with_automation_store(progress.clone())
     .with_project_admission(admission.clone())
     .with_project_replication(replication.clone())
     .with_subscription_delivery_service(actors.clone(), carrier.clone());
@@ -195,7 +189,6 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     drop(actors);
     drop(interactions);
     mail.close().await?;
-    drop(progress);
     drop(projects);
     drop(replication);
     Arc::try_unwrap(admission)

@@ -23,7 +23,6 @@ use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use runtime_primitives::SystemClock;
 use serde_json::Value;
 use std::{io, path::Path, sync::Arc};
-use tokio::sync::Mutex;
 
 struct NoObservationCalls;
 impl CallRouter for NoObservationCalls {
@@ -77,7 +76,6 @@ pub(super) struct MailOwner {
     pub(super) owner: Arc<InteractionStore>,
     store: ObserverStore,
     pub(super) actors: SubscriptionDeliveryService,
-    pub(super) automation: Arc<Mutex<automation_storage::AutomationStore>>,
 }
 impl MailOwner {
     pub async fn outbox_status(
@@ -136,9 +134,6 @@ impl MailOwner {
             peer,
         ));
         let owner = Arc::new(InteractionStore::open(root.join("interaction.sqlite")).await?);
-        let automation = Arc::new(Mutex::new(
-            automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
-        ));
         let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
             push_store: owner.clone(),
@@ -170,7 +165,6 @@ impl MailOwner {
             owner,
             store,
             actors,
-            automation,
         })
     }
     pub async fn local_outcome(
@@ -427,17 +421,11 @@ impl MailOwner {
             owner,
             store,
             actors,
-            automation,
         } = self;
         actors.shutdown().await;
         drop(mail);
         drop(actors);
         drop(store);
-        Arc::try_unwrap(automation)
-            .map_err(|_| io::Error::other("notice actor retained"))?
-            .into_inner()
-            .close()
-            .await?;
         Arc::try_unwrap(owner)
             .map_err(|_| io::Error::other("mail observation owner retained"))?
             .close()

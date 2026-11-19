@@ -1,5 +1,4 @@
 //! Real API fixture with scripted native responses; never a live model backend.
-use automation_storage::AutomationStore;
 use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
 use collaboration_client::{
     ClientError, MessageSendError, MessageSendRequest, PublicMessageContent,
@@ -23,7 +22,6 @@ use crate::served_api;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
 pub enum NativeReply {
@@ -196,9 +194,6 @@ async fn exercise_message(
         endpoint: target.endpoint.clone(),
         gate,
     };
-    let automation_store = Arc::new(Mutex::new(
-        AutomationStore::open(&root.join("automation.sqlite")).await?,
-    ));
     let broker = if recorded {
         let scratch = root.join("scratch");
         tokio::fs::create_dir(&scratch).await?;
@@ -291,7 +286,6 @@ async fn exercise_message(
         None
     };
     let identity = ApplicationFixture::new(service_id, service_id)?
-        .with_automation_store(Arc::clone(&automation_store))
         .with_endpoints(vec![description])?
         .with_native_backend(native_backend.clone())?;
     let route = CodexAppServerDeliveryRoute::new(
@@ -487,10 +481,6 @@ async fn exercise_message(
     };
     drop(broker);
     native_mail.close().await?;
-    let automation_store = Arc::try_unwrap(automation_store)
-        .map_err(|_| std::io::Error::other("service retained automation store"))?
-        .into_inner();
-    automation_store.close().await?;
     drop(directory);
     Ok(RecordedMessageObservation {
         result: result?,

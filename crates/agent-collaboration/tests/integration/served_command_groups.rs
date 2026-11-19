@@ -25,8 +25,7 @@ impl ServedFixture {
         clippy::expect_used,
         reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
     )]
-    /// An application with an automation store, an interaction broker and a lifecycle
-    /// journal, publishing a Codex endpoint whose native backend is absent.
+    /// An application with an interaction broker and a lifecycle journal, publishing a Codex endpoint whose native backend is absent.
     async fn start() -> Self {
         let directory = tempfile::tempdir_in("/tmp").expect("service directory");
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
@@ -53,11 +52,6 @@ impl ServedFixture {
         )
         .await
         .expect("interaction broker");
-        let automation = Arc::new(tokio::sync::Mutex::new(
-            automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-                .await
-                .expect("automation store"),
-        ));
         let journal = lifecycle_observation::ObservationJournal::open(
             &directory.path().join("session-registry.sqlite"),
             "00000000-0000-4000-8000-000000000303"
@@ -79,7 +73,6 @@ impl ServedFixture {
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("endpoint inventory")
-            .with_automation_store(automation)
             .with_approval_broker(broker)
             .with_journal(Arc::clone(&journal));
         let served = ServedCollaborationApi::start(directory.path(), (identity).build())
