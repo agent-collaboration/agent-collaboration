@@ -7,7 +7,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -66,7 +66,7 @@ pub enum OrganizationCommand {
         title: IssueTitle,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -95,7 +95,7 @@ pub enum RoleCommand {
         role: DeliverableRole,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -143,7 +143,7 @@ pub enum ThreadCommand {
 }
 
 /// A post written as part of another thread step, with its minted id.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadPostDraft {
     pub post_id: PostId,
@@ -152,7 +152,7 @@ pub struct ThreadPostDraft {
     pub body: PostText,
     pub addressees: Vec<Addressee>,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -182,13 +182,13 @@ pub enum BacklogCommand {
 }
 
 /// An optional close reference carries its own creation change for reference paging.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BacklogClosingReference {
     pub reference: Reference,
     pub change_id: ChangeId,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -201,7 +201,7 @@ pub enum ReferenceCommand {
     AddLink { link: ExternalLink },
     RemoveLink { link_id: LinkId },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -218,7 +218,7 @@ pub enum DependencyCommand {
         dependency_id: DependencyId,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -239,7 +239,7 @@ pub enum StatusCommand {
         status: WorkStatus,
     },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -371,7 +371,7 @@ pub enum SearchableKind {
     Initiative,
     Project,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "command",

@@ -35,7 +35,7 @@ impl NoticeCadence {
 }
 
 /// Authenticated origin stamped by the Host, outside semantic tool input.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -60,7 +60,7 @@ impl Caller {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -73,7 +73,7 @@ pub enum ActorRef {
     Session(SessionRef),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -289,6 +289,9 @@ impl WorkspaceOperation {
     deny_unknown_fields
 )]
 pub enum WorkspaceAnswer {
+    MessageStatus {
+        status: crate::central_mail::MessageStatus,
+    },
     WorkspaceCreated {
         workspace: Workspace,
     },
@@ -381,7 +384,7 @@ pub struct WorkspaceReply {
     pub result: WorkspaceResult,
     pub actors: Vec<ActorView>,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceRequest {
     pub request_id: Option<RequestId>,

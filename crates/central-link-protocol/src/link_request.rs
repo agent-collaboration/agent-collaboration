@@ -7,7 +7,7 @@ use workspace_model::{Caller, RequestId, WorkspaceOperation, WorkspaceReply, Wor
 pub const MAX_LINK_REQUEST_BATCH_SIZE: usize = 64;
 
 /// A nonempty bounded collection of independent writes with distinct correlations.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "Vec<LinkRequest>", into = "Vec<LinkRequest>")]
 pub struct LinkRequestBatch(Vec<LinkRequest>);
 
@@ -52,7 +52,9 @@ impl From<LinkRequestBatch> for Vec<LinkRequest> {
 }
 
 /// Transport correlation has a separate type and lifetime from durable write idempotency.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(try_from = "String", into = "String")]
 pub struct CorrelationId(String);
 
@@ -83,7 +85,7 @@ impl std::str::FromStr for CorrelationId {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "kind",
     content = "request",
@@ -153,7 +155,7 @@ impl ReplyPayload {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "RequestWire", into = "RequestWire")]
 pub struct LinkRequest {
     correlation_id: CorrelationId,
@@ -185,7 +187,7 @@ impl LinkRequest {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RequestWire {
     correlation_id: CorrelationId,
