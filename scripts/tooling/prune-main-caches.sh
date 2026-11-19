@@ -36,8 +36,8 @@ fi
 # rust-cache exposes no primary-key output. Main runs are serialized by the
 # workflow concurrency group, and this job waits for every writer's post hook.
 # A key created since the first writer started therefore belongs to this run.
-# Cache hits create no entry: a single existing key needs no pruning. Refuse an
-# ambiguous family rather than guess from last-access order or delete its key.
+# Cache hits create no entry, so preserve groups with no fresh key. Refuse a
+# group with multiple distinct fresh keys before deleting anything.
 # The release workflow saves its own Apple Silicon cache from manual main
 # dispatches; GitHub expires older entries, so this job leaves that family alone.
 cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_started_at" '
@@ -46,15 +46,17 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
       // error("Expected a UTC cache-writer timestamp"))
     | .whole + "." + (((.fraction // "") + "000000000")[0:9]) + "Z";
   def family($key):
-    if $key | startswith("v0-rust-wasm-") then
-      # Worker partitions can run with different Rust environments. rust-cache
-      # restores by this prefix and appends the dependency hash to the saved key.
-      ($key | capture("^(?<restore_prefix>v0-rust-wasm-Linux-x64-[0-9a-f]{8})-[0-9a-f]{8}$").restore_prefix)
-      // error("Unexpected WASM cache key: " + $key)
+    if $key | startswith("v0-rust-") then
+      if $key | test("^v0-rust-release-arm64-background-Darwin-arm64-[0-9a-f]{8}-[0-9a-f]{8}$") then null
+      else
+        # rust-cache restores by family, platform and environment hash, then
+        # appends the dependency hash to form the saved key.
+        ($key | capture("^(?<restore_prefix>v0-rust-(static|test|e2e|wasm)-Linux-x64-[0-9a-f]{8})-[0-9a-f]{8}$").restore_prefix)
+        // error("Unexpected rust-cache key: " + $key)
+      end
     else
       ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
-       "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
-       "v0-rust-e2e-", "node-cache-Linux-x64-pnpm-"]
+       "Linux-X64-worker-build-", "node-cache-Linux-x64-pnpm-"]
       | map(. as $prefix | select($key | startswith($prefix))) | first
     end;
   ($since | timestamp) as $started
@@ -70,20 +72,14 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
   | group_by(.family)
   | map(
       . as $entries
-      | (map(.key) | unique) as $keys
       | (map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
-      # pnpm caching is disabled in this workflow. Older main stores are
-      # obsolete; a new store signals an unexpected writer and is protected.
-      | if .[0].family == "node-cache-Linux-x64-pnpm-" then
-          if ($saved | length) != 0 then error("Unexpected pnpm cache writer in this run")
-          else {family: .[0].family, keepKey: null, retired: true,
-                delete: [$entries[] | {id, key, sizeInBytes}]} end
-        else
-          (if ($keys | length) == 1 then $keys[0]
-           elif ($saved | length) == 1 then $saved[0]
-           else error("Cannot identify the saved key for " + .[0].family) end) as $keep
+      | if ($saved | length) == 0 then
+          {family: .[0].family, keepKey: null, reason: "No key saved in this run", delete: []}
+        elif ($saved | length) == 1 then
+          $saved[0] as $keep
           | {family: .[0].family, keepKey: $keep,
              delete: [$entries[] | select(.key != $keep) | {id, key, sizeInBytes}]}
+        else error("Multiple keys saved in this run for " + .[0].family)
         end)
 ')"
 
