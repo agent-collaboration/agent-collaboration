@@ -8,6 +8,7 @@ mod fixture;
 mod link_support;
 mod renewal_contract;
 mod revocation;
+mod revocation_backpressure;
 mod transport_contract;
 use central_link_client::{ClientAction, ClientEvent, LinkClient};
 use central_link_protocol::{DataFrame, LinkFrame, ReplyPayload, RequestPayload};

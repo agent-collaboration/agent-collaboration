@@ -93,3 +93,76 @@ fn issuer_one_machine_id_vectors_are_closed_on_this_host() -> Result<()> {
         round_trip::<MachineConnectionAdmission>,
     )
 }
+
+#[tokio::test]
+async fn signed_revocation_closes_the_worker_link_with_an_unread_reply() -> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = revoke_with_unread_reply(&fixture).await;
+    fixture.close().await?;
+    result
+}
+
+async fn revoke_with_unread_reply(fixture: &Fixture) -> Result<()> {
+    use central_link_protocol::{LinkRequest, RequestPayload};
+    use workspace_model::{WorkspaceOperation, WorkspaceRequest};
+
+    let mut link = ConnectedLink::open(fixture).await?;
+    let origin = fixture.host.signin_origin();
+    let revocation = signed::RevocationJourney {
+        client: &fixture.client,
+        origin: &origin,
+        organization: ORGANIZATION,
+        now: signed::NOW_SECONDS,
+    };
+    let owner = revocation.prepare().await?;
+    let request_id: workspace_model::RequestId = "019f0000-0000-7000-8000-00000000e311".parse()?;
+    let request = LinkRequest::new(
+        "019f0000-0000-7000-8000-00000000e310".parse()?,
+        super::fixture::session_caller()?,
+        RequestPayload::Workspace(WorkspaceRequest {
+            request_id: Some(request_id.clone()),
+            workspace_id: None,
+            operation: WorkspaceOperation::CreateWorkspace {
+                name: "Unread reply".to_owned().try_into()?,
+            },
+        }),
+    )?;
+    super::fixture::send(
+        &mut link.socket,
+        &DataFrame::Request {
+            request: Box::new(request),
+        },
+    )
+    .await?;
+    let mut applied = false;
+    for _ in 0..24 {
+        let read = fixture
+            .runtime()
+            .read(Statement {
+                sql: "SELECT request_id FROM runtime_request_log WHERE request_id=?",
+                args: vec![SqlValue::Text(request_id.to_string())],
+            })
+            .await?;
+        if !read.rows.is_empty() {
+            applied = true;
+            break;
+        }
+    }
+    if !applied {
+        return Err("request never committed while leaving its reply unread".into());
+    }
+    revocation
+        .expect(
+            &owner,
+            fixture.enrollment.as_str(),
+            json!({"result":"revoked"}),
+        )
+        .await?;
+    let Some(Ok(Message::Text(_))) = link.socket.next().await else {
+        return Err("the socket did not retain its pre-revocation reply".into());
+    };
+    if !matches!(link.socket.next().await, Some(Ok(Message::Close { .. }))) {
+        return Err("workerd did not close the socket behind the unread reply".into());
+    }
+    Ok(())
+}
