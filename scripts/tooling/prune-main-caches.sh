@@ -36,8 +36,10 @@ fi
 # rust-cache exposes no primary-key output. Main runs are serialized by the
 # workflow concurrency group, and this job waits for every writer's post hook.
 # A key created since the first writer started therefore belongs to this run.
-# Cache hits create no entry, so preserve groups with no fresh key. Refuse a
-# group with multiple distinct fresh keys before deleting anything.
+# CI writes only to v1-rust with one writer per family. Require a replacement
+# before retiring v0 CI keys. A cache hit creates no entry, so a sole existing
+# v1 key can finish retiring v0 keys after an interrupted prune.
+# A restore-only job can still use a different v1 prefix without saving a key.
 # The release workflow saves its own Apple Silicon cache from manual main
 # dispatches; GitHub expires older entries, so this job leaves that family alone.
 cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_started_at" '
@@ -46,12 +48,12 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
       // error("Expected a UTC cache-writer timestamp"))
     | .whole + "." + (((.fraction // "") + "000000000")[0:9]) + "Z";
   def family($key):
-    if $key | startswith("v0-rust-") then
+    if $key | test("^v[0-9]+-rust-") then
       if $key | test("^v0-rust-release-arm64-background-Darwin-arm64-[0-9a-f]{8}-[0-9a-f]{8}$") then null
       else
-        # rust-cache restores by family, platform and environment hash, then
-        # appends the dependency hash to form the saved key.
-        ($key | capture("^(?<restore_prefix>v0-rust-(static|test|e2e|wasm)-Linux-x64-[0-9a-f]{8})-[0-9a-f]{8}$").restore_prefix)
+        # Group by family to find replacements for retired v0 entries.
+        ($key | capture("^v[01]-rust-(?<ci_family>(static|test|e2e|wasm)-Linux-x64)-[0-9a-f]{8}-[0-9a-f]{8}$")
+         | "v1-rust-" + .ci_family)
         // error("Unexpected rust-cache key: " + $key)
       end
     else
@@ -59,6 +61,7 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
        "Linux-X64-worker-build-", "node-cache-Linux-x64-pnpm-"]
       | map(. as $prefix | select($key | startswith($prefix))) | first
     end;
+  def restore_prefix: sub("-[0-9a-f]{8}$"; "");
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
       error("Cache inventory must be a complete array with fewer than 1000 entries")
@@ -72,15 +75,21 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
   | group_by(.family)
   | map(
       . as $entries
-      | (map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
-      | if ($saved | length) == 0 then
-          {family: .[0].family, keepKey: null, reason: "No key saved in this run", delete: []}
-        elif ($saved | length) == 1 then
-          $saved[0] as $keep
-          | {family: .[0].family, keepKey: $keep,
-             delete: [$entries[] | select(.key != $keep) | {id, key, sizeInBytes}]}
-        else error("Multiple keys saved in this run for " + .[0].family)
-        end)
+      | (map(select(.key | startswith("v0-rust-") | not))) as $active
+      | ($active | map(.key) | unique) as $active_keys
+      | ($active | map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
+      | (if ($saved | length) > 1 then error("Multiple keys saved in this run for " + .[0].family)
+         elif ($saved | length) == 1 then {keepKey: $saved[0]}
+         elif ($active | length) == 0 then {keepKey: null, reason: "No stable CI replacement available"}
+         elif ($active_keys | length) == 1 and ($active | length) < ($entries | length) then
+           {keepKey: $active_keys[0], reason: "Stable CI replacement already present"}
+         else {keepKey: null, reason: "No key saved in this run"} end)
+      | . + {family: $entries[0].family,
+             delete: [.keepKey as $keep | $entries[]
+               | select($keep != null and .key != $keep)
+               | select((.key | startswith("v1-rust-") | not)
+                        or (.key | restore_prefix) == ($keep | restore_prefix))
+               | {id, key, sizeInBytes}]})
 ')"
 
 # Selection must succeed for the entire inventory before any delete is issued.
