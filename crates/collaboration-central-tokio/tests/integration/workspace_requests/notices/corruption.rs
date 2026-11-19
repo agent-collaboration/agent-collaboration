@@ -321,7 +321,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         ]]
     );
     let near_ceiling = chrono::DateTime::from_timestamp_millis(
-        collaboration_central_core::MAX_ALARM_UNIX_MILLIS - 30_000,
+        fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS - 30_000,
     )
     .unwrap();
     f.set_utc(near_ceiling).await;

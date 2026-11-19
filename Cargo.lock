@@ -1407,6 +1407,7 @@ dependencies = [
  "collaboration-client",
  "collaboration-protocol",
  "collaboration-runtime",
+ "fleet-contracts",
  "fleet-identity-protocol",
  "fleet-runtime-test-support",
  "fleet-sync-protocol",
@@ -1762,6 +1763,7 @@ dependencies = [
  "collaboration-central-core",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-runtime-test-support",
@@ -1812,6 +1814,7 @@ dependencies = [
  "chrono",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
@@ -2888,14 +2891,18 @@ dependencies = [
 name = "fleet-contracts"
 version = "0.1.156"
 dependencies = [
+ "agent-automation",
  "central-engine-model",
  "central-storage",
+ "chrono",
  "fleet-identity-protocol",
  "fleet-runtime-ports",
  "message-board",
  "schemars 1.2.2",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -2909,6 +2916,25 @@ dependencies = [
  "schemars 1.2.2",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fleet-mail"
+version = "0.1.156"
+dependencies = [
+ "agent-automation",
+ "central-engine-model",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-runtime",
+ "fleet-runtime-ports",
+ "fleet-workspace-access",
+ "serde",
+ "serde_json",
+ "serde_json_canonicalizer",
+ "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]
@@ -2949,18 +2975,25 @@ version = "0.1.156"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "central-engine-model",
  "central-storage",
+ "chrono",
  "collaboration-central-conformance",
+ "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-storage-schema",
  "fleet-store-sqlx",
+ "fleet-workspace-directory",
  "ring",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
  "tokio",
  "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]

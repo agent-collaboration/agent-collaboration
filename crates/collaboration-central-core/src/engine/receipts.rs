@@ -1,6 +1,7 @@
-use crate::{central_mail_rows::timestamp, guarded_statements::exact};
+use crate::guarded_statements::exact;
 use central_engine_model::{EngineTime, TransitionError};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_contracts::central_mail_rows::timestamp;
 use fleet_runtime_ports::guarded_statements::{any, text};
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;

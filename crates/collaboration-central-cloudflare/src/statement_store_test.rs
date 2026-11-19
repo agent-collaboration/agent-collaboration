@@ -142,7 +142,7 @@ fn engine_publication_uses_both_pending_columns_and_the_supplied_clock() {
         decided_engine_alarm(&answer(vec![vec![integer(300_000)]]), 0, &decide),
         Err(StoreFailure::Corrupt { .. })
     ));
-    let max = collaboration_central_core::MAX_ALARM_UNIX_MILLIS;
+    let max = fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS;
     let row = ReadOutcome {
         columns: row.columns,
         rows: vec![vec![integer(max), SqlValue::Null]],

@@ -7,7 +7,6 @@ pub(crate) mod control_gate;
 pub(crate) mod effects;
 pub(crate) mod failures;
 pub(crate) mod handle;
-pub(crate) mod legacy_units;
 #[cfg(test)]
 pub(crate) mod machine_property_support;
 pub(crate) mod machines;

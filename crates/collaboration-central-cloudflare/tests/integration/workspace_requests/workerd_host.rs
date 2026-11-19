@@ -2,10 +2,10 @@
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::DrainResult;
 use fleet_contracts::AlarmResult;
 use fleet_contracts::WorkspaceCaller;
 use fleet_identity_protocol::OrganizationId;
+use fleet_mail::DrainResult;
 use fleet_runtime_ports::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -419,9 +419,7 @@ impl RemoteRuntime {
     pub async fn inject_engine_commit_fault(&self, fault: fleet_runtime::EngineCommitFault) {
         let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
     }
-    pub async fn legacy_unit_invocations(
-        &self,
-    ) -> collaboration_central_core::LegacyUnitInvocations {
+    pub async fn legacy_unit_invocations(&self) -> fleet_runtime::LegacyUnitInvocations {
         self.control("legacy-unit-invocations", &()).await.unwrap()
     }
     /// Every unit the object's due batches started, in start order (R2/R3).

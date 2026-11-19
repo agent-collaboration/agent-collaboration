@@ -5,7 +5,7 @@ use super::{
     observation_assertions::{assert_record, assert_stamp},
     provision,
 };
-use collaboration_central_core::MAX_ALARM_UNIX_MILLIS;
+use fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS;
 use fleet_runtime_test_support::signin_fixtures as signed;
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, BufReader};

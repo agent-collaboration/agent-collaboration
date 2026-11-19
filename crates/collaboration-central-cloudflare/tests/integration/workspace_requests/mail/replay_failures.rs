@@ -41,7 +41,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         .unwrap();
     assert!(matches!(first, Result::Done(Answer::WakeSet { .. })));
     let unsupported = chrono::DateTime::from_timestamp_millis(
-        collaboration_central_core::MAX_ALARM_UNIX_MILLIS + 1000,
+        fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS + 1000,
     )
     .unwrap();
     assert!(matches!(

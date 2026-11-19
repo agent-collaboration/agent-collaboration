@@ -1,13 +1,14 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
-use crate::engine::legacy_units::LegacyUnitOutcome;
+use crate::CentralMail;
 use crate::{
-    WorkspaceRuntime,
-    central_mail_store::{alarm_update, applied, timestamp},
-    guarded_statements::exact,
+    central_mail_store::{applied, timestamp},
+    exact,
     notification_windows::{parse, parse_time},
     workspace_notice_plans::DrainResult,
 };
-use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
+use central_storage::{GuardedStatement, SqlValue, Statement, StatementBatch, StoreFailure};
+use fleet_contracts::{AlarmRecompute, EngineAttemptControl};
+use fleet_contracts::{DueWorkSource, LegacyUnitOutcome};
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::column;
 use fleet_runtime_ports::stored_values::string;
@@ -15,8 +16,10 @@ use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_workspace_access::WorkspaceRows;
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn preset_workspace_drain(
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    CentralMail<'_, Host, Stores, Control>
+{
+    async fn preset_workspace_drain(
         &self,
         workspace: &WorkspaceId,
         now: Timestamp,
@@ -24,20 +27,20 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let due = now
             .checked_add_signed(chrono::Duration::seconds(5))
             .ok_or_else(|| corrupt("drain_due_at"))?;
-        let _turn = self.fleet_runtime.take_central_turn().await;
+        let _turn = self.runtime.take_central_turn().await;
 
-        applied(self.statement_host().run_batch(StatementBatch{statements:vec![exact("INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:alarm_update()}).await?)
+        applied(self.statement_host().run_batch(StatementBatch{statements:vec![exact("INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:self.engine.alarm_update()}).await?)
     }
     pub async fn drain_workspace(
         &self,
         workspace: &WorkspaceId,
     ) -> Result<DrainResult, StoreFailure> {
-        let _turn = self.fleet_runtime.workspace_turns().take(workspace).await;
+        let _turn = self.runtime.workspace_turns().take(workspace).await;
         self.drain_workspace_held(workspace)
             .await
             .map_err(LegacyUnitOutcome::into_request_failure)
     }
-    pub(crate) async fn drain_workspace_held(
+    async fn drain_workspace_held(
         &self,
         workspace: &WorkspaceId,
     ) -> Result<DrainResult, LegacyUnitOutcome> {
@@ -50,56 +53,54 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         workspace: &WorkspaceId,
     ) -> Result<(), StoreFailure> {
-        use crate::engine::{
-            attempt_records::EngineSubject, attempt_statements::CONTROL_WRITE,
-            control_gate::ControlGate, failures::FailureOutcome, store_adapter::SubjectVersion,
-        };
         use central_engine_model::{InstanceKey, MachineKind, RetirementThreshold};
+        use fleet_contracts::{ControlGate, EngineSubject, FailureOutcome, SubjectVersion};
         let subject = EngineSubject {
             kind: MachineKind("legacy_workspace_drains"),
             key: InstanceKey("all".into()),
         };
-        match crate::engine::port::Engine::new(self)
+        match self
+            .engine
             .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
             .await
         {
             ControlGate::Run(_) => {}
             ControlGate::Skip | ControlGate::Uncertain => return Ok(()),
             ControlGate::CentralDown(failure) => {
-                crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);
+                self.engine.observe_engine_store_down(&subject, failure);
                 return Ok(());
             }
         }
         #[cfg(feature = "test-support")]
-        self.count_legacy_invocation(|count| count.request_drains += 1);
+        self.runtime
+            .count_legacy_invocation(|count| count.request_drains += 1);
         match self.drain_workspace_held(workspace).await {
             Ok(_) => Ok(()),
             Err(LegacyUnitOutcome::CentralDown(failure)) => {
-                crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);
+                self.engine.observe_engine_store_down(&subject, failure);
                 Ok(())
             }
             Err(outcome) => {
                 let outcome = outcome.in_workspace(workspace);
                 if let Some(class) = outcome.failure_class()
-                    && let FailureOutcome::StoreDown(failure) =
-                        crate::engine::port::Engine::new(self)
-                            .record_failure_naming(
-                                &subject,
-                                CONTROL_WRITE,
-                                &SubjectVersion(vec![]),
-                                class,
-                                RetirementThreshold::NOTICE_UNITS,
-                                outcome.affected_workspaces(),
-                            )
-                            .await
+                    && let FailureOutcome::StoreDown(failure) = self
+                        .engine
+                        .record_failure_naming(
+                            &subject,
+                            &SubjectVersion(vec![]),
+                            class,
+                            RetirementThreshold::NOTICE_UNITS,
+                            outcome.affected_workspaces(),
+                        )
+                        .await
                 {
-                    crate::engine::port::Engine::new(self)
-                        .observe_engine_store_down(&subject, failure);
+                    self.engine.observe_engine_store_down(&subject, failure);
                 }
                 Ok(())
             }
         }
     }
+
     async fn commit_workspace_drain(
         &self,
         workspace: &WorkspaceId,
@@ -122,7 +123,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             _ => return Err(corrupt("workspace_drains.drained_through_position").into()),
         };
         let rows = WorkspaceRows::decode(
-            self.fleet_runtime
+            self.runtime
                 .read_workspace(
                     workspace,
                     Statement {
@@ -145,13 +146,13 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         if rows.high_water < through {
             return Err(corrupt("workspace_drains.drained_through_position").into());
         }
-        let now = self.fleet_runtime.now()?;
-        let _central = self.fleet_runtime.take_central_turn().await;
+        let now = self.runtime.now()?;
+        let _central = self.runtime.take_central_turn().await;
 
         let (mut statements, result) = self.plan_workspace_notices(workspace, &rows, now).await?;
         statements.push(exact("UPDATE workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(timestamp(now)),text(workspace),position_value(through)?]));
         #[cfg(feature = "test-support")]
-        self.fleet_runtime
+        self.runtime
             .pause_points()
             .reached(workspace, fleet_runtime::PausePoint::BeforeDrainCommit)
             .await;
@@ -159,17 +160,17 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             self.statement_host()
                 .run_batch(StatementBatch {
                     statements,
-                    alarm: alarm_update(),
+                    alarm: self.engine.alarm_update(),
                 })
                 .await,
         )?;
         #[cfg(feature = "test-support")]
         {
-            self.fleet_runtime
+            self.runtime
                 .pause_points()
                 .reached(workspace, fleet_runtime::PausePoint::AfterDrainCommit)
                 .await;
-            self.fleet_runtime
+            self.runtime
                 .pause_points()
                 .reached(workspace, fleet_runtime::PausePoint::AfterNoticesCommitted)
                 .await;
@@ -201,7 +202,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             // P5 change 6: a workspace whose turn another request holds is skipped
             // for this batch, not a failure; its drain_due_at stays, and the holder's
             // own drain or a later batch drains it.
-            let Some(_turn) = self.fleet_runtime.workspace_turns().try_take(&workspace) else {
+            let Some(_turn) = self.runtime.workspace_turns().try_take(&workspace) else {
                 continue;
             };
             match self.commit_workspace_drain(&workspace).await {
@@ -236,8 +237,23 @@ fn position_value(position: ChangePosition) -> Result<SqlValue, StoreFailure> {
     ))
 }
 
-impl<Host: CentralStore, Stores: WorkspaceStores> fleet_contracts::WorkspaceDrain
-    for WorkspaceRuntime<Host, Stores>
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    DueWorkSource for CentralMail<'_, Host, Stores, Control>
+{
+    async fn plan_due_windows(
+        &self,
+        now: Timestamp,
+    ) -> Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome> {
+        self.plan_due_windows(now).await
+    }
+
+    async fn drain_due_workspaces(&self, now: Timestamp) -> Result<usize, LegacyUnitOutcome> {
+        self.drain_due_workspaces(now).await
+    }
+}
+
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    fleet_contracts::WorkspaceDrain for CentralMail<'_, Host, Stores, Control>
 {
     async fn preset_workspace_drain(
         &self,
@@ -246,7 +262,6 @@ impl<Host: CentralStore, Stores: WorkspaceStores> fleet_contracts::WorkspaceDrai
     ) -> Result<(), StoreFailure> {
         self.preset_workspace_drain(workspace, now).await
     }
-
     async fn drain_after_request(&self, workspace: &WorkspaceId) -> Result<(), StoreFailure> {
         self.drain_after_request(workspace).await
     }

@@ -3,7 +3,6 @@
 //! lifecycle `state`, and saves `disabled` guarded on every raw column with IS.
 use super::lifecycle_finish::{AutomationKind, Lifecycle, LifecycleFinish, NoEffect, WakeKind};
 use crate::{
-    central_mail_rows::timestamp,
     engine::{
         port::EngineHost,
         store_adapter::{LoadFailure, StoreAdapter, Versioned, load_store_failure, raw_version},
@@ -12,6 +11,7 @@ use crate::{
 };
 use central_engine_model::{InstanceKey, ItemFailureClass};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_contracts::central_mail_rows::timestamp;
 use fleet_runtime_ports::CentralStore as _;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::string;

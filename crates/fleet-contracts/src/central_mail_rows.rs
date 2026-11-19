@@ -1,11 +1,63 @@
-//! Stored queue rows are validated before they participate in a central decision.
-use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
-use fleet_runtime_ports::stored_values::column;
-use fleet_runtime_ports::stored_values::json;
-use fleet_runtime_ports::stored_values::string;
+//! Pure mail-row encoding shared by central request paths and the engine; it
+//! names no runtime, so the engine can use it without a module cycle.
+use central_storage::{BatchOutcome, GuardedStatement, ReadOutcome, SqlValue, StoreFailure};
+use fleet_runtime_ports::guarded_statements::{any, text};
+use fleet_runtime_ports::stored_values::{column, json, string};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
+use serde::Serialize;
 use workspace_model::central_mail as mail;
-use workspace_model::{ActorIdentityId, ChangeId, MachineId, ThreadId, WorkspaceId};
+use workspace_model::{ActorIdentityId, ChangeId, MachineId, ThreadId, Timestamp, WorkspaceId};
+pub fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
+    serde_json::to_string(value)
+        .map(text)
+        .map_err(|_| corrupt("mail JSON"))
+}
+pub fn timestamp(value: Timestamp) -> String {
+    value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+pub fn applied(outcome: BatchOutcome) -> Result<(), StoreFailure> {
+    match outcome {
+        BatchOutcome::Applied { .. } => Ok(()),
+        _ => Err(StoreFailure::Unavailable),
+    }
+}
+pub fn insert_message(message: &mail::MessageRecord) -> Result<GuardedStatement, StoreFailure> {
+    let kind = match message.body {
+        mail::MessageBody::Direct { .. } => "direct",
+        mail::MessageBody::Notice { .. } => "notice",
+        mail::MessageBody::Wake { .. } => "wake",
+        mail::MessageBody::Automation { .. } => "automation",
+    };
+    let (state, failure) = match &message.state {
+        mail::MessageState::Queued => ("queued", SqlValue::Null),
+        mail::MessageState::Delivered => ("delivered", SqlValue::Null),
+        mail::MessageState::Cancelled => ("cancelled", SqlValue::Null),
+        mail::MessageState::Failed { reason } => ("failed", text(reason)),
+    };
+    let source = message.source.as_ref();
+    Ok(any(
+        "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_change_id,recipient_actor) WHERE source_change_id IS NOT NULL DO NOTHING",
+        vec![
+            text(&message.message_id),
+            encode(&message.sender)?,
+            text(&message.target.machine_id),
+            encode(&message.target)?,
+            text(kind),
+            encode(&message.body)?,
+            text(state),
+            failure,
+            source.map_or(SqlValue::Null, |source| text(&source.change_id)),
+            source.map_or(SqlValue::Null, |source| text(&source.recipient_actor)),
+            source.map_or(SqlValue::Null, |source| text(&source.workspace_id)),
+            source
+                .and_then(|source| source.thread_id.as_ref())
+                .map_or(SqlValue::Null, text),
+            text(timestamp(message.created_at)),
+            text(timestamp(message.updated_at)),
+        ],
+    ))
+}
+
 fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T, StoreFailure> {
     value.parse().map_err(|_| corrupt(field))
 }
@@ -20,15 +72,7 @@ fn optional<T: std::str::FromStr>(
         _ => Err(corrupt(field)),
     }
 }
-pub(crate) fn notice_messages() -> Statement {
-    Statement {
-        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE message_kind='notice' AND state='queued'",
-        args: vec![],
-    }
-}
-pub(crate) fn decode_messages(
-    rows: &ReadOutcome,
-) -> Result<Vec<mail::MessageRecord>, StoreFailure> {
+pub fn decode_messages(rows: &ReadOutcome) -> Result<Vec<mail::MessageRecord>, StoreFailure> {
     rows.rows
         .iter()
         .map(|row| {
@@ -110,26 +154,4 @@ pub(crate) fn decode_messages(
             })
         })
         .collect()
-}
-
-impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::WorkspaceStores>
-    crate::WorkspaceRuntime<Host, Stores>
-{
-    /// Reads queued messages without consuming them, in stable message-UUIDv7 order.
-    pub async fn queued_for_session(
-        &self,
-        session: &workspace_model::SessionAddress,
-    ) -> Result<mail::SessionQueue, StoreFailure> {
-        let _turn = self.fleet_runtime.take_central_turn().await;
-        // UUIDv7 normally follows admission within one process. A reopen or clock
-        // rollback can change that order; no FIFO promise is made inside a batch.
-        let rows=self.statement_host().read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE target_machine_id=? AND state='queued' ORDER BY message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
-        let mut messages = decode_messages(&rows)?;
-        messages.retain(|message| &message.target == session);
-        messages.sort_by(|left, right| left.message_id.cmp(&right.message_id));
-        Ok(mail::SessionQueue {
-            session: session.clone(),
-            messages,
-        })
-    }
 }

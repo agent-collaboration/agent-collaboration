@@ -8,6 +8,8 @@ mod clock_ids;
 mod due_batch_state;
 mod fleet_runtime;
 #[cfg(feature = "test-support")]
+mod legacy_unit_invocations;
+#[cfg(feature = "test-support")]
 mod pause_points;
 #[cfg(feature = "test-support")]
 mod test_faults;
@@ -22,6 +24,8 @@ pub use clock_ids::ClockIds;
 pub use due_batch_state::DueUnitStart;
 pub use due_batch_state::{DueBatchSnapshot, DueBatchState};
 pub use fleet_runtime::FleetRuntime;
+#[cfg(feature = "test-support")]
+pub use legacy_unit_invocations::LegacyUnitInvocations;
 #[cfg(feature = "test-support")]
 pub use pause_points::{HeldPause, PausePoint, PausePoints};
 #[cfg(feature = "test-support")]

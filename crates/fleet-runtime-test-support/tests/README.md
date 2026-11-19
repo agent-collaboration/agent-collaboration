@@ -8,3 +8,6 @@ person fixtures for both host suites. Business time comes from the caller's cloc
 
 `integration/` opens the shared runtime and exercises alarm publication through
 the fixture's real SQLite statement executor.
+It also checks guarded directory planning and mail drain deadlines through the
+production trait implementations and uses an in-memory notice-unit stand-in
+for isolated compositions.

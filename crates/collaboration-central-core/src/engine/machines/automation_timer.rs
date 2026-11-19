@@ -1,9 +1,9 @@
 #![deny(clippy::wildcard_enum_match_arm)]
 use super::timer_effects::{TimerRefusal, queue_message};
-use crate::central_timer_rows::AutomationRow;
 use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, StateTag, Transition, TransitionError,
 };
+use fleet_contracts::central_timer_rows::AutomationRow;
 use workspace_model::central_mail as mail;
 
 pub(crate) struct AutomationTimer;

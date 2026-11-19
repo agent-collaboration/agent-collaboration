@@ -1,29 +1,12 @@
+use super::attempt_statements::{CONTROL_WRITE, delete_observed_attempt};
+use super::attempt_store::load_attempt;
+use super::effects::{ApplyFailure, classify_batch};
 use super::port::{Engine, EngineHost};
-use super::{
-    attempt_records::{AttemptGuard, EngineSubject},
-    attempt_statements::{CONTROL_WRITE, delete_observed_attempt},
-    attempt_store::load_attempt,
-    effects::{ApplyFailure, classify_batch},
-    failures::FailureOutcome,
-    store_adapter::SubjectVersion,
-};
 use central_engine_model::{AttemptState, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_contracts::{ControlGate, ObservedControl};
+use fleet_contracts::{EngineSubject, FailureOutcome, SubjectVersion};
 use fleet_runtime_ports::CentralStore as _;
-
-/// The control record a run saw at its gate. Its success clears only that
-/// record, so a failure written after the gate survives (R3/R4).
-pub(crate) enum ObservedControl {
-    Absent,
-    Present(AttemptGuard),
-}
-
-pub(crate) enum ControlGate {
-    Run(ObservedControl),
-    Skip,
-    Uncertain,
-    CentralDown(StoreFailure),
-}
 
 impl<R: EngineHost> Engine<'_, R> {
     pub(crate) async fn control_gate(

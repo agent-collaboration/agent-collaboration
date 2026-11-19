@@ -120,11 +120,11 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                     return Err(Failure::StaleStatement);
                 }
                 let repair = async {
-                    crate::central_mail_store::applied(
+                    fleet_contracts::central_mail_rows::applied(
                         self.statement_host()
                             .run_batch(StatementBatch {
                                 statements: vec![],
-                                alarm: crate::central_mail_store::alarm_update(),
+                                alarm: crate::engine::query_registry::alarm_update(),
                             })
                             .await?,
                     )
@@ -187,7 +187,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
-                alarm: crate::central_mail_store::alarm_update(),
+                alarm: crate::engine::query_registry::alarm_update(),
             })
             .await?
         {

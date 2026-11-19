@@ -8,9 +8,10 @@ use super::{
     port::EngineHost,
     probe_machine::{EngineProbe, ProbeEffect, ProbeState},
 };
-use crate::{central_mail_rows::timestamp, guarded_statements::exact};
+use crate::guarded_statements::exact;
 use central_engine_model::{EngineTime, InstanceKey, StateTag};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
+use fleet_contracts::central_mail_rows::timestamp;
 use fleet_runtime_ports::CentralStore as _;
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::column;

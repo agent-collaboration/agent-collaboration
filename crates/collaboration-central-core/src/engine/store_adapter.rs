@@ -1,13 +1,9 @@
-use super::attempt_records::EngineSubject;
 use central_engine_model::{InstanceKey, ItemFailureClass, Machine};
-use central_storage::{CorruptReason, GuardedStatement, ReadOutcome, SqlValue, StoreFailure};
+use central_storage::{CorruptReason, GuardedStatement, ReadOutcome, StoreFailure};
+use fleet_contracts::EngineSubject;
+use fleet_contracts::SubjectVersion;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use std::future::Future;
-
-/// Raw comparison values survive a decode failure, so recording it still checks
-/// the exact subject that was read. The adapter owns their SQL interpretation.
-#[derive(Clone, Debug)]
-pub(crate) struct SubjectVersion(pub Vec<SqlValue>);
 
 pub(crate) struct Versioned<State> {
     pub state: State,

@@ -15,9 +15,10 @@ async fn relative_timer_replay_precedes_new_time_validation() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let ceiling =
-        chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
-            .unwrap();
+    let ceiling = chrono::DateTime::from_timestamp_millis(
+        fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS,
+    )
+    .unwrap();
     assert!(matches!(
         runtime
             .statement_host()

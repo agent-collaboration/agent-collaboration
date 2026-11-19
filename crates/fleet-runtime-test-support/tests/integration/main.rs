@@ -6,6 +6,8 @@ use fleet_runtime_test_support::{InMemoryCentralStore, InMemoryWorkspaceStores, 
 use sqlx::migrate::Migrator;
 use std::sync::Arc;
 
+mod workspace_contracts;
+
 #[tokio::test]
 async fn a_real_sqlite_alarm_query_publishes_the_mark_through_the_runtime_store() {
     let now_ms = 1_800_000_000_000;

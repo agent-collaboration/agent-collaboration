@@ -7,11 +7,11 @@ use super::engine_probe_support::*;
 use central_storage::{
     AlarmPublicationFailure, AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure,
 };
-use collaboration_central_core::{
-    MAX_ALARM_UNIX_MILLIS,
-    engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState,
 };
 use fleet_contracts::AlarmNotPublished;
+use fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS;
 use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 

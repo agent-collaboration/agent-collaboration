@@ -1,12 +1,13 @@
 //! Timer request plans; validated rows live in central_timer_rows.
-use crate::central_timer_rows::decode_automations;
+use crate::CentralMail;
 use crate::{
-    WorkspaceRuntime,
     central_mail_store::{encode, timestamp},
-    guarded_statements::exact,
+    exact,
 };
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, Statement, StoreFailure};
+use fleet_contracts::central_timer_rows::decode_automations;
+use fleet_contracts::{AlarmRecompute, EngineAttemptControl};
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
@@ -14,7 +15,9 @@ use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::Timestamp;
 use workspace_model::central_mail as mail;
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    CentralMail<'_, Host, Stores, Control>
+{
     pub(crate) async fn plan_timer_request(
         &self,
         operation: &mail::CentralMailOperation,
@@ -38,7 +41,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         target: target.clone(),
                     }));
                 }
-                let id: WakeId = self.fleet_runtime.mint()?;
+                let id: WakeId = self.runtime.mint()?;
                 (
                     vec![exact(
                         "INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
@@ -87,8 +90,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         vec![at(), text(wake_id)],
                     )]
                 };
-                statements.push(crate::engine::attempt_statements::delete_attempt(
-                    &crate::engine::attempt_records::EngineSubject {
+                statements.push(self.engine.attempt_cleanup_statements(
+                    &fleet_contracts::EngineSubject {
                         kind: central_engine_model::MachineKind("wake_timer"),
                         key: central_engine_model::InstanceKey(wake_id.to_string()),
                     },
@@ -110,7 +113,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         target: target.clone(),
                     }));
                 }
-                let first = match crate::central_mail_time::first_due(timing, now) {
+                let first = match fleet_contracts::timer_schedule::first_due(timing, now) {
                     Ok(Some(first)) => first,
                     Ok(None) | Err(agent_automation::TimingError::OutOfRange) => {
                         return Ok(Err(Refusal::NoOccurrence));
@@ -121,7 +124,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         }));
                     }
                 };
-                let Some(expires_at) = crate::central_mail_time::lifetime_end(now) else {
+                let Some(expires_at) = fleet_contracts::timer_schedule::lifetime_end(now) else {
                     return Ok(Err(Refusal::TimeOutOfRange {
                         field: "anchorAt".to_owned(),
                     }));
@@ -139,12 +142,13 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         requirement: mail::TimingRequirement::WithinSevenDays,
                     }));
                 }
-                let Some(anchor) = crate::central_mail_time::aligned_at_or_after(now, 300) else {
+                let Some(anchor) = fleet_contracts::timer_schedule::aligned_at_or_after(now, 300)
+                else {
                     return Ok(Err(Refusal::TimeOutOfRange {
                         field: "anchorAt".to_owned(),
                     }));
                 };
-                let id: AutomationId = self.fleet_runtime.mint()?;
+                let id: AutomationId = self.runtime.mint()?;
                 (
                     vec![exact(
                         "INSERT INTO automations(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
@@ -188,8 +192,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         vec![at(), text(automation_id)],
                     )]
                 };
-                statements.push(crate::engine::attempt_statements::delete_attempt(
-                    &crate::engine::attempt_records::EngineSubject {
+                statements.push(self.engine.attempt_cleanup_statements(
+                    &fleet_contracts::EngineSubject {
                         kind: central_engine_model::MachineKind("automation_timer"),
                         key: central_engine_model::InstanceKey(automation_id.to_string()),
                     },

@@ -2,14 +2,11 @@
 //! only `EngineHost`; this module, outside engine/, implements that port for the
 //! runtime and keeps the runtime's public event entry.
 use crate::WorkspaceRuntime;
-use crate::engine::{
-    legacy_units::LegacyUnitOutcome,
-    port::{Engine, EngineHost},
-};
+use crate::engine::port::{Engine, EngineHost};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::{
-    AlarmNotPublished, CentralObservation, EventCompletion, EventCompletionHook,
+    AlarmNotPublished, CentralObservation, EventCompletion, EventCompletionHook, LegacyUnitOutcome,
 };
 use fleet_runtime::{DueBatchState, TurnGuard};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
@@ -38,10 +35,10 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
         &self,
         now: EngineTime,
     ) -> Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome> {
-        WorkspaceRuntime::plan_due_windows(self, now).await
+        fleet_contracts::DueWorkSource::plan_due_windows(&self.mail(), now).await
     }
     async fn drain_due_workspaces(&self, now: EngineTime) -> Result<usize, LegacyUnitOutcome> {
-        WorkspaceRuntime::drain_due_workspaces(self, now).await
+        fleet_contracts::DueWorkSource::drain_due_workspaces(&self.mail(), now).await
     }
     fn try_central_turn(&self) -> Option<TurnGuard<'_>> {
         self.fleet_runtime.try_central_turn()
@@ -51,8 +48,8 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
         self.fleet_runtime.pause_points()
     }
     #[cfg(feature = "test-support")]
-    fn count_legacy_invocation(&self, count: &dyn Fn(&mut crate::LegacyUnitInvocations)) {
-        WorkspaceRuntime::count_legacy_invocation(self, count);
+    fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations)) {
+        self.fleet_runtime.count_legacy_invocation(count);
     }
 }
 

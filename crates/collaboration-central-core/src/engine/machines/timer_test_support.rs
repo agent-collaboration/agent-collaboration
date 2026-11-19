@@ -1,5 +1,5 @@
-use crate::central_timer_rows::{AutomationRow, WakeRow};
 use central_engine_model::{Context, EngineTime, IdSource};
+use fleet_contracts::central_timer_rows::{AutomationRow, WakeRow};
 use workspace_model::{SessionAddress, central_mail as mail};
 
 pub(super) struct ReplayIds;

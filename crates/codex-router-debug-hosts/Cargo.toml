@@ -18,6 +18,7 @@ signin-test-support = [
     "dep:runtime-primitives",
     "dep:chrono",
     "dep:fleet-identity-protocol",
+    "dep:fleet-contracts",
 ]
 # The feature set the former codex-router-host examples (board-debug-runtime,
 # debug_host_acceptance, imagegen-debug-acceptance, provider-only-debug-host) were
@@ -81,6 +82,7 @@ router-clock = { workspace = true, features = ["test-support"], optional = true 
 runtime-primitives = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.150", optional = true }
+fleet-contracts = { workspace = true, optional = true }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }
 codex-native-integration.workspace = true
 codex-router-host = { path = "../codex-router-host", version = "0.1.148" }

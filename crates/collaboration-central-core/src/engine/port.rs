@@ -1,10 +1,10 @@
 //! The engine's only view of the runtime that hosts it (P3, module direction):
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
-use super::legacy_units::LegacyUnitOutcome;
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::CentralObservation;
+use fleet_contracts::LegacyUnitOutcome;
 use fleet_runtime::{DueBatchState, TurnGuard};
 use fleet_runtime_ports::CentralStore;
 use std::future::Future;
@@ -37,7 +37,7 @@ pub(crate) trait EngineHost: Send + Sync {
     #[cfg(feature = "test-support")]
     fn pauses(&self) -> &fleet_runtime::PausePoints;
     #[cfg(feature = "test-support")]
-    fn count_legacy_invocation(&self, count: &dyn Fn(&mut LegacyUnitInvocations));
+    fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations));
 }
 
 /// The engine bound to one host. Every engine operation is a method here, so
@@ -67,17 +67,4 @@ impl<'a, R: EngineHost> Engine<'a, R> {
     pub(crate) fn pauses(&self) -> &'a fleet_runtime::PausePoints {
         self.0.pauses()
     }
-}
-
-/// Test-support counts of whole notice-unit runs (V2 control gate).
-#[cfg(feature = "test-support")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct LegacyUnitInvocations {
-    /// The due batch ran the notice-window unit.
-    pub windows: u64,
-    /// The due batch ran the workspace-drain unit.
-    pub drains: u64,
-    /// A request-triggered drain of one workspace ran (P5 change 5).
-    pub request_drains: u64,
 }

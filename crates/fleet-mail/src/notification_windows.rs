@@ -1,11 +1,12 @@
 //! Recipient windows collate source-owned activity across workspace boundaries.
-use crate::engine::legacy_units::LegacyUnitOutcome;
+use crate::CentralMail;
 use crate::{
-    WorkspaceRuntime,
     central_mail_store::{self, timestamp},
-    guarded_statements::exact,
+    exact,
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_contracts::LegacyUnitOutcome;
+use fleet_contracts::{AlarmRecompute, EngineAttemptControl};
 use fleet_runtime_ports::guarded_statements::{any, text};
 use fleet_runtime_ports::stored_values::column;
 use fleet_runtime_ports::stored_values::json;
@@ -28,12 +29,14 @@ pub(crate) fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T,
 }
 pub(crate) fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFailure> {
     let time: Timestamp = parse(value, field)?;
-    if !crate::central_mail_time::supported(time) {
+    if !fleet_contracts::timer_schedule::supported(time) {
         return Err(corrupt(field));
     }
     Ok(time)
 }
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    CentralMail<'_, Host, Stores, Control>
+{
     pub(crate) async fn notice_due(
         &self,
         recipient: &ActorIdentityId,
@@ -66,7 +69,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         decision_at: Timestamp,
         cadence: NoticeCadence,
     ) -> Result<Timestamp, StoreFailure> {
-        crate::central_mail_time::aligned_strictly_after(decision_at, cadence.seconds())
+        fleet_contracts::timer_schedule::aligned_strictly_after(decision_at, cadence.seconds())
             .ok_or_else(|| corrupt("notification_windows.due_at"))
     }
     pub(crate) async fn notification_windows(
@@ -80,7 +83,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 "notification_windows.first_activity_at",
             )?;
             let due = parse_time(string(&rows, row, "due_at")?, "notification_windows.due_at")?;
-            if !crate::central_mail_time::on_grid(due) {
+            if !fleet_contracts::timer_schedule::on_grid(due) {
                 return Err(corrupt("notification_windows.due_at"));
             }
             let recipient = parse(
@@ -138,7 +141,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let mut items = Vec::new();
         for (workspace, changes) in grouped {
             let ids: Vec<_> = changes.iter().map(|(id, _)| id).collect();
-            let rows=self.fleet_runtime.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
+            let rows=self.runtime.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
             if rows.rows.len() != changes.len() {
                 return Err(corrupt("notification_window_items.change_id").into());
             }
@@ -204,7 +207,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             .statement_host()
             .read(crate::central_mail_records::notice_messages())
             .await?;
-        crate::central_mail_records::decode_messages(&rows)?;
+        fleet_contracts::central_mail_rows::decode_messages(&rows)?;
         let recipient = recipient.map_or(SqlValue::Null, text);
         // Apply each cancellation against the transaction's current body. Two source
         // cancellations in one drain must never restore each other's removed items.

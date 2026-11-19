@@ -1,0 +1,29 @@
+[package]
+name = "fleet-mail"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Central mail, timers, notice windows and workspace drain planning"
+
+[lints]
+workspace = true
+
+[features]
+test-support = ["fleet-runtime/test-support"]
+
+[dependencies]
+agent-automation = { path = "../agent-automation", version = "0.1.149" }
+central-engine-model.workspace = true
+central-storage.workspace = true
+chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
+fleet-contracts.workspace = true
+fleet-runtime.workspace = true
+fleet-runtime-ports.workspace = true
+fleet-workspace-access.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
+workspace-ids.workspace = true
+workspace-model.workspace = true

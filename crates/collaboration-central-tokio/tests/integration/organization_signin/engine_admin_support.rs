@@ -124,7 +124,7 @@ impl EngineOrg {
             .alarm()
             .map(|time| time.unix_millis())
     }
-    pub async fn invocations(&self) -> collaboration_central_core::LegacyUnitInvocations {
+    pub async fn invocations(&self) -> fleet_runtime::LegacyUnitInvocations {
         self.runtime().await.legacy_unit_invocations()
     }
     pub async fn request(

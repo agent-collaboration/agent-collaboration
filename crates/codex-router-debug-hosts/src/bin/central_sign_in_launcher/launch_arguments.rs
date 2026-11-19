@@ -1,6 +1,7 @@
 //! The historical ten flags and their CENTRAL_LAUNCHER_<FLAG> fallbacks.
 use super::launcher_failure::{LauncherFailure, LauncherResult};
-use collaboration_central_core::{MAX_ALARM_UNIX_MILLIS, SignInTrustSettings};
+use collaboration_central_core::SignInTrustSettings;
+use fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS;
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::SyncTime;
 use std::{collections::BTreeMap, path::PathBuf};

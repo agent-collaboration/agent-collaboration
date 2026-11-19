@@ -1,25 +1,16 @@
+use super::attempt_records::StoredAttempt;
+use super::attempt_statements::write_attempt;
+use super::attempt_store::load_attempt;
+use super::effects::{ApplyFailure, classify_batch};
 use super::port::{Engine, EngineHost};
-use super::{
-    attempt_records::{EngineSubject, StoredAttempt},
-    attempt_statements::write_attempt,
-    attempt_store::load_attempt,
-    effects::{ApplyFailure, classify_batch},
-    store_adapter::SubjectVersion,
-};
 use central_engine_model::{
-    FailureRecord, FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
+    FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
 };
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_contracts::FailureOutcome;
+use fleet_contracts::{EngineSubject, SubjectVersion};
 use fleet_runtime_ports::CentralStore as _;
 use workspace_model::WorkspaceId;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum FailureOutcome {
-    Recorded(FailureRecord),
-    Superseded,
-    Uncertain,
-    StoreDown(StoreFailure),
-}
 
 impl<R: EngineHost> Engine<'_, R> {
     pub(crate) fn observe_engine_store_down(&self, subject: &EngineSubject, failure: StoreFailure) {

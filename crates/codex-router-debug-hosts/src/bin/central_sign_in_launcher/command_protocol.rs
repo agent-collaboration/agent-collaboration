@@ -1,8 +1,8 @@
 //! Closed fixture commands and answers; observations leave only as returned IPC.
 use super::launcher_failure::{LauncherFailure, LauncherResult};
-use collaboration_central_core::MAX_ALARM_UNIX_MILLIS;
 use collaboration_central_core::signin_test_observation::SignInObservation;
 use collaboration_central_tokio::TokioWorkspaceHost;
+use fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS;
 use fleet_identity_protocol::OrganizationId;
 use router_clock::ManualClock;
 use runtime_primitives::{Clock, SyncTime};

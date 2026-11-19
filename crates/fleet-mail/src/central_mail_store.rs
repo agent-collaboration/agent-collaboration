@@ -1,16 +1,16 @@
 //! Central-owned statement construction and validated mail rows.
-use crate::WorkspaceRuntime;
-pub(crate) use crate::central_mail_rows::{applied, encode, insert_message, timestamp};
-use central_storage::{AlarmUpdate, Statement, StoreFailure};
+use crate::CentralMail;
+use central_storage::{Statement, StoreFailure};
+pub(crate) use fleet_contracts::central_mail_rows::{applied, encode, insert_message, timestamp};
+use fleet_contracts::{AlarmRecompute, EngineAttemptControl};
 use fleet_runtime_ports::guarded_statements::text;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, SessionAddress, Timestamp};
-pub(crate) fn alarm_update() -> AlarmUpdate {
-    crate::engine::query_registry::alarm_update()
-}
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    CentralMail<'_, Host, Stores, Control>
+{
     pub(crate) fn prepare_message_record(
         &self,
         sender: mail::MessageSender,
@@ -20,7 +20,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         now: Timestamp,
     ) -> Result<mail::MessageRecord, StoreFailure> {
         Ok(mail::MessageRecord {
-            message_id: self.fleet_runtime.mint()?,
+            message_id: self.runtime.mint()?,
             sender,
             target,
             body,

@@ -9,7 +9,7 @@ use workspace_ids::{AutomationId, WakeId};
 use workspace_model::central_mail as mail;
 use workspace_model::{PostText, SessionAddress, Timestamp};
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct WakeRow {
+pub struct WakeRow {
     pub id: WakeId,
     pub target: SessionAddress,
     pub due: Timestamp,
@@ -17,7 +17,7 @@ pub(crate) struct WakeRow {
     pub state: mail::WakeState,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct AutomationRow {
+pub struct AutomationRow {
     pub id: AutomationId,
     pub target: SessionAddress,
     pub timing: TimingRule,
@@ -30,7 +30,7 @@ pub(crate) struct AutomationRow {
 }
 fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFailure> {
     let time: Timestamp = parse(value, field)?;
-    if !crate::central_mail_time::supported(time) {
+    if !crate::timer_schedule::supported(time) {
         return Err(corrupt(field));
     }
     Ok(time)
@@ -38,7 +38,7 @@ fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFailure> {
 fn parse<T: std::str::FromStr>(value: &str, column: &str) -> Result<T, StoreFailure> {
     value.parse().map_err(|_| corrupt(column))
 }
-pub(crate) fn decode_wakes(rows: &ReadOutcome) -> Result<Vec<WakeRow>, StoreFailure> {
+pub fn decode_wakes(rows: &ReadOutcome) -> Result<Vec<WakeRow>, StoreFailure> {
     rows.rows
         .iter()
         .map(|row| {
@@ -49,10 +49,9 @@ pub(crate) fn decode_wakes(rows: &ReadOutcome) -> Result<Vec<WakeRow>, StoreFail
                     let due = parse_time(string(rows, row, "due_at")?, "wakes.due_at")?;
                     let created_at =
                         parse_time(string(rows, row, "created_at")?, "wakes.created_at")?;
-                    let expiry = crate::central_mail_time::lifetime_end(created_at)
+                    let expiry = crate::timer_schedule::lifetime_end(created_at)
                         .ok_or_else(|| corrupt("wakes.created_at"))?;
-                    if !crate::central_mail_time::on_grid(due) || due <= created_at || due > expiry
-                    {
+                    if !crate::timer_schedule::on_grid(due) || due <= created_at || due > expiry {
                         return Err(corrupt("wakes.due_at"));
                     }
                     due
@@ -80,7 +79,7 @@ fn optional_time(
         _ => Err(corrupt(column)),
     }
 }
-pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow>, StoreFailure> {
+pub fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow>, StoreFailure> {
     rows.rows
         .iter()
         .map(|row| {
@@ -108,16 +107,16 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
             let expires_at =
                 parse_time(string(rows, row, "expires_at")?, "automations.expires_at")?;
             let admission = parse_time(string(rows, row, "created_at")?, "automations.created_at")?;
-            let expected_expiry = crate::central_mail_time::lifetime_end(admission)
+            let expected_expiry = crate::timer_schedule::lifetime_end(admission)
                 .ok_or_else(|| corrupt("automations.created_at"))?;
             if expires_at != expected_expiry {
                 return Err(corrupt("automations.expires_at"));
             }
-            if crate::central_mail_time::aligned_at_or_after(admission, 300) != Some(anchor) {
+            if crate::timer_schedule::aligned_at_or_after(admission, 300) != Some(anchor) {
                 return Err(corrupt("automations.anchor_at"));
             }
             if due.is_some_and(|due| {
-                !crate::central_mail_time::on_grid(due) || due > expires_at || due < anchor
+                !crate::timer_schedule::on_grid(due) || due > expires_at || due < anchor
             }) {
                 return Err(corrupt("automations.next_due_at"));
             }
@@ -129,7 +128,7 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
                         *seconds >= 300
                             && *seconds <= 604_800
                             && *seconds % 300 == 0
-                            && crate::central_mail_time::first_due(&timing, admission)
+                            && crate::timer_schedule::first_due(&timing, admission)
                                 .map_err(|_| corrupt("automations.timing_rule"))?
                                 == Some(due)
                     }

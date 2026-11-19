@@ -34,7 +34,8 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         seed: SeedProbe,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::{central_mail_store::timestamp, guarded_statements::exact};
+        use crate::guarded_statements::exact;
+        use fleet_contracts::central_mail_rows::timestamp;
         use fleet_runtime_ports::guarded_statements::{any, text};
         use fleet_runtime_ports::workspace_decode_error::corrupt;
         if !self.alarm_organization_is_provisioned().await? {

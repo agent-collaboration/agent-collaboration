@@ -14,7 +14,10 @@ workspace = true
 axum = { workspace = true, features = ["http1", "tokio", "json"] }
 base64 = "0.22.1"
 central-storage.workspace = true
+central-engine-model.workspace = true
+chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.156" }
+fleet-contracts.workspace = true
 fleet-runtime = { workspace = true, features = ["test-support"] }
 fleet-runtime-ports.workspace = true
 fleet-store-sqlx.workspace = true
@@ -24,9 +27,13 @@ sha2.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 workspace-ids.workspace = true
+workspace-model.workspace = true
 
 [dev-dependencies]
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
+fleet-mail.workspace = true
+fleet-storage-schema.workspace = true
+fleet-workspace-directory.workspace = true
 
 [[test]]
 name = "integration"

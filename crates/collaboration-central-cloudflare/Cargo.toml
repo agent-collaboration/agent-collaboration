@@ -52,6 +52,7 @@ web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "Su
 js-sys = "=0.3.106"
 
 [dev-dependencies]
+fleet-mail.workspace = true
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.150" }
 fleet-runtime-test-support.workspace = true
 router-clock = {path="../router-clock",version="0.1.150",features=["test-support"]}

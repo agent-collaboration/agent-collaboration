@@ -12,7 +12,7 @@ workspace = true
 [features]
 conformance = []
 # Test seams (pause points, the storage conformance schema); never in a production build.
-test-support = ["sqlx-core/migrate", "fleet-runtime/test-support", "fleet-storage-schema/test-support", "fleet-workspace-requests/test-support"]
+test-support = ["sqlx-core/migrate", "fleet-runtime/test-support", "fleet-storage-schema/test-support", "fleet-workspace-requests/test-support", "fleet-mail/test-support"]
 
 [dependencies]
 central-storage.workspace = true
@@ -27,6 +27,7 @@ axum = { workspace = true, features = ["json", "query"] }
 http.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-contracts.workspace = true
+fleet-mail.workspace = true
 fleet-runtime.workspace = true
 fleet-workspace-access.workspace = true
 fleet-workspace-directory.workspace = true

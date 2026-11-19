@@ -1,5 +1,7 @@
 //! Mail drain operations invoked while applying workspace requests.
-use central_storage::StoreFailure;
+use crate::LegacyUnitOutcome;
+use central_engine_model::EngineTime;
+use central_storage::{GuardedStatement, StoreFailure};
 use std::future::Future;
 use workspace_model::{Timestamp, WorkspaceId};
 
@@ -14,4 +16,16 @@ pub trait WorkspaceDrain: Send + Sync {
         &self,
         workspace: &WorkspaceId,
     ) -> impl Future<Output = Result<(), StoreFailure>> + Send;
+}
+
+pub trait DueWorkSource: Send + Sync {
+    fn plan_due_windows(
+        &self,
+        now: EngineTime,
+    ) -> impl Future<Output = Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome>> + Send;
+
+    fn drain_due_workspaces(
+        &self,
+        now: EngineTime,
+    ) -> impl Future<Output = Result<usize, LegacyUnitOutcome>> + Send;
 }

@@ -28,6 +28,8 @@ pub struct FleetRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     #[cfg(feature = "test-support")]
     pauses: crate::PausePoints,
     #[cfg(feature = "test-support")]
+    legacy_invocations: std::sync::Mutex<crate::LegacyUnitInvocations>,
+    #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
 }
 
@@ -55,6 +57,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
             central_turn: CentralTurn::default(),
             #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
+            #[cfg(feature = "test-support")]
+            legacy_invocations: Default::default(),
             #[cfg(feature = "test-support")]
             lost_answers: Default::default(),
         }
@@ -169,5 +173,21 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(request)
+    }
+    #[cfg(feature = "test-support")]
+    pub fn legacy_unit_invocations(&self) -> crate::LegacyUnitInvocations {
+        *self
+            .legacy_invocations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+    #[cfg(feature = "test-support")]
+    pub fn count_legacy_invocation(&self, count: impl FnOnce(&mut crate::LegacyUnitInvocations)) {
+        count(
+            &mut self
+                .legacy_invocations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
     }
 }

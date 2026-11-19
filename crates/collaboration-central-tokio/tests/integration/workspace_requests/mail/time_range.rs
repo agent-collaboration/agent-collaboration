@@ -74,7 +74,7 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
     new_session.session_id = "range-new-caller".to_owned().try_into().unwrap();
     new_caller.caller = workspace_model::Caller::Session(new_session);
     let invalid = chrono::DateTime::from_timestamp_millis(
-        collaboration_central_core::MAX_ALARM_UNIX_MILLIS + 1000,
+        fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS + 1000,
     )
     .unwrap();
     let result = fixture
@@ -103,9 +103,10 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
             .rows,
         before
     );
-    let ceiling =
-        chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
-            .unwrap();
+    let ceiling = chrono::DateTime::from_timestamp_millis(
+        fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS,
+    )
+    .unwrap();
     let last_grid =
         chrono::DateTime::from_timestamp(ceiling.timestamp().div_euclid(300) * 300, 0).unwrap();
     for (number, due, requirement) in [

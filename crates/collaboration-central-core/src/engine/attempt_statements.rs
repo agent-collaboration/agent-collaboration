@@ -1,7 +1,9 @@
-use super::attempt_records::{AttemptGuard, EngineSubject, failure_detail};
-use crate::{central_mail_rows::timestamp, guarded_statements::exact};
+use super::attempt_records::failure_detail;
+use crate::guarded_statements::exact;
 use central_engine_model::{AttemptState, FailureRecord};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_contracts::central_mail_rows::timestamp;
+use fleet_contracts::{AttemptGuard, EngineSubject};
 use fleet_runtime_ports::guarded_statements::{any, text};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 

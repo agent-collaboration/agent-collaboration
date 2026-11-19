@@ -16,7 +16,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let result = fleet_workspace_requests::execute(
             &self.fleet_runtime,
             &self.workspace_directory(),
-            self,
+            &self.mail(),
             caller,
             request,
         )

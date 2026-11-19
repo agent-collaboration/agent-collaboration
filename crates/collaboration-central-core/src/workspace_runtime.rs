@@ -5,9 +5,6 @@ use std::sync::Arc;
 #[cfg(feature = "test-support")]
 use workspace_model::WorkspaceId;
 
-#[cfg(feature = "test-support")]
-pub use crate::engine::port::LegacyUnitInvocations;
-
 /// One organization's request runtime. Machine grant lifetime is fixed by central
 /// policy and has no public configuration API.
 pub struct WorkspaceRuntime<Host: CentralStore, Stores: WorkspaceStores> {
@@ -20,8 +17,6 @@ pub struct WorkspaceRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     failed_alarms: tokio::sync::watch::Sender<Vec<String>>,
     #[cfg(feature = "test-support")]
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
-    #[cfg(feature = "test-support")]
-    pub(crate) legacy_invocations: std::sync::Mutex<LegacyUnitInvocations>,
 }
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub fn from_runtime(
@@ -46,8 +41,6 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             completed_alarms: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             failed_alarms: tokio::sync::watch::channel(Vec::new()).0,
-            #[cfg(feature = "test-support")]
-            legacy_invocations: Default::default(),
             #[cfg(feature = "test-support")]
             lost_provisioning_reply: Default::default(),
         })
@@ -93,20 +86,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         self.fleet_runtime.due_batches().claimed_starts()
     }
     #[cfg(feature = "test-support")]
-    pub fn legacy_unit_invocations(&self) -> LegacyUnitInvocations {
-        *self
-            .legacy_invocations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-    #[cfg(feature = "test-support")]
-    pub(crate) fn count_legacy_invocation(&self, count: impl FnOnce(&mut LegacyUnitInvocations)) {
-        count(
-            &mut self
-                .legacy_invocations
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        );
+    pub fn legacy_unit_invocations(&self) -> fleet_runtime::LegacyUnitInvocations {
+        self.fleet_runtime.legacy_unit_invocations()
     }
     #[cfg(feature = "test-support")]
     pub fn alarm_completion_count(&self) -> u64 {

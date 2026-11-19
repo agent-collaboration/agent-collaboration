@@ -1,9 +1,8 @@
 //! Position-ordered activity joins one central recipient window across workspaces.
-use crate::{
-    WorkspaceRuntime,
-    notification_windows::{NotificationWindow, window_statements},
-};
+use crate::CentralMail;
+use crate::notification_windows::{NotificationWindow, window_statements};
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_contracts::{AlarmRecompute, EngineAttemptControl};
 use fleet_runtime_ports::guarded_statements::{any, text};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
@@ -19,14 +18,16 @@ pub struct DrainResult {
     pub window_items_added: usize,
     pub skipped_recipients: usize,
 }
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    CentralMail<'_, Host, Stores, Control>
+{
     pub(crate) async fn plan_workspace_notices(
         &self,
         workspace: &m::WorkspaceId,
         rows: &WorkspaceRows,
         now: m::Timestamp,
     ) -> Result<(Vec<GuardedStatement>, DrainResult), StoreFailure> {
-        crate::central_mail_records::decode_messages(
+        fleet_contracts::central_mail_rows::decode_messages(
             &self
                 .statement_host()
                 .read(crate::central_mail_records::notice_messages())
@@ -93,7 +94,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         .created_at
                         .ok_or_else(|| corrupt("changes.created_at"))?;
                     let window = NotificationWindow {
-                        id: self.fleet_runtime.mint()?,
+                        id: self.runtime.mint()?,
                         recipient: recipient.clone(),
                         first,
                         due: self.notice_due(&recipient, now).await?,
@@ -106,7 +107,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     workspace,
                     change.thread_id.as_ref(),
                     &change.change_id,
-                    self.fleet_runtime.mint()?,
+                    self.runtime.mint()?,
                     now,
                 ));
                 result.window_items_added += 1;

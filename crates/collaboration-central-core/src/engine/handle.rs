@@ -1,14 +1,12 @@
+use super::effects::{ApplyFailure, EffectHandler, ObjectHostEffects};
 use super::port::{Engine, EngineHost};
-use super::{
-    effects::{ApplyFailure, EffectHandler, ObjectHostEffects},
-    failures::FailureOutcome,
-    source::{EventSource, SourcePolicy},
-    store_adapter::{LoadFailure, StoreAdapter, Versioned},
-};
+use super::source::{EventSource, SourcePolicy};
+use super::store_adapter::{LoadFailure, StoreAdapter, Versioned};
 use central_engine_model::{
     Context, InstanceKey, ItemFailureClass, Machine, RefusalTag, TransitionError,
 };
 use central_storage::StoreFailure;
+use fleet_contracts::FailureOutcome;
 
 pub(crate) enum HandleOutcome<State, Error> {
     Done(State),

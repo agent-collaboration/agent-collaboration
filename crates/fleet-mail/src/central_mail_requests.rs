@@ -1,35 +1,19 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
-use crate::{
-    WorkspaceRuntime,
-    central_mail_store::{self, insert_message},
-};
+use crate::CentralMail;
+use crate::central_mail_store::{self, insert_message};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
 use fleet_contracts::WorkspaceCaller;
+use fleet_contracts::{AlarmRecompute, EngineAttemptControl};
 use fleet_runtime_ports::stored_values::json;
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 use workspace_model::central_mail as mail;
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub async fn request_central(
-        &self,
-        caller: &WorkspaceCaller,
-        request: mail::CentralMailRequest,
-    ) -> Result<mail::CentralMailResult, StoreFailure> {
-        // The request path answers as on main; the due batch that follows checks
-        // the organization stamp once for this event before any unit (P3).
-        let result = self.execute_central(caller, request).await;
-        // Due work and publication cannot replace this event's durable answer.
-        let _ = self.after_event().await;
-        match result {
-            Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
-                Ok(mail::CentralMailResult::CentralUnavailable)
-            }
-            result => result,
-        }
-    }
-    async fn execute_central(
+impl<Host: CentralStore, Stores: WorkspaceStores, Control: EngineAttemptControl + AlarmRecompute>
+    CentralMail<'_, Host, Stores, Control>
+{
+    pub async fn execute_central(
         &self,
         caller: &WorkspaceCaller,
         request: mail::CentralMailRequest,
@@ -51,8 +35,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             },
         };
         let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
-        let _turn = self.fleet_runtime.take_central_turn().await;
-        let now = self.fleet_runtime.now()?;
+        let _turn = self.runtime.take_central_turn().await;
+        let now = self.runtime.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let rows = self
             .statement_host()
@@ -83,7 +67,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     self.statement_host()
                         .run_batch(StatementBatch {
                             statements: vec![],
-                            alarm: central_mail_store::alarm_update(),
+                            alarm: self.engine.alarm_update(),
                         })
                         .await?,
                 )
@@ -123,7 +107,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     .filter(|window| window.recipient == actor)
                 {
                     let due = Self::notice_due_with_cadence(now, *cadence)?;
-                    statements.push(crate::guarded_statements::exact(
+                    statements.push(crate::exact(
                         "UPDATE notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![
                             fleet_runtime_ports::guarded_statements::text(
@@ -179,7 +163,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
-                alarm: central_mail_store::alarm_update(),
+                alarm: self.engine.alarm_update(),
             })
             .await
         {
@@ -192,7 +176,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             Err(error) => return Err(error),
         }
         #[cfg(feature = "test-support")]
-        if self.fleet_runtime.take_lost_reply(&request.request_id) {
+        if self.runtime.take_lost_reply(&request.request_id) {
             return Ok(Result::OutcomeUnknown);
         }
         Ok(answer)

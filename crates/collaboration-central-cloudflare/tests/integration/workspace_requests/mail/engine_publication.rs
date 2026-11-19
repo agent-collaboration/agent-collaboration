@@ -78,7 +78,7 @@ async fn an_unpublishable_alarm_rolls_back_rows_and_keeps_the_real_deadline() {
         .unwrap();
     assert!(prior.is_some());
     fixture.clock.0.store(
-        collaboration_central_core::MAX_ALARM_UNIX_MILLIS,
+        fleet_contracts::timer_schedule::MAX_ALARM_UNIX_MILLIS,
         Ordering::SeqCst,
     );
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
