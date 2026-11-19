@@ -57,7 +57,11 @@ const LAYER_POLICY: [(&str, &[&str]); 28] = [
     ("collaboration-contracts", &[]),
     (
         "acp-client-runtime",
-        &["state-machine-core", "provider-session-machines"],
+        &[
+            "state-machine-core",
+            "provider-session-machines",
+            "router-clock",
+        ],
     ),
     (
         "collaboration-runtime",
