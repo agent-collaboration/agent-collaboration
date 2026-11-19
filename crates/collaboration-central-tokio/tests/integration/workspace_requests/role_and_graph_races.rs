@@ -128,7 +128,7 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT ended_at FROM project_roles WHERE project_id=? AND role='lead'",
+                sql: "SELECT ended_at FROM workspace_project_roles WHERE project_id=? AND role='lead'",
                 args: vec![text(project)],
             },
         )
@@ -189,7 +189,7 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
         );
     }
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
+    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM workspace_deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
     assert_eq!(
         rows.rows
             .iter()

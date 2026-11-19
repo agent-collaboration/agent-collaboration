@@ -128,10 +128,10 @@ async fn real_public_tcp_excludes_all_private_paths_before_and_after_owner_crede
     f.ready().await?;
     let before = f.snapshot().await?;
     let rows_to_watch = [
-        "SELECT * FROM workspaces ORDER BY workspace_id",
-        "SELECT * FROM request_log ORDER BY request_id",
-        "SELECT * FROM organization_used_requests ORDER BY id",
-        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+        "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+        "SELECT * FROM runtime_request_log ORDER BY request_id",
+        "SELECT * FROM admin_used_requests ORDER BY id",
+        "SELECT * FROM access_actor_identities ORDER BY actor_identity_id",
     ];
     let mut before_admission = Vec::new();
     for sql in rows_to_watch {

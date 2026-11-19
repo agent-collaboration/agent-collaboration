@@ -48,7 +48,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     _ => None,
                 };
                 if member.is_some() || matches!(event, m::ChangeEvent::Resolved) {
-                    statements.push(any("DELETE FROM notification_window_items WHERE workspace_id=? AND thread_id=? AND (? IS NULL OR window_id IN (SELECT window_id FROM notification_windows WHERE recipient_actor=?))",vec![text(workspace),text(thread),member.map_or(central_storage::SqlValue::Null,text),member.map_or(central_storage::SqlValue::Null,text)]));
+                    statements.push(any("DELETE FROM mail_notification_window_items WHERE workspace_id=? AND thread_id=? AND (? IS NULL OR window_id IN (SELECT window_id FROM mail_notification_windows WHERE recipient_actor=?))",vec![text(workspace),text(thread),member.map_or(central_storage::SqlValue::Null,text),member.map_or(central_storage::SqlValue::Null,text)]));
                     statements.extend(
                         self.cancel_queued_notices(workspace, thread, member, now)
                             .await?,
@@ -62,7 +62,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     .threads
                     .iter()
                     .find(|row| &row.thread_id == thread)
-                    .ok_or_else(|| corrupt("changes.thread_id"))?;
+                    .ok_or_else(|| corrupt("workspace_changes.thread_id"))?;
                 if current.state == m::ThreadState::Resolved {
                     continue;
                 }
@@ -90,7 +90,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 } else {
                     let first = change
                         .created_at
-                        .ok_or_else(|| corrupt("changes.created_at"))?;
+                        .ok_or_else(|| corrupt("workspace_changes.created_at"))?;
                     let window = NotificationWindow {
                         id: self.mint()?,
                         recipient: recipient.clone(),
@@ -111,7 +111,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 result.window_items_added += 1;
             }
         }
-        statements.push(any("DELETE FROM notification_windows WHERE NOT EXISTS(SELECT 1 FROM notification_window_items i WHERE i.window_id=notification_windows.window_id)",vec![]));
+        statements.push(any("DELETE FROM mail_notification_windows WHERE NOT EXISTS(SELECT 1 FROM mail_notification_window_items i WHERE i.window_id=mail_notification_windows.window_id)",vec![]));
         Ok((statements, result))
     }
 }
@@ -127,13 +127,13 @@ fn targeted_recipients(
         }
         m::ChangeEvent::Posted => {
             let m::ItemRef::Post(id) = &change.item else {
-                return Err(corrupt("changes.item_kind"));
+                return Err(corrupt("workspace_changes.item_kind"));
             };
             let post = rows
                 .posts
                 .iter()
                 .find(|post| &post.post_id == id)
-                .ok_or_else(|| corrupt("changes.item_id"))?;
+                .ok_or_else(|| corrupt("workspace_changes.item_id"))?;
             for addressee in &post.addressees {
                 match addressee {
                     m::Addressee::Actor { actor_identity_id } => {

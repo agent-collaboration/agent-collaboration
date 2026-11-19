@@ -5,7 +5,7 @@ use central_storage::{
     BatchOutcome, ConstraintKind, GuardedStatement, RowExpectation, SqlValue, Statement,
 };
 
-const INSERT: &str = "INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+const INSERT: &str = "INSERT INTO login_machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 fn row(
     pk: u16,
     request: String,
@@ -80,7 +80,7 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
                 .0,
             200
         );
-        let machine_rows = f.rows("SELECT machine_id FROM machines").await?;
+        let machine_rows = f.rows("SELECT machine_id FROM login_machines").await?;
         let machine = match machine_rows.first().and_then(|row| row.first()) {
             Some(SqlValue::Text(value)) => value.clone(),
             _ => return Err("real machine owner absent".into()),
@@ -158,7 +158,8 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
             "{constraint}: valid control inserted no row"
         );
         assert_eq!(
-            f.rows("SELECT COUNT(*) FROM machine_approvals").await?,
+            f.rows("SELECT COUNT(*) FROM login_machine_approvals")
+                .await?,
             vec![vec![number(2)?]]
         );
         f.close().await?;

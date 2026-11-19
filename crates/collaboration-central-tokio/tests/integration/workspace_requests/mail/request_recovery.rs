@@ -138,7 +138,7 @@ async fn warm_generic_create_and_replay_each_rearm_a_physically_missing_alarm() 
     };
     let created_id = workspace.workspace_id.clone();
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
-    let before=rows(&f,"SELECT (SELECT COUNT(*) FROM workspaces WHERE workspace_id=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",vec![text(&created_id),text(id::<m::RequestId>(8610))]).await?.rows;
+    let before=rows(&f,"SELECT (SELECT COUNT(*) FROM directory_workspaces WHERE workspace_id=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)",vec![text(&created_id),text(id::<m::RequestId>(8610))]).await?.rows;
     assert_eq!(
         before,
         vec![vec![
@@ -154,7 +154,7 @@ async fn warm_generic_create_and_replay_each_rearm_a_physically_missing_alarm() 
     );
     assert_eq!(f.host.request(&f.caller, request).await?, first);
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
-    assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM workspaces WHERE workspace_id=?),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",vec![text(&created_id),text(id::<m::RequestId>(8610))]).await?.rows,before);
+    assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM directory_workspaces WHERE workspace_id=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)",vec![text(&created_id),text(id::<m::RequestId>(8610))]).await?.rows,before);
     let after = f.host.central(f.caller.organization_id()).await?;
     assert!(
         Arc::ptr_eq(&runtime, &after),
@@ -192,7 +192,7 @@ async fn completion_rearm_failure_preserves_committed_create_and_exact_replay() 
     );
     let before = rows(
         &f,
-        "SELECT workspace_id,name,state,created_at,updated_at FROM workspaces WHERE workspace_id=?",
+        "SELECT workspace_id,name,state,created_at,updated_at FROM directory_workspaces WHERE workspace_id=?",
         vec![text(&created_id)],
     )
     .await?
@@ -208,10 +208,10 @@ async fn completion_rearm_failure_preserves_committed_create_and_exact_replay() 
         "cached success must survive another completion-only rearm failure"
     );
     assert_eq!(alarm(&f).await?, None);
-    assert_eq!(rows(&f,"SELECT workspace_id,name,state,created_at,updated_at FROM workspaces WHERE workspace_id=?",vec![text(&created_id)]).await?.rows,before);
+    assert_eq!(rows(&f,"SELECT workspace_id,name,state,created_at,updated_at FROM directory_workspaces WHERE workspace_id=?",vec![text(&created_id)]).await?.rows,before);
     let ledger = rows(
         &f,
-        "SELECT COUNT(*) FROM request_log WHERE request_id=?",
+        "SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?",
         vec![text(id::<m::RequestId>(8621))],
     )
     .await?

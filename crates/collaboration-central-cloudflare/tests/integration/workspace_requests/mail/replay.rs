@@ -36,7 +36,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
         matches!(&first, Result::Done(Answer::AutomationSet { next_due_at: Some(due), state: AutomationState::Active, .. }) if *due == last_grid - chrono::Duration::days(7) + chrono::Duration::seconds(600))
     );
     let snapshot = || Statement {
-        sql: "SELECT (SELECT json_group_array(json_array(automation_id,anchor_at,next_due_at,state,created_at,updated_at)) FROM automations),(SELECT json_group_array(json_array(request_id,answer,created_at,updated_at)) FROM request_log),(SELECT COUNT(*) FROM actor_identities),(SELECT COUNT(*) FROM messages)",
+        sql: "SELECT (SELECT json_group_array(json_array(automation_id,anchor_at,next_due_at,state,created_at,updated_at)) FROM automation_schedules),(SELECT json_group_array(json_array(request_id,answer,created_at,updated_at)) FROM runtime_request_log),(SELECT COUNT(*) FROM access_actor_identities),(SELECT COUNT(*) FROM mail_messages)",
         args: vec![],
     };
     let before = runtime

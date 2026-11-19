@@ -14,6 +14,18 @@ pub struct CentralMailRequest {
     pub operation: CentralMailOperation,
 }
 
+/// The agent's send request. The Router stamps the wire operation from its outbox.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SendMessageRequest {
+    pub to: SessionRef,
+    pub body: PostText,
+    pub delivery: MessageDelivery,
+    #[serde(deserialize_with = "present_option")]
+    #[schemars(required, schema_with = "Option::<MessageId>::json_schema")]
+    pub reply_to: Option<MessageId>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",

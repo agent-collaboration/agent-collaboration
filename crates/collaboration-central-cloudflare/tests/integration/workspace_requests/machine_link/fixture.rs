@@ -155,7 +155,7 @@ impl Fixture {
         let result = self.runtime().run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql:"UPDATE machines SET allowed_workspaces=?,updated_at=? WHERE machine_id=?",
+                    sql:"UPDATE login_machines SET allowed_workspaces=?,updated_at=? WHERE machine_id=?",
                     args:vec![SqlValue::Text(serde_json::to_string(&vec![workspace])?),SqlValue::Text(timestamp.to_rfc3339()),SqlValue::Text(INSTALLATION.into())],
                 }, expect:RowExpectation::Exactly(1),
             }], alarm:AlarmUpdate::Unchanged,

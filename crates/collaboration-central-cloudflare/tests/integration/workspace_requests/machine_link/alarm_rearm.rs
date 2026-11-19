@@ -52,7 +52,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
     let runtime = fixture.runtime();
     let rows = runtime
         .read(Statement {
-            sql: "SELECT wake_id,due_at,text,state FROM wakes ORDER BY wake_id",
+            sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
             args: vec![],
         })
         .await?;
@@ -125,7 +125,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
         .await?;
     let after_rows = runtime
         .read(Statement {
-            sql: "SELECT wake_id,due_at,text,state FROM wakes ORDER BY wake_id",
+            sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
             args: vec![],
         })
         .await?;
@@ -189,7 +189,7 @@ async fn unavailable_rearm_journey(fixture: &Fixture) -> Result<()> {
     let runtime = fixture.runtime();
     let rows = runtime
         .read(Statement {
-            sql: "SELECT wake_id,due_at,text,state FROM wakes ORDER BY wake_id",
+            sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
             args: vec![],
         })
         .await?;
@@ -286,7 +286,7 @@ async fn unavailable_rearm_journey(fixture: &Fixture) -> Result<()> {
     }
     let after_rows = runtime
         .read(Statement {
-            sql: "SELECT wake_id,due_at,text,state FROM wakes ORDER BY wake_id",
+            sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
             args: vec![],
         })
         .await?;

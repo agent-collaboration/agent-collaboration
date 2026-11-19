@@ -403,7 +403,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         .result,
         m::WorkspaceResult::OutcomeUnknown
     );
-    let applied=runtime.inspect_workspace(&workspace,Statement{sql:"SELECT state,(SELECT json_extract(answer,'$.kind') FROM request_log WHERE request_id=?) AS stored_answer FROM threads WHERE thread_id=?",args:vec![text(id::<m::RequestId>(32)),text(&thread_id)]}).await.unwrap();
+    let applied=runtime.inspect_workspace(&workspace,Statement{sql:"SELECT state,(SELECT json_extract(answer,'$.kind') FROM workspace_request_log WHERE request_id=?) AS stored_answer FROM workspace_threads WHERE thread_id=?",args:vec![text(id::<m::RequestId>(32)),text(&thread_id)]}).await.unwrap();
     assert_eq!(
         applied.rows,
         vec![vec![text("resolved"), text("done")]],

@@ -6,9 +6,9 @@ use serde_json::{Value, json};
 
 async fn snapshot(f: &Fixture) -> (ReadOutcome, ReadOutcome) {
     (
-        f.read("SELECT * FROM organization_identity ORDER BY id")
+        f.read("SELECT * FROM signin_organization_identity ORDER BY id")
             .await,
-        f.read("SELECT * FROM organization_change_records ORDER BY id")
+        f.read("SELECT * FROM signin_change_records ORDER BY id")
             .await,
     )
 }

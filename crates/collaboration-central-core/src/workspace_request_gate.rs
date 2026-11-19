@@ -108,7 +108,11 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         let logged = runtime
             .read_workspace(
                 workspace,
-                crate::workspace_request_log::lookup(request_id, &cutoff),
+                crate::workspace_request_log::lookup(
+                    crate::workspace_request_log::RequestLogStore::Workspace,
+                    request_id,
+                    &cutoff,
+                ),
             )
             .await?;
         if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
@@ -198,6 +202,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     batch
         .statements
         .extend(crate::workspace_request_log::retain(
+            crate::workspace_request_log::RequestLogStore::Workspace,
             request_id,
             &actor,
             &digest,

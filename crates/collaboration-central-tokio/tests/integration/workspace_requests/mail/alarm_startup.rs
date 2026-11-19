@@ -67,7 +67,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         let healthy_before = healthy_runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id",
+                sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
             })
             .await?
@@ -79,7 +79,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         let applied = bad_runtime.statement_host().run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'second retained identity',0,0)",
+                    sql: "INSERT INTO signin_organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'second retained identity',0,0)",
                     args: vec![text(id::<m::WorkspaceId>(8502))],
                 },
                 expect: RowExpectation::Exactly(1),
@@ -89,14 +89,14 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         assert!(matches!(applied, BatchOutcome::Applied { .. }));
         let expected = StoreFailure::Corrupt {
             reason: CorruptReason::BadValue {
-                column: "organization_identity.id".to_owned(),
+                column: "signin_organization_identity.id".to_owned(),
             },
         };
         assert_eq!(bad_runtime.recompute_alarm().await, Err(expected.clone()));
         let bad_before = bad_runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id",
+                sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
             })
             .await?
@@ -125,7 +125,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
             healthy_runtime
                 .statement_host()
                 .read(Statement {
-                    sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id",
+                    sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                     args: vec![],
                 })
                 .await?
@@ -158,7 +158,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         assert!(matches!(answer, MailResult::Done(Answer::Queued { .. })));
         assert_eq!(reopened.request_central(&healthy, request).await?, answer);
         let rows = healthy_runtime.statement_host().read(Statement {
-            sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",
+            sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)",
             args: vec![text(id::<m::RequestId>(8503))],
         }).await?.rows;
         assert_eq!(
@@ -186,7 +186,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         assert!(
             bad_store
                 .read(Statement {
-                    sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id",
+                    sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                     args: vec![],
                 })
                 .await?

@@ -48,7 +48,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         runtime
             .statement_host()
             .read(Statement {
-                sql: "SELECT state FROM messages WHERE message_id=?",
+                sql: "SELECT state FROM mail_messages WHERE message_id=?",
                 args: vec![text(&message_id)],
             })
             .await
@@ -81,7 +81,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     let notices = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT sender,target_session,body,cancel_due_at FROM messages WHERE message_kind='deliveryOutcome'",
+            sql: "SELECT sender,target_session,body,cancel_due_at FROM mail_messages WHERE message_kind='deliveryOutcome'",
             args: vec![],
         })
         .await

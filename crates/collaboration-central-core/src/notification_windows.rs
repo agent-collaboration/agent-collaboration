@@ -44,18 +44,18 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let rows = self
             .host
             .read(Statement {
-                sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
+                sql: "SELECT notice_cadence FROM access_actor_identities WHERE actor_identity_id=?",
                 args: vec![text(recipient)],
             })
             .await?;
         let row = rows
             .rows
             .first()
-            .ok_or_else(|| corrupt("notification_windows.recipient_actor"))?;
+            .ok_or_else(|| corrupt("mail_notification_windows.recipient_actor"))?;
         let cadence: NoticeCadence = serde_json::from_value(serde_json::Value::String(
             string(&rows, row, "notice_cadence")?.to_owned(),
         ))
-        .map_err(|_| corrupt("actor_identities.notice_cadence"))?;
+        .map_err(|_| corrupt("access_actor_identities.notice_cadence"))?;
         Ok(cadence)
     }
     pub(crate) fn notice_due_with_cadence(
@@ -63,34 +63,37 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         cadence: NoticeCadence,
     ) -> Result<Timestamp, StoreFailure> {
         crate::central_mail_time::aligned_strictly_after(decision_at, cadence.seconds())
-            .ok_or_else(|| corrupt("notification_windows.due_at"))
+            .ok_or_else(|| corrupt("mail_notification_windows.due_at"))
     }
     pub(crate) async fn notification_windows(
         &self,
     ) -> Result<Vec<NotificationWindow>, StoreFailure> {
-        let rows=self.host.read(Statement{sql:"SELECT window_id,recipient_actor,first_activity_at,due_at FROM notification_windows",args:vec![]}).await?;
+        let rows=self.host.read(Statement{sql:"SELECT window_id,recipient_actor,first_activity_at,due_at FROM mail_notification_windows",args:vec![]}).await?;
         let mut windows = Vec::new();
         for row in &rows.rows {
             let first = parse_time(
                 string(&rows, row, "first_activity_at")?,
-                "notification_windows.first_activity_at",
+                "mail_notification_windows.first_activity_at",
             )?;
-            let due = parse_time(string(&rows, row, "due_at")?, "notification_windows.due_at")?;
+            let due = parse_time(
+                string(&rows, row, "due_at")?,
+                "mail_notification_windows.due_at",
+            )?;
             if !crate::central_mail_time::on_grid(due) {
-                return Err(corrupt("notification_windows.due_at"));
+                return Err(corrupt("mail_notification_windows.due_at"));
             }
             let recipient = parse(
                 string(&rows, row, "recipient_actor")?,
-                "notification_windows.recipient_actor",
+                "mail_notification_windows.recipient_actor",
             )?;
             let cadence = self.notice_cadence(&recipient).await?;
             if due.timestamp().rem_euclid(i64::from(cadence.seconds())) != 0 {
-                return Err(corrupt("notification_windows.due_at"));
+                return Err(corrupt("mail_notification_windows.due_at"));
             }
             windows.push(NotificationWindow {
                 id: parse(
                     string(&rows, row, "window_id")?,
-                    "notification_windows.window_id",
+                    "mail_notification_windows.window_id",
                 )?,
                 recipient,
                 first,
@@ -103,7 +106,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         &self,
         window: &NotificationWindowId,
     ) -> Result<Vec<mail::NoticeItem>, LegacyUnitOutcome> {
-        let rows=self.host.read(Statement{sql:"SELECT window_item_id,workspace_id,thread_id,change_id FROM notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",args:vec![text(window)]}).await?;
+        let rows=self.host.read(Statement{sql:"SELECT window_item_id,workspace_id,thread_id,change_id FROM mail_notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",args:vec![text(window)]}).await?;
         let mut grouped: std::collections::BTreeMap<
             WorkspaceId,
             Vec<(ChangeId, Option<ThreadId>)>,
@@ -111,41 +114,43 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         for row in &rows.rows {
             let _: NotificationWindowItemId = parse(
                 string(&rows, row, "window_item_id")?,
-                "notification_window_items.window_item_id",
+                "mail_notification_window_items.window_item_id",
             )?;
             let workspace = parse(
                 string(&rows, row, "workspace_id")?,
-                "notification_window_items.workspace_id",
+                "mail_notification_window_items.workspace_id",
             )?;
             let thread = match column(&rows, row, "thread_id")? {
                 SqlValue::Null => None,
-                SqlValue::Text(value) => Some(parse(value, "notification_window_items.thread_id")?),
-                _ => return Err(corrupt("notification_window_items.thread_id").into()),
+                SqlValue::Text(value) => {
+                    Some(parse(value, "mail_notification_window_items.thread_id")?)
+                }
+                _ => return Err(corrupt("mail_notification_window_items.thread_id").into()),
             };
             let change = parse(
                 string(&rows, row, "change_id")?,
-                "notification_window_items.change_id",
+                "mail_notification_window_items.change_id",
             )?;
             grouped.entry(workspace).or_default().push((change, thread));
         }
         if grouped.is_empty() {
-            return Err(corrupt("notification_window_items").into());
+            return Err(corrupt("mail_notification_window_items").into());
         }
         let mut items = Vec::new();
         for (workspace, changes) in grouped {
             let ids: Vec<_> = changes.iter().map(|(id, _)| id).collect();
-            let rows=self.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
+            let rows=self.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM workspace_changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
             if rows.rows.len() != changes.len() {
-                return Err(corrupt("notification_window_items.change_id").into());
+                return Err(corrupt("mail_notification_window_items.change_id").into());
             }
             for row in &rows.rows {
                 let stored: crate::workspace_change_records::StoredChange =
-                    json(string(&rows, row, "payload")?, "changes")?;
+                    json(string(&rows, row, "payload")?, "workspace_changes")?;
                 if !changes
                     .iter()
                     .any(|(id, thread)| id == &stored.change_id && thread == &stored.thread_id)
                 {
-                    return Err(corrupt("notification_window_items.change_id").into());
+                    return Err(corrupt("mail_notification_window_items.change_id").into());
                 }
                 items.push(notice_item(&stored, &workspace)?);
             }
@@ -168,7 +173,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             if let Some(target) = self.route_notice_actor(&window.recipient).await? {
                 let first = items
                     .first()
-                    .ok_or_else(|| corrupt("notification_window_items"))?;
+                    .ok_or_else(|| corrupt("mail_notification_window_items"))?;
                 let source = mail::NoticeSource {
                     change_id: first.change_id.clone(),
                     recipient_actor: window.recipient.clone(),
@@ -206,7 +211,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         // cancellations in one drain must never restore each other's removed items.
         Ok(vec![
             any(
-                "UPDATE messages SET body=json_set(body,'$.items',json(COALESCE((SELECT json_group_array(json(value)) FROM json_each(json_extract(messages.body,'$.items')) WHERE json_extract(value,'$.workspaceId')!=? OR json_extract(value,'$.threadId') IS NOT ?),'[]'))),updated_at=? WHERE message_kind='notice' AND state='queued' AND (? IS NULL OR recipient_actor=?)",
+                "UPDATE mail_messages SET body=json_set(body,'$.items',json(COALESCE((SELECT json_group_array(json(value)) FROM json_each(json_extract(mail_messages.body,'$.items')) WHERE json_extract(value,'$.workspaceId')!=? OR json_extract(value,'$.threadId') IS NOT ?),'[]'))),updated_at=? WHERE message_kind='notice' AND state='queued' AND (? IS NULL OR recipient_actor=?)",
                 vec![
                     text(workspace),
                     text(thread),
@@ -216,7 +221,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 ],
             ),
             any(
-                "UPDATE messages SET state=CASE WHEN json_array_length(body,'$.items')=0 THEN 'cancelled' ELSE state END,source_change_id=COALESCE(json_extract(body,'$.items[0].changeId'),source_change_id),source_workspace_id=COALESCE(json_extract(body,'$.items[0].workspaceId'),source_workspace_id),source_thread_id=CASE WHEN json_array_length(body,'$.items')=0 THEN source_thread_id ELSE json_extract(body,'$.items[0].threadId') END WHERE message_kind='notice' AND state='queued'",
+                "UPDATE mail_messages SET state=CASE WHEN json_array_length(body,'$.items')=0 THEN 'cancelled' ELSE state END,source_change_id=COALESCE(json_extract(body,'$.items[0].changeId'),source_change_id),source_workspace_id=COALESCE(json_extract(body,'$.items[0].workspaceId'),source_workspace_id),source_thread_id=CASE WHEN json_array_length(body,'$.items')=0 THEN source_thread_id ELSE json_extract(body,'$.items[0].threadId') END WHERE message_kind='notice' AND state='queued'",
                 vec![],
             ),
         ])
@@ -240,11 +245,11 @@ pub(crate) fn notice_item(
 pub(crate) fn delete_window(id: &NotificationWindowId) -> Vec<GuardedStatement> {
     vec![
         any(
-            "DELETE FROM notification_window_items WHERE window_id=?",
+            "DELETE FROM mail_notification_window_items WHERE window_id=?",
             vec![text(id)],
         ),
         exact(
-            "DELETE FROM notification_windows WHERE window_id=?",
+            "DELETE FROM mail_notification_windows WHERE window_id=?",
             vec![text(id)],
         ),
     ]
@@ -259,7 +264,7 @@ pub(crate) fn window_statements(
 ) -> Vec<GuardedStatement> {
     vec![
         any(
-            "INSERT INTO notification_windows(window_id,recipient_actor,first_activity_at,due_at,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(recipient_actor) DO NOTHING",
+            "INSERT INTO mail_notification_windows(window_id,recipient_actor,first_activity_at,due_at,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(recipient_actor) DO NOTHING",
             vec![
                 text(&window.id),
                 text(&window.recipient),
@@ -270,7 +275,7 @@ pub(crate) fn window_statements(
             ],
         ),
         any(
-            "INSERT INTO notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(window_id,workspace_id,change_id) DO NOTHING",
+            "INSERT INTO mail_notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(window_id,workspace_id,change_id) DO NOTHING",
             vec![
                 text(item),
                 text(&window.id),

@@ -25,6 +25,34 @@ flowchart TB
   seam -- "SendMessage, ThreadPost" --> ob --> link
 </script></ex-mermaid>
 
+<h2 id="draft4">0 · Draft 4 (2026-11-18): what changed, and it governs where it differs below</h2>
+<p>These revisions answer the independent extra-high design review (findings 1, 2 and 4) and the owner's identity decisions of 2026-11-18.</p>
+<ol>
+<li><strong>Identity (owner):</strong> one id, <code>MachineId</code> (UUIDv7, the Router install's id, in the Router database). The one address is <code>SessionRef { machine_id, session_id }</code>, with no endpoint. <code>Caller::Session(SessionRef)</code>. <code>SessionAddress</code>, "installation", "peer" and "service id" are gone. Agents' tools take <code>{ type: "local", sessionId }</code> or <code>{ type: "machine", machineId, sessionId }</code>.</li>
+<li><strong>Three status questions, three answers.</strong> Earlier drafts blurred them together.
+  <ul>
+  <li><code>request_status(caller, request)</code>, "what happened to MY request": the local outbox row if there is one (<code>InOutbox</code>, <code>Sent</code>, <code>Answered(reply)</code>, <code>Ended(reason)</code>). If there's no local row, the Router asks <strong>central's request log</strong> (a caller-scoped replay read; central keeps 24 h), which answers <code>Answered</code>, <code>Refused</code> or <code>NotFound</code>. The read names its store: <code>RequestStatusQuery { request_id, scope: Organization | Workspace(WorkspaceId) }</code>. The scope comes from the original request (the outbox row's payload, or <code>Uncertain { request, scope }</code> for an immediate write). An unreadable outbox or an unreachable central answers <code>StatusUnavailable</code>, never <code>NotFound</code>. <code>NotFound</code> means no matching record for this caller in the selected store.</li>
+  <li><code>message_status(message_id)</code>, "what happened to a message I sent": central's <code>ListQuery::MessageStatus</code> (sender-scoped) → <code>Queued | Delivered | Failed{reason} | Cancelled{reason}</code>. It's renamed from "MessageDelivery", which already names the delivery mode.</li>
+  <li><strong>Late outcomes</strong> arrive as <code>DeliveryOutcome</code> carrying <code>sender_request_id</code>, so a sender whose first reply was lost still matches the outcome to its request.</li>
+  </ul></li>
+<li><strong>Submit results are truthful.</strong> <code>OutboxUnavailable</code> only when nothing can have been stored, because the store failed before its transaction began. An insert error whose commit is unknown answers <code>Uncertain { request }</code>, and the agent reconciles with <code>request_status</code>.</li>
+<li><strong>"Delivered" means durably in the recipient Router's inbox</strong> (owner 297: "it goes to b's inbox"; 112: "just trust and move on").
+  <ul>
+  <li>The recipient Router sends <code>Ack(Accepted)</code> when its <strong>inbox insert commits</strong>, not after it hands the message to the agent.</li>
+  <li>The handoff to the agent session is Router-local and runs from the inbox, retried until done. It's exactly-once per message id (the local push key is the message id). The real provider handoff and per-session receipts belong to the Router retrofit (PR 4 lane).</li>
+  <li><code>Ack(Refused{reason})</code> only for a permanent local refusal: the session id is unknown to this Router, or more than one endpoint matches it.</li>
+  </ul></li>
+<li><strong>Lost Acks.</strong>
+  <ul>
+  <li>On every Welcome, the recipient Router re-sends the Ack for every inbox row it accepted in the last 24 h, and central treats repeats as no-ops. So a lost post-write Ack is recovered at the next reconnect.</li>
+  <li>A late <code>Accepted</code> after a cancel becomes <code>DeliveredAfterAll</code>.</li>
+  <li>An Ack for a message not addressed to the connection's machine is ignored, with a typed, logged reason.</li>
+  <li>Both hosts' link handlers must receive Acks: the Cloudflare handler that closes the socket on an Ack is a defect to fix.</li>
+  </ul></li>
+<li><strong>Storage:</strong> the outbox, the inbox and the identity all live in <code>machine_local.sqlite</code>. Nothing is in <code>provider_operations.sqlite</code>.</li>
+<li><strong>Outbox end:</strong> both outbox kinds end at 15 minutes (<code>NotSentWithin15Minutes</code> / <code>NotConfirmedWithin15Minutes</code>), and there's no 24 h outbox end (owner 11-18). Withdrawing an item is not in v1.</li>
+</ol>
+
 <h2 id="types">1 · The call</h2>
 <pre><code>// central-link-client (Lead A). Async; one injected clock.
 pub trait LinkCalls {
@@ -51,8 +79,8 @@ pub enum RequestStatus {
     NotFound,
     InOutbox { flush_at: SyncTime },
     Sent,                           // flushed; central's answer not yet in
-    Answered(ReplyPayload),         // central's whole answer, domain refusals included
-    Refused(LinkAdmissionRefusal),  // central never admitted the frame (token, enrollment, request id conflict)
+    Accepted(ReplyPayload),
+    Refused(RefusalReason),
 }
 
 pub enum SubmitRefusal {
@@ -93,15 +121,15 @@ pub enum SubmitRefusal {
 <ul>
 <li><strong>Outbox kinds:</strong> they stay in the outbox and send after reconnect. That's what the outbox is for (owner 11-15: "covers network drops").</li>
 <li><strong>Immediate kinds:</strong> <code>Refused(CentralUnavailable)</code> at once. Nothing is queued, so a command never runs late without the agent knowing. Lead A's call, recorded.</li>
-<li><strong>Outbox expiry is OPEN in the owner's record</strong> ("not expired properly", 11-15). Until he decides, nothing expires. A full HTML decision page on it goes to the Chief.</li>
-<li><strong>Withdrawing an outbox item before it flushes</strong> isn't in v1. The owner's record doesn't decide it, so it goes on the same decision page as expiry.</li>
+<li><strong>Outbox expiry:</strong> see section 0, item 7.</li>
+
 </ul>
 
 <h2 id="split">5 · Who builds what</h2>
 <ul>
-<li><strong>Lead A, below the seam:</strong> <code>LinkCalls</code>; the outbox table and flush loop; <code>machine_local.sqlite</code> (the outbox and the inbox; <code>provider_operations.sqlite</code> holds provider operations only, owner record:210); the link client wiring; the central link server; the inbox, Welcome resend and de-duplication; the batch frame (at most 64 writes per flush).</li>
+<li><strong>Lead A, below the seam:</strong> <code>LinkCalls</code>; the outbox table and flush loop; <code>machine_local.sqlite</code> (outbox, inbox, identity); the link client wiring; the central link server; the inbox, Welcome resend and de-duplication; the batch frame (at most 64 writes per flush).</li>
 <li><strong>CLI+MCP Lead, above the seam:</strong> every tool and command mapped to a <code>RequestPayload</code> or deleted; the agent-facing wording; the status tool.</li>
-<li><strong>Stand-ins while both build:</strong> Lead A ships a <code>FakeLinkCalls</code> (dev-only) that honours this contract, including <code>InOutbox</code> and later <code>Answered</code>. The tools build against it until the real link lands.</li>
+<li><strong>Stand-ins while both build:</strong> Lead A ships a <code>FakeLinkCalls</code> (dev-only) that honours this contract, including <code>InOutbox</code> and later <code>Accepted</code>. The tools build against it until the real link lands.</li>
 <li><strong>A seam change</strong> needs both Leads' agreement, posted on the shared thread.</li>
 </ul>
 </ex-document>

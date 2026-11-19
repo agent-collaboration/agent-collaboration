@@ -34,8 +34,8 @@ async fn raw_read(f: &Fixture, sql: &'static str) -> ReadOutcome {
     result.unwrap()
 }
 async fn snapshot(f: &Fixture) -> (ReadOutcome, ReadOutcome) {
-    (raw_read(f,"SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id").await,
-     raw_read(f,"SELECT * FROM organization_change_records ORDER BY id").await)
+    (raw_read(f,"SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id").await,
+     raw_read(f,"SELECT * FROM signin_change_records ORDER BY id").await)
 }
 async fn schema(f: &Fixture, sql: &'static str) {
     let outcome = f
@@ -61,7 +61,7 @@ async fn cold_tampered_stamp_refuses_valid_setup_and_keeps_an_unaffected_org_rea
     assert_eq!(f.provision().await.0, 200);
     assert_eq!(f.post(PROVISION,&json!({"organizationId":B,"organizationStatement":signed::stamp(B,NOW_SECONDS).unwrap()})).await.0,200);
     f.execute(
-        "UPDATE organization_identity SET organization_statement=?",
+        "UPDATE signin_organization_identity SET organization_statement=?",
         vec![SqlValue::Text(signed::tamper_signature(&original).unwrap())],
     )
     .await;
@@ -96,7 +96,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(f.provision().await.0, 200);
     let start = NOW_SECONDS * 1000;
     assert_eq!(
-        f.read("SELECT created_at,updated_at FROM organization_change_records ORDER BY id")
+        f.read("SELECT created_at,updated_at FROM signin_change_records ORDER BY id")
             .await
             .rows,
         vec![vec![
@@ -126,7 +126,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         b_runtime
             .read(Statement {
-                sql: "SELECT created_at,updated_at FROM organization_change_records ORDER BY id",
+                sql: "SELECT created_at,updated_at FROM signin_change_records ORDER BY id",
                 args: vec![]
             })
             .await
@@ -156,7 +156,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
         "the live org accepts a renewal issued after t0"
     );
     assert_eq!(
-        f.read("SELECT created_at,updated_at FROM organization_change_records ORDER BY id")
+        f.read("SELECT created_at,updated_at FROM signin_change_records ORDER BY id")
             .await
             .rows,
         vec![
@@ -172,7 +172,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
         "A has exactly its start record and moved-time renewal record"
     );
     assert_eq!(
-        f.read("SELECT created_at,updated_at FROM organization_identity")
+        f.read("SELECT created_at,updated_at FROM signin_organization_identity")
             .await
             .rows,
         vec![vec![
@@ -183,7 +183,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     assert_eq!(
         b_runtime
             .read(Statement {
-                sql: "SELECT created_at,updated_at FROM organization_identity",
+                sql: "SELECT created_at,updated_at FROM signin_organization_identity",
                 args: vec![]
             })
             .await
@@ -320,7 +320,7 @@ async fn cold_retired_key_refuses_exact_retry_and_new_org_but_preserves_the_rema
     assert_eq!((after.0.rows.len(), after.1.rows.len()), (1, 1));
     let c: OrganizationId = C.to_owned().try_into().unwrap();
     let c_runtime = f.host.central(&c).await;
-    let c_rows=c_runtime.read(Statement{sql:"SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records)",args:vec![]}).await.unwrap();
+    let c_rows=c_runtime.read(Statement{sql:"SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records)",args:vec![]}).await.unwrap();
     assert_eq!(
         c_rows.rows,
         vec![vec![
@@ -342,7 +342,7 @@ async fn cold_foreign_compact_with_the_correct_row_id_refuses_every_stamped_call
             args: vec![],
         },
         Statement {
-            sql: "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
+            sql: "SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id",
             args: vec![SqlValue::Text(ORG.into())],
         },
     ] {
@@ -356,17 +356,17 @@ async fn cold_foreign_compact_with_the_correct_row_id_refuses_every_stamped_call
     let foreign = signed::stamp(B, NOW_SECONDS).unwrap();
     // The routing-bug shape keeps row.id=A and changes ONLY the compact to B.
     f.execute(
-        "UPDATE organization_identity SET organization_statement=?",
+        "UPDATE signin_organization_identity SET organization_statement=?",
         vec![SqlValue::Text(foreign.clone())],
     )
     .await;
     let before = snapshot(&f).await;
     let counts_before = f.counts().await;
     let workspaces_before = f
-        .read("SELECT * FROM workspaces ORDER BY workspace_id")
+        .read("SELECT * FROM directory_workspaces ORDER BY workspace_id")
         .await;
     let requests_before = f
-        .read("SELECT * FROM request_log ORDER BY request_id")
+        .read("SELECT * FROM runtime_request_log ORDER BY request_id")
         .await;
     assert!(
         before.0.rows.first().and_then(|row| row.first()) == Some(&SqlValue::Text(ORG.into())),
@@ -407,13 +407,13 @@ async fn cold_foreign_compact_with_the_correct_row_id_refuses_every_stamped_call
         "refused stamped calls must add no floor or person-proof marker"
     );
     assert!(
-        f.read("SELECT * FROM workspaces ORDER BY workspace_id")
+        f.read("SELECT * FROM directory_workspaces ORDER BY workspace_id")
             .await
             == workspaces_before,
         "refused private calls must leave every owning workspace row unchanged"
     );
     assert!(
-        f.read("SELECT * FROM request_log ORDER BY request_id")
+        f.read("SELECT * FROM runtime_request_log ORDER BY request_id")
             .await
             == requests_before,
         "refused private calls must leave the owning request log unchanged"
@@ -430,15 +430,15 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
         (200, json!({"acknowledgedRevision":3}))
     );
     let before = f
-        .read("SELECT * FROM organization_authorization_floors ORDER BY id")
+        .read("SELECT * FROM signin_authorization_floors ORDER BY id")
         .await;
     assert!(
-        f.read("SELECT id FROM person_organization_authorization_floors")
+        f.read("SELECT id FROM signin_person_authorization_floors")
             .await
             .rows
             .is_empty()
     );
-    schema(&f,"CREATE TRIGGER fail_first_person_floor BEFORE INSERT ON person_organization_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture first person floor failure'); END").await;
+    schema(&f,"CREATE TRIGGER fail_first_person_floor BEFORE INSERT ON signin_person_authorization_floors BEGIN SELECT RAISE(ABORT,'fixture first person floor failure'); END").await;
     let request = person_revision(4, "active");
     let failed = reqwest::Client::builder()
         .no_proxy()
@@ -463,14 +463,14 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
     );
     assert!(failed.bytes().await.unwrap().is_empty());
     assert!(
-        f.read("SELECT id FROM person_organization_authorization_floors")
+        f.read("SELECT id FROM signin_person_authorization_floors")
             .await
             .rows
             .is_empty(),
         "the faulted apply left no person floor behind"
     );
     assert_eq!(
-        f.read("SELECT * FROM organization_authorization_floors ORDER BY id")
+        f.read("SELECT * FROM signin_authorization_floors ORDER BY id")
             .await,
         before,
         "the acknowledged organization floor remains unchanged"
@@ -480,9 +480,9 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
         f.post(REVISIONS, &request).await,
         (200, json!({"acknowledgedRevision":4}))
     );
-    assert_eq!(f.read("SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM organization_authorization_floors o,person_organization_authorization_floors p").await.rows,vec![vec![SqlValue::Integer(3.try_into().unwrap()),SqlValue::Text("active".into()),SqlValue::Integer(4.try_into().unwrap()),SqlValue::Text(signed::OWNER_SUBJECT.into())]]);
+    assert_eq!(f.read("SELECT o.minimum_revision,o.state,p.minimum_revision,p.id FROM signin_authorization_floors o,person_organization_authorization_floors p").await.rows,vec![vec![SqlValue::Integer(3.try_into().unwrap()),SqlValue::Text("active".into()),SqlValue::Integer(4.try_into().unwrap()),SqlValue::Text(signed::OWNER_SUBJECT.into())]]);
     let person_before = f
-        .read("SELECT * FROM person_organization_authorization_floors ORDER BY id")
+        .read("SELECT * FROM signin_person_authorization_floors ORDER BY id")
         .await;
     let mut changed_subject = person_revision(5, "active");
     signed::set_claim(
@@ -497,12 +497,12 @@ async fn first_person_floor_insert_failure_never_acknowledges_or_changes_the_org
         "a changed subject for the same org/person is refused"
     );
     assert_eq!(
-        f.read("SELECT * FROM person_organization_authorization_floors ORDER BY id")
+        f.read("SELECT * FROM signin_person_authorization_floors ORDER BY id")
             .await,
         person_before
     );
     assert_eq!(
-        f.read("SELECT * FROM organization_authorization_floors ORDER BY id")
+        f.read("SELECT * FROM signin_authorization_floors ORDER BY id")
             .await,
         before
     );

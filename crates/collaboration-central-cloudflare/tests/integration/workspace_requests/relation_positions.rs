@@ -91,7 +91,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
             .inspect_workspace(
                 &f.workspace,
                 Statement {
-                    sql: "SELECT item_kind,thread_id FROM changes WHERE item_id=?",
+                    sql: "SELECT item_kind,thread_id FROM workspace_changes WHERE item_id=?",
                     args: vec![text(id)],
                 },
             )
@@ -109,7 +109,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT change_kind,thread_id FROM changes WHERE item_id=? AND change_kind='removed'",
+                sql: "SELECT change_kind,thread_id FROM workspace_changes WHERE item_id=? AND change_kind='removed'",
                 args: vec![text(first_reference.kind_and_id().1)],
             },
         )

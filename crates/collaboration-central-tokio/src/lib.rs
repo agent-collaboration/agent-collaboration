@@ -29,6 +29,10 @@ mod workspace_host;
 pub use workspace_host::{TokioWorkspaceHost, TokioWorkspaceStores};
 mod workspace_link;
 pub use workspace_link::WorkspaceLink;
+#[cfg(unix)]
+mod workspace_server;
+#[cfg(unix)]
+pub use workspace_server::{TokioWorkspaceServer, TokioWorkspaceServerError};
 mod platform;
 mod self_hosted_issuer;
 pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};

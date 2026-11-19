@@ -109,7 +109,7 @@ async fn history_scalar_must_be_present_and_boolean() {
         SqlValue::Integer(2_i64.try_into().unwrap()),
     ] {
         let host = ReadSequence(Mutex::new(vec![(
-            "SELECT EXISTS(SELECT 1 FROM machine_approvals) AS has_enrollment",
+            "SELECT EXISTS(SELECT 1 FROM login_machine_approvals) AS has_enrollment",
             row(vec![("has_enrollment", value)]),
         )]));
         assert!(

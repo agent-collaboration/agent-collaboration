@@ -60,7 +60,7 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
         .await
         .unwrap();
     let counts_query = || Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM wakes),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM actor_identities)",
+        sql: "SELECT (SELECT COUNT(*) FROM mail_messages),(SELECT COUNT(*) FROM automation_wakes),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM access_actor_identities)",
         args: vec![],
     };
     let before = runtime
@@ -169,7 +169,7 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state,due_at,(SELECT COUNT(*) FROM messages) FROM wakes",
+            sql: "SELECT state,due_at,(SELECT COUNT(*) FROM mail_messages) FROM automation_wakes",
             args: vec![],
         })
         .await
@@ -226,7 +226,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE wakes SET due_at='+10000-01-01T00:00:00Z' WHERE wake_id=?",
+                    sql: "UPDATE automation_wakes SET due_at='+10000-01-01T00:00:00Z' WHERE wake_id=?",
                     args: vec![text(&wake_id)],
                 },
                 expect: RowExpectation::Exactly(1),
@@ -241,7 +241,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
     // Isolation: that wake fails alone as CorruptRow (due_at); the alarm re-arms
     // on the next mark.
     runtime.after_event().await.unwrap();
-    let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind='wake_timer' AND subject_key=?", args: vec![text(&wake_id)] }).await.unwrap();
+    let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind='wake_timer' AND subject_key=?", args: vec![text(&wake_id)] }).await.unwrap();
     assert_eq!(record.rows.len(), 1);
     assert_eq!(
         &record.rows[0][..3],
@@ -252,12 +252,12 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         ]
     );
     assert!(
-        matches!(&record.rows[0][3], central_storage::SqlValue::Text(detail) if detail.contains("wakes.due_at"))
+        matches!(&record.rows[0][3], central_storage::SqlValue::Text(detail) if detail.contains("automation_wakes.due_at"))
     );
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state,due_at,(SELECT COUNT(*) FROM messages) FROM wakes WHERE wake_id=?",
+            sql: "SELECT state,due_at,(SELECT COUNT(*) FROM mail_messages) FROM automation_wakes WHERE wake_id=?",
             args: vec![text(wake_id)],
         })
         .await

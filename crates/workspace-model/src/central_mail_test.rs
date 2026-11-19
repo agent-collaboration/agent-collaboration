@@ -5,6 +5,31 @@ use super::{
 use serde_json::json;
 
 #[test]
+fn the_agent_send_request_leaves_the_wire_timestamp_to_the_router() {
+    let body = json!({
+        "to": {
+            "machineId": "019f0000-0000-7000-8000-000000000001",
+            "sessionId": "provider/opaque",
+        },
+        "body": "hello",
+        "delivery": "auto",
+        "replyTo": null,
+    });
+    let request: super::SendMessageRequest = serde_json::from_value(body.clone()).unwrap();
+    assert_eq!(serde_json::to_value(request).unwrap(), body);
+
+    let mut stamped = body.clone();
+    stamped["sentAt"] = json!("2030-01-01T00:00:00Z");
+    assert!(serde_json::from_value::<super::SendMessageRequest>(stamped.clone()).is_err());
+    stamped["kind"] = json!("sendMessage");
+    assert!(serde_json::from_value::<super::CentralMailOperation>(stamped).is_ok());
+
+    let mut unstamped = body;
+    unstamped["kind"] = json!("sendMessage");
+    assert!(serde_json::from_value::<super::CentralMailOperation>(unstamped).is_err());
+}
+
+#[test]
 fn request_round_trips_typed_timing_and_camel_case_fields() {
     let wire = json!({
         "requestId": "01890f3e-7b8c-7cc0-8000-000000000001",

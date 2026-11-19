@@ -134,7 +134,7 @@ async fn hibernation_journey(fixture: &Fixture) -> Result<HibernationReceipt> {
         .inspect_workspace(
             &workspace,
             Statement {
-                sql: "SELECT area_id,name FROM areas ORDER BY area_id",
+                sql: "SELECT area_id,name FROM workspace_areas ORDER BY area_id",
                 args: vec![],
             },
         )
@@ -337,7 +337,7 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
     if !fixture
         .runtime()
         .read(Statement {
-            sql: "SELECT workspace_id FROM workspaces",
+            sql: "SELECT workspace_id FROM directory_workspaces",
             args: vec![],
         })
         .await?
@@ -454,7 +454,7 @@ async fn denied_journey(fixture: &Fixture, change: AuthorityChange) -> Result<()
         .inspect_workspace(
             &workspace,
             Statement {
-                sql: "SELECT area_id,name FROM areas",
+                sql: "SELECT area_id,name FROM workspace_areas",
                 args: vec![],
             },
         )

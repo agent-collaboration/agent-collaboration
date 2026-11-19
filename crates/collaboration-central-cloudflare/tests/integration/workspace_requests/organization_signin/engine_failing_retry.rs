@@ -9,7 +9,7 @@ async fn corrupt_wake_failing_once(engine: &EngineOrg) -> (String, Time) {
     let wake = engine.wake(due, "broken target").await;
     engine
         .raw(
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
             vec![text(&wake)],
         )
         .await;
@@ -61,7 +61,7 @@ async fn a_restart_inside_the_look_ahead_does_not_retire_a_failing_wake_early() 
     let wake = engine.wake(due, "broken target").await;
     engine
         .raw(
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
             vec![text(&wake)],
         )
         .await;

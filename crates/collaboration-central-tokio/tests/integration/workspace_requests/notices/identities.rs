@@ -31,7 +31,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     ];
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let statements = identities.into_iter().map(|(actor, kind, identity)| GuardedStatement {
-        statement: Statement { sql: "INSERT INTO actor_identities(actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?)", args: vec![text(actor), text(kind), text(identity), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")] }, expect: RowExpectation::Exactly(1),
+        statement: Statement { sql: "INSERT INTO access_actor_identities(actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?)", args: vec![text(actor), text(kind), text(identity), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")] }, expect: RowExpectation::Exactly(1),
     }).collect();
     assert!(matches!(
         runtime
@@ -45,7 +45,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
         BatchOutcome::Applied { .. }
     ));
     for (number, actor) in [(7225, &person), (7226, &component)] {
-        f.workspace_batch("INSERT INTO thread_members(thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,'observer',1,NULL,?,?)", vec![text(id::<m::ThreadMemberId>(number)), text(&thread), text(actor), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]).await;
+        f.workspace_batch("INSERT INTO workspace_thread_members(thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,'observer',1,NULL,?,?)", vec![text(id::<m::ThreadMemberId>(number)), text(&thread), text(actor), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]).await;
     }
     let mut held = runtime
         .pause_points()
@@ -84,10 +84,10 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     assert_eq!(result.skipped_recipients, 2);
     assert_eq!(result.notices_queued, 0);
     assert_eq!(result.window_items_added, 1);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM notification_window_items WHERE thread_id=i.thread_id)", args: vec![text(&thread)] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM mail_notification_window_items WHERE thread_id=i.thread_id)", args: vec![text(&thread)] }).await.unwrap();
     assert_eq!(rows.rows, vec![vec![text(&agent)]]);
     let workspace_rows = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT c.position,m.actor_identity_id FROM changes c JOIN thread_members m ON m.thread_id=c.thread_id WHERE c.change_kind='posted' AND c.thread_id=? AND c.position=(SELECT MAX(position) FROM changes WHERE thread_id=c.thread_id AND change_kind='posted') AND m.actor_identity_id IN (?,?) AND m.left_at IS NULL AND m.notifications=1 ORDER BY m.actor_identity_id",
+        sql: "SELECT c.position,m.actor_identity_id FROM workspace_changes c JOIN workspace_thread_members m ON m.thread_id=c.thread_id WHERE c.change_kind='posted' AND c.thread_id=? AND c.position=(SELECT MAX(position) FROM workspace_changes WHERE thread_id=c.thread_id AND change_kind='posted') AND m.actor_identity_id IN (?,?) AND m.left_at IS NULL AND m.notifications=1 ORDER BY m.actor_identity_id",
         args: vec![text(&thread), text(&person), text(&component)],
     }).await.unwrap();
     assert_eq!(workspace_rows.rows.len(), 2);
@@ -97,7 +97,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     let cursor = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&f.workspace)],
         })
         .await

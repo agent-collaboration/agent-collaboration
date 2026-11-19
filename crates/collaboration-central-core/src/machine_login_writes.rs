@@ -31,7 +31,7 @@ pub(crate) fn statements(
     if !changes.is_empty()
         && let Some(before) = &machine
     {
-        statements.push(exact("UPDATE machines SET machine_id=machine_id WHERE machine_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)", vec![text(before.machine_id.as_str()),generation(before.generation.get())?,text(machine_state(before.state)),text(before.label.as_str()),encode(&before.allowed_workspaces,"machines.allowed_workspaces")?]));
+        statements.push(exact("UPDATE login_machines SET machine_id=machine_id WHERE machine_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)", vec![text(before.machine_id.as_str()),generation(before.generation.get())?,text(machine_state(before.state)),text(before.label.as_str()),encode(&before.allowed_workspaces,"login_machines.allowed_workspaces")?]));
     }
     for change in changes {
         match change {
@@ -42,9 +42,9 @@ pub(crate) fn statements(
             EnrollmentChange::InsertEnrollment(next) => {
                 let owner = machine
                     .as_ref()
-                    .ok_or_else(|| corrupt("machine_approvals.machine_id"))?;
+                    .ok_or_else(|| corrupt("login_machine_approvals.machine_id"))?;
                 if owner.machine_id != next.machine_id || owner.generation != next.base_generation {
-                    return Err(corrupt("machine_approvals.machine_id"));
+                    return Err(corrupt("login_machine_approvals.machine_id"));
                 }
                 statements.push(insert_enrollment(next, &at)?);
                 enrollments.insert(next.id.as_str().to_owned(), next.clone());
@@ -52,7 +52,7 @@ pub(crate) fn statements(
             EnrollmentChange::ReplaceEnrollment(next) => {
                 let before = enrollments
                     .get(next.id.as_str())
-                    .ok_or_else(|| corrupt("machine_approvals.approval_id"))?;
+                    .ok_or_else(|| corrupt("login_machine_approvals.approval_id"))?;
                 if let Some(guard) = time_guard(before, next, applying_ms)? {
                     statements.push(guard);
                 }
@@ -61,7 +61,7 @@ pub(crate) fn statements(
             }
             EnrollmentChange::Record(record) => {
                 if record.created_at_millis != applying_ms {
-                    return Err(corrupt("organization_change_records.created_at"));
+                    return Err(corrupt("signin_change_records.created_at"));
                 }
                 statements.push(crate::organization_change_rows::insert(record)?);
             }
@@ -77,8 +77,8 @@ fn integer(value: i64, field: &str) -> Result<SqlValue, StoreFailure> {
 }
 fn generation(value: u64) -> Result<SqlValue, StoreFailure> {
     integer(
-        i64::try_from(value).map_err(|_| corrupt("machines.enrollment_generation"))?,
-        "machines.enrollment_generation",
+        i64::try_from(value).map_err(|_| corrupt("login_machines.enrollment_generation"))?,
+        "login_machines.enrollment_generation",
     )
 }
 fn encode(value: &impl Serialize, field: &str) -> Result<SqlValue, StoreFailure> {
@@ -97,14 +97,17 @@ fn put_machine(
     next: &MachineRow,
     at: &str,
 ) -> Result<GuardedStatement, StoreFailure> {
-    let allowed = encode(&next.allowed_workspaces, "machines.allowed_workspaces")?;
+    let allowed = encode(
+        &next.allowed_workspaces,
+        "login_machines.allowed_workspaces",
+    )?;
     match before {
         None => {
             if next.generation.get() != 0 || next.state != MachineState::Revoked {
-                return Err(corrupt("machines.enrollment_generation"));
+                return Err(corrupt("login_machines.enrollment_generation"));
             }
             Ok(exact(
-                "INSERT INTO machines(machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO login_machines(machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
                 vec![
                     text(next.machine_id.as_str()),
                     text(next.label.as_str()),
@@ -118,15 +121,15 @@ fn put_machine(
         }
         Some(before) => {
             if before.machine_id != next.machine_id {
-                return Err(corrupt("machines.machine_id"));
+                return Err(corrupt("login_machines.machine_id"));
             }
             if next.generation != before.generation
                 && next.generation != before.generation.next()?
             {
-                return Err(corrupt("machines.enrollment_generation"));
+                return Err(corrupt("login_machines.enrollment_generation"));
             }
             Ok(exact(
-                "UPDATE machines SET label=?,state=?,allowed_workspaces=?,enrollment_generation=?,updated_at=? WHERE machine_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)",
+                "UPDATE login_machines SET label=?,state=?,allowed_workspaces=?,enrollment_generation=?,updated_at=? WHERE machine_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)",
                 vec![
                     text(next.label.as_str()),
                     text(machine_state(next.state)),
@@ -137,7 +140,10 @@ fn put_machine(
                     generation(before.generation.get())?,
                     text(machine_state(before.state)),
                     text(before.label.as_str()),
-                    encode(&before.allowed_workspaces, "machines.allowed_workspaces")?,
+                    encode(
+                        &before.allowed_workspaces,
+                        "login_machines.allowed_workspaces",
+                    )?,
                 ],
             ))
         }
@@ -154,7 +160,7 @@ struct EncodedState {
 fn state(enrollment: &StoredEnrollment) -> Result<EncodedState, StoreFailure> {
     let ended_at = enrollment
         .ended_at_ms
-        .map(|at| values::timestamp(at, "machine_approvals.ended_at"))
+        .map(|at| values::timestamp(at, "login_machine_approvals.ended_at"))
         .transpose()?;
     let (state, reason, client, last_grant) = match &enrollment.state {
         StoredEnrollmentState::Approved => ("approved", None, None, None),
@@ -168,7 +174,7 @@ fn state(enrollment: &StoredEnrollment) -> Result<EncodedState, StoreFailure> {
             Some(client_id.as_str().to_owned()),
             Some(values::seconds_timestamp(
                 *last_grant_at,
-                "machine_approvals.last_grant_at",
+                "login_machine_approvals.last_grant_at",
             )?),
         ),
         StoredEnrollmentState::Revoked { client_id, reason } => (
@@ -188,10 +194,10 @@ fn state(enrollment: &StoredEnrollment) -> Result<EncodedState, StoreFailure> {
         ),
     };
     if (state == "ended") != ended_at.is_some() {
-        return Err(corrupt("machine_approvals.ended_at"));
+        return Err(corrupt("login_machine_approvals.ended_at"));
     }
     if let Some(client) = &client {
-        values::private_id(client, "machine_approvals.machine_client_id")?;
+        values::private_id(client, "login_machine_approvals.machine_client_id")?;
     }
     Ok(EncodedState {
         state,
@@ -207,21 +213,24 @@ fn nullable(value: Option<impl ToString>) -> SqlValue {
 
 fn insert_enrollment(next: &StoredEnrollment, at: &str) -> Result<GuardedStatement, StoreFailure> {
     if next.state != StoredEnrollmentState::Approved {
-        return Err(corrupt("machine_approvals.state"));
+        return Err(corrupt("login_machine_approvals.state"));
     }
     for (value, field) in [
-        (next.id.as_str(), "machine_approvals.approval_id"),
-        (next.request_id.as_str(), "machine_approvals.request_id"),
+        (next.id.as_str(), "login_machine_approvals.approval_id"),
+        (
+            next.request_id.as_str(),
+            "login_machine_approvals.request_id",
+        ),
         (
             next.approved_by.as_str(),
-            "machine_approvals.approved_by_person_id",
+            "login_machine_approvals.approved_by_person_id",
         ),
     ] {
         values::private_id(value, field)?;
     }
     let encoded = state(next)?;
     Ok(exact(
-        "INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO login_machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         vec![
             text(next.id.as_str()),
             text(next.request_id.as_str()),
@@ -229,7 +238,7 @@ fn insert_enrollment(next: &StoredEnrollment, at: &str) -> Result<GuardedStateme
             text(next.label.as_str()),
             encode(
                 &next.allowed_workspaces,
-                "machine_approvals.allowed_workspaces",
+                "login_machine_approvals.allowed_workspaces",
             )?,
             text(encoded.state),
             nullable(encoded.reason),
@@ -238,14 +247,14 @@ fn insert_enrollment(next: &StoredEnrollment, at: &str) -> Result<GuardedStateme
             generation(next.base_generation.get())?,
             text(values::seconds_timestamp(
                 next.code_expires_at,
-                "machine_approvals.code_expires_at",
+                "login_machine_approvals.code_expires_at",
             )?),
             nullable(encoded.client),
             nullable(encoded.last_grant),
             nullable(encoded.ended_at),
             text(values::timestamp(
                 next.approved_at_ms,
-                "machine_approvals.created_at",
+                "login_machine_approvals.created_at",
             )?),
             text(at),
         ],
@@ -267,18 +276,19 @@ fn replace_enrollment(
         || before.approved_at_ms != next.approved_at_ms
         || before.code_expires_at != next.code_expires_at
     {
-        return Err(corrupt("machine_approvals.immutable_approval"));
+        return Err(corrupt("login_machine_approvals.immutable_approval"));
     }
     let old = state(before)?;
     let new = state(next)?;
     let last_grant = match &before.state {
-        StoredEnrollmentState::Enrolled { last_grant_at, .. } => {
-            Some(integer(last_grant_at.0, "machine_approvals.last_grant_at")?)
-        }
+        StoredEnrollmentState::Enrolled { last_grant_at, .. } => Some(integer(
+            last_grant_at.0,
+            "login_machine_approvals.last_grant_at",
+        )?),
         _ => None,
     };
     Ok(exact(
-        "UPDATE machine_approvals SET state=?,end_reason=?,machine_client_id=?,last_grant_at=?,ended_at=?,updated_at=? WHERE approval_id=? AND machine_id=? AND state=? AND end_reason IS ? AND machine_client_id IS ? AND unixepoch(last_grant_at) IS ? AND ended_at IS NULL AND base_generation=? AND unixepoch(code_expires_at)=? AND request_id=? AND label=? AND json(allowed_workspaces)=json(?) AND approved_by_person_id=? AND permission_checked='machine:enroll' AND unixepoch(created_at)*1000+CAST(substr(strftime('%f',created_at),4,3) AS INTEGER)=?",
+        "UPDATE login_machine_approvals SET state=?,end_reason=?,machine_client_id=?,last_grant_at=?,ended_at=?,updated_at=? WHERE approval_id=? AND machine_id=? AND state=? AND end_reason IS ? AND machine_client_id IS ? AND unixepoch(last_grant_at) IS ? AND ended_at IS NULL AND base_generation=? AND unixepoch(code_expires_at)=? AND request_id=? AND label=? AND json(allowed_workspaces)=json(?) AND approved_by_person_id=? AND permission_checked='machine:enroll' AND unixepoch(created_at)*1000+CAST(substr(strftime('%f',created_at),4,3) AS INTEGER)=?",
         vec![
             text(new.state),
             nullable(new.reason),
@@ -295,16 +305,16 @@ fn replace_enrollment(
             generation(before.base_generation.get())?,
             integer(
                 before.code_expires_at.0,
-                "machine_approvals.code_expires_at",
+                "login_machine_approvals.code_expires_at",
             )?,
             text(before.request_id.as_str()),
             text(before.label.as_str()),
             encode(
                 &before.allowed_workspaces,
-                "machine_approvals.allowed_workspaces",
+                "login_machine_approvals.allowed_workspaces",
             )?,
             text(before.approved_by.as_str()),
-            integer(before.approved_at_ms, "machine_approvals.created_at")?,
+            integer(before.approved_at_ms, "login_machine_approvals.created_at")?,
         ],
     ))
 }
@@ -321,25 +331,25 @@ fn time_guard(
     // A miss rolls back every earlier effect in this decision's batch.
     let guard = match (&before.state, &next.state) {
         (StoredEnrollmentState::Approved, StoredEnrollmentState::Enrolled { .. }) => exact(
-            "UPDATE machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='approved' AND unixepoch(code_expires_at)*1000>?",
+            "UPDATE login_machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='approved' AND unixepoch(code_expires_at)*1000>?",
             vec![text(before.id.as_str()), now],
         ),
         (StoredEnrollmentState::Approved, StoredEnrollmentState::Lapsed) => exact(
-            "UPDATE machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='approved' AND unixepoch(code_expires_at)*1000<=?",
+            "UPDATE login_machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='approved' AND unixepoch(code_expires_at)*1000<=?",
             vec![text(before.id.as_str()), now],
         ),
         (StoredEnrollmentState::Enrolled { .. }, StoredEnrollmentState::Enrolled { .. }) => exact(
-            "UPDATE machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='enrolled' AND ?-unixepoch(last_grant_at)<?",
+            "UPDATE login_machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='enrolled' AND ?-unixepoch(last_grant_at)<?",
             vec![text(before.id.as_str()), now_seconds, idle],
         ),
         (StoredEnrollmentState::Enrolled { .. }, StoredEnrollmentState::Expired { .. }) => exact(
-            "UPDATE machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='enrolled' AND ?-unixepoch(last_grant_at)>=?",
+            "UPDATE login_machine_approvals SET approval_id=approval_id WHERE approval_id=? AND state='enrolled' AND ?-unixepoch(last_grant_at)>=?",
             vec![text(before.id.as_str()), now_seconds, idle],
         ),
         (StoredEnrollmentState::Enrolled { .. }, StoredEnrollmentState::Revoked { .. }) => {
             return Ok(None);
         }
-        _ => return Err(corrupt("machine_approvals.state")),
+        _ => return Err(corrupt("login_machine_approvals.state")),
     };
     Ok(Some(guard))
 }

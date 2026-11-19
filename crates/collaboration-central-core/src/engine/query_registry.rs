@@ -26,14 +26,14 @@ macro_rules! machine_rows {
         "SELECT s.", $key, " AS subject_key,", time_ms!($due), " AS occurrence_ms,",
         "CASE WHEN a.attempt_id IS NOT NULL THEN CASE WHEN a.state='failing' AND a.last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN ",
         time_ms!("a.next_try_at"), " ELSE 0 END WHEN s.state!=",$active," THEN 0 ELSE ", time_ms!($due),
-        " END AS effective_due_ms FROM ", $table, " s LEFT JOIN central_work_attempts a ON a.machine_kind='", $kind,
+        " END AS effective_due_ms FROM ", $table, " s LEFT JOIN engine_work_attempts a ON a.machine_kind='", $kind,
         "' AND a.subject_key=s.", $key, " WHERE s.state NOT IN (",$terminal,") AND (",$predicate,") AND NOT(COALESCE(a.state,'')='retired' AND a.last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable'))"
     ) };
 }
 macro_rules! direct_message_rows {
     () => {
         machine_rows!(
-            "messages",
+            "mail_messages",
             "message_id",
             "s.cancel_due_at",
             "direct_message",
@@ -49,14 +49,14 @@ macro_rules! grid_inputs {
             "COALESCE(",
             controlled_machine!(
                 "wake_timer",
-                machine_rows!("wakes", "wake_id", "s.due_at", "wake_timer")
+                machine_rows!("automation_wakes", "wake_id", "s.due_at", "wake_timer")
             ),
             ",9223372036855),",
             "COALESCE(",
             controlled_machine!(
                 "automation_timer",
                 machine_rows!(
-                    "automations",
+                    "automation_schedules",
                     "automation_id",
                     "s.next_due_at",
                     "automation_timer"
@@ -120,21 +120,21 @@ macro_rules! all_grid_inputs {
 }
 macro_rules! controlled_machine {
     ($kind:literal, $rows:expr) => { concat!(
-        "CASE WHEN EXISTS(SELECT 1 FROM central_work_attempts WHERE machine_kind='engine_source' AND subject_key='", $kind,
+        "CASE WHEN EXISTS(SELECT 1 FROM engine_work_attempts WHERE machine_kind='engine_source' AND subject_key='", $kind,
         "') THEN (SELECT CASE WHEN state='retired' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN NULL WHEN state='failing' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN ", time_ms!("next_try_at"),
-        " ELSE 0 END FROM central_work_attempts WHERE machine_kind='engine_source' AND subject_key='", $kind,
+        " ELSE 0 END FROM engine_work_attempts WHERE machine_kind='engine_source' AND subject_key='", $kind,
         "') ELSE (SELECT MIN(effective_due_ms) FROM (", $rows, ")) END"
     ) };
 }
 macro_rules! controlled_legacy {
     ($kind:literal, $table:literal, $due:literal) => {
         concat!(
-            "CASE WHEN EXISTS(SELECT 1 FROM central_work_attempts WHERE machine_kind='",
+            "CASE WHEN EXISTS(SELECT 1 FROM engine_work_attempts WHERE machine_kind='",
             $kind,
             "' AND subject_key='all') THEN ",
             "(SELECT CASE WHEN state='retired' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN NULL WHEN state='failing' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN ",
             time_ms!("next_try_at"),
-            " ELSE 0 END FROM central_work_attempts WHERE machine_kind='",
+            " ELSE 0 END FROM engine_work_attempts WHERE machine_kind='",
             $kind,
             "' AND subject_key='all') ELSE ",
             "(SELECT MIN(",
@@ -150,13 +150,13 @@ macro_rules! controlled_legacy {
 
 pub(crate) const WAKE_LIST: &str = concat!(
     "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
-    machine_rows!("wakes", "wake_id", "s.due_at", "wake_timer"),
+    machine_rows!("automation_wakes", "wake_id", "s.due_at", "wake_timer"),
     ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
 );
 pub(crate) const AUTOMATION_LIST: &str = concat!(
     "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
     machine_rows!(
-        "automations",
+        "automation_schedules",
         "automation_id",
         "s.next_due_at",
         "automation_timer"
@@ -172,15 +172,19 @@ pub(crate) const DIRECT_MESSAGE_LIST: &str = concat!(
 );
 
 pub(crate) const ALARM_INPUTS: &str = concat!(
-    "SELECT CASE WHEN (SELECT COUNT(*) FROM organization_identity)=1 THEN NULLIF(min(",
+    "SELECT CASE WHEN (SELECT COUNT(*) FROM signin_organization_identity)=1 THEN NULLIF(min(",
     all_grid_inputs!(),
     "),9223372036855) ELSE NULL END AS on_grid_due,",
-    "CASE WHEN (SELECT COUNT(*) FROM organization_identity)=1 THEN NULLIF(min(COALESCE(",
-    controlled_legacy!("legacy_notice_windows", "notification_windows", "due_at"),
+    "CASE WHEN (SELECT COUNT(*) FROM signin_organization_identity)=1 THEN NULLIF(min(COALESCE(",
+    controlled_legacy!(
+        "legacy_notice_windows",
+        "mail_notification_windows",
+        "due_at"
+    ),
     ",9223372036855),COALESCE(",
     controlled_legacy!(
         "legacy_workspace_drains",
-        "workspace_drains",
+        "mail_workspace_drains",
         "drain_due_at"
     ),
     ",9223372036855)),9223372036855) ELSE NULL END AS legacy_due"

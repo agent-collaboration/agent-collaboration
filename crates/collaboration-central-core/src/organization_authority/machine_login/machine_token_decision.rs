@@ -172,7 +172,7 @@ fn grant(
             .as_str()
             .to_owned()
             .try_into()
-            .map_err(|_| crate::workspace_decode_error::corrupt("machines.machine_id"))?,
+            .map_err(|_| crate::workspace_decode_error::corrupt("login_machines.machine_id"))?,
         enrollment_id: enrollment.id.clone(),
         decided_at,
         grant_expires_at: UnixSeconds(expires),

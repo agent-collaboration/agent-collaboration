@@ -39,7 +39,7 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM messages WHERE message_kind='wake'",
+            sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'",
             args: vec![],
         })
         .await
@@ -114,7 +114,7 @@ async fn request_event_runs_due_work_inside_the_fifty_second_horizon() {
     ));
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM messages WHERE message_kind='direct') FROM wakes WHERE wake_id=?", args: vec![text(&wake_id),text(&wake_id)],
+        sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct') FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id),text(&wake_id)],
     }).await.unwrap();
     assert_eq!(
         rows.rows,

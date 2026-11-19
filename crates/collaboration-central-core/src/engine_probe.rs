@@ -40,7 +40,7 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
             workspace_decode_error::corrupt,
         };
         if !self.alarm_organization_is_provisioned().await? {
-            return Err(corrupt("organization_identity.id"));
+            return Err(corrupt("signin_organization_identity.id"));
         }
         if seed.key.get_version_num() != 7 || seed.group.get_version_num() != 7 {
             return Err(corrupt("engine_probe_items.id"));
@@ -69,7 +69,7 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
     ) -> Result<EngineRequestOutcome<ProbeState, ProbeRefusal>, central_storage::StoreFailure> {
         if !self.alarm_organization_is_provisioned().await? {
             return Err(crate::workspace_decode_error::corrupt(
-                "organization_identity.id",
+                "signin_organization_identity.id",
             ));
         }
         if let Err(reason) = self.admit_workspace(caller, None).await? {

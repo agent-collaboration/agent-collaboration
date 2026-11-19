@@ -18,7 +18,7 @@ async fn drain_due(
     runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(workspace)],
         })
         .await
@@ -56,7 +56,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
+                        sql: "INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
                         args: vec![text(&other), text(&past), text(&past), text(&past)],
                     },
                     expect: RowExpectation::Exactly(1),
@@ -133,7 +133,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
         "other due workspaces drain"
     );
     let records = runtime.statement_host().read(Statement {
-        sql: "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains'",
+        sql: "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains'",
         args: vec![],
     }).await.unwrap();
     assert_eq!(

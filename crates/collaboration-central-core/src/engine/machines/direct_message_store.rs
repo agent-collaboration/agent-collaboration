@@ -26,7 +26,7 @@ use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 pub(crate) struct DirectMessageStore<'a, R: EngineHost>(pub &'a R);
 
 pub(crate) const DIRECT_MESSAGE_FAILURE: &str = guarded_attempt_sql!(
-    "EXISTS(SELECT 1 FROM messages WHERE message_id IS ?20 AND sender IS ?21 AND message_kind IS ?22 AND state IS ?23 AND failure_reason IS ?24 AND cancel_due_at IS ?25 AND sender_request_id IS ?26 AND created_at IS ?27 AND updated_at IS ?28 AND state NOT IN ('delivered','failed'))"
+    "EXISTS(SELECT 1 FROM mail_messages WHERE message_id IS ?20 AND sender IS ?21 AND message_kind IS ?22 AND state IS ?23 AND failure_reason IS ?24 AND cancel_due_at IS ?25 AND sender_request_id IS ?26 AND created_at IS ?27 AND updated_at IS ?28 AND state NOT IN ('delivered','failed'))"
 );
 
 impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
@@ -62,7 +62,7 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
                     .0
                     .host()
                     .read(Statement {
-                        sql: "SELECT identity_kind,identity FROM actor_identities WHERE actor_identity_id=?",
+                        sql: "SELECT identity_kind,identity FROM access_actor_identities WHERE actor_identity_id=?",
                         args: vec![text(&row.sender)],
                     })
                     .await
@@ -97,10 +97,10 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
         ];
         args.extend(prior.version.0.clone());
         if args.len() != 12 {
-            return Err(corrupt("messages.version"));
+            return Err(corrupt("mail_messages.version"));
         }
         Ok(exact(
-            "UPDATE messages SET state=?1,failure_reason=?2,updated_at=?3 WHERE message_id IS ?4 AND sender IS ?5 AND message_kind IS ?6 AND state IS ?7 AND failure_reason IS ?8 AND cancel_due_at IS ?9 AND sender_request_id IS ?10 AND created_at IS ?11 AND updated_at IS ?12",
+            "UPDATE mail_messages SET state=?1,failure_reason=?2,updated_at=?3 WHERE message_id IS ?4 AND sender IS ?5 AND message_kind IS ?6 AND state IS ?7 AND failure_reason IS ?8 AND cancel_due_at IS ?9 AND sender_request_id IS ?10 AND created_at IS ?11 AND updated_at IS ?12",
             args,
         ))
     }

@@ -36,7 +36,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     let runtime = runtime(&f).await;
     raw(
         &runtime,
-        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+        "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             text(serde_json::to_string(&[&f.workspace, &late]).unwrap()),
             text(f.caller.caller().machine_id()),
@@ -46,7 +46,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     let at = next_mark(f.clock.utc_now());
     raw(
         &runtime,
-        "INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
+        "INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
         vec![
             text(&f.workspace),
             stamp(at - chrono::Duration::seconds(1)),
@@ -115,7 +115,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
         matches!(
             rows(
                 &runtime,
-                "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+                "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
                 vec![text(&late)],
             )
             .await[0][0],

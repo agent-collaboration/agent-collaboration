@@ -61,9 +61,9 @@ impl<R: EngineHost> StoreAdapter<LifecycleFinish<WakeKind>> for WakeFinishStore<
     async fn load(&self, key: &InstanceKey) -> Result<Option<Versioned<Lifecycle>>, LoadFailure> {
         load_lifecycle(
             self.0,
-            "SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM wakes WHERE wake_id=?",
+            "SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM automation_wakes WHERE wake_id=?",
             key,
-            "wakes.state",
+            "automation_wakes.state",
         )
         .await
     }
@@ -79,7 +79,7 @@ impl<R: EngineHost> StoreAdapter<LifecycleFinish<WakeKind>> for WakeFinishStore<
         ];
         args.extend(prior.version.0.clone());
         Ok(exact(
-            "UPDATE wakes SET state=?1,updated_at=?2 WHERE wake_id IS ?3 AND target IS ?4 AND due_at IS ?5 AND text IS ?6 AND state IS ?7 AND created_at IS ?8 AND updated_at IS ?9",
+            "UPDATE automation_wakes SET state=?1,updated_at=?2 WHERE wake_id IS ?3 AND target IS ?4 AND due_at IS ?5 AND text IS ?6 AND state IS ?7 AND created_at IS ?8 AND updated_at IS ?9",
             args,
         ))
     }
@@ -99,9 +99,9 @@ impl<R: EngineHost> StoreAdapter<LifecycleFinish<AutomationKind>> for Automation
     async fn load(&self, key: &InstanceKey) -> Result<Option<Versioned<Lifecycle>>, LoadFailure> {
         load_lifecycle(
             self.0,
-            "SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at FROM automations WHERE automation_id=?",
+            "SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at FROM automation_schedules WHERE automation_id=?",
             key,
-            "automations.state",
+            "automation_schedules.state",
         )
         .await
     }
@@ -117,7 +117,7 @@ impl<R: EngineHost> StoreAdapter<LifecycleFinish<AutomationKind>> for Automation
         ];
         args.extend(prior.version.0.clone());
         Ok(exact(
-            "UPDATE automations SET state=?1,updated_at=?2 WHERE automation_id IS ?3 AND target IS ?4 AND timing_rule IS ?5 AND anchor_at IS ?6 AND expires_at IS ?7 AND evaluated_through_at IS ?8 AND text IS ?9 AND next_due_at IS ?10 AND state IS ?11 AND created_at IS ?12 AND updated_at IS ?13",
+            "UPDATE automation_schedules SET state=?1,updated_at=?2 WHERE automation_id IS ?3 AND target IS ?4 AND timing_rule IS ?5 AND anchor_at IS ?6 AND expires_at IS ?7 AND evaluated_through_at IS ?8 AND text IS ?9 AND next_due_at IS ?10 AND state IS ?11 AND created_at IS ?12 AND updated_at IS ?13",
             args,
         ))
     }

@@ -60,7 +60,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         panic!("message not queued")
     };
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT sender,target_session,body,(SELECT identity FROM actor_identities WHERE actor_identity_id=json_extract(messages.sender,'$.value')) FROM messages WHERE message_id=?", args: vec![text(message_id)] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT sender,target_session,body,(SELECT identity FROM access_actor_identities WHERE actor_identity_id=json_extract(mail_messages.sender,'$.value')) FROM mail_messages WHERE message_id=?", args: vec![text(message_id)] }).await.unwrap();
     let [row] = rows.rows.as_slice() else {
         panic!("expected one direct message: {:?}", rows.rows)
     };
@@ -170,7 +170,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         Result::Done(Answer::Queued { .. })
     ));
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT target_machine_id, COUNT(*) FROM messages WHERE message_kind='direct' GROUP BY target_machine_id ORDER BY target_machine_id", args: vec![] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT target_machine_id, COUNT(*) FROM mail_messages WHERE message_kind='direct' GROUP BY target_machine_id ORDER BY target_machine_id", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![
@@ -198,7 +198,7 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
         request(&fixture, &fixture.caller, 1010, operation.clone()).await,
         Result::OutcomeUnknown
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='direct'), (SELECT COUNT(*) FROM request_log WHERE request_id=?)", args: vec![text(id::<m::RequestId>(1010))] }).await.unwrap();
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'), (SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)", args: vec![text(id::<m::RequestId>(1010))] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -239,7 +239,7 @@ async fn a_chosen_delivery_and_reply_to_are_stored_in_the_message_body_for_the_r
     let rows = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT json_extract(body,'$.delivery'),json_extract(body,'$.replyTo') FROM messages WHERE message_id=?",
+            sql: "SELECT json_extract(body,'$.delivery'),json_extract(body,'$.replyTo') FROM mail_messages WHERE message_id=?",
             args: vec![text(message_id)],
         })
         .await

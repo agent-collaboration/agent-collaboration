@@ -12,7 +12,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 Ok(true)
             }
             crate::CentralOrganizationIdentity::Stamped { .. } => {
-                Err(corrupt("organization_identity.id"))
+                Err(corrupt("signin_organization_identity.id"))
             }
         }
     }

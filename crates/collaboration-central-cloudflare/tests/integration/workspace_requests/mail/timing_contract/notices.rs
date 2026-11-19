@@ -49,7 +49,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&vec![
@@ -157,7 +157,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         post_ids.push((workspace.clone(), item));
     }
     let r = f.host.central(&f.caller.organization_id).await;
-    let windows=r.statement_host().read(Statement{sql:"SELECT COUNT(*) FROM notification_windows WHERE recipient_actor IN (SELECT actor_identity_id FROM actor_identities WHERE identity LIKE '%cadence-%')",args:vec![]}).await.unwrap();
+    let windows=r.statement_host().read(Statement{sql:"SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor IN (SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%cadence-%')",args:vec![]}).await.unwrap();
     assert_eq!(
         windows.rows,
         vec![vec![central_storage::SqlValue::Integer(
@@ -176,7 +176,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     let drains = r
         .statement_host()
         .read(Statement {
-            sql: "SELECT COUNT(*) FROM workspace_drains WHERE drain_due_at IS NOT NULL",
+            sql: "SELECT COUNT(*) FROM mail_workspace_drains WHERE drain_due_at IS NOT NULL",
             args: vec![],
         })
         .await
@@ -287,7 +287,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         })
     );
     let read_policy = || Statement {
-        sql: "SELECT a.notice_cadence,w.due_at FROM actor_identities a JOIN notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.identity LIKE '%cadence-0%'",
+        sql: "SELECT a.notice_cadence,w.due_at FROM access_actor_identities a JOIN mail_notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.identity LIKE '%cadence-0%'",
         args: vec![],
     };
     let r = f.host.central(&f.caller.organization_id).await;

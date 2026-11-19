@@ -16,7 +16,7 @@
 {"reason":"rejected","result":"refused"},
 {"alarm":"2030-01-01T10:10:00Z","alarmMissing":false,"kinds":[{"failing":1,"kind":"wake_timer","lastFailure":"corrupt_row","oldestFirstFailedAt":"2030-01-01T10:05:00Z","retired":0},{"failing":0,"kind":"automation_timer","lastFailure":null,"oldestFirstFailedAt":null,"retired":0}],"result":"engineHealth"},
 {"alarm":null,"alarmMissing":true,"kinds":[],"result":"engineHealth"},
-{"items":[{"attemptId":"019a3dce-2000-7000-8000-000000000020","count":2,"failureClass":"corrupt_row","kind":"wake_timer","lastFailure":"wakes.target","retiredAt":"2030-01-01T10:10:00Z","subjectKey":"019a3dce-2000-7000-8000-000000000021"}],"next":"019a3dce-2000-7000-8000-000000000020","result":"engineRetired"},
+{"items":[{"attemptId":"019a3dce-2000-7000-8000-000000000020","count":2,"failureClass":"corrupt_row","kind":"wake_timer","lastFailure":"automation_wakes.target","retiredAt":"2030-01-01T10:10:00Z","subjectKey":"019a3dce-2000-7000-8000-000000000021"}],"next":"019a3dce-2000-7000-8000-000000000020","result":"engineRetired"},
 {"items":[],"next":null,"result":"engineRetired"},
 {"result":"engineRetried"},
 {"result":"engineDiscarded"},

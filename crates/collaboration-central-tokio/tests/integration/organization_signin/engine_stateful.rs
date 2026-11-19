@@ -460,7 +460,7 @@ impl EngineModel {
             vec![text(&key)],
         )) == 1;
         let stored = self.block(self.engine().rows(
-            "SELECT answer FROM request_log WHERE request_id=?",
+            "SELECT answer FROM runtime_request_log WHERE request_id=?",
             vec![text(&request_id)],
         ));
         let stored_refusal = match stored.first().map(|row| &row[0]) {
@@ -520,13 +520,13 @@ impl EngineModel {
         let key = self.subjects[index].key.clone();
         tc.assume(!self.subjects[index].fired);
         tc.assume(!self.fault_armed_on(&key));
-        let original = self.block(
-            self.engine()
-                .rows("SELECT target FROM wakes WHERE wake_id=?", vec![text(&key)]),
-        )[0][0]
+        let original = self.block(self.engine().rows(
+            "SELECT target FROM automation_wakes WHERE wake_id=?",
+            vec![text(&key)],
+        ))[0][0]
             .clone();
         self.block(self.engine().raw(
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
             vec![text(&key)],
         ));
         tc.note(&format!("corrupt wake {key}"));
@@ -549,7 +549,7 @@ impl EngineModel {
         if tc.draw(gs::booleans()) {
             if let Some(original) = self.subjects[index].corrupted_target.take() {
                 self.block(self.engine().raw(
-                    "UPDATE wakes SET target=? WHERE wake_id=?",
+                    "UPDATE automation_wakes SET target=? WHERE wake_id=?",
                     vec![original, text(&key)],
                 ));
             }
@@ -664,7 +664,7 @@ impl EngineModel {
             subject.expected.assert_stored(&subject.key, &stored);
         }
         let rows = self.block(self.engine().rows(
-            "SELECT machine_kind,subject_key FROM central_work_attempts",
+            "SELECT machine_kind,subject_key FROM engine_work_attempts",
             vec![],
         ));
         for row in rows {

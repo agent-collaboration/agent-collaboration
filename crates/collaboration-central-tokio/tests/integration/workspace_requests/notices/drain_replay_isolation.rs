@@ -24,7 +24,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
     });
     held.until_held().await;
     f.workspace_batch(
-        "UPDATE changes SET change_kind='bad-kind' WHERE change_id=(SELECT change_id FROM changes WHERE thread_id=? AND change_kind='posted' ORDER BY position DESC LIMIT 1)",
+        "UPDATE workspace_changes SET change_kind='bad-kind' WHERE change_id=(SELECT change_id FROM workspace_changes WHERE thread_id=? AND change_kind='posted' ORDER BY position DESC LIMIT 1)",
         vec![text(&thread)],
     )
     .await;
@@ -46,7 +46,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT COUNT(*) FROM request_log WHERE request_id=?",
+                sql: "SELECT COUNT(*) FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(8242))],
             },
         )
@@ -65,7 +65,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
     let record = r
         .statement_host()
         .read(Statement {
-            sql: "SELECT state,failure_count,next_try_at FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'",
+            sql: "SELECT state,failure_count,next_try_at FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'",
             args: vec![],
         })
         .await

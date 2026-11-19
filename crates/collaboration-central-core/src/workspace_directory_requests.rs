@@ -94,7 +94,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             let workspace =
                 crate::workspace_directory_rows::read_by_id(runtime.host.as_ref(), workspace_id)
                     .await?
-                    .ok_or_else(|| corrupt("workspaces.workspace_id"))?;
+                    .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
             Ok(reply(m::WorkspaceResult::Done(m::WorkspaceAnswer::Item {
                 item: m::ItemView::Workspace(workspace.into()),
             })))
@@ -166,7 +166,11 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     let actor = actor_plan.actor;
     let logged = runtime
         .host
-        .read(crate::workspace_request_log::lookup(request_id, &cutoff))
+        .read(crate::workspace_request_log::lookup(
+            crate::workspace_request_log::RequestLogStore::Organization,
+            request_id,
+            &cutoff,
+        ))
         .await?;
     if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
         return Ok(reply(answer));
@@ -186,7 +190,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
                     workspace_id: runtime.mint()?,
                     name: name.clone(),
                     description: m::Description::try_from(String::new())
-                        .map_err(|_| corrupt("workspaces.description"))?,
+                        .map_err(|_| corrupt("directory_workspaces.description"))?,
                     state: m::WorkspaceState::Active,
                 };
                 statements.push(crate::workspace_directory_rows::insert(
@@ -208,7 +212,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             let current: m::Workspace =
                 crate::workspace_directory_rows::read_by_id(runtime.host.as_ref(), workspace_id)
                     .await?
-                    .ok_or_else(|| corrupt("workspaces.workspace_id"))?
+                    .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?
                     .into();
             let holder = match &change {
                 DirectoryChange::Update { name, .. } => {
@@ -231,6 +235,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         }
     };
     statements.extend(crate::workspace_request_log::retain(
+        crate::workspace_request_log::RequestLogStore::Organization,
         request_id,
         &actor,
         &digest,

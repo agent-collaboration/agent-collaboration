@@ -126,7 +126,7 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
     let rows = runtime
         .read(Statement {
-            sql: "SELECT state,COUNT(*) FROM wakes GROUP BY state ORDER BY state",
+            sql: "SELECT state,COUNT(*) FROM automation_wakes GROUP BY state ORDER BY state",
             args: vec![],
         })
         .await

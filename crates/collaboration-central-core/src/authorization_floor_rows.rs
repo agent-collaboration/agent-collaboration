@@ -37,24 +37,24 @@ pub(crate) fn decode_organization_floor(
     organization: &str,
 ) -> Result<Option<OrganizationFloor>, StoreFailure> {
     if rows.rows.len() > 1 {
-        return Err(corrupt("organization_authorization_floors.id"));
+        return Err(corrupt("signin_authorization_floors.id"));
     }
     let Some(row) = rows.rows.first() else {
         return Ok(None);
     };
     if string(rows, row, "id")? != organization {
-        return Err(corrupt("organization_authorization_floors.id"));
+        return Err(corrupt("signin_authorization_floors.id"));
     }
     let policy_digest = string(rows, row, "permission_policy_digest")?.to_owned();
     if policy_digest.is_empty() {
         return Err(corrupt(
-            "organization_authorization_floors.permission_policy_digest",
+            "signin_authorization_floors.permission_policy_digest",
         ));
     }
     let reject_through_ms = read_integer(rows, row, "request_reject_through_ms")?;
     if reject_through_ms < 0 {
         return Err(corrupt(
-            "organization_authorization_floors.request_reject_through_ms",
+            "signin_authorization_floors.request_reject_through_ms",
         ));
     }
     Ok(Some(OrganizationFloor {
@@ -71,21 +71,17 @@ pub(crate) fn decode_person_floor(
     person: &str,
 ) -> Result<Option<PersonFloor>, StoreFailure> {
     if rows.rows.len() > 1 {
-        return Err(corrupt(
-            "person_organization_authorization_floors.person_id",
-        ));
+        return Err(corrupt("signin_person_authorization_floors.person_id"));
     }
     let Some(row) = rows.rows.first() else {
         return Ok(None);
     };
     let subject_id = string(rows, row, "id")?.to_owned();
-    private_id(&subject_id, "person_organization_authorization_floors.id")?;
+    private_id(&subject_id, "signin_person_authorization_floors.id")?;
     if string(rows, row, "organization_id")? != organization
         || string(rows, row, "person_id")? != person
     {
-        return Err(corrupt(
-            "person_organization_authorization_floors.person_id",
-        ));
+        return Err(corrupt("signin_person_authorization_floors.person_id"));
     }
     Ok(Some(PersonFloor {
         subject_id,
@@ -99,7 +95,7 @@ pub(crate) async fn read_organization_floor(
     organization: &str,
 ) -> Result<Option<OrganizationFloor>, StoreFailure> {
     let rows = host.read(Statement {
-        sql: "SELECT id,minimum_revision,state,permission_policy_digest,request_reject_through_ms FROM organization_authorization_floors WHERE id=?",
+        sql: "SELECT id,minimum_revision,state,permission_policy_digest,request_reject_through_ms FROM signin_authorization_floors WHERE id=?",
         args: vec![SqlValue::Text(organization.to_owned())],
     }).await?;
     decode_organization_floor(&rows, organization)
@@ -111,7 +107,7 @@ pub(crate) async fn read_person_floor(
     person: &str,
 ) -> Result<Option<PersonFloor>, StoreFailure> {
     let rows = host.read(Statement {
-        sql: "SELECT id,organization_id,person_id,minimum_revision,state FROM person_organization_authorization_floors WHERE organization_id=? AND person_id=?",
+        sql: "SELECT id,organization_id,person_id,minimum_revision,state FROM signin_person_authorization_floors WHERE organization_id=? AND person_id=?",
         args: vec![SqlValue::Text(organization.to_owned()), SqlValue::Text(person.to_owned())],
     }).await?;
     decode_person_floor(&rows, organization, person)
@@ -137,7 +133,7 @@ pub(crate) fn organization_guard(
     floor: &OrganizationFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
     Ok(crate::guarded_statements::exact(
-        "UPDATE organization_authorization_floors SET id=id WHERE id=? AND minimum_revision=? AND state=? AND permission_policy_digest=? AND request_reject_through_ms=?",
+        "UPDATE signin_authorization_floors SET id=id WHERE id=? AND minimum_revision=? AND state=? AND permission_policy_digest=? AND request_reject_through_ms=?",
         vec![
             SqlValue::Text(organization.to_owned()),
             integer(floor.revision.get(), "minimum_revision")?,
@@ -153,7 +149,7 @@ pub(crate) fn person_guard(
     floor: &PersonFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
     Ok(crate::guarded_statements::exact(
-        "UPDATE person_organization_authorization_floors SET id=id WHERE id=? AND organization_id=? AND person_id=? AND minimum_revision=? AND state=?",
+        "UPDATE signin_person_authorization_floors SET id=id WHERE id=? AND organization_id=? AND person_id=? AND minimum_revision=? AND state=?",
         vec![
             SqlValue::Text(floor.subject_id.clone()),
             SqlValue::Text(organization.to_owned()),

@@ -2,6 +2,7 @@ mod arguments;
 mod configuration;
 #[cfg(test)]
 mod credential_lifetimes_tests;
+mod serve_configuration;
 pub(crate) use arguments::CentralCommand;
 use arguments::{CredentialKind, MintArguments};
 use chrono::{Duration as ChronoDuration, SubsecRound, Utc};
@@ -10,8 +11,8 @@ use codex_router_secret_store::{
     central_credentials::{CentralCredential, CentralSecretKind},
 };
 use collaboration_central_core::{AccessCaller, AccessClientId};
-use collaboration_central_tokio::{TokioServer, TokioSettings};
-use std::{io::Write, time::Duration};
+use collaboration_central_tokio::TokioWorkspaceServer;
+use std::{io::Write, sync::Arc};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CentralCommandError {
@@ -30,7 +31,9 @@ pub enum CentralCommandError {
     #[error(transparent)]
     Policy(#[from] collaboration_central_core::AccessRefusal),
     #[error(transparent)]
-    Server(#[from] collaboration_central_tokio::TokioServerError),
+    Server(#[from] collaboration_central_tokio::TokioWorkspaceServerError),
+    #[error(transparent)]
+    ServeConfiguration(#[from] serve_configuration::ServeConfigurationError),
     #[error("central local task failed")]
     LocalTask,
     #[error("central commands require async dispatch")]
@@ -50,45 +53,41 @@ pub(crate) async fn run_central_command(
             writeln!(stdout, "credential ready; expires at {expiry}")?;
         }
         CentralCommand::Serve(arguments) => {
-            let listen = arguments.listen;
-            let root = arguments.root.clone();
-            let (config, issuer, _root_lock) = tokio::task::spawn_blocking(move || {
-                let root_lock = configuration::lock_root(&arguments.root)?;
-                let (config, issuer) = configuration::initialize(&arguments)?;
-                Ok::<_, CentralCommandError>((config, issuer, root_lock))
+            let (config, _root_lock) = tokio::task::spawn_blocking(move || {
+                let config = serve_configuration::ServeConfiguration::read(&arguments.config)?;
+                let root_lock = configuration::lock_root(&config.root)?;
+                Ok::<_, CentralCommandError>((config, root_lock))
             })
             .await
             .map_err(|_| CentralCommandError::LocalTask)??;
             let mut terminate =
                 tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-            let server = TokioServer::start_with_jwks(
-                TokioSettings {
-                    root: root.join("objects"),
-                    jwks_url: config.policy.jwks_url.clone(),
-                    access_policy: config.policy,
-                    registry: fleet_sync_lease::RegistryConfig {
-                        lease: fleet_sync_lease::LeasePolicy {
-                            lease_duration: Duration::from_secs(14400),
-                            renew_interval: Duration::from_secs(900),
-                        },
-                        authoritative_receiver: config.receiver,
-                        release_unsent_for: Duration::from_secs(300),
-                        move_needs_renewal_within: Some(Duration::from_secs(1800)),
-                    },
-                    delivery: collaboration_central_tokio::DeliveryConfig {
-                        relay_peer: config.relay,
-                    },
-                    holder_answer_timeout: Duration::from_secs(30),
-                    copy_ack_wait: Duration::from_secs(30),
-                },
-                listen,
-                issuer.jwks(),
+            let server = TokioWorkspaceServer::start(
+                &config.root,
+                config.listen,
+                config.sign_in,
+                Arc::new(router_clock::SystemRuntimeClock::new()),
+                nix::unistd::geteuid().as_raw(),
             )
             .await?;
-            writeln!(stdout, "central listening: {}", server.base_url())?;
-            stdout.flush()?;
-            tokio::select! { result = tokio::signal::ctrl_c() => { result?; }, _ = terminate.recv() => {} }
-            server.shutdown().await?;
+            let running = async {
+                writeln!(
+                    stdout,
+                    "central listening: http://{} (private sign-in socket {})",
+                    server.address(),
+                    server.sign_in_socket().display(),
+                )?;
+                stdout.flush()?;
+                tokio::select! {
+                    result = tokio::signal::ctrl_c() => result?,
+                    _ = terminate.recv() => {}
+                }
+                Ok::<_, CentralCommandError>(())
+            }
+            .await;
+            let shutdown = server.shutdown().await;
+            running?;
+            shutdown?;
             writeln!(stdout, "central stopped")?;
         }
     }

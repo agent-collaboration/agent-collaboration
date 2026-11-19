@@ -7,21 +7,23 @@ use fleet_identity_protocol::OrganizationId;
 pub(crate) async fn read(host: &impl ObjectHost) -> Result<StoredStampRead, StoreFailure> {
     let rows = host
         .read(Statement {
-            sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id LIMIT 2",
+            sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id LIMIT 2",
             args: vec![],
         })
         .await?;
     if rows.rows.len() > 1 {
-        return Err(corrupt("organization_identity.id"));
+        return Err(corrupt("signin_organization_identity.id"));
     }
     let Some(row) = rows.rows.first() else {
         return Ok(StoredStampRead::Unprovisioned);
     };
     let organization = OrganizationId::try_from(string(&rows, row, "id")?.to_owned())
-        .map_err(|_| corrupt("organization_identity.id"))?;
+        .map_err(|_| corrupt("signin_organization_identity.id"))?;
     let statement = string(&rows, row, "organization_statement")?.to_owned();
     if statement.is_empty() {
-        return Err(corrupt("organization_identity.organization_statement"));
+        return Err(corrupt(
+            "signin_organization_identity.organization_statement",
+        ));
     }
     Ok(StoredStampRead::Stamped(StoredOrganizationStamp::new(
         organization,
@@ -32,7 +34,7 @@ fn integer(value: i64) -> Result<SqlValue, StoreFailure> {
     value
         .try_into()
         .map(SqlValue::Integer)
-        .map_err(|_| corrupt("organization_identity.updated_at"))
+        .map_err(|_| corrupt("signin_organization_identity.updated_at"))
 }
 pub(crate) fn insert(
     organization: &OrganizationId,
@@ -43,7 +45,7 @@ pub(crate) fn insert(
 ) -> Result<GuardedStatement, StoreFailure> {
     Ok(GuardedStatement {
         statement: Statement {
-            sql: "INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM organization_identity) AND ?>=? AND ?<?",
+            sql: "INSERT INTO signin_organization_identity(id,organization_statement,created_at,updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM signin_organization_identity) AND ?>=? AND ?<?",
             args: vec![
                 SqlValue::Text(organization.as_str().to_owned()),
                 SqlValue::Text(statement.to_owned()),
@@ -67,7 +69,7 @@ pub(crate) fn replace(
 ) -> Result<GuardedStatement, StoreFailure> {
     Ok(GuardedStatement {
         statement: Statement {
-            sql: "UPDATE organization_identity SET organization_statement=?,updated_at=? WHERE id=? AND organization_statement=? AND ?>=? AND ?<?",
+            sql: "UPDATE signin_organization_identity SET organization_statement=?,updated_at=? WHERE id=? AND organization_statement=? AND ?>=? AND ?<?",
             args: vec![
                 SqlValue::Text(statement.to_owned()),
                 integer(now_ms)?,

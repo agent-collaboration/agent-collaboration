@@ -127,9 +127,9 @@ pub(super) fn refused(reason: &str) -> Value {
 pub(super) async fn snapshot(f: &MachineFixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
     let mut rows = vec![];
     for sql in [
-        "SELECT * FROM machines ORDER BY machine_id",
-        "SELECT * FROM machine_approvals ORDER BY approval_id",
-        "SELECT * FROM organization_change_records ORDER BY id",
+        "SELECT * FROM login_machines ORDER BY machine_id",
+        "SELECT * FROM login_machine_approvals ORDER BY approval_id",
+        "SELECT * FROM signin_change_records ORDER BY id",
         "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
     ] {
         rows.push(f.rows(sql).await?);
@@ -143,7 +143,7 @@ pub(super) async fn seed_workspaces(f: &MachineFixture) -> Result<()> {
         (WORKSPACE, "Login workspace"),
         (WORKSPACE_TWO, "Second login workspace"),
     ] {
-        f.execute("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES (?,?,'active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(workspace),text(name)]).await?;
+        f.execute("INSERT INTO directory_workspaces(workspace_id,name,state,created_at,updated_at) VALUES (?,?,'active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(workspace),text(name)]).await?;
     }
     Ok(())
 }

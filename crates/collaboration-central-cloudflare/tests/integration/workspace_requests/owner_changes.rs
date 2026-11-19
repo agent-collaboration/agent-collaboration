@@ -153,7 +153,7 @@ async fn r21_close_persists_note_reference_and_change_and_refuses_closed_edits()
     );
     let runtime = f.host.central(&f.caller.organization_id).await;
     let effects = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM changes WHERE item_kind='backlogItem' AND item_id=?1 AND change_kind='stateChanged'),(SELECT COUNT(*) FROM item_references WHERE source_kind='backlogItem' AND source_id=?2)",
+        sql: "SELECT (SELECT COUNT(*) FROM workspace_changes WHERE item_kind='backlogItem' AND item_id=?1 AND change_kind='stateChanged'),(SELECT COUNT(*) FROM workspace_item_references WHERE source_kind='backlogItem' AND source_id=?2)",
         args: vec![text(&first), text(&second)],
     }).await.unwrap();
     assert_eq!(
@@ -209,7 +209,7 @@ async fn r21_invalid_close_and_late_reference_failure_leave_all_effects_unapplie
     assert_eq!(show_backlog(&f, &item).await, original);
     let runtime = f.host.central(&f.caller.organization_id).await;
     let snapshot = || Statement {
-        sql: "SELECT status,closing_note,(SELECT COUNT(*) FROM item_references),(SELECT COUNT(*) FROM changes) FROM backlog_items WHERE item_id=?",
+        sql: "SELECT status,closing_note,(SELECT COUNT(*) FROM workspace_item_references),(SELECT COUNT(*) FROM workspace_changes) FROM workspace_backlog_items WHERE item_id=?",
         args: vec![text(&item)],
     };
     let before = runtime
@@ -217,7 +217,7 @@ async fn r21_invalid_close_and_late_reference_failure_leave_all_effects_unapplie
         .await
         .unwrap();
     // This fails the second statement, after the status/note UPDATE has run.
-    f.workspace_execute("CREATE TRIGGER reject_closing_reference BEFORE INSERT ON item_references BEGIN SELECT RAISE(ABORT,'fixture late reference failure'); END", vec![], central_storage::RowExpectation::Any).await;
+    f.workspace_execute("CREATE TRIGGER reject_closing_reference BEFORE INSERT ON workspace_item_references BEGIN SELECT RAISE(ABORT,'fixture late reference failure'); END", vec![], central_storage::RowExpectation::Any).await;
     let operation = close(&item, "Delivered", Some(target));
     let failed = f.call(2026, operation.clone()).await;
     assert!(matches!(
@@ -235,7 +235,7 @@ async fn r21_invalid_close_and_late_reference_failure_leave_all_effects_unapplie
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT request_id FROM request_log WHERE request_id=?",
+                sql: "SELECT request_id FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(2026))],
             },
         )
@@ -314,7 +314,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT creator FROM threads WHERE thread_id=?",
+                sql: "SELECT creator FROM workspace_threads WHERE thread_id=?",
                 args: vec![text(&thread)],
             },
         )
@@ -324,7 +324,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
         panic!("creator");
     };
     let members = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT actor_identity_id FROM thread_members WHERE thread_id=? AND actor_identity_id<>? AND left_at IS NULL",
+        sql: "SELECT actor_identity_id FROM workspace_thread_members WHERE thread_id=? AND actor_identity_id<>? AND left_at IS NULL",
         args: vec![text(&thread), text(creator_id)],
     }).await.unwrap();
     let SqlValue::Text(target) = &members.rows[0][0] else {
@@ -380,7 +380,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     )
     .await;
     let actors = runtime.statement_host().read(Statement {
-        sql: "SELECT actor_identity_id FROM actor_identities WHERE json_extract(identity,'$.session.sessionId')=?",
+        sql: "SELECT actor_identity_id FROM access_actor_identities WHERE json_extract(identity,'$.session.sessionId')=?",
         args: vec![text("fresh-self-participant")],
     }).await.unwrap();
     let SqlValue::Text(fresh_actor) = &actors.rows[0][0] else {

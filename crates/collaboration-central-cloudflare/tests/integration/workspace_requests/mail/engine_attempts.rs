@@ -20,7 +20,7 @@ fn minutes(count: i64) -> chrono::Duration {
 
 async fn record(runtime: &Runtime, kind: &str, key: &str) -> Vec<Vec<SqlValue>> {
     runtime.statement_host().read(Statement {
-        sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+        sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
         args: vec![text(kind), text(key)],
     }).await.unwrap().rows
 }
@@ -116,7 +116,7 @@ async fn failing_wake(fixture: &Fixture, number: u32) -> (Runtime, workspace_ids
     };
     raw(
         &runtime,
-        "CREATE TRIGGER wake_reject BEFORE UPDATE OF state ON wakes WHEN NEW.state='done' BEGIN SELECT RAISE(ABORT,'wake rejected'); END",
+        "CREATE TRIGGER wake_reject BEFORE UPDATE OF state ON automation_wakes WHEN NEW.state='done' BEGIN SELECT RAISE(ABORT,'wake rejected'); END",
         vec![],
     )
     .await;
@@ -153,7 +153,7 @@ async fn failing_automation(fixture: &Fixture, number: u32) -> (Runtime, String)
     };
     raw(
         &runtime,
-        "CREATE TRIGGER automation_reject BEFORE UPDATE OF evaluated_through_at ON automations BEGIN SELECT RAISE(ABORT,'automation rejected'); END",
+        "CREATE TRIGGER automation_reject BEFORE UPDATE OF evaluated_through_at ON automation_schedules BEGIN SELECT RAISE(ABORT,'automation rejected'); END",
         vec![],
     )
     .await;
@@ -179,7 +179,7 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
     dump(&runtime, TEST, "wake failing once").await;
     raw(
         &runtime,
-        "CREATE TRIGGER cancel_reject BEFORE UPDATE OF state ON wakes WHEN NEW.state='disabled' BEGIN SELECT RAISE(ABORT,'cancel rejected'); END",
+        "CREATE TRIGGER cancel_reject BEFORE UPDATE OF state ON automation_wakes WHEN NEW.state='disabled' BEGIN SELECT RAISE(ABORT,'cancel rejected'); END",
         vec![],
     )
     .await;
@@ -198,7 +198,7 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
     let wake_state = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state FROM wakes WHERE wake_id=?",
+            sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
             args: vec![text(&wake_id)],
         })
         .await
@@ -244,7 +244,7 @@ async fn todays_cancel_and_disable_requests_delete_the_record_and_a_failed_reque
     dump(&runtime, TEST, "automation failing once").await;
     raw(
         &runtime,
-        "CREATE TRIGGER disable_reject BEFORE UPDATE OF state ON automations WHEN NEW.state='disabled' BEGIN SELECT RAISE(ABORT,'disable rejected'); END",
+        "CREATE TRIGGER disable_reject BEFORE UPDATE OF state ON automation_schedules WHEN NEW.state='disabled' BEGIN SELECT RAISE(ABORT,'disable rejected'); END",
         vec![],
     )
     .await;
@@ -321,7 +321,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
     seed_probe(&runtime, healthy, group, Some(due), "healthy").await;
     raw(
         &runtime,
-        "INSERT INTO central_work_attempts(attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at) VALUES ('01890f2e-7b4c-7cc0-98c4-000000009533','engine_probe',?,'mangled',1,NULL,'corrupt_row',NULL,'2026-11-13T12:00:00.000Z','2026-11-13T12:00:00.000Z',NULL,'2026-11-13T12:00:00.000Z','2026-11-13T12:00:00.000Z')",
+        "INSERT INTO engine_work_attempts(attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at) VALUES ('01890f2e-7b4c-7cc0-98c4-000000009533','engine_probe',?,'mangled',1,NULL,'corrupt_row',NULL,'2026-11-13T12:00:00.000Z','2026-11-13T12:00:00.000Z',NULL,'2026-11-13T12:00:00.000Z','2026-11-13T12:00:00.000Z')",
         vec![text(damaged)],
     )
     .await;
@@ -342,7 +342,7 @@ async fn a_damaged_record_is_replaced_once_by_a_corrupt_row_record_then_retires_
             text("failing"),
             integer(1),
             text("corrupt_row"),
-            text("central_work_attempts.state\nmangled")
+            text("engine_work_attempts.state\nmangled")
         ]],
         "replaced once by CorruptRow with the raw value kept; never defaulted"
     );

@@ -349,7 +349,7 @@ impl<R: EngineHost> Engine<'_, R> {
                         self.run_machine_unit::<wake_timer::WakeTimer, _>(
                             &WakeStore(self.0),
                             row,
-                            "wakes.due_at",
+                            "automation_wakes.due_at",
                             |occurrence| wake_timer::Event::Due { occurrence },
                         )
                         .await
@@ -358,7 +358,7 @@ impl<R: EngineHost> Engine<'_, R> {
                         self.run_machine_unit::<automation_timer::AutomationTimer, _>(
                             &AutomationStore(self.0),
                             row,
-                            "automations.next_due_at",
+                            "automation_schedules.next_due_at",
                             |occurrence| automation_timer::Event::Due { occurrence },
                         )
                         .await
@@ -367,7 +367,7 @@ impl<R: EngineHost> Engine<'_, R> {
                         self.run_machine_unit::<DirectMessage, _>(
                             &DirectMessageStore(self.0),
                             row,
-                            "messages.cancel_due_at",
+                            "mail_messages.cancel_due_at",
                             |occurrence| super::machines::direct_message::Event::Due { occurrence },
                         )
                         .await

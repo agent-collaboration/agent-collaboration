@@ -8,7 +8,7 @@ use super::support::text;
 use collaboration_central_core::PausePoint;
 use serde_json::json;
 
-const REJECT_AUTOMATION: &str = "CREATE TRIGGER automation_reject BEFORE UPDATE OF evaluated_through_at ON automations BEGIN SELECT RAISE(ABORT,'automation rejected'); END";
+const REJECT_AUTOMATION: &str = "CREATE TRIGGER automation_reject BEFORE UPDATE OF evaluated_through_at ON automation_schedules BEGIN SELECT RAISE(ABORT,'automation rejected'); END";
 
 /// Corrupt wakes due at the next mark, run through two passes: all retired.
 async fn retired_wakes(
@@ -22,14 +22,14 @@ async fn retired_wakes(
         let wake = engine.wake(first, &format!("broken {index}")).await;
         original = engine
             .rows(
-                "SELECT target FROM wakes WHERE wake_id=?",
+                "SELECT target FROM automation_wakes WHERE wake_id=?",
                 vec![text(&wake)],
             )
             .await[0][0]
             .clone();
         engine
             .raw(
-                "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+                "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
                 vec![text(&wake)],
             )
             .await;
@@ -56,7 +56,7 @@ async fn health_lists_every_kind_and_the_retired_list_pages_in_attempt_order() {
     let failing = engine.wake(failing_due, "failing").await;
     engine
         .raw(
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
             vec![text(&failing)],
         )
         .await;
@@ -160,7 +160,7 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
     let attempt = engine.attempt_id("wake_timer", &wakes[0]).await;
     engine
         .raw(
-            "UPDATE wakes SET target=? WHERE wake_id=?",
+            "UPDATE automation_wakes SET target=? WHERE wake_id=?",
             vec![original_target.clone(), text(&wakes[0])],
         )
         .await;
@@ -230,7 +230,7 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
     assert_eq!(
         engine
             .rows(
-                "SELECT state FROM wakes WHERE wake_id=?",
+                "SELECT state FROM automation_wakes WHERE wake_id=?",
                 vec![text(&wakes[0])]
             )
             .await,
@@ -247,7 +247,7 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
     let third = engine.attempt_id("wake_timer", &wakes[2]).await;
     engine
         .raw(
-            "UPDATE wakes SET target=? WHERE wake_id=?",
+            "UPDATE automation_wakes SET target=? WHERE wake_id=?",
             vec![original_target.clone(), text(&wakes[2])],
         )
         .await;
@@ -277,7 +277,7 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
     let failing = engine.wake(due, "failing").await;
     engine
         .raw(
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
             vec![text(&failing)],
         )
         .await;
@@ -316,7 +316,7 @@ async fn automation_state(
 ) -> Vec<Vec<central_storage::SqlValue>> {
     engine
         .rows(
-            "SELECT state FROM automations WHERE automation_id=?",
+            "SELECT state FROM automation_schedules WHERE automation_id=?",
             vec![text(automation)],
         )
         .await
@@ -401,7 +401,7 @@ async fn discard_runs_the_finishing_transition_and_refuses_unsupported_and_stale
         held.until_held().await;
         engine
             .raw(
-                "UPDATE automations SET state='disabled' WHERE automation_id=?",
+                "UPDATE automation_schedules SET state='disabled' WHERE automation_id=?",
                 vec![text(&moved)],
             )
             .await;
@@ -432,27 +432,27 @@ async fn retired_with(engine: &EngineOrg, corruption: &Corruption) -> (&'static 
         Corruption::AutomationTimingRule => (
             "automation_timer",
             engine.automation(first, "corrupt timing").await,
-            "UPDATE automations SET timing_rule='not-json' WHERE automation_id=?",
+            "UPDATE automation_schedules SET timing_rule='not-json' WHERE automation_id=?",
         ),
         Corruption::AutomationTarget => (
             "automation_timer",
             engine.automation(first, "corrupt target").await,
-            "UPDATE automations SET target='not-json' WHERE automation_id=?",
+            "UPDATE automation_schedules SET target='not-json' WHERE automation_id=?",
         ),
         Corruption::WakeDueAt => (
             "wake_timer",
             engine.wake(first, "corrupt due").await,
-            "UPDATE wakes SET due_at='not-a-time' WHERE wake_id=?",
+            "UPDATE automation_wakes SET due_at='not-a-time' WHERE wake_id=?",
         ),
         Corruption::WakeTarget => (
             "wake_timer",
             engine.wake(first, "corrupt target").await,
-            "UPDATE wakes SET target='not-json' WHERE wake_id=?",
+            "UPDATE automation_wakes SET target='not-json' WHERE wake_id=?",
         ),
         Corruption::AutomationLifecycle => (
             "automation_timer",
             engine.automation(first, "corrupt state").await,
-            "UPDATE automations SET state='mangled' WHERE automation_id=?",
+            "UPDATE automation_schedules SET state='mangled' WHERE automation_id=?",
         ),
     };
     engine.raw(sql, vec![text(&subject)]).await;
@@ -476,7 +476,7 @@ async fn subject_state(
         "wake_timer" => {
             engine
                 .rows(
-                    "SELECT state FROM wakes WHERE wake_id=?",
+                    "SELECT state FROM automation_wakes WHERE wake_id=?",
                     vec![text(subject)],
                 )
                 .await
@@ -521,7 +521,7 @@ async fn discarding_a_retired_subject_whose_lifecycle_state_will_not_decode_repo
     let (kind, subject) = retired_with(&engine, &Corruption::AutomationLifecycle).await;
     let before = engine
         .rows(
-            "SELECT * FROM central_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
+            "SELECT * FROM engine_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
             vec![text(&subject)],
         )
         .await;
@@ -533,7 +533,7 @@ async fn discarding_a_retired_subject_whose_lifecycle_state_will_not_decode_repo
     assert_eq!(
         engine
             .rows(
-                "SELECT * FROM central_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
+                "SELECT * FROM engine_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?",
                 vec![text(&subject)],
             )
             .await,

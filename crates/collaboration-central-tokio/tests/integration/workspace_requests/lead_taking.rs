@@ -104,7 +104,7 @@ async fn anyone_takes_the_lead_and_a_lead_hands_it_over() {
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT holder,ended_at FROM project_roles WHERE project_id=? AND role='lead'",
+                sql: "SELECT holder,ended_at FROM workspace_project_roles WHERE project_id=? AND role='lead'",
                 args: vec![text(&project)],
             },
         )

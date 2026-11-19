@@ -68,7 +68,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![SqlValue::Text(allowed), SqlValue::Text(INSTALLATION.into())]
                     },
                     expect: RowExpectation::Exactly(1)
@@ -119,7 +119,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
     let drains = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT workspace_id FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT workspace_id FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![SqlValue::Text(workspace.workspace_id.to_string())],
         })
         .await?;
@@ -136,14 +136,14 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
     );
     let areas = store
         .read(Statement {
-            sql: "SELECT area_id FROM areas",
+            sql: "SELECT area_id FROM workspace_areas",
             args: vec![],
         })
         .await?;
     assert!(areas.rows.is_empty());
     let log = store
         .read(Statement {
-            sql: "SELECT request_id FROM request_log",
+            sql: "SELECT request_id FROM workspace_request_log",
             args: vec![],
         })
         .await?;

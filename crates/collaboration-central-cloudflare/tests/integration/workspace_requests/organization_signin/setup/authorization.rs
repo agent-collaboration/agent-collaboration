@@ -10,7 +10,7 @@ async fn same_actor_changed_content_cannot_reuse_a_retained_create_operation() {
     assert_eq!(first.1["result"], "applied");
     let before = stable_effects(&f).await;
     let before_markers = f
-        .read("SELECT COUNT(*) FROM organization_used_requests")
+        .read("SELECT COUNT(*) FROM admin_used_requests")
         .await
         .rows;
     // This is a new valid proof over the changed body and intent, by the same
@@ -26,7 +26,7 @@ async fn same_actor_changed_content_cannot_reuse_a_retained_create_operation() {
     );
     assert_eq!(before_markers, vec![vec![number(1)]]);
     assert_eq!(
-        f.read("SELECT COUNT(*) FROM organization_used_requests")
+        f.read("SELECT COUNT(*) FROM admin_used_requests")
             .await
             .rows,
         vec![vec![number(2)]],

@@ -10,7 +10,7 @@ async fn database() -> SqliteConnection {
         .run(&mut connection)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO organization_identity VALUES (?,'statement',0,0)")
+    sqlx::query("INSERT INTO signin_organization_identity VALUES (?,'statement',0,0)")
         .bind(key(1))
         .execute(&mut connection)
         .await
@@ -18,7 +18,7 @@ async fn database() -> SqliteConnection {
     connection
 }
 async fn wake(connection: &mut SqliteConnection, number: u32, state: &str, due: &str) {
-    sqlx::query("INSERT INTO wakes VALUES (?,'target',?,'wake',?,'1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')")
+    sqlx::query("INSERT INTO automation_wakes VALUES (?,'target',?,'wake',?,'1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')")
         .bind(key(number)).bind(due).bind(state).execute(connection).await.unwrap();
 }
 async fn attempt(
@@ -29,7 +29,7 @@ async fn attempt(
     state: &str,
     class: &str,
 ) {
-    sqlx::query("INSERT INTO central_work_attempts VALUES (?,?,?,?,1,'1970-01-01T00:10:00.000Z',?,NULL,'1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z',NULL,'1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')")
+    sqlx::query("INSERT INTO engine_work_attempts VALUES (?,?,?,?,1,'1970-01-01T00:10:00.000Z',?,NULL,'1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z',NULL,'1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')")
         .bind(key(number)).bind(kind).bind(subject).bind(state).bind(class).execute(connection).await.unwrap();
 }
 async fn alarm(connection: &mut SqliteConnection) -> (Option<i64>, Option<i64>) {
@@ -113,8 +113,8 @@ async fn the_static_alarm_query_combines_machine_and_legacy_control_deadlines() 
     let mut connection = database().await;
     assert_eq!(alarm(&mut connection).await, (None, None));
     wake(&mut connection, 2, "active", "1970-01-01T00:05:00.000Z").await;
-    sqlx::query("INSERT INTO automations VALUES (?,'target','timing','1970-01-01T00:00:00.000Z','1970-01-08T00:00:00.000Z',NULL,'automation','1970-01-01T00:07:00.000Z','active','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')").bind(key(3)).execute(&mut connection).await.unwrap();
-    sqlx::query("INSERT INTO notification_windows VALUES (?,'recipient','1970-01-01T00:00:00.000Z','1970-01-01T00:15:00.000Z','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')").bind(key(4)).execute(&mut connection).await.unwrap();
+    sqlx::query("INSERT INTO automation_schedules VALUES (?,'target','timing','1970-01-01T00:00:00.000Z','1970-01-08T00:00:00.000Z',NULL,'automation','1970-01-01T00:07:00.000Z','active','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')").bind(key(3)).execute(&mut connection).await.unwrap();
+    sqlx::query("INSERT INTO mail_notification_windows VALUES (?,'recipient','1970-01-01T00:00:00.000Z','1970-01-01T00:15:00.000Z','1970-01-01T00:00:00.000Z','1970-01-01T00:00:00.000Z')").bind(key(4)).execute(&mut connection).await.unwrap();
     assert_eq!(alarm(&mut connection).await, (Some(300_000), Some(900_000)));
     attempt(
         &mut connection,
@@ -135,17 +135,17 @@ async fn the_static_alarm_query_combines_machine_and_legacy_control_deadlines() 
     )
     .await;
     assert_eq!(alarm(&mut connection).await, (Some(420_000), Some(600_000)));
-    sqlx::query("UPDATE central_work_attempts SET state='retired'")
+    sqlx::query("UPDATE engine_work_attempts SET state='retired'")
         .execute(&mut connection)
         .await
         .unwrap();
     assert_eq!(alarm(&mut connection).await, (Some(420_000), None));
-    sqlx::query("UPDATE automations SET next_due_at='unreadable'")
+    sqlx::query("UPDATE automation_schedules SET next_due_at='unreadable'")
         .execute(&mut connection)
         .await
         .unwrap();
     assert_eq!(alarm(&mut connection).await, (Some(0), None));
-    sqlx::query("DELETE FROM organization_identity")
+    sqlx::query("DELETE FROM signin_organization_identity")
         .execute(&mut connection)
         .await
         .unwrap();
@@ -161,10 +161,10 @@ async fn the_static_alarm_query_combines_machine_and_legacy_control_deadlines() 
 #[tokio::test]
 async fn the_test_support_alarm_query_registers_six_kinds_and_the_sixth_contributes() {
     for table in [
-        "FROM wakes ",
-        "FROM automations ",
-        "FROM notification_windows ",
-        "FROM workspace_drains ",
+        "FROM automation_wakes ",
+        "FROM automation_schedules ",
+        "FROM mail_notification_windows ",
+        "FROM mail_workspace_drains ",
         "FROM engine_probe_items ",
         "FROM engine_alarm_only_items ",
     ] {

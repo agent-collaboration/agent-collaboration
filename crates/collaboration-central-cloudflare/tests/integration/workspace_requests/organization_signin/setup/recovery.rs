@@ -28,9 +28,9 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
     assert_eq!(lost.0, 503);
     assert!(lost.1.is_empty());
     let before = stable_effects(&f).await;
-    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests)").await.rows,vec![vec![number(1),number(1),number(2),number(1)]]);
+    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests)").await.rows,vec![vec![number(1),number(1),number(2),number(1)]]);
     let retained = f
-        .read("SELECT answer FROM request_log ORDER BY request_id")
+        .read("SELECT answer FROM runtime_request_log ORDER BY request_id")
         .await
         .rows;
     let Some(SqlValue::Text(retained)) = retained.first().and_then(|row| row.first()) else {
@@ -75,7 +75,7 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
         "replay changes no directory, ledger, actor or record"
     );
     assert_eq!(
-        f.read("SELECT COUNT(*) FROM organization_used_requests")
+        f.read("SELECT COUNT(*) FROM admin_used_requests")
             .await
             .rows,
         vec![vec![number(3)]]
@@ -96,22 +96,25 @@ async fn person_create_records_checked_origin_without_machine_rights() {
         NOW_SECONDS,
     );
     super::super::super::support::seed_enrollment(&f.host, &caller, "[]", NOW_SECONDS).await;
-    let before = f.read("SELECT * FROM machines ORDER BY machine_id").await;
+    let before = f
+        .read("SELECT * FROM login_machines ORDER BY machine_id")
+        .await;
     let approvals = f
-        .read("SELECT * FROM machine_approvals ORDER BY approval_id")
+        .read("SELECT * FROM login_machine_approvals ORDER BY approval_id")
         .await;
     let operation = operation(0x742);
     assert_eq!(
         submit(&f, &f.owner(), &operation, "Person origin").await.1["result"],
         "applied"
     );
-    assert_eq!(f.read("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE kind='workspaceCreated'").await.rows,vec![vec![SqlValue::Text(operation.clone()),SqlValue::Text("workspaceCreated".into()),SqlValue::Text("person".into()),SqlValue::Text(signed::OWNER.into()),SqlValue::Text("workspace:create".into()),SqlValue::Text(operation.clone())]]);
+    assert_eq!(f.read("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM signin_change_records WHERE kind='workspaceCreated'").await.rows,vec![vec![SqlValue::Text(operation.clone()),SqlValue::Text("workspaceCreated".into()),SqlValue::Text("person".into()),SqlValue::Text(signed::OWNER.into()),SqlValue::Text("workspace:create".into()),SqlValue::Text(operation.clone())]]);
     assert_eq!(
-        f.read("SELECT * FROM machines ORDER BY machine_id").await,
+        f.read("SELECT * FROM login_machines ORDER BY machine_id")
+            .await,
         before
     );
     assert_eq!(
-        f.read("SELECT * FROM machine_approvals ORDER BY approval_id")
+        f.read("SELECT * FROM login_machine_approvals ORDER BY approval_id")
             .await,
         approvals
     );
@@ -134,7 +137,7 @@ async fn person_create_records_checked_origin_without_machine_rights() {
         "person create grants no ordinary machine allowance"
     );
     f.execute(
-        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+        "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             SqlValue::Text(serde_json::to_string(&vec![&operation]).unwrap()),
             SqlValue::Text(caller.caller.machine_id().to_string()),
@@ -181,7 +184,9 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
         )
     ));
     assert_eq!(
-        f.read("SELECT name,description FROM workspaces").await.rows,
+        f.read("SELECT name,description FROM directory_workspaces")
+            .await
+            .rows,
         vec![vec![
             SqlValue::Text("Shared name".into()),
             SqlValue::Text("".into())
@@ -203,7 +208,9 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
         (200, json!({"result":"refused","reason":"nameInUse"}))
     );
     assert_eq!(
-        f.read("SELECT COUNT(*) FROM workspaces").await.rows,
+        f.read("SELECT COUNT(*) FROM directory_workspaces")
+            .await
+            .rows,
         vec![vec![number(1)]]
     );
     f.close().await;
@@ -230,7 +237,7 @@ async fn last_statement_failure_rolls_back_directory_actor_ledger_proof_and_chan
     let runtime = f.runtime().await;
     // request_log::retain ends with this DELETE. A real older create makes
     // its expired row eligible, so the final cleanup statement must visit it.
-    let outcome=runtime.run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER fail_setup_ledger BEFORE DELETE ON request_log BEGIN SELECT RAISE(ABORT,'fixture last setup statement failure'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap();
+    let outcome=runtime.run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER fail_setup_ledger BEFORE DELETE ON runtime_request_log BEGIN SELECT RAISE(ABORT,'fixture last setup statement failure'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
     let before = owned_rows(&f).await;
     let operation = operation(0x743);
@@ -266,7 +273,7 @@ async fn last_statement_failure_rolls_back_directory_actor_ledger_proof_and_chan
         "applied",
         "the exact same proof remains fresh after full rollback"
     );
-    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM actor_identities)").await.rows,vec![vec![number(2),number(3),number(2),number(1),number(2)]]);
+    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM directory_workspaces),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM access_actor_identities)").await.rows,vec![vec![number(2),number(3),number(2),number(1),number(2)]]);
     let replay = f
         .post_bytes(signed::CREATE, &body, &headers(&person, &intent, now))
         .await;

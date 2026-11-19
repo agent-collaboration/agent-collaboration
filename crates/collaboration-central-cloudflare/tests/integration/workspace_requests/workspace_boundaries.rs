@@ -28,7 +28,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                        sql: "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![
                             text(
                                 serde_json::to_string(&[&f.workspace, &other.workspace_id])
@@ -136,7 +136,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id FROM actor_identities",
+            sql: "SELECT actor_identity_id FROM access_actor_identities",
             args: vec![],
         })
         .await
@@ -315,7 +315,7 @@ async fn backlog_removal_cascades_both_reference_directions_and_literal_link_tex
         .inspect_workspace(
             &f.workspace,
             Statement {
-                sql: "SELECT reference_id FROM item_references",
+                sql: "SELECT reference_id FROM workspace_item_references",
                 args: vec![],
             },
         )

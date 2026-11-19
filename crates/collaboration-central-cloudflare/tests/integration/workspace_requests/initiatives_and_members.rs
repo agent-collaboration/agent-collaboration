@@ -209,7 +209,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
     let actors = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id,identity FROM actor_identities",
+            sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
             args: vec![],
         })
         .await
