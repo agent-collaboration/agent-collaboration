@@ -515,7 +515,7 @@ enum ModelState {
     SentAnswerLost,
     Accepted,
     Refused,
-    /// Past its deadline: a thread post gives up 24 hours after it was stored.
+    /// Past the 15-minute deadline shared by thread posts and direct messages.
     Ended(OutboxCancellation),
 }
 

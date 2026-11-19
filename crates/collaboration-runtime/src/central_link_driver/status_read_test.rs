@@ -120,12 +120,12 @@ async fn message_status_makes_one_sender_scoped_list_read() {
         correlation_id: request.correlation_id().clone(),
         result: Box::new(ReplyPayload::Workspace(WorkspaceReply {
             result: WorkspaceResult::Done(WorkspaceAnswer::MessageStatus {
-                status: MessageStatus::Delivered,
+                status: MessageStatus::Delivered {},
             }),
             actors: Vec::new(),
         })),
     }));
-    assert_eq!(lookup.await.unwrap(), Ok(Some(MessageStatus::Delivered)));
+    assert_eq!(lookup.await.unwrap(), Ok(Some(MessageStatus::Delivered {})));
     assert!(central.from_router.try_recv().is_err());
     harness.stop().await;
 }
