@@ -6,8 +6,8 @@ Run the package with its workspace CI features:
 cargo nextest run --locked --profile ci -p interaction-storage --features runtime-test-support
 ```
 
-`integration/main.rs` gathers 9 former external test roots.
-Cases cover durable pushes, wake handoff, subscription progress, recovery, and database journal mode. Library unit tests remain colocated with their implementations.
+`integration/main.rs` gathers 6 former external test roots.
+Cases cover durable pushes, subscription progress, recovery, and database journal mode. Library unit tests remain colocated with their implementations.
 History unit cases prove that retention reads durable settlements while the
 acknowledged cache remains unchanged, and that inventory failures return errors.
 

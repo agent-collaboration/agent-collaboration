@@ -22,7 +22,6 @@ pub use interaction_history::{
 };
 mod board_intent_progress;
 mod interaction_notice_pushes;
-mod local_automation_pushes;
 mod local_cancel_deliveries;
 mod local_delivery_retries;
 mod mail_delivery_observations;
@@ -68,7 +67,6 @@ pub use message_send_answers::{
 mod carrier_push_recovery;
 mod carrier_push_transitions;
 mod held_mail;
-mod owed_wake_admission;
 mod push_record_rows;
 mod push_records;
 mod push_retention;

@@ -272,17 +272,6 @@ export const rows: InventoryRow[] = [
     fixedBy: "D2",
   },
   {
-    file: `${S}local_automation_pushes.rs`,
-    line: 103,
-    owner: "router-vocabulary",
-    kind: "content-parser",
-    defines: "settle_wake_push repeats the DeliveryOutcome to PushDeliveryState mapping inline",
-    usedBy: storage,
-    duplicateGroup: "delivery-state-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
     file: `${S}mail_push_projection.rs`,
     line: 106,
     owner: "router-vocabulary",

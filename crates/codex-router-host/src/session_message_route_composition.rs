@@ -44,7 +44,6 @@ pub(crate) fn compose_session_message_routes(
     let service_id = native_backend.endpoint.service_id.clone();
     let codex_route: Arc<dyn SessionDeliveryRoute> = Arc::new(
         collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            Arc::clone(&clock),
             service_id.clone(),
             directory.clone(),
             native_backend,

@@ -141,7 +141,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .unwrap_or_else(|error| panic!("binding: {error}"));
     let clock = identity.runtime_clock();
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
-        identity.runtime_clock(),
         service_id
             .to_owned()
             .try_into()

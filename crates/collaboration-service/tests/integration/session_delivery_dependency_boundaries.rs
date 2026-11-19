@@ -8,10 +8,6 @@ fn message_features_do_not_import_client_routes() {
             include_str!("../../src/collaboration_application/message_operations.rs"),
         ),
         (
-            "timed wake",
-            include_str!("../../../collaboration-runtime/src/wakeup_delivery_sender.rs"),
-        ),
-        (
             "subscription push",
             include_str!("../../src/subscription_delivery/subscription_push.rs"),
         ),
@@ -26,14 +22,6 @@ fn message_features_do_not_import_client_routes() {
         (
             "direct message push",
             include_str!("../../src/subscription_delivery/direct_message_push.rs"),
-        ),
-        (
-            "scheduled run worker",
-            include_str!("../../../collaboration-runtime/src/scheduled_run_worker.rs"),
-        ),
-        (
-            "run reconciliation",
-            include_str!("../../../collaboration-runtime/src/run_reconciliation.rs"),
         ),
     ];
     for (feature, source) in features {

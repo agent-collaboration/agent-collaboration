@@ -43,7 +43,7 @@ async fn materialized_unloaded_session_holds_mail_then_delivers_after_readiness(
         MachineIdentity::new(target.endpoint.service_id.clone(), Some("native proof")).unwrap();
     let loaded = Arc::new(AtomicBool::new(false));
     let inputs = Arc::new(AtomicUsize::new(0));
-    let route = native_route(fixture.host.clock.clone(), &target, socket, root.path());
+    let route = native_route(&target, socket, root.path());
     let delivery = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
         board_availability: BoardAvailability::Unavailable,
@@ -161,7 +161,6 @@ async fn release_ready_item(
 }
 
 fn native_route(
-    clock: Arc<dyn router_clock::RuntimeClock>,
     target: &SessionRef,
     socket: std::path::PathBuf,
     home: &std::path::Path,
@@ -207,7 +206,6 @@ fn native_route(
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket, Some(schemas)).unwrap();
     Arc::new(CodexAppServerDeliveryRoute::new(
-        clock,
         target.endpoint.service_id.clone(),
         endpoints,
         NativeControlBackend {

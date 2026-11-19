@@ -173,7 +173,6 @@ impl ApprovalFixture {
         .expect("approval broker");
         let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
             Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
-                clock.clone(),
                 service_id.clone(),
                 endpoints,
                 native_backend.clone(),

@@ -289,7 +289,6 @@ async fn exercise_message(
         .with_endpoints(vec![description])?
         .with_native_backend(native_backend.clone())?;
     let route = CodexAppServerDeliveryRoute::new(
-        identity.runtime_clock(),
         service_id.to_owned().try_into()?,
         identity.endpoint_directory(),
         native_backend,
