@@ -161,7 +161,13 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     }
     let now = runtime.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
-    let digest = crate::workspace_request_log::digest(&request.operation)?;
+    let digest = match &directory {
+        DirectoryRequest::Change { workspace_id, .. } => {
+            // Directory writes share the organization log across workspace targets.
+            crate::workspace_request_log::digest(&(workspace_id, &request.operation))?
+        }
+        _ => crate::workspace_request_log::digest(&request.operation)?,
+    };
     let actor_plan = runtime.prepare_identity(&identity, now).await?;
     let actor = actor_plan.actor;
     let logged = runtime

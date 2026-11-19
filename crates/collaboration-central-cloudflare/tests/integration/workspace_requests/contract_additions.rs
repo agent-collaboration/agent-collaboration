@@ -528,3 +528,64 @@ async fn new_lists_page_newest_first_and_filter_members_roles_issues_and_tags() 
     assert_eq!(refs(&found), vec![m::ItemRef::Project(project)]);
     f.host.close().await;
 }
+
+#[tokio::test]
+async fn directory_write_request_ids_bind_the_target_workspace() {
+    let f = Fixture::new().await;
+    let directory =
+        |workspace, request, operation| call(&f.host, &f.caller, workspace, request, operation);
+    let second = directory(
+        None,
+        2050,
+        m::WorkspaceOperation::CreateWorkspace {
+            name: name("Unchanged workspace"),
+        },
+    )
+    .await;
+    let m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace: second }) =
+        second.result
+    else {
+        panic!("expected a second workspace, got {second:?}");
+    };
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let second_row = || central_storage::Statement {
+        sql: "SELECT name,description,state,updated_at FROM directory_workspaces WHERE workspace_id=?",
+        args: vec![central_storage::SqlValue::Text(
+            second.workspace_id.to_string(),
+        )],
+    };
+    let before = runtime.statement_host().read(second_row()).await.unwrap();
+    let mut first_answers = Vec::new();
+    let mut reused_answers = Vec::new();
+    for (request, operation) in [
+        (
+            2051,
+            m::WorkspaceOperation::UpdateWorkspace {
+                name: name("First renamed"),
+                description: "First description".to_owned().try_into().unwrap(),
+            },
+        ),
+        (2052, m::WorkspaceOperation::ArchiveWorkspace),
+    ] {
+        let first = directory(Some(f.workspace.clone()), request, operation.clone()).await;
+        let exact_retry = directory(Some(f.workspace.clone()), request, operation.clone()).await;
+        let reused = directory(Some(second.workspace_id.clone()), request, operation).await;
+        first_answers.push((first, exact_retry));
+        reused_answers.push(reused.result);
+    }
+    let after = runtime.statement_host().read(second_row()).await.unwrap();
+    f.host.close().await;
+
+    assert_eq!(before.rows.len(), 1);
+    assert_eq!(after, before);
+    for (first, retry) in first_answers {
+        assert_eq!(retry, first);
+        assert!(matches!(first.result,
+            m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceUpdated { workspace })
+                if workspace.workspace_id == f.workspace));
+    }
+    assert_eq!(
+        reused_answers,
+        vec![m::WorkspaceResult::Refused(m::RefusalReason::RequestIdReused); 2],
+    );
+}
