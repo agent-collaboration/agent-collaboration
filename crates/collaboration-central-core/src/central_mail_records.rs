@@ -62,6 +62,12 @@ pub(crate) fn decode_messages(
                 ("queued", SqlValue::Null) => mail::MessageState::Queued,
                 ("delivered", SqlValue::Null) => mail::MessageState::Delivered,
                 ("cancelled", SqlValue::Null) => mail::MessageState::Cancelled,
+                ("cancelled", SqlValue::Text(reason))
+                    if matches!(expected_kind, "notice" | "deliveryOutcome")
+                        && reason == crate::message_deadline::EXPIRED_24_HOURS =>
+                {
+                    mail::MessageState::Cancelled
+                }
                 ("failed", SqlValue::Text(reason)) if !reason.is_empty() => {
                     mail::MessageState::Failed {
                         reason: reason.clone(),

@@ -29,6 +29,7 @@ const ENGINE_KINDS: &[(&str, EngineKindName)] = &[
     ("wake_timer", EngineKindName::WakeTimer),
     ("automation_timer", EngineKindName::AutomationTimer),
     ("direct_message", EngineKindName::DirectMessage),
+    ("system_message_expiry", EngineKindName::SystemMessageExpiry),
     ("legacy_notice_windows", EngineKindName::LegacyNoticeWindows),
     (
         "legacy_workspace_drains",
@@ -351,6 +352,7 @@ impl<R: EngineHost> Engine<'_, R> {
             // A retired cancel can be retried; discarding it has no defined
             // end for the message yet.
             EngineKindName::DirectMessage
+            | EngineKindName::SystemMessageExpiry
             | EngineKindName::LegacyNoticeWindows
             | EngineKindName::LegacyWorkspaceDrains
             | EngineKindName::EngineSource => {

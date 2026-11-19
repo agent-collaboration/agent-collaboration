@@ -23,6 +23,7 @@ pub enum EngineKindName {
     WakeTimer,
     AutomationTimer,
     DirectMessage,
+    SystemMessageExpiry,
     LegacyNoticeWindows,
     LegacyWorkspaceDrains,
     EngineSource,

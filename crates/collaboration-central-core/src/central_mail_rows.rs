@@ -53,9 +53,7 @@ pub(crate) fn insert_message_due(
         (mail::MessageBody::Direct { .. }, Some(terms)) => Some(terms.delivery_window_ends_at),
         (mail::MessageBody::Notice { .. } | mail::MessageBody::DeliveryOutcome { .. }, None) => {
             Some(
-                message
-                    .created_at
-                    .checked_add_signed(crate::message_deadline::SYSTEM_MESSAGE_DELIVERY_WINDOW)
+                crate::message_deadline::system_message_deadline(message.created_at)
                     .ok_or_else(|| corrupt("mail_messages.delivery_window_ends_at"))?,
             )
         }

@@ -127,7 +127,27 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
             .control::<Option<i64>>("raw-alarm-time", &())
             .await
             .unwrap(),
-        None,
-        "nothing timed is left: the outcome message never arms the alarm"
+        Some(deadline.timestamp_millis()),
+        "a queued outcome arms the 24-hour expiry"
+    );
+    fixture
+        .clock
+        .0
+        .store(deadline.timestamp_millis(), Ordering::SeqCst);
+    runtime.after_event().await.unwrap();
+    let terminal_outcomes = runtime.statement_host().read(Statement {
+        sql: "SELECT state,failure_reason FROM mail_messages WHERE message_kind='deliveryOutcome'",
+        args: vec![],
+    }).await.unwrap();
+    assert_eq!(
+        terminal_outcomes.rows,
+        vec![vec![text("cancelled"), text("expired24Hours")]]
+    );
+    assert_eq!(
+        runtime
+            .control::<Option<i64>>("raw-alarm-time", &())
+            .await
+            .unwrap(),
+        None
     );
 }
