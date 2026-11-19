@@ -117,4 +117,10 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
     fn failure_sql(&self) -> &'static str {
         DIRECT_MESSAGE_FAILURE
     }
+
+    fn mail_ready(&self, effect: &direct::Effect) -> Option<crate::MailDeliveryReady> {
+        match effect {
+            direct::Effect::TellSender(notice) => Some(notice.into()),
+        }
+    }
 }

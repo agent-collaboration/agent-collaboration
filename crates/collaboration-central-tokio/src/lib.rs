@@ -264,3 +264,4 @@ impl<SharedHost: Host> LegacyObjectHost for TokioStorageHost<SharedHost> {
         self.sockets.publish(edits).await
     }
 }
+mod machine_push_registry;

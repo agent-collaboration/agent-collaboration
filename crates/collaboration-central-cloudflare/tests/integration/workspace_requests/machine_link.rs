@@ -1,6 +1,7 @@
 //! One original socket across real object eviction, live authority and SQLite effects.
 mod alarm_rearm;
 mod batch;
+mod delivery;
 mod fixture;
 mod probe_diagnostic;
 mod receipt;

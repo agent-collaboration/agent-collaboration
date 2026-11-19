@@ -206,13 +206,18 @@ fn decode_actor(
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
+        Ok(self.read_actor_identity(actor).await?.is_some())
+    }
+
+    pub(crate) async fn read_actor_identity(
+        &self,
+        actor: &ActorIdentityId,
+    ) -> Result<Option<Identity>, StoreFailure> {
         let rows=self.host.read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
-        match rows.rows.first() {
-            Some(row) => {
-                decode_actor(&rows, row)?;
-                Ok(true)
-            }
-            None => Ok(false),
+        match rows.rows.as_slice() {
+            [] => Ok(None),
+            [row] => Ok(Some(decode_actor(&rows, row)?.identity)),
+            _ => Err(corrupt("access_actor_identities.actor_identity_id")),
         }
     }
 }

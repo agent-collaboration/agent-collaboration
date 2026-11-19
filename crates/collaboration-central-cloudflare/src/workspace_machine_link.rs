@@ -67,7 +67,6 @@ impl CentralObject {
         let auto_response =
             WebSocketRequestResponsePair::new("ping", "pong").map_err(worker::Error::from)?;
         self.state.set_websocket_auto_response(&auto_response);
-        self.state.accept_web_socket(&pair.server);
         // Queue before the safety call; only send after its attempt has completed.
         let welcome = DataFrame::Welcome {
             machine_id: connection.machine_id().clone(),
@@ -76,7 +75,15 @@ impl CentralObject {
         if let Err(failure) = runtime.recompute_alarm().await {
             worker::console_warn!("post_welcome_alarm_recompute_failed failure={failure:?}");
         }
+        let tag = connection.machine_id().as_str();
+        let older = self.state.get_websockets_with_tag(tag);
+        self.state.accept_websocket_with_tags(&pair.server, &[tag]);
         send(&pair.server, welcome)?;
+        for socket in older {
+            let _ = socket.close(Some(1000), Some("machine link replaced"));
+        }
+        self.send_welcome_mail(&runtime, &pair.server, &connection.attachment())
+            .await?;
         Response::from_websocket(pair.client)
     }
 
@@ -136,6 +143,20 @@ impl CentralObject {
         #[cfg(feature = "test-support")]
         super::signin_launcher_controls::sample_clock(self, &organization).await?;
         let runtime = self.runtime(organization).await?;
+        let result = self
+            .dispatch_machine_event(&runtime, socket, attachment, requests)
+            .await;
+        self.flush_ready_mail(&runtime).await;
+        result
+    }
+
+    async fn dispatch_machine_event(
+        &self,
+        runtime: &std::sync::Arc<OrgRuntime>,
+        socket: WebSocket,
+        attachment: MachineConnectionAttachment,
+        requests: IncomingRequests,
+    ) -> Result<()> {
         match requests {
             IncomingRequests::Ack { message_id, answer } => {
                 match runtime
@@ -229,6 +250,105 @@ impl CentralObject {
                     return close(&socket, "machine authority expired or revoked");
                 }
                 Ok(())
+            }
+        }
+    }
+
+    async fn send_welcome_mail(
+        &self,
+        runtime: &OrgRuntime,
+        socket: &WebSocket,
+        attachment: &MachineConnectionAttachment,
+    ) -> Result<()> {
+        use collaboration_central_core::{WELCOME_PAGE_SIZE, WelcomeDeliveryPage};
+        let mut cursor = None;
+        loop {
+            let page = runtime
+                .windowed_welcome_page(attachment, cursor.as_ref())
+                .await
+                .map_err(|error| worker::Error::RustError(error.to_string()))?;
+            let WelcomeDeliveryPage::Ready(rows) = page else {
+                return close(socket, "machine authority expired or revoked");
+            };
+            cursor = rows
+                .last()
+                .map(collaboration_central_core::WindowedDelivery::cursor);
+            let count = rows.len();
+            for row in rows {
+                if !self
+                    .offer_windowed_mail(runtime, socket, attachment, &row.message.message_id)
+                    .await?
+                {
+                    return Ok(());
+                }
+            }
+            if count < WELCOME_PAGE_SIZE {
+                return Ok(());
+            }
+        }
+    }
+
+    pub(super) async fn flush_ready_mail(&self, runtime: &OrgRuntime) {
+        let ready = std::mem::take(
+            &mut *self
+                .mail_pushes
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        for message in ready {
+            for socket in self
+                .state
+                .get_websockets_with_tag(message.machine_id.as_str())
+            {
+                if socket.as_ref().ready_state() != web_sys::WebSocket::OPEN {
+                    continue;
+                }
+                if let Ok(Some(attachment)) =
+                    socket.deserialize_attachment::<MachineConnectionAttachment>()
+                    && let Err(error) = self
+                        .offer_windowed_mail(runtime, &socket, &attachment, &message.message_id)
+                        .await
+                {
+                    worker::console_warn!("central delivery offer failed: {error}");
+                }
+            }
+        }
+    }
+
+    async fn offer_windowed_mail(
+        &self,
+        runtime: &OrgRuntime,
+        socket: &WebSocket,
+        attachment: &MachineConnectionAttachment,
+        message_id: &workspace_ids::MessageId,
+    ) -> Result<bool> {
+        use collaboration_central_core::WindowedDeliveryDecision;
+        let decision = runtime
+            .prepare_windowed_delivery(attachment, message_id)
+            .await
+            .map_err(|error| worker::Error::RustError(error.to_string()))?;
+        match decision {
+            WindowedDeliveryDecision::Ready(delivery) => {
+                if socket.as_ref().ready_state() != web_sys::WebSocket::OPEN {
+                    return Ok(false);
+                }
+                if self.clock.now().unix_millis() < delivery.expires_at.timestamp_millis() {
+                    send(
+                        socket,
+                        DataFrame::Deliver {
+                            message: delivery.message,
+                            sender: delivery.sender,
+                        },
+                    )?;
+                }
+                Ok(true)
+            }
+            WindowedDeliveryDecision::Ineligible | WindowedDeliveryDecision::SenderUnresolved => {
+                Ok(true)
+            }
+            WindowedDeliveryDecision::AuthorityLapsed => {
+                close(socket, "machine authority expired or revoked")?;
+                Ok(false)
             }
         }
     }
