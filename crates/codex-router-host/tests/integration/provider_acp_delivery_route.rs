@@ -1,5 +1,7 @@
 //! Provider route decisions before any client effect.
 
+mod restore_mode_refusal;
+
 use crate::provider_fixture_launch;
 
 use agent_automation::{

@@ -405,15 +405,25 @@ pub(crate) fn mode_mismatch_answer_for(
 /// A held setting's answer, read from the session's cell (D1 M8); a mode a
 /// restore couldn't put back names both modes and the next step.
 pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
+    cells.read(session_id, describe_settings_hold)
+}
+
+pub(crate) fn settings_refusal_for(cells: &SessionCellTable, session_id: &str) -> Option<String> {
     cells.read(session_id, |cell| {
-        if let Some(mismatch) = cell.restore_mode_mismatch() {
-            return mode_not_restored_answer(mismatch);
-        }
-        settings_hold_answer(if cell.any_setting_outcome_unknown() {
-            UnresolvedCause::OutcomeUnknown
-        } else {
-            UnresolvedCause::DefiniteFailure
-        })
+        cell.settings_held().then(|| describe_settings_hold(cell))
+    })
+}
+
+fn describe_settings_hold(
+    cell: &provider_session_machines::session_cell_machine::SessionCell,
+) -> String {
+    if let Some(mismatch) = cell.restore_mode_mismatch() {
+        return mode_not_restored_answer(mismatch);
+    }
+    settings_hold_answer(if cell.any_setting_outcome_unknown() {
+        UnresolvedCause::OutcomeUnknown
+    } else {
+        UnresolvedCause::DefiniteFailure
     })
 }
 

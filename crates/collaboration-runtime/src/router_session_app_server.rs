@@ -146,8 +146,8 @@ enum ThreadMethodError {
     InvalidParams,
     #[error("setting context changed")]
     SettingsContextChanged,
-    #[error("provider settings need resolution")]
-    SettingsUnresolved,
+    #[error("{answer}")]
+    SettingsUnresolved { answer: String },
     #[error("new session settings are invalid")]
     InvalidCreateSetting {
         target: Option<collaboration_protocol::SessionRef>,

@@ -465,7 +465,9 @@ fn queued_input(queued: crate::ProviderQueuedInput) -> QueuedSessionInput {
 fn map_admission_failure(error: ProviderQueueAdmissionError) -> CommandFailure {
     match error {
         ProviderQueueAdmissionError::SessionNotFound => CommandFailure::SessionNotFound,
-        ProviderQueueAdmissionError::SettingsUnresolved => CommandFailure::SettingsUnresolved,
+        ProviderQueueAdmissionError::SettingsUnresolved { answer } => {
+            CommandFailure::SettingsUnresolved { answer }
+        }
         ProviderQueueAdmissionError::UnsupportedContent { content_type } => {
             CommandFailure::UnsupportedContent(content_type)
         }
@@ -507,8 +509,8 @@ fn map_runtime_failure(error: ExternalProviderRuntimeError) -> CommandFailure {
         | ExternalProviderRuntimeError::ProviderSessionNotFound { .. } => {
             CommandFailure::SessionNotFound
         }
-        ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
-            CommandFailure::SettingsUnresolved
+        ExternalProviderRuntimeError::SettingsUnresolved { answer } => {
+            CommandFailure::SettingsUnresolved { answer }
         }
         ExternalProviderRuntimeError::UnsupportedContent { content_type } => {
             CommandFailure::UnsupportedContent(content_type)
@@ -531,7 +533,11 @@ fn map_operation_failure(error: ConversationOperationFailure) -> CommandFailure 
         }
         ConversationOperationFailureKind::Busy => CommandFailure::Busy,
         ConversationOperationFailureKind::UnsupportedCapability => CommandFailure::Unsupported,
-        ConversationOperationFailureKind::SettingsUnresolved => CommandFailure::SettingsUnresolved,
+        ConversationOperationFailureKind::SettingsUnresolved => {
+            CommandFailure::SettingsUnresolved {
+                answer: String::from(error.message),
+            }
+        }
         ConversationOperationFailureKind::InvalidSetting => match error.invalid_setting {
             Some(detail) => CommandFailure::InvalidCreateSetting {
                 target: error.target,

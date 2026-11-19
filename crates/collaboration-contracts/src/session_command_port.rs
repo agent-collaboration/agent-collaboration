@@ -121,8 +121,8 @@ pub enum CommandFailure {
     Busy,
     #[error("session has no active turn")]
     NoActiveTurn,
-    #[error("session settings are unresolved")]
-    SettingsUnresolved,
+    #[error("{answer}")]
+    SettingsUnresolved { answer: String },
     #[error("setting context changed")]
     SettingsContextChanged,
     #[error("content type is unsupported: {0}")]

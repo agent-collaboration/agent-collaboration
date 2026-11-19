@@ -352,6 +352,10 @@ impl ExternalProviderRuntime {
         self.client.settings_unresolved(provider_session_id)
     }
 
+    pub(crate) fn settings_refusal(&self, provider_session_id: &str) -> Option<String> {
+        self.client.settings_refusal(provider_session_id)
+    }
+
     pub fn setting_outcome_unknown(
         &self,
         provider_session_id: &str,

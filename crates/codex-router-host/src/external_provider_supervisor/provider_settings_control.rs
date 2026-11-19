@@ -468,7 +468,9 @@ impl ExternalProviderSupervisor {
             .map(|_| ())
             .map_err(|error| match error {
                 SettingControlFailure::ContextChanged(_) => CommandFailure::SettingsContextChanged,
-                SettingControlFailure::Unresolved { .. } => CommandFailure::SettingsUnresolved,
+                SettingControlFailure::Unresolved { answer, .. } => {
+                    CommandFailure::SettingsUnresolved { answer }
+                }
                 SettingControlFailure::Provider(error) => match error.kind {
                     collaboration_protocol::ProviderSettingsFailureKind::WrongActor => {
                         CommandFailure::UnauthorizedActor

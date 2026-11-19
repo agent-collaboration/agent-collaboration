@@ -95,6 +95,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         super::settings_held(&self.session_cells, provider_session_id)
     }
 
+    /// The session cell's reason and recovery steps if settings hold input.
+    pub fn settings_refusal(&self, provider_session_id: &str) -> Option<String> {
+        crate::session_cell_bookkeeping::settings_refusal_for(
+            &self.session_cells,
+            provider_session_id,
+        )
+    }
+
     /// True while this setting's last change has an unknown outcome, so a
     /// reader never reports the catalog's old value as confirmed (D1 R2).
     pub fn setting_outcome_unknown(
