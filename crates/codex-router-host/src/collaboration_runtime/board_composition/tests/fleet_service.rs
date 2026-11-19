@@ -315,7 +315,7 @@ impl PeerAuthenticator for Authenticator {
             "Bearer board-session-fixture" => (self.peer, self.installation.clone()),
             "Bearer board-epoch-successor-fixture" => (
                 self.successor_peer,
-                "00000000-0000-4000-8000-000000000002"
+                "00000000-0000-7000-8000-000000000002"
                     .to_owned()
                     .try_into()
                     .map_err(|_| AuthRefusal::Unknown)?,
@@ -409,7 +409,7 @@ impl TestFleet {
         let auth = Arc::new(Authenticator {
             peer,
             successor_peer: PeerId::new(durable_steps::Uuid::now_v7())?,
-            installation: "00000000-0000-4000-8000-000000000001"
+            installation: "00000000-0000-7000-8000-000000000001"
                 .to_owned()
                 .try_into()?,
             entered: Notify::new(),
