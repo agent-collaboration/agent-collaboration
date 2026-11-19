@@ -1,7 +1,7 @@
 //! Composes central mail with the interim engine and request entry.
 use crate::WorkspaceRuntime;
 use crate::engine::attempt_statements::{CONTROL_WRITE, delete_attempt};
-use crate::engine::port::Engine;
+use crate::engine::port::{Engine, EngineHost};
 use central_engine_model::{ItemFailureClass, RetirementThreshold};
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
 use fleet_contracts::{
@@ -53,17 +53,13 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
 }
 
-impl<Host: CentralStore, Stores: WorkspaceStores> AlarmRecompute
-    for Engine<'_, WorkspaceRuntime<Host, Stores>>
-{
+impl<Host: EngineHost> AlarmRecompute for Engine<'_, Host> {
     fn alarm_update(&self) -> AlarmUpdate {
         crate::engine::query_registry::alarm_update()
     }
 }
 
-impl<Host: CentralStore, Stores: WorkspaceStores> EngineAttemptControl
-    for Engine<'_, WorkspaceRuntime<Host, Stores>>
-{
+impl<Host: EngineHost> EngineAttemptControl for Engine<'_, Host> {
     async fn control_gate(
         &self,
         subject: &EngineSubject,
