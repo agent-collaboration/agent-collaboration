@@ -11,6 +11,7 @@ use std::sync::Arc;
 use workspace_ids::MachineId;
 
 const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+pub(crate) const MACHINE_TOKEN_LIFETIME_SECONDS: i64 = 600;
 
 #[derive(Clone, Debug)]
 pub struct MachineTokenPolicy {
@@ -157,11 +158,12 @@ impl Claims {
         if self.iss != policy.issuer
             || self.aud != policy.audience
             || self.client_id != self.azp
+            || self.client_id != enrollment_id.as_str()
             || [self.iat, self.exp, grant_expires_at]
                 .iter()
                 .any(|value| !(0..=MAX_SAFE_INTEGER).contains(value))
             || self.exp <= self.iat
-            || self.exp - self.iat > 3600
+            || self.exp - self.iat > MACHINE_TOKEN_LIFETIME_SECONDS
         {
             return Err(rejected);
         }

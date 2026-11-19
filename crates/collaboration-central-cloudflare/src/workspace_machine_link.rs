@@ -166,6 +166,10 @@ impl CentralObject {
                     Ok(MailAckSettlement::Ignored(MailAckIgnored::MachineAuthorityLapsed)) => {
                         close(&socket, "machine authority expired or revoked")
                     }
+                    Ok(MailAckSettlement::Ignored(reason @ MailAckIgnored::WrongMachine)) => {
+                        worker::console_warn!("machine_delivery_ack_ignored reason={reason:?}");
+                        Ok(())
+                    }
                     Ok(_) => Ok(()),
                     Err(_) => socket.close(Some(1011), Some("central unavailable")),
                 }

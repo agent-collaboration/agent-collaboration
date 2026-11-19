@@ -13,7 +13,7 @@ pub fn machine_token(
     sign(
         &json!({"alg":"EdDSA","typ":"at+jwt","kid":"stamp-a"}),
         &json!({"iss":ISSUER,"aud":MACHINE_AUDIENCE,"iat":now_seconds,
-            "exp":now_seconds+3600,"client_id":enrollment,"azp":enrollment,
+            "exp":now_seconds+600,"client_id":enrollment,"azp":enrollment,
             "organization_id":organization,"grant_expires_at":grant_expires_at,
             "principal":{"kind":"machine","installation_id":machine_id,"enrollment_id":enrollment}}),
         7,

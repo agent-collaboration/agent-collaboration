@@ -94,7 +94,7 @@ impl Fixture {
         let token = signed::sign(
             &json!({"alg":"EdDSA","typ":"at+jwt","kid":"stamp-a"}),
             &json!({"iss":signed::ISSUER,"aud":AUDIENCE,"iat":signed::NOW_SECONDS,
-                "exp":signed::NOW_SECONDS+3600,"grant_expires_at":grant_expires_at.0,
+                "exp":signed::NOW_SECONDS+600,"grant_expires_at":grant_expires_at.0,
                 "organization_id":signed::ORGANIZATION,"client_id":enrollment_id,"azp":enrollment_id,
                 "principal":{"kind":"machine","installation_id":INSTALLATION,"enrollment_id":enrollment_id}}),
             7,

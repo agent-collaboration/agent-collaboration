@@ -350,7 +350,7 @@ async fn every_refused_renewal_keeps_the_current_deadline() -> Result<()> {
                 reason: TokenRenewalRefusal::DifferentMachine
             },
             TokenRenewalResult::Refused {
-                reason: TokenRenewalRefusal::DifferentEnrollment
+                reason: TokenRenewalRefusal::TokenRejected
             },
         ]
     );

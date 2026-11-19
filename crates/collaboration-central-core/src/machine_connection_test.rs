@@ -14,7 +14,7 @@ fn attachment() -> MachineConnectionAttachment {
         organization_id: id(1).try_into().unwrap(),
         machine_id: id(3).try_into().unwrap(),
         enrollment_id: id(4).try_into().unwrap(),
-        client_id: id(5).try_into().unwrap(),
+        client_id: id(4).try_into().unwrap(),
         effective_expires_at: UnixSeconds(NOW_MS / 1000 + 600),
     }
 }

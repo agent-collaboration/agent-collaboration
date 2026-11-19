@@ -131,6 +131,9 @@ pub(crate) fn validate_live(
     if facts.active.as_ref().map(|active| &active.id) != Some(&enrollment.id) {
         return Ok(Err(MachineConnectionRefusal::Superseded {}));
     }
+    if attachment.client_id.as_str() != attachment.enrollment_id.as_str() {
+        return Ok(Err(MachineConnectionRefusal::WrongClient {}));
+    }
     match &enrollment.state {
         StoredEnrollmentState::Enrolled { client_id, .. } if client_id == &attachment.client_id => {
         }

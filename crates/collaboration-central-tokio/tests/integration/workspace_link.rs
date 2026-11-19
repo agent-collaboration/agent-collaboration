@@ -216,6 +216,9 @@ async fn public_route_requires_upgrade_and_header_token_and_matching_organizatio
         )),
         client
             .get(fixture.url(signed::ORGANIZATION))
+            .bearer_auth(signed::tamper_signature(&fixture.token)?),
+        client
+            .get(fixture.url(signed::ORGANIZATION))
             .bearer_auth("bad-token"),
         client
             .get(fixture.url(signed::ORGANIZATION))

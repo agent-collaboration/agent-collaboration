@@ -333,6 +333,9 @@ async fn serve_link(
                         close_lapsed_link(&mut socket, &state.stop).await;
                         return;
                     }
+                    Ok(MailAckSettlement::Ignored(reason @ MailAckIgnored::WrongMachine)) => {
+                        tracing::warn!(?reason, "machine_delivery_ack_ignored");
+                    }
                     Ok(_) => {}
                     Err(_) => {
                         close_link(

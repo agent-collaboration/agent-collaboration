@@ -125,7 +125,7 @@ async fn rejects_wrong_profile_ids_and_grant_without_leeway() {
         ("grant_expires_at", json!(NOW)),
         ("iat", json!(NOW + 61)),
         ("exp", json!(NOW - 60)),
-        ("exp", json!(NOW + 3601)),
+        ("exp", json!(NOW + 601)),
         ("workspace_id", Value::Null),
         ("sid", json!("session")),
         ("iat", json!(-1)),
@@ -141,6 +141,11 @@ async fn rejects_wrong_profile_ids_and_grant_without_leeway() {
     let mut machine_id = claims();
     machine_id["principal"]["installation_id"] = json!("legacy");
     invalid.push(machine_id);
+    let mut wrong_client = claims();
+    let other_client = json!("019a61bb-0000-7000-8000-000000000099");
+    wrong_client["client_id"] = other_client.clone();
+    wrong_client["azp"] = other_client;
+    invalid.push(wrong_client);
     for claim in invalid {
         assert_eq!(
             verifier.verify(&token(&key, claim)).await,
@@ -204,7 +209,7 @@ async fn accepts_exact_issued_at_and_lifetime_limits_but_rejects_bad_headers() {
     let (verifier, key) = fixture(false);
     let mut claim = claims();
     claim["iat"] = json!(NOW + 60);
-    claim["exp"] = json!(NOW + 3660);
+    claim["exp"] = json!(NOW + 660);
     assert!(verifier.verify(&token(&key, claim)).await.is_ok());
     for header in [
         json!({"alg":"none", "typ":"at+jwt", "kid":"key"}),
@@ -286,13 +291,13 @@ fn effective_deadline_must_fit_in_safe_milliseconds() {
     };
     let limit = MAX_SAFE_INTEGER / 1000;
     let mut claim = claims();
-    claim["iat"] = json!(limit - 1000);
+    claim["iat"] = json!(limit - MACHINE_TOKEN_LIFETIME_SECONDS);
     claim["exp"] = json!(limit);
     claim["grant_expires_at"] = json!(limit);
     assert_eq!(
         serde_json::from_value::<Claims>(claim.clone())
             .unwrap()
-            .validate(&policy, limit - 1000)
+            .validate(&policy, limit - MACHINE_TOKEN_LIFETIME_SECONDS)
             .unwrap()
             .effective_expires_at(),
         UnixSeconds(limit)
@@ -301,7 +306,7 @@ fn effective_deadline_must_fit_in_safe_milliseconds() {
     assert_eq!(
         serde_json::from_value::<Claims>(claim)
             .unwrap()
-            .validate(&policy, limit - 1000),
+            .validate(&policy, limit - MACHINE_TOKEN_LIFETIME_SECONDS),
         Err(MachineTokenRefusal::Rejected)
     );
 }
