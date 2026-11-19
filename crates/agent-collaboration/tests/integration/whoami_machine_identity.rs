@@ -67,7 +67,7 @@ async fn whoami_refuses_an_installation_rpc_from_a_different_service_identity() 
     let path = root.path().join("service.json");
     let mut manifest: Value =
         serde_json::from_slice(&std::fs::read(&path).expect("manifest")).expect("manifest JSON");
-    manifest["serviceId"] = serde_json::json!("00000000-0000-4000-8000-000000000003");
+    manifest["serviceId"] = serde_json::json!("00000000-0000-7000-8000-000000000003");
     std::fs::write(
         &path,
         serde_json::to_vec(&manifest).expect("mismatched manifest"),
