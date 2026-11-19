@@ -1,6 +1,7 @@
 //! One original socket across real object eviction, live authority and SQLite effects.
 mod alarm_rearm;
 mod batch;
+mod caller_authority;
 mod delivery;
 mod fixture;
 mod probe_diagnostic;
@@ -377,10 +378,12 @@ async fn route_and_caller_refusals(fixture: &Fixture) -> Result<()> {
     let mut link = ConnectedLink::open(fixture).await?;
     let exchange = link
         .call_as(
-            Caller::Person {
+            Caller::Session(workspace_ids::SessionRef {
                 machine_id: "019f0000-0000-7000-8000-00000000cf20".parse()?,
-                person_id: signed::OWNER.parse()?,
-            },
+                session_id: "019f0000-0000-7000-8000-00000000cf07"
+                    .to_owned()
+                    .try_into()?,
+            }),
             WorkspaceRequest {
                 request_id: Some("019f0000-0000-7000-8000-00000000cf21".parse()?),
                 workspace_id: None,

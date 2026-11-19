@@ -12,7 +12,8 @@ use axum::{
 };
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, ProtocolError, ReplyPayload, RequestPayload,
-    RequestStatusAnswer, TokenRenewalRefusal, TokenRenewalResult, decode_text, encode_text,
+    RequestRefusal, RequestStatusAnswer, TokenRenewalRefusal, TokenRenewalResult, decode_text,
+    encode_text,
 };
 use collaboration_central_core::{
     MailAckIgnored, MailAckSettlement, ValidatedMachineConnection, WELCOME_PAGE_SIZE,
@@ -314,9 +315,11 @@ async fn serve_link(
                         return;
                     }
                 };
-                let result = match WorkspaceCaller::new(active, caller) {
+                let result = match WorkspaceCaller::from_machine_link(active, caller) {
                     Ok(caller) => runtime.request_status(&caller, &query).await,
-                    Err(_) => Ok(RequestStatusAnswer::NotFound),
+                    Err(reason) => Ok(RequestStatusAnswer::Refused(RequestRefusal::Workspace(
+                        reason,
+                    ))),
                 };
                 let Ok(result) = result else {
                     close_link(
@@ -574,7 +577,7 @@ async fn dispatch_request(
     connection: &ValidatedMachineConnection,
     request: &LinkRequest,
 ) -> Result<ReplyPayload, central_storage::StoreFailure> {
-    let caller = WorkspaceCaller::new(connection.clone(), request.caller().clone());
+    let caller = WorkspaceCaller::from_machine_link(connection.clone(), request.caller().clone());
     match request.payload() {
         RequestPayload::Workspace(request) => {
             let reply = match caller {

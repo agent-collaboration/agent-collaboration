@@ -2,7 +2,7 @@
 use super::{CentralObject, OrgRuntime, OrganizationId};
 use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, LinkRequestBatch, ReplyPayload,
-    RequestPayload, RequestStatusAnswer, RequestStatusQuery,
+    RequestPayload, RequestRefusal, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::StoreFailure;
 use collaboration_central_core::{
@@ -194,9 +194,11 @@ impl CentralObject {
                     Ok(Err(_)) => return close(&socket, "machine authority expired or revoked"),
                     Err(_) => return socket.close(Some(1011), Some("central unavailable")),
                 };
-                let result = match WorkspaceCaller::new(active, caller) {
+                let result = match WorkspaceCaller::from_machine_link(active, caller) {
                     Ok(caller) => runtime.request_status(&caller, &query).await,
-                    Err(_) => Ok(RequestStatusAnswer::NotFound),
+                    Err(reason) => Ok(RequestStatusAnswer::Refused(RequestRefusal::Workspace(
+                        reason,
+                    ))),
                 };
                 let Ok(result) = result else {
                     return socket.close(Some(1011), Some("central unavailable"));
@@ -396,7 +398,8 @@ impl CentralObject {
                 return Err(worker::Error::RustError(error.to_string()));
             }
         };
-        let caller = match WorkspaceCaller::new(connection, request.caller().clone()) {
+        let caller = match WorkspaceCaller::from_machine_link(connection, request.caller().clone())
+        {
             Ok(caller) => caller,
             Err(reason) => {
                 return Ok(MachineRequestResult::Reply(refused_reply(

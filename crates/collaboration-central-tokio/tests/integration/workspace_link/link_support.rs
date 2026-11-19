@@ -11,10 +11,12 @@ use serde_json::json;
 use workspace_model::{Caller, Workspace, WorkspaceAnswer, WorkspaceReply, WorkspaceResult};
 
 pub(super) fn caller() -> Result<Caller> {
-    Ok(Caller::Person {
+    Ok(Caller::Session(workspace_ids::SessionRef {
         machine_id: INSTALLATION.parse()?,
-        person_id: signed::OWNER.parse()?,
-    })
+        session_id: "019f0000-0000-7000-8000-00000000cf07"
+            .to_owned()
+            .try_into()?,
+    }))
 }
 
 pub(super) fn create_workspace(request_id: &str, name: &str) -> Result<RequestPayload> {

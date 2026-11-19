@@ -31,6 +31,19 @@ impl WorkspaceCaller {
         }
         Ok(Self { connection, caller })
     }
+    /// A public machine link carries only sessions bound to its validated machine.
+    pub fn from_machine_link(
+        connection: crate::ValidatedMachineConnection,
+        caller: Caller,
+    ) -> Result<Self, workspace_model::RefusalReason> {
+        if !matches!(caller, Caller::Session(_)) {
+            return Err(workspace_model::RefusalReason::InvalidInput {
+                field: "caller".to_owned(),
+            });
+        }
+        Self::new(connection, caller)
+    }
+
     #[must_use]
     pub fn organization_id(&self) -> &OrganizationId {
         self.connection.organization_id()

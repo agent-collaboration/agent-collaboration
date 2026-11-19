@@ -33,10 +33,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
         receive(&mut socket).await?,
         LinkFrame::Data(DataFrame::Welcome { .. })
     ));
-    let caller = Caller::Person {
-        machine_id: INSTALLATION.parse()?,
-        person_id: signed::OWNER.parse()?,
-    };
+    let caller = super::link_support::caller()?;
     send(
         &mut socket,
         &frame(

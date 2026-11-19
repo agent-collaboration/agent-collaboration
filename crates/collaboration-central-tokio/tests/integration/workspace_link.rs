@@ -2,6 +2,7 @@
 mod alarm_rearm;
 mod authority_races;
 mod batch_contract;
+mod caller_authority;
 mod delivery;
 mod fixture;
 mod link_support;
@@ -64,15 +65,12 @@ async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and
     );
     send(&mut socket, &LinkFrame::Ping).await?;
     assert_eq!(receive(&mut socket).await?, LinkFrame::Pong);
-    let caller = Caller::Person {
-        machine_id: INSTALLATION.parse()?,
-        person_id: signed::OWNER.parse()?,
-    };
+    let caller = link_support::caller()?;
     let create = RequestPayload::Workspace(serde_json::from_value(json!({
         "requestId":"019f0000-0000-7000-8000-00000000ce10","workspaceId":null,
         "operation":{"kind":"createWorkspace","name":"Real link workspace"},
     }))?);
-    let request = client.begin_request(caller.clone(), create)?;
+    let request = client.begin_request(caller, create)?;
     let LinkFrame::Data(DataFrame::Request { request: expected }) = &request else {
         return Err("client request shape".into());
     };
@@ -92,15 +90,19 @@ async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and
     let mail = RequestPayload::Mail(serde_json::from_value(
         json!({"requestId":"019f0000-0000-7000-8000-00000000ce11","operation":{"kind":"setNoticeCadence","cadence":"m25"}}),
     )?);
+    let caller = Caller::Person {
+        machine_id: INSTALLATION.parse()?,
+        person_id: signed::OWNER.parse()?,
+    };
     let request = client.begin_request(caller, mail)?;
     send(&mut socket, &request).await?;
     let reply = receive(&mut socket).await?;
     assert!(matches!(
         client.receive(&attempt, reply)?,
         ClientEvent::Reply {
-            result: ReplyPayload::Mail(CentralMailResult::Refused(CentralMailRefusal::NotSession)),
+            result: ReplyPayload::Mail(CentralMailResult::Refused(CentralMailRefusal::Workspace(RefusalReason::InvalidInput { field }))),
             ..
-        }
+        } if field == "caller"
     ));
     socket
         .close(reqwest_websocket::CloseCode::Normal, None)
@@ -126,10 +128,11 @@ async fn semantic_requests_recheck_caller_and_original_grant_expiry() -> Result<
             "requestId":request_id,"workspaceId":null,"operation":{"kind":"createWorkspace","name":"Must not create"},
         }))?))
     };
-    let mismatched = Caller::Person {
-        machine_id: OTHER_MACHINE.parse()?,
-        person_id: signed::OWNER.parse()?,
+    let Caller::Session(mut session) = link_support::caller()? else {
+        return Err("expected a session caller".into());
     };
+    session.machine_id = OTHER_MACHINE.parse()?;
+    let mismatched = Caller::Session(session);
     send(
         &mut socket,
         &client.begin_request(mismatched, payload("019f0000-0000-7000-8000-00000000ce20")?)?,
@@ -150,10 +153,7 @@ async fn semantic_requests_recheck_caller_and_original_grant_expiry() -> Result<
     fixture.clock.advance(Duration::from_secs(600))?;
     send(&mut socket, &LinkFrame::Ping).await?;
     assert_eq!(receive(&mut socket).await?, LinkFrame::Pong);
-    let caller = Caller::Person {
-        machine_id: INSTALLATION.parse()?,
-        person_id: signed::OWNER.parse()?,
-    };
+    let caller = link_support::caller()?;
     send(
         &mut socket,
         &client.begin_request(caller, payload("019f0000-0000-7000-8000-00000000ce21")?)?,
