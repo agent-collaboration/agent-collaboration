@@ -2,7 +2,7 @@ use super::*;
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecision, EndpointDescription, EndpointId, EndpointRef,
-    GenerationNumber, OperationId, RouterOriginRef, SessionId, UuidIdentity,
+    GenerationNumber, OperationId, RouterOriginRef, SessionId,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::NativeControlBackend;
@@ -17,7 +17,7 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 use super::approval_push_fixture;
 
-fn approval_actor(session: &collaboration_protocol::SessionRef) -> message_board::Identity {
+fn approval_actor(session: &collaboration_protocol::HarnessSessionRef) -> message_board::Identity {
     message_board::Identity::Session {
         session: serde_json::from_value(serde_json::to_value(session).expect("session JSON"))
             .expect("board session"),
@@ -26,8 +26,9 @@ fn approval_actor(session: &collaboration_protocol::SessionRef) -> message_board
 
 #[test]
 fn provider_output_classifier_reports_only_bounded_uuid_metadata() {
-    let expected = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-        .expect("expected service ID");
+    let expected =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())
+            .expect("expected service ID");
     let different = "2ff962c5-7fa3-4c18-a5ca-1bbe8db09e81";
     let cases = [
         (
@@ -139,11 +140,11 @@ fn owned_host_endpoint_fixture() -> ExternalProviderLaunch {
 }
 
 fn session_ref(
-    service_id: &UuidIdentity,
+    service_id: &workspace_ids::MachineId,
     endpoint_id: &str,
     session_id: &str,
-) -> TestResult<SessionRef> {
-    Ok(SessionRef {
+) -> TestResult<HarnessSessionRef> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned())?,
@@ -154,8 +155,8 @@ fn session_ref(
 
 async fn approval_broker_fixture(
     root: &tempfile::TempDir,
-    service_id: &UuidIdentity,
-    approver: &SessionRef,
+    service_id: &workspace_ids::MachineId,
+    approver: &HarnessSessionRef,
 ) -> TestResult<(
     Arc<ServiceInteractionBroker>,
     tokio::task::JoinHandle<Result<String, Box<dyn std::error::Error + Send + Sync>>>,
@@ -163,7 +164,7 @@ async fn approval_broker_fixture(
     let socket_path = root.path().join("native-approver.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
     let native_generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let mut definitions = serde_json::Map::new();
@@ -340,10 +341,11 @@ fn fixture_acp_permission_without_allow_agent() -> ExternalProviderLaunch {
 #[cfg(unix)]
 #[tokio::test]
 async fn fixture_acp_permission_notice_reaches_approver_and_allow_executes_command() -> TestResult {
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let approver = session_ref(&service_id, "codex-local", "approver")?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     for endpoint_id in ["cursor-local", "claude-local"] {
@@ -449,10 +451,11 @@ async fn fixture_acp_permission_notice_reaches_approver_and_allow_executes_comma
 #[tokio::test]
 async fn reject_only_offer_reaches_approver_and_returns_selected_id() -> TestResult {
     let root = tempfile::tempdir()?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let approver = session_ref(&service_id, "codex-local", "approver")?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(
@@ -600,7 +603,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
     let requester = session_ref(&service_id, "cursor-local", "requester")?;
     let approver = session_ref(&service_id, "codex-local", "approver")?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize_with_mcp_http(

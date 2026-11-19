@@ -20,7 +20,7 @@ enum NativeWarningCase {
 
 #[tokio::test]
 async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_warnings() {
-    const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+    const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
     for warning_case in [
         NativeWarningCase::ConflictingPeers,
@@ -168,7 +168,7 @@ async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_w
 #[tokio::test]
 async fn actual_history_job_and_peer_only_loaded_observation_keep_both_facts() {
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
-    let source=SourceApiFixture::start_with_native_jobs("00000000-0000-4000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"history-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"History job","state":"stopped","startedAt":1790162100000_i64})]).await;
+    let source=SourceApiFixture::start_with_native_jobs("00000000-0000-7000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"history-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"History job","state":"stopped","startedAt":1790162100000_i64})]).await;
     source.publish_native_peer(SESSION, "/source/native");
     source.fail_native_jobs_after_history();
     let snapshot =
@@ -207,7 +207,7 @@ async fn actual_history_job_and_peer_only_loaded_observation_keep_both_facts() {
 async fn actual_working_job_stays_active_with_idle_or_unreported_peer_metadata() {
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
     for status in [Some("idle"), None] {
-        let source=SourceApiFixture::start_with_native_jobs("00000000-0000-4000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"active-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Working despite peer metadata","state":"working","startedAt":1790162100000_i64})]).await;
+        let source=SourceApiFixture::start_with_native_jobs("00000000-0000-7000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"active-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Working despite peer metadata","state":"working","startedAt":1790162100000_i64})]).await;
         source.publish_native_peer_with_status(SESSION, "/source/native", status);
         let snapshot =
             agent_session_inventory::test_support::complete_source_reader::read_complete_source(
@@ -247,7 +247,7 @@ async fn actual_working_job_stays_active_with_idle_or_unreported_peer_metadata()
 #[tokio::test]
 async fn actual_native_peer_corroboration_keeps_actual_updated_time_and_job_identity() {
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
-    let source=SourceApiFixture::start_with_native_jobs("00000000-0000-4000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"distinct-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Corroborated job","state":"working","startedAt":1790162100000_i64})]).await;
+    let source=SourceApiFixture::start_with_native_jobs("00000000-0000-7000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"distinct-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Corroborated job","state":"working","startedAt":1790162100000_i64})]).await;
     source.publish_native_peer(SESSION, "/source/resumed");
     let snapshot =
         agent_session_inventory::test_support::complete_source_reader::read_complete_source(
@@ -303,7 +303,7 @@ async fn actual_native_api_distinguishes_complete_empty_unidentified_and_invalid
         ),
     ] {
         let source = SourceApiFixture::start_with_native_jobs(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "source-model",
             jobs,
         )
@@ -371,7 +371,7 @@ async fn actual_native_history_and_loaded_views_corroborate_once_without_inventi
     })
     .collect();
     let source = SourceApiFixture::start_with_native_jobs(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "source-model",
         jobs,
     )
@@ -433,7 +433,7 @@ async fn actual_native_history_and_loaded_views_corroborate_once_without_inventi
 #[tokio::test]
 async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid() {
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
-    let source=SourceApiFixture::start_with_native_jobs("00000000-0000-4000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"distinct-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Before prompt native","state":"blocked","startedAt":1790162100000_i64})]).await;
+    let source=SourceApiFixture::start_with_native_jobs("00000000-0000-7000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"distinct-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Before prompt native","state":"blocked","startedAt":1790162100000_i64})]).await;
     let PickerSourceContext::ConfiguredHosted(mut profile) =
         source.request("Observed source").source_context
     else {

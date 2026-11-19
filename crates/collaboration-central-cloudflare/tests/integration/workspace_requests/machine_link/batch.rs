@@ -169,7 +169,7 @@ async fn batch_journey(fixture: &Fixture) -> Result<BatchHibernationReceipt> {
     Ok(BatchHibernationReceipt {
         kind: "c2BatchHibernation",
         organization: fixture.organization.clone(),
-        installation_id: INSTALLATION.parse()?,
+        machine_id: INSTALLATION.parse()?,
         welcome,
         baseline_request: baseline.request,
         baseline_reply: baseline.reply,
@@ -279,7 +279,7 @@ fn assert_member_witnesses(
         }
         let required = [
             EnrollmentReadQuery::ByEnrollment,
-            EnrollmentReadQuery::MachineByInstallation,
+            EnrollmentReadQuery::MachineById,
             EnrollmentReadQuery::ActiveEnrollment,
         ];
         let mut next = 0;

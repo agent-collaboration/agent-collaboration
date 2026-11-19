@@ -10,7 +10,7 @@ use std::path::Path;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct IdentityRecord {
     version: u8,
-    service_id: UuidIdentity,
+    service_id: workspace_ids::MachineId,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -21,7 +21,7 @@ struct PeerIdentityRecord {
 }
 
 /// Reads the existing Host identity without creating a directory or identity file.
-pub fn read_service_identity(directory: &Path) -> io::Result<Option<UuidIdentity>> {
+pub fn read_service_identity(directory: &Path) -> io::Result<Option<workspace_ids::MachineId>> {
     match read_identity(&directory.join("service-identity.json")) {
         Ok(identity) => Ok(Some(identity)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -35,7 +35,7 @@ pub fn new_service_uuid() -> io::Result<UuidIdentity> {
     UuidIdentity::try_from(uuid::Uuid::now_v7().to_string()).map_err(io::Error::other)
 }
 
-pub fn load_service_identity(directory: &Path) -> io::Result<UuidIdentity> {
+pub fn load_service_identity(directory: &Path) -> io::Result<workspace_ids::MachineId> {
     let metadata = std::fs::symlink_metadata(directory)?;
     if !directory.is_absolute() || !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0
     {
@@ -49,7 +49,8 @@ pub fn load_service_identity(directory: &Path) -> io::Result<UuidIdentity> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    let identity = new_service_uuid()?;
+    let identity = workspace_ids::MachineId::try_from(String::from(new_service_uuid()?))
+        .map_err(io::Error::other)?;
     let suffix: String = new_service_uuid()?.into();
     let temporary = directory.join(format!(".service-identity-{suffix}.tmp"));
     let result = (|| {
@@ -84,7 +85,7 @@ pub fn load_service_identity(directory: &Path) -> io::Result<UuidIdentity> {
         Err(error) => Err(error),
     }
 }
-fn read_identity(path: &Path) -> io::Result<UuidIdentity> {
+fn read_identity(path: &Path) -> io::Result<workspace_ids::MachineId> {
     let metadata = std::fs::symlink_metadata(path)?;
     if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 || metadata.len() > 1024 {
         return Err(io::Error::other("invalid identity file"));
@@ -210,7 +211,7 @@ mod read_only_identity_tests {
         assert_eq!(read_service_identity(directory.path())?, None);
         assert_eq!(std::fs::read_dir(directory.path())?.count(), 0);
         let path = directory.path().join("service-identity.json");
-        let bytes = br#"{"version":1,"serviceId":"550e8400-e29b-41d4-a716-446655440000"}"#;
+        let bytes = br#"{"version":1,"serviceId":"550e8400-e29b-71d4-a716-446655440000"}"#;
         std::fs::write(&path, bytes)?;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
         let modified = path.metadata()?.modified()?;
@@ -219,10 +220,15 @@ mod read_only_identity_tests {
                 read_service_identity(directory.path())?
                     .ok_or_else(|| io::Error::other("identity missing"))?
             ),
-            "550e8400-e29b-41d4-a716-446655440000"
+            "550e8400-e29b-71d4-a716-446655440000"
         );
         assert_eq!(std::fs::read(&path)?, bytes);
         assert_eq!(modified, path.metadata()?.modified()?);
+        let v4 = br#"{"version":1,"serviceId":"550e8400-e29b-41d4-a716-446655440000"}"#;
+        std::fs::write(&path, v4)?;
+        assert!(read_service_identity(directory.path()).is_err());
+        assert!(load_service_identity(directory.path()).is_err());
+        assert_eq!(std::fs::read(&path)?, v4);
         std::fs::write(&path, b"invalid")?;
         assert!(read_service_identity(directory.path()).is_err());
         assert_eq!(std::fs::read(&path)?, b"invalid");

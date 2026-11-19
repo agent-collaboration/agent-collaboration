@@ -15,14 +15,14 @@ use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeBinding;
 use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeClaudeAction;
 use agent_session_inventory::sessions::source_ssh_protocol::SourceOperation;
 use agent_session_inventory::sessions::source_ssh_transport::read_source;
+use collaboration_client::protocol::HarnessSessionRef;
 use collaboration_client::protocol::NativeSessionView;
 use collaboration_client::protocol::ProviderSessionListParams;
-use collaboration_client::protocol::SessionRef;
 use serde_json::Value;
 use serde_json::json;
 
 const CHILD_TEST: &str = "session_picker::client::client_action_view::configured_claude_resume_test::configured_resume_child";
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
 #[test]
@@ -222,7 +222,7 @@ async fn configured_resume_child() {
     assert_eq!(mutations, if guarded && !invalid_proof { 1 } else { 0 });
     if !guarded {
         // Deliberate copies and New keep their existing dispatch policy.
-        let target: SessionRef = serde_json::from_value(json!({"endpoint":{
+        let target: HarnessSessionRef = serde_json::from_value(json!({"endpoint":{
             "serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":record.session_id}))
         .unwrap();
         for action in [

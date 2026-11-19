@@ -168,7 +168,7 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
         create_and_prompt_schema["allOf"].is_array(),
         "Codex create-and-prompt requirements must be conditional"
     );
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let caller = serde_json::json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"schema-caller"
     });
@@ -494,7 +494,7 @@ fn sdk_only_operations_are_advertised_by_both_cli_and_mcp_catalogs() {
 fn conversation_create_tool_preserves_created_and_pending_operation_identity() {
     let operation_id = OperationId::generate();
     let target = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"created-thread"
     }))
     .expect("target");
@@ -550,7 +550,7 @@ fn conversation_create_tool_preserves_created_and_pending_operation_identity() {
 fn conversation_create_tool_reports_endpoint_named_unsupported_input() {
     let operation_id = OperationId::generate();
     let endpoint = serde_json::from_value(serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"cursor-local"
+        "serviceId":"00000000-0000-7000-8000-000000000001", "endpointId":"cursor-local"
     }))
     .expect("endpoint");
     let response = conversation_create_tool_result(

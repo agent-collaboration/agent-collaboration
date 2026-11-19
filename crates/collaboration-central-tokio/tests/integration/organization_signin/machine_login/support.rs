@@ -23,13 +23,13 @@ pub(super) type RevokeResult = std::result::Result<
 >;
 pub(super) fn revoke_control(
     serial: u16,
-    installation: &str,
+    machine_id: &str,
     enrollment: &str,
 ) -> Result<collaboration_central_core::MachineLoginControl> {
     Ok(collaboration_central_core::MachineLoginControl::Revoke {
         person_id: signed::OWNER.to_owned().try_into()?,
         operation_id: id(serial).try_into()?,
-        installation: installation.to_owned().try_into()?,
+        machine_id: machine_id.to_owned().try_into()?,
         enrollment_id: enrollment.to_owned().try_into()?,
     })
 }
@@ -38,13 +38,13 @@ impl MachineFixture {
     pub async fn revoke(
         &self,
         serial: u16,
-        installation: &str,
+        machine_id: &str,
         enrollment: &str,
     ) -> Result<RevokeResult> {
         let runtime = self.inner.runtime(ORG).await?;
         Ok(collaboration_central_core::machine_login_control(
             runtime.as_ref(),
-            revoke_control(serial, installation, enrollment)?,
+            revoke_control(serial, machine_id, enrollment)?,
         )
         .await)
     }
@@ -75,13 +75,13 @@ pub(super) fn text(value: impl ToString) -> SqlValue {
 }
 pub(super) fn approval(
     serial: u16,
-    installation: &str,
+    machine_id: &str,
     label: &str,
     workspaces: &[&str],
     now: i64,
 ) -> Value {
     json!({"organizationId":ORG,"approver":signed::OWNER,"permissionChecked":"machine:enroll",
- "requestId":id(serial),"installation":installation,"peer":installation,"label":label,
+ "requestId":id(serial),"installation":machine_id,"peer":machine_id,"label":label,
  "allowedWorkspaces":workspaces,"approverSecondFactorAt":now-60,"codeExpiresAt":now+600})
 }
 pub(super) fn token(enrollment: &str, client: &str) -> Value {
@@ -102,13 +102,13 @@ pub(super) fn enrollment(answer: &Value) -> Result<String> {
 }
 pub(super) fn grant(
     enrollment: &str,
-    installation: &str,
+    machine_id: &str,
     now: i64,
     superseded: Option<(&str, &str)>,
 ) -> Value {
     let mut answer = serde_json::Map::from_iter([
         ("result".to_owned(), json!("grant")),
-        ("installation".to_owned(), json!(installation)),
+        ("installation".to_owned(), json!(machine_id)),
         ("enrollmentId".to_owned(), json!(enrollment)),
         ("decidedAt".to_owned(), json!(now)),
         ("grantExpiresAt".to_owned(), json!(now + LIFETIME)),

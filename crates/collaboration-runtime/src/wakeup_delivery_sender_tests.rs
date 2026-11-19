@@ -11,7 +11,7 @@ use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
-    DeliveryRejectionReason, SavedMessage, SessionReachability, SessionRef,
+    DeliveryRejectionReason, HarnessSessionRef, SavedMessage, SessionReachability,
 };
 use runtime_primitives::Clock;
 use serde_json::json;
@@ -54,7 +54,7 @@ impl SessionMessageDelivery for ProviderSessionNotFound {
 async fn dispatch_fixture_wake(
     delivery: Arc<dyn SessionMessageDelivery>,
     mode: collaboration_protocol::MessageDelivery,
-) -> automation_storage::DeliveryRecord<SessionRef, CodexGeneration, serde_json::Value> {
+) -> automation_storage::DeliveryRecord<HarnessSessionRef, CodexGeneration, serde_json::Value> {
     let clock = Arc::new(
         router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1792432800000,
@@ -74,7 +74,7 @@ async fn dispatch_fixture_wake(
     );
     let now_ms = clock.now().unix_millis() - 10_000;
     let message: SavedMessage = serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"empty-session"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"empty-session"},
         "content":{"kind":"humanUser","text":"wake fixture"},
         "delivery":mode
     }))
@@ -138,7 +138,7 @@ async fn dispatch_fixture_wake(
     let record = store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
+        .read_delivery::<HarnessSessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
         .await
         .expect("delivery record");
     assert!(
@@ -183,20 +183,20 @@ impl collaboration_contracts::SessionDeliveryRoute for QueueUnsupportedRoute {
     }
     fn supports_delivery_mode(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
         mode: collaboration_protocol::MessageDelivery,
     ) -> bool {
         mode != collaboration_protocol::MessageDelivery::Queue
     }
     fn claim(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
     fn presence(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::RoutePresence> {
         Box::pin(async { Ok(collaboration_contracts::RoutePresence::Running) })
     }
@@ -213,7 +213,7 @@ impl collaboration_contracts::SessionDeliveryRoute for QueueUnsupportedRoute {
                 target: Some(request.target),
                 generation: Some(
                     serde_json::from_value(json!({
-                        "serviceEpoch":"00000000-0000-4000-8000-000000000001", "generation":1
+                        "serviceEpoch":"00000000-0000-7000-8000-000000000001", "generation":1
                     }))
                     .expect("fixture generation"),
                 ),

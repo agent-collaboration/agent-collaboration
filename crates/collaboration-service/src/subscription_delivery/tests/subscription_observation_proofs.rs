@@ -360,7 +360,7 @@ async fn a_resolved_membership_stays_visible_while_its_allocated_item_is_held() 
     let message_board::Identity::Session { session: target } = &fixture.reader else {
         panic!("session reader fixture");
     };
-    let target: collaboration_protocol::SessionRef = target.clone().try_into().unwrap();
+    let target: collaboration_protocol::HarnessSessionRef = target.clone().try_into().unwrap();
     fixture
         .post(&fixture.root, "allocated before resolution")
         .await;

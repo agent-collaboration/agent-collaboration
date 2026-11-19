@@ -230,7 +230,7 @@ pub(super) async fn control(
             Response::from_json(&runtime.drain_workspace(&workspace).await)
         }
         "/test/queue" => {
-            let session: workspace_model::SessionAddress = request.json().await?;
+            let session: workspace_ids::SessionRef = request.json().await?;
             Response::from_json(&runtime.queued_for_session(&session).await)
         }
         "/test/alarm" => Response::from_json(&object.state.storage().get_alarm().await?),

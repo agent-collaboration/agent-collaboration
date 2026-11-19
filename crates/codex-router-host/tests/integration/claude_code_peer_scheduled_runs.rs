@@ -30,10 +30,10 @@ use collaboration_contracts::StopRequestOutcome;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AutomationConfigureRequest, CodexGeneration, DeliveryOutcome, EndpointId, EndpointRef,
-    InstructionCreateParams, InstructionText, MachineId, MachineLabel, MessageText, OperationId,
-    PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, RouterLink, RunExecution,
-    RunShowRequest, RunState, ScheduleCreateRequest, ScheduleEnableRequest, SchedulePrepareRequest,
-    SessionId, SessionRef, UuidIdentity, WorkerOutcome, render_push_line,
+    HarnessSessionRef, InstructionCreateParams, InstructionText, MachineLabel, MessageText,
+    OperationId, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, RouterLink,
+    RunExecution, RunShowRequest, RunState, ScheduleCreateRequest, ScheduleEnableRequest,
+    SchedulePrepareRequest, SessionId, WorkerOutcome, render_push_line,
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::{Value, json};
@@ -43,13 +43,13 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path, sync::Arc};
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 struct RecordedRunEvidence(
-    tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 );
 
 impl RunEvidenceSink for RecordedRunEvidence {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
         Box::pin(async move {
             self.0.lock().await.push(evidence);
@@ -94,10 +94,12 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
     let socket_path = root.path().join("peer.sock");
     publish_peer(root.path(), &session_id, &socket_path);
     let listener = tokio::net::UnixListener::bind(&socket_path).expect("peer listener");
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service ID"),
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )
+            .expect("service ID"),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),
         },
         session_id,
@@ -157,10 +159,7 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
     let schedule_id = agent_automation::ScheduleId::generate();
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("push id");
     let prepared_line = render_push_line(&PushLineInput {
-        link: RouterLink::new(
-            MachineId::from(target.endpoint.service_id.clone()),
-            push_id.clone(),
-        ),
+        link: RouterLink::new(target.endpoint.service_id.clone(), push_id.clone()),
         machine_label: MachineLabel::try_from("schedule-fixture".to_owned())
             .expect("machine label"),
         origin: PushOrigin::Router(PushKind::ScheduleRun),
@@ -198,7 +197,7 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
         );
         user
     });
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
+    let inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef> = serde_json::from_value(json!({
         "scheduleChangeId":agent_automation::ChangeId::generate(),
         "instructionRevisionId":agent_automation::RevisionId::generate(),
         "instructionText":"Check work",
@@ -280,10 +279,12 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
 #[tokio::test]
 async fn scheduled_peer_rejects_a_prepared_push_link_that_disagrees_with_its_id() {
     let root = tempfile::tempdir().expect("registry root");
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service ID"),
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )
+            .expect("service ID"),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),
         },
         session_id: SessionId::try_from("peer-mismatch".to_owned()).expect("session ID"),
@@ -300,10 +301,7 @@ async fn scheduled_peer_rejects_a_prepared_push_link_that_disagrees_with_its_id(
         PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("linked push id");
     assert_ne!(push_id, linked_push_id);
     let line = render_push_line(&PushLineInput {
-        link: RouterLink::new(
-            MachineId::from(target.endpoint.service_id.clone()),
-            linked_push_id,
-        ),
+        link: RouterLink::new(target.endpoint.service_id.clone(), linked_push_id),
         machine_label: MachineLabel::try_from("schedule-fixture".to_owned())
             .expect("machine label"),
         origin: PushOrigin::Router(PushKind::ScheduleRun),
@@ -314,7 +312,7 @@ async fn scheduled_peer_rejects_a_prepared_push_link_that_disagrees_with_its_id(
         body: Some("Inspect work".to_owned()),
     })
     .expect("prepared schedule line");
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
+    let inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef> = serde_json::from_value(json!({
         "scheduleChangeId":agent_automation::ChangeId::generate(),
         "instructionRevisionId":agent_automation::RevisionId::generate(),
         "instructionText":"Inspect work",
@@ -395,7 +393,7 @@ async fn host_worker_finalizes_peer_run_as_written() {
     })
     .await
     .expect("Host runtime");
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: runtime.service_id().clone(),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),

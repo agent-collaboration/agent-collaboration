@@ -15,7 +15,7 @@ use std::sync::Arc;
 #[tokio::test]
 async fn message_to_missing_endpoint_reports_no_native_effects() {
     // Arrange: the served API without a backend.
-    let id = "00000000-0000-4000-8000-000000000001";
+    let id = "00000000-0000-7000-8000-000000000001";
     let directory = tempfile::tempdir().unwrap();
     let automation_store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))

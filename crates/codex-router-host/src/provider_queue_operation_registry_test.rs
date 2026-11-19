@@ -1,9 +1,9 @@
 use super::*;
 use std::sync::{Arc, Barrier};
 
-fn fixture() -> (SessionRef, ProviderBindingIdentity) {
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},
+fn fixture() -> (HarnessSessionRef, ProviderBindingIdentity) {
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"},
         "sessionId":"provider-session"
     }))
     .expect("target");

@@ -14,7 +14,7 @@ async fn stateless_http_resumed_prompt_load_response_loss_retains_target_without
     assert_eq!(
         body.pointer("/result/structuredContent/target"),
         Some(&json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"resumed-thread"
         }))
     );
@@ -42,7 +42,7 @@ async fn stateless_http_resumed_prompt_load_rejection_retains_target_code_and_da
     assert_eq!(
         body.pointer("/result/structuredContent/target"),
         Some(&json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"resumed-thread"
         }))
     );
@@ -72,7 +72,7 @@ async fn run_stateless_mcp_resumed_prompt_after_load(load_error: Option<Value>) 
         std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private service directory");
     }
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let description = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"}, "label":"MCP resumed load fixture",
@@ -232,7 +232,7 @@ async fn stateless_http_observation_attach_failure_retains_target_and_pre_dispat
         std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private service directory");
     }
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"observe-thread"});
     let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
@@ -274,7 +274,7 @@ async fn stateless_http_observation_resume_response_loss_retains_target_and_unkn
         std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private service directory");
     }
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"observe-thread"});
     let identity = collaboration_service::ApplicationFixture::new(service_id, epoch).expect("service identity").with_endpoints(vec![serde_json::from_value(json!({
@@ -366,7 +366,7 @@ async fn run_stateless_mcp_create_response_loss(
         std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private service directory");
     }
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let description = serde_json::from_value(json!({

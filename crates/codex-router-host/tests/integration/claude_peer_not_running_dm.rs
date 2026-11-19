@@ -16,8 +16,8 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, DeliveryRejectionReason, EndpointId, EndpointRef,
-    MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
-    PushRecordDraft, SessionId, SessionReachability, SessionRef, UuidIdentity,
+    HarnessSessionRef, MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
+    PushOrigin, PushRecordDraft, SessionId, SessionReachability,
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::BoardAvailability;
@@ -37,11 +37,13 @@ use std::{
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn target() -> SessionRef {
-    SessionRef {
+fn target() -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service id"),
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )
+            .expect("service id"),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint id"),
         },
         session_id: SessionId::try_from("closed-peer-session".to_owned()).expect("session id"),
@@ -51,7 +53,7 @@ fn target() -> SessionRef {
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn draft(
     clock: &dyn router_clock::RuntimeClock,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     mode: MessageDelivery,
     guard: Option<CodexGeneration>,
 ) -> PushRecordDraft {
@@ -339,7 +341,7 @@ async fn queue_to_same_endpoint_label_on_another_service_keeps_queue_hold_behavi
         start_peer_delivery_service(directory.path(), Vec::new()).await;
     let mut target = target();
     target.endpoint.service_id =
-        UuidIdentity::try_from("00000000-0000-4000-8000-000000000099".to_owned())
+        workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000099".to_owned())
             .expect("foreign router service id");
     assert!(router.supports_delivery_mode(&target, MessageDelivery::Queue));
     let push_draft = draft(
@@ -379,10 +381,10 @@ impl SessionDeliveryRoute for LoadableProviderSession {
     fn reachability(&self) -> SessionReachability {
         SessionReachability::ProviderAcp
     }
-    fn claim(&self, _target: &SessionRef) -> DeliveryFuture<'_, NativeRouteClaim> {
+    fn claim(&self, _target: &HarnessSessionRef) -> DeliveryFuture<'_, NativeRouteClaim> {
         Box::pin(async { Ok(NativeRouteClaim::can_load()) })
     }
-    fn presence(&self, _target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
+    fn presence(&self, _target: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence> {
         Box::pin(async { Ok(RoutePresence::Wakeable) })
     }
     fn deliver<'a>(

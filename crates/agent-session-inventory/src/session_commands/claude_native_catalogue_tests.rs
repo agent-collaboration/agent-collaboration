@@ -55,9 +55,9 @@ async fn native_background_active_list_and_resume_directory_survive_public_api_p
         )
         .unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
-        let description=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
+        let description=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
         let mut identity = ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
         .unwrap()

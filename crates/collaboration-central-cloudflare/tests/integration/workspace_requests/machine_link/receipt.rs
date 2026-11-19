@@ -3,14 +3,15 @@ use central_link_protocol::DataFrame;
 use central_storage::ReadOutcome;
 use fleet_identity_protocol::OrganizationId;
 use serde::Serialize;
-use workspace_model::{AreaId, MachineId};
+use workspace_ids::MachineId;
+use workspace_model::AreaId;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct HibernationReceipt {
     pub kind: &'static str,
     pub organization: OrganizationId,
-    pub installation_id: MachineId,
+    pub machine_id: MachineId,
     pub welcome: DataFrame,
     pub baseline_request: DataFrame,
     pub baseline_reply: DataFrame,
@@ -38,7 +39,7 @@ pub(super) struct AreaReceipt {
 pub(super) struct BatchHibernationReceipt {
     pub kind: &'static str,
     pub organization: OrganizationId,
-    pub installation_id: MachineId,
+    pub machine_id: MachineId,
     pub welcome: DataFrame,
     pub baseline_request: DataFrame,
     pub baseline_reply: DataFrame,

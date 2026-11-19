@@ -428,7 +428,7 @@ async fn recorded_test_history_is_readable_without_resume() -> ProofResult<()> {
         return Err("Source was not a Luna debug proof".into());
     }
     let events = std::fs::read_to_string(source.join("proof-events.jsonl"))?;
-    let target: collaboration_client::protocol::SessionRef = events
+    let target: collaboration_client::protocol::HarnessSessionRef = events
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .find(|event| {

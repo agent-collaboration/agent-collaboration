@@ -38,7 +38,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
         Some(harness.requests.clone()),
     ));
     let machine = MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         Some("notice fixture"),
@@ -52,7 +52,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     let replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition> =
         harness.projects.clone();
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission.clone())

@@ -2,8 +2,9 @@
 
 use collaboration_protocol::{
     ConversationBindingIdentity, ConversationOperationQueueState, ConversationOperationSnapshot,
-    ObservationTimestamp, OperationId, ProviderBindingIdentity, ProviderOperationEffect,
-    ProviderOperationKind, ProviderOperationStage, ProviderReconciliationState, SessionRef,
+    HarnessSessionRef, ObservationTimestamp, OperationId, ProviderBindingIdentity,
+    ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
+    ProviderReconciliationState,
 };
 use std::{
     collections::HashMap,
@@ -38,7 +39,7 @@ pub enum ProviderQueueCancellationError {
 
 #[derive(Clone)]
 struct QueuedProviderOperation {
-    target: SessionRef,
+    target: HarnessSessionRef,
     binding: ProviderBindingIdentity,
     queued_at_ms: i64,
     state: ConversationOperationQueueState,
@@ -53,7 +54,7 @@ impl ProviderQueueOperationRegistry {
     pub(crate) fn record_queued_contents(
         &self,
         operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         binding: ProviderBindingIdentity,
         input_id: session_event_model::InputId,
         contents: &[session_event_model::PromptContent],
@@ -72,7 +73,7 @@ impl ProviderQueueOperationRegistry {
     fn record_queued_with_preview(
         &self,
         operation_id: OperationId,
-        target: SessionRef,
+        target: HarnessSessionRef,
         binding: ProviderBindingIdentity,
         input_id: session_event_model::InputId,
         preview: String,
@@ -112,7 +113,7 @@ impl ProviderQueueOperationRegistry {
         queued
     }
 
-    pub(crate) fn list(&self, target: &SessionRef) -> Vec<ProviderQueuedInput> {
+    pub(crate) fn list(&self, target: &HarnessSessionRef) -> Vec<ProviderQueuedInput> {
         let operations = self
             .operations
             .lock()
@@ -139,7 +140,7 @@ impl ProviderQueueOperationRegistry {
 
     pub(crate) fn cancel(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         input_id: &session_event_model::InputId,
     ) -> Result<(), ProviderQueueCancellationError> {
         let mut operations = self

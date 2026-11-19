@@ -7,7 +7,7 @@ fn factory_probe_preserves_safe_stored_value_and_session() {
         serde_json::from_value(serde_json::json!({
             "target": {
                 "endpoint": {
-                    "serviceId": "00000000-0000-4000-8000-000000000001",
+                    "serviceId": "00000000-0000-7000-8000-000000000001",
                     "endpointId": "codex-local"
                 },
                 "sessionId": "safe-session"

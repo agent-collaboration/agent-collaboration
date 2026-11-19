@@ -81,7 +81,7 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
         )
         .await?;
     let reader_identity = MachineIdentity::new(
-        UuidIdentity::try_from(reader_origin.installation.as_str().to_owned())?,
+        workspace_ids::MachineId::try_from(reader_origin.installation.as_str().to_owned())?,
         Some(reader_origin.machine.as_str()),
     )?;
     let board =

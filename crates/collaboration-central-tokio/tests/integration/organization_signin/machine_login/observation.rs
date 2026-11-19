@@ -58,7 +58,7 @@ async fn machine_observation_rejects_corrupt_rows_without_partial_facts_or_write
         .ok_or("machine approvals missing")?;
     assert_eq!((machines.len(), approvals.len()), (1, 1));
     assert_eq!(machines[0]["machineId"], *machine_id);
-    assert_eq!(machines[0]["installationId"], INSTALLATION);
+    assert_eq!(machines[0]["machineId"], INSTALLATION);
     assert_eq!(machines[0]["state"], "enrolled");
     assert_eq!(machines[0]["enrollmentGeneration"], generation.get());
     assert_eq!(machines[0]["allowedWorkspaces"], json!([WORKSPACE]));

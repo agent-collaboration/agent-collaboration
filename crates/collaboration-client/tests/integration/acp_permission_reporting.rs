@@ -17,7 +17,7 @@ async fn create_and_load_return_permission_differences_from_acp_setup() {
         let root = directory.path().join("service");
         std::fs::create_dir(&root).unwrap();
         std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let service_id = "00000000-0000-4000-8000-000000000001";
+        let service_id = "00000000-0000-7000-8000-000000000001";
         let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
         let actor = json!({"endpoint":endpoint,"sessionId":"creator"});
         let identity = ApplicationFixture::new(service_id, service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({
@@ -124,7 +124,7 @@ async fn codex_create_reports_requested_and_actual_permission_mode() {
         let root = directory.path().join("service");
         std::fs::create_dir(&root).unwrap();
         std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let service_id = "00000000-0000-4000-8000-000000000001";
+        let service_id = "00000000-0000-7000-8000-000000000001";
         let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
         let actor = json!({"endpoint":endpoint,"sessionId":"creator"});
         let identity = ApplicationFixture::new(service_id, service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({

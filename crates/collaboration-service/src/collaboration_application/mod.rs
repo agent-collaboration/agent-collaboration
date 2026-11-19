@@ -107,7 +107,7 @@ impl CollaborationApplication {
         }
     }
     #[must_use]
-    pub fn service_id(&self) -> &collaboration_protocol::UuidIdentity {
+    pub fn service_id(&self) -> &workspace_ids::MachineId {
         self.identity.service_id()
     }
     #[must_use]

@@ -23,8 +23,8 @@ use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
     CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryPeerClaim,
-    DeliveryRejection, DeliveryRejectionReason, EndpointRef, MessageDelivery, SessionReachability,
-    SessionRef,
+    DeliveryRejection, DeliveryRejectionReason, EndpointRef, HarnessSessionRef, MessageDelivery,
+    SessionReachability,
 };
 use std::sync::Arc;
 
@@ -103,13 +103,13 @@ impl ClaudeCodePeerDeliveryRoute {
         }
     }
 
-    pub(crate) fn serves(&self, target: &SessionRef) -> bool {
+    pub(crate) fn serves(&self, target: &HarnessSessionRef) -> bool {
         target.endpoint == self.endpoint
     }
 
     pub(crate) async fn lookup(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<PeerSessionLookup, PeerLookupFailure> {
         let registry = Arc::clone(&self.registry);
         let session_id = target.session_id.clone();
@@ -119,7 +119,8 @@ impl ClaudeCodePeerDeliveryRoute {
     pub(crate) fn evidence(
         peer: &PeerSessionRecord,
         write: PeerWriteEffect,
-    ) -> Result<RouteEffectEvidence<SessionRef, CodexGeneration>, DeliveryContractError> {
+    ) -> Result<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>, DeliveryContractError>
+    {
         let session_id = PeerSessionReference::try_from(String::from(peer.session_id.clone()))
             .map_err(|_| DeliveryContractError::InvalidEvidence)?;
         Ok(RouteEffectEvidence::ClaudeCodePeer(
@@ -141,7 +142,7 @@ impl ClaudeCodePeerDeliveryRoute {
 
     async fn prepare_peer_delivery(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         precondition: &DeliveryPrecondition,
         mode: MessageDelivery,
     ) -> Result<PeerDeliveryPreparation, DeliveryContractError> {
@@ -323,7 +324,10 @@ fn peer_claim_rejection(claims: Vec<claude_code_peer_messaging::PeerClaim>) -> D
 }
 
 impl LiveSessionOwnershipCheck for ClaudeCodePeerDeliveryRoute {
-    fn check<'a>(&'a self, target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+    fn check<'a>(
+        &'a self,
+        target: &'a HarnessSessionRef,
+    ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async move {
             if !self.serves(target) {
                 return Ok(LiveSessionOwnership::NotLive);
@@ -348,11 +352,11 @@ impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
         SessionReachability::ClaudeCodePeer
     }
 
-    fn supports_delivery_mode(&self, target: &SessionRef, mode: MessageDelivery) -> bool {
+    fn supports_delivery_mode(&self, target: &HarnessSessionRef, mode: MessageDelivery) -> bool {
         !self.serves(target) || mode != MessageDelivery::Queue
     }
 
-    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, NativeRouteClaim> {
+    fn claim(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, NativeRouteClaim> {
         let target = target.clone();
         Box::pin(async move {
             if !self.serves(&target) {
@@ -381,7 +385,7 @@ impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
         })
     }
 
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence> {
         let target = target.clone();
         Box::pin(async move {
             if !self.serves(&target) {

@@ -16,7 +16,7 @@ async fn context_covers_assignments_scope_facts_and_card_session_presence() -> R
     let (project, workstream) = fixture.project().await?;
     let (second, second_work) = fixture.project().await?;
     let session: SessionRef = serde_json::from_value(
-        json!({"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"00000000-0000-4000-8000-000000000003"}),
+        json!({"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-7000-8000-000000000001"},"sessionId":"00000000-0000-4000-8000-000000000003"}),
     )?;
     let holder = Identity::Session {
         session: session.clone(),

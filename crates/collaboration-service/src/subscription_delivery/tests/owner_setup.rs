@@ -33,8 +33,7 @@ impl OwnerFixture {
                         Some(requests),
                     )),
                     identity: collaboration_contracts::MachineIdentity::new(
-                        collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
-                            .unwrap(),
+                        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).unwrap(),
                         Some("Owner-test-machine"),
                     )
                     .unwrap(),
@@ -183,7 +182,7 @@ impl OwnerFixture {
                 registry: self.registry.clone(),
                 fleet: fleet.clone(),
                 identity: collaboration_contracts::MachineIdentity::new(
-                    collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
+                    workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).unwrap(),
                     Some("Owner-test-machine"),
                 )
                 .unwrap(),

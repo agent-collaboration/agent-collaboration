@@ -87,7 +87,7 @@ mod scheduled_run_route_tests;
 mod wakeup_delivery_sender {
     use agent_automation::DeliveryId;
     use automation_storage::AutomationStore;
-    use collaboration_protocol::{CodexGeneration, SessionRef};
+    use collaboration_protocol::{CodexGeneration, HarnessSessionRef};
     use collaboration_runtime::test_support::WakeDeliverySender;
     use collaboration_runtime::test_support::build_wake_push_draft;
     use std::sync::Arc;

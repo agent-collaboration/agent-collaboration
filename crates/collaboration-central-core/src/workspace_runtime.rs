@@ -15,7 +15,7 @@ pub trait WorkspaceStoreCalls: Clone + Send + Sync + 'static {
         call: StoreCall,
     ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
 }
-/// A semantic caller bound to core-validated installation provenance.
+/// A semantic caller bound to core-validated machine_id provenance.
 #[derive(Clone)]
 pub struct WorkspaceCaller {
     connection: crate::ValidatedMachineConnection,
@@ -26,7 +26,7 @@ impl WorkspaceCaller {
         connection: crate::ValidatedMachineConnection,
         caller: Caller,
     ) -> Result<Self, workspace_model::RefusalReason> {
-        if caller.machine_id() != connection.installation_machine_id() {
+        if caller.machine_id() != connection.machine_id() {
             return Err(workspace_model::RefusalReason::MachineRevoked);
         }
         Ok(Self { connection, caller })

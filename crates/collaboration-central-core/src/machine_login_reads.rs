@@ -15,9 +15,9 @@ use crate::{
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
 
-const BY_REQUEST: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.request_id=?";
-const BY_ENROLLMENT: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.approval_id=?";
-const ACTIVE: &str = "SELECT a.approval_id,a.request_id,a.machine_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.installation_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.machine_id=? AND a.state='enrolled'";
+const BY_REQUEST: &str = "SELECT a.approval_id,a.request_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.machine_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.request_id=?";
+const BY_ENROLLMENT: &str = "SELECT a.approval_id,a.request_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.machine_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.approval_id=?";
+const ACTIVE: &str = "SELECT a.approval_id,a.request_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.machine_id FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id WHERE a.machine_id=? AND a.state='enrolled'";
 
 pub(crate) async fn facts(
     host: &impl ObjectHost,
@@ -74,11 +74,11 @@ pub(crate) async fn facts(
     } else {
         None
     };
-    let machine = if let Some(installation) = &query.installation {
-        let rows = host.read(Statement { sql: "SELECT machine_id,installation_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at FROM machines WHERE installation_id=?", args: vec![text(installation.as_str())] }).await?;
-        only_row(&rows, machine, "machines.installation_id")?
+    let machine = if let Some(machine_id) = &query.machine_id {
+        let rows = host.read(Statement { sql: "SELECT machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at FROM machines WHERE machine_id=?", args: vec![text(machine_id.as_str())] }).await?;
+        only_row(&rows, machine, "machines.machine_id")?
     } else if let Some(found) = &enrollment {
-        let rows = host.read(Statement { sql: "SELECT machine_id,installation_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at FROM machines WHERE machine_id=?", args: vec![text(found.machine_id)] }).await?;
+        let rows = host.read(Statement { sql: "SELECT machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at FROM machines WHERE machine_id=?", args: vec![text(found.machine_id.as_str())] }).await?;
         Some(
             only_row(&rows, machine, "machines.machine_id")?
                 .ok_or_else(|| corrupt("machine_approvals.machine_id"))?,
@@ -90,7 +90,7 @@ pub(crate) async fn facts(
         let rows = host
             .read(Statement {
                 sql: ACTIVE,
-                args: vec![text(found.id)],
+                args: vec![text(found.machine_id.as_str())],
             })
             .await?;
         only_row(
@@ -162,7 +162,6 @@ async fn superseded_client(
     };
     if previous.id == current.id
         || previous.machine_id != current.machine_id
-        || previous.installation != current.installation
         || previous.ended_at_ms != Some(record.created_at_millis)
         || record.origin != expected_origin
         || !matches!(

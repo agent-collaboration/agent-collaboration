@@ -2,12 +2,12 @@
 use agent_automation::{RunPhase, RunRecord};
 use collaboration_protocol::{
     CodexGeneration, DeliveryReceipt, DeliveryRouteEvidence, EndpointRef, ExecutionTiming,
-    NativeExecution, RetainedSummary, RunExecution, RunExecutionEvidence, RunSnapshot, RunState,
-    SessionRef,
+    HarnessSessionRef, NativeExecution, RetainedSummary, RunExecution, RunExecutionEvidence,
+    RunSnapshot, RunState,
 };
 use collaboration_runtime::observation_timestamp::timestamp;
 pub(crate) fn snapshot<TReceipt: Into<DeliveryReceipt>>(
-    record: RunRecord<SessionRef, EndpointRef, CodexGeneration, TReceipt>,
+    record: RunRecord<HarnessSessionRef, EndpointRef, CodexGeneration, TReceipt>,
 ) -> Result<RunSnapshot, ()> {
     let route = record
         .evidence
@@ -148,7 +148,7 @@ mod tests {
     use collaboration_protocol::{DeliveryReceipt, RunExecution};
     use serde_json::json;
 
-    fn captured_inputs(target: &SessionRef) -> serde_json::Value {
+    fn captured_inputs(target: &HarnessSessionRef) -> serde_json::Value {
         json!({
             "scheduleChangeId":agent_automation::ChangeId::generate(),
             "instructionRevisionId":agent_automation::RevisionId::generate(),
@@ -165,11 +165,11 @@ mod tests {
     fn provider_and_peer_runs_project_without_native_turns()
     -> Result<(), Box<dyn std::error::Error>> {
         let service = "00000000-0000-4000-8000-000000000001";
-        let provider_target: SessionRef = serde_json::from_value(json!({
+        let provider_target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"provider-worker"
         }))?;
         let operation = agent_automation::AttemptId::generate();
-        let provider: RunRecord<SessionRef, EndpointRef, CodexGeneration, DeliveryReceipt> =
+        let provider: RunRecord<HarnessSessionRef, EndpointRef, CodexGeneration, DeliveryReceipt> =
             serde_json::from_value(json!({
                 "runId":agent_automation::RunId::generate(),"scheduleId":agent_automation::ScheduleId::generate(),
                 "dueAtMs":1000,"phase":"executing","inputs":captured_inputs(&provider_target),
@@ -198,10 +198,10 @@ mod tests {
             return Err("provider run wire lost execution evidence".into());
         }
 
-        let peer_target: SessionRef = serde_json::from_value(json!({
+        let peer_target: HarnessSessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"peer-worker"
         }))?;
-        let peer: RunRecord<SessionRef, EndpointRef, CodexGeneration, DeliveryReceipt> =
+        let peer: RunRecord<HarnessSessionRef, EndpointRef, CodexGeneration, DeliveryReceipt> =
             serde_json::from_value(json!({
                 "runId":agent_automation::RunId::generate(),"scheduleId":agent_automation::ScheduleId::generate(),
                 "dueAtMs":1000,"phase":"finished","inputs":captured_inputs(&peer_target),

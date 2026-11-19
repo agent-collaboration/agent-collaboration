@@ -4,22 +4,22 @@ use serde_json::json;
 #[test]
 fn provider_inventory_has_only_known_durable_and_live_fields() {
     let params: ProviderSessionListParams = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "view":"stored","scope":{"kind":"any"},"source":"all",
         "query":null,"pageSize":10,"cursor":null
     }))
     .expect("provider params");
     assert_eq!(params.page_size, 10);
     let result: ProviderSessionListResult = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "observedAt":"2026-09-26T00:00:00Z",
         "sessions":[{
             "origin":"hostedProvider",
-            "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"session-1"},
+            "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"session-1"},
             "workingDirectory":"/tmp/project","updatedAt":3,
             "state":"unloaded","requestedPolicy":{"access":"write-restricted"},
             "approver":{"kind":"human","humanId":"owner"},
-            "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
+            "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
         }],"nextCursor":null
     })).expect("provider result");
     let wire = serde_json::to_value(result).expect("serialize");
@@ -33,10 +33,10 @@ fn provider_inventory_has_only_known_durable_and_live_fields() {
 #[test]
 fn cursor_provider_row_keeps_origin_optional_and_projects_saved_policy() {
     let row = json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"cursor-one"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"cursor-one"},
         "workingDirectory":"/tmp/project","updatedAt":3,
         "state":"unloaded","requestedPolicy":{"access":"write-restricted"},"approver":{"kind":"human","humanId":"owner"},
-        "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
+        "createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     });
     let decoded: collaboration_protocol::ProviderSessionSummary =
         serde_json::from_value(row.clone()).expect("Cursor provider row");

@@ -381,7 +381,7 @@ async fn stored_page(
         let reasoning_effort: Option<String> = row.try_get("reasoning_effort").map_err(|_| ())?;
         let name: Option<String> = row.try_get("name").map_err(|_| ())?;
         let title: Option<String> = row.try_get("title").map_err(|_| ())?;
-        let session_ref = collaboration_protocol::SessionRef {
+        let session_ref = collaboration_protocol::HarnessSessionRef {
             endpoint: params.endpoint.clone(),
             session_id: id.clone().try_into().map_err(|_| ())?,
         };
@@ -512,7 +512,7 @@ async fn runtime_page(
             .get("title")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let session_ref = collaboration_protocol::SessionRef {
+        let session_ref = collaboration_protocol::HarnessSessionRef {
             endpoint: params.endpoint.clone(),
             session_id: id.to_owned().try_into().map_err(|_| ())?,
         };

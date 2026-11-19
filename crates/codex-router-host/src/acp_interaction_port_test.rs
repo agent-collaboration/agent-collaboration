@@ -72,7 +72,7 @@ impl SessionEventSink for RecordedInteractionSink {
 async fn stalled_session_notices_do_not_delay_turn_cancellation_or_resolution() {
     use acp_client_runtime::InteractionPort as _;
     let directory = tempfile::tempdir().expect("broker directory");
-    let service_id: collaboration_protocol::UuidIdentity = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89"
+    let service_id: workspace_ids::MachineId = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89"
         .to_owned()
         .try_into()
         .expect("service ID");
@@ -126,21 +126,23 @@ async fn stalled_session_notices_do_not_delay_turn_cancellation_or_resolution() 
     port.install_broker(Arc::clone(&broker)).await;
     port.install_event_sink(Arc::clone(&sink) as Arc<dyn SessionEventSink>)
         .await;
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":endpoint,"sessionId":"provider-session"
-    }))
-    .expect("target");
-    let approver: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":endpoint,"sessionId":"approver-session"
-    }))
-    .expect("approver");
+    let target: collaboration_protocol::HarnessSessionRef =
+        serde_json::from_value(serde_json::json!({
+            "endpoint":endpoint,"sessionId":"provider-session"
+        }))
+        .expect("target");
+    let approver: collaboration_protocol::HarnessSessionRef =
+        serde_json::from_value(serde_json::json!({
+            "endpoint":endpoint,"sessionId":"approver-session"
+        }))
+        .expect("approver");
     let context = || ExternalProviderApprovalContext {
         requester: target.clone().into(),
         approver: approver.clone().into(),
         target: target.clone(),
         operation_id: OperationId::generate(),
         binding_generation: serde_json::from_value(serde_json::json!({
-            "serviceEpoch":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","generation":1
+            "serviceEpoch":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","generation":1
         }))
         .expect("generation"),
         binding_retirement: CancellationToken::new(),
@@ -230,8 +232,8 @@ async fn stalled_session_notices_do_not_delay_turn_cancellation_or_resolution() 
 
 #[test]
 fn human_approver_reaches_typed_broker_without_a_synthetic_session() {
-    let target: collaboration_protocol::SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"cursor-local"},
+    let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"cursor-local"},
         "sessionId":"provider-session"
     }))
     .expect("target");

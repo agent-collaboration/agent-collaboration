@@ -41,7 +41,7 @@ macro_rules! ensure_eq {
 
 fn session() -> TestResult<SessionRef> {
     Ok(serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-session-1"
     }))?)
 }
@@ -177,7 +177,7 @@ async fn projection_rejection_resyncs_only_that_session() -> TestResult {
     let (_root, hub) = hub(8).await?;
     let affected = session()?;
     let other: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
+        "endpoint":{"serviceId":"0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-session-2"
     }))?;
     let approval: PendingInteraction = serde_json::from_value(serde_json::json!({
@@ -375,7 +375,7 @@ async fn sessions_use_durable_inventory_with_live_state_overlay() -> TestResult 
     let root = tempfile::tempdir()?;
     let mut store = ProviderOperationStore::open(&root.path().join("operations.sqlite")).await?;
     let target = session()?;
-    let stored_target: collaboration_protocol::SessionRef =
+    let stored_target: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(serde_json::to_value(&target)?)?;
     store
         .record_session(&ProviderSessionRecord {
@@ -494,7 +494,7 @@ async fn sessions_inventory_preserves_human_approver_after_restart() -> TestResu
     let path = root.path().join("operations.sqlite");
     let mut store = ProviderOperationStore::open(&path).await?;
     let target = session()?;
-    let stored_target: collaboration_protocol::SessionRef =
+    let stored_target: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(serde_json::to_value(&target)?)?;
     let human: collaboration_protocol::ProviderIdentity =
         serde_json::from_value(serde_json::json!({"humanId":"owner"}))?;

@@ -30,7 +30,7 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
         native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(
-            "00000000-0000-4000-8000-000000000001".to_owned(),
+            "00000000-0000-7000-8000-000000000001".to_owned(),
         )?,
         machine: message_board::MachineLabel::try_from("aggregate CLI proof".to_owned())?,
     };
@@ -46,16 +46,14 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             Some("aggregate CLI proof"),
         )?,
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
         (ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission.clone()))
@@ -119,7 +117,7 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
             &input,
             &ActorOrigin {
                 installation: ServiceId::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
+                    "00000000-0000-7000-8000-000000000001".to_owned(),
                 )?,
                 machine: MachineLabel::try_from("aggregate CLI proof".to_owned())?,
             },

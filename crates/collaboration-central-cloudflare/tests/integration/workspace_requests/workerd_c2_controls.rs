@@ -2,7 +2,8 @@
 use super::*;
 use central_storage::SafeInteger;
 use collaboration_central_core::identity_contract::ClientId;
-use fleet_identity_protocol::{EnrollmentId, InstallationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, UnixSeconds};
+use workspace_ids::MachineId;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -19,8 +20,7 @@ pub enum WitnessPhase {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AttachmentSnapshot {
     pub organization_id: OrganizationId,
-    pub machine_id: uuid::Uuid,
-    pub installation_id: InstallationId,
+    pub machine_id: MachineId,
     pub enrollment_id: EnrollmentId,
     pub client_id: ClientId,
     pub effective_expires_at: UnixSeconds,
@@ -39,7 +39,7 @@ pub struct WitnessRecord {
 #[serde(rename_all = "camelCase")]
 pub enum EnrollmentReadQuery {
     ByEnrollment,
-    MachineByInstallation,
+    MachineById,
     ActiveEnrollment,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]

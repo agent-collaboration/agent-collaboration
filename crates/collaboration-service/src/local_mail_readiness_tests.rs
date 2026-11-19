@@ -5,7 +5,7 @@ struct ReadinessPresence(std::sync::atomic::AtomicBool);
 impl collaboration_contracts::TargetPresenceProbe for ReadinessPresence {
     fn presence(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
         Box::pin(async {
             Ok(if self.0.load(std::sync::atomic::Ordering::SeqCst) {

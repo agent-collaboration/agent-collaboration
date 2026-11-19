@@ -206,7 +206,7 @@ async fn scoped_native_selection_retains_every_thread_fact_and_intent_branch()
             linked.clone(),
             FactKind::ScopeAcknowledgement {
                 session: serde_json::from_value(
-                    json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"read selector fixture"}),
+                    json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"read selector fixture"}),
                 )?,
                 subject: TrailSubject::Project,
                 paths: vec![],

@@ -1,9 +1,9 @@
 use agent_automation::{OccurrenceId, RunId, ScheduleId, WakeupId};
 use chrono::Utc;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, MessageDelivery,
-    PushActivityRange, PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
-    PushOrigin, PushRecordDraft, RouterOriginRef, SessionId, SessionRef, UuidIdentity,
+    CodexGeneration, DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, HarnessSessionRef,
+    MessageDelivery, PushActivityRange, PushActivitySnapshot, PushDeliveryState, PushHeaderFacts,
+    PushId, PushKind, PushOrigin, PushRecordDraft, RouterOriginRef, SessionId,
 };
 use interaction_storage::{InteractionStore, StorageError};
 use message_board::{
@@ -47,10 +47,12 @@ fn ensure(condition: bool, message: &'static str) -> TestResult {
     }
 }
 
-fn session(session_id: &str) -> Result<SessionRef, TestError> {
-    Ok(SessionRef {
+fn session(session_id: &str) -> Result<HarnessSessionRef, TestError> {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+            service_id: workspace_ids::MachineId::try_from(
+                "00000000-0000-7000-8000-000000000001".to_owned(),
+            )?,
             endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
         },
         session_id: SessionId::try_from(session_id.to_owned())?,
@@ -79,7 +81,7 @@ fn direct_message_draft(
 }
 
 fn router_push_draft(
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     kind: PushKind,
     origin: RouterOriginRef,
     header_facts: PushHeaderFacts,

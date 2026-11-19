@@ -12,7 +12,8 @@ use collaboration_contracts::RouteClaim;
 use collaboration_contracts::RoutePresence;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_protocol::{
-    OperationId, ProviderOperationEffect, ProviderOperationStage, SessionReachability, SessionRef,
+    HarnessSessionRef, OperationId, ProviderOperationEffect, ProviderOperationStage,
+    SessionReachability,
 };
 use std::sync::Arc;
 
@@ -34,13 +35,13 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
 
     fn claim(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         let target = target.clone();
         Box::pin(async move { Ok(self.claim.claim(&target).await) })
     }
 
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
+    fn presence(&self, target: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence> {
         let target = target.clone();
         Box::pin(async move {
             if !self.serves(&target) {

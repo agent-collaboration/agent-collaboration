@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use crate::served_api;
 use collaboration_protocol::{
-    EndpointDescription, NativeSessionScope, NativeSessionSource, NativeSessionView,
-    ProviderRequestedPolicy, ProviderSessionListParams, ProviderSessionState,
-    ProviderWorkingDirectory, RouterAccess, SessionRef,
+    EndpointDescription, HarnessSessionRef, NativeSessionScope, NativeSessionSource,
+    NativeSessionView, ProviderRequestedPolicy, ProviderSessionListParams, ProviderSessionState,
+    ProviderWorkingDirectory, RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -33,14 +33,14 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
         .to_string(),
     )
     .expect("terminal registry record");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"claude-local"},
         "sessionId":"provider-session"
     }))
     .expect("target");
-    let creator: SessionRef = serde_json::from_value(json!({
+    let creator: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"creator"
     }))
@@ -68,11 +68,11 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
         })
         .await
         .expect("record session");
-    let older: SessionRef = serde_json::from_value(json!({
+    let older: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":target.endpoint,"sessionId":"older-session"
     }))
     .expect("older target");
-    let cursor_target: SessionRef = serde_json::from_value(json!({
+    let cursor_target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"cursor-local"},
         "sessionId":"cursor-session"
     }))

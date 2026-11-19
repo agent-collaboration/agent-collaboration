@@ -3,9 +3,9 @@ use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessag
 use collaboration_protocol::{
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationSettlement,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, DeliveryDisposition,
-    DeliveryEvidence, DeliveryOutcome, DeliveryShowRequest, EndpointRef, MessageDelivery,
-    MessageText, OperationId, PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory,
-    RouterAccess, SessionId, SessionRef, WakeSendRequest, WakeShowRequest,
+    DeliveryEvidence, DeliveryOutcome, DeliveryShowRequest, EndpointRef, HarnessSessionRef,
+    MessageDelivery, MessageText, OperationId, PositiveSeconds, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, RouterAccess, SessionId, WakeSendRequest, WakeShowRequest,
 };
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
@@ -22,7 +22,7 @@ pub(super) fn provider_fixture(path: &Path) {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-pub(super) fn message(target: SessionRef) -> MessageSendRequest {
+pub(super) fn message(target: HarnessSessionRef) -> MessageSendRequest {
     MessageSendRequest {
         item_id: None,
         target,
@@ -140,9 +140,9 @@ pub(super) fn publish_peer(registry: &Path, session_id: &SessionId, protocol: u6
 pub(super) async fn create_provider_target(
     client: &CollaborationClient,
     endpoint: EndpointRef,
-    actor: SessionRef,
+    actor: HarnessSessionRef,
     working_directory: &Path,
-) -> SessionRef {
+) -> HarnessSessionRef {
     let description = client
         .list_endpoints()
         .await
@@ -207,8 +207,8 @@ pub(super) async fn create_provider_target(
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) async fn load_provider_target(
     client: &CollaborationClient,
-    target: SessionRef,
-    actor: SessionRef,
+    target: HarnessSessionRef,
+    actor: HarnessSessionRef,
     working_directory: &Path,
 ) {
     let generation = client
@@ -268,7 +268,7 @@ pub(super) async fn load_provider_target(
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: SessionRef) {
+pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: HarnessSessionRef) {
     // Omitted expiry ends a day after due; a fixed historical date is already expired.
     let request: WakeSendRequest = serde_json::from_value(json!({
         "operationId": OperationId::generate(),

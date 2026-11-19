@@ -7,7 +7,7 @@ use std::path::Path;
 
 async fn load_broker(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let endpoint: EndpointRef = serde_json::from_value(serde_json::json!({
-        "serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"claude-local"
+        "serviceId":"00000000-0000-7000-8000-000000000001", "endpointId":"claude-local"
     }))?;
     let interaction_store = std::sync::Arc::new(
         interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
@@ -86,7 +86,7 @@ async fn nonreserved_sqlite_prefix_table_blocks_foreign_adoption_and_owned_reope
 #[tokio::test]
 async fn typed_json_is_ignored_on_fresh_startup_and_reopen() {
     // Structurally and semantically valid old typed history must not be imported.
-    let original = br#"{"old-refusal":{"kind":"refusedApproval","requester":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"old-requester"},"approver":{"kind":"human","humanId":"owner"},"refusal":{"requestId":"old-refusal","title":"Old refusal","description":null,"subject":null,"options":[],"reason":"fixture"}}}"#;
+    let original = br#"{"old-refusal":{"kind":"refusedApproval","requester":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"old-requester"},"approver":{"kind":"human","humanId":"owner"},"refusal":{"requestId":"old-refusal","title":"Old refusal","description":null,"subject":null,"options":[],"reason":"fixture"}}}"#;
     // Validate the fixture independently so startup errors cannot manufacture a pass.
     let records: std::collections::BTreeMap<
         String,

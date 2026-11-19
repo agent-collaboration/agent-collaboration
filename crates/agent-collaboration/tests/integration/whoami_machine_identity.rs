@@ -1,6 +1,5 @@
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_protocol::UuidIdentity;
 use collaboration_service::ApplicationFixture;
 
 use serde_json::Value;
@@ -18,7 +17,7 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
         .expect("private service directory");
     // The CLI reads the machine label from the version 3 manifest the API publishes.
     let machine_identity = MachineIdentity::new(
-        UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service id"),
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service id"),
         Some("Sunbook-Pro-M4"),
     )
     .expect("machine label");

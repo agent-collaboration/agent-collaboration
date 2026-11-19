@@ -141,17 +141,17 @@ UNION ALL SELECT 5,workspace_id,json_object('kind','workspace','row',json_object
  FROM workspaces
 ), machines_and_approvals AS (
 SELECT 6 AS row_group,machine_id AS row_id,json_object('kind','machine','row',json_object(
- 'machine_id',machine_id,'installation_id',installation_id,'label',label,'state',state,
+ 'machine_id',machine_id,'label',label,'state',state,
  'allowed_workspaces',allowed_workspaces,'enrollment_generation',enrollment_generation,
  'created_at',created_at,'updated_at',updated_at)) AS payload
  FROM machines
 UNION ALL SELECT 7,a.approval_id,json_object('kind','machineApproval','row',json_object(
- 'approval_id',a.approval_id,'request_id',a.request_id,'machine_id',a.machine_id,'label',a.label,
+ 'approval_id',a.approval_id,'request_id',a.request_id,'label',a.label,
  'allowed_workspaces',a.allowed_workspaces,'state',a.state,'end_reason',a.end_reason,
  'approved_by_person_id',a.approved_by_person_id,'permission_checked',a.permission_checked,
  'base_generation',a.base_generation,'code_expires_at',a.code_expires_at,
  'machine_client_id',a.machine_client_id,'last_grant_at',a.last_grant_at,'ended_at',a.ended_at,
- 'created_at',a.created_at,'updated_at',a.updated_at,'installation_id',m.installation_id))
+ 'created_at',a.created_at,'updated_at',a.updated_at,'machine_id',m.machine_id))
  FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id
 )
 SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM identity_records_and_organization_floor

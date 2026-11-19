@@ -18,7 +18,6 @@ const correlationIds = [
 const attachment = c2AttachmentSchema.parse({
   organizationId: originalInstance,
   machineId: newInstance,
-  installationId: "019f0000-0000-7000-8000-000000000006",
   enrollmentId: correlationIds[0],
   clientId: correlationIds[0],
   effectiveExpiresAt: 1_800_000_600,
@@ -52,7 +51,7 @@ function fixture(): C2WitnessRecord[] {
     );
   };
   const reads = (): void => {
-    for (const query of ["byEnrollment", "machineByInstallation", "activeEnrollment"])
+    for (const query of ["byEnrollment", "machineById", "activeEnrollment"])
       append({ kind: "enrollmentRead", objectId, query, outcome: "read" });
   };
   append({ kind: "constructor", objectId });

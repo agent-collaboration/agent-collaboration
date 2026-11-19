@@ -7,7 +7,7 @@ async fn conversation_create_without_identity_or_from_reports_unavailable() {
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-0000000000aa";
+    let service_id = "00000000-0000-7000-8000-0000000000aa";
     let epoch = "00000000-0000-4000-8000-0000000000ab";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let description = serde_json::from_value(json!({
@@ -60,7 +60,7 @@ async fn conversation_create_without_identity_or_from_reports_unavailable() {
     assert_eq!(record["kind"], "conversationError");
     assert_eq!(
         record["error"]["message"],
-        "collaboration API protocol violation: current session identity unavailable; run agent-collaboration whoami --json or pass --from SessionRef JSON"
+        "collaboration API protocol violation: current session identity unavailable; run agent-collaboration whoami --json or pass --from HarnessSessionRef JSON"
     );
 }
 
@@ -71,7 +71,7 @@ async fn conversation_create_from_supplies_created_by_without_env() {
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-0000000000ac";
+    let service_id = "00000000-0000-7000-8000-0000000000ac";
     let epoch = "00000000-0000-4000-8000-0000000000ad";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let description = serde_json::from_value(json!({

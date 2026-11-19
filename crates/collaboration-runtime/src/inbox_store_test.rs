@@ -27,7 +27,6 @@ fn message(index: u8) -> MessageRecord {
         "sender": { "kind": "central" },
         "target": {
             "machineId": "01890f2e-7b4c-7cc0-98c4-000000000002",
-            "endpoint": "codex-local",
             "sessionId": "receiver",
         },
         "body": { "kind": "direct", "body": "hello", "delivery": "auto", "replyTo": null },

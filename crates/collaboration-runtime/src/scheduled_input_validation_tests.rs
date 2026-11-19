@@ -33,7 +33,7 @@ async fn exercise_input_validation(
         AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
     let endpoint: EndpointRef = serde_json::from_value(
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"}),
+        json!({"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"}),
     )?;
     let generation: CodexGeneration = serde_json::from_value(
         json!({"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1}),
@@ -50,7 +50,7 @@ async fn exercise_input_validation(
     let schedule = store
         .lock()
         .await
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -67,7 +67,7 @@ async fn exercise_input_validation(
             imported_continuity: ContinuityInput::ImportedSummary {
                 text: "y".repeat(100_000),
                 source_run_id: "prior-run".into(),
-                source_target: SessionRef {
+                source_target: HarnessSessionRef {
                     endpoint: endpoint.clone(),
                     session_id: "prior-thread".to_owned().try_into()?,
                 },
@@ -79,13 +79,13 @@ async fn exercise_input_validation(
     let run = store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("run missing")?;
     store
         .lock()
         .await
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 60000)
         .await?;
     let socket_path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
@@ -103,7 +103,7 @@ async fn exercise_input_validation(
         store
             .lock()
             .await
-            .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+            .begin_run_preparation::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
                 automation_storage::RunPreparationIntent {
                     run_id: run.clone(),
                     effects: effects.clone().into(),
@@ -111,14 +111,14 @@ async fn exercise_input_validation(
             )
             .await?;
         effects.allocation = PreparationEffect::Accepted;
-        effects.target = Some(SessionRef {
+        effects.target = Some(HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id: "prepared-thread".to_owned().try_into()?,
         });
         store
             .lock()
             .await
-            .record_run_target::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+            .record_run_target::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
                 RunPreparedTarget {
                     run_id: run.clone(),
                     effects,
@@ -171,7 +171,7 @@ async fn exercise_input_validation(
     let failed = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run)
+        .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run)
         .await?;
     let failed_native = failed
         .evidence
@@ -225,14 +225,14 @@ async fn exercise_input_validation(
     store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 120000)
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 120000)
         .await?
         .ok_or("successor missing")?;
     if !matches!(
         store
             .lock()
             .await
-            .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 120000)
+            .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&schedule.schedule_id, 120000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {

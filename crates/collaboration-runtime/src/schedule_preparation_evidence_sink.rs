@@ -9,8 +9,8 @@ use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::PreparationEvidenceSink;
 use collaboration_contracts::PreparedTarget;
 use collaboration_protocol::{
-    ChangeId, CodexGeneration, DeliveryRouteEvidence, EndpointRef, OperationId, ScheduleFailure,
-    SessionRef,
+    ChangeId, CodexGeneration, DeliveryRouteEvidence, EndpointRef, HarnessSessionRef, OperationId,
+    ScheduleFailure,
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -26,7 +26,7 @@ pub struct StoredPreparationEvidenceSink {
 }
 
 pub fn project_evidence(
-    evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>,
+    evidence: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> Result<DeliveryRouteEvidence, DeliveryContractError> {
     if !evidence.is_valid() {
         return Err(DeliveryContractError::InvalidEvidence);
@@ -37,7 +37,7 @@ pub fn project_evidence(
 
 pub fn decode_stored_evidence(
     value: Value,
-) -> Result<RouteEffectEvidence<SessionRef, CodexGeneration>, StorageError> {
+) -> Result<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>, StorageError> {
     if value.get("kind").is_some() {
         serde_json::from_value(value).map_err(|_| StorageError::InvalidRecord)
     } else {
@@ -88,8 +88,8 @@ fn validate_prepared_target(prepared: &PreparedTarget) -> Result<(), DeliveryCon
 }
 
 fn same_preparation_identity(
-    before: &RouteEffectEvidence<SessionRef, CodexGeneration>,
-    after: &RouteEffectEvidence<SessionRef, CodexGeneration>,
+    before: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
+    after: &RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
 ) -> bool {
     match (before, after) {
         (
@@ -110,7 +110,7 @@ fn same_preparation_identity(
 impl PreparationEvidenceSink for StoredPreparationEvidenceSink {
     fn record_intent(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, bool> {
         Box::pin(async move {
             if !evidence.is_valid() {
@@ -136,7 +136,7 @@ impl PreparationEvidenceSink for StoredPreparationEvidenceSink {
     fn record_prepared<'a>(
         &'a self,
         prepared: &'a PreparedTarget,
-    ) -> DeliveryFuture<'a, ScheduleInspection<SessionRef, EndpointRef>> {
+    ) -> DeliveryFuture<'a, ScheduleInspection<HarnessSessionRef, EndpointRef>> {
         Box::pin(async move {
             validate_prepared_target(prepared)?;
             let mut store = self.store.lock().await;
@@ -181,7 +181,7 @@ impl PreparationEvidenceSink for StoredPreparationEvidenceSink {
     fn record_failure<'a>(
         &'a self,
         failure: &'a ScheduleFailure,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         uncertain: bool,
     ) -> DeliveryFuture<'a, ()> {
         Box::pin(async move {
@@ -218,7 +218,7 @@ mod tests {
     fn legacy_native_preparation_evidence_projects_as_codex_route()
     -> Result<(), Box<dyn std::error::Error>> {
         let endpoint: EndpointRef = serde_json::from_value(json!({
-            "serviceId":"00000000-0000-4000-8000-000000000001",
+            "serviceId":"00000000-0000-7000-8000-000000000001",
             "endpointId":"codex-local"
         }))?;
         let native =

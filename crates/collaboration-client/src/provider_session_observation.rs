@@ -8,7 +8,7 @@ use std::{collections::VecDeque, time::Duration};
 
 use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
-    EndpointId, EndpointRef, ObservationEndReason, SessionId, SessionRef,
+    EndpointId, EndpointRef, HarnessSessionRef, ObservationEndReason, SessionId,
 };
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -36,7 +36,7 @@ pub enum SessionObservation {
 /// Follows one provider Session through bounded observation calls.
 pub struct ProviderSessionFollow {
     access: ProviderObservationAccess,
-    target: SessionRef,
+    target: HarnessSessionRef,
     generation: CodexGeneration,
     epoch: Option<u64>,
     after_sequence: Option<u64>,
@@ -76,7 +76,7 @@ impl SessionObservation {
             .endpoint_directory("agent-collaboration-observer")
             .await
             .map_err(|error| OperationError::before_dispatch("observation-connect", None, error))?;
-        let target = SessionRef {
+        let target = HarnessSessionRef {
             endpoint: EndpointRef {
                 service_id: endpoints.service_id(),
                 endpoint_id,
@@ -184,7 +184,7 @@ impl SessionObservation {
     }
 
     #[must_use]
-    pub fn target(&self) -> &SessionRef {
+    pub fn target(&self) -> &HarnessSessionRef {
         match self {
             Self::Native(native) => native.target(),
             Self::Provider(follow) => &follow.target,
@@ -281,7 +281,7 @@ fn provider_access(
 
 async fn endpoint_is_provider(
     endpoints: &EndpointDirectoryReader,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
 ) -> Result<bool, OperationError> {
     let inventory = endpoints.endpoints().await.map_err(|error| {
         OperationError::before_dispatch("observation-discovery", Some(target.clone()), error)

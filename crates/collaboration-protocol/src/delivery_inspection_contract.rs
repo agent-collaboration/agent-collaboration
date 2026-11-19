@@ -1,7 +1,7 @@
 //! Delivery eligibility and native evidence are separate, explicit inspection dimensions.
 use crate::{
-    CodexGeneration, DeliveryReceipt, DeliveryRouteEvidence, MessageDelivery, ObservationTimestamp,
-    SessionRef,
+    CodexGeneration, DeliveryReceipt, DeliveryRouteEvidence, HarnessSessionRef, MessageDelivery,
+    ObservationTimestamp,
 };
 use agent_automation::{AttemptId, DeliveryId, OccurrenceId, WakeupId};
 use schemars::JsonSchema;
@@ -12,7 +12,7 @@ pub struct NativeEffectEvidence {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub permission_differences: Vec<crate::PermissionDifference>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub generation: Option<CodexGeneration>,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -111,7 +111,7 @@ pub enum DeliveryDisposition {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DeliveryInspection {
     pub delivery_id: DeliveryId,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub mode: MessageDelivery,
     pub source: DeliverySource,
     pub eligible_at: ObservationTimestamp,

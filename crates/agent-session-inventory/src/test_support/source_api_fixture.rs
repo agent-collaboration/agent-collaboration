@@ -125,15 +125,15 @@ impl SourceApiFixture {
             .unwrap();
         if !matches!(providers, SourceProviderFixture::CodexOnly) {
             use collaboration_client::protocol::{
-                ProviderRequestedPolicy, RouterAccess, SessionRef,
+                HarnessSessionRef, ProviderRequestedPolicy, RouterAccess,
             };
             use collaboration_runtime::ProviderOperationStore;
             use collaboration_runtime::ProviderSessionEventHub;
             use collaboration_runtime::ProviderSessionRecord;
-            let target: SessionRef = serde_json::from_value(serde_json::json!({
+            let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
                 "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"shared-source-id"
             })).unwrap();
-            let owner: SessionRef = serde_json::from_value(serde_json::json!({
+            let owner: HarnessSessionRef = serde_json::from_value(serde_json::json!({
                 "endpoint":endpoint,"sessionId":"fixture-owner"
             }))
             .unwrap();

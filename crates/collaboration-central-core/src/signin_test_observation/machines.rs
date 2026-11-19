@@ -9,11 +9,11 @@ use crate::{
     workspace_decode_error::corrupt,
 };
 use central_storage::{ReadOutcome, SafeInteger, SqlValue, StoreFailure};
-use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_identity_protocol::EnrollmentId;
 use message_board::WorkspaceId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use uuid::Uuid;
+use workspace_ids::MachineId;
 
 #[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,8 +25,7 @@ pub enum ObservedMachineState {
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ObservedMachine {
-    pub machine_id: Uuid,
-    pub installation_id: InstallationId,
+    pub machine_id: MachineId,
     pub state: ObservedMachineState,
     pub allowed_workspaces: Vec<WorkspaceId>,
     pub enrollment_generation: u64,
@@ -55,7 +54,7 @@ pub enum ObservedApprovalEndReason {
 pub struct ObservedMachineApproval {
     pub approval_id: EnrollmentId,
     pub request_id: DeviceLoginRequestId,
-    pub machine_id: Uuid,
+    pub machine_id: MachineId,
     pub state: ObservedApprovalState,
     pub end_reason: Option<ObservedApprovalEndReason>,
     pub allowed_workspaces: AllowedWorkspaces,
@@ -113,8 +112,7 @@ pub(super) fn decode_machine_observation(
         .ok_or_else(|| corrupt("signin_observation.machine"))?;
     let checked = machine_login_rows::machine(&rows, row)?;
     Ok(ObservedMachine {
-        machine_id: checked.id,
-        installation_id: checked.installation,
+        machine_id: checked.machine_id,
         state: match checked.state {
             MachineState::Enrolled => ObservedMachineState::Enrolled,
             MachineState::Revoked => ObservedMachineState::Revoked,

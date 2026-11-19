@@ -11,7 +11,7 @@ use crate::{
 };
 use agent_automation::{RunId, ScheduleId};
 use automation_storage::{AutomationStore, StorageError};
-use collaboration_protocol::{EndpointRef, SessionRef};
+use collaboration_protocol::{EndpointRef, HarnessSessionRef};
 use runtime_primitives::SyncTime;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, watch};
@@ -307,7 +307,7 @@ impl SchedulePass {
             self.store
                 .lock()
                 .await
-                .enqueue_due_run::<SessionRef, EndpointRef>(id, now_ms)
+                .enqueue_due_run::<HarnessSessionRef, EndpointRef>(id, now_ms)
                 .await?;
         }
         Ok(due.len())
@@ -336,7 +336,7 @@ impl SchedulePass {
             self.store
                 .lock()
                 .await
-                .admit_waiting_run::<SessionRef, EndpointRef>(&id, now_ms)
+                .admit_waiting_run::<HarnessSessionRef, EndpointRef>(&id, now_ms)
                 .await?;
         }
         if read < INVENTORY_BATCH {

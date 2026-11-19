@@ -6,8 +6,8 @@ use crate::api_test_harness::{
     ServedApi, TEST_PROTOCOL_VERSION, TEST_SERVICE_ID, api_config, test_identity,
 };
 use collaboration_protocol::{
-    EndpointDescription, OBSERVATION_EVENT_NOTIFICATION, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, RouterAccess, SessionRef,
+    EndpointDescription, HarnessSessionRef, OBSERVATION_EVENT_NOTIFICATION,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -46,7 +46,7 @@ fn private_directory() -> tempfile::TempDir {
     directory
 }
 
-fn provider_target(session_id: &str) -> SessionRef {
+fn provider_target(session_id: &str) -> HarnessSessionRef {
     serde_json::from_value(json!({
         "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "claude-local"},
         "sessionId": session_id
@@ -57,9 +57,9 @@ fn provider_target(session_id: &str) -> SessionRef {
 /// A Router with one provider endpoint whose Session hub records `sessions`.
 async fn provider_router(
     directory: &Path,
-    sessions: &[&SessionRef],
+    sessions: &[&HarnessSessionRef],
 ) -> (ApplicationFixture, Arc<ProviderSessionEventHub>) {
-    let owner: SessionRef = serde_json::from_value(json!({
+    let owner: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "codex-local"},
         "sessionId": "owner"
     }))
@@ -108,13 +108,13 @@ async fn provider_router(
     (identity, hub)
 }
 
-async fn publish(hub: &ProviderSessionEventHub, target: &SessionRef, item_id: &str) {
+async fn publish(hub: &ProviderSessionEventHub, target: &HarnessSessionRef, item_id: &str) {
     publish_text(hub, target, item_id, item_id).await;
 }
 
 async fn publish_text(
     hub: &ProviderSessionEventHub,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     item_id: &str,
     text: &str,
 ) {
@@ -152,7 +152,7 @@ async fn next_streamed(streamed: &mut mpsc::UnboundedReceiver<Value>) -> Value {
 }
 
 fn observe(
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     timeout_seconds: u64,
     cursor: Option<&Value>,
 ) -> CallToolRequestParams {

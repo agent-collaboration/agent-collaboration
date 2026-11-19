@@ -8,7 +8,7 @@ use super::*;
 /// Sends one queued message to the reader's own session, which the fixture holds.
 pub(super) async fn send_held(
     app: &CollaborationApplication,
-    target: &collaboration_protocol::SessionRef,
+    target: &collaboration_protocol::HarnessSessionRef,
     text: &str,
 ) -> (
     SessionMessageSendParams,
@@ -137,7 +137,7 @@ pub(super) async fn checked_while_wakeable_then_loaded(
 /// A native observation of the reader's own thread going idle, as the observer records
 /// a thread that loaded.
 pub(super) fn thread_loaded(
-    target: &collaboration_protocol::SessionRef,
+    target: &collaboration_protocol::HarnessSessionRef,
 ) -> collaboration_protocol::LifecycleObservation {
     serde_json::from_value(serde_json::json!({
         "observedAt":"2027-01-15T08:01:00.000Z","source":"nativeNotification",

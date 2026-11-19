@@ -33,15 +33,18 @@ use std::sync::Arc;
 struct NoLivePeer;
 
 impl LiveSessionOwnershipCheck for NoLivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+    fn check<'a>(
+        &'a self,
+        _target: &'a HarnessSessionRef,
+    ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
     }
 }
 
-fn target() -> SessionRef {
-    SessionRef {
+fn target() -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89"
+            service_id: "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89"
                 .to_owned()
                 .try_into()
                 .expect("service ID"),
@@ -51,7 +54,7 @@ fn target() -> SessionRef {
     }
 }
 
-fn binding(target: &SessionRef) -> ProviderBindingIdentity {
+fn binding(target: &HarnessSessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("fifo-binding".to_owned()).expect("binding ID"),
@@ -242,13 +245,13 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
 
 struct CloseDuringQueueAcceptance {
     supervisor: Arc<ExternalProviderSupervisor>,
-    target: SessionRef,
+    target: HarnessSessionRef,
 }
 
 impl AttemptEvidenceSink for CloseDuringQueueAcceptance {
     fn record(
         &self,
-        _: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         let supervisor = Arc::clone(&self.supervisor);
         let target = self.target.clone();

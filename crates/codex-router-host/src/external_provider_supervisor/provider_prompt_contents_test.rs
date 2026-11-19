@@ -1,17 +1,17 @@
 use super::ProviderPromptContentsRequest;
 use collaboration_protocol::{
-    ConversationPromptRequest, MessageContent, MessageText, OperationId, SessionRef,
+    ConversationPromptRequest, HarnessSessionRef, MessageContent, MessageText, OperationId,
 };
 use session_event_model::PromptContent;
 
 #[test]
 fn prompt_request_forwards_exact_task_text_without_router_envelope() {
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
         "endpoint":{"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"codex-local"},
         "sessionId":"target-session"
     }))
     .expect("target session");
-    let sender: SessionRef = serde_json::from_value(serde_json::json!({
+    let sender: HarnessSessionRef = serde_json::from_value(serde_json::json!({
         "endpoint":{"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"claude-local"},
         "sessionId":"sender-session"
     }))

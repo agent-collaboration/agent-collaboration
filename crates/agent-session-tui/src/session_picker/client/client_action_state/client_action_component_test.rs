@@ -25,7 +25,7 @@ fn control(character: char) -> TerminalEvent {
 async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_identity() {
     for client_name in ["Cursor", "Claude"] {
         let binding:ProviderBindingIdentity=serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"actual-cursor"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"actual-cursor"},
             "bindingId":"cursor-binding","runtime":{"provider":"cursor","runtimeName":"fixture"},"transport":"stdioAcp",
             "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":7},
             "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]
@@ -193,7 +193,7 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
         );
         assert_eq!(
             String::from(captured[0].service_id.clone()),
-            "00000000-0000-4000-8000-000000000001"
+            "00000000-0000-7000-8000-000000000001"
         );
         let Some(SessionsPickerOutcome::InterruptedClientAction(detached)) = outcome else {
             panic!("detachment must retain uncertain action")

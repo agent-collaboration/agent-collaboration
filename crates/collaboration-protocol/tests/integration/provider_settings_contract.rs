@@ -6,8 +6,8 @@ use serde_json::json;
 
 #[test]
 fn immediate_settings_contract_has_no_operation_identity() {
-    let target = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-session"});
-    let actor = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"caller"});
+    let target = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-session"});
+    let actor = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"caller"});
     let set = json!({"target":target,"actor":actor,"setting":"mode","value":"ask"});
     let _: ProviderSettingsSetRequest = serde_json::from_value(set).expect("set request");
     assert!(serde_json::from_value::<ProviderSettingsSetRequest>(json!({"operationId":"019c6e27-e55b-73d1-87d8-4e01f1f75101","target":target,"actor":actor,"setting":"mode","value":"ask"})).is_err());

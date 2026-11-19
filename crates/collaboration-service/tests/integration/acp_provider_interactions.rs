@@ -103,7 +103,7 @@ mod remediation;
 async fn only_the_approver_receives_and_decides_exact_provider_options() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let endpoint: SessionEndpointRef = provider.endpoint.clone();
     let interaction_store = Arc::new(
@@ -289,7 +289,7 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
 async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let interaction_store = Arc::new(
         interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))

@@ -6,7 +6,7 @@ use collaboration_client::{ClientError, MessageSendError, OperationEffect};
 fn queued_report_names_sender_custody_without_a_push_or_native_receipt() {
     let queued = serde_json::from_value(serde_json::json!({
         "item":"01900000-0000-7000-8000-000000000002",
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000099","endpointId":"codex-local"},"sessionId":"remote-recipient"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000099","endpointId":"codex-local"},"sessionId":"remote-recipient"},
         "targetIdentity":"remote recipient"
     })).unwrap();
     let (record, code, confirmation, failure, write_failure) = super::queued_report(queued);
@@ -77,7 +77,7 @@ fn adapter_distinguishes_preparation_loss_from_post_dispatch_loss() {
 
     let (submission, submission_target) = MessageSendError::Submission {
         target: serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"target"
         }))
         .expect("target"),
@@ -93,7 +93,7 @@ fn adapter_distinguishes_preparation_loss_from_post_dispatch_loss() {
 
     let (malformed_after_dispatch, malformed_target) = MessageSendError::Submission {
         target: serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"target"
         }))
         .expect("target"),

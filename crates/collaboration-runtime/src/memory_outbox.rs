@@ -134,7 +134,7 @@ impl OutboxStorage for MemoryOutbox {
                 });
             }
             let target = content(&item.request, &item.payload)?.target;
-            let expires_at = expires_at_ms(&target, now.unix_millis());
+            let expires_at = expires_at_ms(now.unix_millis());
             self.rows.insert(
                 item.request.clone(),
                 Row {
@@ -478,7 +478,7 @@ fn end_row(
     departure: DepartureAtDeadline,
     now: SyncTime,
 ) -> EndedWrite {
-    let reason = end_reason(&row.target, departure);
+    let reason = end_reason(departure);
     row.state = RowState::Ended(reason);
     row.payload = None;
     row.updated_at = now.unix_millis();

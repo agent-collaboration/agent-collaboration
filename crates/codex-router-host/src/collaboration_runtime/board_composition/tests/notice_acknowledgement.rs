@@ -57,7 +57,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
     let second_board = open_board_admission(
         &second_root,
         MachineIdentity::new(
-            UuidIdentity::try_from(second_origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(second_origin.installation.as_str().to_owned())?,
             Some("record-failure Router"),
         )?,
         Some(second_machine.session_inputs()?),
@@ -210,7 +210,7 @@ async fn recovered_prefix(
     let board = open_board_admission(
         root,
         MachineIdentity::new(
-            UuidIdentity::try_from(origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(origin.installation.as_str().to_owned())?,
             Some(origin.machine.as_str()),
         )?,
         Some(inputs),

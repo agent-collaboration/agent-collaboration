@@ -37,13 +37,6 @@
       "type": "string",
       "x-maxUtf8Bytes": 64
     },
-    "InstallationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 36
-    },
     "IsolationInstanceId": {
       "maxLength": 36,
       "minLength": 36,
@@ -106,6 +99,11 @@
         "physical",
         "cloudVm"
       ],
+      "type": "string"
+    },
+    "MachineId": {
+      "description": "The Router install's durable identity, shared with central.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
     },
     "ModelName": {
@@ -434,7 +432,7 @@
           "$ref": "#/$defs/LaunchContext"
         },
         "machine": {
-          "$ref": "#/$defs/InstallationId"
+          "$ref": "#/$defs/MachineId"
         },
         "machineEnvironment": {
           "$ref": "#/$defs/MachineEnvironment"

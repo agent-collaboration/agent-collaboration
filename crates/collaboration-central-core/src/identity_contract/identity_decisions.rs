@@ -1,4 +1,5 @@
 //! Sign-in service decisions and machine-token extension claims.
+//! Issuer contract still on the pre-11-18 identity; replaced with the Switchboard vectors from the Fleet access Lead.
 use super::{AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollPermission, PersonId};
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
 use fleet_sync_protocol::PeerId;

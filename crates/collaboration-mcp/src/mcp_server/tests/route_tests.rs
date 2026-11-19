@@ -106,7 +106,7 @@ impl collaboration_contracts::SessionMessageDelivery for PeerWrittenDelivery {
 impl collaboration_contracts::TargetPresenceProbe for PeerWrittenDelivery {
     fn presence(
         &self,
-        _: &collaboration_protocol::SessionRef,
+        _: &collaboration_protocol::HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
         Box::pin(async { Ok(collaboration_contracts::TargetPresence::Running) })
     }
@@ -145,7 +145,7 @@ async fn message_server(
             delivery: std::sync::Arc::clone(&delivery),
             presence: std::sync::Arc::clone(&presence),
             machine_identity: collaboration_contracts::MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(FIXTURE_SERVICE_ID.to_owned())
+                workspace_ids::MachineId::try_from(FIXTURE_SERVICE_ID.to_owned())
                     .expect("service id"),
                 Some("mcp-message-test"),
             )
@@ -321,7 +321,7 @@ async fn native_sessions_list_routes_claude_to_provider_tool_without_changing_sc
     let server = CollaborationMcpServer::catalog_only();
     let request: collaboration_protocol::NativeSessionListParams = serde_json::from_value(
         serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "view":"active","scope":{"kind":"any"},"source":"interactive",
             "pageSize":10
         }),
@@ -458,7 +458,7 @@ fn queued_send_and_reply_are_custody_successes_matching_the_advertised_schemas()
     let server = CollaborationMcpServer::catalog_only();
     let expected = serde_json::json!({"queued":{
         "item":FIXTURE_PUSH_ID,
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000099","endpointId":"codex-local"},"sessionId":"remote-recipient"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000099","endpointId":"codex-local"},"sessionId":"remote-recipient"},
         "targetIdentity":"remote recipient"
     }});
     let send =
@@ -525,7 +525,7 @@ fn message_reply_is_by_reference_and_has_no_latest_sender_compatibility_fields()
     );
     let validator = jsonschema::validator_for(&output_schema).expect("reply output schema");
     let valid_reply_result = serde_json::json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"sender-session"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"sender-session"},
         "targetIdentity":"✳️ claude-local/sender-s",
         "pushId":FIXTURE_PUSH_ID,
         "link":format!("router://{FIXTURE_SERVICE_ID}/push/{FIXTURE_PUSH_ID}"),
@@ -578,7 +578,7 @@ fn message_send_post_submission_failure_matches_advertised_output_schema() {
     let validator = jsonschema::validator_for(&Value::Object((*schema).clone()))
         .expect("message_send JSON Schema");
     let target = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
         "sessionId":"thread-a"
     }))
     .expect("target");
@@ -750,7 +750,7 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
     let temporary = tempfile::tempdir().expect("temporary directory");
     let (server, owner, native) = message_server(temporary.path()).await;
     let foreign_sender = serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-0000000000ff","endpointId":"codex-local"},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-0000000000ff","endpointId":"codex-local"},
         "sessionId":"elsewhere"
     });
     let send: super::super::message_tools::UndecodedMessageSend =
@@ -793,7 +793,7 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
 
 #[test]
 fn a_message_stored_without_a_known_delivery_names_its_target_with_unknown_effect() {
-    let target: collaboration_protocol::SessionRef =
+    let target: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(fixture_session("codex-local", "message-thread")).expect("target");
     let stored_but_unknown = collaboration_service::collaboration_application::MessageFailure {
         existing: None,

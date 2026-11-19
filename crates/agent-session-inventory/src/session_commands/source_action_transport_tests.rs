@@ -2,7 +2,7 @@
 //! receipt processing and actual two-machine/vendor behavior have separate gates.
 use super::*;
 use crate::sessions::router_connection_registry::RouterConnectionRegistry;
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde_json::json;
 use std::{ffi::OsString, os::unix::fs::PermissionsExt};
 
@@ -12,7 +12,7 @@ fn profile() -> RouterConnectionProfile {
     RouterConnectionRegistry::parse(
         &json!({"version":1,"routers":[{
         "name":"Captured source","connection":{"kind":"ssh",
-        "serviceId":"00000000-0000-4000-8000-000000000001",
+        "serviceId":"00000000-0000-7000-8000-000000000001",
         "destination":"source.example.invalid","executable":"/fixed/agent-sessions",
         "serviceDirectory":"/private/source's root","clientProfile":"routerDebug"},
         "defaultRemoteCwd":"/source/project"}]})
@@ -131,7 +131,7 @@ async fn managed_ssh_receipt_probe(mode: &str) {
         "transport":"stdioAcp","generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":4},
         "capabilities":[{"name":"load","status":"supported","evidence":"advertised"}]
     })).unwrap();
-    let target: SessionRef = serde_json::from_value(
+    let target: HarnessSessionRef = serde_json::from_value(
         json!({"endpoint":binding.endpoint,"sessionId":"captured-managed-target"}),
     )
     .unwrap();

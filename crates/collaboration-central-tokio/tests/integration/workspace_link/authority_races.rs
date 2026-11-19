@@ -68,7 +68,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+                        sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                         args: vec![SqlValue::Text(allowed), SqlValue::Text(INSTALLATION.into())]
                     },
                     expect: RowExpectation::Exactly(1)
@@ -102,7 +102,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
             operation_id: "019f0000-0000-7000-8000-00000000cf05"
                 .to_owned()
                 .try_into()?,
-            installation: INSTALLATION.to_owned().try_into()?,
+            machine_id: INSTALLATION.to_owned().try_into()?,
             enrollment_id: connection.enrollment_id().clone(),
         },
     )

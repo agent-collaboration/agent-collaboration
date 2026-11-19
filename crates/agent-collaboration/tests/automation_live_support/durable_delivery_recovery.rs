@@ -9,9 +9,9 @@ use collaboration_client::WakeWaitError;
 use collaboration_client::protocol::{
     ChannelDescription, CodexGeneration, DeliveryEvidence, DeliveryListRequest,
     DeliveryShowRequest, EndpointAvailability, EndpointDescription, EndpointRef,
-    ExecutionDestination, ExpiryRequest, ImportedContinuity, MessageContent, MessageDelivery,
-    NativeCarrier, OperationId, RunListRequest, SavedMessage, ScheduleImportRequest, SessionRef,
-    TimingRequest, WakeMutationRequest, WakeSendRequest, WakeShowRequest,
+    ExecutionDestination, ExpiryRequest, HarnessSessionRef, ImportedContinuity, MessageContent,
+    MessageDelivery, NativeCarrier, OperationId, RunListRequest, SavedMessage,
+    ScheduleImportRequest, TimingRequest, WakeMutationRequest, WakeSendRequest, WakeShowRequest,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_runtime::NativeControlBackend;
@@ -38,7 +38,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         service_id: service_id.clone().try_into()?,
         endpoint_id: proof.endpoint.endpoint_id.clone(),
     };
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint.clone(),
         session_id: native_target.session_id,
     };

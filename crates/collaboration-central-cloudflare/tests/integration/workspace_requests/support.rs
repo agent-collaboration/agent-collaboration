@@ -44,14 +44,13 @@ pub(super) const FIXTURE_NOW: i64 = 1_861_920_000;
 pub(super) fn caller() -> FixtureCaller {
     FixtureCaller {
         organization_id: serde_json::from_str(&format!("\"{}\"", id::<m::WorkspaceId>(1))).unwrap(),
-        caller: m::Caller::Session(m::SessionAddress {
+        caller: m::Caller::Session(workspace_ids::SessionRef {
             machine_id: id(2),
-            endpoint: "codex-local".to_owned().try_into().unwrap(),
             session_id: "test-session".to_owned().try_into().unwrap(),
         }),
         token: signed::machine_token(
             &id::<m::WorkspaceId>(1).to_string(),
-            &id::<m::MachineId>(2).to_string(),
+            &id::<workspace_ids::MachineId>(2).to_string(),
             &id::<m::WorkspaceId>(4).to_string(),
             FIXTURE_NOW,
             FIXTURE_NOW + 600,
@@ -84,7 +83,6 @@ pub(super) fn machine_caller(
 pub(super) async fn seed_enrollment(
     host: &WorkerdHost,
     caller: &FixtureCaller,
-    private_machine: impl ToString,
     allowed_workspaces: &str,
     now: i64,
 ) {
@@ -96,8 +94,8 @@ pub(super) async fn seed_enrollment(
         .unwrap()
         .to_rfc3339();
     let statements=[
-        ("INSERT INTO machines (machine_id,installation_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,?,'enrolled',?,1,?,?)",vec![text(private_machine.to_string()),text(caller.caller.machine_id()),text("Machine"),text(allowed_workspaces),text(&at),text(&at)]),
-        ("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,'Machine',?,'enrolled',NULL,?,'machine:enroll',0,?,?,?,NULL,?,?)",vec![text(&caller.enrollment_id),text(&caller.enrollment_id),text(private_machine.to_string()),text(allowed_workspaces),text(signed::OWNER),text(code_expires),text(&caller.enrollment_id),text(&at),text(&at),text(&at)]),
+        ("INSERT INTO machines (machine_id,label,state,allowed_workspaces,enrollment_generation,created_at,updated_at) VALUES (?,?,'enrolled',?,1,?,?)",vec![text(caller.caller.machine_id()),text("Machine"),text(allowed_workspaces),text(&at),text(&at)]),
+        ("INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,end_reason,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,ended_at,created_at,updated_at) VALUES (?,?,?,'Machine',?,'enrolled',NULL,?,'machine:enroll',0,?,?,?,NULL,?,?)",vec![text(&caller.enrollment_id),text(&caller.enrollment_id),text(caller.caller.machine_id()),text(allowed_workspaces),text(signed::OWNER),text(code_expires),text(&caller.enrollment_id),text(&at),text(&at),text(&at)]),
     ].into_iter().map(|(sql,args)|GuardedStatement {statement:Statement {sql,args},expect:RowExpectation::Exactly(1)}).collect();
     assert!(matches!(
         runtime
@@ -119,7 +117,7 @@ pub(super) async fn seed_organization(host: &WorkerdHost, caller: &FixtureCaller
 }
 pub(super) async fn seed(host: &WorkerdHost, caller: &FixtureCaller) {
     seed_organization(host, caller).await;
-    seed_enrollment(host, caller, id::<m::WorkspaceId>(3), "[]", FIXTURE_NOW).await;
+    seed_enrollment(host, caller, "[]", FIXTURE_NOW).await;
 }
 // A fresh bearer represents a renewed connection; existing connection deadlines never move.
 pub(super) fn fresh_auth(host: &WorkerdHost, caller: &FixtureCaller) -> FixtureCaller {
@@ -198,7 +196,7 @@ pub(super) async fn create_workspace(host: &WorkerdHost, caller: &FixtureCaller)
     let batch = StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
-                sql: "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+                sql: "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
                 args: vec![
                     text(serde_json::to_string(&vec![workspace.workspace_id.clone()]).unwrap()),
                     text(caller.caller.machine_id()),
@@ -351,7 +349,7 @@ impl Fixture {
     }
 }
 
-pub(super) fn session(caller: &FixtureCaller) -> m::SessionAddress {
+pub(super) fn session(caller: &FixtureCaller) -> workspace_ids::SessionRef {
     let m::Caller::Session(session) = &caller.caller else {
         panic!("fixture requires session caller");
     };

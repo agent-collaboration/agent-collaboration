@@ -25,7 +25,7 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
     tokio::fs::create_dir_all(&api_root).await?;
     std::fs::set_permissions(&api_root, std::fs::Permissions::from_mode(0o700))?;
     let application = (ApplicationFixture::new(
-        "550e8400-e29b-41d4-a716-446655440000",
+        "550e8400-e29b-71d4-a716-446655440000",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission.clone()))

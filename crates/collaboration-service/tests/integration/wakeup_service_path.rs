@@ -15,7 +15,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     ));
     let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
     let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
@@ -23,7 +23,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     let clock = identity.runtime_clock();
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("wake-test").await?;
-    let target = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"});
+    let target = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"});
     let request: WakeSendRequest = serde_json::from_value(
         json!({"operationId":OperationId::generate(),"message":{"target":target.clone(),"content":{"kind":"agent","sender":target,"text":"Check status"},"delivery":"queue","generationGuard":null},"timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"after","seconds":120}}),
     )?;
@@ -118,7 +118,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     if !empty.records.is_empty() || empty.coverage.latest_attempt_included {
         return Err("empty attempt history invented submission evidence".into());
     }
-    let claimed = store.lock().await.claim_delivery::<collaboration_protocol::SessionRef,collaboration_protocol::MessageContent,collaboration_protocol::CodexGeneration>(&delivery, clock.utc_now().timestamp_millis()).await?.ok_or("fixture claim missing")?;
+    let claimed = store.lock().await.claim_delivery::<collaboration_protocol::HarnessSessionRef,collaboration_protocol::MessageContent,collaboration_protocol::CodexGeneration>(&delivery, clock.utc_now().timestamp_millis()).await?.ok_or("fixture claim missing")?;
     let attempts = client
         .read_delivery_attempts(collaboration_protocol::DeliveryAttemptsRequest {
             delivery_id: delivery.clone(),
@@ -139,9 +139,9 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
         return Err("claimed attempt falsely reported a client dispatch".into());
     }
     // A scripted native acceptance exercises receipt projection through the real SDK.
-    let generation = json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1});
+    let generation = json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1});
     let dispatching: agent_automation::NativeEffectEvidence<
-        collaboration_protocol::SessionRef,
+        collaboration_protocol::HarnessSessionRef,
         collaboration_protocol::CodexGeneration,
     > = serde_json::from_value(json!({
         "target":target,"generation":generation,"clientUserMessageId":claimed.attempt_id,
@@ -176,7 +176,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
         "submissionId":"accepted-fixture-submission"}
     }))?;
     let effects: agent_automation::NativeEffectEvidence<
-        collaboration_protocol::SessionRef,
+        collaboration_protocol::HarnessSessionRef,
         collaboration_protocol::CodexGeneration,
     > = serde_json::from_value(json!({
         "target":target,"generation":generation,"clientUserMessageId":claimed.attempt_id,

@@ -225,7 +225,7 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
                 .unwrap_or_else(|error| panic!("schemas: {error}")),
         );
         let generation = serde_json::from_value(
-            json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
+            json!({"serviceEpoch":"00000000-0000-7000-8000-000000000001","generation":1}),
         )
         .unwrap_or_else(|error| panic!("generation: {error}"));
         let (client, server) =
@@ -386,7 +386,7 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
             params: if resumed {
                 json!({"sessionId":"thread-a","cwd":"/work","mcpServers":[]})
             } else {
-                json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}})
+                json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}})
             },
             approval_broker: std::sync::Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         };

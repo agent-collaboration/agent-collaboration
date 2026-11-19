@@ -5,8 +5,8 @@ use std::sync::Arc;
 use crate::served_api;
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    BoundedObservationRequest, EndpointDescription, ObservationEndReason, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, RouterAccess, SessionRef,
+    BoundedObservationRequest, EndpointDescription, HarnessSessionRef, ObservationEndReason,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 /// A Router whose provider endpoint's Session hub has one retained event.
 struct ProviderFixture {
     _root: tempfile::TempDir,
-    target: SessionRef,
+    target: HarnessSessionRef,
     board_target: message_board::SessionRef,
     hub: Arc<ProviderSessionEventHub>,
     identity: ApplicationFixture,
@@ -27,13 +27,13 @@ struct ProviderFixture {
 
 async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error>> {
     let root = tempfile::tempdir()?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"claude-local"},
         "sessionId":"provider-session"
     }))?;
-    let owner: SessionRef = serde_json::from_value(json!({
+    let owner: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"owner"
     }))?;
@@ -521,7 +521,7 @@ async fn metadata_payloads_remain_exact_in_retained_and_live_public_observation(
 /// hub's epoch.
 async fn single_event(
     client: &CollaborationClient,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     after_sequence: Option<u64>,
     epoch: Option<u64>,
 ) -> Result<(Value, Option<u64>), Box<dyn std::error::Error>> {

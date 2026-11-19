@@ -35,7 +35,7 @@ pub(crate) fn uuid_v7(seed: u16) -> String {
 
 pub(crate) fn caller() -> Caller {
     serde_json::from_value(json!({"kind": "session", "value": {
-        "machineId": INSTALLATION, "endpoint": "claude-local", "sessionId": "s1"}}))
+        "machineId": INSTALLATION, "sessionId": "s1"}}))
     .unwrap()
 }
 
@@ -50,7 +50,7 @@ pub(crate) fn direct_message(request: &str) -> RequestPayload {
     serde_json::from_value(
         json!({"kind": "mail", "request": {"requestId": request, "operation": {
         "kind": "sendMessage",
-        "to": {"machineId": INSTALLATION, "endpoint": "codex-local", "sessionId": "recipient"},
+        "to": {"machineId": INSTALLATION, "sessionId": "recipient"},
         "body": "are you there", "delivery": "auto", "replyTo": null,
         "sentAt": "2030-01-01T00:00:00Z"}}}),
     )

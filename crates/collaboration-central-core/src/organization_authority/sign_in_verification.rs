@@ -40,9 +40,8 @@ pub trait SignInVerification: Send + Sync + 'static {
         Box::pin(async { Err(MachineTokenRefusal::Unavailable) })
     }
 
-    /// The sign-in service's own ServiceId: the identity of the link authority
-    /// and the installation recorded on what it writes for a person. None when
-    /// the deployment configured none; admin calls then refuse.
+    /// Origin recorded for writes made by the sign-in authority for a person.
+    /// Admin calls require this origin to be configured.
     fn sign_in_service(&self) -> Option<message_board::ServiceId>;
 }
 

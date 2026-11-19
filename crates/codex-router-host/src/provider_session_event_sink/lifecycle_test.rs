@@ -54,7 +54,7 @@ async fn closed_session_loads_real_history_through_the_host_hub() {
     ));
     let hub = Arc::new(ProviderSessionEventHub::new(store));
     let endpoint = SessionEndpointRef {
-        service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
+        service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
             .expect("service"),
         endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint"),
     };
@@ -217,7 +217,7 @@ async fn fixture_with_script(script: &str, arguments: &[&str]) -> Fixture {
     ));
     let hub = Arc::new(ProviderSessionEventHub::new(Arc::clone(&store)));
     let endpoint = SessionEndpointRef {
-        service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
+        service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())
             .expect("service"),
         endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint"),
     };
@@ -248,7 +248,7 @@ async fn fixture_with_script(script: &str, arguments: &[&str]) -> Fixture {
 }
 
 async fn record_session(store: &Arc<Mutex<ProviderOperationStore>>, session: &SessionRef) {
-    let target: collaboration_protocol::SessionRef =
+    let target: collaboration_protocol::HarnessSessionRef =
         serde_json::from_value(serde_json::to_value(session).expect("session JSON"))
             .expect("control SessionRef");
     let mut owner = target.clone();

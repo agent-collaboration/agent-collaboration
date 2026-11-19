@@ -5,7 +5,7 @@ mod tests {
     use collaboration_client::{ClientError, JournalStatus};
     use collaboration_mcp::test_support::ServedCollaborationApi;
     use collaboration_protocol::{
-        MachineId, MachineLabel, NativeSessionListParams, NativeSessionScope, NativeSessionSource,
+        MachineLabel, NativeSessionListParams, NativeSessionScope, NativeSessionSource,
         NativeSessionView, PushHeaderFacts, PushId, PushLineInput, PushOrigin, RouterLink,
         SessionDisplayNameLookup, parse_push_line_header, render_push_line, session_identity,
     };
@@ -45,7 +45,7 @@ mod tests {
             .unwrap();
         pool.close().await;
 
-        let id = "00000000-0000-4000-8000-000000000021";
+        let id = "00000000-0000-7000-8000-000000000021";
         let epoch = "00000000-0000-4000-8000-000000000022";
         let endpoint: collaboration_protocol::EndpointRef = serde_json::from_value(json!({
             "serviceId": id,
@@ -106,10 +106,7 @@ mod tests {
         assert_eq!(display_names.display_name_for(&session.target), Ok(None));
         let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned()).unwrap();
         let line = render_push_line(&PushLineInput {
-            link: RouterLink::new(
-                MachineId::from(session.target.endpoint.service_id.clone()),
-                push_id,
-            ),
+            link: RouterLink::new(session.target.endpoint.service_id.clone(), push_id),
             machine_label: MachineLabel::try_from("fixture-host".to_owned()).unwrap(),
             origin: PushOrigin::Session(session.target.clone()),
             header_facts: PushHeaderFacts::DirectMessage {
@@ -156,7 +153,7 @@ mod tests {
             .execute(&pool).await.unwrap();
         pool.close().await;
         let original_catalog = std::fs::read(&database).unwrap();
-        let id = "00000000-0000-4000-8000-000000000001";
+        let id = "00000000-0000-7000-8000-000000000001";
         let epoch = "00000000-0000-4000-8000-000000000002";
         let endpoint: collaboration_protocol::EndpointRef =
             serde_json::from_value(json!({"serviceId":id,"endpointId":"codex-local"})).unwrap();
@@ -333,7 +330,7 @@ mod tests {
         page_size: u32,
     ) -> Vec<collaboration_protocol::NativeSessionListResult> {
         let home = root.join("native-home");
-        let id = "00000000-0000-4000-8000-000000000011";
+        let id = "00000000-0000-7000-8000-000000000011";
         let epoch = "00000000-0000-4000-8000-000000000012";
         let endpoint: collaboration_protocol::EndpointRef =
             serde_json::from_value(json!({"serviceId":id,"endpointId":"codex-local"})).unwrap();

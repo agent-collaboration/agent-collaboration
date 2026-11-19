@@ -3,8 +3,9 @@ use crate::{
     ReplyPayload, TokenRenewalResult,
 };
 use serde::{Deserialize, Serialize};
+use workspace_ids::MachineId;
 use workspace_ids::MessageId;
-use workspace_model::{MachineId, Timestamp, central_mail::MessageRecord};
+use workspace_model::{Timestamp, central_mail::MessageRecord};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameDirection {

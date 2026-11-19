@@ -1,7 +1,7 @@
 //! Reusable recipient and transport fixtures for the opt-in delivery matrix.
 pub(super) use super::peer_fixture::PeerFixture;
 use super::proof_context::{ProofContext, ProofResult};
-use collaboration_client::protocol::SessionRef;
+use collaboration_client::protocol::HarnessSessionRef;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{
@@ -171,8 +171,8 @@ fn write_private_file(path: &Path, bytes: &[u8]) -> ProofResult<()> {
 )]
 pub(super) async fn mcp_send(
     proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
+    sender: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     text: &str,
 ) -> ProofResult<()> {
     let manifest: Value = serde_json::from_slice(&std::fs::read(

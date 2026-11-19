@@ -6,7 +6,7 @@ use collaboration_client::board::{
     SubscriptionScope, SubscriptionTimingPatch, ThreadCreateRequest, ThreadJoinRequest,
     ThreadPostRequest, WorkspaceCreateRequest, WorkspaceId,
 };
-use collaboration_client::protocol::{SessionRef, ThreadSubscribeRequest};
+use collaboration_client::protocol::{HarnessSessionRef, ThreadSubscribeRequest};
 use serde_json::json;
 
 use crate::subscription_notice_observer as notice_observer;
@@ -14,9 +14,9 @@ pub(super) use notice_observer::verify_subscription_notice;
 
 pub(super) async fn board_subscription_push(
     proof: &mut ProofContext,
-    sender: &SessionRef,
-    codex: &SessionRef,
-    peer: &SessionRef,
+    sender: &HarnessSessionRef,
+    codex: &HarnessSessionRef,
+    peer: &HarnessSessionRef,
     codex_marker: &str,
     peer_marker: &str,
 ) -> ProofResult<()> {
@@ -26,8 +26,8 @@ pub(super) async fn board_subscription_push(
 
 pub(super) async fn board_subscription_push_targets(
     proof: &mut ProofContext,
-    sender: &SessionRef,
-    targets: &[(&SessionRef, &str)],
+    sender: &HarnessSessionRef,
+    targets: &[(&HarnessSessionRef, &str)],
 ) -> ProofResult<()> {
     let actor: Identity = serde_json::from_value(json!({"kind":"session","session":sender}))?;
     let workspace_id = WorkspaceId::generate();

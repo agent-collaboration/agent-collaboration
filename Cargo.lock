@@ -259,6 +259,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -327,6 +328,7 @@ dependencies = [
  "tokio-util",
  "toml 1.1.6+spec-1.1.0",
  "url",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -352,6 +354,7 @@ dependencies = [
  "tokio",
  "ui-preference-store",
  "unicode-width 0.2.2",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -698,6 +701,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -1105,6 +1109,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "uuid",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -1550,6 +1555,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2024,6 +2030,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2048,6 +2055,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2135,6 +2143,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2157,6 +2166,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -2212,6 +2222,7 @@ dependencies = [
  "tracing-subscriber",
  "turmoil",
  "uuid",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -2272,6 +2283,7 @@ dependencies = [
  "tracing-subscriber",
  "turso_parser",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -4117,6 +4129,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -8136,6 +8149,8 @@ dependencies = [
 name = "workspace-ids"
 version = "0.1.154"
 dependencies = [
+ "hegeltest",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

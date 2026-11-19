@@ -403,13 +403,13 @@ fn conversation_preview_does_not_reuse_equal_ids_from_another_router() {
     let mut second = first.clone();
     first.identity = agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(
         serde_json::from_value(serde_json::json!({
-            "endpoint": {"serviceId": "00000000-0000-4000-8000-000000000001", "endpointId": "codex-local"},
+            "endpoint": {"serviceId": "00000000-0000-7000-8000-000000000001", "endpointId": "codex-local"},
             "sessionId": first.session_id
         })).expect("first source identity")
     );
     second.identity = agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(
         serde_json::from_value(serde_json::json!({
-            "endpoint": {"serviceId": "00000000-0000-4000-8000-000000000002", "endpointId": "codex-local"},
+            "endpoint": {"serviceId": "00000000-0000-7000-8000-000000000002", "endpointId": "codex-local"},
             "sessionId": second.session_id
         })).expect("second source identity")
     );
@@ -532,13 +532,13 @@ async fn picker_preview_loads_real_history_without_leaking_between_equal_hosted_
             0,
             "First source",
             "ONLY_FIRST_HISTORY",
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
         ),
         (
             1,
             "Second source",
             "ONLY_SECOND_HISTORY",
-            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-7000-8000-000000000002",
         ),
     ] {
         let source_home = home.path().join(format!("home-{index}"));

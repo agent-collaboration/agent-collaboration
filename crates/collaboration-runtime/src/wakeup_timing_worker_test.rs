@@ -133,7 +133,7 @@ impl WakeFixture {
         expiry: ExpiryRule,
     ) -> TestResult<agent_automation::WakeupId> {
         let message: SavedMessage = serde_json::from_value(json!({
-            "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":session},
+            "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":session},
             "content":{"kind":"humanUser","text":"wake fixture"},
             "delivery":"auto"
         }))?;
@@ -178,7 +178,7 @@ impl WakeFixture {
             Arc::clone(&self.delivery) as Arc<dyn SessionMessageDelivery>,
             AutomationConfigurationHandle::default(),
             collaboration_contracts::MachineIdentity::new(
-                "00000000-0000-4000-8000-000000000001"
+                "00000000-0000-7000-8000-000000000001"
                     .to_owned()
                     .try_into()?,
                 None,

@@ -36,7 +36,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     let runtime = runtime(&f).await;
     raw(
         &runtime,
-        "UPDATE machines SET allowed_workspaces=? WHERE installation_id=?",
+        "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         vec![
             text(serde_json::to_string(&[&f.workspace, &late]).unwrap()),
             text(f.caller.caller().machine_id()),

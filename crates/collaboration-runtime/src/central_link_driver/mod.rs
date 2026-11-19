@@ -4,8 +4,6 @@
 mod driver_task;
 #[cfg(test)]
 mod driver_test_support;
-#[cfg(test)]
-mod installation_address;
 mod installation_link;
 mod link_transport;
 #[cfg(test)]
@@ -26,6 +24,7 @@ pub use link_transport::{
     AUTHORITY_LAPSED_CLOSE, LinkClosed, LinkInbound, LinkSocket, LinkTransport, LinkTransportError,
     MachineTokenSource, TokenAvailability, TransportFuture, WebSocketLinkTransport,
 };
+use workspace_ids::MachineId;
 
 use crate::outbox_store::OutboxStoreError;
 use crate::{CentralInbox, OutboxStorage};
@@ -39,7 +38,7 @@ use runtime_primitives::SyncTime;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use workspace_model::{Caller, MachineId, RequestId};
+use workspace_model::{Caller, RequestId};
 
 /// Where on a minute mark's ±3 s window this Router sends (owner, 2026-11-15:
 /// "jitter i was thinking +-3s"). Injected so tests and simulations decide it.

@@ -2,7 +2,7 @@
 use super::*;
 use collaboration_protocol::{MessageSendResult, SessionMessageReplyParams};
 
-const REMOTE_SERVICE: &str = "00000000-0000-4000-8000-000000000099";
+const REMOTE_SERVICE: &str = "00000000-0000-7000-8000-000000000099";
 
 fn remote_request() -> MessageSendRequest {
     let mut request = fixture_request(None);

@@ -81,7 +81,7 @@ async fn foreign_requester_or_approver_is_rejected_before_prompt_or_cancel_dispa
     let backend = ScriptedProviderBackend::new();
     let listener = start_listener(temporary.path(), &backend).await;
     let target = json!({"endpoint":{"serviceId":SERVICE_ID,"endpointId":"claude-code"},"sessionId":"provider-thread"});
-    let foreign = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000009",
+    let foreign = json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000009",
         "endpointId":"codex-local"},"sessionId":"foreign-agent"});
     for (requester, approver) in [
         (

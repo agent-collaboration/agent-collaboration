@@ -32,7 +32,7 @@ pub enum SessionClientEffect {
 pub struct CapturedClientAction {
     pub attempt: u64,
     pub source: PickerSourceContext,
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub effect: SessionClientEffect,
 }
 
@@ -269,7 +269,7 @@ pub async fn read_provider_details(
     executable_path: Option<&str>,
     source: &PickerSourceContext,
     binding: ProviderBindingIdentity,
-    target: collaboration_client::protocol::SessionRef,
+    target: collaboration_client::protocol::HarnessSessionRef,
 ) -> Result<SourceReply, SourceReadError> {
     let expected_service = binding.endpoint.service_id.clone();
     if target.endpoint != binding.endpoint {

@@ -9,7 +9,7 @@ use super::{
 };
 use codex_router_test_support::FixtureResult;
 use collaboration_client::protocol::{EndpointId, EndpointRef};
-use collaboration_protocol::{DeliveryOutcome, PushDeliveryState, SessionRef};
+use collaboration_protocol::{DeliveryOutcome, HarnessSessionRef, PushDeliveryState};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 
@@ -25,7 +25,7 @@ pub async fn closed_peer_follow_is_refused_and_a_later_post_reaches_it(
         endpoint_id: EndpointId::try_from("claude-local".to_owned())?,
     };
     let session: collaboration_client::protocol::SessionId = identity().try_into()?;
-    let target: SessionRef =
+    let target: HarnessSessionRef =
         serde_json::from_value(json!({"endpoint":endpoint,"sessionId":session}))?;
     let reader = json!({"kind":"session","session":target});
 

@@ -225,7 +225,7 @@ pub(super) async fn exercise_round_trip() -> ProofResult<()> {
 
 fn grade_round_trip(
     proof_state: &MessagingProofState,
-    sender: &collaboration_client::protocol::SessionRef,
+    sender: &collaboration_client::protocol::HarnessSessionRef,
     sender_turns: &[serde_json::Value],
     recipient_turns: &[serde_json::Value],
 ) -> ProofResult<()> {

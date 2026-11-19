@@ -1,7 +1,7 @@
 //! Schedule configuration remains separate from derived Run occupancy and timer progress.
 use crate::{
-    EndpointRef, InstructionId, ObservationTimestamp, OperationId, PositiveSeconds, SessionRef,
-    TimingRequest,
+    EndpointRef, HarnessSessionRef, InstructionId, ObservationTimestamp, OperationId,
+    PositiveSeconds, TimingRequest,
 };
 use agent_automation::{ChangeId, RunId, ScheduleId};
 use schemars::JsonSchema;
@@ -11,8 +11,14 @@ use serde::{Deserialize, Serialize};
 pub enum ExecutionDestination {
     Unprepared,
     FreshEachRunUnprepared,
-    OwnedThread { target: SessionRef, cwd: String },
-    FreshEachRun { endpoint: EndpointRef, cwd: String },
+    OwnedThread {
+        target: HarnessSessionRef,
+        cwd: String,
+    },
+    FreshEachRun {
+        endpoint: EndpointRef,
+        cwd: String,
+    },
 }
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -44,7 +50,7 @@ pub enum ImportedContinuity {
     ImportedSummary {
         text: String,
         source_run_id: String,
-        source_target: SessionRef,
+        source_target: HarnessSessionRef,
         import_operation_id: OperationId,
     },
 }

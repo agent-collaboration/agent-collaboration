@@ -37,13 +37,12 @@ use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationPromptRequest, DeliveryOutcome,
     DestinationPreparation, EndpointAvailability, EndpointDescription, EndpointId, EndpointRef,
-    GenerationNumber, MachineId, MachineLabel, MessageContent, MessageText, NonEmptyText,
+    GenerationNumber, HarnessSessionRef, MachineLabel, MessageContent, MessageText, NonEmptyText,
     ObservationTimestamp, OperationId, PositiveSeconds, ProviderBindingId, ProviderBindingIdentity,
     ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
     ProviderCapabilityStatus, ProviderKind, ProviderRequestedPolicy, ProviderRuntimeIdentity,
     ProviderTransport, ProviderWorkingDirectory, PushHeaderFacts, PushId, PushKind, PushLineInput,
-    PushOrigin, RouterAccess, RouterLink, RunExecution, SessionId, SessionRef, UuidIdentity,
-    render_push_line,
+    PushOrigin, RouterAccess, RouterLink, RunExecution, SessionId, UuidIdentity, render_push_line,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
@@ -59,18 +58,21 @@ use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, Buf
 
 struct NoLivePeer;
 impl LiveSessionOwnershipCheck for NoLivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+    fn check<'a>(
+        &'a self,
+        _target: &'a HarnessSessionRef,
+    ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
     }
 }
 
 struct RecordedRunEvidence(
-    tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 );
 impl RunEvidenceSink for RecordedRunEvidence {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
         Box::pin(async move {
             let dispatching = matches!(&evidence,
@@ -94,12 +96,12 @@ impl RunEvidenceSink for RecordedRunEvidence {
 }
 
 struct RecordedPreparationIntent(
-    tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 );
 impl PreparationEvidenceSink for RecordedPreparationIntent {
     fn record_intent(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, bool> {
         Box::pin(async move {
             self.0.lock().await.push(evidence);
@@ -110,14 +112,15 @@ impl PreparationEvidenceSink for RecordedPreparationIntent {
     fn record_prepared<'a>(
         &'a self,
         _prepared: &'a PreparedTarget,
-    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<SessionRef, EndpointRef>> {
+    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<HarnessSessionRef, EndpointRef>>
+    {
         Box::pin(async { Err(DeliveryContractError::ClientOperation) })
     }
 
     fn record_failure<'a>(
         &'a self,
         _failure: &'a collaboration_protocol::ScheduleFailure,
-        _evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        _evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
         _uncertain: bool,
     ) -> DeliveryFuture<'a, ()> {
         Box::pin(async { Err(DeliveryContractError::ClientOperation) })
@@ -126,7 +129,7 @@ impl PreparationEvidenceSink for RecordedPreparationIntent {
 
 fn rendered_schedule_push(
     run_id: &RunId,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     push_id: PushId,
     body: &str,
 ) -> PreparedPush {
@@ -140,12 +143,12 @@ fn rendered_schedule_push(
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn rendered_schedule_line(
     run_id: &RunId,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     push_id: PushId,
     body: &str,
 ) -> MessageText {
     let rendered = render_push_line(&PushLineInput {
-        link: RouterLink::new(MachineId::from(target.endpoint.service_id.clone()), push_id),
+        link: RouterLink::new(target.endpoint.service_id.clone(), push_id),
         machine_label: MachineLabel::try_from("schedule-fixture".to_owned())
             .expect("machine label"),
         origin: PushOrigin::Router(PushKind::ScheduleRun),
@@ -175,13 +178,14 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
     let event_socket = root.path().join("active.sock");
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("scheduled push");
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("active event listener");
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-        .expect("service ID");
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())
+            .expect("service ID");
     let endpoint = EndpointRef {
         service_id: service_id.clone(),
         endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint"),
     };
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint.clone(),
         session_id: SessionId::try_from("scheduled-session".to_owned()).expect("session"),
     };
@@ -375,7 +379,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         .prepare_existing_target(&target, "", &sink)
         .await
         .expect("existing target prepared");
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
+    let inputs: CapturedRunInputs<HarnessSessionRef, EndpointRef> = serde_json::from_value(json!({
         "scheduleChangeId":agent_automation::ChangeId::generate(),
         "instructionRevisionId":agent_automation::RevisionId::generate(),
         "instructionText":"Check work",

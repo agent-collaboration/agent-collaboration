@@ -5,10 +5,10 @@ use crate::board_fixture;
 use automation_storage::AutomationStore;
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, MessageContent, MessageDelivery,
-    PushActivityRange, PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
-    PushOrigin, PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
-    UuidIdentity,
+    DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, HarnessSessionRef, MessageContent,
+    MessageDelivery, PushActivityRange, PushActivitySnapshot, PushDeliveryState, PushHeaderFacts,
+    PushId, PushKind, PushOrigin, PushRecordDraft, RouterOriginRef, SessionId,
+    SessionMessageSendParams,
 };
 use collaboration_service::ApplicationFixture;
 
@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::sync::{Arc, atomic::Ordering};
 use tokio::sync::Mutex as TokioMutex;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 
 #[path = "push_surface/board_and_history_proofs.rs"]
 mod board_and_history_proofs;
@@ -35,10 +35,11 @@ use native_push_fixture::{
 };
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
-    SessionRef {
+fn session(endpoint_id: &str, session_id: &str) -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service id"),
+            service_id: workspace_ids::MachineId::try_from(SERVICE_ID.to_owned())
+                .expect("service id"),
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("endpoint id"),
         },
         session_id: SessionId::try_from(session_id.to_owned()).expect("session id"),
@@ -46,7 +47,7 @@ fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn send_params(target: &SessionRef, sender: &SessionRef, text: &str) -> Value {
+fn send_params(target: &HarnessSessionRef, sender: &HarnessSessionRef, text: &str) -> Value {
     serde_json::to_value(SessionMessageSendParams {
         item_id: None,
         target: target.clone(),

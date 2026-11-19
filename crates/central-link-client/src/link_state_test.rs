@@ -32,7 +32,7 @@ fn connect(client: &mut LinkClient) -> ConnectionAttempt {
     attempt
 }
 fn caller() -> Caller {
-    serde_json::from_str(r#"{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","endpoint":"codex","sessionId":"s"}}"#).unwrap()
+    serde_json::from_str(r#"{"kind":"session","value":{"machineId":"01890f2e-7b4c-7cc0-98c4-000000000002","sessionId":"s"}}"#).unwrap()
 }
 fn payload() -> RequestPayload {
     RequestPayload::Workspace(WorkspaceRequest {

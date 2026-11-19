@@ -6,7 +6,7 @@ use std::ffi::OsString;
 
 fn source_request(fixture: &ClaudeProcessFixture) -> serde_json::Value {
     json!({"serviceDirectory":fixture.root.path().join("router/agent-communication"),
-        "expectedService":"00000000-0000-4000-8000-000000000001",
+        "expectedService":"00000000-0000-7000-8000-000000000001",
         "operation":{"kind":"nativeClaude","serviceEpoch":"00000000-0000-4000-8000-000000000002",
             "action":{"kind":"new","directory":fixture.working_directory,
                 "arguments":Vec::<std::ffi::OsString>::new()}}})
@@ -22,7 +22,7 @@ async fn current_source_inventory_advertises_guarded_resume() {
     let api = ServedCollaborationApi::start_with(
         &service_directory,
         ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
         .unwrap()
@@ -175,7 +175,7 @@ async fn source_native_observed_receipt_and_arguments_are_preserved_without_id_c
     assert_eq!(receipt, b"bg-fixture-receipt-001\n");
     assert!(
         result.get("operationId").is_none() && result.get("target").is_none(),
-        "an opaque vendor receipt must not become a Router ID or conversation SessionRef"
+        "an opaque vendor receipt must not become a Router ID or conversation HarnessSessionRef"
     );
     assert_eq!(
         fixture.invocation().unwrap().arguments,
@@ -227,9 +227,9 @@ async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_bef
         )
         .unwrap();
         fs::set_permissions(&reader, fs::Permissions::from_mode(0o700)).unwrap();
-        let description=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
+        let description=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
         let identity = ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
         .unwrap()
@@ -254,7 +254,7 @@ async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_bef
         } else {
             root.join("home")
         };
-        request["operation"]["action"] = json!({"kind":action,"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":session},"directory":directory,"arguments":Vec::<OsString>::new()});
+        request["operation"]["action"] = json!({"kind":action,"target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":session},"directory":directory,"arguments":Vec::<OsString>::new()});
         let output = tokio::time::timeout(
             Duration::from_secs(10),
             fixture

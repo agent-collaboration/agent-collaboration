@@ -17,7 +17,7 @@ use serde_json::json;
 
 fn largest_session() -> SessionRef {
     serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"a".repeat(64)},
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"a".repeat(64)},
         "sessionId":"\u{0001}".repeat(4096)
     }))
     .unwrap()
@@ -46,7 +46,7 @@ pub(super) fn largest_message(peer: PeerId) -> DeliveryItem<RouterDeliveryTypes>
             delivery: MailDeliveryMode::Steer,
             guard: Some(
                 GenerationGuard::new(
-                    "00000000-0000-4000-8000-000000000001"
+                    "00000000-0000-7000-8000-000000000001"
                         .to_owned()
                         .try_into()
                         .unwrap(),
@@ -134,9 +134,9 @@ pub(super) fn largest_notification(peer: PeerId) -> DeliveryItem<RouterDeliveryT
 pub(super) fn ordinary_message(peer: PeerId) -> DeliveryItem<RouterDeliveryTypes> {
     DeliveryItem::new(
         ItemId::new(uuid::Uuid::now_v7()).unwrap(),
-        MailSender::HumanUser { installation: "00000000-0000-4000-8000-000000000001".to_owned().try_into().unwrap() },
+        MailSender::HumanUser { installation: "00000000-0000-7000-8000-000000000001".to_owned().try_into().unwrap() },
         Recipient { peer, address: serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"relay-recipient"
         })).unwrap() },
         None,

@@ -143,7 +143,7 @@ async fn fork_response_loss_after_session_new_reports_unknown_without_replay() {
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let description = serde_json::from_value(json!({
@@ -275,7 +275,7 @@ async fn acp_initialize_response_loss_reports_no_effect_before_conversation_crea
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let description = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"}, "label":"initialize loss fixture",
@@ -358,7 +358,7 @@ async fn compiled_cli_conversation_records_deserialize_for_success_errors_deadli
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-0000c0dec001";
+    let service_id = "00000000-0000-7000-8000-0000c0dec001";
     let epoch = "00000000-0000-4000-8000-0000c0dec002";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
     let description = serde_json::from_value(json!({
@@ -675,7 +675,7 @@ async fn resumed_prompt_load_response_loss_retains_target_and_never_replays() {
     assert_eq!(
         record["target"],
         json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"resumed-thread"
         })
     );
@@ -698,7 +698,7 @@ async fn resumed_prompt_load_rejection_retains_target_code_and_data_without_prom
     assert_eq!(
         record["target"],
         json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"resumed-thread"
         })
     );
@@ -722,7 +722,7 @@ async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::proces
         .mode(0o700)
         .create(&root)
         .expect("private fixture directory");
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let description = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"}, "label":"resumed load fixture",

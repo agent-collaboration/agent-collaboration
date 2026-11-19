@@ -250,7 +250,7 @@ async fn grouping_keeps_full_identity_through_navigation_and_regrouping_at_all_f
         "provider",
         "cli",
     );
-    hosted.identity=SessionPickerIdentity::HostedCodex(serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"same"})).unwrap());
+    hosted.identity=SessionPickerIdentity::HostedCodex(serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"same"})).unwrap());
     hosted.source_context = Some(crate::session_picker::PickerSourceContext::DefaultHosted);
     hosted.recency_at_ms = Some(100);
     let mut local = picker_record("same", "Local choice", "/repo/project-a", "provider", "cli");

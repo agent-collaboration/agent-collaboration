@@ -76,13 +76,8 @@ pub(super) fn baseline_attachment(
     };
     require(
         attachment.organization_id.as_str() == ORGANIZATION
-            && attachment.installation_id.as_str() == INSTALLATION,
+            && attachment.machine_id.as_str() == INSTALLATION,
         "attachment public identity changed",
-    )?;
-    require(
-        attachment.machine_id.get_version_num() == 7
-            && attachment.machine_id.to_string() != INSTALLATION,
-        "private row identity must differ from public installation",
     )?;
     require(
         records.iter().any(|record| {
@@ -193,7 +188,7 @@ pub(super) fn reconstruction(
     )?;
     let required = [
         EnrollmentReadQuery::ByEnrollment,
-        EnrollmentReadQuery::MachineByInstallation,
+        EnrollmentReadQuery::MachineById,
         EnrollmentReadQuery::ActiveEnrollment,
     ];
     let mut next = 0;

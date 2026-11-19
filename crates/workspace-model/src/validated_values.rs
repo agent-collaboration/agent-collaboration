@@ -90,53 +90,6 @@ bounded_text!(PostText, 1, 64 * 1024, false, true);
 bounded_text!(TrailText, 1, 64 * 1024, false, true);
 bounded_text!(TrailTag, 1, 256, true, true);
 
-// Ported from message-board::board_identity: provider session ids stay opaque.
-macro_rules! identity_text {
-    ($name:ident,$max:expr,$validator:expr,$requirement:literal) => {
-        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-        #[serde(try_from = "String", into = "String")]
-        pub struct $name(String);
-        impl TryFrom<String> for $name {
-            type Error = ValueValidationError;
-            fn try_from(value: String) -> Result<Self, Self::Error> {
-                if value.is_empty() || value.len() > $max || !($validator)(&value) {
-                    return Err(ValueValidationError {
-                        field: stringify!($name),
-                        requirement: $requirement,
-                    });
-                }
-                Ok(Self(value))
-            }
-        }
-        impl From<$name> for String {
-            fn from(value: $name) -> Self {
-                value.0
-            }
-        }
-        impl $name {
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-    };
-}
-identity_text!(
-    SessionId,
-    4096,
-    |value: &str| !value.contains('\0'),
-    "must contain 1 to 4096 UTF-8 bytes without NUL"
-);
-identity_text!(
-    EndpointId,
-    64,
-    |value: &str| value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'),
-    "must start with a lowercase letter and contain only lowercase letters, digits, or hyphens"
-);
-
 /// A page always returns at least one row when a matching row exists.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "u16", into = "u16")]

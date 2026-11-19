@@ -7,6 +7,39 @@ async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_dir
  {
     let f = Fixture::new().await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
+    let schema = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT name, pk FROM pragma_table_info('machines') WHERE name IN ('machine_id', 'installation_id') ORDER BY cid",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        schema.rows,
+        vec![vec![
+            text("machine_id"),
+            central_storage::SqlValue::Integer(central_storage::SafeInteger::new(1).unwrap())
+        ]]
+    );
+    let link = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT \"table\", \"to\" FROM pragma_foreign_key_list('messages') WHERE \"from\"='target_machine_id'",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(link.rows, vec![vec![text("machines"), text("machine_id")]]);
+    let legacy = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert!(legacy.rows.is_empty());
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("Must not be written"),
         description: "Test description".to_owned().try_into().unwrap(),
@@ -14,7 +47,7 @@ async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_dir
     let now = router_clock::RuntimeClock::utc_now(f.clock.as_ref()).timestamp();
     let valid_token = signed::machine_token(
         organization().as_str(),
-        &id::<m::MachineId>(2).to_string(),
+        &id::<workspace_ids::MachineId>(2).to_string(),
         &id::<m::WorkspaceId>(4).to_string(),
         now,
         now + 600,
@@ -62,7 +95,7 @@ async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_dir
     let edits = [
         (
             "UPDATE machines SET state='revoked' WHERE machine_id=?",
-            text(id::<m::WorkspaceId>(3)),
+            text(f.caller.caller().machine_id()),
             m::RefusalReason::MachineRevoked,
             "UPDATE machines SET state='enrolled' WHERE machine_id=?",
         ),
@@ -74,7 +107,7 @@ async fn live_admission_refuses_revoked_expired_wrong_signature_and_archived_dir
         ),
         (
             "UPDATE machines SET allowed_workspaces='[]' WHERE machine_id=?",
-            text(id::<m::WorkspaceId>(3)),
+            text(f.caller.caller().machine_id()),
             m::RefusalReason::WorkspaceNotAllowed,
             "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
         ),

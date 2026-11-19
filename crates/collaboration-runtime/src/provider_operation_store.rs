@@ -3,10 +3,10 @@
 //! This store intentionally has no request, prompt, reply, diagnostic, or transcript input.
 
 use collaboration_protocol::{
-    ConversationBindingIdentity, OperationId, ProviderBindingIdentity, ProviderIdentity,
-    ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
+    ConversationBindingIdentity, HarnessSessionRef, OperationId, ProviderBindingIdentity,
+    ProviderIdentity, ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
     ProviderPromptStopReason, ProviderReconciliationState, ProviderRequestedPolicy,
-    ProviderWorkingDirectory, SessionRef,
+    ProviderWorkingDirectory,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::{
@@ -127,7 +127,7 @@ pub struct ProviderOperationRecord {
     pub operation_id: OperationId,
     pub operation_kind: ProviderOperationKind,
     pub binding: ConversationBindingIdentity,
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     pub stage: ProviderOperationStage,
     pub effect: ProviderOperationEffect,
     pub reconciliation_state: ProviderReconciliationState,
@@ -296,7 +296,7 @@ impl ProviderOperationStore {
     pub async fn blocking_uncertain_operation_ids(
         &mut self,
         binding: &ProviderBindingIdentity,
-        target: Option<&SessionRef>,
+        target: Option<&HarnessSessionRef>,
     ) -> Result<Vec<OperationId>, ProviderOperationStoreError> {
         let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
         let candidates = sqlx::query!(
@@ -372,7 +372,7 @@ impl ProviderOperationStore {
     pub async fn record_target(
         &mut self,
         operation_id: &OperationId,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         observed_at_ms: i64,
     ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
         let target_service_id = String::from(target.endpoint.service_id.clone());
@@ -608,9 +608,9 @@ fn decode_record(
     );
     let target = match target_parts {
         (None, None, None) => None,
-        (Some(service_id), Some(endpoint_id), Some(session_id)) => Some(SessionRef {
+        (Some(service_id), Some(endpoint_id), Some(session_id)) => Some(HarnessSessionRef {
             endpoint: collaboration_protocol::EndpointRef {
-                service_id: collaboration_protocol::UuidIdentity::try_from(service_id)
+                service_id: workspace_ids::MachineId::try_from(service_id)
                     .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
                 endpoint_id: collaboration_protocol::EndpointId::try_from(endpoint_id)
                     .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
@@ -723,7 +723,7 @@ async fn validate_schema(
 /// Durable provider session metadata needed for load-on-demand and approvals.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProviderSessionRecord {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub working_directory: ProviderWorkingDirectory,
     pub requested_policy: ProviderRequestedPolicy,
     pub created_by: ProviderIdentity,

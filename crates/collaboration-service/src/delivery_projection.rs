@@ -3,11 +3,11 @@ use agent_automation::{AttemptOutcome, DeliveryStatus};
 use automation_storage::DeliveryRecord;
 use collaboration_protocol::{
     CodexGeneration, DeliveryDisposition, DeliveryEvidence, DeliveryInspection, DeliverySource,
-    MessageDelivery, SessionRef,
+    HarnessSessionRef, MessageDelivery,
 };
 pub(crate) fn snapshot(
     record: DeliveryRecord<
-        SessionRef,
+        HarnessSessionRef,
         CodexGeneration,
         collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
     >,

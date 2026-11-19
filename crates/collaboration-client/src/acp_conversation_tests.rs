@@ -4,14 +4,15 @@ use std::os::unix::fs::PermissionsExt;
 
 fn endpoint(service_id: &str) -> EndpointRef {
     EndpointRef {
-        service_id: UuidIdentity::try_from(service_id.to_owned()).expect("valid service UUID"),
+        service_id: workspace_ids::MachineId::try_from(service_id.to_owned())
+            .expect("valid service UUID"),
         endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("valid endpoint"),
     }
 }
 
 #[test]
 fn acp_prompt_forwarding_preserves_exact_caller_text_without_envelope() {
-    let sender = SessionRef {
+    let sender = HarnessSessionRef {
         endpoint: endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f"),
         session_id: collaboration_protocol::SessionId::try_from("claude-session".to_owned())
             .expect("sender session"),
@@ -79,15 +80,15 @@ fn new_and_forked_conversations_require_local_creator_and_approver_before_setup(
         endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("peer endpoint"),
     };
     let foreign_endpoint = endpoint("018f47d2-24d5-7a68-b9ec-6f759c394590");
-    let local_identity = SessionRef {
+    let local_identity = HarnessSessionRef {
         endpoint: local_endpoint.clone(),
         session_id: SessionId::try_from("caller".to_owned()).expect("session ID"),
     };
-    let peer_identity = SessionRef {
+    let peer_identity = HarnessSessionRef {
         endpoint: peer_endpoint,
         session_id: SessionId::try_from("peer".to_owned()).expect("session ID"),
     };
-    let foreign_identity = SessionRef {
+    let foreign_identity = HarnessSessionRef {
         endpoint: foreign_endpoint,
         session_id: SessionId::try_from("foreign".to_owned()).expect("session ID"),
     };
@@ -172,11 +173,11 @@ fn existing_session_without_creation_identities_remains_valid() {
 async fn sdk_identity_preflight_fails_before_acp_discovery_or_mutation() {
     let local_endpoint = endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f");
     let foreign_endpoint = endpoint("018f47d2-24d5-7a68-b9ec-6f759c394590");
-    let local_identity = SessionRef {
+    let local_identity = HarnessSessionRef {
         endpoint: local_endpoint.clone(),
         session_id: SessionId::try_from("local".to_owned()).expect("session ID"),
     };
-    let foreign_identity = SessionRef {
+    let foreign_identity = HarnessSessionRef {
         endpoint: foreign_endpoint,
         session_id: SessionId::try_from("foreign".to_owned()).expect("session ID"),
     };
@@ -226,7 +227,7 @@ fn missing_final_reply_metadata_reports_output_as_not_retained() {
 
 #[test]
 fn resumed_prompt_failures_retain_the_known_target_for_rejection_and_post_dispatch_loss() {
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f"),
         session_id: SessionId::try_from("resumed-thread".to_owned()).expect("session ID"),
     };
@@ -250,7 +251,7 @@ fn resumed_prompt_failures_retain_the_known_target_for_rejection_and_post_dispat
 #[tokio::test]
 async fn invalid_prompt_deadline_fails_before_discovery_or_creation() {
     let endpoint = endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f");
-    let sender = SessionRef {
+    let sender = HarnessSessionRef {
         endpoint: endpoint.clone(),
         session_id: SessionId::try_from("sender".to_owned()).expect("session ID"),
     };
@@ -329,7 +330,7 @@ async fn session_scratch_scopes_are_unique_owner_private_and_stamped_as_used() {
     assert!(root.path().join("scratch/.locks").is_dir());
 }
 use crate::PublicPromptContent;
-use collaboration_protocol::{SessionId, UuidIdentity};
+use collaboration_protocol::SessionId;
 
 /// A creator holds its scope's lock shared while it creates and stamps the
 /// folder, so the sweep's non-blocking exclusive lock fails meanwhile.

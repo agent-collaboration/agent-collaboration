@@ -37,8 +37,10 @@ fn at(text: &str) -> DateTime<Utc> {
 
 fn binding() -> ProviderBindingIdentity {
     let endpoint = EndpointRef {
-        service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-            .unwrap(),
+        service_id: workspace_ids::MachineId::try_from(
+            "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+        )
+        .unwrap(),
         endpoint_id: EndpointId::try_from("cursor-local".to_owned()).unwrap(),
     };
     ProviderBindingIdentity {

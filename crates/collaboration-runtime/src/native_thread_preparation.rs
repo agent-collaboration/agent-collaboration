@@ -2,8 +2,8 @@
 use crate::NativeAdmission;
 use codex_native_integration::{NativeConnectionError, NativeOperation, NativeProtocolConnection};
 use collaboration_protocol::{
-    CessationEvidence, DestinationPreparation, EndpointRef, NativeEffectEvidence,
-    PreparationEffect, SessionRef, SubmissionEffect,
+    CessationEvidence, DestinationPreparation, EndpointRef, HarnessSessionRef,
+    NativeEffectEvidence, PreparationEffect, SubmissionEffect,
 };
 use serde_json::{Value, json};
 pub(crate) struct NativePreparationInput<'a> {
@@ -38,7 +38,10 @@ pub(crate) fn initial_effects(destination: &DestinationPreparation) -> NativeEff
 }
 pub(crate) fn initial_automation_effects(
     destination: &DestinationPreparation,
-) -> agent_automation::NativeEffectEvidence<SessionRef, collaboration_protocol::CodexGeneration> {
+) -> agent_automation::NativeEffectEvidence<
+    HarnessSessionRef,
+    collaboration_protocol::CodexGeneration,
+> {
     let native = initial_effects(destination);
     agent_automation::NativeEffectEvidence {
         permission_differences: Vec::new(),
@@ -69,7 +72,7 @@ pub(crate) fn cwd(destination: &DestinationPreparation) -> &str {
 }
 pub(crate) async fn prepare(
     input: NativePreparationInput<'_>,
-) -> Result<(SessionRef, NativeEffectEvidence), NativePreparationFailure> {
+) -> Result<(HarnessSessionRef, NativeEffectEvidence), NativePreparationFailure> {
     let mut effects = initial_effects(input.destination);
     effects.generation = Some(input.admission.generation().clone());
     let allocation = !matches!(input.destination, DestinationPreparation::Existing { .. });
@@ -155,7 +158,7 @@ pub(crate) async fn prepare(
         .and_then(Value::as_str);
     let target = id
         .and_then(|id| id.to_owned().try_into().ok())
-        .map(|session_id| SessionRef {
+        .map(|session_id| HarnessSessionRef {
             endpoint: endpoint(input.destination).clone(),
             session_id,
         });

@@ -17,7 +17,7 @@ mod tests;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceInventoryBinding {
-    pub service_id: UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub service_epoch: UuidIdentity,
     pub endpoints: BTreeMap<EndpointRef, InventoryEndpointKind>,
     /// Canonical current Host membership; independent of managed ACP channels.
@@ -26,7 +26,7 @@ pub struct SourceInventoryBinding {
 
 impl SourceInventoryBinding {
     pub fn from_inventory(
-        expected_service: &UuidIdentity,
+        expected_service: &workspace_ids::MachineId,
         inventory: &EndpointInventory,
     ) -> Result<Self, SourceInventoryRejection> {
         let first = inventory

@@ -348,8 +348,9 @@ impl LinkDriver {
                 reply,
             } => match submission_path(&payload) {
                 SubmissionPath::Outbox => {
-                    let submission = self.submit_to_outbox(caller, payload).await;
-                    let _ = reply.send(submission);
+                    if let Some(submission) = self.submit_to_outbox(caller, payload, &reply).await {
+                        let _ = reply.send(submission);
+                    }
                 }
                 SubmissionPath::Immediate if self.not_enrolled() => {
                     let _ = reply.send(Submission::Refused(SubmitRefusal::NotEnrolled));
@@ -390,9 +391,17 @@ impl LinkDriver {
         }
     }
 
-    async fn submit_to_outbox(&mut self, caller: Caller, payload: RequestPayload) -> Submission {
+    /// Stores an outbox write and answers with its receipt. None when the caller
+    /// went away before admission: no row is written and nothing is sent
+    /// (pre-admission cancel). Once the insert commits, nothing is undone.
+    async fn submit_to_outbox(
+        &mut self,
+        caller: Caller,
+        payload: RequestPayload,
+        reply: &oneshot::Sender<Submission>,
+    ) -> Option<Submission> {
         let Some(request) = payload.write_request_id().cloned() else {
-            return Submission::Refused(SubmitRefusal::OutboxUnavailable);
+            return Some(Submission::Refused(SubmitRefusal::OutboxUnavailable));
         };
         let now = self.clock.now();
         let flush_at = self.flush.receipt_mark(now);
@@ -404,9 +413,12 @@ impl LinkDriver {
         };
         let inserted = {
             let mut store = self.store.lock().await;
+            if reply.is_closed() {
+                return None;
+            }
             store.insert(&item, now).await
         };
-        match inserted {
+        Some(match inserted {
             Ok(OutboxInsert::Stored) => {
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
                 Submission::InOutbox(OutboxReceipt {
@@ -439,7 +451,7 @@ impl LinkDriver {
                 self.apply_flush(FlushEvent::Stored { flush_at }).await;
                 Submission::Refused(SubmitRefusal::OutboxUnavailable)
             }
-        }
+        })
     }
 
     async fn submit_now(
@@ -448,6 +460,11 @@ impl LinkDriver {
         payload: RequestPayload,
         reply: oneshot::Sender<Submission>,
     ) {
+        // Pre-admission cancel: a caller already gone gets no frame. From here to
+        // the send nothing awaits, so this is the last point before the frame.
+        if reply.is_closed() {
+            return;
+        }
         let request = payload.write_request_id().cloned();
         let frame = match self.client.begin_request(caller, payload) {
             Ok(frame) => frame,
@@ -546,3 +563,7 @@ mod store_faults_tests;
 #[cfg(test)]
 #[path = "driver_task_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "pre_admission_test.rs"]
+mod pre_admission_tests;

@@ -5,7 +5,7 @@ use serde_json::json;
 #[test]
 fn accepted_execution_requires_native_turn_id_on_the_wire() {
     let value = json!({
-        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"worker"},
+        "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"worker"},
         "nativeTurnId":"exact-turn",
         "startedAt":"2026-09-09T00:00:00Z",
         "deadlineAt":"2026-09-09T01:00:00Z",

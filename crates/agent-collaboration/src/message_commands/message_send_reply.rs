@@ -237,7 +237,7 @@ fn queued_report(
         queued.item.as_str(),
         queued.target_identity,
         serde_json::to_string(&queued.target)
-            .unwrap_or_else(|_| "SessionRef unavailable".to_owned())
+            .unwrap_or_else(|_| "HarnessSessionRef unavailable".to_owned())
     );
     let result: MessageSendResult = MessageSendResult::Queued { queued };
     (
@@ -263,7 +263,8 @@ fn reply_confirmation_line(
 }
 
 fn session_ref_text(reply: &collaboration_client::protocol::SessionMessageReplyResult) -> String {
-    serde_json::to_string(&reply.target).unwrap_or_else(|_| "SessionRef unavailable".to_owned())
+    serde_json::to_string(&reply.target)
+        .unwrap_or_else(|_| "HarnessSessionRef unavailable".to_owned())
 }
 
 fn report(result: Result<MessageSendResult, MessageSendError>, machine: bool) -> i32 {
@@ -336,7 +337,8 @@ fn send_confirmation_line(push: &collaboration_client::protocol::PushMessageSend
         "push {} to {} {}: {}; {}",
         push.push_id.as_str(),
         push.target_identity,
-        serde_json::to_string(&push.target).unwrap_or_else(|_| "SessionRef unavailable".to_owned()),
+        serde_json::to_string(&push.target)
+            .unwrap_or_else(|_| "HarnessSessionRef unavailable".to_owned()),
         delivery_outcome_label(&push.receipt.outcome),
         push.link
     )

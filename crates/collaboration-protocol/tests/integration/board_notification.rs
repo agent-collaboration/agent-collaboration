@@ -1,6 +1,7 @@
 use collaboration_protocol::*;
 use message_board::{NotifyIntentId, ProjectId, RoleAssignmentId};
 use serde_json::json;
+use workspace_ids::MachineId;
 
 #[expect(
     clippy::expect_used,

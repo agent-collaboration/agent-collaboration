@@ -3,7 +3,7 @@ use lifecycle_observation::map_native_lifecycle;
 use serde_json::json;
 #[test]
 fn mapping_keeps_only_lifecycle_facts_and_never_content() {
-    let scope:ObservationScope=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},"observerId":"00000000-0000-4000-8000-000000000003"})).unwrap_or_else(|e|panic!("scope: {e}"));
+    let scope:ObservationScope=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000002","generation":1},"observerId":"00000000-0000-4000-8000-000000000003"})).unwrap_or_else(|e|panic!("scope: {e}"));
     let at = || {
         "2026-09-05T12:00:00Z"
             .to_owned()

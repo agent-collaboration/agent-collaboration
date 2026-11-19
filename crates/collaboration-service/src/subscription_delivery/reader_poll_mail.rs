@@ -8,7 +8,7 @@ use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_mail_protocol::NotificationSource;
 #[cfg(test)]
 use collaboration_protocol::PushId;
-use collaboration_protocol::{MachineId, PushLineInput, RouterLink, render_push_line};
+use collaboration_protocol::{PushLineInput, RouterLink, render_push_line};
 use fleet_sync_protocol::DeliveryItem;
 
 pub(in crate::subscription_delivery) fn poll_unsent(
@@ -192,7 +192,7 @@ impl ReaderDeliveryOwner {
         }
         let line = render_push_line(&PushLineInput {
             link: RouterLink::new(
-                MachineId::from(self.push.machine.service_id().clone()),
+                self.push.machine.service_id().clone(),
                 record.push_id.clone(),
             ),
             machine_label: self.push.machine.machine_label().clone(),

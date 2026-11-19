@@ -16,7 +16,7 @@ struct FixtureOwnership(LiveSessionOwnership);
 impl LiveSessionOwnershipCheck for FixtureOwnership {
     fn check<'a>(
         &'a self,
-        _target: &'a SessionRef,
+        _target: &'a HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'a, LiveSessionOwnership> {
         let result = self.0;
         Box::pin(async move { Ok(result) })
@@ -34,18 +34,20 @@ fn fixture_launch(event_path: &std::path::Path, fail_load: bool) -> ExternalProv
     )
 }
 
-fn target() -> SessionRef {
-    SessionRef {
+fn target() -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service"),
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )
+            .expect("service"),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint"),
         },
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
     }
 }
 
-fn binding(target: &SessionRef) -> ProviderBindingIdentity {
+fn binding(target: &HarnessSessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("fixture-binding".to_owned()).expect("binding"),

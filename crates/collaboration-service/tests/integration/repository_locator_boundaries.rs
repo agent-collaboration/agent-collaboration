@@ -17,7 +17,7 @@ async fn max_bound_escaped_locators_page_fully_below_the_frame_limit() -> Result
         let common_directory = format!("/{marker}{}", "\\\"".repeat(2047));
         assert_eq!(common_directory.len(), 4096);
         let repository = RepositoryRef::Local {
-            service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+            service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             common_directory: CommonDirectory::try_from(common_directory)?,
         };
         let mut request = fixture.header();
@@ -82,7 +82,7 @@ async fn oversized_stored_locator_is_rejected_by_domain_decoding() -> Result<(),
     let mut stored: Value = serde_json::from_str(&payload)?;
     *stored
         .pointer_mut("/record/repositories")
-        .ok_or("repositories missing")? = json!([{"kind":"local","serviceId":"00000000-0000-4000-8000-000000000001","commonDirectory":format!("/{}","x".repeat(4096))}]);
+        .ok_or("repositories missing")? = json!([{"kind":"local","serviceId":"00000000-0000-7000-8000-000000000001","commonDirectory":format!("/{}","x".repeat(4096))}]);
     sqlx::query("UPDATE cached_fleet_records SET payload=? WHERE kind='workspace' AND id=?")
         .bind(stored.to_string())
         .bind(fixture.workspace.as_str())

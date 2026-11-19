@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use collaboration_protocol::QuestionResponse;
 use collaboration_protocol::{
-    CodexGeneration, OperationId, ProviderIdentity, QuestionAnswerValue,
-    SessionRef as ProtocolSessionRef,
+    CodexGeneration, HarnessSessionRef as ProtocolSessionRef, OperationId, ProviderIdentity,
+    QuestionAnswerValue,
 };
 use message_board::{Identity, SessionRef};
 use serde::{Deserialize, Serialize};

@@ -60,9 +60,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     let second_board = open_board_admission(
         &directory.path().join("second-router"),
         collaboration_contracts::MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                second_origin.installation.as_str().to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from(second_origin.installation.as_str().to_owned())?,
             Some("later-notice-target"),
         )?,
         Some(second_machine.session_inputs()?),
@@ -150,7 +148,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     std::fs::create_dir(&api_directory)?;
     std::fs::set_permissions(&api_directory, std::fs::Permissions::from_mode(0o700))?;
     let app = (collaboration_service::ApplicationFixture::new(
-        "550e8400-e29b-41d4-a716-446655440000",
+        "550e8400-e29b-71d4-a716-446655440000",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission.clone())

@@ -2,8 +2,8 @@
 use super::{
     Arc, AtomicUsize, AttemptId, AutomationStore, CodexGeneration, ContinuityInput, EndpointRef,
     ExecutionDestination, FakeRouteKind, FakeScheduledExecution, FakeSettlementPlan,
-    FakeSubmissionPlan, InstructionText, Mutex, OperationId, PushId, RunId, ScheduleCreate,
-    ScheduleDefinition, ScheduledRunExecution, ScheduledRunWorker, SessionRef, TestResult,
+    FakeSubmissionPlan, HarnessSessionRef, InstructionText, Mutex, OperationId, PushId, RunId,
+    ScheduleCreate, ScheduleDefinition, ScheduledRunExecution, ScheduledRunWorker, TestResult,
     TimingRule, json,
 };
 
@@ -83,11 +83,11 @@ pub async fn provider_worker_fixture_counting_submits(
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
-    let service = "00000000-0000-4000-8000-000000000001";
+    let service = "00000000-0000-7000-8000-000000000001";
     let interactions = Arc::new(
         interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
     );
-    let target: SessionRef = serde_json::from_value(json!({
+    let target: HarnessSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service,"endpointId":"claude-local"},
         "sessionId":"provider-worker"
     }))?;
@@ -119,7 +119,7 @@ pub async fn provider_worker_fixture_counting_submits(
     let schedule = store
         .lock()
         .await
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+        .create_schedule(&ScheduleCreate::<HarnessSessionRef, EndpointRef> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -142,13 +142,19 @@ pub async fn provider_worker_fixture_counting_submits(
     let run_id = store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, timing.first_due_ms())
+        .enqueue_due_run::<HarnessSessionRef, EndpointRef>(
+            &schedule.schedule_id,
+            timing.first_due_ms(),
+        )
         .await?
         .ok_or("run missing")?;
     store
         .lock()
         .await
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, timing.first_due_ms())
+        .admit_waiting_run::<HarnessSessionRef, EndpointRef>(
+            &schedule.schedule_id,
+            timing.first_due_ms(),
+        )
         .await?;
     let worker = ScheduledRunWorker {
         store: Arc::clone(&store),

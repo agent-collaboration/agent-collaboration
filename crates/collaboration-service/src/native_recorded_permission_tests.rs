@@ -2,7 +2,9 @@
 use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
 use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
 use collaboration_contracts::LoadPolicy;
-use collaboration_protocol::{CodexGeneration, EndpointDescription, MessageDelivery, SessionRef};
+use collaboration_protocol::{
+    CodexGeneration, EndpointDescription, HarnessSessionRef, MessageDelivery,
+};
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ServiceInteractionBroker;
@@ -16,7 +18,7 @@ use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
-const SERVICE: &str = "3d26f886-1489-423f-bc3d-6c0c940ddbb2";
+const SERVICE: &str = "3d26f886-1489-723f-bc3d-6c0c940ddbb2";
 const EPOCH: &str = "110a92d0-e607-4947-86ca-45838ac90a96";
 const THREAD: &str = "recorded-cold-thread";
 
@@ -72,7 +74,7 @@ fn backend_with_queue_support(
     )
 }
 
-fn target() -> SessionRef {
+fn target() -> HarnessSessionRef {
     serde_json::from_value(
         json!({"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":THREAD}),
     )
@@ -350,7 +352,7 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
 }
 
 /// The existing native endpoint sends a real malformed read response before any mutating RPC.
-pub(crate) async fn malformed_thread_read_probe() -> (SessionRef, NativeMessageOutcome) {
+pub(crate) async fn malformed_thread_read_probe() -> (HarnessSessionRef, NativeMessageOutcome) {
     let observation = cold_message_probe(ProbeCase {
         authority: RecordedAuthority::Valid,
         reply: NativeReply::MalformedThreadRead,

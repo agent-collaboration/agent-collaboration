@@ -5,8 +5,9 @@ use crate::outbox_flush::MemberOutcome;
 use central_link_protocol::{ReplyPayload, RequestPayload};
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};
+use workspace_ids::SessionRef;
 use workspace_model::{
-    Caller, PostText, RequestId, SessionAddress, ThreadId, WorkspaceId, WorkspaceOperation,
+    Caller, PostText, RequestId, ThreadId, WorkspaceId, WorkspaceOperation,
     central_mail::CentralMailOperation,
 };
 
@@ -24,7 +25,7 @@ pub enum OutboxWriteTarget {
         thread_id: ThreadId,
     },
     Session {
-        to: SessionAddress,
+        to: SessionRef,
     },
 }
 

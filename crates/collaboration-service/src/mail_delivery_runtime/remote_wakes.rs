@@ -17,7 +17,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) struct LocalWakeOwner {
     clock: Arc<dyn router_clock::RuntimeClock>,
-    pub service: collaboration_protocol::UuidIdentity,
+    pub service: workspace_ids::MachineId,
     pub store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     pub permits: Arc<tokio::sync::Semaphore>,
 }
@@ -30,7 +30,7 @@ fn refused(reason: RemoteWakeRefusal, mutation: RemoteWakeMutationState) -> Remo
 impl MailDeliveryRuntime {
     pub fn attach_wake_owner(
         &self,
-        service: collaboration_protocol::UuidIdentity,
+        service: workspace_ids::MachineId,
         store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
         permits: Arc<tokio::sync::Semaphore>,
     ) -> Result<(), String> {

@@ -1,6 +1,6 @@
-//! Accept typed Approver identities while keeping existing SessionRef actors readable.
+//! Accept typed Approver identities while keeping existing HarnessSessionRef actors readable.
 
-use crate::SessionRef;
+use crate::HarnessSessionRef;
 use message_board::Identity;
 use serde::Deserialize;
 
@@ -12,7 +12,7 @@ where
     #[serde(untagged)]
     enum ActorWire {
         Typed(Identity),
-        Legacy(SessionRef),
+        Legacy(HarnessSessionRef),
     }
     match ActorWire::deserialize(deserializer)? {
         ActorWire::Typed(actor) => Ok(actor),

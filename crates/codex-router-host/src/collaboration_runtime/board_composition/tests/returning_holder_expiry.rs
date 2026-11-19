@@ -45,7 +45,7 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
     let second_board = open_board_admission(
         &fixture.directory.path().join("second-router"),
         MachineIdentity::new(
-            UuidIdentity::try_from(second_origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(second_origin.installation.as_str().to_owned())?,
             Some(second_origin.machine.as_str()),
         )?,
         Some(second_machine.session_inputs()?),

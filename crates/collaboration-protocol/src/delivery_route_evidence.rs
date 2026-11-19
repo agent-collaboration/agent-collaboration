@@ -1,6 +1,6 @@
 //! Public inspection projects each route's stored evidence without native assumptions.
 use crate::{
-    CodexGeneration, NativeEffectEvidence, OperationId, ProviderBindingId, SessionRef,
+    CodexGeneration, HarnessSessionRef, NativeEffectEvidence, OperationId, ProviderBindingId,
     SubmissionEffect,
 };
 use agent_automation::{PeerSessionReference, PeerWriteEffect};
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Captured provider reconciliation context, separate from a public delivery receipt.
 pub type ProviderAcpRouteEvidence =
-    agent_automation::ProviderAcpEffectEvidence<SessionRef, CodexGeneration>;
+    agent_automation::ProviderAcpEffectEvidence<HarnessSessionRef, CodexGeneration>;
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(
@@ -23,7 +23,7 @@ pub enum DeliveryRouteEvidence {
     ProviderAcp {
         binding_id: ProviderBindingId,
         generation: CodexGeneration,
-        target: SessionRef,
+        target: HarnessSessionRef,
         operation_id: OperationId,
         submission: SubmissionEffect,
     },

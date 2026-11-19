@@ -1,5 +1,5 @@
 //! Message origin and delivery are independent public choices.
-use crate::{MAX_CONTROL_FRAME_BYTES, SessionRef};
+use crate::{HarnessSessionRef, MAX_CONTROL_FRAME_BYTES};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -56,7 +56,7 @@ pub enum SessionDisplayNameLookupError {
 pub trait SessionDisplayNameLookup: Send + Sync {
     fn display_name_for(
         &self,
-        session: &SessionRef,
+        session: &HarnessSessionRef,
     ) -> Result<Option<SessionDisplayName>, SessionDisplayNameLookupError>;
 }
 
@@ -74,7 +74,7 @@ impl JsonSchema for MessageText {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MessageContent {
     Agent {
-        sender: SessionRef,
+        sender: HarnessSessionRef,
         text: MessageText,
     },
     HumanUser {
@@ -118,7 +118,10 @@ pub struct RenderedMessage {
 }
 
 /// Formats one session as the emoji-prefixed identity used in message headers and reply output.
-pub fn session_identity(session: &SessionRef, display_name: Option<&SessionDisplayName>) -> String {
+pub fn session_identity(
+    session: &HarnessSessionRef,
+    display_name: Option<&SessionDisplayName>,
+) -> String {
     let endpoint_id = String::from(session.endpoint.endpoint_id.clone());
     let fallback_emoji = endpoint_default_emoji(&endpoint_id);
     match display_name {
@@ -131,7 +134,7 @@ pub fn session_identity(session: &SessionRef, display_name: Option<&SessionDispl
     }
 }
 
-fn fallback_session_label(session: &SessionRef) -> String {
+fn fallback_session_label(session: &HarnessSessionRef) -> String {
     let endpoint_id = String::from(session.endpoint.endpoint_id.clone());
     let session_id = String::from(session.session_id.clone());
     let short_session_id: String = session_id.chars().take(8).collect();

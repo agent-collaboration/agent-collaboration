@@ -15,9 +15,8 @@ use std::{
 use tokio::task::JoinSet;
 use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 use turmoil::net::{TcpListener, TcpStream};
-use workspace_model::{
-    ChangePosition, ItemRef, MachineId, WorkspaceAnswer, WorkspaceReply, WorkspaceResult,
-};
+use workspace_ids::MachineId;
+use workspace_model::{ChangePosition, ItemRef, WorkspaceAnswer, WorkspaceReply, WorkspaceResult};
 
 use super::simulated_clock::SimulatedClock;
 

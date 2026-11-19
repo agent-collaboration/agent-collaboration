@@ -5,9 +5,10 @@ use crate::{
     workspace_row_codec::{column, json, string},
 };
 use central_storage::{ReadOutcome, SqlValue, StoreFailure};
+use workspace_ids::SessionRef;
 use workspace_ids::{MessageId, RequestId};
 use workspace_model::central_mail as mail;
-use workspace_model::{Identity, SessionAddress, Timestamp};
+use workspace_model::{Identity, Timestamp};
 
 /// The columns a direct message's reducer reads; they are also its version.
 pub(crate) const DIRECT_MESSAGE_COLUMNS: &str = "SELECT message_id,sender,message_kind,state,failure_reason,cancel_due_at,sender_request_id,created_at,updated_at FROM messages WHERE message_id=?";
@@ -108,7 +109,7 @@ pub(crate) fn refusal_text(reason: mail::MessageRefusal) -> Result<String, Store
 /// an agent session is told how its message ended; a person has no session.
 pub(crate) fn decode_sender_session(
     rows: &ReadOutcome,
-) -> Result<Option<SessionAddress>, StoreFailure> {
+) -> Result<Option<SessionRef>, StoreFailure> {
     let [row] = rows.rows.as_slice() else {
         return Err(corrupt("messages.sender"));
     };

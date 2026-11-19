@@ -9,7 +9,7 @@ use sqlx::{ConnectOptions, Connection};
 
 fn session() -> Result<SessionRef, TestError> {
     Ok(serde_json::from_value(
-        json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"context-reader"}),
+        json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"context-reader"}),
     )?)
 }
 async fn grant(
@@ -194,8 +194,8 @@ async fn provider_context_uses_existing_durable_session_worktrees() -> Result<()
     )
     .await?;
     for (revision, endpoint) in [(0, "claude-local"), (1, "cursor-local")] {
-        let target: collaboration_protocol::SessionRef = serde_json::from_value(
-            json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":endpoint},"sessionId":endpoint}),
+        let target: collaboration_protocol::HarnessSessionRef = serde_json::from_value(
+            json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":endpoint},"sessionId":endpoint}),
         )?;
         providers
             .record_session(&collaboration_runtime::ProviderSessionRecord {

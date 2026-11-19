@@ -14,7 +14,7 @@ async fn explicit_and_role_resolved_foreign_sessions_are_deferred_without_writes
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let foreign: Identity = serde_json::from_value(json!({"kind":"session","session":{
-        "endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000099"},
+        "endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-7000-8000-000000000099"},
         "sessionId":"foreign-recipient"
     }}))?;
     for via_role in [false, true] {

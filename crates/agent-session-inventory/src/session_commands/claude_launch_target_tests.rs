@@ -11,7 +11,7 @@ const SESSION_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 fn service_manifest(router_proxy_endpoint: Option<&str>) -> serde_json::Value {
     let mut manifest = serde_json::json!({
         "version": 3,
-        "serviceId": "00000000-0000-4000-8000-000000000001",
+        "serviceId": "00000000-0000-7000-8000-000000000001",
         "machineLabel": "fixture-machine",
         "serviceEpoch": "00000000-0000-4000-8000-000000000002",
         "serviceVersion": env!("CARGO_PKG_VERSION"),
@@ -418,7 +418,7 @@ fn active_inventory_records_include_only_local_claude_interactive_sessions() {
         "origin": "claudeCodeInteractive",
         "target": {
             "endpoint": {
-                "serviceId": "00000000-0000-4000-8000-000000000001",
+                "serviceId": "00000000-0000-7000-8000-000000000001",
                 "endpointId": "claude-local"
             },
             "sessionId": SESSION_ID

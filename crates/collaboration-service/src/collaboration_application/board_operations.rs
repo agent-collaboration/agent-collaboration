@@ -383,7 +383,7 @@ async fn presence_for_reader(
         };
     };
     let target = match serde_json::to_value(session)
-        .and_then(serde_json::from_value::<collaboration_protocol::SessionRef>)
+        .and_then(serde_json::from_value::<collaboration_protocol::HarnessSessionRef>)
     {
         Ok(target) => target,
         Err(error) => {

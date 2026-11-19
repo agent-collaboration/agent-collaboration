@@ -58,7 +58,7 @@ impl BoardControlFixture {
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: MachineIdentity::new(
-                    UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("UUID"),
+                    workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("UUID"),
                     Some("off-board proof"),
                 )
                 .expect("identity"),
@@ -80,7 +80,7 @@ impl BoardControlFixture {
         let delivery = Arc::new(RecordingDelivery::new(Arc::clone(&pushes)));
         let presence = Arc::new(RunningPresence);
         let machine = MachineIdentity::new(
-            UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
+            workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
             Some("off-board-proof"),
         )
         .expect("machine identity");
@@ -293,8 +293,8 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn stored_delivered_dm(
     fixture: &BoardControlFixture,
-    origin: &SessionRef,
-    target: &SessionRef,
+    origin: &HarnessSessionRef,
+    target: &HarnessSessionRef,
     created_at: DateTime<Utc>,
     body: &str,
 ) -> PushId {

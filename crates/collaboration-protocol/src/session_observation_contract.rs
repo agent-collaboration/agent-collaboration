@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{CodexGeneration, SessionRef};
+use crate::{CodexGeneration, HarnessSessionRef};
 
 #[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,7 +19,7 @@ pub enum ObservationEndReason {
 #[derive(JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BoundedObservationResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub attached: bool,
     pub events: Vec<Value>,
@@ -33,7 +33,7 @@ pub struct BoundedObservationResult {
 #[derive(JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BoundedObservationRequest {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     #[schemars(range(min = 1))]
     pub timeout_seconds: u64,
     #[schemars(range(min = 1, max = 4096))]
@@ -129,7 +129,7 @@ mod tests {
     fn paging_fields_are_optional_and_marker_has_typed_kind() {
         let base = json!({
             "target": {
-                "endpoint": {"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+                "endpoint": {"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
                 "sessionId":"session-one"
             },
             "timeoutSeconds": 1,

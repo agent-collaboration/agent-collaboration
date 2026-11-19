@@ -12,7 +12,7 @@ use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
-use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, SessionRef};
+use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, HarnessSessionRef};
 use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
 use message_board::*;
@@ -416,7 +416,7 @@ impl OwnerFixture {
             presence: self.presence.clone(),
             clock,
             machine_identity: collaboration_contracts::MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
+                workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).unwrap(),
                 Some("Owner-test-machine"),
             )
             .unwrap(),
@@ -612,7 +612,7 @@ impl ScriptedPresence {
 }
 
 impl TargetPresenceProbe for ScriptedPresence {
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+    fn presence(&self, _: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence> {
         self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let presence = self.0.lock().unwrap().clone();
         let pause = self.2.lock().unwrap().take();
@@ -637,7 +637,7 @@ impl TargetPresenceProbe for ScriptedPresence {
     }
 }
 
-pub const SERVICE_ID: &str = "550e8400-e29b-41d4-a716-446655440000";
+pub const SERVICE_ID: &str = "550e8400-e29b-71d4-a716-446655440000";
 pub fn reader_identity() -> Identity {
     Identity::Session {
         session: message_board::SessionRef {

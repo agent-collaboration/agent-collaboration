@@ -26,7 +26,7 @@ use message_board::SessionRef as BoardSessionRef;
 use session_event_model::{PromptContent, ProviderSubmission, SettingApplicationIntent};
 use std::path::PathBuf;
 
-const SERVICE_ID: &str = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+const SERVICE_ID: &str = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
 const SCRIPTED_AGENT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../verification/fixtures/scripted-acp-agent.ts"
@@ -45,7 +45,7 @@ struct NoLivePeer;
 impl LiveSessionOwnershipCheck for NoLivePeer {
     fn check<'a>(
         &'a self,
-        _target: &'a collaboration_protocol::SessionRef,
+        _target: &'a collaboration_protocol::HarnessSessionRef,
     ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
     }
@@ -61,8 +61,8 @@ struct CommandPortRig {
     actor: Identity,
 }
 
-fn protocol_target(session_id: &str) -> collaboration_protocol::SessionRef {
-    collaboration_protocol::SessionRef {
+fn protocol_target(session_id: &str) -> collaboration_protocol::HarnessSessionRef {
+    collaboration_protocol::HarnessSessionRef {
         endpoint: collaboration_protocol::EndpointRef {
             service_id: SERVICE_ID.to_owned().try_into().expect("service ID"),
             endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint ID"),
@@ -71,7 +71,7 @@ fn protocol_target(session_id: &str) -> collaboration_protocol::SessionRef {
     }
 }
 
-fn provider_binding(target: &collaboration_protocol::SessionRef) -> ProviderBindingIdentity {
+fn provider_binding(target: &collaboration_protocol::HarnessSessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("n4-tap-binding".to_owned()).expect("binding ID"),

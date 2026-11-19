@@ -1,6 +1,6 @@
 //! CLI envelopes; operation payloads retain their API, native and ACP contracts.
 use crate::{
-    AdapterOperationFailure, CodexGeneration, RouterAccess, SessionRef, SettingsObservation,
+    AdapterOperationFailure, CodexGeneration, HarnessSessionRef, RouterAccess, SettingsObservation,
 };
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ pub enum FiniteCommandRecord<TResult, TError> {
     Error {
         /// Known operation target retained when failure follows target resolution.
         #[serde(skip_serializing_if = "Option::is_none", default)]
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         error: TError,
     },
 }
@@ -32,11 +32,11 @@ pub enum FiniteCommandRecord<TResult, TError> {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum NativeObservationRecord {
     ListenerReady {
-        target: SessionRef,
+        target: HarnessSessionRef,
         generation: CodexGeneration,
     },
     NativeMessage {
-        target: SessionRef,
+        target: HarnessSessionRef,
         generation: CodexGeneration,
         message: Map<String, Value>,
     },
@@ -67,21 +67,21 @@ pub enum ConversationRecord {
         operation_id: crate::OperationId,
     },
     ConversationCreated {
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     SessionReady {
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     SessionUpdate {
-        target: SessionRef,
+        target: HarnessSessionRef,
         #[schemars(schema_with = "acp_update_schema")]
         update: Value,
     },
     PermissionRequired {
-        target: SessionRef,
+        target: HarnessSessionRef,
     },
     PromptResult {
-        target: SessionRef,
+        target: HarnessSessionRef,
         effective_model: String,
         effective_effort: String,
         effective_access: Option<RouterAccess>,
@@ -96,13 +96,13 @@ pub enum ConversationRecord {
         result: Value,
     },
     ConversationSettlement {
-        target: SessionRef,
+        target: HarnessSessionRef,
         terminal_reason: ConversationTerminalReason,
         #[schemars(schema_with = "acp_result_schema")]
         result: Value,
     },
     ConversationError {
-        target: Option<SessionRef>,
+        target: Option<HarnessSessionRef>,
         error: AdapterOperationFailure,
     },
 }

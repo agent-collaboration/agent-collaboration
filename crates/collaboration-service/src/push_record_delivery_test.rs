@@ -13,18 +13,18 @@ use automation_storage::AutomationStore;
 use collaboration_contracts::TargetPresenceProbe;
 
 use collaboration_protocol::{
-    EndpointId, EndpointRef, MessageContent, MessageDelivery, PushDeliveryState, RouterLink,
-    SessionId, SessionMessageSendParams, SessionRef, UuidIdentity,
+    EndpointId, EndpointRef, HarnessSessionRef, MessageContent, MessageDelivery, PushDeliveryState,
+    RouterLink, SessionId, SessionMessageSendParams,
 };
 
 use serde_json::{Value, json};
 use std::{path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 
-fn session(service_id: &UuidIdentity) -> SessionRef {
-    SessionRef {
+fn session(service_id: &workspace_ids::MachineId) -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("endpoint id"),
@@ -50,7 +50,7 @@ async fn identity_without_native_work(
     let delivery: Arc<dyn SessionMessageDelivery> = router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = router;
     let machine = MachineIdentity::new(
-        UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
+        workspace_ids::MachineId::try_from(SERVICE_ID.to_owned()).unwrap(),
         Some("delivery-error-test"),
     )
     .unwrap();

@@ -4,8 +4,9 @@ use crate::{
     workspace_row_codec::{column, json, string},
 };
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
+use workspace_ids::MachineId;
 use workspace_model::central_mail as mail;
-use workspace_model::{ActorIdentityId, ChangeId, MachineId, ThreadId, WorkspaceId};
+use workspace_model::{ActorIdentityId, ChangeId, ThreadId, WorkspaceId};
 fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T, StoreFailure> {
     value.parse().map_err(|_| corrupt(field))
 }
@@ -34,7 +35,7 @@ pub(crate) fn decode_messages(
         .map(|row| {
             let sender: mail::MessageSender =
                 json(string(rows, row, "sender")?, "messages.sender")?;
-            let target: workspace_model::SessionAddress = json(
+            let target: workspace_ids::SessionRef = json(
                 string(rows, row, "target_session")?,
                 "messages.target_session",
             )?;
@@ -114,7 +115,7 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
     /// Reads queued messages without consuming them, in stable message-UUIDv7 order.
     pub async fn queued_for_session(
         &self,
-        session: &workspace_model::SessionAddress,
+        session: &workspace_ids::SessionRef,
     ) -> Result<mail::SessionQueue, StoreFailure> {
         let _turn = self.take_central_turn().await;
         // UUIDv7 normally follows admission within one process. A reopen or clock

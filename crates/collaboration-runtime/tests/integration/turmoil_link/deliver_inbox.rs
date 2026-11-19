@@ -105,7 +105,7 @@ fn fixture_message() -> MessageRecord {
         "messageId": "01890f2e-7b4c-7cc0-98c4-000000000009",
         "sender": {"kind": "central"},
         "target": {
-            "machineId": INSTALLATION, "endpoint": "codex-local", "sessionId": "recipient"
+            "machineId": INSTALLATION, "sessionId": "recipient"
         },
         "body": {"kind": "direct", "body": "hello", "delivery": "auto", "replyTo": null},
         "state": {"kind": "queued"},

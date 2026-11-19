@@ -7,8 +7,8 @@ use collaboration_client::{
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryReceipt, EndpointDescription, MessageDelivery, PushMessageSendResult,
-    PushRecord, SessionRef,
+    CodexGeneration, DeliveryReceipt, EndpointDescription, HarnessSessionRef, MessageDelivery,
+    PushMessageSendResult, PushRecord,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::NativeControlBackend;
@@ -46,7 +46,7 @@ pub struct RecordedMessageObservation {
     pub result: Result<PushMessageSendResult, MessageSendError>,
     pub requests: Vec<Value>,
     pub stored: Option<PushRecord>,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub generation: CodexGeneration,
     pub shown: Value,
 }
@@ -158,10 +158,10 @@ async fn exercise_message(
     let root = directory.path().to_path_buf();
     let socket_path = root.join("n.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
-    let target: SessionRef = serde_json::from_value(
+    let target: HarnessSessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"target"}),
     )?;
     let mut definitions = serde_json::Map::new();
@@ -507,7 +507,7 @@ struct FixturePresence(collaboration_contracts::TargetPresence);
 impl collaboration_contracts::TargetPresenceProbe for FixturePresence {
     fn presence(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
         Box::pin(async { Ok(self.0.clone()) })
     }

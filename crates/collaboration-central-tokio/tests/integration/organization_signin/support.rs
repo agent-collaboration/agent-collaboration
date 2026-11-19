@@ -16,7 +16,6 @@ use std::sync::Arc;
 pub(super) const A: &str = signed::ORGANIZATION;
 pub(super) const B: &str = "019f0000-0000-7000-8000-00000000b2b1";
 pub(super) const WORKSPACE: &str = "019f0000-0000-7000-8000-00000000b301";
-pub(super) const MACHINE: &str = "019f0000-0000-7000-8000-00000000b302";
 pub(super) const INSTALLATION: &str = "019f0000-0000-7000-8000-00000000b303";
 pub(super) const ENROLLMENT: &str = "019f0000-0000-7000-8000-00000000b304";
 pub(super) const PROVISION: &str = "/internal/organization-provisioning";
@@ -251,9 +250,8 @@ impl Fixture {
             .map_err(|_| "machine fixture admission refused")?;
         Ok(collaboration_central_core::WorkspaceCaller::new(
             connection,
-            workspace_model::Caller::Session(workspace_model::SessionAddress {
+            workspace_model::Caller::Session(workspace_ids::SessionRef {
                 machine_id: INSTALLATION.to_owned().try_into()?,
-                endpoint: "codex-local".to_owned().try_into()?,
                 session_id: session.to_owned().try_into()?,
             }),
         )
@@ -270,17 +268,16 @@ impl Fixture {
         let wake = "019f0000-0000-7000-8000-00000000b306"
             .to_owned()
             .try_into()?;
-        let target = workspace_model::SessionAddress {
+        let target = workspace_ids::SessionRef {
             machine_id: INSTALLATION.to_owned().try_into()?,
-            endpoint: "codex-local".to_owned().try_into()?,
             session_id: session.to_owned().try_into()?,
         };
         self.apply(A,"INSERT INTO wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",vec![text(&wake),text(serde_json::to_string(&target)?),text(due.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(serde_json::to_string("pending before first stamp")?),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true))]).await?;
         Ok((wake, due))
     }
     pub async fn seed_machine(&self) -> Result {
-        self.apply(A,"INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(MACHINE),text(INSTALLATION)]).await?;
-        self.apply(A,"INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'existing machine','[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:46:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(ENROLLMENT),text("019f0000-0000-7000-8000-00000000b305"),text(MACHINE),text(signed::OWNER),text(ENROLLMENT)]).await
+        self.apply(A,"INSERT INTO machines(machine_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,'existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(INSTALLATION)]).await?;
+        self.apply(A,"INSERT INTO machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'existing machine','[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:46:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(ENROLLMENT),text("019f0000-0000-7000-8000-00000000b305"),text(INSTALLATION),text(signed::OWNER),text(ENROLLMENT)]).await
     }
 }
 pub(super) async fn post(

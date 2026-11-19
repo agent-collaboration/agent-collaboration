@@ -2,8 +2,8 @@
 use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
-    RouterOriginRef, SessionRef,
+    DeliveryOutcome, DeliveryReceipt, HarnessSessionRef, PushId, PushKind, PushOrigin, PushRecord,
+    PushRecordDraft, RouterOriginRef,
 };
 use sqlx_turso::TursoConnection;
 use std::time::Duration;
@@ -21,14 +21,14 @@ pub const MAX_PUSH_LIST_LIMIT: u32 = 100;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PushInboxQuery {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub limit: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectMessageHistoryQuery {
-    pub caller: SessionRef,
-    pub with: SessionRef,
+    pub caller: HarnessSessionRef,
+    pub with: HarnessSessionRef,
     pub limit: u32,
 }
 
@@ -127,7 +127,7 @@ impl InteractionStore {
 
     pub async fn list_pending_push_records(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushRecord>, StorageError> {
         let mut connection = self.writer.lock().await;
         let (service_id, endpoint_id, session_id) = session_key(target);
@@ -147,7 +147,7 @@ impl InteractionStore {
 
     pub async fn list_held_push_records(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushRecord>, StorageError> {
         let mut connection = self.writer.lock().await;
         let (service_id, endpoint_id, session_id) = session_key(target);
@@ -167,7 +167,7 @@ impl InteractionStore {
 
     pub async fn list_held_carrier_push_records(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushRecord>, StorageError> {
         let mut connection = self.writer.lock().await;
         let (service_id, endpoint_id, session_id) = session_key(target);
@@ -188,7 +188,7 @@ impl InteractionStore {
     /// Terminalize one selected held Reader batch, bounded by its replacement age.
     pub async fn settle_held_subscription_push(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         push_id: &PushId,
         created_before: Option<DateTime<Utc>>,
         reason: &str,
@@ -296,7 +296,7 @@ impl InteractionStore {
     pub async fn mark_push_read(
         &self,
         push_id: &PushId,
-        caller: &SessionRef,
+        caller: &HarnessSessionRef,
         read_at: DateTime<Utc>,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
@@ -436,7 +436,7 @@ pub(crate) async fn insert_push_record_with_retention(
     Ok(())
 }
 
-fn session_key(session: &SessionRef) -> (String, String, String) {
+fn session_key(session: &HarnessSessionRef) -> (String, String, String) {
     (
         String::from(session.endpoint.service_id.clone()),
         String::from(session.endpoint.endpoint_id.clone()),

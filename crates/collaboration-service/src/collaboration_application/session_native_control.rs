@@ -3,10 +3,10 @@ use super::{NativeSessionFailure, NativeSessionFailureKind, NativeSessionStage, 
 use crate::inventory_failures::NATIVE_FAILURE_MESSAGE;
 use codex_native_integration::{NativeConnectionError, NativeOperation, NativeProtocolConnection};
 use collaboration_protocol::{
-    ChannelDescription, CodexGeneration, EndpointDescription, NativeInspectParams,
-    NativeInspectResult, NativeInterruptKind, NativeInterruptParams, NativeInterruptResult,
-    NativeRenameParams, NativeRenameResult, RouterAccess, SessionRef, SettingsObservation,
-    SettingsUnavailableReason,
+    ChannelDescription, CodexGeneration, EndpointDescription, HarnessSessionRef,
+    NativeInspectParams, NativeInspectResult, NativeInterruptKind, NativeInterruptParams,
+    NativeInterruptResult, NativeRenameParams, NativeRenameResult, RouterAccess,
+    SettingsObservation, SettingsUnavailableReason,
 };
 use serde_json::{Value, json};
 
@@ -240,7 +240,7 @@ impl NativeSessionControl {
     /// The local Codex endpoint, its advertised native channel and the backend serving it.
     fn native_route(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         stage: NativeSessionStage,
     ) -> Result<NativeRoute<'_>, NativeSessionFailure> {
         let refused = |kind| NativeSessionFailure::refused(kind, stage);
@@ -272,7 +272,7 @@ impl NativeSessionControl {
     /// Admits one native read or write and runs it, unless the backend retires first.
     async fn native_call(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
         expected_generation: Option<&CodexGeneration>,
         stage: NativeSessionStage,
         operation: NativeOperation,

@@ -3,8 +3,8 @@ use chrono::{DateTime, Utc};
 use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{MailSender, NotificationSource};
 use collaboration_protocol::{
-    PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind, PushOrigin,
-    PushRecordDraft, RouterOriginRef, SessionRef,
+    HarnessSessionRef, PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind,
+    PushOrigin, PushRecordDraft, RouterOriginRef,
 };
 use fleet_sync_delivery::DeliveryError;
 use fleet_sync_protocol::DeliveryItem;
@@ -47,7 +47,7 @@ fn received_mail_push_for(
     item.body()
         .validate_sender(item.sender())
         .map_err(|_| invalid_projection())?;
-    let target: SessionRef = item
+    let target: HarnessSessionRef = item
         .recipient()
         .address
         .clone()

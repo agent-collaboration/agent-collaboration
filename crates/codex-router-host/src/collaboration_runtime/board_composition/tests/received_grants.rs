@@ -104,7 +104,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
     let second_board = open_board_admission(
         &second_root,
         MachineIdentity::new(
-            UuidIdentity::try_from(second_origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(second_origin.installation.as_str().to_owned())?,
             Some("receiving Router"),
         )?,
         Some(second_machine.session_inputs()?),
@@ -321,7 +321,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
     let second_board = open_board_admission(
         &fixture.directory.path().join("second-router"),
         MachineIdentity::new(
-            UuidIdentity::try_from(second_origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(second_origin.installation.as_str().to_owned())?,
             Some("intervening Router"),
         )?,
         Some(second_machine.session_inputs()?),
@@ -504,7 +504,7 @@ async fn received_idle_holder_move_preserves_claimed_prefix_without_an_interveni
     let board = open_board_admission(
         &root,
         MachineIdentity::new(
-            UuidIdentity::try_from(target_origin.installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(target_origin.installation.as_str().to_owned())?,
             Some(target_origin.machine.as_str()),
         )?,
         Some(target.session_inputs()?),

@@ -1,9 +1,10 @@
-use collaboration_protocol::{MachineLabel, MachineLabelError, UuidIdentity};
+use collaboration_protocol::{MachineLabel, MachineLabelError};
+use workspace_ids::MachineId;
 
 /// Router's local identity used by push links and the service discovery manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MachineIdentity {
-    service_id: UuidIdentity,
+    service_id: MachineId,
     machine_label: MachineLabel,
 }
 
@@ -11,7 +12,7 @@ impl MachineIdentity {
     /// Chooses the upstream Remote Control name, then the OS hostname, then
     /// the stable service id when the OS cannot provide a hostname.
     pub fn new(
-        service_id: UuidIdentity,
+        service_id: MachineId,
         remote_control_server_name: Option<&str>,
     ) -> Result<Self, MachineLabelError> {
         let host_name = nix::unistd::gethostname()
@@ -21,7 +22,7 @@ impl MachineIdentity {
     }
 
     fn from_sources(
-        service_id: UuidIdentity,
+        service_id: MachineId,
         remote_control_server_name: Option<&str>,
         host_name: Option<&str>,
     ) -> Result<Self, MachineLabelError> {
@@ -38,7 +39,7 @@ impl MachineIdentity {
     }
 
     #[must_use]
-    pub const fn service_id(&self) -> &UuidIdentity {
+    pub const fn service_id(&self) -> &MachineId {
         &self.service_id
     }
 
@@ -50,13 +51,13 @@ impl MachineIdentity {
 
 #[cfg(test)]
 mod tests {
-    use super::MachineIdentity;
-    use collaboration_protocol::{MAX_MACHINE_LABEL_SCALARS, UuidIdentity};
+    use super::{MachineId, MachineIdentity};
+    use collaboration_protocol::MAX_MACHINE_LABEL_SCALARS;
 
     const SERVICE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 
-    fn service_id() -> UuidIdentity {
-        UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("valid service id")
+    fn service_id() -> MachineId {
+        MachineId::try_from(SERVICE_ID.to_owned()).expect("valid service id")
     }
 
     #[test]

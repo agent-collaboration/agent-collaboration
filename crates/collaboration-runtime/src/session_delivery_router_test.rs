@@ -12,8 +12,8 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::DeliveryReceipt;
 use collaboration_protocol::{
     DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryPeerClaim,
-    DeliveryRejection, DeliveryRejectionReason, MessageDelivery, MessageText, PushId,
-    SessionReachability, SessionRef,
+    DeliveryRejection, DeliveryRejectionReason, HarnessSessionRef, MessageDelivery, MessageText,
+    PushId, SessionReachability,
 };
 use std::sync::{Arc, Mutex};
 
@@ -31,13 +31,13 @@ impl SessionDeliveryRoute for CapturingRoute {
             .unwrap_or(SessionReachability::ClaudeCodePeer)
     }
 
-    fn supports_delivery_mode(&self, _: &SessionRef, mode: MessageDelivery) -> bool {
+    fn supports_delivery_mode(&self, _: &HarnessSessionRef, mode: MessageDelivery) -> bool {
         mode != MessageDelivery::Queue || !self.queue_unsupported
     }
 
     fn claim(
         &self,
-        _: &SessionRef,
+        _: &HarnessSessionRef,
     ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         let claim = self
             .claim
@@ -46,7 +46,7 @@ impl SessionDeliveryRoute for CapturingRoute {
         Box::pin(async move { Ok(claim) })
     }
 
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
+    fn presence(&self, _: &HarnessSessionRef) -> DeliveryFuture<'_, RoutePresence> {
         Box::pin(async { Ok(RoutePresence::Running) })
     }
 
@@ -107,8 +107,8 @@ async fn typed_route_rejection_precedes_another_routes_holds_claim()
         ..CapturingRoute::default()
     });
     let router = SessionDeliveryRouter::new(vec![holds, rejected]);
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"target"
     }))
     .expect("target session");
@@ -136,13 +136,13 @@ async fn prepared_push_uses_the_selected_route_without_changing_its_line_or_poli
         .expect("UUIDv7 push id");
     let expected_push_id = push_id.clone();
     let link = format!(
-        "router://00000000-0000-4000-8000-000000000001/push/{}",
+        "router://00000000-0000-7000-8000-000000000001/push/{}",
         push_id.as_str()
     );
     let line =
         MessageText::try_from(format!("✉️ sender · \"preview\" · {link}")).expect("push line");
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"target"
     }))
     .expect("target session");
@@ -205,13 +205,13 @@ async fn unsupported_queue_steers_once_for_every_route_kind() {
             .expect("UUIDv7 push id");
         let expected_push_id = push_id.clone();
         let link = format!(
-            "router://00000000-0000-4000-8000-000000000001/push/{}",
+            "router://00000000-0000-7000-8000-000000000001/push/{}",
             push_id.as_str()
         );
         let line =
             MessageText::try_from(format!("✉️ sender · \"preview\" · {link}")).expect("push line");
-        let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+        let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
         "sessionId":"target"
     }))
     .expect("target session");

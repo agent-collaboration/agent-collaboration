@@ -7,7 +7,15 @@ import { assertC2Restore, c2AttachmentSchema, c2RecordSchema } from "./c2-witnes
 const uuid = z.uuidv7();
 const areaRef = z.object({ kind: z.literal("area"), id: uuid }).strict();
 export const c2SessionSchema = z
-  .object({ machineId: uuid, endpoint: z.string().min(1), sessionId: uuid })
+  .object({
+    machineId: uuid,
+    sessionId: z
+      .string()
+      .min(1)
+      .refine(
+        (value): boolean => !value.includes("\0") && Buffer.byteLength(value, "utf8") <= 4096,
+      ),
+  })
   .strict();
 const caller = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), value: c2SessionSchema }).strict(),
@@ -68,7 +76,7 @@ export const c2ProductReceiptSchema = z
   .object({
     kind: z.literal("c2Hibernation"),
     organization: uuid,
-    installationId: uuid,
+    machineId: uuid,
     welcome: z
       .object({
         kind: z.literal("welcome"),
@@ -241,8 +249,8 @@ function assertSessionCaller(receipt: C2ProductReceipt): void {
     );
     assert.equal(
       frame.request.caller.value.machineId,
-      receipt.installationId,
-      "caller uses installation",
+      receipt.machineId,
+      "caller uses the Router machine ID",
     );
   }
 }
@@ -250,7 +258,7 @@ function assertSessionCaller(receipt: C2ProductReceipt): void {
 export function originalC2Attachment(
   receipt: Pick<
     C2ProductReceipt,
-    "beforeEvents" | "organization" | "installationId" | "heartbeatEvents"
+    "beforeEvents" | "organization" | "machineId" | "heartbeatEvents"
   >,
 ): z.infer<typeof c2AttachmentSchema> {
   const upgrades = receipt.beforeEvents.filter((record) => record.event.kind === "upgrade");
@@ -261,12 +269,7 @@ export function originalC2Attachment(
   const attachment = upgrade.event.attachments[0];
   assert.ok(attachment !== undefined);
   assert.equal(attachment.organizationId, receipt.organization);
-  assert.equal(attachment.installationId, receipt.installationId);
-  assert.notEqual(
-    attachment.machineId,
-    receipt.installationId,
-    "private row key must differ from public installation",
-  );
+  assert.equal(attachment.machineId, receipt.machineId, "attachment uses the Router machine ID");
   assert.ok(
     receipt.beforeEvents.some(
       (record) =>
@@ -313,11 +316,7 @@ function assertSocketWitnesses(receipt: C2ProductReceipt): void {
 
 export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
   const receipt = c2ProductReceiptSchema.parse(raw);
-  assert.equal(
-    receipt.welcome.machineId,
-    receipt.installationId,
-    "Welcome uses public installation",
-  );
+  assert.equal(receipt.welcome.machineId, receipt.machineId, "Welcome uses the Router machine ID");
   assertSemanticFrames(receipt);
   assertSessionCaller(receipt);
   assertSocketWitnesses(receipt);

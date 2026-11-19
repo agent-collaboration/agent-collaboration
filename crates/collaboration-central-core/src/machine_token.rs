@@ -4,10 +4,11 @@ use crate::{
     identity_contract::{ClientId, MachinePrincipal, MachineTokenClaims},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use runtime_primitives::Clock;
 use serde::Deserialize;
 use std::sync::Arc;
+use workspace_ids::MachineId;
 
 const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 
@@ -20,7 +21,7 @@ pub struct MachineTokenPolicy {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VerifiedMachineToken {
     organization_id: OrganizationId,
-    installation_id: InstallationId,
+    machine_id: MachineId,
     enrollment_id: EnrollmentId,
     client_id: ClientId,
     effective_expires_at: UnixSeconds,
@@ -32,8 +33,8 @@ impl VerifiedMachineToken {
         &self.organization_id
     }
     #[must_use]
-    pub fn installation_id(&self) -> &InstallationId {
-        &self.installation_id
+    pub fn machine_id(&self) -> &MachineId {
+        &self.machine_id
     }
     #[must_use]
     pub fn enrollment_id(&self) -> &EnrollmentId {
@@ -180,7 +181,6 @@ impl Claims {
             .ok_or(rejected)?;
         for id in [
             organization_id.as_str(),
-            installation_id.as_str(),
             enrollment_id.as_str(),
             self.client_id.as_str(),
             self.azp.as_str(),
@@ -190,9 +190,10 @@ impl Claims {
                 return Err(rejected);
             }
         }
+        let machine_id = installation_id.as_str().parse().map_err(|_| rejected)?;
         Ok(VerifiedMachineToken {
             organization_id,
-            installation_id,
+            machine_id,
             enrollment_id,
             client_id: self.client_id.try_into().map_err(|_| rejected)?,
             effective_expires_at: UnixSeconds(effective_expires_at),

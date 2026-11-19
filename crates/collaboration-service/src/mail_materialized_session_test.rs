@@ -5,7 +5,9 @@ use crate::{
     SubscriptionDeliveryServiceProps,
 };
 use collaboration_contracts::{MachineIdentity, SessionDeliveryRoute};
-use collaboration_protocol::{CodexGeneration, MessageDelivery, PushDeliveryState, SessionRef};
+use collaboration_protocol::{
+    CodexGeneration, HarnessSessionRef, MessageDelivery, PushDeliveryState,
+};
 use collaboration_runtime::{
     CodexAppServerDeliveryRoute, EndpointDirectory, NativeControlBackend, NativeGenerationGate,
     SessionDeliveryRouter, UnmaterializedThreadHolder,
@@ -162,7 +164,7 @@ async fn release_ready_item(
 
 fn native_route(
     clock: Arc<dyn router_clock::RuntimeClock>,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     socket: std::path::PathBuf,
     home: &std::path::Path,
 ) -> Arc<dyn SessionDeliveryRoute> {
@@ -221,7 +223,7 @@ fn native_route(
 
 async fn serve_materialized_thread(
     listener: tokio::net::UnixListener,
-    target: SessionRef,
+    target: HarnessSessionRef,
     push_id: String,
     loaded: Arc<AtomicBool>,
     inputs: Arc<AtomicUsize>,

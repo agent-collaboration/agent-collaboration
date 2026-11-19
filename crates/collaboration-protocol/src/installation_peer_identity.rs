@@ -7,7 +7,7 @@ use std::borrow::Cow;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InstallationIdentity {
-    pub service_id: crate::UuidIdentity,
+    pub service_id: workspace_ids::MachineId,
     pub machine_label: crate::MachineLabel,
     pub peer_id: InstallationPeerId,
     #[serde(default)]

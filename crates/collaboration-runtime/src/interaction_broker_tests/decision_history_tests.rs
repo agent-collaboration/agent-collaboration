@@ -406,6 +406,9 @@ async fn valid_legacy_routes_are_removed_after_loading() {
     use collaboration_protocol::RouterAccess;
 
     let service_id = crate::new_service_uuid().expect("service id");
+    let service_id = String::from(service_id)
+        .parse::<workspace_ids::MachineId>()
+        .unwrap();
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
@@ -425,11 +428,11 @@ async fn valid_legacy_routes_are_removed_after_loading() {
     let routes_path = directory.path().join("approval-routes.json");
     let route = ApprovalRoute {
         thread_id: "route-thread".to_owned(),
-        created_by: SessionRef {
+        created_by: HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id: "creator".to_owned().try_into().expect("creator id"),
         },
-        approver: SessionRef {
+        approver: HarnessSessionRef {
             endpoint: endpoint.clone(),
             session_id: "approver".to_owned().try_into().expect("approver id"),
         },
@@ -557,6 +560,9 @@ async fn typed_approval_rejects_foreign_service_participants_without_pending_his
 
     let (broker, _, _) = fixture_broker().await;
     let foreign_service = crate::new_service_uuid().expect("foreign service");
+    let foreign_service = String::from(foreign_service)
+        .parse::<workspace_ids::MachineId>()
+        .unwrap();
     let foreign_requester =
         board_session_ref(&session(&foreign_service, "provider-session")).expect("requester");
     let local_approver =

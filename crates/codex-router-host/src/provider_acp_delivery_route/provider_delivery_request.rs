@@ -4,7 +4,7 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{
-    DeliveryCorrelationId, MessageDelivery, MessageText, PushId, SessionRef,
+    DeliveryCorrelationId, HarnessSessionRef, MessageDelivery, MessageText, PushId,
 };
 
 pub(super) enum ProviderDeliveryContent {
@@ -12,7 +12,7 @@ pub(super) enum ProviderDeliveryContent {
 }
 
 pub(super) struct ProviderDeliveryRequest {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub content: ProviderDeliveryContent,
     pub mode: MessageDelivery,
     pub load_policy: LoadPolicy,

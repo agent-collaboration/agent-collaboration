@@ -50,10 +50,11 @@ async fn provider_option_sets_keep_order_scope_and_selected_id() -> TestResult {
             (ApprovalDecision::Deny, reject_id),
         ] {
             let root = tempfile::tempdir()?;
-            let service_id =
-                UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+            let service_id = workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )?;
             let generation = CodexGeneration {
-                service_epoch: service_id.clone(),
+                service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
                 generation: GenerationNumber::try_from(1)?,
             };
             let fixture = acp_scripted_fixture::AcpFixtureScript::new()
@@ -146,9 +147,10 @@ async fn output_limit_cancels_pending_permission() -> TestResult {
     let root = tempfile::tempdir()?;
     let event_socket = root.path().join("output-limit-event.sock");
     let listener = tokio::net::UnixListener::bind(&event_socket)?;
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(
@@ -219,9 +221,10 @@ async fn provider_exit_cancels_pending_permission_as_provider_retired() -> TestR
         .exit_on_socket_signal(&exit_socket_path)
         .record_diagnostics(root.path().join("fixture-diagnostics.txt"))
         .launch();
-    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let service_id =
+        workspace_ids::MachineId::try_from("0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
-        service_epoch: service_id.clone(),
+        service_epoch: service_id.as_str().to_owned().try_into().unwrap(),
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = ExternalProviderRuntime::initialize(

@@ -7,7 +7,7 @@ use std::{path::PathBuf, sync::Arc};
 use acp_client_runtime::AgentSessionClient;
 pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
 use collaboration_protocol::{
-    CodexGeneration, OperationId, ProviderIdentity, ProviderPromptStopReason, SessionRef,
+    CodexGeneration, HarnessSessionRef, OperationId, ProviderIdentity, ProviderPromptStopReason,
 };
 use collaboration_runtime::ProviderSessionEventHub;
 use collaboration_runtime::ServiceInteractionBroker;
@@ -38,7 +38,7 @@ pub use acp_client_runtime::{
 pub struct ExternalProviderApprovalContext {
     pub requester: ProviderIdentity,
     pub approver: ProviderIdentity,
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub operation_id: OperationId,
     pub binding_generation: CodexGeneration,
     pub binding_retirement: CancellationToken,
@@ -620,8 +620,8 @@ fn test_approval_context(
     provider_session_id: &str,
     operation_id: Option<OperationId>,
 ) -> ExternalProviderApprovalContext {
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
+    let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
         "endpoint": {"serviceId": service_id, "endpointId": "cursor-local"},
         "sessionId": provider_session_id,
     }))

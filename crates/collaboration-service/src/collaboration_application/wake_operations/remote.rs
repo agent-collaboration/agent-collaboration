@@ -297,7 +297,7 @@ impl WakeOperations {
         &self,
         id: &WakeupId,
         context: &WakeFailureContext,
-    ) -> Result<Option<collaboration_protocol::SessionRef>, WakeFailure> {
+    ) -> Result<Option<collaboration_protocol::HarnessSessionRef>, WakeFailure> {
         let Some(store) = self.store.as_ref() else {
             return Ok(None);
         };
@@ -318,7 +318,7 @@ impl WakeOperations {
     async fn control(
         &self,
         context: WakeFailureContext,
-        target: collaboration_protocol::SessionRef,
+        target: collaboration_protocol::HarnessSessionRef,
         operation: OperationId,
         request: RemoteWakeRequest,
         bound: Duration,
@@ -350,7 +350,7 @@ impl WakeOperations {
     async fn remote_call(
         &self,
         context: WakeFailureContext,
-        target: collaboration_protocol::SessionRef,
+        target: collaboration_protocol::HarnessSessionRef,
         operation_id: OperationId,
         canonical_request: Vec<u8>,
         body: WakeBody,

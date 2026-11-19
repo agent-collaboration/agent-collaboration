@@ -34,6 +34,8 @@ struct OverlayModel {
     scripted: ScriptedCentral,
     /// Writes the outbox holds, whatever their submitter was told.
     accepted: BTreeSet<String>,
+    /// When each accepted write was stored, for its 15-minute deadline.
+    accepted_at: std::collections::BTreeMap<String, i64>,
     next_seed: u16,
     faults: FaultPlan,
 }
@@ -221,6 +223,8 @@ impl OverlayModel {
             other => panic!("unexpected submission {other:?}"),
         }
         if held {
+            self.accepted_at
+                .insert(id.clone(), self.harness.clock.now().unix_millis());
             self.accepted.insert(id);
         }
         // A write stored inside a mark's window that passed while the link was
@@ -308,6 +312,13 @@ impl OverlayModel {
         let pending = self.pending();
         for id in &self.accepted {
             let write = pending.iter().find(|write| write.request_id.as_str() == id);
+            // A write past its 15 minutes may end instead (checked by the invariant).
+            if matches!(
+                write.map(|write| &write.state),
+                Some(PendingWriteState::Cancelled { .. })
+            ) {
+                continue;
+            }
             let Some(PendingWriteState::Answered(reply)) = write.map(|write| &write.state) else {
                 panic!("{id} not answered within {HEALED_WITHIN_MARKS} healthy marks: {write:?}");
             };
@@ -352,7 +363,17 @@ impl OverlayModel {
                     );
                 }
                 PendingWriteState::Cancelled { reason } => {
-                    panic!("nothing passes its deadline in this model, yet {id}: {reason:?}");
+                    let stored = self.accepted_at[&id];
+                    assert!(
+                        self.harness.clock.now().unix_millis() >= stored + 15 * 60 * 1000,
+                        "{id} ended before its 15 minutes: {reason:?}"
+                    );
+                    if *reason == central_link_client::OutboxCancellation::NotSentWithin15Minutes {
+                        assert!(
+                            in_central.is_none(),
+                            "{id} never left the Mac, yet central has it"
+                        );
+                    }
                 }
             }
         }
@@ -416,6 +437,7 @@ fn each_write_shows_once_except_a_lost_answer_until_its_replay(tc: TestCase) {
         central: Some(central),
         scripted: ScriptedCentral::default(),
         accepted: BTreeSet::new(),
+        accepted_at: std::collections::BTreeMap::new(),
         next_seed: 0,
         faults,
     };

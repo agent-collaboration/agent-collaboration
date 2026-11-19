@@ -1,6 +1,6 @@
 //! One provider Session's state and last advertised capabilities/settings.
 
-use crate::{ProviderSessionState, ProviderSettingName, SessionRef};
+use crate::{HarnessSessionRef, ProviderSessionState, ProviderSettingName};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use session_event_model::CapabilityReport;
@@ -8,7 +8,7 @@ use session_event_model::CapabilityReport;
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSessionInspectRequest {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -21,7 +21,7 @@ pub enum ProviderHistoryAvailability {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSessionInspectResult {
-    pub target: SessionRef,
+    pub target: HarnessSessionRef,
     pub state: ProviderSessionState,
     pub capabilities: CapabilityReport,
     pub history: ProviderHistoryAvailability,
@@ -85,6 +85,6 @@ pub struct ProviderInspectFailure {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<crate::ConversationOperationFailureStage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target: Option<SessionRef>,
+    pub target: Option<HarnessSessionRef>,
     pub message: String,
 }

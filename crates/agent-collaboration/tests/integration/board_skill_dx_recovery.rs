@@ -130,7 +130,7 @@ async fn luna_recovers_from_combined_board_argument_diagnostic() -> ProofResult<
 
 async fn wait_for_terminal_turn(
     proof: &mut ProofContext,
-    agent: &collaboration_client::protocol::SessionRef,
+    agent: &collaboration_client::protocol::HarnessSessionRef,
 ) -> ProofResult<Vec<Value>> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(600);
     let mut interval = tokio::time::interval(Duration::from_secs(1));

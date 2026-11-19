@@ -35,7 +35,7 @@ impl Lifetime {
 
     async fn create_project(&self) -> Result<ProjectId, Box<dyn std::error::Error + Send + Sync>> {
         let app = collaboration_service::ApplicationFixture::new(
-            "550e8400-e29b-41d4-a716-446655440000",
+            "550e8400-e29b-71d4-a716-446655440000",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(self.admission.clone())

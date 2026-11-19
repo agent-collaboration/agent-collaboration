@@ -46,7 +46,7 @@ pub fn intent_handoff_input() -> Result<Option<collaboration_service::IntentHand
     Ok(Some(collaboration_service::IntentHandoffInput {
         item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())?,
         enrollment: collaboration_service::IntentRecipientEnrollment {
-            service: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+            service: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             peer: fixture_peer()?,
         },
     }))
@@ -104,7 +104,7 @@ impl BoardFixture {
         let common =
             std::fs::canonicalize(fixture._directory.path().join("context-repository/.git"))?;
         let repository = RepositoryRef::Local {
-            service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+            service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             common_directory: common
                 .to_str()
                 .ok_or("common UTF8")?
@@ -176,7 +176,7 @@ impl BoardFixture {
             identity: fixture_machine_identity()?,
         })?);
         let mut identity = ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission.clone())
@@ -411,7 +411,7 @@ impl BoardFixture {
             identity: fixture_machine_identity()?,
         })?);
         let identity = ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission.clone());
@@ -528,7 +528,7 @@ impl BoardFixture {
         let mut write = store
             .begin_admission(ActorOrigin {
                 installation: ServiceId::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
+                    "00000000-0000-7000-8000-000000000001".to_owned(),
                 )?,
                 machine: MachineLabel::try_from("V1/V2 proof".to_owned())?,
             })
@@ -592,14 +592,14 @@ impl BoardFixture {
 
 fn fixture_record_origin() -> Result<ActorOrigin, TestError> {
     Ok(ActorOrigin {
-        installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+        installation: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("V1/V2 proof".to_owned())?,
     })
 }
 
 fn fixture_machine_identity() -> Result<MachineIdentity, TestError> {
     Ok(MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()?,
         Some("V1/V2 proof"),

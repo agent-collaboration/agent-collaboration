@@ -19,7 +19,7 @@ use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
-    DeliveryRejectionReason, MessageDelivery, PushId, PushKind, SessionRef,
+    DeliveryRejectionReason, HarnessSessionRef, MessageDelivery, PushId, PushKind,
 };
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -33,7 +33,7 @@ struct HeldClient {
     supports_queue: bool,
 }
 impl SessionMessageDelivery for HeldClient {
-    fn supports_delivery_mode(&self, _: &SessionRef, mode: MessageDelivery) -> bool {
+    fn supports_delivery_mode(&self, _: &HarnessSessionRef, mode: MessageDelivery) -> bool {
         mode != MessageDelivery::Queue || self.supports_queue
     }
     fn deliver<'a>(
@@ -61,7 +61,7 @@ impl SessionMessageDelivery for HeldClient {
 }
 struct RunningPresence;
 impl TargetPresenceProbe for RunningPresence {
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+    fn presence(&self, _: &HarnessSessionRef) -> DeliveryFuture<'_, TargetPresence> {
         Box::pin(async { Ok(TargetPresence::Running) })
     }
 }
@@ -115,7 +115,7 @@ impl Runtime {
             }),
             presence: Arc::new(RunningPresence),
             machine_identity: MachineIdentity::new(
-                "00000000-0000-4000-8000-000000000001"
+                "00000000-0000-7000-8000-000000000001"
                     .to_owned()
                     .try_into()
                     .unwrap(),
@@ -164,7 +164,7 @@ fn request(session: &str, mode: MessageDelivery) -> DeliveryRequest {
     DeliveryRequest {
         correlation:DeliveryCorrelationId::try_from(push_id.as_str().to_owned()).unwrap(),
         payload:PreparedPush {push_id,line:"frozen native mail".to_owned().try_into().unwrap(),load_policy:LoadPolicy::LoadedOnly},
-        target:serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":session})).unwrap(),
+        target:serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":session})).unwrap(),
         mode,precondition:DeliveryPrecondition::Unpinned,attempt:agent_automation::AttemptId::generate(),
     }
 }

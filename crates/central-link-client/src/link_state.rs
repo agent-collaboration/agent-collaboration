@@ -9,8 +9,9 @@ use central_link_protocol::{
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{sync::Arc, time::Duration};
+use workspace_ids::MachineId;
 use workspace_model::{
-    Caller, MachineId, MessageId,
+    Caller, MessageId,
     central_mail::{DeliveryAnswer, MessageRecord},
 };
 

@@ -22,7 +22,6 @@ const correlation = "019f0000-0000-7000-8000-000000000004";
 const attachment = c2AttachmentSchema.parse({
   organizationId: organization,
   machineId: "019f0000-0000-7000-8000-000000000005",
-  installationId: "019f0000-0000-7000-8000-000000000006",
   enrollmentId: "019f0000-0000-7000-8000-000000000007",
   clientId: "019f0000-0000-7000-8000-000000000008",
   effectiveExpiresAt: 1_800_000_600,
@@ -43,7 +42,7 @@ function validRecords(): C2WitnessRecord[] {
       { kind: "constructor", objectId },
       { kind: "handler", objectId, instanceId: instance, attachment },
       { kind: "enrollmentRead", objectId, query: "byEnrollment", outcome: "read" },
-      { kind: "enrollmentRead", objectId, query: "machineByInstallation", outcome: "read" },
+      { kind: "enrollmentRead", objectId, query: "machineById", outcome: "read" },
       { kind: "enrollmentRead", objectId, query: "activeEnrollment", outcome: "read" },
       { kind: "restoreResult", objectId, correlationId: correlation, outcome: "admitted" },
       // An actual held recheck may legitimately repeat these reads.
@@ -67,6 +66,13 @@ function validRecords(): C2WitnessRecord[] {
   ];
 }
 
+test("C2 attachment refuses the former installation ID field", (): void => {
+  assert.equal(
+    c2AttachmentSchema.safeParse({ ...attachment, installationId: organization }).success,
+    false,
+  );
+});
+
 test("C2 oracle accepts real read set plus repeated held recheck", (): void => {
   assertC2Restore({ records: validRecords(), before, attachment, correlationId: correlation });
 });
@@ -85,7 +91,7 @@ test("C2 oracle rejects missing live SQL, stale instance, attachment drift and w
     () => assertC2Restore({ records: stale, before, attachment, correlationId: correlation }),
     /must be new/,
   );
-  const wrongAttachment = { ...attachment, installationId: organization };
+  const wrongAttachment = { ...attachment, machineId: organization };
   assert.throws(
     () =>
       assertC2Restore({

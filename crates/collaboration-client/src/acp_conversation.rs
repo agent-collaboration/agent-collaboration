@@ -7,7 +7,8 @@ use crate::conversation_contract::{
 };
 use crate::{AcpTransportConnection, ClientError, ProviderPromptOutput};
 use collaboration_protocol::{
-    AcpSchemaCatalog, ConversationOutputUnavailableReason, EndpointId, EndpointRef, SessionRef,
+    AcpSchemaCatalog, ConversationOutputUnavailableReason, EndpointId, EndpointRef,
+    HarnessSessionRef,
 };
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, path::Path, time::Duration};
@@ -33,7 +34,7 @@ pub struct AcpConversation {
     schemas: AcpSchemaCatalog,
     endpoint: EndpointRef,
     service_directory: std::path::PathBuf,
-    target: Option<SessionRef>,
+    target: Option<HarnessSessionRef>,
     session_ready: bool,
     next_id: u64,
     callbacks: BTreeSet<String>,
@@ -109,7 +110,7 @@ impl AcpConversation {
         prompt: ConversationPromptRequest,
         cancel: CancellationToken,
         emit: &mut impl FnMut(ConversationEvent) -> Result<(), ClientError>,
-    ) -> Result<(SessionRef, ConversationEnd), ConversationCreatePromptError> {
+    ) -> Result<(HarnessSessionRef, ConversationEnd), ConversationCreatePromptError> {
         self.open_and_prompt_with_setup_updates(
             create,
             prompt,
@@ -127,7 +128,7 @@ impl AcpConversation {
         cancel: CancellationToken,
         emit: &mut impl FnMut(ConversationEvent) -> Result<(), ClientError>,
         setup_updates: SetupUpdateDelivery,
-    ) -> Result<(SessionRef, ConversationEnd), ConversationCreatePromptError> {
+    ) -> Result<(HarnessSessionRef, ConversationEnd), ConversationCreatePromptError> {
         prompt
             .validate()
             .map_err(|source| crate::OperationError::before_dispatch("validation", None, source))?;

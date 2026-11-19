@@ -6,7 +6,7 @@ use automation_storage::{
 };
 use collaboration_protocol::{
     AutomationEventDetails, AutomationEventsRequest, DeliveryAttemptsRequest, DeliveryEvidence,
-    DeliveryReceipt, OperationId, SavedMessage, SessionRef,
+    DeliveryReceipt, HarnessSessionRef, OperationId, SavedMessage,
 };
 use collaboration_service::ApplicationFixture;
 use serde_json::json;
@@ -21,7 +21,7 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         OperationId::generate().as_str()
     ));
     let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
-    let service_id = "00000000-0000-4000-8000-000000000001";
+    let service_id = "00000000-0000-7000-8000-000000000001";
     let identity = ApplicationFixture::new(service_id, service_id)
         .map_err(std::io::Error::other)?
         .with_automation_store(Arc::clone(&store));
@@ -60,7 +60,7 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         return Err("wake did not fire".into());
     };
     let first = store.lock().await
-        .claim_delivery::<SessionRef, collaboration_protocol::MessageContent, collaboration_protocol::CodexGeneration>(&delivery_id, now_ms)
+        .claim_delivery::<HarnessSessionRef, collaboration_protocol::MessageContent, collaboration_protocol::CodexGeneration>(&delivery_id, now_ms)
         .await?.ok_or("first attempt missing")?;
     let first_receipt: DeliveryReceipt = serde_json::from_value(json!({
         "outcome":{"kind":"notSubmitted","retryable":true,"reason":"provider starting"},
@@ -70,7 +70,7 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         .lock()
         .await
         .complete_delivery(DeliveryCompletion::<
-            SessionRef,
+            HarnessSessionRef,
             collaboration_protocol::CodexGeneration,
             DeliveryReceipt,
         > {
@@ -87,12 +87,12 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         .await?;
     let second_at = now_ms + 2_000;
     let second = store.lock().await
-        .claim_delivery::<SessionRef, collaboration_protocol::MessageContent, collaboration_protocol::CodexGeneration>(&delivery_id, second_at)
+        .claim_delivery::<HarnessSessionRef, collaboration_protocol::MessageContent, collaboration_protocol::CodexGeneration>(&delivery_id, second_at)
         .await?.ok_or("second attempt missing")?;
     let claimed = store
         .lock()
         .await
-        .read_delivery::<SessionRef, collaboration_protocol::CodexGeneration, DeliveryReceipt>(
+        .read_delivery::<HarnessSessionRef, collaboration_protocol::CodexGeneration, DeliveryReceipt>(
             &delivery_id,
         )
         .await?;
@@ -107,7 +107,7 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         .lock()
         .await
         .complete_delivery(DeliveryCompletion::<
-            SessionRef,
+            HarnessSessionRef,
             collaboration_protocol::CodexGeneration,
             DeliveryReceipt,
         > {

@@ -1,12 +1,12 @@
 use crate::{
     ActorIdentityId, AreaId, BacklogItemId, ChangeId, ChangePosition, DeliverableId,
-    DeliverableRoleId, DependencyId, Description, EndpointId, InitiativeId, IssueId, IssueTitle,
-    ItemRef, MachineId, PersonId, PostId, PostText, ProjectId, ProjectRoleId, ReadMarkId,
-    RequiredDescription, ResourceName, SessionId, ThreadId, ThreadMemberId, TrailTag, TrailText,
-    WorkLogEntryId, WorkspaceId,
+    DeliverableRoleId, DependencyId, Description, InitiativeId, IssueId, IssueTitle, ItemRef,
+    PersonId, PostId, PostText, ProjectId, ProjectRoleId, ReadMarkId, RequiredDescription,
+    ResourceName, ThreadId, ThreadMemberId, TrailTag, TrailText, WorkLogEntryId, WorkspaceId,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use workspace_ids::SessionRef;
 
 pub type Timestamp = DateTime<Utc>;
 
@@ -78,7 +78,6 @@ records! {
     Project { project_id: ProjectId, area_id: AreaId, title: ResourceName, description: RequiredDescription, status: WorkStatus, lead: ActorIdentityId },
     Initiative { initiative_id: InitiativeId, name: ResourceName, description: Description, status: WorkStatus },
     ActorIdentity { actor_identity_id: ActorIdentityId, identity: Identity },
-    SessionAddress { machine_id: MachineId, endpoint: EndpointId, session_id: SessionId },
     ProjectRoleAssignment { project_role_id: ProjectRoleId, project_id: ProjectId, role: ProjectRole, holder: ActorIdentityId, granted_at: Timestamp, state: AssignmentState },
     Deliverable { deliverable_id: DeliverableId, project_id: ProjectId, title: ResourceName },
     DeliverableRoleAssignment { deliverable_role_id: DeliverableRoleId, deliverable_id: DeliverableId, role: DeliverableRole, holder: ActorIdentityId, granted_at: Timestamp, state: AssignmentState },
@@ -102,7 +101,7 @@ records! {
 )]
 pub enum Identity {
     AgentSession {
-        session: SessionAddress,
+        session: SessionRef,
     },
     RouterComponent {
         machine_id: MachineId,
@@ -215,3 +214,5 @@ pub enum ChangeEvent {
         role: DeliverableRole,
     },
 }
+
+use workspace_ids::MachineId;

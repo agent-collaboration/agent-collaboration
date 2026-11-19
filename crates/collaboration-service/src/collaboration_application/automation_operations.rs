@@ -14,11 +14,11 @@ use collaboration_protocol::{
     AutomationConfiguration, AutomationConfigureRequest, AutomationInspectionFailure,
     AutomationInspectionFailureKind, AutomationStatus, CodexGeneration, ConfigurationFailure,
     ConfigurationFailureKind, ConfigurationFileState, ConfigurationNextAction, EndpointRef,
-    InstructionCreateParams, InstructionFailure, InstructionFailureKind, InstructionId,
-    InstructionNextAction, InstructionShowParams, InstructionSnapshot, InstructionStage,
-    InstructionUpdateParams, LocalMutationEvidence, LocalMutationState, OperationId, RunFailure,
-    RunFailureKind, RunFailureStage, RunId, RunNextAction, RunRecoveryRequest, RunShowRequest,
-    RunSnapshot, ScheduleFailure, ScheduleFailureKind, SessionRef,
+    HarnessSessionRef, InstructionCreateParams, InstructionFailure, InstructionFailureKind,
+    InstructionId, InstructionNextAction, InstructionShowParams, InstructionSnapshot,
+    InstructionStage, InstructionUpdateParams, LocalMutationEvidence, LocalMutationState,
+    OperationId, RunFailure, RunFailureKind, RunFailureStage, RunId, RunNextAction,
+    RunRecoveryRequest, RunShowRequest, RunSnapshot, ScheduleFailure, ScheduleFailureKind,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -135,7 +135,7 @@ impl AutomationOperations {
         let read = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(
+            .read_run::<HarnessSessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(
                 &request.run_id,
             )
             .await;
@@ -313,7 +313,7 @@ enum RunAccess {
 }
 
 type StoredRun = agent_automation::RunRecord<
-    SessionRef,
+    HarnessSessionRef,
     EndpointRef,
     CodexGeneration,
     collaboration_runtime::stored_run_receipt::StoredRunReceipt,
@@ -328,7 +328,7 @@ async fn recover_summary(
     store
         .lock()
         .await
-        .recover_summary::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(
+        .recover_summary::<HarnessSessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(
             &SummaryRecoveryRequest {
                 operation_id: request.operation_id,
                 run_id: request.run_id,

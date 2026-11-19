@@ -245,7 +245,7 @@ fn named_mcp_tool_call_fixture(
 }
 
 fn approval_context(operation_id: &str) -> ExternalProviderApprovalContext {
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     ExternalProviderApprovalContext {
         requester: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"cursor-local"},"sessionId":"requester"})).expect("requester"),
         approver: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"approver"})).expect("approver"),

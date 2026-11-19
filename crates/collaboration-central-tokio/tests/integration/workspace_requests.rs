@@ -136,7 +136,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let missing = signed::machine_token(
         organization().as_str(),
-        &id::<m::MachineId>(98).to_string(),
+        &id::<workspace_ids::MachineId>(98).to_string(),
         &id::<m::WorkspaceId>(97).to_string(),
         now,
         now + 600,
@@ -166,7 +166,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .unwrap();
     let token = signed::machine_token(
         other.as_str(),
-        &id::<m::MachineId>(2).to_string(),
+        &id::<workspace_ids::MachineId>(2).to_string(),
         &id::<m::WorkspaceId>(4).to_string(),
         now,
         now + 600,
@@ -179,7 +179,7 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
             .unwrap()
             .is_err()
     );
-    seed_machine_for(&f.host, &other, &id(2), 3, 4, now).await;
+    seed_machine_for(&f.host, &other, &id(2), 4, now).await;
     let connection = second_runtime
         .admit_machine_connection(&token)
         .await

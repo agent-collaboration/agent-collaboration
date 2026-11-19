@@ -13,6 +13,7 @@ runtime-test-support = ["interaction-storage/runtime-test-support", "collaborati
 [lints]
 workspace = true
 [dependencies]
+workspace-ids.workspace = true
 router-clock.workspace = true
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }

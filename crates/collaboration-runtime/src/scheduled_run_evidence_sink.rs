@@ -11,7 +11,7 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::RunEvidenceDisposition;
 use collaboration_contracts::RunEvidenceSink;
-use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
+use collaboration_protocol::{CodexGeneration, EndpointRef, HarnessSessionRef};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -21,7 +21,7 @@ pub struct StoredRunEvidenceSink {
     configuration: AutomationConfigurationHandle,
     run_id: RunId,
     schedule_id: ScheduleId,
-    latest: Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    latest: Mutex<Option<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
 }
 
 impl StoredRunEvidenceSink {
@@ -31,7 +31,7 @@ impl StoredRunEvidenceSink {
         configuration: AutomationConfigurationHandle,
         run_id: RunId,
         schedule_id: ScheduleId,
-        initial: Option<RouteEffectEvidence<SessionRef, CodexGeneration>>,
+        initial: Option<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>,
     ) -> Self {
         Self {
             store,
@@ -43,13 +43,13 @@ impl StoredRunEvidenceSink {
         }
     }
 
-    pub async fn latest(&self) -> Option<RouteEffectEvidence<SessionRef, CodexGeneration>> {
+    pub async fn latest(&self) -> Option<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>> {
         self.latest.lock().await.clone()
     }
 
     async fn begin_dispatch(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> Result<RunEvidenceDisposition, DeliveryContractError> {
         let lease = self.configuration.admission_lease().await;
         let Some(configuration) = lease.configuration() else {
@@ -78,7 +78,7 @@ impl StoredRunEvidenceSink {
 impl RunEvidenceSink for StoredRunEvidenceSink {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
         Box::pin(async move {
             let disposition = match &evidence {
@@ -223,7 +223,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                 .store
                 .lock()
                 .await
-                .begin_run_stop::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                .begin_run_stop::<HarnessSessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                     &self.run_id,
                     identity,
                 )

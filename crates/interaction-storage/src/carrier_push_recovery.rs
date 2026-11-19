@@ -2,8 +2,8 @@
 use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, PushId, PushKind, PushRecord,
-    SessionId, SessionRef, UuidIdentity,
+    DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, HarnessSessionRef, PushId, PushKind,
+    PushRecord, SessionId,
 };
 use sqlx::FromRow;
 
@@ -16,7 +16,9 @@ struct DirectMessageTargetRow {
 
 impl InteractionStore {
     /// Finds reader owners that must resume known-unsent direct messages.
-    pub async fn direct_message_recovery_targets(&self) -> Result<Vec<SessionRef>, StorageError> {
+    pub async fn direct_message_recovery_targets(
+        &self,
+    ) -> Result<Vec<HarnessSessionRef>, StorageError> {
         let mut connection = self.writer.lock().await;
         let kind = push_record_rows::serialize_kind(PushKind::DirectMessage)?;
         let board = push_record_rows::serialize_kind(PushKind::BoardNotification)?;
@@ -44,7 +46,7 @@ impl InteractionStore {
 
     pub async fn list_unsent_direct_messages(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<Vec<PushRecord>, StorageError> {
         let mut connection = self.writer.lock().await;
         let kind = push_record_rows::serialize_kind(PushKind::DirectMessage)?;
@@ -109,13 +111,15 @@ impl InteractionStore {
     }
 }
 
-fn direct_message_recovery_target(row: DirectMessageTargetRow) -> Result<SessionRef, &'static str> {
-    let service_id =
-        UuidIdentity::try_from(row.target_service_id).map_err(|_| "target_service_id")?;
+fn direct_message_recovery_target(
+    row: DirectMessageTargetRow,
+) -> Result<HarnessSessionRef, &'static str> {
+    let service_id = workspace_ids::MachineId::try_from(row.target_service_id)
+        .map_err(|_| "target_service_id")?;
     let endpoint_id =
         EndpointId::try_from(row.target_endpoint_id).map_err(|_| "target_endpoint_id")?;
     let session_id = SessionId::try_from(row.target_session_id).map_err(|_| "target_session_id")?;
-    Ok(SessionRef {
+    Ok(HarnessSessionRef {
         endpoint: EndpointRef {
             service_id,
             endpoint_id,

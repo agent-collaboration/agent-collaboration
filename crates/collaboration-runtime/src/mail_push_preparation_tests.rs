@@ -13,7 +13,7 @@ use serde_json::json;
 
 fn machine() -> MachineIdentity {
     MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000001"
+        "00000000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap(),
@@ -25,7 +25,7 @@ fn recipient() -> Recipient<message_board::SessionRef> {
     Recipient {
         peer: PeerId::new(uuid::Uuid::now_v7()).unwrap(),
         address: serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "sessionId":"project-free-recipient"
         })).unwrap(),
     }
@@ -43,7 +43,7 @@ fn message(
     DeliveryItem::new(
         ItemId::new(uuid::Uuid::now_v7()).unwrap(),
         MailSender::Session(serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-local"},
             "sessionId":"frozen-sender"
         })).unwrap()),
         recipient(),
@@ -382,7 +382,7 @@ fn intent_is_loaded_only_and_mismatched_push_or_router_is_refused_before_dispatc
         prepare_mail_push(&item, &wrong, &machine(), &TargetPresence::Running, &call()).is_err()
     );
     let other = MachineIdentity::new(
-        "00000000-0000-4000-8000-000000000003"
+        "00000000-0000-7000-8000-000000000003"
             .to_owned()
             .try_into()
             .unwrap(),

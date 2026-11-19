@@ -3,10 +3,10 @@
 use super::ExternalProviderSupervisor;
 use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{
-    ProviderConfigOptionView, ProviderConfigValueView, ProviderHistoryAvailability,
-    ProviderInspectFailure, ProviderInspectFailureKind, ProviderSessionInspectRequest,
-    ProviderSessionInspectResult, ProviderSessionState, ProviderSettingChoiceView,
-    ProviderSettingsCatalogView, SessionRef,
+    HarnessSessionRef, ProviderConfigOptionView, ProviderConfigValueView,
+    ProviderHistoryAvailability, ProviderInspectFailure, ProviderInspectFailureKind,
+    ProviderSessionInspectRequest, ProviderSessionInspectResult, ProviderSessionState,
+    ProviderSettingChoiceView, ProviderSettingsCatalogView,
 };
 use session_event_model::SessionState;
 
@@ -139,7 +139,7 @@ fn state_tag(state: SessionState) -> ProviderSessionState {
     }
 }
 
-fn failure(kind: ProviderInspectFailureKind, target: &SessionRef) -> ProviderInspectFailure {
+fn failure(kind: ProviderInspectFailureKind, target: &HarnessSessionRef) -> ProviderInspectFailure {
     ProviderInspectFailure {
         kind,
         stage: None,
@@ -159,7 +159,7 @@ fn failure(kind: ProviderInspectFailureKind, target: &SessionRef) -> ProviderIns
 impl ExternalProviderSupervisor {
     pub async fn session_model_catalog(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<
         Vec<collaboration_runtime::ProviderModelEntry>,
         collaboration_runtime::SessionModelCatalogError,

@@ -2,8 +2,8 @@
 use agent_automation::{OccurrenceId, WakeupId};
 use chrono::{TimeZone, Utc};
 use collaboration_protocol::{
-    DeliveryOutcome, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
-    PushRecordDraft, RouterOriginRef, SessionRef,
+    DeliveryOutcome, HarnessSessionRef, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
+    PushOrigin, PushRecordDraft, RouterOriginRef,
 };
 use interaction_storage::{InteractionStore, StorageError};
 use sqlx::Connection;
@@ -23,7 +23,7 @@ fn wake_draft() -> Result<PushRecordDraft, Box<dyn std::error::Error>> {
             }
             .canonical_string()?,
         ),
-        target: serde_json::from_value::<SessionRef>(serde_json::json!({
+        target: serde_json::from_value::<HarnessSessionRef>(serde_json::json!({
             "endpoint": {"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"codex-local"},
             "sessionId":"owed-wake-target"
         }))?,

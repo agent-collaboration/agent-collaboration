@@ -19,12 +19,12 @@ use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, ConversationPromptRequest,
     DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability,
-    EndpointDescription, EndpointId, EndpointRef, GenerationNumber, MessageContent,
-    MessageDelivery, MessageText, NonEmptyText, ObservationTimestamp, OperationId,
+    EndpointDescription, EndpointId, EndpointRef, GenerationNumber, HarnessSessionRef,
+    MessageContent, MessageDelivery, MessageText, NonEmptyText, ObservationTimestamp, OperationId,
     ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities, ProviderCapability,
     ProviderCapabilityEvidence, ProviderCapabilityName, ProviderCapabilityStatus, ProviderKind,
     ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
-    PushId, RouterAccess, SessionId, SessionRef, UuidIdentity,
+    PushId, RouterAccess, SessionId, UuidIdentity,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
@@ -39,17 +39,22 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 struct NoLivePeer;
 
 impl LiveSessionOwnershipCheck for NoLivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
+    fn check<'a>(
+        &'a self,
+        _target: &'a HarnessSessionRef,
+    ) -> DeliveryFuture<'a, LiveSessionOwnership> {
         Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
     }
 }
 
-struct RecordedEvidence(tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
+struct RecordedEvidence(
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<HarnessSessionRef, CodexGeneration>>>,
+);
 
 impl AttemptEvidenceSink for RecordedEvidence {
     fn record(
         &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+        evidence: RouteEffectEvidence<HarnessSessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()> {
         Box::pin(async move {
             self.0.lock().await.push(evidence);
@@ -59,11 +64,13 @@ impl AttemptEvidenceSink for RecordedEvidence {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn target() -> SessionRef {
-    SessionRef {
+fn target() -> HarnessSessionRef {
+    HarnessSessionRef {
         endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service"),
+            service_id: workspace_ids::MachineId::try_from(
+                "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89".to_owned(),
+            )
+            .expect("service"),
             endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint"),
         },
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -71,14 +78,14 @@ fn target() -> SessionRef {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn non_creator_agent(target: &SessionRef) -> SessionRef {
+fn non_creator_agent(target: &HarnessSessionRef) -> HarnessSessionRef {
     let mut sender = target.clone();
     sender.session_id = SessionId::try_from("other-session".to_owned()).expect("sender ID");
     sender
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn binding(target: &SessionRef) -> ProviderBindingIdentity {
+fn binding(target: &HarnessSessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("claude-fixture-binding".to_owned())
@@ -122,7 +129,7 @@ async fn prepared_route(
 ) -> (
     ProviderAcpDeliveryRoute,
     Arc<ExternalProviderSupervisor>,
-    SessionRef,
+    HarnessSessionRef,
     CodexGeneration,
 ) {
     let target = target();
@@ -315,7 +322,7 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn request(target: SessionRef, mode: MessageDelivery) -> DeliveryRequest {
+fn request(target: HarnessSessionRef, mode: MessageDelivery) -> DeliveryRequest {
     let push_id =
         PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");
     let correlation =

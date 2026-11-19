@@ -14,7 +14,7 @@ async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str)
         .await?;
     assert!(
         active.len() <= 1,
-        "{step}: more than one enrolled login for the installation"
+        "{step}: more than one enrolled login for the machine_id"
     );
     let expected = state
         .active

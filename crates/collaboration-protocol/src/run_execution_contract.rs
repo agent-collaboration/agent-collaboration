@@ -1,8 +1,8 @@
 //! Complete public Run state preserves frozen inputs, actual native receipts and separate summary results.
 use crate::{
-    ChangeId, DeliveryReceipt, DeliveryRouteEvidence, ExecutionDestination, ObservationTimestamp,
-    OperationId, PositiveSeconds, RevisionId, RunExecution, RunId, ScheduleId, SessionRef,
-    SummarySourceReference,
+    ChangeId, DeliveryReceipt, DeliveryRouteEvidence, ExecutionDestination, HarnessSessionRef,
+    ObservationTimestamp, OperationId, PositiveSeconds, RevisionId, RunExecution, RunId,
+    ScheduleId, SummarySourceReference,
 };
 use agent_automation::AttemptId;
 use schemars::JsonSchema;
@@ -22,13 +22,13 @@ pub enum ContinuityInput {
     LocalSummary {
         text: String,
         source_run_id: RunId,
-        source_target: SessionRef,
+        source_target: HarnessSessionRef,
         source_reference: SummarySourceReference,
     },
     ImportedSummary {
         text: String,
         source_run_id: String,
-        source_target: SessionRef,
+        source_target: HarnessSessionRef,
         import_operation_id: OperationId,
     },
 }
@@ -147,7 +147,7 @@ pub struct RunExecutionEvidence {
 pub struct RetainedSummary {
     pub text: String,
     pub source_run_id: RunId,
-    pub source_target: SessionRef,
+    pub source_target: HarnessSessionRef,
     pub source_reference: SummarySourceReference,
     pub summary_attempt_id: AttemptId,
 }

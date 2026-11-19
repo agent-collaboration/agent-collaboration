@@ -1,7 +1,7 @@
 //! One source-owned request tuple and view-specific opaque continuation.
 use collaboration_client::protocol::{
-    CodexGeneration, NativeSessionListParams, NativeSessionListResult, NativeSessionObservation,
-    NativeSessionSource, NativeSessionView, NativeThreadStatus, SessionRef,
+    CodexGeneration, HarnessSessionRef, NativeSessionListParams, NativeSessionListResult,
+    NativeSessionObservation, NativeSessionSource, NativeSessionView, NativeThreadStatus,
 };
 use collaboration_client::{ClientError, CollaborationClient};
 use std::collections::BTreeSet;
@@ -25,7 +25,7 @@ pub(in crate::sessions) struct NativeInventoryPager {
     request: NativeSessionListParams,
     observation_context: InventoryObservationContext,
     seen_cursors: BTreeSet<String>,
-    seen_targets: BTreeSet<SessionRef>,
+    seen_targets: BTreeSet<HarnessSessionRef>,
     pages_read: usize,
     paging_state: NativePagingState,
 }

@@ -1,9 +1,8 @@
 //! Central's typed mail and timer contract; delivery belongs to a later boundary.
-use crate::{
-    ChangeEvent, ChangePosition, ItemRef, PostText, RefusalReason, SessionAddress, Timestamp,
-};
+use crate::{ChangeEvent, ChangePosition, ItemRef, PostText, RefusalReason, Timestamp};
 use agent_automation::TimingRule;
 use serde::{Deserialize, Serialize};
+use workspace_ids::SessionRef;
 use workspace_ids::{
     ActorIdentityId, AutomationId, ChangeId, MessageId, RequestId, ThreadId, WakeId, WorkspaceId,
 };
@@ -27,7 +26,7 @@ pub enum CentralMailOperation {
         cadence: crate::NoticeCadence,
     },
     SendMessage {
-        to: SessionAddress,
+        to: SessionRef,
         body: PostText,
         /// Required: a missing field is refused, never defaulted.
         delivery: MessageDelivery,
@@ -41,7 +40,7 @@ pub enum CentralMailOperation {
         sent_at: Timestamp,
     },
     SetWake {
-        target: SessionAddress,
+        target: SessionRef,
         /// Future UTC five-minute mark, with zero fractional seconds, within seven days.
         due_at: Timestamp,
         text: PostText,
@@ -50,7 +49,7 @@ pub enum CentralMailOperation {
         wake_id: WakeId,
     },
     SetAutomation {
-        target: SessionAddress,
+        target: SessionRef,
         /// At uses UTC five-minute marks; durations are positive multiples of 300
         /// seconds; cron selects only five-minute values and UTC-aligned occurrences.
         timing: TimingRule,
@@ -127,7 +126,7 @@ pub enum CentralMailRefusal {
     },
     Workspace(RefusalReason),
     UnknownSession {
-        target: SessionAddress,
+        target: SessionRef,
     },
     NoOccurrence,
     InvalidInput {
@@ -300,7 +299,7 @@ pub enum MessageSender {
 pub struct MessageRecord {
     pub message_id: MessageId,
     pub sender: MessageSender,
-    pub target: SessionAddress,
+    pub target: SessionRef,
     pub body: MessageBody,
     pub state: MessageState,
     pub source: Option<NoticeSource>,
@@ -312,7 +311,7 @@ pub struct MessageRecord {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SessionQueue {
-    pub session: SessionAddress,
+    pub session: SessionRef,
     pub messages: Vec<MessageRecord>,
 }
 

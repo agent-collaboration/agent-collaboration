@@ -5,9 +5,9 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
-    CodexGeneration, EndpointDescription, EndpointId, EndpointRef, OperationId, PushHeaderFacts,
-    PushId, PushKind, PushOrigin, RouterLink, RouterOriginRef, SavedMessage, SessionId, SessionRef,
-    UuidIdentity,
+    CodexGeneration, EndpointDescription, EndpointId, EndpointRef, HarnessSessionRef, OperationId,
+    PushHeaderFacts, PushId, PushKind, PushOrigin, RouterLink, RouterOriginRef, SavedMessage,
+    SessionId,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_service::ApplicationFixture;
@@ -34,7 +34,7 @@ use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 const REPEAT_INTERVAL_SECONDS: u32 = 300;
 const MINIMUM_REPEAT_GAP_MILLIS: i64 = 300_000;
 const WAKE_BODY: &str = "Review the recurring report";
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_ID: &str = "00000000-0000-7000-8000-000000000001";
 const SESSION_ID: &str = "fixture-recurring-target";
 
 type TestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -88,7 +88,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     );
     let socket_path = root.path().join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path).expect("bind native socket");
-    let service_identity: UuidIdentity = SERVICE_ID
+    let service_identity: workspace_ids::MachineId = SERVICE_ID
         .to_owned()
         .try_into()
         .expect("valid service identity");
@@ -97,7 +97,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         "generation": 1
     }))
     .expect("valid Codex generation");
-    let target = SessionRef {
+    let target = HarnessSessionRef {
         endpoint: EndpointRef {
             service_id: service_identity.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("valid endpoint id"),
@@ -393,7 +393,7 @@ async fn next_native_queue_delivery(
 async fn load_and_validate_stored_wake_push(
     interactions: &Arc<interaction_storage::InteractionStore>,
     observed: &NativeQueueObservation,
-    target: &SessionRef,
+    target: &HarnessSessionRef,
     wakeup_id: &WakeupId,
 ) -> TestResult<(PushId, RouterOriginRef)> {
     let push_id = PushId::try_from(observed.client_user_message_id.clone())?;

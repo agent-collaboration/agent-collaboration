@@ -29,7 +29,7 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
 {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let backend = Arc::new(ScriptedProviderBackend::new()?);
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
     let interaction_store = Arc::new(
@@ -174,7 +174,7 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+    let service_id = "0ff962c5-7fa3-7c18-a5ca-1bbe8db09e89";
     let backend = Arc::new(ScriptedProviderBackend::new()?);
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
     let interaction_store = Arc::new(

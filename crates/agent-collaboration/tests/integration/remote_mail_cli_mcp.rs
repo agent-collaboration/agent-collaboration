@@ -4,7 +4,7 @@ use crate::local_mail_surfaces;
 use crate::native_sql;
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
-use collaboration_protocol::{MailItemId, SessionRef};
+use collaboration_protocol::{HarnessSessionRef, MailItemId};
 use collaboration_runtime::MailDeliverySession;
 use durable_steps::AtomicStore;
 use fleet_sync_protocol::{PeerId, SchemaSupport};
@@ -15,7 +15,7 @@ use runtime_primitives::{Backoff, UuidV7Ids};
 use serde_json::{Value, json};
 use std::{sync::atomic::Ordering, time::Duration};
 
-async fn offline_surfaces() -> TestResult<(tempfile::TempDir, Surfaces, SessionRef)> {
+async fn offline_surfaces() -> TestResult<(tempfile::TempDir, Surfaces, HarnessSessionRef)> {
     let root = tempfile::tempdir()?;
     let peer = PeerId::new(uuid::Uuid::now_v7())?;
     let bound = Duration::from_secs(5);
@@ -57,8 +57,8 @@ async fn offline_surfaces() -> TestResult<(tempfile::TempDir, Surfaces, SessionR
         relay: PeerId::new(uuid::Uuid::now_v7())?,
     }))
     .await?;
-    let remote: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"claude-local"},
+    let remote: HarnessSessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"claude-local"},
         "sessionId":"remote-recipient",
     }))?;
     surfaces
@@ -97,7 +97,7 @@ async fn cli(surfaces: &Surfaces, arguments: &[&str]) -> TestResult<(i32, Value,
 fn sender() -> Value {
     json!({"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"remote-cli-sender"})
 }
-fn input(item: &MailItemId, target: &SessionRef, text: &str) -> Value {
+fn input(item: &MailItemId, target: &HarnessSessionRef, text: &str) -> Value {
     json!({"itemId":item,"target":target,"message":{"kind":"agent","sender":sender(),"text":text},"delivery":"auto"})
 }
 

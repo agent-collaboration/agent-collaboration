@@ -17,9 +17,9 @@ use collaboration_contracts::{
 };
 use collaboration_protocol::{
     AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
-    DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText, OperationId,
-    ProviderOperationEffect, ProviderOperationKind, ProviderReconciliationState,
-    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess, SessionRef,
+    DeliveryRejectionReason, GenerationNumber, HarnessSessionRef, MessageDelivery, MessageText,
+    OperationId, ProviderOperationEffect, ProviderOperationKind, ProviderReconciliationState,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess,
 };
 use collaboration_runtime::{
     EndpointDirectory, ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord,
@@ -210,7 +210,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c394599".to_owned())
         .expect("UUIDv7 push id");
     let line = MessageText::try_from(format!(
-        "✉️ Main · \"prepared while busy\" · router://00000000-0000-4000-8000-000000000001/push/{}",
+        "✉️ Main · \"prepared while busy\" · router://00000000-0000-7000-8000-000000000001/push/{}",
         push_id.as_str()
     ))
     .expect("push line");
@@ -440,7 +440,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     let loaded_only_push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c394588".to_owned())
         .expect("UUIDv7 loaded-only push id");
     let loaded_only_line = MessageText::try_from(format!(
-        "🧵 Main · \"held batch\" · router://00000000-0000-4000-8000-000000000001/push/{}",
+        "🧵 Main · \"held batch\" · router://00000000-0000-7000-8000-000000000001/push/{}",
         loaded_only_push_id.as_str()
     ))
     .expect("loaded-only push line");

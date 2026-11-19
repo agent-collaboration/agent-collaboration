@@ -100,7 +100,7 @@ async fn explicit_codex_session_ref_routes_load_on_a_new_multi_route_connection(
     let load = json!({"jsonrpc":"2.0","id":2,"method":"session/load","params":{
         "sessionId":"stored-native-session","cwd":"/tmp","mcpServers":[],
         "_meta":{"router":{"sessionRef":{"endpoint":{
-            "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"
+            "serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"
         },"sessionId":"stored-native-session"}}}
     }});
     writer.write_all(format!("{load}\n").as_bytes()).await?;

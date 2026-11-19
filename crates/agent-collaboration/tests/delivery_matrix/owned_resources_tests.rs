@@ -59,7 +59,7 @@ fn actor(value: Actor) -> ProofResult<Identity> {
     Ok(Identity::Session {
         session: SessionRef {
             endpoint: SessionEndpointRef {
-                service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+                service_id: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
                 endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
             },
             session_id: SessionId::try_from(

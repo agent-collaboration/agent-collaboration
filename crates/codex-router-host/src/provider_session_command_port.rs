@@ -25,9 +25,9 @@ use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationResumeRequest, EndpointId, EndpointRef,
-    OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
+    HarnessSessionRef, OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
     ProviderRequestedSettings, ProviderSettingName, ProviderSettingsSetRequest,
-    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef, UuidIdentity,
+    ProviderWorkingDirectory, RouterAccess, SessionId,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -64,7 +64,7 @@ impl HostSessionCommandPort {
 
     async fn stored_session(
         &self,
-        target: &SessionRef,
+        target: &HarnessSessionRef,
     ) -> Result<collaboration_runtime::ProviderSessionRecord, CommandFailure> {
         self.store
             .lock()
@@ -382,22 +382,24 @@ fn working_directory(path: &std::path::Path) -> Result<ProviderWorkingDirectory,
 
 fn protocol_endpoint(endpoint: &SessionEndpointRef) -> Result<EndpointRef, CommandFailure> {
     Ok(EndpointRef {
-        service_id: UuidIdentity::try_from(endpoint.service_id.as_str().to_owned())
+        service_id: workspace_ids::MachineId::try_from(endpoint.service_id.as_str().to_owned())
             .map_err(|_| CommandFailure::ProviderFailure)?,
         endpoint_id: EndpointId::try_from(endpoint.endpoint_id.as_str().to_owned())
             .map_err(|_| CommandFailure::ProviderFailure)?,
     })
 }
 
-fn protocol_session(session: &message_board::SessionRef) -> Result<SessionRef, CommandFailure> {
-    Ok(SessionRef {
+fn protocol_session(
+    session: &message_board::SessionRef,
+) -> Result<HarnessSessionRef, CommandFailure> {
+    Ok(HarnessSessionRef {
         endpoint: protocol_endpoint(&session.endpoint)?,
         session_id: SessionId::try_from(session.session_id.as_str().to_owned())
             .map_err(|_| CommandFailure::ProviderFailure)?,
     })
 }
 
-fn board_session(session: SessionRef) -> Result<message_board::SessionRef, CommandFailure> {
+fn board_session(session: HarnessSessionRef) -> Result<message_board::SessionRef, CommandFailure> {
     let identity = ProviderIdentity::Session(session)
         .to_board_identity()
         .map_err(|_| CommandFailure::ProviderFailure)?;

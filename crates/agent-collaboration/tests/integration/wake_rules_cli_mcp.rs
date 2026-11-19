@@ -26,7 +26,7 @@ macro_rules! ensure_ne {
     };
 }
 type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 
 struct Surfaces {
     root: tempfile::TempDir,

@@ -12,8 +12,7 @@ fn id(suffix: u64) -> String {
 fn attachment() -> MachineConnectionAttachment {
     MachineConnectionAttachment {
         organization_id: id(1).try_into().unwrap(),
-        machine_id: id(2).parse().unwrap(),
-        installation_id: id(3).try_into().unwrap(),
+        machine_id: id(3).try_into().unwrap(),
         enrollment_id: id(4).try_into().unwrap(),
         client_id: id(5).try_into().unwrap(),
         effective_expires_at: UnixSeconds(NOW_MS / 1000 + 600),
@@ -23,8 +22,7 @@ fn facts() -> EnrollmentFacts {
     let attachment = attachment();
     let enrollment = StoredEnrollment {
         id: attachment.enrollment_id.clone(),
-        machine_id: attachment.machine_id,
-        installation: attachment.installation_id.clone(),
+        machine_id: attachment.machine_id.clone(),
         request_id: id(6).try_into().unwrap(),
         approved_by: id(7).try_into().unwrap(),
         label: "test machine".to_owned().try_into().unwrap(),
@@ -44,8 +42,7 @@ fn facts() -> EnrollmentFacts {
         prior_approval: None,
         enrollment: Some(enrollment.clone()),
         machine: Some(MachineRow {
-            id: attachment.machine_id,
-            installation: attachment.installation_id,
+            machine_id: attachment.machine_id,
             label: "test machine".to_owned().try_into().unwrap(),
             allowed_workspaces: vec![],
             generation: EnrollmentGeneration::try_from(1).unwrap(),
@@ -61,16 +58,15 @@ fn admit(attachment: &MachineConnectionAttachment, facts: &EnrollmentFacts) -> A
 }
 
 #[test]
-fn public_caller_uses_installation_and_rejects_private_row_identity() {
-    // Arrange: central row and public installation deliberately differ.
+fn caller_uses_the_admitted_machine_and_refuses_a_different_machine() {
     let provenance = attachment();
     let connection = admit(&provenance, &facts()).unwrap().unwrap();
-    assert_eq!(connection.installation_machine_id().as_str(), id(3));
+    assert_eq!(connection.machine_id().as_str(), id(3));
     let caller = |suffix| Caller::Person {
         person_id: id(7).parse().unwrap(),
         machine_id: id(suffix).parse().unwrap(),
     };
-    // Act / Assert: only the installation may bind a semantic request caller.
+    // Act / Assert: only the machine_id may bind a semantic request caller.
     assert!(WorkspaceCaller::new(connection.clone(), caller(3)).is_ok());
     assert!(matches!(
         WorkspaceCaller::new(connection, caller(2)),
@@ -111,12 +107,6 @@ fn live_admission_requires_matching_active_machine_enrollment_and_client() {
     wrong_row.machine_id = id(9).parse().unwrap();
     assert!(matches!(
         admit(&wrong_row, &baseline).unwrap(),
-        Err(MachineConnectionRefusal::EnrollmentNotActive {})
-    ));
-    let mut wrong_installation = provenance.clone();
-    wrong_installation.installation_id = id(9).try_into().unwrap();
-    assert!(matches!(
-        admit(&wrong_installation, &baseline).unwrap(),
         Err(MachineConnectionRefusal::EnrollmentNotActive {})
     ));
     let mut wrong_organization = baseline;
@@ -160,22 +150,16 @@ fn original_deadline_has_no_leeway_and_never_renews_during_admission() {
 fn attachment_is_closed_and_restoration_rejects_invalid_identity_and_time() {
     let provenance = attachment();
     let encoded = serde_json::to_value(&provenance).unwrap();
-    assert_eq!(encoded.as_object().unwrap().len(), 6);
+    assert_eq!(encoded.as_object().unwrap().len(), 5);
     let mut extra = encoded.clone();
     extra["permissions"] = serde_json::json!([]);
     assert!(serde_json::from_value::<MachineConnectionAttachment>(extra).is_err());
     let mut missing = encoded;
     missing.as_object_mut().unwrap().remove("enrollmentId");
     assert!(serde_json::from_value::<MachineConnectionAttachment>(missing).is_err());
-    let mut non_v7 = provenance.clone();
-    non_v7.installation_id = "018f1111-2222-4000-8000-000000000003"
-        .to_owned()
-        .try_into()
-        .unwrap();
-    assert!(matches!(
-        admit(&non_v7, &facts()),
-        Err(StoreFailure::Corrupt { .. })
-    ));
+    let mut non_v7 = serde_json::to_value(&provenance).unwrap();
+    non_v7["machineId"] = serde_json::json!("018f1111-2222-4000-8000-000000000003");
+    assert!(serde_json::from_value::<MachineConnectionAttachment>(non_v7).is_err());
     for expiry in [-1, i64::MAX] {
         let mut invalid = provenance.clone();
         invalid.effective_expires_at = UnixSeconds(expiry);

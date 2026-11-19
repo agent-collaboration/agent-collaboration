@@ -6,9 +6,9 @@ use crate::session_picker::screen::fixtures::provider_filter_storyboard_fixture:
 use crate::session_picker::screen::fixtures::provider_filter_storyboard_fixture::SHARED_SESSION;
 use agent_session_inventory::sessions::SessionPickerRecord;
 use collaboration_client::protocol::ClaudeCodeBackgroundOrigin;
+use collaboration_client::protocol::HarnessSessionRef;
 use collaboration_client::protocol::NativeClaudeBackgroundState;
 use collaboration_client::protocol::ProviderSessionSummary;
-use collaboration_client::protocol::SessionRef;
 use std::io;
 
 #[cfg(debug_assertions)]
@@ -61,7 +61,7 @@ impl PickerFixtureScenario {
     ) -> io::Result<SessionsPickerRequest> {
         match self {
             Self::StoppedNativeClaude => {
-                let target: SessionRef = serde_json::from_value(serde_json::json!({
+                let target: HarnessSessionRef = serde_json::from_value(serde_json::json!({
                     "endpoint":{"serviceId":FIXTURE_SERVICE,"endpointId":"claude-local"},
                     "sessionId":SHARED_SESSION,
                 }))
@@ -119,7 +119,7 @@ impl PickerFixtureScenario {
                     .first()
                     .cloned()
                     .ok_or_else(|| io::Error::other("SSH fork source is absent"))?;
-                let target:SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":FIXTURE_SERVICE,"endpointId":"codex-fixture-ssh"},"sessionId":SHARED_SESSION})).map_err(io::Error::other)?;
+                let target:HarnessSessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":FIXTURE_SERVICE,"endpointId":"codex-fixture-ssh"},"sessionId":SHARED_SESSION})).map_err(io::Error::other)?;
                 let mut record =
                     crate::session_picker::screen::fixtures::fixture_data::picker_record(
                         SHARED_SESSION,

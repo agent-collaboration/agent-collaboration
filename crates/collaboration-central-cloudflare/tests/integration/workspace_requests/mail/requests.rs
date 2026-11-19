@@ -24,7 +24,7 @@ async fn request(
         .unwrap()
 }
 
-fn send(to: m::SessionAddress, body: &str) -> Operation {
+fn send(to: workspace_ids::SessionRef, body: &str) -> Operation {
     Operation::SendMessage {
         to,
         body: body.to_owned().try_into().unwrap(),
@@ -84,7 +84,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         }
     );
     assert_eq!(
-        serde_json::from_str::<m::SessionAddress>(target).unwrap(),
+        serde_json::from_str::<workspace_ids::SessionRef>(target).unwrap(),
         first
     );
     assert_eq!(
@@ -107,14 +107,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         id::<m::WorkspaceId>(1006).to_string(),
         FIXTURE_NOW,
     );
-    seed_enrollment(
-        &fixture.host,
-        &second_caller,
-        id::<m::WorkspaceId>(1005),
-        "[]",
-        FIXTURE_NOW,
-    )
-    .await;
+    seed_enrollment(&fixture.host, &second_caller, "[]", FIXTURE_NOW).await;
     // Resolve the second session as an admitted caller before targeting it.
     assert!(matches!(
         request(

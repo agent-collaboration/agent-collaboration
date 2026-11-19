@@ -22,7 +22,7 @@ async fn adr_lifecycle_is_replayable_through_mcp() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let origin = ActorOrigin {
-        installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+        installation: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("fleet MCP proof".to_owned())?,
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
@@ -38,16 +38,14 @@ async fn adr_lifecycle_is_replayable_through_mcp() -> TestResult {
             .await?,
         fleet,
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             Some("fleet MCP proof"),
         )?,
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
         (ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission))
@@ -132,7 +130,7 @@ async fn a_thread_can_discuss_an_immutable_adr_in_its_workspace() -> TestResult 
     let registry =
         crate::native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
     let origin = ActorOrigin {
-        installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
+        installation: ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("ADR subject proof".to_owned())?,
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
@@ -147,16 +145,14 @@ async fn a_thread_can_discuss_an_immutable_adr_in_its_workspace() -> TestResult 
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(
-                "00000000-0000-4000-8000-000000000001".to_owned(),
-            )?,
+            workspace_ids::MachineId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?,
             Some("ADR subject proof"),
         )?,
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
         (ApplicationFixture::new(
-            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-7000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(admission))

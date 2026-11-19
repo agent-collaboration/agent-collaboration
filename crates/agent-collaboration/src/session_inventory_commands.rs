@@ -301,14 +301,14 @@ mod tests {
         ]);
         assert!(parsed.is_ok(), "provider source is optional");
         let provider: EndpointDescription = serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "label":"Provider", "availability":{"state":"available","observedAt":"2026-09-26T00:00:00Z"},
             "channels":[{"kind":"externalProvider","transport":"stdioAcp","bindingId":"fixture-binding",
                 "bindingGeneration":7,"runtime":{"provider":"claudeCode","runtimeName":"fixture"},
                 "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]}]
         })).expect("provider endpoint");
         let native: EndpointDescription = serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "label":"Codex", "availability":{"state":"available","observedAt":"2026-09-26T00:00:00Z"},
             "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock",
                 "schemaDigest":null,"generation":null}]
@@ -318,7 +318,7 @@ mod tests {
             InventoryEndpointKind::Provider
         );
         let unavailable_claude: EndpointDescription = serde_json::from_value(json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},
             "label":"Claude", "availability":{"state":"unavailable","observedAt":"2026-09-26T00:00:00Z","reason":"ACP unavailable"},
             "channels":[]
         })).expect("unavailable Claude endpoint");
@@ -335,10 +335,10 @@ mod tests {
     #[test]
     fn native_list_keeps_the_frozen_codex_page_shape() {
         let frozen_native_result = json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
+            "endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},
             "observedAt":"2026-09-26T00:00:00Z","generation":null,
             "sessions":[{
-                "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread-1"},
+                "target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-local"},"sessionId":"thread-1"},
                 "name":null,"title":"Existing thread","source":"interactive",
                 "workingDirectory":"/tmp/project",
                 "observation":{"kind":"stored","updatedAt":"2026-09-26T00:00:00Z"},

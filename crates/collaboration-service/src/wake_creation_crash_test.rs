@@ -16,7 +16,7 @@ use std::{
 const STAGE_ENV: &str = "WAKE_CREATION_TEST_CRASH_STAGE";
 const ROOT_ENV: &str = "WAKE_CREATION_TEST_CRASH_ROOT";
 const OPERATION_ENV: &str = "WAKE_CREATION_TEST_CRASH_OPERATION";
-const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE: &str = "00000000-0000-7000-8000-000000000001";
 const CRASH_EXIT: i32 = 92;
 type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error>>;
 

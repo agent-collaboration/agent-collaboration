@@ -167,7 +167,12 @@ fn grant(
         .checked_add(MACHINE_GRANT_LIFETIME_SECONDS)
         .ok_or(StoreFailure::Unavailable)?;
     Ok(MachineTokenDecision::Grant {
-        installation: enrollment.installation.clone(),
+        installation: enrollment
+            .machine_id
+            .as_str()
+            .to_owned()
+            .try_into()
+            .map_err(|_| crate::workspace_decode_error::corrupt("machines.machine_id"))?,
         enrollment_id: enrollment.id.clone(),
         decided_at,
         grant_expires_at: UnixSeconds(expires),

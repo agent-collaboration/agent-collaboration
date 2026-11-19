@@ -23,7 +23,7 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
 
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let installation = ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
+    let installation = ServiceId::try_from("00000000-0000-7000-8000-000000000001".to_owned())?;
     let origin = ActorOrigin {
         installation: installation.clone(),
         machine: MachineLabel::try_from("aggregate proof".to_owned())?,
@@ -42,7 +42,7 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
-            collaboration_protocol::UuidIdentity::try_from(installation.as_str().to_owned())?,
+            workspace_ids::MachineId::try_from(installation.as_str().to_owned())?,
             Some("aggregate proof"),
         )?,
     })?);

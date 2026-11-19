@@ -148,7 +148,7 @@ async fn actual_alarm_fires_simultaneous_wakes_once_and_excludes_cancelled() {
             workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
-            serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
+            serde_json::from_str::<workspace_ids::SessionRef>(address).unwrap(),
             target
         );
         let workspace_model::central_mail::MessageBody::Wake {

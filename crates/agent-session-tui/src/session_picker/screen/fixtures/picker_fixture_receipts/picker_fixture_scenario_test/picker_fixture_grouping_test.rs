@@ -31,13 +31,13 @@ fn grouping_fixture_keeps_nine_full_identities_and_the_approved_bucket_table() {
     assert_eq!(identities,serde_json::json!([
         {"kind":"localCodex","sessionId":"00000000-0000-4000-8000-000000000011"},
         {"kind":"localCodex","sessionId":"00000000-0000-4000-8000-000000000012"},
-        {"kind":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-fixture"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
-        {"kind":"nativeClaude","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000014"}},
-        {"kind":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-fixture"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
-        {"kind":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"unknown-fixture"},"sessionId":"unknown-zeta"}},
-        {"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-source-a"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
-        {"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-source-a"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
-        {"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000002","endpointId":"codex-source-b"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
+        {"kind":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-fixture"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
+        {"kind":"nativeClaude","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000014"}},
+        {"kind":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"cursor-fixture"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
+        {"kind":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"unknown-fixture"},"sessionId":"unknown-zeta"}},
+        {"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000001","endpointId":"codex-source-a"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
+        {"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-source-a"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
+        {"kind":"hostedCodex","target":{"endpoint":{"serviceId":"00000000-0000-7000-8000-000000000002","endpointId":"codex-source-b"},"sessionId":"00000000-0000-4000-8000-000000000011"}},
     ]).as_array().unwrap().clone());
     let model = SessionsPickerModel::new(request, 120);
     let now: chrono::DateTime<chrono::FixedOffset> = "2026-10-31T00:10:00-04:00".parse().unwrap();
