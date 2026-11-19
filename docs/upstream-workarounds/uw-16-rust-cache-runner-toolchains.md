@@ -26,6 +26,15 @@ The CI workflow supplies a `cmd-format` that returns only the workflow-selected
 other command, including `rustc -vV` and Cargo metadata. The action still hashes
 the active compiler, build environment and dependencies. [Command formatter](../../scripts/tooling/ci-rust-cache-command.sh) · [CI workflow](../../.github/workflows/ci.yml)
 
+## Cache retention
+
+A save can supersede older `v1` keys under its own restore prefix. Restore-only
+jobs can still use another prefix without saving an entry. The pruner preserves
+those keys because GitHub's `last_accessed_at` field provides no per-run reader
+record or freshness guarantee. Retained prefixes can consume budget until
+GitHub evicts entries that have gone unaccessed for more than seven days.
+[Cache REST API](https://docs.github.com/en/rest/actions/cache?apiVersion=2022-11-28#list-github-actions-caches-for-a-repository) · [GitHub eviction policy](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#usage-limits-and-eviction-policy)
+
 ## Recreate
 
 Run two isolated Linux x64 CI jobs on the same checkout with the pinned action.

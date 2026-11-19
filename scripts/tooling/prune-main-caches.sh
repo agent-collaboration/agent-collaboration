@@ -39,6 +39,7 @@ fi
 # CI writes only to v1-rust with one writer per family. Require a replacement
 # before retiring v0 CI keys. A cache hit creates no entry, so a sole existing
 # v1 key can finish retiring v0 keys after an interrupted prune.
+# A restore-only job can still use a different v1 prefix without saving a key.
 # The release workflow saves its own Apple Silicon cache from manual main
 # dispatches; GitHub expires older entries, so this job leaves that family alone.
 cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_started_at" '
@@ -50,8 +51,7 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
     if $key | test("^v[0-9]+-rust-") then
       if $key | test("^v0-rust-release-arm64-background-Darwin-arm64-[0-9a-f]{8}-[0-9a-f]{8}$") then null
       else
-        # A fresh CI key supersedes the family even when an intended toolchain
-        # or environment change gives it a new restore prefix.
+        # Group by family to find replacements for retired v0 entries.
         ($key | capture("^v[01]-rust-(?<ci_family>(static|test|e2e|wasm)-Linux-x64)-[0-9a-f]{8}-[0-9a-f]{8}$")
          | "v1-rust-" + .ci_family)
         // error("Unexpected rust-cache key: " + $key)
@@ -61,6 +61,7 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
        "Linux-X64-worker-build-", "node-cache-Linux-x64-pnpm-"]
       | map(. as $prefix | select($key | startswith($prefix))) | first
     end;
+  def restore_prefix: sub("-[0-9a-f]{8}$"; "");
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
       error("Cache inventory must be a complete array with fewer than 1000 entries")
@@ -84,7 +85,11 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
            {keepKey: $active_keys[0], reason: "Stable CI replacement already present"}
          else {keepKey: null, reason: "No key saved in this run"} end)
       | . + {family: $entries[0].family,
-             delete: [.keepKey as $keep | $entries[] | select($keep != null and .key != $keep) | {id, key, sizeInBytes}]})
+             delete: [.keepKey as $keep | $entries[]
+               | select($keep != null and .key != $keep)
+               | select((.key | startswith("v1-rust-") | not)
+                        or (.key | restore_prefix) == ($keep | restore_prefix))
+               | {id, key, sizeInBytes}]})
 ')"
 
 # Selection must succeed for the entire inventory before any delete is issued.
