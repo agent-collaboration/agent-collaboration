@@ -352,9 +352,8 @@ pub(crate) fn report_actor_exit(
     true
 }
 
-/// A setting kind holds the session's prompts: its last change was refused
-/// where refusals hold, or its outcome is unknown. An in-flight change holds
-/// nothing here: a prompt waits behind it in the session's actor.
+/// An unknown setting outcome holds prompts. A prompt waits behind an
+/// in-flight change in the actor while that change is being settled.
 pub(crate) fn settings_held(cells: &SessionCellTable, session_id: &str) -> bool {
     cells.read(
         session_id,
@@ -374,17 +373,9 @@ pub(crate) fn busy_answer(
     })
 }
 
-/// Describes the independent setting uncertainty or refusal that holds input.
-pub(crate) fn settings_hold_answer_for(cells: &SessionCellTable, session_id: &str) -> String {
-    let unknown = cells.read(
-        session_id,
-        provider_session_machines::session_cell_machine::SessionCell::any_setting_outcome_unknown,
-    );
-    settings_hold_answer(if unknown {
-        UnresolvedCause::OutcomeUnknown
-    } else {
-        UnresolvedCause::DefiniteFailure
-    })
+/// The answer when an unknown setting write holds input.
+pub(crate) fn settings_uncertainty_answer() -> String {
+    settings_hold_answer(UnresolvedCause::OutcomeUnknown)
 }
 
 /// The kind's last change has an unknown outcome.
@@ -451,8 +442,8 @@ pub(crate) fn set_keep_fast_off_in_run(
     );
 }
 
-/// A setting the session couldn't take when it was created holds it: a
-/// refused value (any kind, as today) or an unknown outcome.
+/// Records a setting the session could not apply on create. The cell
+/// decides whether the failure holds input.
 pub(crate) fn hold_setting_at_create(
     cells: &SessionCellTable,
     session_id: &str,

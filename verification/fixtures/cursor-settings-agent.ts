@@ -120,6 +120,8 @@ async function serveSharedSettings(peer: {
 //
 // argv after the receipt, any order:
 //   boolean-fast: fast is a boolean option instead of a false/true select.
+//   on-off-fast: use the on/off select identifiers advertised by Claude.
+//   fast-not-offered-on-fixture-b: omit the fast option on fixture-b.
 //   refuse-fast-once: the first fast change is answered with an error.
 //   refuse-fast-after-model: fast changes are accepted until a model change is
 //     accepted after the first fast change; the next fast change is refused,
@@ -156,6 +158,8 @@ async function serveSharedSettings(peer: {
 //     <receipt>.release-load exists; other requests are answered meanwhile.
 const reactiveBehaviourNames = [
   "boolean-fast",
+  "on-off-fast",
+  "fast-not-offered-on-fixture-b",
   "refuse-fast-once",
   "refuse-fast-after-model",
   "malformed-fast-reply",
@@ -203,7 +207,11 @@ function reactiveOptions(
     option("model", "model", ["fixture-a", "fixture-b"], session.model),
     option("effort", "thought_level", ["medium", "high"], session.effort),
   ];
-  if (!withFast) return result;
+  if (
+    !withFast ||
+    (behaviours.has("fast-not-offered-on-fixture-b") && session.model === "fixture-b")
+  )
+    return result;
   if (behaviours.has("boolean-fast"))
     result.push({
       id: "fast",
@@ -212,6 +220,8 @@ function reactiveOptions(
       type: "boolean",
       currentValue: session.fast,
     });
+  else if (behaviours.has("on-off-fast"))
+    result.push(option("fast", "model_config", ["on", "off"], session.fast ? "on" : "off"));
   else result.push(option("fast", "model_config", ["false", "true"], String(session.fast)));
   return result;
 }
@@ -276,7 +286,7 @@ function answerReactiveFast(
   const parameters = requestParameters(request);
   const off = peer.behaviours.has("boolean-fast")
     ? parameters.type === "boolean" && parameters.value === false
-    : parameters.value === "false";
+    : parameters.value === (peer.behaviours.has("on-off-fast") ? "off" : "false");
   if (!off) {
     peer.refuse(request, "fixture accepts only fast off");
     return;

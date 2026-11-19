@@ -244,13 +244,13 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
         &fixture.client.session_cells,
         &fixture.session_id,
         provider_session_machines::ProviderSettingKind::Mode,
-        provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure,
+        provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown,
     );
     // The refusal names the held setting's state and its steps (D1 M8).
     assert!(matches!(
-        fixture.prompt(vec![text_block("rejected settings")]).await,
+        fixture.prompt(vec![text_block("unknown setting outcome")]).await,
         Err(ExternalProviderRuntimeError::SettingsUnresolved { answer })
-            if answer == "a setting change was refused; set a value explicitly or accept the current value"
+            if answer == "a setting change's outcome is unknown; set a value explicitly"
     ));
     let audio =
         serde_json::from_value(json!({"type":"audio","mimeType":"audio/wav","data":"aGVsbG8="}))

@@ -218,8 +218,8 @@ pub(crate) fn fast_off_requested(
     }
 }
 
-/// Turns the agent's fast option off. A select gets "false", a boolean gets
-/// false; only an answer that reads off confirms it (D1 R8).
+/// Sends the advertised off identifier for a select and false for a boolean.
+/// Only an answer that reads off confirms the change.
 async fn apply_fast_off(
     session: &ActiveSession<'_, Agent>,
     catalog: &mut ProviderSettingsCatalog,
@@ -237,7 +237,9 @@ async fn apply_fast_off(
     let value = match option.current_value {
         crate::ProviderConfigValue::Boolean(_) => SessionConfigOptionValue::boolean(false),
         crate::ProviderConfigValue::Select(_) => {
-            if !option.choices.iter().any(|choice| choice.value == "false") {
+            let Some(off) = option.choices.iter().find(|choice| {
+                crate::provider_session_settings::is_fast_off_select_value(&choice.value)
+            }) else {
                 return Err(invalid(
                     option
                         .choices
@@ -245,8 +247,8 @@ async fn apply_fast_off(
                         .map(|choice| choice.value.clone())
                         .collect(),
                 ));
-            }
-            SessionConfigOptionValue::value_id("false")
+            };
+            SessionConfigOptionValue::value_id(off.value.clone())
         }
     };
     let request =

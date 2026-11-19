@@ -200,7 +200,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                 match command {
                     ProviderSessionCommand::Prompt { input_id, operation_id, prompt, turn_cancellation, dispatch, reply } => {
                         if crate::session_cell_bookkeeping::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
-                            let answer = crate::session_cell_bookkeeping::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref());
+                            let answer = crate::session_cell_bookkeeping::settings_uncertainty_answer();
                             if let Some(dispatch) = dispatch {
                                 let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved { answer: answer.clone() }));
                             }
@@ -435,7 +435,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                                         }
                                         Some(ProviderSessionCommand::Steer { input_id, prompt, reply }) => {
                                             if crate::session_cell_bookkeeping::settings_held(&runtime_handles.session_cells, provider_session_id.0.as_ref()) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::session_cell_bookkeeping::settings_hold_answer_for(&runtime_handles.session_cells, provider_session_id.0.as_ref()) }));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::session_cell_bookkeeping::settings_uncertainty_answer() }));
                                                 continue;
                                             }
                                             let submitted_text = Some(prompt.submitted_text());
@@ -479,7 +479,7 @@ async fn run_session_loop<P: InteractionPort, R: SettingReply>(
                     }
                     ProviderSessionCommand::Steer { input_id, prompt, reply } => {
                         if crate::session_cell_bookkeeping::settings_held(&runtime_handles.session_cells, session.session_id().0.as_ref()) {
-                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::session_cell_bookkeeping::settings_hold_answer_for(&runtime_handles.session_cells, session.session_id().0.as_ref()) }));
+                            let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: crate::session_cell_bookkeeping::settings_uncertainty_answer() }));
                             continue;
                         }
                         let submitted_text = Some(prompt.submitted_text());

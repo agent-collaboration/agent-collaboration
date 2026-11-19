@@ -22,7 +22,7 @@ mod provider_session_queue;
 mod provider_session_restore;
 mod provider_transport;
 pub(crate) use crate::session_cell_bookkeeping::{
-    busy_answer, hold_setting_at_create, settings_held, settings_hold_answer_for,
+    busy_answer, hold_setting_at_create, settings_held, settings_uncertainty_answer,
 };
 
 use crate::ProviderCapabilityReport;

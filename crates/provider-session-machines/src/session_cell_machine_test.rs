@@ -683,11 +683,10 @@ fn change(id: u128) -> crate::session_setting_machine::SettingApplication {
     crate::session_setting_machine::SettingApplication(uuid::Uuid::from_u128(id))
 }
 
-/// Oracle: the Lead's 3b-5 ruling (today's behaviour): an in-flight change
-/// holds no prompt (a prompt waits behind it in the actor); a refused fast
-/// or an unknown outcome does.
+/// A setting still being applied is serialized by the actor. Only an
+/// unknown result holds input once the change settles.
 #[test]
-fn only_unresolved_settings_hold_prompts() {
+fn only_unknown_setting_outcomes_hold_prompts() {
     // Arrange
     let live = live_with_one_queued();
     let to = crate::session_setting_machine::SettingValueId("b".to_owned());
@@ -724,6 +723,29 @@ fn only_unresolved_settings_hold_prompts() {
         },
     );
 
+    let fast_unknown = setting(
+        &fast_changing,
+        crate::ProviderSettingKind::Fast,
+        SessionSettingEvent::OutcomeUnknown {
+            application: change(2),
+        },
+    );
+    let mode_changing = setting(
+        &live,
+        crate::ProviderSettingKind::Mode,
+        SessionSettingEvent::SetRequested {
+            to: crate::session_setting_machine::SettingValueId("ask".to_owned()),
+            application: change(3),
+        },
+    );
+    let mode_failed = setting(
+        &mode_changing,
+        crate::ProviderSettingKind::Mode,
+        SessionSettingEvent::Failed {
+            application: change(3),
+        },
+    );
+
     // Assert
     assert!(
         !changing.settings_held(),
@@ -733,7 +755,18 @@ fn only_unresolved_settings_hold_prompts() {
         !refused_model.settings_held(),
         "a refused model holds nothing"
     );
-    assert!(fast_failed.settings_held(), "a refused fast holds prompts");
+    assert!(
+        !fast_failed.settings_held(),
+        "a definite fast refusal leaves input available"
+    );
+    assert!(
+        !mode_failed.settings_held(),
+        "a definite mode refusal leaves input available"
+    );
+    assert!(
+        fast_unknown.settings_held(),
+        "an unknown fast write holds input"
+    );
 }
 
 /// Oracle: the Lead's 3b-5 ruling (today's accept): accept clears every

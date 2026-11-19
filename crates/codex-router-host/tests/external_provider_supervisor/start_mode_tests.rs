@@ -174,12 +174,20 @@ async fn lost_auto_is_unconfirmed_on_create_and_show() -> TestResult {
 /// Oracle: D1 V5b, spec R2 "When the mode is confirmed but a later setting
 /// fails" — the start is created without settings naming fast, with the mode
 /// applied; show keeps requested auto, the confirmed fallback and its reason,
-/// and prompts are held.
+/// and the next prompt proceeds after the definite refusal.
 #[cfg(unix)]
 #[tokio::test]
 async fn confirmed_fallback_then_later_failure_keeps_the_mode_report() -> TestResult {
-    let fixture =
-        ModeFixture::start("claude", &["clamp-auto", "offer-fast", "refuse-fast-once"]).await?;
+    let fixture = ModeFixture::start(
+        "claude",
+        &[
+            "clamp-auto",
+            "offer-fast",
+            "refuse-fast-once",
+            "plain-prompts",
+        ],
+    )
+    .await?;
     let operation_id = OperationId::generate();
     operation(
         fixture
@@ -229,13 +237,14 @@ async fn confirmed_fallback_then_later_failure_keeps_the_mode_report() -> TestRe
             },
         })
         .await;
-    let held = match prompted {
-        Err(refusal) => refusal.kind,
-        Ok(_) => match wait(&fixture.backend, prompt_operation).await {
-            Err(refusal) => refusal.kind,
-            Ok(result) => return Err(format!("a held prompt ran: {result:?}").into()),
-        },
-    };
+    operation(prompted)?;
+    let prompt_settled = operation(wait(&fixture.backend, prompt_operation).await)?;
+    ensure!(matches!(
+        prompt_settled.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. },
+        }
+    ));
     fixture.backend.shutdown().await.map_err(str::to_owned)?;
 
     ensure_eq!(failed.len(), 1);
@@ -255,7 +264,11 @@ async fn confirmed_fallback_then_later_failure_keeps_the_mode_report() -> TestRe
         .ok_or("show has the settings catalog")?
         .current_mode;
     ensure_eq!(current_mode.as_deref(), Some("acceptEdits"));
-    ensure_eq!(held, ConversationOperationFailureKind::SettingsUnresolved);
+    let wire: serde_json::Value = serde_json::from_slice(&std::fs::read(&fixture.receipt)?)?;
+    ensure_eq!(
+        wire.get("prompts"),
+        Some(&serde_json::json!([target.session_id]))
+    );
     Ok(())
 }
 

@@ -194,15 +194,14 @@ fn auto_mode() -> ProviderSettingRequest {
     }
 }
 
-/// Oracle: D1 spec R2 row "Refuses the change" and R4 — created without
-/// settings, failed setting mode, the agent's known starting mode stays,
-/// prompts are held, and the in-folder allowance is off.
+/// A refused requested mode is reported and keeps the agent's known
+/// starting mode. Input may run without acquiring the auto allowance.
 #[tokio::test]
-async fn refused_auto_is_created_without_settings_held_and_has_no_allowance() {
+async fn refused_auto_reports_the_mode_without_holding_input_or_granting_allowance() {
     let fixture = Fixture::start(&["reject-mode"]).await;
 
     let (session, failed) = created_without_settings_session(fixture.create("auto").await);
-    let held = fixture.prompt_in_folder_edit(&session).await;
+    let prompted = fixture.prompt_in_folder_edit(&session).await;
     let current_mode = fixture
         .client
         .settings_catalog(&session)
@@ -215,19 +214,20 @@ async fn refused_auto_is_created_without_settings_held_and_has_no_allowance() {
     assert_eq!(failed.kind, ProviderSettingKind::Mode);
     assert_eq!(failed.value, "auto");
     assert_eq!(current_mode.as_deref(), Some("default"));
-    assert!(
-        matches!(
-            held,
-            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
-        ),
-        "{held:?}"
-    );
+    prompted.expect("the known refusal leaves input available");
     assert_eq!(
         router_auto,
         Some(false),
         "a refused auto turns no allowance on"
     );
-    assert_eq!(fixture.receipt()["prompts"], json!([]));
+    let receipt = fixture.receipt();
+    assert_eq!(receipt["prompts"], json!([session]));
+    assert_eq!(
+        receipt
+            .pointer("/permissionAnswers/0/answer/outcome/outcome")
+            .and_then(Value::as_str),
+        Some("cancelled")
+    );
 }
 
 /// Oracle: D1 spec R2 row "Its answer is lost or unreadable" and R4 — the

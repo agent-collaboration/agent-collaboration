@@ -34,6 +34,11 @@ pub enum FastRequest {
     Off,
 }
 
+/// A select option's vendor-provided ID for turning fast off.
+pub(crate) fn is_fast_off_select_value(value: &str) -> bool {
+    matches!(value, "false" | "off")
+}
+
 /// What the agent last reported for its fast option.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FastObserved {
@@ -242,14 +247,15 @@ impl ProviderSettingsCatalog {
         self.config_option(ProviderSettingKind::Fast).is_some()
     }
 
-    /// The fast option's value as the agent reported it. Only an explicit
-    /// "false" or false reads off, so fast is never reported off by guess.
+    /// Reads the vendor's off identifier or a boolean false as off.
     #[must_use]
     pub fn fast_observed(&self) -> FastObserved {
         match self.config_option(ProviderSettingKind::Fast) {
             None => FastObserved::NoOption,
             Some(option) => match &option.current_value {
-                ProviderConfigValue::Select(value) if value == "false" => FastObserved::Off,
+                ProviderConfigValue::Select(value) if is_fast_off_select_value(value) => {
+                    FastObserved::Off
+                }
                 ProviderConfigValue::Boolean(false) => FastObserved::Off,
                 ProviderConfigValue::Select(_) | ProviderConfigValue::Boolean(true) => {
                     FastObserved::On

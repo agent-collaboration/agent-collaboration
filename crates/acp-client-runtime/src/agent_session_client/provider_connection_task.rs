@@ -477,8 +477,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     }
                                                     let _written = task_session_settings.write(&created.provider_session_id, generation, catalog.clone());
                                                 }
-                                                // A setting the create couldn't apply holds the
-                                                // session's prompts until it's resolved.
+                                                // Keep the outcome for reporting and Accept. The
+                                                // cell decides whether it holds input.
                                                 let unresolved_kind = match setup_error.as_ref() {
                                                     Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure)),
                                                     Some(ExternalProviderRuntimeError::CreatedWithoutSettings { failed, .. }) => Some((failed.kind, if failed.reason == session_event_model::ProviderSettingFailureReason::OutcomeUnknown { provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown } else { provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure })),
@@ -781,7 +781,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 continue;
                                             }
                                             if super::settings_held(&session_cells, &provider_session_id) {
-                                                let answer = super::settings_hold_answer_for(&session_cells, &provider_session_id);
+                                                let answer = super::settings_uncertainty_answer();
                                                 if let Some(dispatch) = dispatch {
                                                     let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved { answer: answer.clone() }));
                                                 }
@@ -815,7 +815,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 continue;
                                             }
                                             if super::settings_held(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: super::settings_hold_answer_for(&session_cells, &provider_session_id) }));
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: super::settings_uncertainty_answer() }));
                                                 continue;
                                             }
                                             let Some(session) = sessions.get(&provider_session_id) else {

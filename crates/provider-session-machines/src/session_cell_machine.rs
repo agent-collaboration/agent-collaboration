@@ -102,15 +102,13 @@ impl SessionCell {
         }
     }
 
-    /// A kind holds prompts: its last change was refused (where refusals
-    /// hold) or its outcome is unknown.
+    /// Only a write that may have applied without confirmation holds input.
+    /// Definite refusals remain available for reporting and Accept.
     pub fn settings_held(&self) -> bool {
-        self.settings
-            .values()
-            .any(|setting| matches!(setting, SessionSetting::Unresolved { .. }))
+        self.any_setting_outcome_unknown()
     }
 
-    /// Some held setting's last change has an unknown outcome.
+    /// Some setting's last change has an unknown outcome.
     pub fn any_setting_outcome_unknown(&self) -> bool {
         self.settings.values().any(|setting| {
             matches!(

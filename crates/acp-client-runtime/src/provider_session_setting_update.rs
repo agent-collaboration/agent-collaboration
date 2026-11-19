@@ -41,10 +41,7 @@ pub(crate) async fn apply_loaded_setting(
         )
     {
         return Err(ExternalProviderRuntimeError::SettingsUnresolved {
-            answer: crate::session_cell_bookkeeping::settings_hold_answer_for(
-                &handles.session_cells,
-                &provider_session_id,
-            ),
+            answer: crate::session_cell_bookkeeping::settings_uncertainty_answer(),
         });
     }
     let current = catalog.effective_settings();
@@ -146,8 +143,8 @@ pub(crate) async fn apply_loaded_setting(
         }
         Some(SettingSetupFailure::Agent { reason, .. }) => {
             if kind == ProviderSettingKind::Fast {
-                // A session meant to be non-fast never quietly runs fast (R8):
-                // a refused explicit off holds prompts, with the agent's catalog.
+                // Preserve the returned catalog and the refusal for reporting
+                // and Accept. The definite refusal does not hold input.
                 keep_returned_catalog(handles, &provider_session_id, &catalog)?;
                 record(
                     handles,
@@ -214,7 +211,6 @@ pub(crate) async fn apply_loaded_setting(
                 };
             commit_confirmed_setting(handles, &provider_session_id, kind, application, &catalog)?;
             let effective_settings = if kind == ProviderSettingKind::Model
-                && catalog.offers_fast()
                 && crate::session_cell_bookkeeping::keep_fast_off(
                     &handles.session_cells,
                     &provider_session_id,
@@ -292,7 +288,12 @@ async fn keep_fast_off_after_model(
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: fast,
                 value: FAST_OFF.to_owned(),
-                reason: "the agent's fast option can't be turned off".to_owned(),
+                reason: if catalog.offers_fast() {
+                    "the agent's fast option can't be turned off"
+                } else {
+                    "fast is not offered for the current model"
+                }
+                .to_owned(),
             })
         }
         Some(SettingSetupFailure::Uncertain { .. }) => {

@@ -330,10 +330,10 @@ async fn invalid_first_setting_closes_created_session() {
     );
 }
 
-/// Oracle: specification R14 reports a partly applied setup and blocks work
-/// until the caller explicitly accepts the effective settings.
+/// R14 reports each part of a failed setup. A definite failure and an
+/// untried setting leave the created session available for input.
 #[tokio::test]
-async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
+async fn definite_partial_setup_reports_settings_and_dispatches_input() {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("accepted.txt");
     let client = AgentSessionClient::initialize(
@@ -385,28 +385,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         }]
         .into_boxed_slice()
     );
-    assert!(client.settings_unresolved(&provider_session_id));
-    let blocked = client
-        .submit_with_approval_dispatch_for_input(
-            provider_session_id.clone(),
-            session_event_model::InputId::generate(),
-            acp_client_runtime::ProviderTurnInput::Prompt(
-                session_event_model::ProviderSubmission::plain(vec![
-                    session_event_model::PromptContent::text("too early".to_owned())
-                        .expect("text prompt"),
-                ]),
-            ),
-            (),
-            None,
-        )
-        .await;
-    assert!(matches!(
-        blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved { .. })
-    ));
-    client
-        .accept_session_settings(provider_session_id.clone())
-        .expect("caller accepts effective settings");
+    assert!(!client.settings_unresolved(&provider_session_id));
     let prompt = client
         .submit_with_approval_dispatch_for_input(
             provider_session_id,
@@ -422,17 +401,17 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         )
         .await;
     client.shutdown().await;
-    assert!(prompt.is_ok(), "prompt after accept: {prompt:?}");
+    assert!(prompt.is_ok(), "prompt after known refusal: {prompt:?}");
     assert_eq!(
         std::fs::read_to_string(receipt).expect("prompt receipt"),
         "prompt-after-accept"
     );
 }
 
-/// Oracle: specification R14 lets the caller resolve a partial setup by
-/// applying a currently offered value before prompting.
+/// A caller may repair one failed setting without having to accept the
+/// other untried values before sending input.
 #[tokio::test]
-async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
+async fn resolving_failed_kind_leaves_untried_kind_nonblocking() {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("resolved.txt");
     let sink = Arc::new(SettingsEventSink::default());
@@ -484,10 +463,6 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         assert_eq!(settings[0].model.as_deref(), Some("a"));
         assert_eq!(settings[1].model.as_deref(), Some("b"));
     }
-    assert!(client.settings_unresolved(&provider_session_id));
-    client
-        .accept_session_settings(provider_session_id.clone())
-        .expect("accept remaining untried setting");
     assert!(!client.settings_unresolved(&provider_session_id));
     let prompt = client
         .submit_with_approval_dispatch_for_input(
