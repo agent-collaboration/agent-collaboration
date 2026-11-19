@@ -2,7 +2,7 @@
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
 use super::{DueBatchState, legacy_units::LegacyUnitOutcome};
-use crate::{CentralObservation, ObjectHost};
+use crate::{CentralObservation, MailDeliveryReady, ObjectHost};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 use std::future::Future;
@@ -15,6 +15,7 @@ pub(crate) trait EngineHost: Send + Sync {
     fn ids(&self) -> &dyn runtime_primitives::IdSource;
     fn due_batches(&self) -> &DueBatchState;
     fn observe(&self, observation: CentralObservation);
+    fn offer_mail(&self, delivery: MailDeliveryReady);
     /// Today's organization stamp check (P3): `Ok(false)` when unprovisioned.
     fn organization_is_provisioned(
         &self,
@@ -23,7 +24,9 @@ pub(crate) trait EngineHost: Send + Sync {
     fn plan_due_windows(
         &self,
         now: EngineTime,
-    ) -> impl Future<Output = Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome>> + Send;
+    ) -> impl Future<
+        Output = Result<(Vec<GuardedStatement>, Vec<MailDeliveryReady>), LegacyUnitOutcome>,
+    > + Send;
     /// The workspace-drain unit, unchanged notice code (P5).
     fn drain_due_workspaces(
         &self,

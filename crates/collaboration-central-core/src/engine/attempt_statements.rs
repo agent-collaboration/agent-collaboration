@@ -7,19 +7,19 @@ use crate::{
 use central_engine_model::{AttemptState, FailureRecord};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 
-const READ_ATTEMPT: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM central_work_attempts WHERE machine_kind=? AND subject_key=?";
+const READ_ATTEMPT: &str = "SELECT attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?";
 
 /// The literal predicate belongs to the adapter that owns the subject. No UPDATE
 /// of the subject is used as a guard: that would retrigger its failed statement.
 macro_rules! guarded_attempt_sql {
     ($subject_predicate:literal) => {
         concat!(
-            "INSERT INTO central_work_attempts(attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at) ",
+            "INSERT INTO engine_work_attempts(attempt_id,machine_kind,subject_key,state,failure_count,next_try_at,last_failure,last_failure_detail,first_failed_at,last_failed_at,retired_at,created_at,updated_at) ",
             "SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13 WHERE ",
-            "(?14=0 OR EXISTS(SELECT 1 FROM central_work_attempts WHERE machine_kind=?2 AND subject_key=?3 AND attempt_id IS ?15 AND state IS ?16 AND failure_count IS ?17 AND last_failure IS ?18 AND updated_at IS ?19)) AND (",
+            "(?14=0 OR EXISTS(SELECT 1 FROM engine_work_attempts WHERE machine_kind=?2 AND subject_key=?3 AND attempt_id IS ?15 AND state IS ?16 AND failure_count IS ?17 AND last_failure IS ?18 AND updated_at IS ?19)) AND (",
             $subject_predicate,
             ") ON CONFLICT(machine_kind,subject_key) DO UPDATE SET attempt_id=excluded.attempt_id,state=excluded.state,failure_count=excluded.failure_count,next_try_at=excluded.next_try_at,last_failure=excluded.last_failure,last_failure_detail=excluded.last_failure_detail,first_failed_at=excluded.first_failed_at,last_failed_at=excluded.last_failed_at,retired_at=excluded.retired_at,created_at=excluded.created_at,updated_at=excluded.updated_at ",
-            "WHERE ?14=1 AND central_work_attempts.attempt_id IS ?15 AND central_work_attempts.state IS ?16 AND central_work_attempts.failure_count IS ?17 AND central_work_attempts.last_failure IS ?18 AND central_work_attempts.updated_at IS ?19"
+            "WHERE ?14=1 AND engine_work_attempts.attempt_id IS ?15 AND engine_work_attempts.state IS ?16 AND engine_work_attempts.failure_count IS ?17 AND engine_work_attempts.last_failure IS ?18 AND engine_work_attempts.updated_at IS ?19"
         )
     };
 }
@@ -36,7 +36,7 @@ pub(crate) fn read_attempt(subject: &EngineSubject) -> Statement {
 
 pub(crate) fn delete_attempt(subject: &EngineSubject) -> GuardedStatement {
     any(
-        "DELETE FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+        "DELETE FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
         vec![text(subject.kind.0), text(&subject.key.0)],
     )
 }
@@ -49,7 +49,7 @@ pub(crate) fn delete_observed_attempt(
     observed: &AttemptGuard,
 ) -> GuardedStatement {
     any(
-        "DELETE FROM central_work_attempts WHERE machine_kind=? AND subject_key=? AND attempt_id IS ? AND state IS ? AND failure_count IS ? AND last_failure IS ? AND updated_at IS ?",
+        "DELETE FROM engine_work_attempts WHERE machine_kind=? AND subject_key=? AND attempt_id IS ? AND state IS ? AND failure_count IS ? AND last_failure IS ? AND updated_at IS ?",
         vec![
             text(subject.kind.0),
             text(&subject.key.0),
@@ -66,7 +66,7 @@ fn integer(value: i64) -> Result<SqlValue, StoreFailure> {
     value
         .try_into()
         .map(SqlValue::Integer)
-        .map_err(|_| corrupt("central_work_attempts.failure_count"))
+        .map_err(|_| corrupt("engine_work_attempts.failure_count"))
 }
 
 /// Bind slots 1..19; an adapter's subject-version values start at slot 20.

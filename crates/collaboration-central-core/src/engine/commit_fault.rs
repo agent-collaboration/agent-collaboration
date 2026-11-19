@@ -30,10 +30,10 @@ impl EngineCommitFault {
     pub fn matches(&self, batch: &StatementBatch) -> bool {
         batch.statements.iter().any(|statement| {
             let sql = statement.statement.sql;
-            (sql.starts_with("UPDATE wakes SET")
-                || sql.starts_with("UPDATE automations SET")
+            (sql.starts_with("UPDATE automation_wakes SET")
+                || sql.starts_with("UPDATE automation_schedules SET")
                 || sql.starts_with("UPDATE engine_probe_items SET")
-                || sql.starts_with("UPDATE workspace_drains SET"))
+                || sql.starts_with("UPDATE mail_workspace_drains SET"))
                 && statement
                     .statement
                     .args
@@ -80,8 +80,9 @@ impl EngineReadFault {
             .sql
             .starts_with("SELECT subject_key,occurrence_ms,effective_due_ms")
             && match self.kind.as_str() {
-                "wake_timer" => statement.sql.contains("FROM wakes s"),
-                "automation_timer" => statement.sql.contains("FROM automations s"),
+                "wake_timer" => statement.sql.contains("FROM automation_wakes s"),
+                "automation_timer" => statement.sql.contains("FROM automation_schedules s"),
+                "direct_message" => statement.sql.contains("FROM mail_messages s"),
                 "engine_probe" => statement.sql.contains("s.machine_kind='engine_probe'"),
                 _ => false,
             }

@@ -199,6 +199,12 @@ impl<R: EngineHost> Engine<'_, R> {
                 .await
             {
                 Ok(()) => {
+                    for delivery in effects
+                        .iter()
+                        .filter_map(|effect| adapter.mail_ready(effect))
+                    {
+                        self.0.offer_mail(delivery);
+                    }
                     #[cfg(feature = "test-support")]
                     self.pauses()
                         .reached_engine(crate::PausePoint::AfterEngineCommit, &key.0)
@@ -300,8 +306,8 @@ fn receipt_failure<State, Error>(failure: ApplyFailure) -> HandleOutcome<State, 
         ApplyFailure::Superseded => HandleOutcome::Superseded,
         ApplyFailure::Uncertain => HandleOutcome::Uncertain,
         ApplyFailure::StoreDown(failure) => HandleOutcome::StoreDown(failure),
-        ApplyFailure::Rejected(_) => {
-            HandleOutcome::StoreDown(crate::workspace_decode_error::corrupt("request_log.claim"))
-        }
+        ApplyFailure::Rejected(_) => HandleOutcome::StoreDown(
+            crate::workspace_decode_error::corrupt("runtime_request_log.claim"),
+        ),
     }
 }

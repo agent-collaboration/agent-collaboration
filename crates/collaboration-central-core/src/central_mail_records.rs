@@ -4,8 +4,9 @@ use crate::{
     workspace_row_codec::{column, json, string},
 };
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
+use workspace_ids::MachineId;
 use workspace_model::central_mail as mail;
-use workspace_model::{ActorIdentityId, ChangeId, MachineId, ThreadId, WorkspaceId};
+use workspace_model::{ActorIdentityId, ChangeId, ThreadId, WorkspaceId};
 fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T, StoreFailure> {
     value.parse().map_err(|_| corrupt(field))
 }
@@ -22,7 +23,7 @@ fn optional<T: std::str::FromStr>(
 }
 pub(crate) fn notice_messages() -> Statement {
     Statement {
-        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE message_kind='notice' AND state='queued'",
+        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM mail_messages WHERE message_kind='notice' AND state='queued'",
         args: vec![],
     }
 }
@@ -33,44 +34,46 @@ pub(crate) fn decode_messages(
         .iter()
         .map(|row| {
             let sender: mail::MessageSender =
-                json(string(rows, row, "sender")?, "messages.sender")?;
-            let target: workspace_model::SessionAddress = json(
+                json(string(rows, row, "sender")?, "mail_messages.sender")?;
+            let target: workspace_ids::SessionRef = json(
                 string(rows, row, "target_session")?,
-                "messages.target_session",
+                "mail_messages.target_session",
             )?;
             let machine: MachineId = parse(
                 string(rows, row, "target_machine_id")?,
-                "messages.target_machine_id",
+                "mail_messages.target_machine_id",
             )?;
             if target.machine_id != machine {
-                return Err(corrupt("messages.target_machine_id"));
+                return Err(corrupt("mail_messages.target_machine_id"));
             }
-            let body: mail::MessageBody = json(string(rows, row, "body")?, "messages.body")?;
-            let expected_kind = match &body {
-                mail::MessageBody::Direct { .. } => "direct",
-                mail::MessageBody::Notice { items } => {
-                    if items.is_empty() && string(rows, row, "state")? != "cancelled" {
-                        return Err(corrupt("messages.body"));
-                    }
-                    "notice"
-                }
-                mail::MessageBody::Wake { .. } => "wake",
-                mail::MessageBody::Automation { .. } => "automation",
-            };
+            let body: mail::MessageBody = json(string(rows, row, "body")?, "mail_messages.body")?;
+            if let mail::MessageBody::Notice { items } = &body
+                && items.is_empty()
+                && string(rows, row, "state")? != "cancelled"
+            {
+                return Err(corrupt("mail_messages.body"));
+            }
+            let expected_kind = crate::central_mail_rows::stored_kind(&body);
             if string(rows, row, "message_kind")? != expected_kind {
-                return Err(corrupt("messages.message_kind"));
+                return Err(corrupt("mail_messages.message_kind"));
             }
             let failure = column(rows, row, "failure_reason")?;
             let state = match (string(rows, row, "state")?, failure) {
                 ("queued", SqlValue::Null) => mail::MessageState::Queued,
                 ("delivered", SqlValue::Null) => mail::MessageState::Delivered,
                 ("cancelled", SqlValue::Null) => mail::MessageState::Cancelled,
+                ("cancelled", SqlValue::Text(reason))
+                    if matches!(expected_kind, "notice" | "deliveryOutcome")
+                        && reason == crate::message_deadline::EXPIRED_24_HOURS =>
+                {
+                    mail::MessageState::Cancelled
+                }
                 ("failed", SqlValue::Text(reason)) if !reason.is_empty() => {
                     mail::MessageState::Failed {
                         reason: reason.clone(),
                     }
                 }
-                _ => return Err(corrupt("messages.state")),
+                _ => return Err(corrupt("mail_messages.state")),
             };
             let change: Option<ChangeId> = optional(rows, row, "source_change_id")?;
             let recipient: Option<ActorIdentityId> = optional(rows, row, "recipient_actor")?;
@@ -88,7 +91,7 @@ pub(crate) fn decode_messages(
                     })
                 }
                 (None, None, None, None) if expected_kind != "notice" => None,
-                _ => return Err(corrupt("messages.source_change_id")),
+                _ => return Err(corrupt("mail_messages.source_change_id")),
             };
             if let (mail::MessageBody::Notice { items }, Some(source)) = (&body, &source)
                 && let Some(first) = items.first()
@@ -96,17 +99,17 @@ pub(crate) fn decode_messages(
                     || first.workspace_id != source.workspace_id
                     || first.thread_id != source.thread_id)
             {
-                return Err(corrupt("messages.source_change_id"));
+                return Err(corrupt("mail_messages.source_change_id"));
             }
             Ok(mail::MessageRecord {
-                message_id: parse(string(rows, row, "message_id")?, "messages.message_id")?,
+                message_id: parse(string(rows, row, "message_id")?, "mail_messages.message_id")?,
                 sender,
                 target,
                 body,
                 state,
                 source,
-                created_at: parse(string(rows, row, "created_at")?, "messages.created_at")?,
-                updated_at: parse(string(rows, row, "updated_at")?, "messages.updated_at")?,
+                created_at: parse(string(rows, row, "created_at")?, "mail_messages.created_at")?,
+                updated_at: parse(string(rows, row, "updated_at")?, "mail_messages.updated_at")?,
             })
         })
         .collect()
@@ -118,12 +121,12 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
     /// Reads queued messages without consuming them, in stable message-UUIDv7 order.
     pub async fn queued_for_session(
         &self,
-        session: &workspace_model::SessionAddress,
+        session: &workspace_ids::SessionRef,
     ) -> Result<mail::SessionQueue, StoreFailure> {
         let _turn = self.take_central_turn().await;
         // UUIDv7 normally follows admission within one process. A reopen or clock
         // rollback can change that order; no FIFO promise is made inside a batch.
-        let rows=self.host.read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE target_machine_id=? AND state='queued' ORDER BY message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
+        let rows=self.host.read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM mail_messages WHERE target_machine_id=? AND state='queued' ORDER BY message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
         let mut messages = decode_messages(&rows)?;
         messages.retain(|message| &message.target == session);
         messages.sort_by(|left, right| left.message_id.cmp(&right.message_id));

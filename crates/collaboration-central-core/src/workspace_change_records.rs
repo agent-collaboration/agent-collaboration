@@ -26,7 +26,7 @@ impl StoredChange {
             && let ItemRef::Project(item) = &self.item
             && item != project
         {
-            return Err(corrupt("changes.project_id"));
+            return Err(corrupt("workspace_changes.project_id"));
         }
         let member = || {
             self.subject_actor
@@ -51,11 +51,11 @@ impl StoredChange {
                 let role: RoleName = match self.item {
                     ItemRef::Project(_) => RoleName::Project(
                         serde_json::from_value(serde_json::Value::String(role.clone()))
-                            .map_err(|_| corrupt("project_roles.role"))?,
+                            .map_err(|_| corrupt("workspace_project_roles.role"))?,
                     ),
                     ItemRef::Deliverable(_) => RoleName::Deliverable(
                         serde_json::from_value(serde_json::Value::String(role.clone()))
-                            .map_err(|_| corrupt("deliverable_roles.role"))?,
+                            .map_err(|_| corrupt("workspace_deliverable_roles.role"))?,
                     ),
                     _ => return Err(corrupt("role item")),
                 };

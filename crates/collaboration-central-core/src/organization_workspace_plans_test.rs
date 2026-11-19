@@ -34,7 +34,7 @@ fn assert_corrupt(encoded: &str) {
         retained_result(encoded, &request()),
         Err(StoreFailure::Corrupt {
             reason: CorruptReason::BadValue {
-                column: "request_log.answer".to_owned(),
+                column: "runtime_request_log.answer".to_owned(),
             },
         })
     );

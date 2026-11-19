@@ -11,7 +11,7 @@ use crate::person_request::AdminOperationId;
 use central_storage::StoreFailure;
 use runtime_primitives::IdSource;
 
-/// None means the installation has no currently enrolled login.
+/// None means the machine_id has no currently enrolled login.
 pub(crate) fn revoke_machine_enrollment(
     facts: &EnrollmentFacts,
     person: &PersonId,

@@ -28,7 +28,8 @@ fn approval_plans_an_inactive_snapshot_and_allowance_records_after_its_machine()
     };
     assert_eq!(machine.state, MachineState::Revoked);
     assert_eq!(machine.generation, EnrollmentGeneration::default());
-    assert_eq!(row.machine_id, machine.id);
+    assert_eq!(row.machine_id.as_str(), request.installation.as_str());
+    assert_eq!(machine.machine_id.as_str(), request.installation.as_str());
     assert_ne!(row.machine_id.to_string(), row.id.as_str());
     assert_eq!(row.state, StoredEnrollmentState::Approved);
     assert_eq!(row.approved_at_ms, NOW_MS);
@@ -66,7 +67,7 @@ fn approval_plans_an_inactive_snapshot_and_allowance_records_after_its_machine()
         assert_eq!(record.created_at_millis, NOW_MS);
     }
     assert_eq!(records(&plan).len(), 2);
-    assert_eq!(ids.minted(), 4);
+    assert_eq!(ids.minted(), 3);
 }
 
 #[test]
@@ -114,7 +115,7 @@ fn duplicate_allowed_workspaces_keep_the_snapshot_but_plan_one_allowance_and_rec
         )
     );
     assert_eq!(plan.changes.len(), 3);
-    assert_eq!(ids.minted(), 3);
+    assert_eq!(ids.minted(), 2);
 }
 
 #[test]

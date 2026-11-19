@@ -69,12 +69,12 @@ pub(crate) async fn prepare_authorization_revision(
             );
             if organization.is_some() {
                 statements.push(exact(
-                    "UPDATE organization_authorization_floors SET minimum_revision=?,state=?,permission_policy_digest=?,updated_at=? WHERE id=?",
+                    "UPDATE signin_authorization_floors SET minimum_revision=?,state=?,permission_policy_digest=?,updated_at=? WHERE id=?",
                     vec![integer(revision.get(), "minimum_revision")?,text(state),text(permission_policy_digest.as_str()),now,text(organization_id)],
                 ));
             } else {
                 statements.push(exact(
-                    "INSERT INTO organization_authorization_floors(id,minimum_revision,state,permission_policy_digest,request_reject_through_ms,created_at,updated_at) SELECT ?1,?2,?3,?4,0,?5,?5 WHERE NOT EXISTS(SELECT 1 FROM organization_authorization_floors WHERE id=?1)",
+                    "INSERT INTO signin_authorization_floors(id,minimum_revision,state,permission_policy_digest,request_reject_through_ms,created_at,updated_at) SELECT ?1,?2,?3,?4,0,?5,?5 WHERE NOT EXISTS(SELECT 1 FROM signin_authorization_floors WHERE id=?1)",
                     vec![text(organization_id),integer(revision.get(), "minimum_revision")?,text(state),text(permission_policy_digest.as_str()),now],
                 ));
             }
@@ -89,12 +89,12 @@ pub(crate) async fn prepare_authorization_revision(
             let state = person_state(crate::person_request::floor_delivery::person_state(*state));
             if person.is_some() {
                 statements.push(exact(
-                    "UPDATE person_organization_authorization_floors SET minimum_revision=?,state=?,updated_at=? WHERE id=? AND organization_id=? AND person_id=?",
+                    "UPDATE signin_person_authorization_floors SET minimum_revision=?,state=?,updated_at=? WHERE id=? AND organization_id=? AND person_id=?",
                     vec![integer(revision.get(), "minimum_revision")?,text(state),now,text(subject_id.as_str()),text(organization_id),text(person_id.as_str())],
                 ));
             } else {
                 statements.push(exact(
-                    "INSERT INTO person_organization_authorization_floors(id,organization_id,person_id,minimum_revision,state,created_at,updated_at) SELECT ?1,?2,?3,?4,?5,?6,?6 WHERE NOT EXISTS(SELECT 1 FROM person_organization_authorization_floors WHERE organization_id=?2 AND person_id=?3)",
+                    "INSERT INTO signin_person_authorization_floors(id,organization_id,person_id,minimum_revision,state,created_at,updated_at) SELECT ?1,?2,?3,?4,?5,?6,?6 WHERE NOT EXISTS(SELECT 1 FROM signin_person_authorization_floors WHERE organization_id=?2 AND person_id=?3)",
                     vec![text(subject_id.as_str()),text(organization_id),text(person_id.as_str()),integer(revision.get(), "minimum_revision")?,text(state),now],
                 ));
             }

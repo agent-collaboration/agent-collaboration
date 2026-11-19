@@ -6,7 +6,9 @@ use crate::engine::{
     legacy_units::LegacyUnitOutcome,
     port::{Engine, EngineHost},
 };
-use crate::{CentralObservation, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{
+    CentralObservation, MailDeliveryReady, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
 
@@ -27,13 +29,16 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> EngineHost for WorkspaceRuntime<H, S
     fn observe(&self, observation: CentralObservation) {
         (self.signin_observer)(observation);
     }
+    fn offer_mail(&self, delivery: MailDeliveryReady) {
+        (self.mail_delivery_ready)(delivery);
+    }
     async fn organization_is_provisioned(&self) -> Result<bool, StoreFailure> {
         self.alarm_organization_is_provisioned().await
     }
     async fn plan_due_windows(
         &self,
         now: EngineTime,
-    ) -> Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome> {
+    ) -> Result<(Vec<GuardedStatement>, Vec<MailDeliveryReady>), LegacyUnitOutcome> {
         WorkspaceRuntime::plan_due_windows(self, now).await
     }
     async fn drain_due_workspaces(&self, now: EngineTime) -> Result<usize, LegacyUnitOutcome> {

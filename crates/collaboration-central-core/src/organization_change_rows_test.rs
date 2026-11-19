@@ -117,8 +117,6 @@ async fn two_valid_supersession_records_are_corrupt_instead_of_selecting_one() {
             "018f1111-2222-7000-8000-000000000003"
         )
         .await,
-        Err(bad_value(
-            "organization_change_records.machine_supersession"
-        ))
+        Err(bad_value("signin_change_records.machine_supersession"))
     );
 }

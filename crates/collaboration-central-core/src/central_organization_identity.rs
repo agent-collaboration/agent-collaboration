@@ -13,20 +13,22 @@ pub async fn read_central_organization(
 ) -> Result<CentralOrganizationIdentity, StoreFailure> {
     let rows = host
         .read(Statement {
-            sql: "SELECT id,organization_statement FROM organization_identity ORDER BY id LIMIT 2",
+            sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id LIMIT 2",
             args: vec![],
         })
         .await?;
     if rows.rows.len() > 1 {
-        return Err(corrupt("organization_identity.id"));
+        return Err(corrupt("signin_organization_identity.id"));
     }
     let Some(row) = rows.rows.first() else {
         return Ok(CentralOrganizationIdentity::Unprovisioned);
     };
     let organization_id = OrganizationId::try_from(string(&rows, row, "id")?.to_owned())
-        .map_err(|_| corrupt("organization_identity.id"))?;
+        .map_err(|_| corrupt("signin_organization_identity.id"))?;
     if string(&rows, row, "organization_statement")?.is_empty() {
-        return Err(corrupt("organization_identity.organization_statement"));
+        return Err(corrupt(
+            "signin_organization_identity.organization_statement",
+        ));
     }
     Ok(CentralOrganizationIdentity::Stamped { organization_id })
 }
