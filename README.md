@@ -13,10 +13,8 @@ The product boundary is intentionally narrow:
 The collaboration CLI is an interface to the Rust SDK. Reusable connection and
 session operations belong to `collaboration-client`; `collaboration-protocol`
 defines the shared request and result types. `collaboration-service` handles
-requests inside the Router Host, and `collaboration-mcp` serves them as MCP tools. Message-board types and rules live in `message-board`, with SQLx
-persistence in `message-board-storage`.
-Request and result types are available through `collaboration_client::protocol`;
-board request/result types through `collaboration_client::board`. SDK consumers
+requests inside the Router Host, and `collaboration-mcp` serves them as MCP tools.
+Request and result types are available through `collaboration_client::protocol`. SDK consumers
 do not need to invoke the CLI or depend on its argument types.
 
 Queue delivery falls back to steer when the selected target does not support
@@ -210,7 +208,7 @@ Streamable HTTP MCP endpoint with Codex. Use the selected current `service.json`
 do not guess a port or expose the unauthenticated endpoint beyond loopback.
 Local wakes and schedules are not available in this build; they return with central
 wakes and schedules. [Debug testing instructions](docs/testing/automation-debug-testing.md)
-cover the opt-in Luna acceptance runner and its isolated Host. Shared message boards use the same client and service; see the
+cover the opt-in Luna acceptance runner and its isolated Host. For local session operations, see the
 [agent collaboration skill](agent-skills/agent-collaboration/SKILL.md). Other language
 SDK implementations and remote transport follow separately.
 

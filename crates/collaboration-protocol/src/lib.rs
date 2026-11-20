@@ -1,21 +1,8 @@
 //! Public communication contracts without process, storage or transport ownership.
 mod mail_boundary_conversions;
 pub use mail_boundary_conversions::MailBoundaryConversionError;
-mod thread_subscription_contract;
-mod thread_subscription_wait;
-pub use thread_subscription_contract::{
-    ThreadSubscribeRequest, ThreadSubscriptionPresence, ThreadSubscriptionState,
-    ThreadSubscriptionView, ThreadSubscriptionsRequest, ThreadSubscriptionsResult,
-    ThreadUnsubscribeRequest,
-};
-pub use thread_subscription_wait::{
-    InvalidSubscriptionWait, MAX_SUBSCRIPTION_WAIT_SECONDS, SubscriptionRenewalEntry,
-    SubscriptionRenewalOutcome, SubscriptionWaitBatch, ThreadSubscriptionWaitFilter,
-    ThreadSubscriptionWaitOutcome, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
-};
 mod cli_output_contract;
 mod fleet_host_status;
-pub use board_sync_protocol::{FleetLinkRecord, FleetLinkState};
 pub use cli_output_contract::{
     ConversationRecord, ConversationTerminalReason, EffortChange, FiniteCommandRecord,
     NativeObservationRecord, ObservationCloseReason,
@@ -171,7 +158,7 @@ pub use endpoint_inventory::EndpointInventory;
 mod identity_schemas;
 mod installation_peer_identity;
 pub use installation_peer_identity::{
-    CentralLinkObservation, InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
+    InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
 };
 mod protocol_type_schemas;
 pub use protocol_type_schemas::protocol_type_schemas;

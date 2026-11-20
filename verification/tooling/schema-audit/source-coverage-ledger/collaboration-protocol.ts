@@ -354,16 +354,6 @@ export const section: LedgerSection = {
       note: "BoundedObservationResult L21 (events: Vec<Value> L25, native Codex messages or provider hub events, untyped), BoundedObservationRequest L35, OBSERVATION_EVENT_NOTIFICATION L67 = notifications/codexRouter/observationEvent, the custom MCP notification name; ObservationEventNotification L72 carries the event as untyped JSON and provider_event L92 reads its sequence field by hand. Inline #[cfg(test)] mod tests at L123.",
     },
     {
-      file: "crates/collaboration-protocol/src/thread_subscription_contract.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "types ThreadSubscribeRequest L12, ThreadUnsubscribeRequest L23, ThreadSubscriptionsRequest L33, ThreadSubscriptionsResult L39, ThreadSubscriptionState L46, ThreadSubscriptionPresence L59, ThreadSubscriptionView L67",
-    },
-    {
-      file: "crates/collaboration-protocol/src/thread_subscription_wait.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "types MAX_SUBSCRIPTION_WAIT_SECONDS L12, ThreadSubscriptionWaitFilter L21, ThreadSubscriptionWaitRequest L33 decoded through RawThreadSubscriptionWaitRequest L45 (try_from L63), InvalidSubscriptionWait L57, SubscriptionWaitBatch L106, ThreadSubscriptionWaitResult L127, ThreadSubscriptionWaitOutcome L152",
-    },
-    {
       file: "crates/collaboration-protocol/src/wake_authority.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
       note: "types WakeCreator L9, WakeRefusal L18",

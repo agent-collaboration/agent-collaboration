@@ -20,7 +20,6 @@ use collaboration_protocol::{
     PushRecordDraft, SessionId, SessionReachability, SessionRef, UuidIdentity,
 };
 use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 
@@ -136,7 +135,6 @@ async fn start_peer_delivery_service(
     let delivery: Arc<dyn SessionMessageDelivery> = router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = router.clone();
     let service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: Arc::clone(&automation),
         delivery,
         presence,

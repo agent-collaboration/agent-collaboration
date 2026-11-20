@@ -18,17 +18,114 @@ fn retired_cancel_tools_and_cli_commands_are_absent() {
         "message cancel must be rejected by the argument parser"
     );
     assert_eq!(
-        agent_collaboration::run_board_command(
-            ["project", "notification-cancel", "--help"]
-                .map(Into::into)
-                .to_vec()
+        agent_collaboration::refuse_retired_command_group(
+            &["project", "notification-cancel", "--help"].map(Into::into)
         ),
-        2,
+        Some(2),
         "project notification-cancel must be rejected by the argument parser"
     );
     assert!(tools.iter().any(|tool| tool.name == "installation_show"));
     assert!(tools.iter().any(|tool| tool.name == "conversation_cancel"));
 }
+
+const RETIRED_BOARD_TOOLS: [&str; 96] = [
+    "request_effects",
+    "workstream_create",
+    "workstream_rename",
+    "workstream_close",
+    "task_create",
+    "task_update",
+    "task_move_workstream",
+    "task_set_status",
+    "task_link",
+    "task_unlink",
+    "task_duplicate",
+    "task_replace",
+    "subtask_add",
+    "subtask_check",
+    "subtask_uncheck",
+    "subtask_move",
+    "subtask_remove",
+    "work_trail_add",
+    "work_trail_redact",
+    "role_grant",
+    "role_release",
+    "owner_grant_record",
+    "role_replace_lead",
+    "role_acknowledge_current",
+    "project_publish_plan",
+    "project_close",
+    "project_describe",
+    "fact_record",
+    "thread_renew",
+    "workstream_show",
+    "workstream_list",
+    "task_show",
+    "task_list",
+    "subtask_show",
+    "subtask_list",
+    "role_show",
+    "role_list",
+    "fact_show",
+    "fact_list",
+    "intent_show",
+    "intent_list",
+    "adr_create",
+    "adr_transition",
+    "adr_show",
+    "adr_list",
+    "feed_read",
+    "view_work",
+    "view_card",
+    "view_session_context",
+    "view_owner",
+    "view_lead_load",
+    "work_trail_show",
+    "discovery_search",
+    "post_search",
+    "workspace_create",
+    "workspace_archive",
+    "workspace_update",
+    "workspace_show",
+    "workspace_list",
+    "repository_attach",
+    "repository_detach",
+    "repository_list",
+    "board_create",
+    "board_update",
+    "board_show",
+    "board_list",
+    "board_close",
+    "board_archive",
+    "project_claim",
+    "project_create",
+    "project_update",
+    "project_list",
+    "project_show",
+    "thread_post",
+    "post_show",
+    "post_list",
+    "thread_show",
+    "thread_resolve",
+    "thread_unresolve",
+    "thread_watch",
+    "thread_unwatch",
+    "project_watch",
+    "project_unwatch",
+    "thread_list",
+    "thread_create",
+    "thread_refile",
+    "thread_join",
+    "thread_leave",
+    "thread_participant_list",
+    "thread_subscribe",
+    "thread_unsubscribe",
+    "thread_subscriptions",
+    "inbox_fetch",
+    "inbox_acknowledge",
+    "inbox_workspaces",
+    "thread_wait",
+];
 
 /// The local wake and schedule tools this build no longer carries.
 const RETIRED_WAKE_AND_SCHEDULE_TOOLS: [&str; 36] = [
@@ -71,9 +168,12 @@ const RETIRED_WAKE_AND_SCHEDULE_TOOLS: [&str; 36] = [
 ];
 
 #[test]
-fn retired_wake_and_schedule_tools_are_absent_from_the_catalog() {
+fn retired_tools_are_absent_from_the_catalog() {
     let tools = CollaborationMcpServer::catalog_only().resolved_tools();
-    for retired in RETIRED_WAKE_AND_SCHEDULE_TOOLS {
+    for retired in RETIRED_WAKE_AND_SCHEDULE_TOOLS
+        .into_iter()
+        .chain(RETIRED_BOARD_TOOLS)
+    {
         assert!(
             tools.iter().all(|tool| tool.name != retired),
             "retired tool {retired} must not be advertised"
@@ -88,7 +188,7 @@ fn retired_wake_and_schedule_tools_are_absent_from_the_catalog() {
 }
 
 #[tokio::test]
-async fn a_retired_wake_or_schedule_tool_gets_the_ordinary_unknown_tool_answer() {
+async fn a_retired_tool_gets_the_ordinary_unknown_tool_answer() {
     // Arrange
     let directory = tempfile::tempdir().expect("service directory");
     let api = crate::api_test_harness::ServedApi::tcp(&crate::api_test_harness::api_config(
@@ -97,7 +197,11 @@ async fn a_retired_wake_or_schedule_tool_gets_the_ordinary_unknown_tool_answer()
     ))
     .await;
 
-    for (index, retired) in RETIRED_WAKE_AND_SCHEDULE_TOOLS.into_iter().enumerate() {
+    for (index, retired) in RETIRED_WAKE_AND_SCHEDULE_TOOLS
+        .into_iter()
+        .chain(RETIRED_BOARD_TOOLS)
+        .enumerate()
+    {
         // Act
         let (_, answer) = api
             .post(&serde_json::json!({
@@ -128,14 +232,14 @@ async fn a_retired_wake_or_schedule_tool_gets_the_ordinary_unknown_tool_answer()
 fn catalog_has_complete_unique_tools_with_resolvable_schemas() {
     let server = CollaborationMcpServer::catalog_only();
     let tools = server.resolved_tools();
-    assert_eq!(tools.len(), 129);
+    assert_eq!(tools.len(), 33);
     let mut names = tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 129);
+    assert_eq!(names.len(), 33);
     assert!(names.contains(&"conversation_resume"));
     assert!(names.contains(&"installation_show"));
     assert!(names.contains(&"conversation_close"));
@@ -143,12 +247,6 @@ fn catalog_has_complete_unique_tools_with_resolvable_schemas() {
     assert!(names.contains(&"provider_session_inspect"));
     assert!(names.contains(&"question_list"));
     assert!(names.contains(&"question_answer"));
-    assert!(names.contains(&"thread_refile"));
-    assert!(names.contains(&"thread_subscribe"));
-    assert!(names.contains(&"thread_unsubscribe"));
-    assert!(names.contains(&"thread_subscriptions"));
-    assert!(names.contains(&"workspace_archive"));
-    assert!(names.contains(&"board_close"));
     for tool in tools {
         let input = serde_json::to_value(&tool.input_schema).expect("input schema JSON");
         jsonschema::validator_for(&input)
@@ -335,13 +433,6 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
         );
     }
 
-    let wait = schema_for("thread_wait");
-    let wait_required = required_for(&wait);
-    for field in ["actor", "filter", "maxWaitSeconds"] {
-        assert!(wait_required.contains(&serde_json::json!(field)));
-    }
-    assert!(wait["properties"].get("request").is_none());
-    assert!(wait["properties"].get("timeoutSeconds").is_none());
     let descriptions = tools
         .iter()
         .map(|tool| {
@@ -351,14 +442,6 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
             )
         })
         .collect::<std::collections::BTreeMap<_, _>>();
-    let wait_description = descriptions.get("thread_wait").expect("wait description");
-    for phrase in ["poll-mode", "empty batch", "acknowledges"] {
-        assert!(wait_description.contains(phrase), "{wait_description}");
-    }
-    let join_description = descriptions.get("thread_join").expect("join description");
-    assert!(join_description.contains("watch to true"));
-    assert!(join_description.contains("mode and whenIdle"));
-
     for tool in ["conversation_create", "conversation_create_and_prompt"] {
         let description = descriptions
             .get(tool)
@@ -454,92 +537,6 @@ fn provider_create_schemas_accept_settings_and_keep_endpoint_specific_refusals()
                 "{tool_name}: Codex must require {omitted}"
             );
         }
-    }
-}
-
-#[test]
-fn thread_subscription_tools_expose_subscription_policy_and_join_options() {
-    let server = CollaborationMcpServer::catalog_only();
-    let tools = server.resolved_tools();
-    let schema_for = |name: &str| {
-        tools
-            .iter()
-            .find(|tool| tool.name == name)
-            .unwrap_or_else(|| panic!("missing tool {name}"))
-    };
-    let required_fields = |schema: &Value| -> Vec<Value> {
-        schema["required"]
-            .as_array()
-            .unwrap_or_else(|| panic!("schema has no required array: {schema}"))
-            .clone()
-    };
-
-    let subscribe = schema_for("thread_subscribe");
-    let subscribe_schema = Value::Object((*subscribe.input_schema).clone());
-    for field in ["actor", "scope", "policy"] {
-        assert!(
-            required_fields(&subscribe_schema).contains(&serde_json::json!(field)),
-            "subscribe requires {field}"
-        );
-    }
-    let policy_property = &subscribe_schema["properties"]["policy"];
-    let policy = match policy_property["$ref"].as_str() {
-        Some(policy_reference) => {
-            let policy_path = policy_reference
-                .strip_prefix('#')
-                .expect("local subscription policy reference");
-            subscribe_schema
-                .pointer(policy_path)
-                .expect("subscription policy schema")
-        }
-        None => policy_property,
-    };
-    for field in [
-        "mode",
-        "whenIdle",
-        "quietSeconds",
-        "capSeconds",
-        "lifetimeSeconds",
-    ] {
-        assert!(
-            policy["properties"].get(field).is_some(),
-            "policy exposes {field}"
-        );
-    }
-
-    let unsubscribe = schema_for("thread_unsubscribe");
-    let unsubscribe_schema = Value::Object((*unsubscribe.input_schema).clone());
-    for field in ["actor", "scope"] {
-        assert!(required_fields(&unsubscribe_schema).contains(&serde_json::json!(field)));
-    }
-
-    let subscriptions = schema_for("thread_subscriptions");
-    let subscriptions_schema = Value::Object((*subscriptions.input_schema).clone());
-    assert!(required_fields(&subscriptions_schema).contains(&serde_json::json!("actor")));
-
-    let join = schema_for("thread_join");
-    let join_schema = Value::Object((*join.input_schema).clone());
-    for field in ["mode", "whenIdle"] {
-        assert!(
-            join_schema["properties"].get(field).is_some(),
-            "join exposes {field}"
-        );
-        assert!(
-            !required_fields(&join_schema).contains(&serde_json::json!(field)),
-            "join option {field} remains optional"
-        );
-    }
-
-    for name in [
-        "thread_subscribe",
-        "thread_unsubscribe",
-        "thread_subscriptions",
-    ] {
-        let tool = schema_for(name);
-        assert!(
-            tool.output_schema.is_some(),
-            "{name} exposes its output wrapper"
-        );
     }
 }
 
@@ -693,41 +690,6 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
             "conversation_create_and_prompt",
             &["advertised client", "completed turn", "peer reply"][..],
         ),
-        (
-            "inbox_fetch",
-            &[
-                "Unread mode initializes reader tracking",
-                "Latest mode does not initialize",
-            ][..],
-        ),
-        (
-            "thread_post",
-            &["Saving the message", "reply", "assignment success"][..],
-        ),
-        (
-            "thread_wait",
-            &["poll-mode", "empty batch", "acknowledges"][..],
-        ),
-        (
-            "thread_subscribe",
-            &[
-                "Creates, updates or reactivates",
-                "thread or project",
-                "policy",
-            ][..],
-        ),
-        (
-            "thread_unsubscribe",
-            &["cancelled", "watch remains active", "inbox"][..],
-        ),
-        (
-            "thread_subscriptions",
-            &[
-                "active or draining",
-                "pending counts",
-                "does not acknowledge",
-            ][..],
-        ),
     ] {
         let description = descriptions
             .get(name)
@@ -738,92 +700,5 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
                 "{name} description missing {phrase:?}: {description}"
             );
         }
-    }
-    for name in [
-        "view_work",
-        "view_card",
-        "view_owner",
-        "view_lead_load",
-        "view_session_context",
-    ] {
-        let description = descriptions.get(name).expect("summary description");
-        assert!(
-            description.contains("advances no read marks"),
-            "{name}: {description}"
-        );
-        assert!(
-            description.contains("no readMark field"),
-            "{name}: {description}"
-        );
-    }
-    let thread = descriptions.get("thread_show").expect("thread description");
-    for phrase in [
-        "metadata",
-        "without posts",
-        "no content coverage",
-        "advances no read mark",
-    ] {
-        assert!(thread.contains(phrase), "thread_show: {thread}");
-    }
-    fn assert_summary_schema(schema: &Value, root: &Value) {
-        if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-            assert_summary_schema(
-                root.pointer(reference.strip_prefix('#').expect("local schema reference"))
-                    .expect("resolved schema reference"),
-                root,
-            );
-            return;
-        }
-        if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
-            assert!(!properties.contains_key("readMark"));
-            assert!(!properties.contains_key("read_mark"));
-            if let Some(payload) = properties.get("payload") {
-                assert_summary_schema(payload, root);
-            }
-        }
-        for union in ["oneOf", "anyOf", "allOf"] {
-            if let Some(variants) = schema.get(union).and_then(Value::as_array) {
-                for variant in variants {
-                    assert_summary_schema(variant, root);
-                }
-            }
-        }
-    }
-    for tool in server.resolved_tools().into_iter().filter(|tool| {
-        matches!(
-            tool.name.as_ref(),
-            "view_work" | "view_card" | "view_owner" | "view_lead_load" | "view_session_context"
-        )
-    }) {
-        let schema = Value::Object((*tool.output_schema.expect("summary output schema")).clone());
-        let success = schema.pointer("/anyOf/0").expect("success branch");
-        assert_summary_schema(success, &schema);
-    }
-    let feed = descriptions.get("feed_read").expect("feed description");
-    assert!(feed.contains("mark that coverage"));
-    assert!(feed.contains("readMark outcome"));
-    let trail = descriptions
-        .get("work_trail_show")
-        .expect("trail description");
-    assert!(trail.contains("marks scanned coverage"));
-    assert!(trail.contains("partial decision register marks nothing"));
-}
-
-#[test]
-fn task_action_descriptions_explain_existing_targets_and_terminal_drops() {
-    let server = CollaborationMcpServer::catalog_only();
-    let actions = server
-        .resolved_tools()
-        .into_iter()
-        .filter(|tool| matches!(tool.name.as_ref(), "task_duplicate" | "task_replace"))
-        .collect::<Vec<_>>();
-    assert_eq!(actions.len(), 2);
-    for tool in actions {
-        let description = tool.description.expect("task action description");
-        assert!(description.contains("existing task"), "{description}");
-        assert!(description.contains("drops"), "{description}");
-        assert!(description.contains("work-trail"), "{description}");
-        assert!(description.contains("atomically"), "{description}");
-        assert!(!description.contains("copy"), "{description}");
     }
 }

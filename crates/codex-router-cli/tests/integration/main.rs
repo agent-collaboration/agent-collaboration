@@ -7,7 +7,6 @@ mod compiled_cli_host_acceptance;
 mod compiled_cli_host_stop;
 mod debug_host_isolation;
 mod debug_plaintext_cli;
-mod fleet_enrollment_cli;
 mod proxy_overload_passthrough;
 mod responses_account_recovery;
 

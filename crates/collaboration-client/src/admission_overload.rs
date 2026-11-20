@@ -3,15 +3,12 @@
 //! A listener at its request limit answers a tool call with one generic payload,
 //! `{kind: "overloaded", stage: "admission", effect: "none", message}`: the call did not
 //! run, and the same operation identity may be retried. The client recognises it before any
-//! family decode ([`ClientError::Overloaded`]), and the board and conversation clients report
+//! family decode ([`ClientError::Overloaded`]), and the conversation client reports
 //! it as their own typed `overloaded` failure with the next action "retry later".
 use crate::ClientError;
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationFailureStage, NonEmptyText, ProviderOperationEffect,
-};
-use message_board::{
-    BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardNextAction,
 };
 use serde_json::Value;
 
@@ -30,16 +27,6 @@ pub(crate) fn admission_overload(failure: &Value) -> Option<ClientError> {
 
 const DEFAULT_MESSAGE: &str =
     "Request capacity exceeded; this request was not run. Retry when capacity is available.";
-
-pub(crate) fn board(message: String) -> BoardError {
-    BoardError {
-        kind: BoardFailureKind::Overloaded,
-        stage: BoardFailureStage::Admission,
-        message,
-        next_action: BoardNextAction::RetryLater,
-        details: BoardErrorDetails::None,
-    }
-}
 
 /// The conversation family's overload, for the CLI's typed conversation report.
 #[must_use]

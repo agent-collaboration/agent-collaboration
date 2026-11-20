@@ -342,27 +342,4 @@ export const rows: InventoryRow[] = [
     disposition: "duplicate",
     fixedBy: "D2",
   },
-  {
-    file: "crates/codex-router-host/src/collaboration_runtime/board_composition/project_claims.rs",
-    line: 49,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "claim_project converts the central fleet LeaseAnswer::Claim HolderChangeAnswer into the public MCP project_claim result board_sync_protocol ProjectClaimReply (49-91): Granted becomes Claimed {epoch, expiresAt, start} only once the snapshot install is Ready, Pending (or an install still pending) becomes Pending {attempt: the request id}, Refused goes through claim_refusal (96); collaboration-service board_project_operations.rs:15-33 returns it unchanged as the project_claim output (collaboration-mcp catalog_tools.rs:255). The one conversion of the central answer into this public result",
-    usedBy: [{ crate: "codex-router-host" }, { crate: "collaboration-service" }, { part: "N11" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/codex-router-host/src/collaboration_runtime/board_composition/project_claims.rs",
-    line: 108,
-    owner: "router-vocabulary",
-    kind: "method-table",
-    defines:
-      "claim_refusal maps central HolderChangeRefusal into the public ProjectClaimRefusal (96-121); its GateRefused arm recognises the two gate reasons only by the string literals callerNotEnrolled (108) and board_archived (112), spelled independently of their central-core producers (session_scope/enrollment_gate.rs:36, fleet_claim_step.rs:160); any other gate refusal becomes an io error that the service reports as board_unavailable",
-    usedBy: [{ crate: "codex-router-host" }, { crate: "collaboration-service" }, { part: "N11" }],
-    duplicateGroup: null,
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
 ];

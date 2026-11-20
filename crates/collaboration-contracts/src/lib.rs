@@ -1,16 +1,4 @@
 //! Shared collaboration vocabulary and capability ports; no runtime resource ownership.
-mod project_claim;
-pub use project_claim::{ProjectClaim, ProjectClaimError, ProjectClaimFuture};
-mod project_registration;
-pub use project_registration::{
-    ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
-    ProjectRegistrationState,
-};
-mod project_replication_position;
-pub use project_replication_position::{
-    AcknowledgedMailChangesFuture, ProjectReplicationPosition, ReplicatedPositionFuture,
-    UnacknowledgedProjectReplication,
-};
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
 mod native_delivery_result;

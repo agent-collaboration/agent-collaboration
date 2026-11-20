@@ -1,11 +1,20 @@
-//! Missing sender custody is described from the UUIDv7 age, using the owning clock.
+//! Missing local custody is described from the UUIDv7 age, using the owning clock.
 use super::*;
 use crate::collaboration_rejection::CollaborationRejection;
 
 async fn assert_missing_status_copy(days: i64, expected: &str) {
     // Arrange a real store and status runtime; neither owns custody for this id.
     let runtime = Runtime::new().await;
-    let (mail, app) = remote_application(&runtime).await;
+    let mail = Arc::new(runtime.local_mail_runtime());
+    let service = String::from(runtime.local_mail_props().machine.service_id().clone());
+    let app = crate::ApplicationFixture::new(&service, &uuid::Uuid::now_v7().to_string())
+        .unwrap()
+        .with_interaction_store(runtime.fixture.owner.clone())
+        .with_installation_peer(runtime.fixture.host.config.local.owner)
+        .unwrap()
+        .with_mail_delivery_runtime(mail.clone())
+        .unwrap()
+        .build();
     let now = runtime_primitives::Clock::now(runtime.fixture.host.clock.as_ref()).unix_millis();
     let birth = u128::try_from(now - days * 86_400_000).unwrap();
     let item: collaboration_protocol::MailItemId =
@@ -18,45 +27,19 @@ async fn assert_missing_status_copy(days: i64, expected: &str) {
         caller: caller.clone(),
         reference: item.as_str().to_owned(),
     };
-    // Act/Assert first for an absent item, then for a retained sender context
-    // whose real SDK Outbox answers Unknown. Both public renderers use this message.
-    for has_context in [false, true] {
-        if has_context {
-            let id = item.clone();
-            let context = collaboration_protocol::MailReadContext::Direct {
-                origin: collaboration_protocol::PushOrigin::Session(caller.clone()),
-                recipient: super::super::request(&runtime).target,
-            };
-            runtime
-                .fixture
-                .store
-                .transaction(move |scope| {
-                    Box::pin(async move {
-                        interaction_storage::record_mail_read_context_in_scope(
-                            scope,
-                            &id,
-                            &context,
-                            chrono::DateTime::from_timestamp_millis(now).unwrap(),
-                        )
-                        .await
-                        .map_err(StoreError::backend)
-                    })
-                })
-                .await
-                .unwrap();
-        }
-        let failure = match app.messages().message_show(request.clone()).await {
-            Ok(_) => panic!("absent custody invented a retained message"),
-            Err(failure) => failure,
-        };
-        assert_eq!(
-            failure.kind,
-            crate::collaboration_application::MessageFailureKind::NotFound
-        );
-        assert_eq!(failure.message, expected);
-        let published = failure.published_rejection();
-        assert_eq!(published.data.unwrap()["message"], expected);
-    }
+    let failure = match app.messages().message_show(request).await {
+        Ok(_) => panic!("absent custody invented a retained message"),
+        Err(failure) => failure,
+    };
+    assert_eq!(
+        failure.kind,
+        crate::collaboration_application::MessageFailureKind::NotFound
+    );
+    assert_eq!(failure.message, expected);
+    assert_eq!(
+        failure.published_rejection().data.unwrap()["message"],
+        expected
+    );
     assert_eq!(
         runtime
             .sql_count("SELECT count(*) AS count FROM _fleet_sync_outbox_items")
@@ -75,11 +58,11 @@ async fn assert_missing_status_copy(days: i64, expected: &str) {
 }
 
 #[tokio::test]
-async fn missing_sender_status_at_day59_is_unknown() {
+async fn missing_local_status_at_day59_is_unknown() {
     assert_missing_status_copy(59, "unknown").await;
 }
 
 #[tokio::test]
-async fn missing_sender_status_at_day61_says_removed_after60_days() {
+async fn missing_local_status_at_day61_says_removed_after60_days() {
     assert_missing_status_copy(61, "removed after 60 days").await;
 }

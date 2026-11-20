@@ -24,7 +24,6 @@ import { section as agentSessionTui1 } from "./source-coverage-ledger/agent-sess
 import { section as agentSessionTui2 } from "./source-coverage-ledger/agent-session-tui-2.ts";
 import { section as automationStorage } from "./source-coverage-ledger/automation-storage.ts";
 import { section as boardCentralTestSupport } from "./source-coverage-ledger/board-central-test-support.ts";
-import { section as boardFleetSync } from "./source-coverage-ledger/board-fleet-sync.ts";
 import { section as boardSyncProtocol } from "./source-coverage-ledger/board-sync-protocol.ts";
 import { section as centralLinkClient } from "./source-coverage-ledger/central-link-client.ts";
 import { section as centralLinkProtocol } from "./source-coverage-ledger/central-link-protocol.ts";
@@ -68,12 +67,9 @@ import { section as collaborationService1 } from "./source-coverage-ledger/colla
 import { section as collaborationService2 } from "./source-coverage-ledger/collaboration-service-2.ts";
 import { section as collaborationService3 } from "./source-coverage-ledger/collaboration-service-3.ts";
 import { section as collaborationService4 } from "./source-coverage-ledger/collaboration-service-4.ts";
-import { section as fleetAdmission } from "./source-coverage-ledger/fleet-admission.ts";
 import { section as fleetIdentityProtocol } from "./source-coverage-ledger/fleet-identity-protocol.ts";
 import { section as interactionStorage } from "./source-coverage-ledger/interaction-storage.ts";
 import { section as lifecycleObservation } from "./source-coverage-ledger/lifecycle-observation.ts";
-import { section as messageBoardStorage1 } from "./source-coverage-ledger/message-board-storage-1.ts";
-import { section as messageBoardStorage2 } from "./source-coverage-ledger/message-board-storage-2.ts";
 import { section as messageBoard } from "./source-coverage-ledger/message-board.ts";
 import { section as nodeTestFixture } from "./source-coverage-ledger/node-test-fixture.ts";
 import { section as ownedProcessTestSupport } from "./source-coverage-ledger/owned-process-test-support.ts";
@@ -111,7 +107,6 @@ export const LEDGER_SECTIONS: readonly LedgerSection[] = [
   agentSessionTui2,
   automationStorage,
   boardCentralTestSupport,
-  boardFleetSync,
   boardSyncProtocol,
   centralLinkClient,
   centralLinkProtocol,
@@ -155,12 +150,9 @@ export const LEDGER_SECTIONS: readonly LedgerSection[] = [
   collaborationService2,
   collaborationService3,
   collaborationService4,
-  fleetAdmission,
   fleetIdentityProtocol,
   interactionStorage,
   lifecycleObservation,
-  messageBoardStorage1,
-  messageBoardStorage2,
   messageBoard,
   nodeTestFixture,
   ownedProcessTestSupport,

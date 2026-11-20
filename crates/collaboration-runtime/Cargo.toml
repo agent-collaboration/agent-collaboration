@@ -17,19 +17,13 @@ workspace = true
 router-clock.workspace = true
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-fleet-sync-tokio-runner.workspace = true
-board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 durable-steps.workspace = true
 fleet-sync-delivery.workspace = true
-fleet-sync-lease.workspace = true
 fleet-sync-protocol.workspace = true
-fleet-sync-writer.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }
-message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
-fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 base64.workspace = true
@@ -39,7 +33,6 @@ codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
 codex-native-integration.workspace = true
 chrono.workspace = true
 lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
-getrandom = "0.3.4"
 nix.workspace = true
 futures-util.workspace = true
 tokio-tungstenite.workspace = true

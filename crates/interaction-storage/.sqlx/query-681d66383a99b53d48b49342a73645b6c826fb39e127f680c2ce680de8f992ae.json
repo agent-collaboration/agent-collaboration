@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"item_id!: String\" FROM router_pushes\n               WHERE retention='mailTerminalAge' AND delivery_state='held'\n                 AND kind IN ('boardNotification', 'subscriptionActivity')\n               UNION SELECT item_id FROM pending_poll_mail",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "681d66383a99b53d48b49342a73645b6c826fb39e127f680c2ce680de8f992ae"
+}

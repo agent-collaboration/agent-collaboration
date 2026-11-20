@@ -32,13 +32,12 @@ observation contracts. Tests and their original baselines live with each family.
 
 The wrappers retired in 0.1.102 have these retained entries:
 
-| Surface                                           | Current source and entry                                                                                             |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Local board records and reopen                    | `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `tests/board_e2e/`                                   |
-| Local central replication, holders and forwarding | `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`                                                          |
-| Native central conformance                        | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required                  |
-| Local Worker conformance                          | `composed_scope_workerd` and `session_scope_workerd` examples; use CI's pinned tools and scenario selections         |
-| Two-machine Tokio, workerd or staging             | Unavailable until deliverable C; `node verification/run.ts` refuses with exit 2. Retained cases remain source for C. |
+| Surface                               | Current source and entry                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Local mail replay and custody         | `crates/agent-collaboration/tests/e2e/local_mail_e2e.rs` with `board-debug-runtime`                          |
+| Native central conformance            | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required          |
+| Local Worker conformance              | `composed_scope_workerd` and `session_scope_workerd` examples; use CI's pinned tools and scenario selections |
+| Two-machine Tokio, workerd or staging | `node verification/run.ts` exits 2. The Mac core and message tools must land before the two-Mac proof.       |
 
 The Rust local process suites require the CI local-end-to-end job's prebuilt
 entry points and owned runtime roots. The TypeScript runtime entries require

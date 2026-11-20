@@ -1,24 +1,5 @@
-//! Debug-only causal barriers at the two D1 Router custody boundaries.
+//! Socket authorization for the debug mail clock.
 use std::{io, path::Path};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-pub(crate) async fn wait_at_socket(variable: &'static str, marker: &[u8]) -> io::Result<()> {
-    let Some(path) = std::env::var_os(variable) else {
-        return Ok(());
-    };
-    validate_barrier_socket(Path::new(&path))?;
-    let mut barrier = tokio::net::UnixStream::connect(path).await?;
-    barrier.write_all(marker).await?;
-    let mut release = [0];
-    tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        barrier.read_exact(&mut release),
-    )
-    .await
-    .map_err(io::Error::other)??;
-    Ok(())
-}
-
 pub(crate) fn validate_barrier_socket(socket: &Path) -> io::Result<()> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
     if !socket.is_absolute() {

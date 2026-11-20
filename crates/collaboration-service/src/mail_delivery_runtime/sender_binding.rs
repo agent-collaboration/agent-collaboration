@@ -4,39 +4,17 @@ use durable_steps::storage::TransactionScope;
 use fleet_sync_delivery::{SenderBinding, SenderBindingFailure};
 use fleet_sync_protocol::{DatabaseId, DeliveryTypes, PeerId, Submitter};
 use message_board::ServiceId;
-use std::{collections::BTreeSet, sync::Mutex};
 
 /// Lookup hints carry no authority; the supplied custody scope owns directory truth.
 pub struct MachineSenderBinding {
     service: ServiceId,
     peer: PeerId,
-    missing: Mutex<BTreeSet<ServiceId>>,
-    requested: tokio::sync::Notify,
 }
 
 impl MachineSenderBinding {
     #[must_use]
     pub fn new(service: ServiceId, peer: PeerId) -> Self {
-        Self {
-            service,
-            peer,
-            missing: Mutex::new(BTreeSet::new()),
-            requested: tokio::sync::Notify::new(),
-        }
-    }
-
-    pub(super) async fn lookup_requested(&self) {
-        self.requested.notified().await;
-    }
-
-    pub(super) fn take_missing_installations(
-        &self,
-    ) -> Result<BTreeSet<ServiceId>, durable_steps::StoreError> {
-        let mut missing = self
-            .missing
-            .lock()
-            .map_err(|_| durable_steps::StoreError::backend("sender lookup hints poisoned"))?;
-        Ok(std::mem::take(&mut *missing))
+        Self { service, peer }
     }
 }
 
@@ -72,14 +50,7 @@ where
                 Ok(Some(peer)) => PeerId::try_from(peer.as_str().to_owned())
                     .map(Submitter::Machine)
                     .map_err(|_| SenderBindingFailure::Conflict),
-                Ok(None) => {
-                    self.missing
-                        .lock()
-                        .map_err(|_| SenderBindingFailure::Unavailable)?
-                        .insert(service.clone());
-                    self.requested.notify_one();
-                    Err(SenderBindingFailure::Unknown)
-                }
+                Ok(None) => Err(SenderBindingFailure::Unknown),
                 Err(
                     interaction_storage::StorageError::InstallationPeerConflict
                     | interaction_storage::StorageError::InvalidStoredRecord,

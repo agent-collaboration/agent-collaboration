@@ -8,12 +8,9 @@ cargo nextest run --locked --profile ci -p codex-router-host --features keychain
 
 `integration/main.rs` gathers the external roots, including native model and skill bridge cases. Each root keeps its
 module namespace. The cases cover Host startup and configuration, singleton
-ownership, child process groups, update and restart lifecycles, enrollment,
+ownership, child process groups, update and restart lifecycles,
 collaboration composition, provider routes and native inventory.
-`shared_fleet_store` starts the real runtime on a fresh root and checks it keeps
-one Fleet database (`fleet.sqlite`, no older store beside it), that a second
-process asking to write it gets the store's lock error, and that a restart keeps
-the board cursor key the composition installed.
+The local mail composition test covers startup with a fresh directory and with old board files present.
 Runtime replacement cases hold a real status probe across an app-server schema
 change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.

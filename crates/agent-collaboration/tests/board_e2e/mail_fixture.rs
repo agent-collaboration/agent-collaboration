@@ -96,7 +96,7 @@ impl MailFixture {
             return Err("cannot reopen a live mail Host".into());
         }
         self.stopped = None;
-        self.host = Some(BoardHost::start(&self.directory, None).await?);
+        self.host = Some(BoardHost::start(&self.directory).await?);
         Ok(())
     }
 

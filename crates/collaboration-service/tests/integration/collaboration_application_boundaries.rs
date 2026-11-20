@@ -3,16 +3,10 @@
 
 #[test]
 fn application_message_features_do_not_import_client_routes() {
-    let features = [
-        (
-            "message operations",
-            include_str!("../../src/collaboration_application/message_operations.rs"),
-        ),
-        (
-            "board and subscription operations",
-            include_str!("../../src/collaboration_application/board_operations.rs"),
-        ),
-    ];
+    let features = [(
+        "message operations",
+        include_str!("../../src/collaboration_application/message_operations.rs"),
+    )];
     for (feature, source) in features {
         for forbidden in [
             "native_message_dispatch",

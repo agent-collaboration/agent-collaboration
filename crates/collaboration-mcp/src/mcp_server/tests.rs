@@ -22,9 +22,6 @@ mod route_tests;
 #[path = "tests/catalog_tests.rs"]
 mod catalog_tests;
 
-#[path = "tests/project_tool_schema_tests.rs"]
-mod project_tool_schema_tests;
-
 #[path = "tests/schema_tests.rs"]
 mod schema_tests;
 

@@ -4,8 +4,7 @@ use crate::collaboration_rejection::{
 };
 use crate::push_record_delivery::{PushDeliveryFailure, store_first_and_deliver};
 use crate::push_record_resolver::{
-    ActivityReadError, ReferenceError, caller_is_local, can_read, expand_activity_ranges, link_for,
-    make_notice_list, resolve_reference,
+    ReferenceError, caller_is_local, can_read, link_for, make_notice_list, resolve_reference,
 };
 use collaboration_protocol::{
     MachineId, MessageContent, MessageDelivery, MessageReplyResult, MessageSendResult,
@@ -25,7 +24,6 @@ pub struct MessageOperations {
     pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(super) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
     pub(super) display_names: collaboration_runtime::SessionDisplayNameCache,
-    pub(super) registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
 }
 
 impl MessageOperations {
@@ -34,14 +32,12 @@ impl MessageOperations {
         interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
         mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
         display_names: collaboration_runtime::SessionDisplayNameCache,
-        registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
     ) -> Self {
         Self {
             identity,
             interaction_store,
             mail_delivery,
             display_names,
-            registry,
         }
     }
 
@@ -230,13 +226,10 @@ impl MessageOperations {
             .await
             .map(MessageSendResult::Local)
         } else {
-            let runtime = self.mail_delivery.as_ref().ok_or_else(|| {
-                MessageFailure::discovery(
-                    MessageFailureKind::Unavailable,
-                    "Remote message delivery is not configured",
-                )
-            })?;
-            runtime.send_remote(draft, target_identity).await
+            return Err(MessageFailure::discovery(
+                MessageFailureKind::Unavailable,
+                "Remote message delivery is not configured",
+            ));
         };
         result.map_err(|failure| self.delivery_failure(failure))
     }
@@ -297,19 +290,10 @@ impl MessageOperations {
                 }
             };
         }
-        let activity_ranges = expand_activity_ranges(&record, self.registry.as_ref())
-            .await
-            .map_err(|error| {
-                let message = match error {
-                    ActivityReadError::Unavailable => "Board range storage is unavailable",
-                    ActivityReadError::Failed => "Board activity range could not be read",
-                };
-                MessageFailure::new(MessageFailureKind::Unavailable, stage, message)
-            })?;
         Ok(PushRecordShowResult {
             link: link_for(&record, identity),
             record,
-            activity_ranges,
+            activity_ranges: Vec::new(),
         })
     }
 

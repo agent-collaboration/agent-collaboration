@@ -3,14 +3,10 @@
 //! untyped command as the retryable overload, never as a connection failure or protocol
 //! violation.
 
-use collaboration_application_test_support::native_registry;
-use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::request_slot_holder::RequestSlotHolder;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_service::ApplicationFixture;
 
-use collaboration_service::ProjectAdmission;
-use collaboration_service::ProjectAdmissionProps;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
 
@@ -34,46 +30,13 @@ async fn run_cli(
 
 #[tokio::test]
 async fn shed_commands_report_an_overload_to_retry() {
-    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-        chrono::DateTime::from_timestamp_millis(1792432800000).expect("fixed fixture time"),
-    ));
-
     // Arrange: one request slot, held by the slot holder.
     let directory = tempfile::Builder::new()
         .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir_in("/tmp")
         .expect("private directory");
-    // A local, unenrolled machine: the Fleet client has no session and no central.
-    let fleet = collaboration_runtime::FleetClient::new(
-        &message_board_storage::FleetStore::open(
-            &directory
-                .path()
-                .join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await
-        .expect("local Fleet store"),
-        Arc::new(native_registry::PendingRegistration),
-        None,
-    );
-    let admission = Arc::new(
-        ProjectAdmission::new(ProjectAdmissionProps {
-            clock: clock.clone(),
-            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
-                .await
-                .expect("native registry"),
-            fleet: Arc::new(fleet),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
-                    .expect("service fixture"),
-                Some("overload proof"),
-            )
-            .expect("identity fixture"),
-        })
-        .expect("admission fixture"),
-    );
     let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-        .expect("service identity")
-        .with_project_admission(admission);
+        .expect("service identity");
     let (identity, holder) = RequestSlotHolder::install(identity, SERVICE_ID, directory.path())
         .await
         .expect("slot holder");
@@ -120,17 +83,6 @@ async fn shed_commands_report_an_overload_to_retry() {
     .expect("the holding call holds the only request slot");
 
     // Act
-    let (board_exit, board) = run_cli(
-        directory.path(),
-        &[
-            "project",
-            "list",
-            "--board-id",
-            message_board::BoardId::generate().as_str(),
-        ],
-    )
-    .await
-    .expect("board command output");
     let (endpoints_exit, endpoints) = run_cli(directory.path(), &["endpoints", "list"])
         .await
         .expect("endpoints command output");
@@ -142,16 +94,6 @@ async fn shed_commands_report_an_overload_to_retry() {
         .await
         .expect("native bridge output");
 
-    // Assert: the board refusal is its typed overload; the untyped command reports the
-    // retryable overload with no effect.
-    assert_eq!(board_exit, Some(4), "{board}");
-    assert_eq!(board["error"]["kind"], "overloaded", "{board}");
-    assert!(
-        board["error"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("not run")),
-        "{board}"
-    );
     assert_eq!(endpoints_exit, Some(3), "{endpoints}");
     assert_eq!(endpoints["error"]["kind"], "overloaded", "{endpoints}");
     assert_eq!(endpoints["error"]["effect"], "none", "{endpoints}");

@@ -30,53 +30,9 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: `${R}fleet_link_failure.rs`,
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "FleetLinkFailure l9 and FleetLinkFailureReason l21 are MCP installation_show output (via FleetLinkRecord.lastFailure); as_str name table l76; hand JsonSchemas auth_refusal_schema l108 and close_reason_schema l111 for upstream types",
-    },
-    {
-      file: `${R}fleet_link_status.rs`,
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "FleetLinkRecord l9, FleetLinkState l29, FleetLinkRefusal l49, FleetLinkDrop l62, FleetLinkDropReason l70 are MCP installation_show output (collaboration-protocol installation_peer_identity.rs:31); as_str name table l84; peer_schema l114",
-    },
-    {
-      file: `${R}fleet_reads.rs`,
-      disposition: {
-        kind: "excluded",
-        reason: `${boardFleet}: FleetFeedRead l15, FleetSnapshotCursor l31`,
-      },
-    },
-    {
-      file: `${R}holder_refusal.rs`,
-      disposition: {
-        kind: "excluded",
-        reason: `${boardFleet}: HolderObservation l7, BoardHolderChangeRefusal l31 with From conversions to and from upstream wire::HolderChangeRefusal l60/l90 (central fleet refusal names)`,
-      },
-    },
-    {
       file: `${R}lib.rs`,
       disposition: { kind: "none" },
       note: "module declarations and re-exports only",
-    },
-    {
-      file: `${R}project_claim.rs`,
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "ProjectClaimRequest l11 (MCP project_claim input), ProjectClaimReply l25 and ProjectClaimRefusal l48 (output), collaboration-mcp catalog_tools.rs:255; hand JsonSchemas for upstream Epoch l71, PeerId l74, ReplicationPosition l77, SchemaIdentity l84",
-    },
-    {
-      file: `${R}surface_codecs.rs`,
-      disposition: {
-        kind: "excluded",
-        reason: `${boardFleet}: serde remote codecs renaming upstream fleet_sync_protocol enums: PieceRefusalCodec l14, LeaseRefusalCodec l53, RegistrationRefusalCodec l78, ClaimAnswerCodec l98, DeliveryStatusCodec l126, CancelResultCodec l153, holder_refusal_value l162`,
-      },
-      note: "inline cfg(test) module integrity_refusal_tests l181",
-    },
-    {
-      file: `${R}surface_names.rs`,
-      disposition: {
-        kind: "excluded",
-        reason: `${boardFleet}: transparent surface wrappers BoardPieceRefusal, BoardLeaseRefusal, BoardRegistrationRefusal, BoardClaimAnswer, BoardDeliveryStatus, BoardCancelResult (l26-33) over the surface_codecs codecs`,
-      },
     },
   ],
   sendSites: [],

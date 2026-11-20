@@ -149,7 +149,6 @@ async fn start_runtime(router_root: &Path) -> CollaborationRuntime {
     let directory = router_root.join("agent-communication");
     private(&directory);
     CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
         directory: directory.clone(),
         codex_home: directory.clone(),
         backend_socket: directory.join("backend.sock"),

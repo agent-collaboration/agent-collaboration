@@ -35,7 +35,6 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     let cursor_prompts = root.path().join("cursor-prompts.log");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -275,7 +274,6 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
     let approver_prompts = root.path().join("approver-prompts.log");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -395,7 +393,6 @@ async fn host_delivers_a_local_message_while_automation_storage_is_unreadable() 
     let registry = root.path().join("peer-registry");
     std::fs::create_dir(&registry).expect("peer registry");
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
         directory: root.path().to_owned(),
         codex_home: root.path().to_owned(),
         backend_socket: root.path().join("backend.sock"),
@@ -450,4 +447,118 @@ async fn host_delivers_a_local_message_while_automation_storage_is_unreadable() 
     std::fs::remove_file(registry.join(format!("{}.json", std::process::id())))
         .expect("remove peer registry record");
     runtime.shutdown().await.expect("Host shutdown");
+}
+
+#[tokio::test]
+async fn host_delivers_and_reads_local_session_mail_without_board_storage() {
+    use collaboration_client::PublicMessageContent;
+    use collaboration_protocol::{MessageShowResult, PushRecordShowParams};
+
+    for has_old_board_files in [false, true] {
+        let root = tempfile::tempdir().expect("Host root");
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("private Host root");
+        let retired_paths = [
+            "fleet.sqlite",
+            "fleet-cache.sqlite",
+            "fleet-outbox.sqlite",
+            "board-cursors.sqlite",
+            "projects/legacy/e1.sqlite",
+            "board-read-cache/legacy.sqlite",
+            "machine-session/state.json",
+        ];
+        let old_bytes = b"old board data that cannot be opened as a store";
+        if has_old_board_files {
+            for path in retired_paths.map(|path| root.path().join(path)) {
+                std::fs::create_dir_all(path.parent().expect("retired path parent"))
+                    .expect("retired data directory");
+                std::fs::write(path, old_bytes).expect("retired data");
+            }
+        }
+        let registry = root.path().join("peer-registry");
+        std::fs::create_dir(&registry).expect("peer registry");
+        let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+            directory: root.path().to_owned(),
+            codex_home: root.path().to_owned(),
+            backend_socket: root.path().join("backend.sock"),
+            mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            native_schema: None,
+            peer_registry_directory: Some(registry.clone()),
+            remote_control_server_name: None,
+            owner_human_id: None,
+        })
+        .await
+        .expect("Host startup without board storage");
+        let client = CollaborationClient::connect(root.path(), "local-board-free-mail", "1")
+            .await
+            .expect("discover the Host and connect");
+        let target = SessionRef {
+            endpoint: EndpointRef {
+                service_id: runtime.service_id().clone(),
+                endpoint_id: EndpointId::try_from("claude-local".to_owned())
+                    .expect("peer endpoint"),
+            },
+            session_id: SessionId::try_from("recipient".to_owned()).expect("recipient session"),
+        };
+        let mut sender = target.clone();
+        sender.session_id = SessionId::try_from("sender".to_owned()).expect("sender session");
+        let peer_socket = registry.join("peer.sock");
+        let listener = tokio::net::UnixListener::bind(&peer_socket).expect("peer socket");
+        publish_peer(&registry, &target.session_id, 1, &peer_socket);
+        let receiver = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("peer accepted");
+            let mut lines = BufReader::new(stream).lines();
+            let _auth = lines.next_line().await.expect("auth line").expect("auth");
+            serde_json::from_str::<Value>(
+                &lines.next_line().await.expect("user line").expect("user"),
+            )
+            .expect("user JSON")
+        });
+
+        let body = "local mail with no board storage";
+        let mut request = message(target.clone());
+        request.message = PublicMessageContent::Agent {
+            sender,
+            text: collaboration_protocol::MessageText::try_from(body.to_owned())
+                .expect("valid message"),
+        };
+        let sent = client
+            .send_message(request)
+            .await
+            .expect("local message admitted");
+
+        let collaboration_protocol::MessageSendResult::Local(sent) = sent else {
+            panic!("local message returned remote custody");
+        };
+        assert_eq!(sent.receipt.outcome, DeliveryOutcome::PeerMessageWritten);
+        let received = receiver.await.expect("peer receiver");
+        let content = received["message"]["content"]
+            .as_str()
+            .expect("peer content");
+        assert!(content.contains(body), "{content}");
+        assert!(content.contains(sent.push_id.as_str()), "{content}");
+        let shown = client
+            .router_show(PushRecordShowParams {
+                caller: target,
+                reference: sent.push_id.as_str().to_owned(),
+            })
+            .await
+            .expect("recipient can read the delivered message");
+        let MessageShowResult::Local(shown) = shown else {
+            panic!("local message returned remote custody");
+        };
+        assert_eq!(shown.record.push_id, sent.push_id);
+        assert_eq!(shown.record.body.as_deref(), Some(body));
+        runtime.shutdown().await.expect("Host shutdown");
+        for path in retired_paths.map(|path| root.path().join(path)) {
+            if has_old_board_files {
+                assert_eq!(
+                    std::fs::read(path).expect("retired data survived"),
+                    old_bytes
+                );
+            } else {
+                assert!(!path.exists(), "Host created {}", path.display());
+            }
+        }
+    }
 }

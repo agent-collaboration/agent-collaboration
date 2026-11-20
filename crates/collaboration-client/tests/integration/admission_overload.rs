@@ -3,22 +3,17 @@
 //! uncertain outcome. The served API runs one request at a time on its socket; a held call
 //! takes that one, so every other call is shed.
 
-use collaboration_application_test_support::native_registry;
 use collaboration_client::{
-    BoardClientError, ClientError, CollaborationAccess, CollaborationClient,
-    NativeTransportConnection, NativeTransportError, OperationEffect,
-    operation_failure_from_client_error, resolve_public_native,
+    ClientError, CollaborationAccess, CollaborationClient, NativeTransportConnection,
+    NativeTransportError, OperationEffect, operation_failure_from_client_error,
+    resolve_public_native,
 };
-use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::request_slot_holder::RequestSlotHolder;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
-use collaboration_protocol::{EndpointId, OperationFailureKind, OperationId};
+use collaboration_protocol::{EndpointId, OperationFailureKind};
 use collaboration_service::ApplicationFixture;
 
-use collaboration_service::ProjectAdmission;
-use collaboration_service::ProjectAdmissionProps;
-use message_board::{BoardFailureKind, BoardNextAction};
-use serde_json::{Value, json};
+use serde_json::json;
 use std::{sync::Arc, time::Duration};
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
@@ -36,37 +31,12 @@ type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error>>;
 
 impl SaturatedApi {
     async fn start() -> TestResult<Self> {
-        let clock = Arc::new(router_clock::SystemRuntimeClock::new());
-
         use std::os::unix::fs::PermissionsExt;
         let directory = tempfile::Builder::new()
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir_in("/tmp")?;
-        // A local, unenrolled machine: the Fleet client has no session and no central.
-        let fleet = collaboration_runtime::FleetClient::new(
-            &message_board_storage::FleetStore::open(
-                &directory
-                    .path()
-                    .join(message_board_storage::FleetStore::FILE_NAME),
-            )
-            .await?,
-            Arc::new(native_registry::PendingRegistration),
-            None,
-        );
-        let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
-            clock: clock.clone(),
-            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
-                .await
-                .map_err(|error| std::io::Error::other(error.to_string()))?,
-            fleet: Arc::new(fleet),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
-                Some("overload proof"),
-            )?,
-        })?);
         let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-            .map_err(std::io::Error::other)?
-            .with_project_admission(admission);
+            .map_err(std::io::Error::other)?;
         let (identity, holder) =
             RequestSlotHolder::install(identity, SERVICE_ID, directory.path()).await?;
         let served = Arc::new(ServedCollaborationApi::start_with(
@@ -124,50 +94,6 @@ impl SaturatedApi {
         }
         Ok(())
     }
-}
-
-fn from_json<TValue: serde::de::DeserializeOwned>(value: Value) -> serde_json::Result<TValue> {
-    serde_json::from_value(value)
-}
-
-#[tokio::test]
-async fn a_shed_board_call_is_a_typed_retryable_board_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .project_list(
-            from_json(json!({"boardId":message_board::BoardId::generate(), "page": {}}))
-                .expect("request JSON"),
-        )
-        .await;
-    let Err(BoardClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed board rejection, got {shed:?}");
-    };
-    assert_eq!(failure.kind, BoardFailureKind::Overloaded);
-    assert_eq!(failure.next_action, BoardNextAction::RetryLater);
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_board_write_is_not_an_unknown_outcome() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .project_create(
-            from_json(json!({
-                "projectId": OperationId::generate(),
-                "boardId":message_board::BoardId::generate(), "title": "Shed",
-                "requestId":message_board::RequestId::generate(), "protocolVersion":1,"actingFor":null,
-                "actor": {"kind": "human", "humanId": "owner"}
-            }))
-            .expect("request JSON"),
-        )
-        .await;
-    let Err(BoardClientError::Rejected(failure)) = shed else {
-        panic!("a shed write must not read as an unknown outcome: {shed:?}");
-    };
-    assert_eq!(failure.kind, BoardFailureKind::Overloaded);
-    api.stop().await.expect("API stops");
 }
 
 #[tokio::test]

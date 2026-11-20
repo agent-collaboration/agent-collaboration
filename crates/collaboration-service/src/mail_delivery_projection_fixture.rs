@@ -199,9 +199,12 @@ impl Host for ProjectionHost {
                         .to_string()
                         .try_into()
                         .map_err(StoreError::backend)?;
-                    mark_mail_push_attempted_in_scope(scope, &push_id)
-                        .await
-                        .map_err(StoreError::backend)?;
+                    // A legacy poll item holds SDK custody before it owns a push.
+                    if !collaboration_runtime::received_mail_push::is_poll_mail(item) {
+                        mark_mail_push_attempted_in_scope(scope, &push_id)
+                            .await
+                            .map_err(StoreError::backend)?;
+                    }
                     Ok(resolved)
                 })
             })

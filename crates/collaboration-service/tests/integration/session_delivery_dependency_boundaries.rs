@@ -16,10 +16,6 @@ fn message_features_do_not_import_client_routes() {
             include_str!("../../../collaboration-runtime/src/interaction_broker.rs"),
         ),
         (
-            "subscription admission",
-            include_str!("../../src/collaboration_application/board_operations.rs"),
-        ),
-        (
             "direct message push",
             include_str!("../../src/subscription_delivery/direct_message_push.rs"),
         ),

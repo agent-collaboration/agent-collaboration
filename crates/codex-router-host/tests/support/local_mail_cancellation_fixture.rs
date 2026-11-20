@@ -206,7 +206,6 @@ impl PendingLocalCancelFixture {
     pub async fn start_host(&self) -> TestResult<CollaborationRuntime> {
         Ok(CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
-                board_session: None,
                 directory: self.root().to_owned(),
                 codex_home: self.root().to_owned(),
                 backend_socket: self.root().join("absent-native.sock"),

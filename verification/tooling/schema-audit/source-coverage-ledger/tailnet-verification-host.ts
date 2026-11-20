@@ -28,11 +28,6 @@ export const section: LedgerSection = {
       note: "driver plan and allocation guards only: D1NativeArtifact l19, D1AuthPolicy l27, D1NativeReadinessPlan l35, private file reader l155",
     },
     {
-      file: `${R}d1_native_runtime.rs`,
-      disposition: { kind: "sends", owners: ["codex"] },
-      note: "NativeProtocolConnection::connect l127 (initialize + initialized inside codex-native-integration), request account/read json! l130, hand reads requiresOpenaiAuth/account l133; driver-local D1HostPlan l38 and status JSON l214/l239; session_inputs l103 builds central BoardSessionInputs from the fixture (central fleet link, not one of the six edges)",
-    },
-    {
       file: `${R}driver_error.rs`,
       disposition: { kind: "none" },
       note: "DriverError enum and category names only",
@@ -159,28 +154,6 @@ export const section: LedgerSection = {
       line: 235,
       edge: "managed-codex",
       sends: "account/read {refreshToken:false}",
-      owner: { crate: "tailnet-verification-host" },
-      origin: "apparatus",
-      coverage: { kind: "uncovered", reason: noTap },
-    },
-    {
-      file: `${R}d1_native_runtime.rs`,
-      line: 127,
-      edge: "managed-codex",
-      sends:
-        "initialize and initialized, sent inside NativeProtocolConnection::connect for this caller",
-      owner: { crate: "tailnet-verification-host" },
-      origin: "apparatus",
-      coverage: {
-        kind: "uncovered",
-        reason: noTap,
-      },
-    },
-    {
-      file: `${R}d1_native_runtime.rs`,
-      line: 130,
-      edge: "managed-codex",
-      sends: "account/read {refreshToken:false} via NativeProtocolConnection::request",
       owner: { crate: "tailnet-verification-host" },
       origin: "apparatus",
       coverage: { kind: "uncovered", reason: noTap },

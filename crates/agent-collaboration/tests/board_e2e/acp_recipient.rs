@@ -3,7 +3,6 @@
 //! directory runs. It is absent while its Host's provider has not loaded the session (a
 //! fresh Host), and present once `conversation_load` loads it. Every load and prompt the
 //! provider receives is appended to a journal in the Host directory.
-use super::fixture::identity;
 use codex_router_test_support::FixtureResult;
 use collaboration_protocol::SessionRef;
 use serde_json::{Value, json};

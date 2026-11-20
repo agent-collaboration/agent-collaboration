@@ -1,12 +1,5 @@
-//! Opt-in real board listeners and stores, without a native process. With the
-//! runtime-test-support feature, a `fixture-provider-acp.json` in the directory starts
-//! one fixture ACP provider on the Cursor endpoint, as an e2e recipient that can be held for.
-//!
-//! Run with `<directory> <MCP port> [<private fixture session JSON>]`.
-//! Port 0 asks the OS for a free port. Read the published service.json for its URL.
-//! CLI clients select this directory with --service-directory. Stop with SIGTERM
-//! or Ctrl-C; restart on the same directory to exercise durable board recovery.
-use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs, load_fleet_enrollment};
+//! Isolated collaboration listeners and local mail storage with an optional fixture ACP provider.
+use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_protocol::ServiceManifest;
 #[cfg(feature = "runtime-test-support")]
 #[path = "board-debug-runtime/fixture_provider.rs"]
@@ -57,29 +50,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err("board-debug-runtime requires a debug build".into());
     }
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
-    let [directory, port, extra @ ..] = arguments.as_slice() else {
-        return Err("usage: board-debug-runtime <private temporary directory> <MCP port> [<private fixture session JSON>]".into());
+    let [directory, port] = arguments.as_slice() else {
+        return Err("usage: board-debug-runtime <private temporary directory> <MCP port>".into());
     };
     let port: u16 = port.to_str().ok_or("port must be UTF-8")?.parse()?;
     let directory = validate_debug_directory(Path::new(directory), port)?;
-    let board_session = match extra {
-        [] => None,
-        [path] => {
-            let path = PathBuf::from(path);
-            let root = directory.clone();
-            Some(
-                tokio::task::spawn_blocking(move || load_fleet_enrollment(&path, &root))
-                    .await
-                    .map_err(io::Error::other)??,
-            )
-        }
-        _ => return Err("expected at most one private fixture session JSON path".into()),
-    };
     let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME unavailable")?);
     // Keep the normal Codex state path. No native process or stored-session read
     // is requested by this launcher; the native endpoint remains unavailable.
     let inputs = CollaborationRuntimeInputs {
-        board_session,
         owner_human_id: None,
         directory: directory.clone(),
         codex_home: home.join(".codex"),

@@ -2,7 +2,7 @@
 
 /// The local wake and schedule command groups this build no longer carries, each with a
 /// command it once accepted.
-const RETIRED_GROUP_COMMANDS: [[&str; 2]; 8] = [
+const RETIRED_GROUP_COMMANDS: [[&str; 2]; 29] = [
     ["wake", "send"],
     ["schedule", "create"],
     ["instruction", "show"],
@@ -11,6 +11,27 @@ const RETIRED_GROUP_COMMANDS: [[&str; 2]; 8] = [
     ["delivery", "list"],
     ["revision", "list"],
     ["operation", "show"],
+    ["board", "workspace"],
+    ["request-effects", "show"],
+    ["workspace", "list"],
+    ["project", "list"],
+    ["repository", "list"],
+    ["post", "show"],
+    ["thread", "list"],
+    ["inbox", "fetch"],
+    ["search", "resources"],
+    ["workstream", "list"],
+    ["task", "list"],
+    ["subtask", "list"],
+    ["work-trail", "show"],
+    ["adr", "list"],
+    ["fact", "list"],
+    ["feed", "read"],
+    ["role", "list"],
+    ["view", "work"],
+    ["process", "show"],
+    ["move", "show"],
+    ["hook", "list"],
 ];
 
 #[test]
@@ -182,7 +203,6 @@ fn finite_control_groups_keep_json_for_missing_required_arguments() {
         &["sessions", "list", "--json"],
         &["session", "inspect", "--json"],
         &["conversation", "prompt", "--json"],
-        &["board", "project", "show", "--json"],
         &["message", "send", "--json"],
     ];
 

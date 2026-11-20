@@ -133,7 +133,6 @@ async fn message_server(
     let clock = identity.runtime_clock();
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
-            board_availability: collaboration_service::BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: std::sync::Arc::clone(&delivery),
             presence: std::sync::Arc::clone(&presence),
@@ -147,10 +146,9 @@ async fn message_server(
         },
     );
     owner.start().await.expect("delivery owner starts");
-    let identity = identity.with_subscription_delivery_service(owner.clone(), presence.clone());
     let (identity, native) = crate::native_mail_owner::start(
         identity,
-        crate::native_board_test_fixture::fixture_peer().expect("fixture peer"),
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("fixture peer"),
         collaboration_service::MailPushDeliveryProps {
             interactions,
             actors: owner.clone(),
@@ -630,62 +628,6 @@ fn message_send_unknown_delivery_retains_outcome_in_typed_error() {
 }
 
 #[test]
-fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
-    let actor: message_board::Identity = serde_json::from_value(serde_json::json!({
-        "kind":"session",
-        "session":fixture_session("codex-local", "wait-reader")
-    }))
-    .expect("wait Reader identity");
-    let filter: collaboration_protocol::ThreadSubscriptionWaitFilter =
-        serde_json::from_value(serde_json::json!({
-            "kind":"roots",
-            "threads":[{"thread":"019f0000-0000-7000-8000-000000000005"}]
-        }))
-        .expect("thread-root wait filter");
-    let tool_result = super::super::thread_wait_outcome_unknown(&actor, &filter, &[]);
-    assert_eq!(tool_result.is_error, Some(true));
-    let structured = tool_result
-        .structured_content
-        .expect("typed wait outcome error");
-    assert_eq!(structured["mcpResult"], "error");
-    assert_eq!(structured["kind"], "outcomeUnknown");
-    assert_eq!(structured["stage"], "response");
-    assert_eq!(structured["effect"], "unknown");
-    assert_eq!(
-        structured["actor"],
-        serde_json::to_value(actor).expect("actor JSON")
-    );
-    assert_eq!(
-        structured["filter"],
-        serde_json::to_value(filter).expect("filter JSON")
-    );
-    assert!(structured.get("resource").is_none());
-    let message = structured["message"].as_str().expect("recovery guidance");
-    for phrase in [
-        "activity may have been handed off",
-        "subscriptions",
-        "unread inbox",
-        "thread subscriptions",
-        "inbox fetch",
-    ] {
-        assert!(message.contains(phrase), "{message}");
-    }
-
-    let server = CollaborationMcpServer::catalog_only();
-    let schema = server
-        .resolved_tools()
-        .into_iter()
-        .find(|tool| tool.name == "thread_wait")
-        .and_then(|tool| tool.output_schema)
-        .expect("advertised board_thread_wait output schema");
-    let schema = Value::Object((*schema).clone());
-    jsonschema::validator_for(&schema)
-        .expect("board_thread_wait output schema")
-        .validate(&structured)
-        .expect("typed wait outcome matches advertised MCP output schema");
-}
-
-#[test]
 fn message_send_foreign_writer_rejection_has_typed_action_in_mcp_error() {
     let server = CollaborationMcpServer::catalog_only();
     let schema = server
@@ -754,6 +696,17 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
             "generationGuard":null
         }))
         .expect("message_send input");
+    let remote_item = collaboration_protocol::MailItemId::generate();
+    let foreign_target = serde_json::json!({
+        "endpoint":{"serviceId":"00000000-0000-4000-8000-0000000000ff","endpointId":"codex-local"},
+        "sessionId":"foreign-target"
+    });
+    let remote = serde_json::from_value(serde_json::json!({
+        "itemId": remote_item,
+        "target": foreign_target,
+        "message":{"kind":"humanUser","text":"Cannot leave this Router"}
+    }))
+    .expect("non-local message input");
     let reply: collaboration_client::MessageReplyRequest =
         serde_json::from_value(serde_json::json!({
             "caller":fixture_session("codex-local", "target-session"),
@@ -764,6 +717,7 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
 
     // Act
     let sent = server.message_send(super::super::Parameters(send)).await;
+    let remote = server.message_send(super::super::Parameters(remote)).await;
     let replied = server.message_reply(super::super::Parameters(reply)).await;
 
     // Assert
@@ -774,6 +728,19 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
     assert!(sent["target"].is_null());
     assert_eq!(sent["code"], -32602);
     assert_eq!(sent["data"]["kind"], "wrongService");
+    let remote = remote.structured_content.expect("non-local send rejection");
+    assert_eq!(remote["serviceKind"], "unavailable");
+    assert_eq!(remote["effect"], "none");
+    let remote_push = remote_item.as_str().to_owned().try_into().expect("push id");
+    assert!(
+        native
+            .interactions
+            .get_push_record(&remote_push)
+            .await
+            .unwrap()
+            .is_none(),
+        "refused non-local send acquired local custody"
+    );
     let replied = replied.structured_content.expect("reply rejection");
     assert_eq!(replied["serviceKind"], "notFound");
     assert_eq!(replied["effect"], "none");

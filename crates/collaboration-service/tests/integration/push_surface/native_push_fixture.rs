@@ -193,7 +193,6 @@ pub(super) async fn setup_with_retention() -> (
     let clock = identity.runtime_clock();
     let actors = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
-            board_availability: collaboration_service::BoardAvailability::Unavailable,
             push_store: store.clone(),
             delivery: delivery.clone(),
             presence: presence.clone(),
@@ -202,7 +201,6 @@ pub(super) async fn setup_with_retention() -> (
         },
     );
     actors.start().await.expect("single owner starts");
-    let identity = identity.with_subscription_delivery_service(actors.clone(), presence.clone());
     let (identity, mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("installation peer"),

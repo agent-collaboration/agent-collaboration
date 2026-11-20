@@ -27,7 +27,7 @@ fn library_frames_refuse_removed_tail_reads_and_report_answers() {
     }}}});
     assert!(serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(answer).is_err());
     let current =
-        request(json!({"kind":"read","value":{"scope":{"kind":"fleetRecords"},"cursor":null}}));
+        request(json!({"kind":"read","value":{"scope":{"kind":"notices"},"cursor":null}}));
     let decoded: wire::ClientFrame<BoardConsumerProtocol> =
         serde_json::from_value(current.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), current);

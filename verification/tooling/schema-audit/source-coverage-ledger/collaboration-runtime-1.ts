@@ -65,11 +65,6 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: `${R}central_project_reads.rs`,
-      disposition: { kind: "none" },
-      note: "central board read copies: maps fleet-admission DirectoryLease to message_board CurrentWriter and WriterObservation (:62-94) and selects leases (:271-324); this is the central board protocol between Router and central, not one of the six outside edges or four protocols; no wire write",
-    },
-    {
       file: `${R}codex_app_server_delivery_result.rs`,
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "reads back the Router's own -32050 failure body from message_effect_state.rs (effects.resume, effects.submission, kind, reason, nextAction, clientCode; :85-190) and re-assembles NativeDeliveryFailure with json! and from_value (:149-159); NativeSendAcceptance to DeliveryOutcome (:49-77) and DeliveryOutcome to NativeObservedOutcome (:193-224). No Codex wire shape is read here",
@@ -118,26 +113,6 @@ export const section: LedgerSection = {
       file: `${R}endpoint_directory.rs`,
       disposition: { kind: "none" },
       note: "endpoint snapshots over collaboration-protocol EndpointDescription; validation only, no shape",
-    },
-    {
-      file: `${R}fleet_client.rs`,
-      disposition: { kind: "none" },
-      note: "fleet client over the Host machine session: board-sync BoardConsumerRequest and BoardPayload encode/decode (:104, :346, :367), FleetReply serde (:25), FleetRequestResult to RequestResult (:367-376), CallFailure to ForwardOutcome (:527-547); this is the central board protocol between Router and central, not one of the six outside edges; json! only in tests",
-    },
-    {
-      file: `${R}fleet_client/cache_refresh.rs`,
-      disposition: { kind: "none" },
-      note: "fleet cache rebuild from central board read pages; BoardPayload record decode (:164-171); central board protocol, not an outside edge",
-    },
-    {
-      file: `${R}fleet_client/outbox_retention.rs`,
-      disposition: { kind: "none" },
-      note: "fleet outbox retention worker; storage only",
-    },
-    {
-      file: `${R}fleet_client/synchronization.rs`,
-      disposition: { kind: "none" },
-      note: "fleet synchronization request bookkeeping; no message shape",
     },
     {
       file: `${R}interaction_broker.rs`,
@@ -199,11 +174,6 @@ export const section: LedgerSection = {
       file: `${R}mail_delivery_projection.rs`,
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "receive and outcome hooks: RecipientOutcome to DeliveryReceipt with reason texts (:251-328), refusal reason serialized to JSON text (:313), CarrierAcceptance against DeliveryOutcome (:341), TooLateAt mapping (:233), mail ItemId to PushId (:82, :149, :190, :223), message_send answer PushMessageSendResult with RouterLink text (:158-169)",
-    },
-    {
-      file: `${R}mail_delivery_session.rs`,
-      disposition: { kind: "none" },
-      note: "borrowed machine session handle and delivery task config; no shape",
     },
     {
       file: `${R}mail_push_preparation.rs`,

@@ -49,7 +49,7 @@ async fn a_protected_ready_port_is_joined_before_a_new_host_is_accepted() -> Fix
         async |owned| {
             let mut reports = 0;
             let mut removed_hold = Ok(());
-            let (host, stopped) = BoardHost::start_with_port_reports(&directory, None, |port| {
+            let (host, stopped) = BoardHost::start_with_port_reports(&directory, |port| {
                 reports += 1;
                 if reports == 1 {
                     // read_ready has acknowledged the child is held before serve entry.
@@ -94,7 +94,7 @@ async fn repeated_protected_ready_ports_stop_after_three_joined_attempts() -> Fi
         None::<BoardHost>,
         async |owned| {
             let mut reports = 0;
-            let result = BoardHost::start_with_port_reports(&directory, None, |_| {
+            let result = BoardHost::start_with_port_reports(&directory, |_| {
                 reports += 1;
                 43127
             })
@@ -113,7 +113,7 @@ async fn repeated_protected_ready_ports_stop_after_three_joined_attempts() -> Fi
                     .contains("protected listener ports [43127, 43127, 43127] after 3 attempts")
             );
             // Exhaustion must release the same directory for another real Host.
-            *owned = Some(BoardHost::start(&directory, None).await?);
+            *owned = Some(BoardHost::start(&directory).await?);
             Ok(())
         },
         stop_owned_host,

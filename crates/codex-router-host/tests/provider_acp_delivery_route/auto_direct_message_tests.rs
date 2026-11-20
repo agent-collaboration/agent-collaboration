@@ -5,7 +5,6 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
     PushDeliveryState, PushHeaderFacts, PushKind, PushOrigin, PushRecordDraft,
 };
-use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 
@@ -121,7 +120,6 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
             .expect("push store"),
     );
     let owner = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: pushes.clone(),
         delivery: router.clone(),
         presence: router,

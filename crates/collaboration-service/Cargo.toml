@@ -18,23 +18,16 @@ collaboration-contracts = { version = "0.1.105", path = "../collaboration-contra
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 fleet-sync-tokio-runner.workspace = true
-board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 durable-steps.workspace = true
 fleet-sync-delivery.workspace = true
-fleet-sync-lease.workspace = true
 fleet-sync-protocol.workspace = true
-fleet-sync-writer.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
-petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }
-message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
-fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 base64.workspace = true
-sha2.workspace = true
 sqlx = { workspace = true, features = ["sqlite"] }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
 codex-native-integration.workspace = true
@@ -56,15 +49,12 @@ thiserror.workspace = true
 
 [dev-dependencies]
 router-clock = { workspace = true, features = ["test-support"] }
-message-board-storage = { path = "../message-board-storage", version = "0.1.20", features = ["test-support"] }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14", features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", features = ["test-support"] }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
-fleet-sync-session.workspace = true
-fleet-sync-receiver.workspace = true
 tracing-subscriber.workspace = true
 turso_parser = { workspace = true, features = ["serde"] }
 proptest.workspace = true

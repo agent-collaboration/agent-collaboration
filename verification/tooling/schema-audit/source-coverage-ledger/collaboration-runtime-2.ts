@@ -55,36 +55,6 @@ export const section: LedgerSection = {
       note: "private Unix socket binding",
     },
     {
-      file: `${R}project_claim_store.rs`,
-      disposition: { kind: "none" },
-      note: "project claim installation",
-    },
-    {
-      file: `${R}project_read_handle.rs`,
-      disposition: { kind: "none" },
-      note: "project read gate",
-    },
-    {
-      file: `${R}project_registry_reads.rs`,
-      disposition: { kind: "none" },
-      note: "project reader resolution",
-    },
-    {
-      file: `${R}project_replication_cursor.rs`,
-      disposition: { kind: "none" },
-      note: "feed cursor mapping",
-    },
-    {
-      file: `${R}project_store_paths.rs`,
-      disposition: { kind: "none" },
-      note: "project file discovery",
-    },
-    {
-      file: `${R}project_store_registry.rs`,
-      disposition: { kind: "none" },
-      note: "project file handles",
-    },
-    {
       file: `${R}provider_acp_content_translation.rs`,
       disposition: { kind: "converts", owners: ["acp", "router-vocabulary"] },
       note: "parse_prompt_content (:5): ACP text, resource_link, image, audio, resource blocks to CommandContent (content parser 3 of 4)",

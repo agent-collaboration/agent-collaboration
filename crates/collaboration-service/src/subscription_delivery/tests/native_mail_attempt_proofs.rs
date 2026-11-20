@@ -1,6 +1,5 @@
 //! The real reader actors serialize each target; the external client is held at a channel seam.
 use super::super::subscription_service::OwnerObservation;
-use crate::BoardAvailability;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
 
@@ -107,7 +106,6 @@ impl Runtime {
         );
         let (calls, receiver) = mpsc::unbounded_channel();
         let service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Unavailable,
             push_store: store.clone(),
             delivery: Arc::new(HeldClient {
                 calls,

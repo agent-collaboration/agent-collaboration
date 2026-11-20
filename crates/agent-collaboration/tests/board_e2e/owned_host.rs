@@ -97,8 +97,8 @@ pub fn artifact_command(binary: &Path) -> FixtureResult<Command> {
 }
 
 impl BoardHost {
-    pub async fn start(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
-        Self::start_with_port_reports(directory, session, std::convert::identity)
+    pub async fn start(directory: &Path) -> FixtureResult<Self> {
+        Self::start_with_port_reports(directory, std::convert::identity)
             .await
             .map(|(host, _)| host)
     }
@@ -106,13 +106,12 @@ impl BoardHost {
     /// Port reports can force rejection, but cannot permit a protected actual listener.
     pub async fn start_with_port_reports(
         directory: &Path,
-        session: Option<&Path>,
         mut report_port: impl FnMut(u16) -> u16,
     ) -> FixtureResult<(Self, Vec<StoppedHost>)> {
         let mut rejected_ports = Vec::new();
         let mut stopped_attempts = Vec::new();
         for _ in 0..MAX_START_ATTEMPTS {
-            let mut host = Self::spawn_owned(directory, session)?;
+            let mut host = Self::spawn_owned(directory)?;
             match host.read_ready(&mut report_port).await {
                 Ok(ReadyListener::Accepted) => return Ok((host, stopped_attempts)),
                 Ok(ReadyListener::ProtectedPort(port)) => {
@@ -140,7 +139,7 @@ impl BoardHost {
         .into())
     }
 
-    fn spawn_owned(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
+    fn spawn_owned(directory: &Path) -> FixtureResult<Self> {
         let binary = std::env::var_os("CODEX_ROUTER_E2E_HOST_BINARY")
             .map(PathBuf::from)
             .ok_or(
@@ -159,9 +158,6 @@ impl BoardHost {
                 "CODEX_ROUTER_TEST_MAIL_STATUS_INTERVAL_MS",
                 std::fs::read_to_string(status_interval)?.trim(),
             );
-        }
-        if let Some(session) = session {
-            command.arg(session);
         }
         command
             .env_remove("CODEX_ROUTER_HOST_INHERITED_LOCK")

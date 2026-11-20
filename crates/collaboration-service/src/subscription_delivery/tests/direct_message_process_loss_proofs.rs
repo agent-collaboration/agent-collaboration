@@ -4,7 +4,6 @@
 //!
 //! The real delivery service, target actor and interaction store run in a child process;
 //! only the native client stands in. It writes one witness line per submission it receives.
-use crate::BoardAvailability;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
 use collaboration_contracts::AttemptEvidenceSink;
@@ -120,7 +119,6 @@ fn service_over(
     delivery: Arc<dyn SessionMessageDelivery>,
 ) -> SubscriptionDeliveryService {
     SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: store,
         delivery,
         presence: Arc::new(RunningPresence),

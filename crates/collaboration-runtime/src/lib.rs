@@ -1,19 +1,5 @@
 //! Resource-backed collaboration execution, provider adapters, durable owners and workers.
-mod project_store_paths;
-mod project_store_registry;
-pub use project_store_registry::{
-    NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry, install_board_cursor_key,
-};
-mod central_project_reads;
-mod project_read_handle;
-pub use central_project_reads::{
-    CentralReadError, ProjectReadCopyFuture, ProjectReadCopySource, PulledProjectReadCopy,
-};
-pub use project_read_handle::{ProjectReadHandle, ProjectReadSnapshot};
-mod fleet_client;
-pub use fleet_client::{FleetClient, FleetClientError, FleetReply};
 mod interaction_retention_worker;
-mod project_claim_store;
 pub use interaction_retention_worker::InteractionRetentionWorker;
 mod endpoint_directory;
 pub use endpoint_directory::{EndpointDirectory, EndpointInventoryReader, EndpointSnapshot};
@@ -130,16 +116,11 @@ mod outgoing_mail_message;
 pub use outgoing_mail_message::outgoing_mail_message;
 pub mod mail_push_preparation;
 pub use mail_push_preparation::{MailPushPreparation, prepare_mail_push};
-mod mail_delivery_session;
-pub use mail_delivery_session::MailDeliverySession;
 mod mail_delivery_projection;
 pub use mail_delivery_projection::{
     project_cancelled_after_delivery, project_mail_cancel_outcome, project_mail_outcome,
     project_received_mail,
 };
-
-mod project_replication_cursor;
-pub use project_replication_cursor::project_replication_cursor;
 
 /// Test-only hooks for causal runtime steps observed through the application.
 #[cfg(feature = "test-support")]

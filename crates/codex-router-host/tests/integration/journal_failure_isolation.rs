@@ -18,7 +18,6 @@ async fn journal_open_failure_does_not_disable_the_api_and_native_publication() 
         .unwrap_or_else(|error| panic!("blocked database: {error}"));
     // Act: callers can still discover the service and its explicit storage-unavailable state.
     let mut runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("backend.sock"),

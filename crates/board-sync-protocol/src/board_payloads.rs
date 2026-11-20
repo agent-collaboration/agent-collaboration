@@ -71,8 +71,6 @@ pub enum BoardReadScope {
         request: RequestId,
         after: Option<message_board::RequestEffectsCursor>,
     },
-    FleetRecords,
-    FleetSnapshot,
     Directory {
         query: BoardPayload,
     },
@@ -87,8 +85,6 @@ pub enum BoardReadScope {
     deny_unknown_fields
 )]
 pub enum BoardReadCursor {
-    Fleet(message_board::FleetPosition),
-    FleetSnapshot(crate::FleetSnapshotCursor),
     Notices(fleet_sync_protocol::NoticePosition),
     Snapshot(fleet_sync_protocol::SnapshotCursor),
 }
@@ -158,13 +154,6 @@ pub enum BoardReadPage {
     InstallationPeers(InstallationPeerPage),
     RequestEffects {
         result: message_board::RequestEffectsRead,
-        as_of: chrono::DateTime<chrono::Utc>,
-    },
-    FleetFeed(crate::FleetFeedRead),
-    FleetSnapshot {
-        records: Vec<BoardPayload>,
-        next: Option<crate::FleetSnapshotCursor>,
-        snapshot_at: message_board::FleetPosition,
         as_of: chrono::DateTime<chrono::Utc>,
     },
     Directory {

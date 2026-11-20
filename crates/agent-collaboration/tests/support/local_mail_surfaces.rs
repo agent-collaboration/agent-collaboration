@@ -14,8 +14,6 @@ use collaboration_protocol::{
 };
 use collaboration_service::ApplicationFixture;
 
-use collaboration_service::BoardAvailability;
-
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 
@@ -111,17 +109,6 @@ impl Surfaces {
         })
     }
     pub(super) async fn start() -> TestResult<Self> {
-        Self::start_with_session(None).await
-    }
-    pub(super) async fn start_with_session(
-        session: Option<collaboration_runtime::MailDeliverySession>,
-    ) -> TestResult<Self> {
-        Self::start_with_project_admission(session, None).await
-    }
-    pub(super) async fn start_with_project_admission(
-        session: Option<collaboration_runtime::MailDeliverySession>,
-        admission: Option<Arc<collaboration_service::ProjectAdmission>>,
-    ) -> TestResult<Self> {
         let root = tempfile::Builder::new()
             .prefix("m2c-mail-surface-")
             .tempdir()?;
@@ -133,13 +120,9 @@ impl Surfaces {
             interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
                 .await?,
         );
-        let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?;
-        if let Some(admission) = admission {
-            identity = identity.with_project_admission(admission);
-        }
+        let identity = ApplicationFixture::new(SERVICE, SERVICE)?;
         let clock = identity.runtime_clock();
         let delivery = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: carrier.clone(),
             presence: carrier.clone(),
@@ -147,13 +130,8 @@ impl Surfaces {
             clock: clock.clone(),
         });
         delivery.start().await?;
-        let identity =
-            identity.with_subscription_delivery_service(delivery.clone(), carrier.clone());
-        let peer = match &session {
-            Some(session) => session.peer,
-            None => fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
-        };
-        let (identity, native) = native_mail_owner::start_with_session(
+        let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?;
+        let (identity, native) = native_mail_owner::start(
             identity,
             peer,
             collaboration_service::MailPushDeliveryProps {
@@ -163,7 +141,6 @@ impl Surfaces {
                 machine: machine_identity,
                 clock,
             },
-            session,
         )?;
         let api = ServedCollaborationApi::start(root.path(), (identity).build())?;
         Ok(Self {
@@ -178,10 +155,6 @@ impl Surfaces {
     }
     pub(super) fn session(id: &str) -> Value {
         json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":id})
-    }
-    // Remote public-surface proofs inspect the actual SDK status owner.
-    pub(super) fn mail_runtime(&self) -> Arc<collaboration_service::MailDeliveryRuntime> {
-        self.native.runtime_handle()
     }
     pub(super) fn input(id: Option<&str>, text: &str) -> Value {
         let mut value = json!({"target":Self::session("fixture-target"),"message":{"kind":"humanUser","text":text},"delivery":"auto"});

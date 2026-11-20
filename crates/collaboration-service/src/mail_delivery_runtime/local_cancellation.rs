@@ -180,7 +180,7 @@ async fn admit_cancel_effects(
 }
 
 #[cfg(test)]
-async fn pause_cancel_admission(socket: &std::path::Path) -> Result<(), StoreError> {
+pub(super) async fn pause_cancel_admission(socket: &std::path::Path) -> Result<(), StoreError> {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     let mut connection = tokio::net::UnixStream::connect(socket)
         .await
