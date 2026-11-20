@@ -73,6 +73,8 @@ use native::*;
 mod custody_retention;
 #[path = "mail_push_direct_delivery_tests.rs"]
 mod direct;
+#[path = "inbound_wake_refusal_tests.rs"]
+mod inbound_wake;
 #[path = "local_mail_runtime_tests.rs"]
 mod local_runtime;
 #[path = "mail_materialized_session_test.rs"]
