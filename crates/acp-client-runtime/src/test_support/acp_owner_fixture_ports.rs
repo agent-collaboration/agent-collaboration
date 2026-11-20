@@ -6,7 +6,7 @@ use crate::{
     SessionEventSink,
     acp_transport::TransportRun,
     owner_session_open::{OwnerOpenedSession, OwnerSessionOpenSetup},
-    owner_session_setting::OwnerSettingWirePlan,
+    owner_session_setting::{OwnerSettingWirePlan, RestoreSettingReadback},
     owner_session_stream::{OwnerStreamTarget, ReplayedSessionFacts},
     owner_wire::OwnerAcpWire,
     session_owner_task::{OwnerCompletionPort, OwnerTaskError, SessionOwnerPorts},
@@ -38,6 +38,15 @@ struct OpenedRestore {
     generation: SessionGeneration,
     replay: ReplayedSessionFacts,
     fallback: Option<String>,
+    setting_readback: Option<RestoreSettingReadback>,
+}
+
+impl OpenedRestore {
+    fn apply_setting_readback(&mut self) {
+        if let Some(readback) = self.setting_readback.take() {
+            self.opened.apply_restore_setting_readback(readback);
+        }
+    }
 }
 
 pub(super) struct FixturePorts<P: InteractionPort> {
@@ -180,6 +189,7 @@ impl<P: InteractionPort> FixturePorts<P> {
                                 generation: run.generation,
                                 replay,
                                 fallback: planned.accepted_mode_fallback,
+                                setting_readback: None,
                             },
                         );
                         SessionWireResult::Restore {
@@ -306,10 +316,11 @@ impl<P: InteractionPort> FixturePorts<P> {
         value: String,
         completions: &OwnerCompletionPort,
     ) -> Result<Option<OwnerEvent>, OwnerTaskError> {
-        let pending = lock(&self.restores);
+        let mut pending = lock(&self.restores);
         let opened = pending
-            .get(&run.attempt)
+            .get_mut(&run.attempt)
             .ok_or(OwnerTaskError::ExecutorStopped)?;
+        opened.apply_setting_readback();
         let plan = OwnerSettingWirePlan::from_catalog(
             self.id.clone(),
             opened.opened.catalog(),
@@ -320,9 +331,14 @@ impl<P: InteractionPort> FixturePorts<P> {
         let completion = completions.reserve(address)?;
         match plan {
             Ok(plan) => {
-                let _offered =
-                    self.wire
-                        .reapply_setting(address.incarnation, run, setting, plan, completion);
+                let (plan, readback) = plan.retain_restore_readback();
+                if self
+                    .wire
+                    .reapply_setting(address.incarnation, run, setting, plan, completion)
+                    .is_ok()
+                {
+                    opened.setting_readback = Some(readback);
+                }
                 Ok(None)
             }
             Err(_) => {
@@ -610,10 +626,11 @@ impl<P: InteractionPort> SessionOwnerPorts for FixturePorts<P> {
                 Ok(Some(OwnerEvent::Replay { run, events }))
             }
             OwnerEffect::PrepareHost(run) => {
-                let pending = lock(&self.restores);
+                let mut pending = lock(&self.restores);
                 let opened = pending
-                    .get(&run.attempt)
+                    .get_mut(&run.attempt)
                     .ok_or(OwnerTaskError::ExecutorStopped)?;
+                opened.apply_setting_readback();
                 Ok(Some(OwnerEvent::Prepare(RestorePreparation::HostReady {
                     run,
                     capabilities: opened.opened.capabilities().to_session_model(),

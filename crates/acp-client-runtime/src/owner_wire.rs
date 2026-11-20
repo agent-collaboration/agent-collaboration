@@ -326,6 +326,15 @@ impl OwnerAcpWire {
             .map(|grant| grant.grant.clone())
     }
 
+    #[cfg(feature = "test-support")]
+    pub(crate) fn router_auto_grant_for_test(&self, run: TransportRun) -> Option<bool> {
+        self.grants
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&run)
+            .map(|grant| grant.router_auto)
+    }
+
     pub(crate) fn register_reader(&self, run: TransportRun) -> mpsc::Receiver<PromptTerminal> {
         let (send, receive) = mpsc::channel(1);
         self.readers

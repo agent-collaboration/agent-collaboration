@@ -9,6 +9,9 @@ mod recovered_admission_tests;
 #[path = "restore_recovery/writer_admission_test.rs"]
 mod writer_admission_tests;
 
+#[path = "restore_recovery/restore_readback_test.rs"]
+mod restore_readback_tests;
+
 #[path = "restore_recovery/cancel_confirmation_test.rs"]
 mod cancel_confirmation_tests;
 

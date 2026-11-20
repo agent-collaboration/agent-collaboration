@@ -9,7 +9,7 @@ use acp_client_runtime::{
     ExternalProviderRuntimeError,
     acp_transport::TransportRun,
     owner_session_open::{OwnerOpenedSession, OwnerSessionOpenSetup},
-    owner_session_setting::{OwnerSettingWirePlan, RestoreSettingPlan},
+    owner_session_setting::{OwnerSettingWirePlan, RestoreSettingPlan, RestoreSettingReadback},
     owner_session_stream::OwnerStreamTarget,
     owner_wire::OwnerAcpWire,
     session_owner_task::{OwnerCompletionPort, OwnerTaskError, SessionOwnerPorts},
@@ -58,6 +58,15 @@ struct OpenedRestore {
     session: OwnerOpenedSession,
     fallback: Option<String>,
     skills: Option<session_event_model::SkillView>,
+    setting_readback: Option<RestoreSettingReadback>,
+}
+
+impl OpenedRestore {
+    fn apply_setting_readback(&mut self) {
+        if let Some(readback) = self.setting_readback.take() {
+            self.session.apply_restore_setting_readback(readback);
+        }
+    }
 }
 
 struct OwnerRun {
@@ -274,6 +283,7 @@ impl SessionOwnerExecution {
                     session,
                     fallback: accepted_mode_fallback,
                     skills,
+                    setting_readback: None,
                 },
             );
             completion.send(OwnerEvent::Wire(SessionWireResult::Restore {
@@ -293,10 +303,11 @@ impl SessionOwnerExecution {
         value: SettingValueId,
         completions: &OwnerCompletionPort,
     ) -> Result<Option<OwnerEvent>, OwnerTaskError> {
-        let connection = lock(&self.opens);
-        let Some(opened) = connection.get(&run.attempt) else {
+        let mut connection = lock(&self.opens);
+        let Some(opened) = connection.get_mut(&run.attempt) else {
             return Ok(Some(setting_unsent(run, setting)));
         };
+        opened.apply_setting_readback();
         let request = match OwnerSettingWirePlan::from_catalog(
             self.session_id(),
             opened.session.catalog(),
@@ -307,6 +318,7 @@ impl SessionOwnerExecution {
             Ok(request) => request,
             Err(_) => return Ok(Some(setting_unsent(run, setting))),
         };
+        let (request, readback) = request.retain_restore_readback();
         let completion = completions.reserve(address)?;
         if self
             .wire
@@ -315,6 +327,7 @@ impl SessionOwnerExecution {
         {
             return Ok(Some(setting_unsent(run, setting)));
         }
+        opened.setting_readback = Some(readback);
         Ok(None)
     }
 
@@ -552,16 +565,20 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 },
             ))),
             OwnerEffect::PrepareHost(run) => {
-                let openings = lock(&self.opens);
-                let preparation = match openings.get(&run.attempt) {
-                    Some(entry) => RestorePreparation::HostReady {
-                        run,
-                        capabilities: entry.session.capabilities().to_session_model(),
-                        settings: entry.session.settings(),
-                        observed: acp_client_runtime::owner_session_creation::catalogue_evidence(
-                            entry.session.catalog(),
-                        ),
-                    },
+                let mut openings = lock(&self.opens);
+                let preparation = match openings.get_mut(&run.attempt) {
+                    Some(entry) => {
+                        entry.apply_setting_readback();
+                        RestorePreparation::HostReady {
+                            run,
+                            capabilities: entry.session.capabilities().to_session_model(),
+                            settings: entry.session.settings(),
+                            observed:
+                                acp_client_runtime::owner_session_creation::catalogue_evidence(
+                                    entry.session.catalog(),
+                                ),
+                        }
+                    }
                     None => RestorePreparation::Failed {
                         run,
                         stage: PreparationStage::HostSetup,

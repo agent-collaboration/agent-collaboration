@@ -797,6 +797,11 @@ impl<P: InteractionPort> FixtureClient<P> {
         })
     }
 
+    pub fn in_folder_router_auto_for_test(&self, id: &str) -> Option<bool> {
+        let wire = self.owner_wire();
+        wire.router_auto_grant_for_test(wire.route_for_session(id)?)
+    }
+
     pub fn settings_catalog(&self, id: &str) -> Option<ProviderSettingsCatalog> {
         let session = self.session(id).ok()?;
         let mut catalog =

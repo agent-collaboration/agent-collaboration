@@ -22,6 +22,7 @@ use provider_session_machines::{
     },
     session_setting_machine::{SettingApplication, SettingValueId},
 };
+use std::sync::{Arc, Mutex, PoisonError};
 use uuid::Uuid;
 
 pub struct RestoreSettingPlan {
@@ -34,11 +35,7 @@ impl OwnerOpenedSession {
     #[must_use]
     pub fn restore_setting_plan(&mut self, requested_mode: Option<&str>) -> RestoreSettingPlan {
         let current = self.catalog.effective_settings().mode;
-        self.router_auto_active = crate::provider_setting_application::current_mode_grants_auto(
-            requested_mode,
-            &self.catalog,
-            self.behavior.as_ref(),
-        );
+        self.refresh_restored_allowance();
         let (mode, accepted_mode_fallback) = if let Some(requested) = requested_mode {
             match plan_permission_mode(
                 RequestedPermissionMode::from_request(Some(requested)),
@@ -80,7 +77,33 @@ impl OwnerOpenedSession {
                 .then(|| SettingApplication(Uuid::now_v7())),
         }
     }
+
+    pub fn apply_restore_setting_readback(&mut self, readback: RestoreSettingReadback) {
+        let catalog = readback
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(catalog) = catalog {
+            self.catalog = catalog;
+            self.refresh_restored_allowance();
+        }
+    }
+
+    fn refresh_restored_allowance(&mut self) {
+        // Evaluate the adapter's Auto rule against the reported mode. The
+        // saved folders still determine whether this run has a scope at all.
+        self.router_auto_active = crate::provider_setting_application::current_mode_grants_auto(
+            Some("auto"),
+            &self.catalog,
+            self.behavior.as_ref(),
+        );
+    }
 }
+
+/// The full catalogue readback for one restore setter. Its owner drops this
+/// receipt when advancing past the write, so a late reply cannot update a run.
+pub struct RestoreSettingReadback(Arc<Mutex<Option<ProviderSettingsCatalog>>>);
 
 pub struct OwnerSettingWirePlan {
     pub(crate) message: UntypedMessage,
@@ -95,6 +118,7 @@ struct SettingResponseShape {
     current: Option<SettingValueId>,
     reads_value: bool,
     mode_confirmation: Option<ModeConfirmation>,
+    restore_readback: Option<RestoreSettingReadback>,
 }
 
 #[derive(Clone, Copy)]
@@ -172,6 +196,7 @@ impl OwnerSettingWirePlan {
                 current: current_value(catalog, kind),
                 reads_value,
                 mode_confirmation: None,
+                restore_readback: None,
             },
         })
     }
@@ -179,6 +204,13 @@ impl OwnerSettingWirePlan {
     pub(crate) fn with_mode_confirmation(mut self, mode: Option<ModeConfirmation>) -> Self {
         self.response.mode_confirmation = mode;
         self
+    }
+
+    #[must_use]
+    pub fn retain_restore_readback(mut self) -> (Self, RestoreSettingReadback) {
+        let slot = Arc::new(Mutex::new(None));
+        self.response.restore_readback = Some(RestoreSettingReadback(Arc::clone(&slot)));
+        (self, RestoreSettingReadback(slot))
     }
 
     pub(crate) fn correlate(
@@ -257,6 +289,12 @@ impl CorrelatedSetting {
                 current_value(&shape.catalog, shape.kind)
             })
         };
+        if let Some(readback) = shape.restore_readback.take()
+            && (catalogue_reported || confirmed_legacy_mode)
+        {
+            *readback.0.lock().unwrap_or_else(PoisonError::into_inner) =
+                Some(shape.catalog.clone());
+        }
         match correlation {
             SettingCorrelation::Explicit(authorization) => {
                 let fast_refusal = shape.kind == ProviderSettingKind::Fast
