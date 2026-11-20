@@ -168,7 +168,7 @@ fn send_race_arguments(receipt: &std::path::Path, behavior: &str) -> Vec<String>
 }
 
 #[tokio::test]
-async fn busy_with_steering_uses_the_running_owner_answer() {
+async fn busy_with_steering_uses_the_running_owner_answer_after_the_turn_ends() {
     use provider_session_machines::session_refusal_answers::session_busy_answer;
 
     let rig = steering_session_on_clock(
@@ -214,7 +214,34 @@ async fn busy_with_steering_uses_the_running_owner_answer() {
         .expect("input");
     direct.busy = super::provider_prompt_contents::PromptBusyPolicy::RefuseBusy;
     let operation = direct.operation_id.clone();
-    let failure = match rig.supervisor.prompt_contents(direct).await {
+    let runtime = rig
+        .supervisor
+        .runtime_for(&rig.target.endpoint)
+        .expect("runtime");
+    let acknowledgement = runtime.preparation_fixture.pause_delivery_ack(false);
+    let refused = rig.supervisor.prompt_contents(direct);
+    tokio::pin!(refused);
+    tokio::select! {
+        result = acknowledgement.reached => result.expect("the owner refused the command"),
+        result = &mut refused => panic!("refusal was rendered early: {result:?}"),
+    }
+    node_test_fixture::release_fixture(&rig.receipt, ".release").expect("release foreground");
+    let owner = rig
+        .supervisor
+        .session_owner_for(&rig.target)
+        .expect("session owner");
+    owner
+        .snapshots()
+        .wait_for(|snapshot| {
+            snapshot.turn == provider_session_machines::session_turn_machine::SessionTurn::Idle
+        })
+        .await
+        .expect("the later watch value is idle");
+    acknowledgement
+        .release
+        .send(())
+        .expect("render the refusal");
+    let failure = match refused.await {
         Ok(_) => rig
             .supervisor
             .wait(ConversationOperationWaitRequest {
@@ -234,7 +261,6 @@ async fn busy_with_steering_uses_the_running_owner_answer() {
         answer,
         session_busy_answer(&snapshot.lifecycle, snapshot.turn, steer)
     );
-    node_test_fixture::release_fixture(&rig.receipt, ".release").expect("release foreground");
     rig.supervisor.shutdown().await.expect("shutdown");
 }
 

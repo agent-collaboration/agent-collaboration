@@ -11,8 +11,10 @@ use acp_client_runtime::{
 use collaboration_protocol::{EndpointRef, OperationId, SessionId, SessionRef};
 use provider_session_machines::session_owner::{
     CreateOutcome, CreateProgress, OwnerAddress, OwnerEffect, OwnerEvent, PublicationBatch,
-    PublicationFact, RemoteEffect, SessionOwnerCommand, SessionPublication, SessionWireRequest,
+    PublicationFact, RemoteEffect, SessionOwnerCommand, SessionOwnerRefusal, SessionOwnerRejection,
+    SessionPublication, SessionWireRequest,
 };
+use provider_session_machines::session_refusal_answers::effect_in_progress_answer;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -121,10 +123,14 @@ impl SessionOwnerDoor {
         admitted
             .await
             .map_err(|_| ExternalProviderRuntimeError::TransportFailure)?
-            .map_err(|reason| {
-                ExternalProviderRuntimeError::Operation(format!(
-                    "the session owner refused create: {reason:?}"
-                ))
+            .map_err(|refusal| {
+                let answer = match refusal.rejection {
+                    SessionOwnerRejection::Refused(SessionOwnerRefusal::EffectInProgress(
+                        effect,
+                    )) => effect_in_progress_answer(effect, &refusal.snapshot),
+                    other => format!("the session owner refused create: {other:?}"),
+                };
+                ExternalProviderRuntimeError::Operation(answer)
             })?;
         result
             .await

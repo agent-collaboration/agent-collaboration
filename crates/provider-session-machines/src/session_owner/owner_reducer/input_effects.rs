@@ -3,7 +3,8 @@ use crate::queued_entry_machine::{QueuedEntryEffect, SentOutcome};
 use crate::session_cell_machine::{QueuedOperation, SessionCellEffect, SessionCellEvent};
 use crate::session_lifecycle_machine::SessionLifecycle;
 use crate::session_owner::{
-    AuthorizedWork, DeliveryPlacementKind, OwnerEffect, RevokeReason, TurnMembership,
+    AuthorizedWork, DeliveryPlacementKind, EffectInProgress, OwnerEffect, RevokeReason,
+    TurnMembership,
 };
 use crate::session_owner::{
     EffectOutcome, InputWait, LastLiveTurn, OwnerInput, PendingPrompt, PromptAdmission,
@@ -96,9 +97,9 @@ impl OwnerTransition {
         }
         if admission == PromptAdmission::Direct
             && self.is_live(input.generation)
-            && self.prompt_in_progress()
+            && let Some(blocker) = self.prompt_blocker()
         {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+            return Err(SessionOwnerRefusal::EffectInProgress(blocker).into());
         }
         if queued
             && self
@@ -250,20 +251,34 @@ impl OwnerTransition {
 
     pub(super) fn admit_warm(&mut self, input: OwnerInput) -> OwnerResult {
         self.require_live(input.generation)?;
-        if self.prompt_in_progress() || !self.next.prompts.is_empty() || self.next.setting.is_some()
-        {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+        let blocker = self
+            .prompt_blocker()
+            .or_else(|| {
+                self.next
+                    .setting
+                    .is_some()
+                    .then_some(EffectInProgress::SettingChange)
+            })
+            .or_else(|| (!self.next.prompts.is_empty()).then_some(EffectInProgress::QueuedPrompts));
+        if let Some(blocker) = blocker {
+            return Err(SessionOwnerRefusal::EffectInProgress(blocker).into());
         }
         self.admit_prompt(input, PromptAdmission::Direct)
     }
 
     pub(super) fn prompt_in_progress(&self) -> bool {
-        self.next.turn() != SessionTurn::Idle
-            || self
-                .next
-                .prompts
-                .values()
-                .any(|pending| pending.wait != InputWait::Admission)
+        self.prompt_blocker().is_some()
+    }
+
+    fn prompt_blocker(&self) -> Option<EffectInProgress> {
+        if self.next.turn() != SessionTurn::Idle {
+            return Some(EffectInProgress::TurnInProgress);
+        }
+        self.next
+            .prompts
+            .values()
+            .any(|pending| pending.wait != InputWait::Admission)
+            .then_some(EffectInProgress::PromptDispatch)
     }
 
     pub(super) fn apply_entry_effects(&mut self, effects: Vec<SessionCellEffect>) -> OwnerResult {
@@ -797,7 +812,7 @@ impl OwnerTransition {
             return Err(SessionOwnerRefusal::SettingsUnresolved.into());
         }
         if self.next.steer.is_some() {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+            return Err(SessionOwnerRefusal::EffectInProgress(EffectInProgress::Steer).into());
         }
         let effects = self.cell_move(SessionCellEvent::SteerRequested {
             agent_steers: supported,

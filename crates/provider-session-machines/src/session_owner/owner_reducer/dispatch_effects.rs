@@ -4,9 +4,9 @@ use crate::queued_entry_machine::SentOutcome;
 use crate::session_cell_machine::SessionCellEvent;
 use crate::session_owner::{
     AuthorizationStatus, AuthorizationTarget, AuthorizedWork, CancelDrainReport,
-    DispatchAuthorization, DispatchResult, InputWait, OwnerDeadline, OwnerEffect, OwnerInput,
-    PendingAuthorization, RevokeReason, SessionOwnerEffect, SessionPublication, SessionTurn,
-    TurnId, TurnMembership, WireOutcome,
+    DispatchAuthorization, DispatchResult, EffectInProgress, InputWait, OwnerDeadline, OwnerEffect,
+    OwnerInput, PendingAuthorization, RevokeReason, SessionOwnerEffect, SessionOwnerRefusal,
+    SessionPublication, SessionTurn, TurnId, TurnMembership, WireOutcome,
 };
 use session_event_model::InputId;
 
@@ -55,7 +55,7 @@ impl OwnerTransition {
             {
                 return Ok(());
             }
-            return Err(super::super::SessionOwnerRefusal::EffectInProgress.into());
+            return Err(SessionOwnerRefusal::EffectInProgress(EffectInProgress::Cancel).into());
         }
         let foreground = self
             .next

@@ -924,7 +924,7 @@ impl<P: InteractionPort> FixtureSession<P> {
             .map_err(fixture_error)?
             .map_err(|rejection| {
                 use provider_session_machines::session_owner::{SessionOwnerRefusal, SessionOwnerRejection};
-                match rejection {
+                match rejection.rejection {
                     SessionOwnerRejection::Refused(SessionOwnerRefusal::SettingsUnresolved) =>
                         ExternalProviderRuntimeError::SettingsUnresolved {
                             answer: "settings-uncertain: resolve the unknown setting before sending input".into(),
@@ -935,7 +935,7 @@ impl<P: InteractionPort> FixtureSession<P> {
                         ExternalProviderRuntimeError::UnsupportedSteering,
                     SessionOwnerRejection::Refused(SessionOwnerRefusal::SkillSelectionChanged) =>
                         ExternalProviderRuntimeError::Behavior(crate::ProviderError::InvalidSelection),
-                    SessionOwnerRejection::Refused(SessionOwnerRefusal::EffectInProgress) if self.owner.snapshots().borrow().turn != SessionTurn::Idle =>
+                    SessionOwnerRejection::Refused(SessionOwnerRefusal::EffectInProgress(provider_session_machines::session_owner::EffectInProgress::TurnInProgress)) =>
                         ExternalProviderRuntimeError::LocalBusy { answer: "a turn is running; queue the message or cancel the turn".into() },
                     other => ExternalProviderRuntimeError::LocalBusy { answer: format!("{other:?}") },
                 }

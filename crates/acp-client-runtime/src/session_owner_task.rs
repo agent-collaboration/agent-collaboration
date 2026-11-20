@@ -29,10 +29,16 @@ pub enum OwnerTaskError {
     ExecutorStopped,
 }
 
+#[derive(Debug)]
+pub struct OwnerCommandRefusal {
+    pub rejection: SessionOwnerRejection,
+    pub snapshot: Box<SessionSnapshot>,
+}
+
 struct Submission {
     address: OwnerAddress,
     command: SessionOwnerCommand,
-    accepted: oneshot::Sender<Result<(), SessionOwnerRejection>>,
+    accepted: oneshot::Sender<Result<(), OwnerCommandRefusal>>,
 }
 
 #[derive(Clone)]
@@ -47,7 +53,7 @@ impl SessionOwnerHandle {
         &self,
         address: OwnerAddress,
         command: SessionOwnerCommand,
-    ) -> Result<oneshot::Receiver<Result<(), SessionOwnerRejection>>, OwnerMailboxUnavailable> {
+    ) -> Result<oneshot::Receiver<Result<(), OwnerCommandRefusal>>, OwnerMailboxUnavailable> {
         let (accepted, decision) = oneshot::channel();
         self.commands
             .try_send(Submission {
@@ -252,7 +258,7 @@ impl SessionOwnerTask {
     fn process(
         &mut self,
         event: OwnerMailboxEvent,
-        accepted: Option<oneshot::Sender<Result<(), SessionOwnerRejection>>>,
+        accepted: Option<oneshot::Sender<Result<(), OwnerCommandRefusal>>>,
         ports: &mut impl SessionOwnerPorts,
     ) -> Result<(), OwnerTaskError> {
         let mut ready = VecDeque::from([(event, accepted)]);
@@ -262,7 +268,10 @@ impl SessionOwnerTask {
                 Ok(outbox) => outbox,
                 Err(reason) => {
                     if let Some(accepted) = accepted {
-                        let _reader_gone = accepted.send(Err(reason));
+                        let _reader_gone = accepted.send(Err(OwnerCommandRefusal {
+                            rejection: reason,
+                            snapshot: Box::new(self.machine.snapshot()),
+                        }));
                     }
                     continue;
                 }

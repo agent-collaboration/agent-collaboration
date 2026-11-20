@@ -3,11 +3,11 @@ use crate::ProviderSettingKind;
 use crate::session_cell_machine::SessionCellEvent;
 use crate::session_lifecycle_machine::SessionLifecycle;
 use crate::session_owner::{
-    AuthorizationStatus, AuthorizedWork, EffectOutcome, FastReadback, ModelFastOutcome,
-    ObservationCause, ObservedSetting, OwnerEffect, OwnerSetting, QueuedSetting, RemoteEffect,
-    RevokeReason, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal, SessionOwnerReply,
-    SessionPublication, SessionStoreRequest, SettingEffectInProgress, SettingEvidence,
-    SettingObservation, SettingReadback, SettingWait,
+    AuthorizationStatus, AuthorizedWork, EffectInProgress, EffectOutcome, FastReadback,
+    ModelFastOutcome, ObservationCause, ObservedSetting, OwnerEffect, OwnerSetting, QueuedSetting,
+    RemoteEffect, RevokeReason, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal,
+    SessionOwnerReply, SessionPublication, SessionStoreRequest, SettingEffectInProgress,
+    SettingEvidence, SettingObservation, SettingReadback, SettingWait,
 };
 use crate::session_setting_machine::{SessionSettingEvent, SettingValueId};
 use session_event_model::InputId;
@@ -145,7 +145,11 @@ impl OwnerTransition {
         if self.next.setting != Some((setting, SettingWait::Enqueue))
             || !self.revoke_input(setting.change.generation, input, RevokeReason::Cancelled)
         {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+            // The owner uses this guard when a setting waiter withdraws.
+            return Err(SessionOwnerRefusal::EffectInProgress(
+                EffectInProgress::SettingCancelTooLate,
+            )
+            .into());
         }
         Ok(())
     }

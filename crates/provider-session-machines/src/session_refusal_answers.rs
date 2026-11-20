@@ -7,6 +7,7 @@
 use crate::queue_line_machine::QueueLineMachine;
 use crate::session_lifecycle_answers::state_answer;
 use crate::session_lifecycle_machine::SessionLifecycle;
+use crate::session_owner::{EffectInProgress, SessionSnapshot};
 use crate::session_setting_machine::{
     SessionSetting, SessionSettingMachine, SettingValueId, UnresolvedCause,
 };
@@ -138,6 +139,48 @@ pub fn session_busy_answer(
         | SessionLifecycle::Loading { .. }
         | SessionLifecycle::Closing { .. } => state_answer(lifecycle),
     }
+}
+
+pub fn effect_in_progress_answer(effect: EffectInProgress, snapshot: &SessionSnapshot) -> String {
+    match effect {
+        EffectInProgress::TurnInProgress => {
+            return session_busy_answer(
+                &snapshot.lifecycle,
+                snapshot.turn,
+                snapshot
+                    .projection
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|report| report.steer),
+            );
+        }
+        EffectInProgress::PromptDispatch => {
+            "the Router is preparing a prompt. Wait for it before sending again"
+        }
+        EffectInProgress::QueuedPrompts => {
+            "messages are waiting in the queue. Wait for them to be sent"
+        }
+        EffectInProgress::SettingChange => {
+            "a setting is being changed. Wait for the change before sending again"
+        }
+        EffectInProgress::Steer => {
+            "a steer is in progress. Wait for its result before steering again"
+        }
+        EffectInProgress::Cancel => "a cancellation is in progress. Wait for its result",
+        EffectInProgress::Create => {
+            "the Router is creating the session. Wait for the create result"
+        }
+        EffectInProgress::ProviderDisconnected => {
+            "the provider connection ended. Reconnect, then retry the session request"
+        }
+        EffectInProgress::CreateOnActiveOwner => {
+            "the session already has an owner. Use the existing session"
+        }
+        EffectInProgress::SettingCancelTooLate => {
+            "the setting can no longer be cancelled. Wait for its result"
+        }
+    }
+    .to_owned()
 }
 
 /// The valid next steps for a session setting in `setting`: its caller

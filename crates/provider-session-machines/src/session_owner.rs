@@ -534,6 +534,20 @@ pub enum SettingEffectInProgress {
     FencedSetting(Option<crate::session_setting_machine::SessionSetting>),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EffectInProgress {
+    TurnInProgress,
+    PromptDispatch,
+    QueuedPrompts,
+    SettingChange,
+    Steer,
+    Cancel,
+    Create,
+    ProviderDisconnected,
+    CreateOnActiveOwner,
+    SettingCancelTooLate,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionOwnerRefusal {
     Cell(state_machine_core::TransitionError<SessionCellRefusal>),
@@ -541,7 +555,7 @@ pub enum SessionOwnerRefusal {
     SettingsUnresolved,
     SettingContextChanged,
     InputAlreadyAdmitted,
-    EffectInProgress,
+    EffectInProgress(EffectInProgress),
     SettingEffectInProgress(SettingEffectInProgress),
     CancelTargetInactive,
     QueueFull,

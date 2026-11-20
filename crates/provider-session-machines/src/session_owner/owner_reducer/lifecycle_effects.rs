@@ -5,9 +5,10 @@ use crate::session_lifecycle_machine::{
 };
 use crate::session_owner::OwnerSetting;
 use crate::session_owner::{
-    AuthorizationStatus, CloseRequest, ObservationCause, ObservedSetting, OwnerEffect,
-    PreparationStage, PreparedSetup, RestoreDisposition, RestoreFailure, RestoreModeOutcome,
-    RestorePhase, RestorePreparation, RestoreResult, SettingEvidence, TurnMembership,
+    AuthorizationStatus, CloseRequest, EffectInProgress, ObservationCause, ObservedSetting,
+    OwnerEffect, PreparationStage, PreparedSetup, RestoreDisposition, RestoreFailure,
+    RestoreModeOutcome, RestorePhase, RestorePreparation, RestoreResult, SettingEvidence,
+    TurnMembership,
 };
 use crate::session_owner::{
     CloseOutcome, EffectOutcome, PendingRestore, RemoteEffect, RestoreFailureStage, RestoreWait,
@@ -61,8 +62,14 @@ impl OwnerTransition {
         via: RestoreVia,
         after_queue_evidence: Option<uuid::Uuid>,
     ) -> OwnerResult {
-        if !self.next.ports.connection_alive || self.next.ports.create.is_some() {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+        if !self.next.ports.connection_alive {
+            return Err(SessionOwnerRefusal::EffectInProgress(
+                EffectInProgress::ProviderDisconnected,
+            )
+            .into());
+        }
+        if self.next.ports.create.is_some() {
+            return Err(SessionOwnerRefusal::EffectInProgress(EffectInProgress::Create).into());
         }
         self.cell_move(SessionCellEvent::LoadRequested { attempt, via })?;
         self.next.ports.observed.clear();

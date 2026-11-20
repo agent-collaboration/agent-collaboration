@@ -38,8 +38,11 @@ pub enum OwnerDoorError {
     Mailbox(#[from] OwnerMailboxUnavailable),
     #[error("the Router couldn't prepare this session's owner")]
     Unavailable,
-    #[error("the session owner refused the command: {0:?}")]
-    Refused(SessionOwnerRejection),
+    #[error("the session owner refused the command: {rejection:?}")]
+    Refused {
+        rejection: SessionOwnerRejection,
+        snapshot: Option<Box<SessionSnapshot>>,
+    },
     #[error("the session owner stopped before giving a result")]
     OwnerStopped,
 }
@@ -541,9 +544,12 @@ impl SessionOwnerAddress {
                 if !content.selected_skills().is_empty() =>
             {
                 self.calls.release_input(&input.input);
-                return Err(OwnerDoorError::Refused(SessionOwnerRejection::Refused(
-                    provider_session_machines::session_owner::SessionOwnerRefusal::SkillSelectionChanged,
-                )));
+                return Err(OwnerDoorError::Refused {
+                    rejection: SessionOwnerRejection::Refused(
+                        provider_session_machines::session_owner::SessionOwnerRefusal::SkillSelectionChanged,
+                    ),
+                    snapshot: None,
+                });
             }
             command => command,
         };
@@ -658,7 +664,10 @@ impl SessionOwnerAddress {
         accepted
             .await
             .map_err(|_| OwnerDoorError::OwnerStopped)?
-            .map_err(OwnerDoorError::Refused)
+            .map_err(|refusal| OwnerDoorError::Refused {
+                rejection: refusal.rejection,
+                snapshot: Some(refusal.snapshot),
+            })
     }
 
     #[cfg(test)]

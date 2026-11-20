@@ -2,20 +2,31 @@ use super::publication_effects::WIRE_BUDGET;
 use super::{OwnerRejection, OwnerResult, OwnerTransition};
 use crate::session_lifecycle_machine::{LoadAttempt, SessionLifecycle};
 use crate::session_owner::{
-    CreateOutcome, CreateProgress, OwnerDeadline, OwnerEffect, RemoteEffect, RestoreFailure,
-    RestoreResult, RunAttempt, SessionOwnerEffect, SessionOwnerRefusal, SessionPublication,
-    SessionWireRequest,
+    CreateOutcome, CreateProgress, EffectInProgress, OwnerDeadline, OwnerEffect, RemoteEffect,
+    RestoreFailure, RestoreResult, RunAttempt, SessionOwnerEffect, SessionOwnerRefusal,
+    SessionPublication, SessionWireRequest,
 };
 use crate::{SessionGeneration, session_cell_machine::SessionCellEvent};
 use uuid::Uuid;
 
 impl OwnerTransition {
     pub(super) fn start_create(&mut self, operation: Uuid) -> OwnerResult {
-        if !matches!(self.next.lifecycle(), SessionLifecycle::NotLoaded { .. })
-            || !self.next.ports.connection_alive
-            || self.next.ports.create.is_some()
-        {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+        if !matches!(self.next.lifecycle(), SessionLifecycle::NotLoaded { .. }) {
+            // The registry opens a provisional owner for create. An active
+            // session owner cannot receive this command through the Host.
+            return Err(SessionOwnerRefusal::EffectInProgress(
+                EffectInProgress::CreateOnActiveOwner,
+            )
+            .into());
+        }
+        if !self.next.ports.connection_alive {
+            return Err(SessionOwnerRefusal::EffectInProgress(
+                EffectInProgress::ProviderDisconnected,
+            )
+            .into());
+        }
+        if self.next.ports.create.is_some() {
+            return Err(SessionOwnerRefusal::EffectInProgress(EffectInProgress::Create).into());
         }
         self.next.ports.create = Some(operation);
         self.effects

@@ -219,7 +219,7 @@ impl ExternalProviderRuntime {
             )
             .await
             .map_err(|error| match error {
-                crate::session_owner_door::OwnerDoorError::Refused(_) => {
+                crate::session_owner_door::OwnerDoorError::Refused { .. } => {
                     ExternalProviderRuntimeError::LocalBusy {
                         answer: error.to_string(),
                     }
@@ -417,9 +417,12 @@ impl ExternalProviderRuntime {
                 };
                 if matches!(
                     error,
-                    crate::session_owner_door::OwnerDoorError::Refused(
-                        SessionOwnerRejection::Refused(SessionOwnerRefusal::EffectInProgress)
-                    )
+                    crate::session_owner_door::OwnerDoorError::Refused {
+                        rejection: SessionOwnerRejection::Refused(
+                            SessionOwnerRefusal::EffectInProgress(_)
+                        ),
+                        ..
+                    }
                 ) {
                     ExternalProviderRuntimeError::LocalBusy {
                         answer: error.to_string(),

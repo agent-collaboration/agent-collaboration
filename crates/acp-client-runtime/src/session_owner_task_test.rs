@@ -76,10 +76,7 @@ impl Fixture {
         }
     }
 
-    fn submit_create(
-        &self,
-        operation: Uuid,
-    ) -> oneshot::Receiver<Result<(), SessionOwnerRejection>> {
+    fn submit_create(&self, operation: Uuid) -> oneshot::Receiver<Result<(), OwnerCommandRefusal>> {
         self.handle
             .try_submit(self.address, SessionOwnerCommand::Create { operation })
             .expect("the mailbox accepted the create")

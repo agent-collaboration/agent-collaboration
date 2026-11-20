@@ -188,20 +188,20 @@ pub(super) async fn apply(
         .settle(correlation, command)
         .await
         .map_err(|error| match error {
-            crate::session_owner_door::OwnerDoorError::Refused(SessionOwnerRejection::Refused(
-                SessionOwnerRefusal::SettingContextChanged,
-            )) => SettingControlFailure::ContextChanged(request.target.clone()),
-            crate::session_owner_door::OwnerDoorError::Refused(SessionOwnerRejection::Refused(
-                SessionOwnerRefusal::SettingsUnresolved,
-            )) => SettingControlFailure::Unresolved(request.target.clone()),
+            crate::session_owner_door::OwnerDoorError::Refused {
+                rejection:
+                    SessionOwnerRejection::Refused(SessionOwnerRefusal::SettingContextChanged),
+                ..
+            } => SettingControlFailure::ContextChanged(request.target.clone()),
+            crate::session_owner_door::OwnerDoorError::Refused {
+                rejection: SessionOwnerRejection::Refused(SessionOwnerRefusal::SettingsUnresolved),
+                ..
+            } => SettingControlFailure::Unresolved(request.target.clone()),
             other => failure(
                 ProviderSettingsFailureKind::Busy,
                 &request.target,
-                &super::provider_owner_operations::derived_owner_refusal(
-                    &owner.snapshots().borrow(),
-                    &other,
-                )
-                .unwrap_or_else(|| other.to_string()),
+                &super::provider_owner_operations::derived_owner_refusal(&other)
+                    .unwrap_or_else(|| other.to_string()),
             )
             .into(),
         })?;

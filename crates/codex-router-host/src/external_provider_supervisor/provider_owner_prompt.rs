@@ -7,7 +7,7 @@ use super::{
     ProviderOperationKind, SessionRef, admitted_submission, existing_submission, failure,
     optional_message_text,
     provider_operation_admission::DispatchMark,
-    provider_owner_operations::{owner_refused, owner_unavailable},
+    provider_owner_operations::owner_failure,
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
     retain_operation, runtime_failure,
 };
@@ -143,13 +143,11 @@ impl ExternalProviderSupervisor {
                                     Ok(settled) => {
                                         retained_prompt(&runtime, operation, target, settled)
                                     }
-                                    Err(_) => {
-                                        ProviderOperationCompletion::Failure(owner_unavailable(
-                                            operation,
-                                            target,
-                                            crate::session_owner_door::OwnerDoorError::OwnerStopped,
-                                        ))
-                                    }
+                                    Err(_) => ProviderOperationCompletion::Failure(owner_failure(
+                                        operation,
+                                        target,
+                                        crate::session_owner_door::OwnerDoorError::OwnerStopped,
+                                    )),
                                 }
                             });
                             Ok(admitted_submission(snapshot))
@@ -192,7 +190,7 @@ impl ExternalProviderSupervisor {
             .map_err(|error| runtime_failure(operation.clone(), Some(target.clone()), error))?;
         let owner = self
             .session_owner_for(&target)
-            .map_err(|error| owner_unavailable(operation.clone(), target.clone(), error))?;
+            .map_err(|error| owner_failure(operation.clone(), target.clone(), error))?;
         let snapshot = owner.snapshots().borrow().clone();
         let generation = match snapshot.lifecycle {
             SessionLifecycle::Live { generation } => generation,
@@ -281,12 +279,7 @@ impl ExternalProviderSupervisor {
             .start_delivery(input, content, command)
             .await
             .map_err(|error| {
-                let refusal = owner_refused(
-                    operation.clone(),
-                    target.clone(),
-                    error,
-                    &owner.snapshots().borrow(),
-                );
+                let refusal = owner_failure(operation.clone(), target.clone(), error);
                 if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
                     && refusal.kind == ConversationOperationFailureKind::CannotSteer
                 {
@@ -563,7 +556,7 @@ impl ExternalProviderSupervisor {
             self.runtime_binding(&target.endpoint, &operation, Some(target.clone()))?;
         let owner = self
             .session_owner_for(&target)
-            .map_err(|error| owner_unavailable(operation.clone(), target.clone(), error))?;
+            .map_err(|error| owner_failure(operation.clone(), target.clone(), error))?;
         let snapshot = owner.snapshots().borrow().clone();
         let (generation, cold_restore) = match (admission, snapshot.lifecycle) {
             (_, SessionLifecycle::Live { generation })
@@ -815,20 +808,18 @@ impl ExternalProviderSupervisor {
                 if matches!(admission, DeliveryAdmission::QueueOnRun(_))
                     && matches!(
                         error,
-                        crate::session_owner_door::OwnerDoorError::Refused(
-                            SessionOwnerRejection::Refused(SessionOwnerRefusal::GenerationChanged)
-                        )
+                        crate::session_owner_door::OwnerDoorError::Refused {
+                            rejection: SessionOwnerRejection::Refused(
+                                SessionOwnerRefusal::GenerationChanged
+                            ),
+                            ..
+                        }
                     )
                 {
                     self.drop_reservation(&operation, &live, false);
                     return Ok(InputAcceptance::QueuePlanChanged);
                 }
-                let refusal = owner_refused(
-                    operation.clone(),
-                    target.clone(),
-                    error,
-                    &owner.snapshots().borrow(),
-                );
+                let refusal = owner_failure(operation.clone(), target.clone(), error);
                 if refusal.effect == ProviderOperationEffect::None {
                     self.queued_operation_registry()
                         .mark_not_submitted(&operation, String::from(refusal.message.clone()));

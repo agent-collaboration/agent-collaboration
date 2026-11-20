@@ -536,6 +536,37 @@ fn stalled_host_work_expires_and_unapplied_committed_history_rebases_without_ret
 }
 
 #[test]
+fn a_direct_prompt_names_the_input_waiting_for_its_dispatch_mark() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let first = input(run.generation, 2);
+    let effects = enqueue_prompt(&mut state, &first);
+    assert!(
+        effects.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
+            first
+        )))
+    );
+    assert_eq!(state.snapshot().turn, SessionTurn::Idle);
+
+    let result = decide(
+        &state,
+        OwnerEvent::Command(SessionOwnerCommand::Prompt {
+            input: input(run.generation, 3),
+            admission: PromptAdmission::Direct,
+        }),
+    );
+    let Err(SessionOwnerRejection::Refused(SessionOwnerRefusal::EffectInProgress(effect))) = result
+    else {
+        panic!("the prompt must refuse with the effect that holds admission");
+    };
+    assert_eq!(effect, EffectInProgress::PromptDispatch);
+    assert_eq!(
+        crate::session_refusal_answers::effect_in_progress_answer(effect, &state.snapshot()),
+        "the Router is preparing a prompt. Wait for it before sending again",
+    );
+}
+
+#[test]
 fn setting_cannot_overtake_an_input_waiting_for_its_dispatch_mark() {
     let mut state = fresh();
     let run = restore_live(&mut state, 1);
