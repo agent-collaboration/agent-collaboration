@@ -1,13 +1,11 @@
 //! V1: the owed-reply reducer through `handle` on the native host (P10).
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{
-    PausePoint,
-    engine_owed_probe::{
-        EngineReceipt, EngineRefusal, EngineRequestOutcome, OwedAnswer, OwedEvent, OwedFinish,
-        OwedReplyRefusal, OwedReplyRequest, OwedState, SeedOwedReply,
-    },
+use collaboration_central_core::engine_owed_probe::{
+    EngineReceipt, EngineRefusal, EngineRequestOutcome, OwedAnswer, OwedEvent, OwedFinish,
+    OwedReplyRefusal, OwedReplyRequest, OwedState, SeedOwedReply,
 };
+use fleet_runtime::PausePoint;
 
 type OwedOutcome = EngineRequestOutcome<OwedState, OwedReplyRefusal>;
 
@@ -50,7 +48,7 @@ async fn owed_facts(
     item: uuid::Uuid,
     group: uuid::Uuid,
 ) -> Vec<central_storage::SqlValue> {
-    runtime.statement_host().read(super::super::Statement {
+    runtime.runtime().statement_host().read(super::super::Statement {
         sql: "SELECT state,send_id,(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),completed_claim IS NOT NULL FROM engine_probe_items WHERE item_id=? AND machine_kind='owed_reply'",
         args: vec![text(group), text(item)],
     }).await.unwrap().rows.into_iter().next().unwrap()
@@ -181,7 +179,7 @@ async fn two_answers_racing_on_one_owed_reply_commit_once() {
         )
         .await,
     );
-    let points = runtime.pause_points();
+    let points = runtime.runtime().pause_points();
     let mut first_hold = points.hold_engine(PausePoint::AfterEngineLoad, &item.to_string());
     let mut second_hold = points.hold_engine(PausePoint::AfterEngineLoad, &item.to_string());
     let answer = |request, answer| {

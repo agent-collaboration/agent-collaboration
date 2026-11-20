@@ -1,5 +1,6 @@
 use super::*;
-use collaboration_central_core::{PausePoint, WorkspaceCaller};
+use collaboration_central_core::WorkspaceCaller;
+use fleet_runtime::PausePoint;
 async fn held_pair(
     f: &Fixture,
     first: m::WorkspaceOperation,
@@ -8,7 +9,10 @@ async fn held_pair(
 ) -> (m::WorkspaceReply, m::WorkspaceReply) {
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let seam = f.workspace.clone();
-    let mut first_hold = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
+    let mut first_hold = runtime
+        .runtime()
+        .pause_points()
+        .hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
         request_id: Some(id(700)),
         workspace_id: Some(f.workspace.clone()),
@@ -21,7 +25,10 @@ async fn held_pair(
     });
     first_hold.until_held().await;
     // Arm the forbidden second read after the first consumed its pause point.
-    let mut forbidden_read = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
+    let mut forbidden_read = runtime
+        .runtime()
+        .pause_points()
+        .hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
         request_id: Some(id(701)),
         workspace_id: Some(f.workspace.clone()),
@@ -34,7 +41,7 @@ async fn held_pair(
     tokio::select! {
         biased;
         ()=forbidden_read.until_held()=>panic!("second request read while the first still owns the turn"),
-        ()=runtime.workspace_turns().until_waiting(&seam,1)=>{}
+        ()=runtime.runtime().workspace_turns().until_waiting(&seam,1)=>{}
     }
     assert!(!second.is_finished());
     drop(forbidden_read);
@@ -125,7 +132,7 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
     }
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let rows = runtime
-        .inspect_workspace(
+        .runtime().inspect_workspace(
             &f.workspace,
             Statement {
                 sql: "SELECT ended_at FROM workspace_project_roles WHERE project_id=? AND role='lead'",
@@ -189,7 +196,7 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
         );
     }
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM workspace_deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
+    let rows=runtime.runtime().inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM workspace_deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
     assert_eq!(
         rows.rows
             .iter()

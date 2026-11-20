@@ -8,7 +8,7 @@ use central_storage::{
     AlarmPublication, AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome,
     SafeInteger, SqlValue, Statement, StatementBatch, StoreFailure,
 };
-use runtime_primitives::SyncTime;
+use fleet_runtime_ports::SyncTime;
 use sqlx::error::ErrorKind;
 use sqlx::migrate::{MigrateError, Migrator};
 use sqlx::sqlite::{

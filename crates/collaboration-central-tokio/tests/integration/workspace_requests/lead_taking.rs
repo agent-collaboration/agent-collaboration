@@ -101,7 +101,7 @@ async fn anyone_takes_the_lead_and_a_lead_hands_it_over() {
     // Assert: each replaced lead's assignment ended; exactly one is active.
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let rows = runtime
-        .inspect_workspace(
+        .runtime().inspect_workspace(
             &f.workspace,
             Statement {
                 sql: "SELECT holder,ended_at FROM workspace_project_roles WHERE project_id=? AND role='lead'",

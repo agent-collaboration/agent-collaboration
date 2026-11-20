@@ -8,13 +8,15 @@ use crate::{
         attempt_records::EngineSubject, attempt_statements::delete_attempt,
         machines::direct_message::DirectMessage,
     },
-    guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    guarded_statements::{exact, text},
+    stored_values::string,
+    workspace_decode_error::corrupt,
+};
 use workspace_ids::MessageId;
 use workspace_model::{
     ResolvedSender, Timestamp,
@@ -71,7 +73,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         attachment: &MachineConnectionAttachment,
         cursor: Option<&WelcomeDeliveryCursor>,
     ) -> Result<WelcomeDeliveryPage, StoreFailure> {
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         if self
             .restore_machine_connection_held(attachment)
             .await?
@@ -79,7 +81,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         {
             return Ok(WelcomeDeliveryPage::AuthorityLapsed);
         }
-        let now = self.now()?;
+        let now = self.execution.now()?;
         let (created_at, message_id) = cursor.map_or((SqlValue::Null, SqlValue::Null), |cursor| {
             (text(timestamp(cursor.created_at)), text(&cursor.message_id))
         });
@@ -87,7 +89,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             .ok()
             .and_then(|size| size.try_into().ok())
             .ok_or_else(|| corrupt("Welcome page size"))?;
-        let rows = self.host.read(Statement {
+        let rows = self.execution.statement_host().read(Statement {
             sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,delivery_window_ends_at FROM mail_messages WHERE target_machine_id=?1 AND state='queued' AND message_kind IN ('direct','notice','deliveryOutcome') AND delivery_window_ends_at>?2 AND (?3 IS NULL OR (created_at,message_id)>(?3,?4)) ORDER BY created_at,message_id LIMIT ?5",
             args: vec![
                 text(attachment.machine_id()), text(timestamp(now)), created_at, message_id,
@@ -119,7 +121,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         attachment: &MachineConnectionAttachment,
         message_id: &MessageId,
     ) -> Result<WindowedDeliveryDecision, StoreFailure> {
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         if self
             .restore_machine_connection_held(attachment)
             .await?
@@ -127,8 +129,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         {
             return Ok(WindowedDeliveryDecision::AuthorityLapsed);
         }
-        let now = self.now()?;
-        let rows = self.host.read(Statement {
+        let now = self.execution.now()?;
+        let rows = self.execution.statement_host().read(Statement {
             sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,delivery_window_ends_at FROM mail_messages WHERE message_id=? AND target_machine_id=? AND state='queued' AND message_kind IN ('direct','notice','deliveryOutcome') AND delivery_window_ends_at>?",
             args: vec![text(message_id), text(attachment.machine_id()), text(timestamp(now))],
         }).await?;
@@ -165,7 +167,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let MessageSender::Actor(_) = &message.sender else {
             return Err(corrupt("mail_messages.sender"));
         };
-        let now = timestamp(self.now()?);
+        let now = timestamp(self.execution.now()?);
         let statements = vec![
             exact(
                 "UPDATE mail_messages SET state='failed',failure_reason=?,updated_at=? WHERE message_id=? AND target_machine_id=? AND sender=? AND message_kind='direct' AND state='queued' AND failure_reason IS NULL AND delivery_window_ends_at>?",
@@ -184,7 +186,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }),
         ];
         match self
-            .host
+            .execution
+            .statement_host()
             .run_batch(StatementBatch {
                 statements,
                 alarm: crate::engine::query_registry::alarm_update(),

@@ -25,6 +25,7 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
     let f = Fixture::new().await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let empty = runtime
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -39,6 +40,7 @@ async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
         "business store ready before bulk fixture writes"
     );
     let actors = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT actor_identity_id FROM access_actor_identities",

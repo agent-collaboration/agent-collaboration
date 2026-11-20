@@ -14,6 +14,7 @@ async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
         .unwrap();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -41,6 +42,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
         .await
         .unwrap();
     let window = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT window_id,due_at FROM mail_notification_windows WHERE recipient_actor=?",
@@ -91,7 +93,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     else {
         panic!("automation refused")
     };
-    let items = runtime.statement_host().read(Statement {
+    let items = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at FROM mail_notification_window_items WHERE window_id=?", args: vec![text(window_id)],
     }).await.unwrap();
     assert!(!items.rows.is_empty());
@@ -109,7 +111,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
         outcome.is_ok(),
         "a bad window must not fail timers: {outcome:?}"
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation' AND json_extract(body,'$.automationId')=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice')", args: vec![text(&wake_id), text(&automation_id)],
     }).await.unwrap();
     // The other-window half of the branch test is deferred: today's whole unit rolls back.
@@ -128,7 +130,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
                 .await;
             runtime.after_event().await.unwrap();
         }
-        let record = runtime.statement_host().read(Statement {
+        let record = runtime.runtime().statement_host().read(Statement {
             sql: "SELECT state,failure_count FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![],
         }).await.unwrap();
         assert_eq!(
@@ -144,7 +146,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     }
     fixture.set_utc(due + chrono::Duration::minutes(15)).await;
     runtime.after_event().await.unwrap();
-    let record = runtime.statement_host().read(Statement {
+    let record = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT (SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice' AND recipient_actor=?)", args: vec![text(&recipient)],
     }).await.unwrap();
     assert_eq!(
@@ -188,6 +190,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
         .await
         .unwrap();
     let drains = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT workspace_id FROM mail_workspace_drains WHERE workspace_id=?",
@@ -210,7 +213,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
         outcome.is_ok(),
         "a broken drain must not fail timers: {outcome:?}"
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?) FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id), text(&wake_id)],
     }).await.unwrap();
     assert_eq!(
@@ -224,7 +227,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
                 .await;
             runtime.after_event().await.unwrap();
         }
-        let record = runtime.statement_host().read(Statement {
+        let record = runtime.runtime().statement_host().read(Statement {
             sql: "SELECT state,failure_count,next_try_at FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],
         }).await.unwrap();
         assert_eq!(
@@ -250,7 +253,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
     .await;
     fixture.set_utc(due + chrono::Duration::minutes(15)).await;
     runtime.after_event().await.unwrap();
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],
     }).await.unwrap();
     assert_eq!(
@@ -277,6 +280,7 @@ async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_r
         "INSERT INTO engine_work_attempts VALUES (?,'legacy_workspace_drains','all','failing',1,?,'statement_rejected',NULL,?,?,NULL,?,?)",
         vec![text(&attempt_id),stamp(now+chrono::Duration::minutes(5)),stamp(now),stamp(now),stamp(now),stamp(now)]).await;
     let before = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
@@ -288,6 +292,7 @@ async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_r
     created(fixture.call(8313, post(&thread, vec![])).await);
 
     let deferred = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
@@ -302,6 +307,7 @@ async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_r
     execute(&fixture,"UPDATE engine_work_attempts SET state='retired',next_try_at=NULL,retired_at=? WHERE attempt_id=?",vec![stamp(now),text(&attempt_id)]).await;
     created(fixture.call(8314, post(&thread, vec![])).await);
     let retired = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
@@ -318,6 +324,7 @@ async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_r
     created(fixture.call(8315, post(&thread, vec![])).await);
 
     let completed = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
@@ -329,7 +336,7 @@ async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_r
         completed.rows, before.rows,
         "a reached retry permits the immediate drain"
     );
-    let record = runtime.statement_host().read(Statement {
+    let record = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT attempt_id,state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],
     }).await.unwrap();
     assert_eq!(

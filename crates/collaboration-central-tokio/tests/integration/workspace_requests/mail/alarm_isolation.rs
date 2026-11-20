@@ -42,6 +42,7 @@ async fn exercise_isolation(corruption: &'static str, failure_column: &str) {
         .await
         .unwrap();
     let applied = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -69,7 +70,7 @@ async fn exercise_isolation(corruption: &'static str, failure_column: &str) {
         outcome.is_ok(),
         "a broken item must not fail the alarm: {outcome:?}"
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?) FROM automation_wakes WHERE wake_id=?",
         args: vec![text(&healthy), text(&healthy)],
     }).await.unwrap();
@@ -77,7 +78,7 @@ async fn exercise_isolation(corruption: &'static str, failure_column: &str) {
         rows.rows,
         vec![vec![text("done"), SqlValue::Integer(1.try_into().unwrap())]]
     );
-    let failure = runtime.statement_host().read(Statement {
+    let failure = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind='wake_timer' AND subject_key=?",
         args: vec![text(&bad)],
     }).await.unwrap();
@@ -95,6 +96,7 @@ async fn exercise_isolation(corruption: &'static str, failure_column: &str) {
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|time| time.unix_millis()),
@@ -140,7 +142,7 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    let rejected = runtime.statement_host().run_batch(StatementBatch {
+    let rejected = runtime.runtime().statement_host().run_batch(StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement { sql: "CREATE TRIGGER reject_one_wake BEFORE UPDATE ON automation_wakes WHEN OLD.text='broken' BEGIN SELECT RAISE(ABORT,'reject one wake'); END", args: vec![] }, expect: RowExpectation::Any,
         }], alarm: AlarmUpdate::Unchanged,
@@ -159,14 +161,14 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
         outcome.is_ok(),
         "a rejected item statement must not fail the alarm: {outcome:?}"
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?) FROM automation_wakes WHERE wake_id=?", args: vec![text(&healthy), text(&healthy)],
     }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![text("done"), SqlValue::Integer(1.try_into().unwrap())]]
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='wake_timer' AND subject_key=?", args: vec![text(&bad)],
     }).await.unwrap();
     assert_eq!(
@@ -178,6 +180,7 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
         ]]
     );
     runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -193,7 +196,7 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
         .unwrap();
     fixture.set_utc(due + chrono::Duration::minutes(5)).await;
     runtime.after_event().await.unwrap();
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='wake_timer' AND subject_key=?) FROM automation_wakes WHERE wake_id=?", args: vec![text(&bad), text(&bad), text(&bad)],
     }).await.unwrap();
     assert_eq!(
@@ -235,7 +238,7 @@ async fn corrupt_due_automation_timing_does_not_block_due_wake() {
         .await
         .unwrap();
     runtime
-        .statement_host()
+        .runtime().statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
@@ -261,14 +264,14 @@ async fn corrupt_due_automation_timing_does_not_block_due_wake() {
         outcome.is_ok(),
         "a broken automation must not fail the alarm: {outcome:?}"
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?) FROM automation_wakes WHERE wake_id=?", args: vec![text(&healthy), text(&healthy)],
     }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![text("done"), SqlValue::Integer(1.try_into().unwrap())]]
     );
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='automation_timer' AND subject_key=?", args: vec![text(&automation_id)],
     }).await.unwrap();
     assert_eq!(
@@ -315,7 +318,7 @@ async fn wake_state(fixture: &Fixture, wake: &workspace_ids::WakeId) -> Vec<Vec<
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    runtime.statement_host().read(Statement {
+    runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?) FROM automation_wakes WHERE wake_id=?",
         args: vec![text(wake), text(wake)],
     }).await.unwrap().rows
@@ -350,6 +353,7 @@ async fn corrupt_queued_message_does_not_block_due_wake() {
     let future = set_wake_at(&f, 3022, later, "future").await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let applied = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -368,7 +372,12 @@ async fn corrupt_queued_message_does_not_block_due_wake() {
         sql: "SELECT * FROM mail_messages WHERE message_id=?",
         args: vec![text(&message_id)],
     };
-    let before = runtime.statement_host().read(message_row()).await.unwrap();
+    let before = runtime
+        .runtime()
+        .statement_host()
+        .read(message_row())
+        .await
+        .unwrap();
     f.clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
@@ -378,7 +387,12 @@ async fn corrupt_queued_message_does_not_block_due_wake() {
 
     assert_eq!(completion.work.wakes_fired, 1);
     assert_eq!(
-        runtime.statement_host().read(message_row()).await.unwrap(),
+        runtime
+            .runtime()
+            .statement_host()
+            .read(message_row())
+            .await
+            .unwrap(),
         before
     );
     assert_eq!(
@@ -393,13 +407,14 @@ async fn corrupt_queued_message_does_not_block_due_wake() {
         ]]
     );
     // No timer item failed, so no timer carries an attempt record.
-    let attempts = runtime.statement_host().read(Statement {
+    let attempts = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT machine_kind,subject_key FROM engine_work_attempts WHERE machine_kind IN ('wake_timer','automation_timer')",
         args: vec![],
     }).await.unwrap();
     assert_eq!(attempts.rows, Vec::<Vec<SqlValue>>::new());
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|time| time.unix_millis()),

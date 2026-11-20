@@ -462,7 +462,9 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
 }
 
 mod clock_boundaries;
+mod completion_hook;
 mod initiatives_and_members;
+mod migration_reopen;
 mod read_projection_cases;
 mod relations;
 mod remaining_operations;

@@ -6,7 +6,8 @@ use central_storage::{
     StatementBatch,
 };
 use collaboration_central_conformance::{ConformanceResult as Result, signin_fixtures as signed};
-use collaboration_central_core::{MachineLoginControl, PausePoint, machine_login_control};
+use collaboration_central_core::{MachineLoginControl, machine_login_control};
+use fleet_runtime::PausePoint;
 use serde_json::json;
 use workspace_model::{Caller, RefusalReason, WorkspaceAnswer, WorkspaceReply, WorkspaceResult};
 
@@ -61,6 +62,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
     let allowed = serde_json::to_string(&vec![workspace.workspace_id.clone()])?;
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -80,6 +82,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
         .await?
         .map_err(|_| "fixture admission refused")?;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold(&workspace.workspace_id, PausePoint::AfterReads);
 
@@ -114,6 +117,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
 
     // Assert: admission lost the race, so no workspace or drain deadline may be created.
     let drains = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT workspace_id FROM mail_workspace_drains WHERE workspace_id=?",
@@ -129,7 +133,7 @@ async fn revocation_after_rule_reads_refuses_before_workspace_or_drain_effects()
             .root_path()
             .join("modern/workspace-stores")
             .join(format!("{}.sqlite", workspace.workspace_id)),
-        std::sync::Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        std::sync::Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
     );
     let areas = store
         .read(Statement {

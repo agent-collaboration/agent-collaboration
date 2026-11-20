@@ -7,10 +7,8 @@ use super::super::engine_evidence::{
 };
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{
-    PausePoint,
-    engine_probe::{EngineRequestOutcome, ProbeEvent},
-};
+use collaboration_central_core::engine_probe::{EngineRequestOutcome, ProbeEvent};
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 #[tokio::test]
@@ -31,6 +29,7 @@ async fn a_request_that_stops_the_earliest_timed_subject_moves_the_alarm_with_it
     // The Stop request commits and is held at the post-commit pause, before
     // its closing due batch and publication.
     let mut committed = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineCommit, &stopped.to_string());
     let request = tokio::spawn({

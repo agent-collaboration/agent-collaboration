@@ -8,11 +8,13 @@ use crate::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
     },
     person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
 };
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    stored_values::{json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_model::{ActorIdentityId, Identity, PersonId, RequestId, Timestamp};
 
 /// What the admin batch carries for one engine operation.
@@ -145,9 +147,10 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         let actor = self.prepare_identity(&identity, now).await?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
-            .host
-            .read(crate::workspace_request_log::lookup(
-                crate::workspace_request_log::RequestLogStore::Organization,
+            .execution
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                fleet_runtime::workspace_request_log::RequestLogStore::Organization,
                 &operation,
                 &cutoff,
             ))
@@ -213,8 +216,8 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             }
             Err(reason) => refusal(reason),
         };
-        statements.extend(crate::workspace_request_log::retain(
-            crate::workspace_request_log::RequestLogStore::Organization,
+        statements.extend(fleet_runtime::workspace_request_log::retain(
+            fleet_runtime::workspace_request_log::RequestLogStore::Organization,
             &operation,
             &actor,
             &person.intent_digest,
@@ -261,8 +264,8 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             } => (operation, actor, statements, cutoff),
         };
         let retain = |result: &OrganizationAdminResult| {
-            crate::workspace_request_log::retain(
-                crate::workspace_request_log::RequestLogStore::Organization,
+            fleet_runtime::workspace_request_log::retain(
+                fleet_runtime::workspace_request_log::RequestLogStore::Organization,
                 &operation,
                 &actor,
                 &person.intent_digest,

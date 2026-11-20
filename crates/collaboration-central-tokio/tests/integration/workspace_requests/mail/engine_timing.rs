@@ -66,7 +66,7 @@ async fn a_probe_request_starts_the_due_batch_without_an_alarm_callback() {
     .await;
     seed_probe(&runtime, request_item, request_group, None, "request").await;
     driver_settled(&fixture, &runtime).await;
-    let callbacks = runtime.alarm_completion_count();
+    let callbacks = runtime.runtime().alarm_completion_count();
     fixture.set_utc(at(start, 4, 58, 0)).await;
 
     let answer = runtime
@@ -84,7 +84,7 @@ async fn a_probe_request_starts_the_due_batch_without_an_alarm_callback() {
         "the request's own event ran the due batch 38 s after the last one"
     );
     assert_eq!(
-        runtime.alarm_completion_count(),
+        runtime.runtime().alarm_completion_count(),
         callbacks,
         "no alarm callback ran"
     );

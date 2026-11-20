@@ -18,3 +18,7 @@ pub use signature_crypto::{
 };
 pub use time_and_ids::{Clock, IdSource, SyncTime, canonical_uuid_v7, uuid_v7};
 pub use workspace_stores::WorkspaceStores;
+
+pub mod guarded_statements;
+pub mod stored_values;
+pub mod workspace_decode_error;

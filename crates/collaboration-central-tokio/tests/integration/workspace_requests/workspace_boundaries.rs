@@ -24,6 +24,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -134,6 +135,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
     assert_eq!(first.actors, second.actors);
     assert_eq!(first.actors.len(), 1);
     let actors = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT actor_identity_id FROM access_actor_identities",
@@ -312,6 +314,7 @@ async fn backlog_removal_cascades_both_reference_directions_and_literal_link_tex
     .await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let rows = runtime
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {

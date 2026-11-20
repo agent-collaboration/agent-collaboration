@@ -37,7 +37,7 @@ fn failure(prior: Option<&FailureRecord>, now: i64) -> FailureRecord {
 }
 async fn database() -> SqliteConnection {
     let mut connection = SqliteConnection::connect("sqlite::memory:").await.unwrap();
-    crate::workspace_migrations::central_migrator()
+    fleet_storage_schema::workspace_migrations::central_migrator()
         .run(&mut connection)
         .await
         .unwrap();

@@ -10,10 +10,10 @@ use super::super::{
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublicationFailure, StoreFailure};
-use collaboration_central_core::{
-    PausePoint,
-    engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState,
 };
+use fleet_runtime::PausePoint;
 
 /// A time with no later five-minute mark inside the portable range, yet far
 /// enough below it that a due batch's look-ahead horizon is still supported.

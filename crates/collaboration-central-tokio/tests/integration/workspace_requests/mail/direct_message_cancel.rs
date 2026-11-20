@@ -53,6 +53,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         let message_id = message_id.clone();
         async move {
             runtime
+                .runtime()
                 .statement_host()
                 .read(Statement {
                     sql,
@@ -85,7 +86,11 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         "accept stores the cancel mark and the sender's request id"
     );
     assert_eq!(
-        runtime.statement_host().published_alarm().unwrap(),
+        runtime
+            .runtime()
+            .statement_host()
+            .published_alarm()
+            .unwrap(),
         Some(mark),
         "the cancel is timed work: the accept arms the alarm at its mark"
     );
@@ -106,7 +111,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         SqlValue::Text("cancelled".to_owned())
     );
     let notices = runtime
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT sender,target_session,body,state,cancel_due_at,sender_request_id,created_at,delivery_window_ends_at FROM mail_messages WHERE message_kind='deliveryOutcome'",
             args: vec![],
@@ -152,12 +157,17 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     fixture.set_utc(mark + chrono::Duration::minutes(30)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        runtime.statement_host().published_alarm().unwrap(),
+        runtime
+            .runtime()
+            .statement_host()
+            .published_alarm()
+            .unwrap(),
         Some(deadline),
         "a queued outcome arms the 24-hour expiry"
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='deliveryOutcome'",
@@ -171,7 +181,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     );
     fixture.set_utc(deadline).await;
     runtime.after_event().await.unwrap();
-    let terminal_outcomes = runtime.statement_host().read(Statement {
+    let terminal_outcomes = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,failure_reason FROM mail_messages WHERE message_kind='deliveryOutcome'",
         args: vec![],
     }).await.unwrap();
@@ -179,6 +189,13 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
         terminal_outcomes.rows,
         vec![vec![text("cancelled"), text("expired24Hours")]]
     );
-    assert_eq!(runtime.statement_host().published_alarm().unwrap(), None);
+    assert_eq!(
+        runtime
+            .runtime()
+            .statement_host()
+            .published_alarm()
+            .unwrap(),
+        None
+    );
     fixture.host.close().await;
 }

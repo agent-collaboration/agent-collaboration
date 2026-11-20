@@ -6,7 +6,7 @@ fn key(number: u32) -> String {
 }
 async fn database() -> SqliteConnection {
     let mut connection = SqliteConnection::connect("sqlite::memory:").await.unwrap();
-    crate::workspace_migrations::central_migrator()
+    fleet_storage_schema::workspace_migrations::central_migrator()
         .run(&mut connection)
         .await
         .unwrap();

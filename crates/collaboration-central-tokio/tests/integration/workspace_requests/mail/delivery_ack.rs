@@ -86,6 +86,7 @@ async fn a_live_recipient_can_settle_once_after_cancel_and_another_machine_canno
     );
 
     let stored = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT state FROM mail_messages WHERE message_id=?",
@@ -94,7 +95,7 @@ async fn a_live_recipient_can_settle_once_after_cancel_and_another_machine_canno
         .await
         .unwrap();
     assert_eq!(stored.rows, vec![vec![text("delivered")]]);
-    let outcome_bodies = runtime.statement_host().read(Statement {
+    let outcome_bodies = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT body FROM mail_messages WHERE message_kind='deliveryOutcome' ORDER BY created_at,message_id",
         args: vec![],
     }).await.unwrap();

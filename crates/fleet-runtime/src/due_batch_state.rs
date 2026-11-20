@@ -185,7 +185,7 @@ impl DueBatchState {
 
     /// Called by the due batch as each unit starts, before its first await.
     #[cfg(feature = "test-support")]
-    pub(super) fn record_unit_start(&self, start: DueUnitStart) {
+    pub fn record_unit_start(&self, start: DueUnitStart) {
         self.unit_starts
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

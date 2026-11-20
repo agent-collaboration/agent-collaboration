@@ -2,7 +2,7 @@
 //! cases do not close the held workspace effect or operation replay assertions.
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -62,6 +62,7 @@ async fn held_read(f: &Fixture, adjust: fn(&mut Value), release_after_ms: u64) -
     )?;
     let runtime = f.runtime(A).await?;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::BeforeSignInSample);
     let client = f.client();

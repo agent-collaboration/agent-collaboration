@@ -3,7 +3,8 @@
 //! publishes on the other.
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{PausePoint, WorkspaceCaller};
+use collaboration_central_core::WorkspaceCaller;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 use workspace_model as m;
 
@@ -19,7 +20,11 @@ async fn arm(runtime: &Runtime, number: u32, due: chrono::DateTime<chrono::Utc>)
     .await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        runtime.statement_host().alarm().map(|at| at.unix_millis()),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         Some(due.timestamp_millis())
     );
 }
@@ -31,8 +36,8 @@ async fn a_drive_that_wakes_during_a_held_move_waits_for_it() {
     let runtime = runtime(&fixture).await;
     let due = fixture.clock.utc_now() + chrono::Duration::minutes(5);
     arm(&runtime, 13400, due).await;
-    let completed = runtime.alarm_completion_count();
-    let starts = runtime.due_batch_starts().len();
+    let completed = runtime.runtime().alarm_completion_count();
+    let starts = runtime.runtime().due_batch_starts().len();
 
     // Act: hold a move and, inside it, reach `due`; the driver wakes.
     let held = fixture.clock.hold_move().await;
@@ -40,19 +45,19 @@ async fn a_drive_that_wakes_during_a_held_move_waits_for_it() {
         .unwrap();
     tokio::select! {
         biased;
-        () = runtime.until_alarm_completed(completed + 1) => {
+        () = runtime.runtime().until_alarm_completed(completed + 1) => {
             panic!("a drive ran during a move")
         }
         () = fixture.clock.until_drive_waiting() => {}
     }
-    assert_eq!(runtime.due_batch_starts().len(), starts);
+    assert_eq!(runtime.runtime().due_batch_starts().len(), starts);
     held.advance(std::time::Duration::from_secs(10)).unwrap();
     drop(held);
 
     // Assert: the drive ran after the move and took its time from after it.
-    runtime.until_alarm_completed(completed + 1).await;
+    runtime.runtime().until_alarm_completed(completed + 1).await;
     assert_eq!(
-        runtime.due_batch_starts().last(),
+        runtime.runtime().due_batch_starts().last(),
         Some(&(due + chrono::Duration::seconds(10)).timestamp_millis())
     );
     fixture.host.close().await;
@@ -73,13 +78,15 @@ async fn a_move_waiting_on_one_organization_runs_before_another_organization_dri
     let due = fixture.clock.utc_now() + chrono::Duration::minutes(5);
     arm(&a, 13410, due).await;
     arm(&b, 13420, due).await;
-    let a_completed = a.alarm_completion_count();
+    let a_completed = a.runtime().alarm_completion_count();
     // A's driver wakes but stops before its drive guard: runnable from the old
     // position. B's drive takes its guard and stops mid-batch.
     let mut a_waiting = a
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut b_held = b
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
     fixture
@@ -99,7 +106,7 @@ async fn a_move_waiting_on_one_organization_runs_before_another_organization_dri
     a_waiting.release();
     tokio::select! {
         biased;
-        () = a.until_alarm_completed(a_completed + 1) => {
+        () = a.runtime().until_alarm_completed(a_completed + 1) => {
             panic!("organization A drove while a move was waiting")
         }
         () = fixture.clock.until_drive_waiting() => {}
@@ -109,8 +116,11 @@ async fn a_move_waiting_on_one_organization_runs_before_another_organization_dri
     moved.await;
 
     // Assert: A's drive ran after the move and took its time from after it.
-    a.until_alarm_completed(a_completed + 1).await;
+    a.runtime().until_alarm_completed(a_completed + 1).await;
     assert_eq!(fixture.clock.utc_now(), later);
-    assert_eq!(a.due_batch_starts().last(), Some(&later.timestamp_millis()));
+    assert_eq!(
+        a.runtime().due_batch_starts().last(),
+        Some(&later.timestamp_millis())
+    );
     fixture.host.close().await;
 }

@@ -1,9 +1,9 @@
 //! Stored queue rows are validated before they participate in a central decision.
-use crate::{
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, json, string},
-};
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::{
+    stored_values::{column, json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_ids::MachineId;
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, ChangeId, ThreadId, WorkspaceId};
@@ -123,10 +123,10 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         session: &workspace_ids::SessionRef,
     ) -> Result<mail::SessionQueue, StoreFailure> {
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         // UUIDv7 normally follows admission within one process. A reopen or clock
         // rollback can change that order; no FIFO promise is made inside a batch.
-        let rows=self.host.read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM mail_messages WHERE target_machine_id=? AND state='queued' ORDER BY message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
+        let rows=self.execution.statement_host().read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM mail_messages WHERE target_machine_id=? AND state='queued' ORDER BY message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
         let mut messages = decode_messages(&rows)?;
         messages.retain(|message| &message.target == session);
         messages.sort_by(|left, right| left.message_id.cmp(&right.message_id));

@@ -7,7 +7,8 @@
 //! transition decides under the record's guard).
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{PausePoint, engine_probe::ProbeEvent};
+use collaboration_central_core::engine_probe::ProbeEvent;
+use fleet_runtime::PausePoint;
 
 #[tokio::test]
 async fn a_failure_from_an_overlapping_batch_never_counts_before_the_next_try() {

@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 use serde_json::json;
 use std::time::Duration;
@@ -42,6 +42,7 @@ async fn pre_sample_holds_keep_first_replay_renewal_and_stored_expiry_assertions
         let before = f.snapshot().await?;
         let runtime = f.runtime(A).await?;
         let mut held = runtime
+            .runtime()
             .pause_points()
             .hold_central(PausePoint::BeforeSignInSample);
         let client = f.client();
@@ -89,6 +90,7 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
     signed::set_claim(&mut claims, "exp", json!(signed::NOW_SECONDS + 1))?;
     let statement = signed::sign(&signed::stamp_header(), &claims, 7)?;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::AfterSignInSample);
     let first_client = f.client();
@@ -100,7 +102,8 @@ async fn post_sample_clock_advance_commits_original_time_and_the_next_writer_que
     let second_body = serde_json::to_string(&organization_floor(A, 1, "active"))?;
     let mut second =
         tokio::spawn(async move { post(&second_client, REVISIONS, second_body, vec![]).await });
-    let waits = tokio::select! {()=runtime.until_central_waiting(1)=>true,_=&mut second=>false};
+    let waits =
+        tokio::select! {()=runtime.runtime().until_central_waiting(1)=>true,_=&mut second=>false};
     assert!(
         waits,
         "the second writer crossed the first writer's org turn"
@@ -156,8 +159,8 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
     // Pending durable work predates provisioning; C2 correctly cannot authenticate an unstamped org.
     let (wake_id, due) = f.seed_pending_wake("wake-session").await?;
     let runtime = f.runtime(A).await?;
-    assert_eq!(runtime.statement_host().alarm(), None);
-    let mut alarm = runtime.statement_host().subscribe_alarm();
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
+    let mut alarm = runtime.runtime().statement_host().subscribe_alarm();
     assert_eq!(
         f.provision(A, &signed::stamp(A, signed::NOW_SECONDS)?)
             .await?

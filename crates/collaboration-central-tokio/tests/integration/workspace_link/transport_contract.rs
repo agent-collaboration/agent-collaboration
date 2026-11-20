@@ -20,7 +20,7 @@ fn workspace_store(fixture: &Fixture, workspace: &WorkspaceId) -> ObjectStorage 
             .root_path()
             .join("modern/workspace-stores")
             .join(format!("{workspace}.sqlite")),
-        Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
     )
 }
 
@@ -68,6 +68,7 @@ async fn two_in_flight_requests_keep_distinct_correlations_and_payloads() -> Res
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT name FROM directory_workspaces ORDER BY name",
@@ -111,6 +112,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
     let allowance = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -136,7 +138,7 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
         "requestId":write_id,"workspaceId":workspace.workspace_id,
         "operation":{"kind":"createArea","name":"Exactly one area","description":"Test description"}
     }))?);
-    runtime.lose_reply_after_apply(write_id.parse()?);
+    runtime.runtime().lose_reply_after_apply(write_id.parse()?);
 
     // Act: the response is unknown only after the actual workspace batch committed.
     let write = client.begin_request(caller()?, payload.clone())?;

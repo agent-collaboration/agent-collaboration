@@ -36,7 +36,7 @@ async fn welcome_pages_by_creation_then_id_and_excludes_a_row_at_its_deadline() 
     let CentralMailResult::Done(CentralMailAnswer::Queued { message_id }) = result else {
         panic!("fixture send did not queue: {result:?}");
     };
-    let seeded = runtime.statement_host().run_batch(StatementBatch {
+    let seeded = runtime.runtime().statement_host().run_batch(StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
                 sql: "WITH RECURSIVE ids(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM ids WHERE n<251) INSERT INTO mail_messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,created_at,updated_at,cancel_due_at,sender_request_id,delivery_window_ends_at) SELECT printf('01890f2e-7b4c-7cc0-98c4-%012x',n),sender,target_machine_id,target_session,message_kind,body,state,created_at,updated_at,cancel_due_at,sender_request_id,CASE WHEN n=0 THEN ?1 ELSE delivery_window_ends_at END FROM ids CROSS JOIN mail_messages WHERE message_id=?2",

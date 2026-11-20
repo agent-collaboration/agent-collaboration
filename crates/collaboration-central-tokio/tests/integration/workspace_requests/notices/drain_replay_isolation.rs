@@ -8,6 +8,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
     let thread = f.thread(8241, area).await;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut held = r
+        .runtime()
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let operation = post(&thread, vec![]);
@@ -43,6 +44,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
         .expect("replay returns cached decision");
     assert_eq!(replay, first);
     let ledger = r
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -63,7 +65,7 @@ async fn committed_write_and_replay_succeed_even_when_its_drain_is_corrupt() {
     )
     .unwrap();
     let record = r
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT state,failure_count,next_try_at FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'",
             args: vec![],

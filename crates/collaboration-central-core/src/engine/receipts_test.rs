@@ -14,7 +14,7 @@ fn claim() -> ReceiptClaim {
 #[tokio::test]
 async fn a_live_receipt_cannot_be_overwritten_and_expiry_is_one_millisecond_exclusive() {
     let mut connection = SqliteConnection::connect("sqlite::memory:").await.unwrap();
-    crate::workspace_migrations::central_migrator()
+    fleet_storage_schema::workspace_migrations::central_migrator()
         .run(&mut connection)
         .await
         .unwrap();

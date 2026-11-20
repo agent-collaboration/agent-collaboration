@@ -183,13 +183,22 @@ impl Drop for WorkerdHost {
 }
 impl WorkerdHost {
     pub async fn open(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
-        c2_controls::open_fixture(clock).await
+        c2_controls::open_fixture(clock, None).await
+    }
+    pub async fn open_with_persistence(
+        clock: Arc<dyn Clock>,
+        directory: &Path,
+    ) -> Result<Self, StoreFailure> {
+        let directory = directory
+            .canonicalize()
+            .map_err(|_| StoreFailure::Unavailable)?;
+        c2_controls::open_fixture(clock, Some(directory)).await
     }
     pub fn now_seconds(&self) -> i64 {
         self.clock.now().unix_millis().div_euclid(1000)
     }
     pub async fn open_signin(clock: Arc<dyn Clock>, plan: &Path) -> Result<Self, StoreFailure> {
-        Self::open_configured(clock, Some(plan.to_owned()), false, true).await
+        Self::open_configured(clock, Some(plan.to_owned()), false, true, None).await
     }
     /// `capture_logs` gives the bridge a private stderr the fixture reads; without
     /// it the bridge inherits this process's stderr, so that pipe's EOF means
@@ -199,6 +208,7 @@ impl WorkerdHost {
         plan: Option<std::path::PathBuf>,
         c2_witness: bool,
         capture_logs: bool,
+        persistence: Option<std::path::PathBuf>,
     ) -> Result<Self, StoreFailure> {
         let signin = plan.is_some();
         let initial_time_ms = clock.now().unix_millis();
@@ -213,6 +223,9 @@ impl WorkerdHost {
             command.arg(manifest.join("tests/support/workerd-bridge.mts"));
             if let Some(plan) = plan {
                 command.arg("--signin-plan").arg(plan);
+            }
+            if let Some(directory) = persistence {
+                command.arg("--persistence-directory").arg(directory);
             }
             if c2_witness {
                 command
@@ -457,19 +470,14 @@ impl RemoteRuntime {
             .await?;
         Ok(())
     }
-    pub async fn inject_engine_commit_fault(
-        &self,
-        fault: collaboration_central_core::EngineCommitFault,
-    ) {
+    pub async fn inject_engine_commit_fault(&self, fault: fleet_runtime::EngineCommitFault) {
         let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
     }
-    pub async fn legacy_unit_invocations(
-        &self,
-    ) -> collaboration_central_core::LegacyUnitInvocations {
+    pub async fn legacy_unit_invocations(&self) -> fleet_runtime::LegacyUnitInvocations {
         self.control("legacy-unit-invocations", &()).await.unwrap()
     }
     /// Every unit the object's due batches started, in start order (R2/R3).
-    pub async fn due_unit_starts(&self) -> Vec<collaboration_central_core::DueUnitStart> {
+    pub async fn due_unit_starts(&self) -> Vec<fleet_runtime::DueUnitStart> {
         self.control("due-unit-starts", &()).await.unwrap()
     }
     pub async fn engine_commit_fault_pending(&self) -> bool {
@@ -477,10 +485,7 @@ impl RemoteRuntime {
             .await
             .unwrap()
     }
-    pub async fn inject_engine_read_fault(
-        &self,
-        fault: collaboration_central_core::EngineReadFault,
-    ) {
+    pub async fn inject_engine_read_fault(&self, fault: fleet_runtime::EngineReadFault) {
         let _: bool = self.control("engine-read-fault", &fault).await.unwrap();
     }
     /// Arms one keyed engine hold (`point` in camelCase, e.g. "afterEngineLoad").

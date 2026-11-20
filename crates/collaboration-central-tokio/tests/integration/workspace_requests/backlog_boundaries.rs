@@ -40,6 +40,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -95,7 +96,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
         f.call(0, m::WorkspaceOperation::Show { item }).await,
         before
     );
-    let effects = runtime.inspect_workspace(&f.workspace, Statement {
+    let effects = runtime.runtime().inspect_workspace(&f.workspace, Statement {
         sql: "SELECT (SELECT COUNT(*) FROM workspace_item_references),(SELECT COUNT(*) FROM workspace_changes WHERE change_kind='stateChanged')", args: vec![],
     }).await.unwrap();
     assert_eq!(

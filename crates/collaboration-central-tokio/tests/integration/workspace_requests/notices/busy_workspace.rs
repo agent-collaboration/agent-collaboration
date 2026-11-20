@@ -16,6 +16,7 @@ async fn drain_due(
     workspace: &m::WorkspaceId,
 ) -> SqlValue {
     runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
@@ -52,7 +53,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     assert!(matches!(
         runtime
-            .statement_host()
+            .runtime().statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
@@ -70,6 +71,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
 
     // Write A commits in W1 and is held holding W1's turn, before its own drain.
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
@@ -132,7 +134,7 @@ async fn a_held_write_on_one_workspace_never_delays_another_requests_reply() {
         SqlValue::Null,
         "other due workspaces drain"
     );
-    let records = runtime.statement_host().read(Statement {
+    let records = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains'",
         args: vec![],
     }).await.unwrap();

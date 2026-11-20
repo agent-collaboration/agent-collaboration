@@ -20,10 +20,6 @@ use super::{
     },
     port::{Engine, EngineHost},
 };
-use crate::{
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, string},
-};
 use central_engine_model::{
     DueBatchPolicy, DueRow, EngineTime, InstanceKey, MachineKind, RetirementThreshold,
 };
@@ -32,6 +28,10 @@ use central_storage::{
 };
 use fleet_contracts::{AlarmNotPublished, AlarmResult, EventCompletion};
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::{
+    stored_values::{column, string},
+    workspace_decode_error::corrupt,
+};
 use futures_util::{StreamExt, stream};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -76,13 +76,13 @@ enum Unit {
 #[cfg(feature = "test-support")]
 impl Unit {
     /// The visit-order receipt names a unit by its subject (R2/R3).
-    fn start_receipt(&self, now: EngineTime) -> super::due_batch_state::DueUnitStart {
+    fn start_receipt(&self, now: EngineTime) -> fleet_runtime::DueUnitStart {
         let (kind, key) = match self {
             Self::Machine(kind, row) => (kind.kind().0, row.key.0.clone()),
             Self::Windows => ("legacy_notice_windows", "all".to_owned()),
             Self::Drains => ("legacy_workspace_drains", "all".to_owned()),
         };
-        super::due_batch_state::DueUnitStart {
+        fleet_runtime::DueUnitStart {
             batch_start_unix_millis: now.timestamp_millis(),
             machine_kind: kind.to_owned(),
             subject_key: key,
@@ -428,7 +428,10 @@ impl<R: EngineHost> Engine<'_, R> {
                     Ok(count) => {
                         #[cfg(feature = "test-support")]
                         self.pauses()
-                            .reached_engine(crate::PausePoint::BeforeControlClear, subject.kind.0)
+                            .reached_engine(
+                                fleet_runtime::PausePoint::BeforeControlClear,
+                                subject.kind.0,
+                            )
                             .await;
                         match self.clear_control(&subject, &observed).await {
                             Err(ApplyFailure::StoreDown(_) | ApplyFailure::Rejected(_)) => {
@@ -572,7 +575,7 @@ impl<R: EngineHost> Engine<'_, R> {
         #[cfg(feature = "test-support")]
         if count > 0 {
             self.pauses()
-                .reached_central(crate::PausePoint::BeforeTimerCommit)
+                .reached_central(fleet_runtime::PausePoint::BeforeTimerCommit)
                 .await;
         }
         LegacyUnitOutcome::batch(
@@ -589,7 +592,7 @@ impl<R: EngineHost> Engine<'_, R> {
         #[cfg(feature = "test-support")]
         if count > 0 {
             self.pauses()
-                .reached_central(crate::PausePoint::AfterTimerCommit)
+                .reached_central(fleet_runtime::PausePoint::AfterTimerCommit)
                 .await;
         }
         Ok(count)

@@ -182,3 +182,106 @@ async fn timer_commit_crash_restarts_without_loss_or_duplicate() {
         fixture.host.close().await;
     }
 }
+
+#[tokio::test]
+async fn cold_callback_commits_due_work_once_and_arms_the_next_mark() {
+    use super::super::engine_v2_support::{alarm_ms, now, set_now, set_wake, wake_messages};
+
+    let fixture = Fixture::new().await;
+    let start = now(&fixture);
+    let first_mark = start + chrono::Duration::minutes(5);
+    let next_mark = start + chrono::Duration::minutes(10);
+    let first = set_wake(&fixture, 1308, first_mark, "due on cold activation").await;
+    let second = set_wake(&fixture, 1309, next_mark, "pending on cold activation").await;
+    let runtime = fixture.host.cold_runtime(&fixture.caller.organization_id);
+    assert_eq!(wake_messages(&runtime, &first).await, 0);
+    assert_eq!(wake_messages(&runtime, &second).await, 0);
+    assert_eq!(
+        alarm_ms(&runtime).await,
+        Some(first_mark.timestamp_millis())
+    );
+
+    set_now(&fixture, first_mark);
+    assert_eq!(runtime.cold_alarm().await.unwrap().wakes_fired, 1);
+
+    let receipt: AlarmReceipt = runtime
+        .control::<Option<AlarmReceipt>>("raw-alarm-status", &())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(receipt.initialized_cold);
+    assert_eq!(
+        receipt.organization,
+        Some(fixture.caller.organization_id.clone())
+    );
+    assert_eq!(alarm_ms(&runtime).await, Some(next_mark.timestamp_millis()));
+    assert_eq!(wake_messages(&runtime, &first).await, 1);
+    assert_eq!(wake_messages(&runtime, &second).await, 0);
+    assert!(runtime.dispatch_due_alarm().await.unwrap().is_none());
+
+    set_now(&fixture, next_mark);
+    assert_eq!(
+        runtime
+            .dispatch_due_alarm()
+            .await
+            .unwrap()
+            .unwrap()
+            .wakes_fired,
+        1
+    );
+    assert_eq!(wake_messages(&runtime, &first).await, 1);
+    assert_eq!(wake_messages(&runtime, &second).await, 1);
+    assert_eq!(alarm_ms(&runtime).await, None);
+    fixture.host.close().await;
+
+    require_migration_validation_before_cold_stamp_read().await;
+}
+
+async fn require_migration_validation_before_cold_stamp_read() {
+    use super::super::engine_v2_support::{integer, now, runtime, set_now, set_wake};
+    use central_storage::{
+        AlarmUpdate, BatchOutcome, GuardedStatement, ReadOutcome, RowExpectation, StatementBatch,
+        StoreFailure,
+    };
+
+    let fixture = Fixture::new().await;
+    let owner = runtime(&fixture).await;
+    let due = now(&fixture) + chrono::Duration::minutes(5);
+    set_wake(&fixture, 1310, due, "cold validation failure").await;
+    let corrupt = |sql| GuardedStatement {
+        statement: Statement { sql, args: vec![] },
+        expect: RowExpectation::Exactly(1),
+    };
+    assert!(matches!(
+        owner
+            .run_batch(StatementBatch {
+                statements: vec![
+                    corrupt("UPDATE _sqlx_migrations SET checksum=X'00' WHERE version=1"),
+                    corrupt("UPDATE signin_organization_identity SET organization_statement=''"),
+                ],
+                alarm: AlarmUpdate::Unchanged,
+            })
+            .await
+            .unwrap(),
+        BatchOutcome::Applied { .. }
+    ));
+    set_now(&fixture, due);
+
+    // Both validation steps would fail. The migration error must take precedence.
+    assert_eq!(owner.cold_alarm().await, Err(StoreFailure::Unavailable));
+    let rows: std::result::Result<ReadOutcome, StoreFailure> = owner
+        .control(
+            "raw-read",
+            &Statement {
+                sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='active'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')",
+                args: vec![],
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        rows.unwrap().rows,
+        vec![vec![integer(1), integer(0), integer(0)]]
+    );
+    fixture.host.close().await;
+}

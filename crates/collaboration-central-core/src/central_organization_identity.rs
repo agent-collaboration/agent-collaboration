@@ -1,8 +1,8 @@
 //! The provisioned sign-in stamp is central's sole durable organization identity.
-use crate::{workspace_decode_error::corrupt, workspace_row_codec::string};
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
 use fleet_runtime_ports::CentralStore;
+use fleet_runtime_ports::{stored_values::string, workspace_decode_error::corrupt};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CentralOrganizationIdentity {
     Unprovisioned,

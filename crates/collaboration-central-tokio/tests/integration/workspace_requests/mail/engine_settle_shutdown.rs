@@ -2,7 +2,7 @@
 //! the gated clock goes with it, so a waiting clock move never waits forever.
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 #[tokio::test]
@@ -21,10 +21,15 @@ async fn a_drive_cancelled_by_host_close_releases_its_clock_guard() {
     .await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        runtime.statement_host().alarm().map(|at| at.unix_millis()),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         Some(due.timestamp_millis())
     );
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
     fixture.set_utc(due).await;

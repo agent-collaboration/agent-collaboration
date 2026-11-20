@@ -4,8 +4,8 @@
 use central_storage::{
     AlarmUpdate, ReadOutcome, SqlValue, Statement, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::ClockIds;
 use collaboration_central_tokio::ObjectStorage;
+use fleet_runtime::ClockIds;
 use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use sqlx::migrate::Migrator;
 use std::collections::BTreeMap;

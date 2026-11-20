@@ -6,9 +6,8 @@
 use sqlx_core::migrate::Migrator;
 use std::sync::{Arc, LazyLock};
 
-static WORKSPACE_STORE: LazyLock<Arc<Migrator>> = LazyLock::new(|| {
-    Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator())
-});
+static WORKSPACE_STORE: LazyLock<Arc<Migrator>> =
+    LazyLock::new(|| Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()));
 /// The explicit widget apparatus selects this fixture, never the business runtime.
 #[cfg(feature = "test-support")]
 static WIDGET_STORE: LazyLock<Arc<Migrator>> =

@@ -79,11 +79,16 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
         .unwrap();
     let (wake_id, due) = set_wake(&fixture, 1500).await;
     assert_eq!(
-        runtime.statement_host().alarm().unwrap().unix_millis(),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .unwrap()
+            .unix_millis(),
         due.timestamp_millis()
     );
     batch(
-        runtime.statement_host(),
+        runtime.runtime().statement_host(),
         "DELETE FROM signin_organization_identity",
         vec![],
     )
@@ -93,9 +98,10 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
         runtime.after_event().await.unwrap().work,
         fleet_contracts::AlarmResult::default()
     );
-    assert_eq!(runtime.statement_host().alarm(), None);
-    assert_untouched(runtime.statement_host(), &wake_id).await;
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
+    assert_untouched(runtime.runtime().statement_host(), &wake_id).await;
     let result = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![],
@@ -109,10 +115,10 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
         .await
         .unwrap();
     assert!(matches!(result, BatchOutcome::Applied { .. }));
-    assert!(runtime.statement_host().alarm().is_some());
+    assert!(runtime.runtime().statement_host().alarm().is_some());
     runtime.recompute_alarm().await.unwrap();
-    assert_eq!(runtime.statement_host().alarm(), None);
-    assert_untouched(runtime.statement_host(), &wake_id).await;
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
+    assert_untouched(runtime.runtime().statement_host(), &wake_id).await;
     fixture.host.close().await;
 }
 
@@ -127,6 +133,7 @@ async fn matching_stamp_restores_timer_on_startup() {
         .await
         .unwrap();
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT id,organization_statement FROM signin_organization_identity",
@@ -148,10 +155,15 @@ async fn matching_stamp_restores_timer_on_startup() {
         ]]
     );
     assert_eq!(
-        runtime.statement_host().alarm().unwrap().unix_millis(),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .unwrap()
+            .unix_millis(),
         due.timestamp_millis()
     );
-    assert_untouched(runtime.statement_host(), &wake_id).await;
+    assert_untouched(runtime.runtime().statement_host(), &wake_id).await;
     fixture.host.close().await;
 }
 
@@ -190,10 +202,10 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
             .await
             .unwrap();
         let (wake_id, due) = set_wake(&fixture, number).await;
-        let prior_alarm = runtime.statement_host().alarm();
-        batch(runtime.statement_host(), sql, args).await;
+        let prior_alarm = runtime.runtime().statement_host().alarm();
+        batch(runtime.runtime().statement_host(), sql, args).await;
         let stamp_before = runtime
-            .statement_host()
+            .runtime().statement_host()
             .read(Statement {
                 sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
@@ -209,8 +221,8 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
         };
         assert_eq!(runtime.after_event().await.unwrap_err().failure, expected);
         assert_eq!(runtime.recompute_alarm().await.unwrap_err(), expected);
-        assert_eq!(runtime.statement_host().alarm(), prior_alarm);
-        assert_untouched(runtime.statement_host(), &wake_id).await;
+        assert_eq!(runtime.runtime().statement_host().alarm(), prior_alarm);
+        assert_untouched(runtime.runtime().statement_host(), &wake_id).await;
         fixture.host.close().await;
         // Isolation (O4): opening the host no longer fails for every organization;
         // the invalid one is still refused with no business effects.
@@ -234,7 +246,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
                 "{}.sqlite",
                 fixture.caller.organization_id().as_str()
             )),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrations::central_migrator()),
         );
         assert_untouched(&raw, &wake_id).await;
         let stamp_after = raw

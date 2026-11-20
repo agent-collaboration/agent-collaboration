@@ -30,7 +30,8 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     let other = workspace.workspace_id;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
@@ -139,6 +140,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
             .await,
         );
         let actors = r
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
@@ -160,7 +162,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     }
     assert_ne!(recipients[0], recipients[1]);
     let windows = r
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT recipient_actor,due_at FROM mail_notification_windows ORDER BY recipient_actor",
             args: vec![],
@@ -221,6 +223,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     )
     .await;
     let outage = r
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -238,15 +241,16 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         "the owning W1 store must actually fail its changes read"
     );
     assert!(
-        r.inspect_workspace(
-            &other,
-            Statement {
-                sql: "SELECT change_id FROM workspace_changes",
-                args: vec![]
-            }
-        )
-        .await
-        .is_ok(),
+        r.runtime()
+            .inspect_workspace(
+                &other,
+                Statement {
+                    sql: "SELECT change_id FROM workspace_changes",
+                    args: vec![]
+                }
+            )
+            .await
+            .is_ok(),
         "W2 remains readable"
     );
     f.set_utc(due).await;
@@ -261,7 +265,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
             text(&f.workspace),
         ],
     };
-    let first_effects = r.statement_host().read(effects()).await.unwrap();
+    let first_effects = r.runtime().statement_host().read(effects()).await.unwrap();
     assert_eq!(
         first_effects.rows,
         vec![vec![
@@ -271,12 +275,13 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         ]],
         "the wake fires; the whole window unit waits for the outage to clear"
     );
-    let record = r.statement_host().read(Statement { sql: "SELECT state,last_failure FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![] }).await.unwrap();
+    let record = r.runtime().statement_host().read(Statement { sql: "SELECT state,last_failure FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![] }).await.unwrap();
     assert_eq!(
         record.rows,
         vec![vec![text("failing"), text("other_store_unavailable")]]
     );
     let retained = r
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT due_at FROM mail_notification_windows WHERE recipient_actor=?",
@@ -289,7 +294,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         vec![vec![due_text.clone()]],
         "transient outage retains its original due time"
     );
-    let minimum = r.statement_host().read(Statement { sql: "SELECT MIN(unixepoch(due_at)*1000+CAST(substr(strftime('%f',due_at),4,3) AS INTEGER)) AS earliest_due FROM (SELECT due_at FROM automation_wakes WHERE state='active' UNION ALL SELECT next_due_at FROM automation_schedules WHERE state='active' AND next_due_at IS NOT NULL UNION ALL SELECT due_at FROM mail_notification_windows UNION ALL SELECT drain_due_at FROM mail_workspace_drains WHERE drain_due_at IS NOT NULL) WHERE unixepoch(due_at) IS NOT NULL", args: vec![] }).await.unwrap();
+    let minimum = r.runtime().statement_host().read(Statement { sql: "SELECT MIN(unixepoch(due_at)*1000+CAST(substr(strftime('%f',due_at),4,3) AS INTEGER)) AS earliest_due FROM (SELECT due_at FROM automation_wakes WHERE state='active' UNION ALL SELECT next_due_at FROM automation_schedules WHERE state='active' AND next_due_at IS NOT NULL UNION ALL SELECT due_at FROM mail_notification_windows UNION ALL SELECT drain_due_at FROM mail_workspace_drains WHERE drain_due_at IS NOT NULL) WHERE unixepoch(due_at) IS NOT NULL", args: vec![] }).await.unwrap();
     assert_eq!(
         minimum.rows,
         vec![vec![SqlValue::Integer(
@@ -297,7 +302,10 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         )]]
     );
     assert_eq!(
-        r.statement_host().alarm().map(|time| time.unix_millis()),
+        r.runtime()
+            .statement_host()
+            .alarm()
+            .map(|time| time.unix_millis()),
         Some(later_due.timestamp_millis())
     );
     f.set_utc(later_due).await;
@@ -309,7 +317,12 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
     .await;
     let _retry = r.after_event().await;
     assert_eq!(
-        r.statement_host().read(effects()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(effects())
+            .await
+            .unwrap()
+            .rows,
         vec![vec![
             SqlValue::Integer(1.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap()),
@@ -317,13 +330,16 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         ]],
         "retry must deliver W1 exactly once without duplicating healthy effects"
     );
-    let later_count = r.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?", args: vec![text(later_wake)] }).await.unwrap();
+    let later_count = r.runtime().statement_host().read(Statement { sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?", args: vec![text(later_wake)] }).await.unwrap();
     assert_eq!(
         later_count.rows,
         vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
     );
     assert_eq!(
-        r.statement_host().alarm().map(|time| time.unix_millis()),
+        r.runtime()
+            .statement_host()
+            .alarm()
+            .map(|time| time.unix_millis()),
         Some((later_due + chrono::Duration::hours(24)).timestamp_millis())
     );
     f.host.close().await;

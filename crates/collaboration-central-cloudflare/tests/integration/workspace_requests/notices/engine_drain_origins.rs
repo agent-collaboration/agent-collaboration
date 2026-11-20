@@ -9,9 +9,8 @@ use super::super::engine_v2_support::{
     alarm_ms, next_mark, now, raw, record, rows, runtime, set_now, set_wake, stamp, wake_messages,
 };
 use super::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, engine_probe::InstanceKey,
-};
+use collaboration_central_core::engine_probe::InstanceKey;
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 
 const DRAINS: &str = "legacy_workspace_drains";
 

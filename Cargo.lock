@@ -1398,7 +1398,9 @@ dependencies = [
  "collaboration-central-core",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-storage-schema",
  "futures-channel",
  "futures-util",
  "http",
@@ -1457,7 +1459,9 @@ dependencies = [
  "chrono",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-storage-schema",
  "futures-util",
  "hegeltest",
  "http",
@@ -1496,7 +1500,10 @@ dependencies = [
  "collaboration-central-tokio",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-storage-schema",
+ "fleet-store-sqlx",
  "futures-util",
  "hegeltest",
  "reqwest 0.12.28",
@@ -2387,14 +2394,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-runtime"
+version = "0.1.156"
+dependencies = [
+ "central-engine-model",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-identity-protocol",
+ "fleet-runtime-ports",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
 name = "fleet-runtime-ports"
 version = "0.1.156"
 dependencies = [
  "central-engine-model",
  "central-storage",
  "serde",
+ "serde_json",
  "uuid",
  "workspace-ids",
+]
+
+[[package]]
+name = "fleet-storage-schema"
+version = "0.1.156"
+dependencies = [
+ "sqlx",
+ "sqlx-core",
+]
+
+[[package]]
+name = "fleet-store-sqlx"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-runtime-ports",
+ "sqlx",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

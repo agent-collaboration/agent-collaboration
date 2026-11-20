@@ -8,6 +8,7 @@ impl MachineFixture {
             .inner
             .runtime(ORG)
             .await?
+            .runtime()
             .statement_host()
             .run_batch(central_storage::StatementBatch {
                 statements: vec![statement],
@@ -161,8 +162,9 @@ impl MachineFixture {
     ) -> Result<(DecisionReply, DecisionReply)> {
         let runtime = self.inner.runtime(ORG).await?;
         let mut held = runtime
+            .runtime()
             .pause_points()
-            .hold_central(collaboration_central_core::PausePoint::AfterSignInSample);
+            .hold_central(fleet_runtime::PausePoint::AfterSignInSample);
         let client = self.inner.client();
         let body = serde_json::to_string(first)?;
         let first =
@@ -176,8 +178,7 @@ impl MachineFixture {
             tokio::spawn(
                 async move { super::super::support::post(&client, TOKEN, body, vec![]).await },
             );
-        let queued =
-            tokio::select! {()=runtime.until_central_waiting(1)=>true,_=&mut second=>false};
+        let queued = tokio::select! {()=runtime.runtime().until_central_waiting(1)=>true,_=&mut second=>false};
         assert!(
             queued,
             "the second token decision crossed the held org turn"
@@ -194,8 +195,9 @@ impl MachineFixture {
     pub async fn held_approval(&self, body: &Value, millis: u64) -> Result<(u16, Value)> {
         let runtime = self.inner.runtime(ORG).await?;
         let mut held = runtime
+            .runtime()
             .pause_points()
-            .hold_central(collaboration_central_core::PausePoint::BeforeSignInSample);
+            .hold_central(fleet_runtime::PausePoint::BeforeSignInSample);
         let client = self.inner.client();
         let body = serde_json::to_string(body)?;
         let pending = tokio::spawn(async move {

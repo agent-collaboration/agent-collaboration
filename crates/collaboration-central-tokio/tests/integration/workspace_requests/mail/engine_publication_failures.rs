@@ -8,10 +8,11 @@ use central_storage::{
     AlarmPublicationFailure, AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure,
 };
 use collaboration_central_core::{
-    MAX_ALARM_UNIX_MILLIS, PausePoint,
+    MAX_ALARM_UNIX_MILLIS,
     engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
 };
 use fleet_contracts::AlarmNotPublished;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 /// A time with no later five-minute mark inside the portable range, yet far
@@ -57,6 +58,7 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
     assert_eq!(previous, ms(at(start, 10, 0, 0)));
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .take_alarm_publication_failures()
             .is_empty()
@@ -68,7 +70,10 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
     fixture.relocate_authority(from_ms(edge)).await;
     fixture.refresh_caller().await;
     // Relocating publishes at the edge too; only the request's failures are measured.
-    let _relocation_failures = runtime.statement_host().take_alarm_publication_failures();
+    let _relocation_failures = runtime
+        .runtime()
+        .statement_host()
+        .take_alarm_publication_failures();
 
     let answer = runtime
         .request_probe(
@@ -89,7 +94,10 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
     // request's own batch (C1, R7) and then its closing pass each committed and
     // reported the failed publication.
     assert_eq!(
-        runtime.statement_host().take_alarm_publication_failures(),
+        runtime
+            .runtime()
+            .statement_host()
+            .take_alarm_publication_failures(),
         vec![
             AlarmPublicationFailure::NoLaterGridMark,
             AlarmPublicationFailure::NoLaterGridMark
@@ -97,7 +105,10 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
     );
     assert_eq!(alarm_ms(&runtime), previous, "the previous alarm is kept");
     assert_eq!(
-        runtime.statement_host().failed_alarm_publication_at(),
+        runtime
+            .runtime()
+            .statement_host()
+            .failed_alarm_publication_at(),
         Some(runtime_primitives::SyncTime::from_unix_millis(edge))
     );
 
@@ -105,7 +116,10 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
 
     assert_eq!(completion, Err(unpublishable()));
     assert_eq!(
-        runtime.statement_host().take_alarm_publication_failures(),
+        runtime
+            .runtime()
+            .statement_host()
+            .take_alarm_publication_failures(),
         vec![AlarmPublicationFailure::NoLaterGridMark],
         "the final pass batch applied and reported Failed"
     );
@@ -135,18 +149,24 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
         (NO_LATER_MARK_UNIX_MILLIS.div_euclid(300_000) + 1) * 300_000 > MAX_ALARM_UNIX_MILLIS,
         "the fixture time has no later mark"
     );
-    let completed = runtime.alarm_completion_count();
+    let completed = runtime.runtime().alarm_completion_count();
     fixture.set_utc(from_ms(NO_LATER_MARK_UNIX_MILLIS)).await;
 
     let published = runtime.recompute_alarm().await;
 
     assert_eq!(published, Err(unpublishable().failure));
     assert_eq!(
-        runtime.statement_host().take_alarm_publication_failures(),
+        runtime
+            .runtime()
+            .statement_host()
+            .take_alarm_publication_failures(),
         vec![AlarmPublicationFailure::NoLaterGridMark]
     );
     assert_eq!(
-        runtime.statement_host().failed_alarm_publication_at(),
+        runtime
+            .runtime()
+            .statement_host()
+            .failed_alarm_publication_at(),
         Some(runtime_primitives::SyncTime::from_unix_millis(
             NO_LATER_MARK_UNIX_MILLIS
         ))
@@ -163,7 +183,7 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
         tokio::task::yield_now().await;
     }
     assert_eq!(
-        runtime.alarm_completion_count(),
+        runtime.runtime().alarm_completion_count(),
         completed,
         "neither the old 10:05 deadline nor a retry fired"
     );
@@ -174,6 +194,7 @@ async fn with_no_later_mark_the_alarm_is_unpublishable_and_nothing_is_armed() {
     );
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .take_alarm_publication_failures()
             .is_empty(),
@@ -208,9 +229,11 @@ async fn a_restart_mid_fan_out_redoes_no_done_item_and_fires_the_rest_once() {
     seed_probe(&runtime, committed, committed_group, Some(due), "committed").await;
     seed_probe(&runtime, loaded, loaded_group, Some(due), "loaded").await;
     let mut after_commit = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineCommit, &committed.to_string());
     let mut after_load = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &loaded.to_string());
     fixture.set_utc(due).await;
@@ -278,6 +301,7 @@ async fn a_dropped_alarm_is_republished_by_the_next_requests_own_event() {
     // The native twin of /test/raw-drop-alarm: an empty plain SetFromQuery NULL.
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![],

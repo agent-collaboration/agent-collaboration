@@ -1,10 +1,10 @@
 use crate::WorkspaceRuntime;
-use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::{json, string};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
 };
+use fleet_runtime_ports::stored_values::{json, string};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason,
@@ -55,7 +55,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             },
         };
         let (kind, encoded) = identity_fields(&identity)?;
-        let rows = self.host.read(identity_lookup(kind, &encoded)).await?;
+        let rows = self
+            .execution
+            .statement_host()
+            .read(identity_lookup(kind, &encoded))
+            .await?;
         match rows.rows.as_slice() {
             [] => Ok(None),
             [row] => string(&rows, row, "actor_identity_id")?
@@ -73,7 +77,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         now: workspace_model::Timestamp,
     ) -> Result<ActorIdentityPlan, StoreFailure> {
         let (kind, encoded) = identity_fields(identity)?;
-        let rows = self.host.read(identity_lookup(kind, &encoded)).await?;
+        let rows = self
+            .execution
+            .statement_host()
+            .read(identity_lookup(kind, &encoded))
+            .await?;
         if rows.rows.len() > 1 {
             return Err(corrupt("access_actor_identities.identity"));
         }
@@ -86,7 +94,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 statements: vec![],
             });
         }
-        let actor: ActorIdentityId = self.mint()?;
+        let actor: ActorIdentityId = self.execution.mint()?;
         let statement = identity_insert(&actor, kind, &encoded, &now.to_rfc3339());
         Ok(ActorIdentityPlan {
             actor,
@@ -103,14 +111,14 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     ) -> Result<ActorIdentityId, StoreFailure> {
         let (kind, encoded) = identity_fields(identity)?;
         let lookup = || identity_lookup(kind, &encoded);
-        let existing = self.host.read(lookup()).await?;
+        let existing = self.execution.statement_host().read(lookup()).await?;
         if let Some(row) = existing.rows.first() {
             return string(&existing, row, "actor_identity_id")?
                 .parse()
                 .map_err(|_| corrupt("actor_identity_id"));
         }
-        let minted: ActorIdentityId = self.mint()?;
-        let now = self.now()?.to_rfc3339();
+        let minted: ActorIdentityId = self.execution.mint()?;
+        let now = self.execution.now()?.to_rfc3339();
         let batch = StatementBatch {
             statements: vec![GuardedStatement {
                 statement: identity_insert(&minted, kind, &encoded, &now),
@@ -118,7 +126,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }],
             alarm: AlarmUpdate::Unchanged,
         };
-        match self.host.run_batch(batch).await? {
+        match self.execution.statement_host().run_batch(batch).await? {
             BatchOutcome::Applied { .. } => {}
             // A rejected statement keeps main's store-outage answer on this path.
             BatchOutcome::StatementRejected { .. } => return Err(StoreFailure::Unavailable),
@@ -126,7 +134,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 return Err(corrupt("actor insertion"));
             }
         }
-        let stored = self.host.read(lookup()).await?;
+        let stored = self.execution.statement_host().read(lookup()).await?;
         let row = stored
             .rows
             .first()
@@ -150,7 +158,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 })
             }),
             ActorRef::Session(session) => {
-                let _turn = self.take_central_turn().await;
+                let _turn = self.execution.take_central_turn().await;
                 self.resolve_identity(&Identity::AgentSession {
                     session: session.clone(),
                 })
@@ -167,7 +175,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             return Ok(vec![]);
         }
         let encoded = serde_json::to_string(ids).map_err(|_| corrupt("actor ids"))?;
-        let rows=self.host.read(Statement {sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id IN (SELECT value FROM json_each(?))",args:vec![text(encoded)]}).await?;
+        let rows=self.execution.statement_host().read(Statement {sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id IN (SELECT value FROM json_each(?))",args:vec![text(encoded)]}).await?;
         let mut actors = Vec::new();
         for row in &rows.rows {
             actors.push(ActorView::from(decode_actor(&rows, row)?));
@@ -214,7 +222,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         actor: &ActorIdentityId,
     ) -> Result<Option<Identity>, StoreFailure> {
-        let rows=self.host.read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
+        let rows=self.execution.statement_host().read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
         match rows.rows.as_slice() {
             [] => Ok(None),
             [row] => Ok(Some(decode_actor(&rows, row)?.identity)),

@@ -14,6 +14,7 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() -> Result {
     let operation = "019f0000-0000-7000-8000-00000000d771";
     f.runtime(A)
         .await?
+        .runtime()
         .lose_reply_after_apply(operation.to_owned().try_into()?);
     let lost = create(&f, &owner, operation, "Lost reply", "retained description").await?;
     assert_eq!(lost.status, 503);

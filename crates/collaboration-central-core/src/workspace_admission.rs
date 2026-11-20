@@ -1,8 +1,8 @@
 //! Live request admission. Callers hold the central turn through the admitted effect.
-use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::{column, json, string};
 use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::stored_values::{column, json, string};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{RefusalReason, WorkspaceId};
 
@@ -12,7 +12,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         caller: &WorkspaceCaller,
         workspace: Option<&WorkspaceId>,
     ) -> Result<Result<(), RefusalReason>, StoreFailure> {
-        if caller.organization_id() != &self.organization
+        if caller.organization_id() != self.execution.organization()
             || caller.caller().machine_id() != caller.connection().machine_id()
         {
             return Ok(Err(RefusalReason::MachineRevoked));
@@ -25,7 +25,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             return Ok(Err(RefusalReason::MachineRevoked));
         }
         if let Some(workspace) = workspace {
-            let rows = self.host.read(Statement {
+            let rows = self.execution.statement_host().read(Statement {
                 sql: "SELECT m.allowed_workspaces,w.state AS workspace_state FROM login_machines m LEFT JOIN directory_workspaces w ON w.workspace_id=? WHERE m.machine_id=?",
                 args: vec![SqlValue::Text(workspace.to_string()), SqlValue::Text(caller.connection().machine_id().as_str().to_owned())],
             }).await?;
@@ -59,7 +59,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         caller: &WorkspaceCaller,
     ) -> Result<Vec<WorkspaceId>, StoreFailure> {
         let rows = self
-            .host
+            .execution
+            .statement_host()
             .read(Statement {
                 sql: "SELECT allowed_workspaces FROM login_machines WHERE machine_id=?",
                 args: vec![SqlValue::Text(

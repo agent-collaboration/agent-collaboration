@@ -126,7 +126,7 @@ pub(super) async fn witness_fixture_attempt_ids(fixture: &super::support::Fixtur
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    install_attempt_id_witness(runtime.statement_host()).await;
+    install_attempt_id_witness(runtime.runtime().statement_host()).await;
 }
 pub(super) async fn assert_fixture_attempt_ids_are_uuid_v7(
     fixture: &super::support::Fixture,
@@ -138,5 +138,6 @@ pub(super) async fn assert_fixture_attempt_ids_are_uuid_v7(
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    assert_every_written_attempt_id_is_uuid_v7(runtime.statement_host(), test, planted).await
+    assert_every_written_attempt_id_is_uuid_v7(runtime.runtime().statement_host(), test, planted)
+        .await
 }

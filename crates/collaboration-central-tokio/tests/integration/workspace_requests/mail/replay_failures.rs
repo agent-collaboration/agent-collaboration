@@ -47,6 +47,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
     .unwrap();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -65,12 +66,17 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         BatchOutcome::Applied { .. }
     ));
     let before = runtime
+        .runtime()
         .statement_host()
         .read(snapshot())
         .await
         .unwrap()
         .rows;
-    let alarm_before = runtime.statement_host().alarm().map(|at| at.unix_millis());
+    let alarm_before = runtime
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|at| at.unix_millis());
     assert_eq!(alarm_before, Some(due.timestamp_millis()));
     // Embedded setup allowance: the fixture's setup claimed the due batch at T0, so
     // the held clock moves to T0 + 30 s before this event's due batch.
@@ -84,6 +90,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .read(snapshot())
             .await
@@ -92,7 +99,11 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         before
     );
     assert_eq!(
-        runtime.statement_host().alarm().map(|at| at.unix_millis()),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         alarm_before
     );
     fixture.host.close().await;
@@ -115,14 +126,20 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         .unwrap();
     assert!(matches!(&first, Result::Done(Answer::WakeSet { due_at, .. }) if *due_at == due));
     let before = runtime
+        .runtime()
         .statement_host()
         .read(snapshot())
         .await
         .unwrap()
         .rows;
-    let alarm_before = runtime.statement_host().alarm().map(|at| at.unix_millis());
+    let alarm_before = runtime
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|at| at.unix_millis());
     {
         runtime
+            .runtime()
             .statement_host()
             .fail_next_alarm_batch(failure.clone());
         let expected = match &failure {
@@ -140,6 +157,7 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         );
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .read(snapshot())
                 .await
@@ -148,7 +166,11 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
             before
         );
         assert_eq!(
-            runtime.statement_host().alarm().map(|at| at.unix_millis()),
+            runtime
+                .runtime()
+                .statement_host()
+                .alarm()
+                .map(|at| at.unix_millis()),
             alarm_before
         );
         assert_eq!(
@@ -161,6 +183,7 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         );
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .read(snapshot())
                 .await
@@ -169,7 +192,11 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
             before
         );
         assert_eq!(
-            runtime.statement_host().alarm().map(|at| at.unix_millis()),
+            runtime
+                .runtime()
+                .statement_host()
+                .alarm()
+                .map(|at| at.unix_millis()),
             alarm_before
         );
     }

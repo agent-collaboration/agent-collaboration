@@ -36,9 +36,10 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         ),
         "{failed:?}"
     );
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM workspace_project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
+    let rows=runtime.runtime().inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM workspace_project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
     assert_eq!(rows.rows, vec![vec![text(&original.lead)]]);
     let log = runtime
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -55,12 +56,12 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
         RowExpectation::Any,
     )
     .await;
-    runtime.lose_reply_after_apply(id(402));
+    runtime.runtime().lose_reply_after_apply(id(402));
     assert_eq!(
         f.call(402, operation.clone()).await.result,
         m::WorkspaceResult::OutcomeUnknown
     );
-    let applied=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM workspace_project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
+    let applied=runtime.runtime().inspect_workspace(&f.workspace,Statement{sql:"SELECT holder FROM workspace_project_roles WHERE project_id=? AND role='lead' AND ended_at IS NULL",args:vec![text(&project)]}).await.unwrap();
     assert_eq!(applied.rows.len(), 1);
     assert_ne!(
         applied.rows,
@@ -217,6 +218,7 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     for table in ["workspace_deliverables", "workspace_changes"] {
         let schema = runtime
+            .runtime()
             .inspect_workspace(
                 &f.workspace,
                 Statement {

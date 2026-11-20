@@ -1,11 +1,11 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
-use crate::{
-    WorkspaceCaller, WorkspaceRuntime, central_mail_store,
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
-};
+use crate::{WorkspaceCaller, WorkspaceRuntime, central_mail_store};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    stored_values::{json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_model as m;
 use workspace_model::central_mail as mail;
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
@@ -32,7 +32,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
         use mail::{CentralMailRefusal as Refusal, CentralMailResult as Result};
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         if let Err(reason) = self.admit_workspace(caller, None).await? {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
@@ -44,13 +44,14 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 person_id: person_id.clone(),
             },
         };
-        let digest = crate::workspace_request_log::digest(&request.operation)?;
-        let now = self.now()?;
+        let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
+        let now = self.execution.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let rows = self
-            .host
-            .read(crate::workspace_request_log::lookup(
-                crate::workspace_request_log::RequestLogStore::Organization,
+            .execution
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                fleet_runtime::workspace_request_log::RequestLogStore::Organization,
                 &request.request_id,
                 &cutoff,
             ))
@@ -74,7 +75,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
                 central_mail_store::applied(
-                    self.host
+                    self.execution
+                        .statement_host()
                         .run_batch(StatementBatch {
                             statements: vec![],
                             alarm: central_mail_store::alarm_update(),
@@ -109,12 +111,14 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 let encoded =
                     serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
                 let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
-                let mut statements = vec![crate::guarded_statements::exact(
+                let mut statements = vec![fleet_runtime_ports::guarded_statements::exact(
                     "UPDATE access_actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
                     vec![
-                        crate::guarded_statements::text(cadence_text),
-                        crate::guarded_statements::text(central_mail_store::timestamp(now)),
-                        crate::guarded_statements::text(&actor),
+                        fleet_runtime_ports::guarded_statements::text(cadence_text),
+                        fleet_runtime_ports::guarded_statements::text(
+                            central_mail_store::timestamp(now),
+                        ),
+                        fleet_runtime_ports::guarded_statements::text(&actor),
                     ],
                 )];
                 // Recompute the pending deadline from now on the new epoch cadence;
@@ -126,12 +130,12 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     .filter(|window| window.recipient == actor)
                 {
                     let due = Self::notice_due_with_cadence(now, *cadence)?;
-                    statements.push(crate::guarded_statements::exact(
+                    statements.push(fleet_runtime_ports::guarded_statements::exact(
                         "UPDATE mail_notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![
-                            crate::guarded_statements::text(central_mail_store::timestamp(due)),
-                            crate::guarded_statements::text(central_mail_store::timestamp(now)),
-                            crate::guarded_statements::text(&window.id),
+                            fleet_runtime_ports::guarded_statements::text(central_mail_store::timestamp(due)),
+                            fleet_runtime_ports::guarded_statements::text(central_mail_store::timestamp(now)),
+                            fleet_runtime_ports::guarded_statements::text(&window.id),
                         ],
                     ));
                 }
@@ -186,8 +190,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             Err(reason) => (vec![], Result::Refused(reason)),
         };
 
-        statements.extend(crate::workspace_request_log::retain(
-            crate::workspace_request_log::RequestLogStore::Organization,
+        statements.extend(fleet_runtime::workspace_request_log::retain(
+            fleet_runtime::workspace_request_log::RequestLogStore::Organization,
             &request.request_id,
             &actor,
             &digest,
@@ -196,7 +200,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             &cutoff,
         )?);
         match self
-            .host
+            .execution
+            .statement_host()
             .run_batch(StatementBatch {
                 statements,
                 alarm: central_mail_store::alarm_update(),
@@ -215,7 +220,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             (self.mail_delivery_ready)(delivery);
         }
         #[cfg(feature = "test-support")]
-        if self.take_lost_reply(&request.request_id) {
+        if self.execution.take_lost_reply(&request.request_id) {
             return Ok(Result::OutcomeUnknown);
         }
         Ok(answer)

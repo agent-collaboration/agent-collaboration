@@ -1,15 +1,15 @@
 //! Strict authorization-floor decoding and snapshot guards for modern central.
-use crate::{
-    person_request::{
-        FloorRevision, OrganizationFloor, OrganizationFloorState, PersonFloor, PersonFloorState,
-    },
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, string},
+use crate::person_request::{
+    FloorRevision, OrganizationFloor, OrganizationFloorState, PersonFloor, PersonFloorState,
 };
 use central_storage::{
     GuardedStatement, ReadOutcome, SafeInteger, SqlValue, Statement, StoreFailure,
 };
 use fleet_runtime_ports::CentralStore;
+use fleet_runtime_ports::{
+    stored_values::{column, string},
+    workspace_decode_error::corrupt,
+};
 
 pub(crate) fn integer(value: i64, field: &str) -> Result<SqlValue, StoreFailure> {
     SafeInteger::new(value)
@@ -132,7 +132,7 @@ pub(crate) fn organization_guard(
     organization: &str,
     floor: &OrganizationFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
-    Ok(crate::guarded_statements::exact(
+    Ok(fleet_runtime_ports::guarded_statements::exact(
         "UPDATE signin_authorization_floors SET id=id WHERE id=? AND minimum_revision=? AND state=? AND permission_policy_digest=? AND request_reject_through_ms=?",
         vec![
             SqlValue::Text(organization.to_owned()),
@@ -148,7 +148,7 @@ pub(crate) fn person_guard(
     person: &str,
     floor: &PersonFloor,
 ) -> Result<GuardedStatement, StoreFailure> {
-    Ok(crate::guarded_statements::exact(
+    Ok(fleet_runtime_ports::guarded_statements::exact(
         "UPDATE signin_person_authorization_floors SET id=id WHERE id=? AND organization_id=? AND person_id=? AND minimum_revision=? AND state=?",
         vec![
             SqlValue::Text(floor.subject_id.clone()),

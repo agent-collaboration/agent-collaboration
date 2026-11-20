@@ -83,7 +83,7 @@ impl Fixture {
         let host = Arc::new(
             TokioWorkspaceHost::open_with_signin(root.path(), clock.clone(), trust).await?,
         );
-        let schema = host.central(&org(A)?).await?.statement_host().read(Statement { sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'", args: vec![] }).await?;
+        let schema = host.central(&org(A)?).await?.runtime().statement_host().read(Statement { sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'", args: vec![] }).await?;
         if !schema.rows.is_empty() {
             return Err("modern credential schema must be absent".into());
         }
@@ -146,6 +146,7 @@ impl Fixture {
         Ok(self
             .runtime(organization)
             .await?
+            .runtime()
             .statement_host()
             .read(Statement { sql, args })
             .await?
@@ -160,6 +161,7 @@ impl Fixture {
         let outcome = self
             .runtime(organization)
             .await?
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {

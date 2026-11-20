@@ -108,6 +108,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
         return Err("fixture runtime was not cached".into());
     }
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
@@ -121,7 +122,11 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
         SqlValue::Text("active".into()),
     ]];
     if rows.rows != expected_rows
-        || runtime.statement_host().alarm().map(|at| at.unix_millis())
+        || runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis())
             != Some(due.timestamp_millis())
     {
         return Err("healthy wake fixture did not retain its actual armed alarm and row".into());
@@ -129,6 +134,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
 
     // Fault only the actual retained alarm. No row, runtime or injected time changes.
     let dropped = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![],
@@ -139,7 +145,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
         })
         .await?;
     if !matches!(dropped, BatchOutcome::Applied { .. })
-        || runtime.statement_host().alarm().is_some()
+        || runtime.runtime().statement_host().alarm().is_some()
     {
         return Err("physical alarm fault did not clear the actual native alarm".into());
     }
@@ -150,12 +156,17 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
         return Err("warm reconnect did not receive its authenticated Welcome".into());
     }
     // This physical read precedes any runtime lookup, core query or semantic frame.
-    let physical_after_welcome = runtime.statement_host().alarm().map(|at| at.unix_millis());
+    let physical_after_welcome = runtime
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|at| at.unix_millis());
     let same_after = fixture.host.central(&organization).await?;
     if !Arc::ptr_eq(&runtime, &same_after) {
         return Err("reconnect cold-opened a different runtime".into());
     }
     let earliest = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: ENGINE_ALARM_INPUTS,
@@ -163,6 +174,7 @@ async fn reconnect_journey(fixture: &Fixture) -> Result<()> {
         })
         .await?;
     let after_rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
@@ -304,6 +316,7 @@ async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) 
     let organization = signed::ORGANIZATION.to_owned().try_into()?;
     let runtime = fixture.host.central(&organization).await?;
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",
@@ -317,12 +330,17 @@ async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) 
             SqlValue::Text("Nonfatal reconnect wake".into()),
             SqlValue::Text("active".into()),
         ]]
-        || runtime.statement_host().alarm().map(|at| at.unix_millis())
+        || runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis())
             != Some(due.timestamp_millis())
     {
         return Err("failure fixture healthy armed wake missing".into());
     }
     let dropped = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![],
@@ -333,12 +351,13 @@ async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) 
         })
         .await?;
     if !matches!(dropped, BatchOutcome::Applied { .. })
-        || runtime.statement_host().alarm().is_some()
+        || runtime.runtime().statement_host().alarm().is_some()
     {
         return Err("failure fixture physical alarm did not clear".into());
     }
     let log_baseline = logs.snapshot()?.len();
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(central_storage::StoreFailure::Unavailable);
     let mut reopened = fixture.connect().await?;
@@ -347,7 +366,7 @@ async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) 
         return Err("Unavailable alarm publication suppressed authenticated Welcome".into());
     }
     // Capture before any later runtime request can repair the missing deadline.
-    let physical_after_welcome = runtime.statement_host().alarm();
+    let physical_after_welcome = runtime.runtime().statement_host().alarm();
     let captured = logs.snapshot()?;
     let interval = std::str::from_utf8(
         captured
@@ -386,6 +405,7 @@ async fn unavailable_rearm_journey(fixture: &Fixture, logs: &CapturedRearmLogs) 
         return Err("nonfatal reconnect replaced its warm runtime".into());
     }
     let after = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT wake_id,due_at,text,state FROM automation_wakes ORDER BY wake_id",

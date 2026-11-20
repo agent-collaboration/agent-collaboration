@@ -8,9 +8,8 @@ use super::super::engine_v2_support::{
     wake_messages,
 };
 use super::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, engine_probe::InstanceKey,
-};
+use collaboration_central_core::engine_probe::InstanceKey;
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 
 const DRAINS: &str = "legacy_workspace_drains";
 
@@ -108,6 +107,7 @@ async fn run(case: &Case) {
 async fn fault(f: &Fixture, workspace: &m::WorkspaceId, kind: EngineCommitFaultKind) {
     runtime(f)
         .await
+        .runtime()
         .statement_host()
         .inject_engine_commit_fault(EngineCommitFault {
             key: InstanceKey(workspace.to_string()),
@@ -172,7 +172,10 @@ async fn central_down_on_the_drain_batch_records_nothing_and_rearms() {
 
     let runtime = runtime(f).await;
     assert!(
-        !runtime.statement_host().engine_commit_fault_pending(),
+        !runtime
+            .runtime()
+            .statement_host()
+            .engine_commit_fault_pending(),
         "the drain batch met the fault"
     );
     assert!(
@@ -218,7 +221,10 @@ async fn rejected_and_uncertain_and_guard_failed_drain_batches_each_take_their_o
 
         let runtime = runtime(f).await;
         assert!(
-            !runtime.statement_host().engine_commit_fault_pending(),
+            !runtime
+                .runtime()
+                .statement_host()
+                .engine_commit_fault_pending(),
             "{kind:?}: met"
         );
         assert_eq!(wake_messages(&runtime, &case.wake).await, 1, "{kind:?}");
@@ -299,7 +305,10 @@ async fn remote_down_never_masks_central_down_across_two_workspaces() {
 
     let runtime = runtime(f).await;
     assert!(
-        !runtime.statement_host().engine_commit_fault_pending(),
+        !runtime
+            .runtime()
+            .statement_host()
+            .engine_commit_fault_pending(),
         "W2 met central down"
     );
     assert!(

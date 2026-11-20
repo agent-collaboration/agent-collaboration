@@ -68,7 +68,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT target_machine_id,sender,target_session,body,(SELECT identity FROM access_actor_identities WHERE actor_identity_id=json_extract(mail_messages.sender,'$.value')) FROM mail_messages WHERE message_id=?", args: vec![text(message_id)] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT target_machine_id,sender,target_session,body,(SELECT identity FROM access_actor_identities WHERE actor_identity_id=json_extract(mail_messages.sender,'$.value')) FROM mail_messages WHERE message_id=?", args: vec![text(message_id)] }).await.unwrap();
     let [row] = rows.rows.as_slice() else {
         panic!("expected one direct message: {:?}", rows.rows)
     };
@@ -181,7 +181,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT target_machine_id, COUNT(*) FROM mail_messages WHERE message_kind='direct' GROUP BY target_machine_id ORDER BY target_machine_id", args: vec![] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT target_machine_id, COUNT(*) FROM mail_messages WHERE message_kind='direct' GROUP BY target_machine_id ORDER BY target_machine_id", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![
@@ -207,13 +207,13 @@ async fn lost_answer_has_durable_effect_and_exact_replay() {
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    runtime.lose_reply_after_apply(id(1010));
+    runtime.runtime().lose_reply_after_apply(id(1010));
     let operation = send(session(&fixture.caller), "lost answer");
     assert_eq!(
         request(&fixture, &fixture.caller, 1010, operation.clone()).await,
         Result::OutcomeUnknown
     );
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'), (SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)", args: vec![text(id::<m::RequestId>(1010))] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'), (SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)", args: vec![text(id::<m::RequestId>(1010))] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -256,7 +256,7 @@ async fn a_chosen_delivery_and_reply_to_are_stored_in_the_message_body_for_the_r
         .await
         .unwrap();
     let rows = runtime
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT json_extract(body,'$.delivery'),json_extract(body,'$.replyTo') FROM mail_messages WHERE message_id=?",
             args: vec![text(message_id)],
@@ -292,7 +292,7 @@ async fn unknown_installation_fails_the_real_message_foreign_key_without_a_row()
         .utc_now()
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     // Go directly through the actual store so known_session cannot short-circuit the FK proof.
-    let outcome = runtime.statement_host().run_batch(StatementBatch {
+    let outcome = runtime.runtime().statement_host().run_batch(StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
                 sql: "INSERT INTO mail_messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,created_at,updated_at) VALUES (?,?,?,?,'direct',?,'queued',?,?)",
@@ -309,6 +309,7 @@ async fn unknown_installation_fails_the_real_message_foreign_key_without_a_row()
     );
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT message_id FROM mail_messages",

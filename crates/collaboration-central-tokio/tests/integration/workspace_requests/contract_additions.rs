@@ -554,7 +554,12 @@ async fn directory_write_request_ids_bind_the_target_workspace() {
             second.workspace_id.to_string(),
         )],
     };
-    let before = runtime.statement_host().read(second_row()).await.unwrap();
+    let before = runtime
+        .runtime()
+        .statement_host()
+        .read(second_row())
+        .await
+        .unwrap();
     let mut first_answers = Vec::new();
     let mut reused_answers = Vec::new();
     for (request, operation) in [
@@ -573,7 +578,12 @@ async fn directory_write_request_ids_bind_the_target_workspace() {
         first_answers.push((first, exact_retry));
         reused_answers.push(reused.result);
     }
-    let after = runtime.statement_host().read(second_row()).await.unwrap();
+    let after = runtime
+        .runtime()
+        .statement_host()
+        .read(second_row())
+        .await
+        .unwrap();
     f.host.close().await;
 
     assert_eq!(before.rows.len(), 1);

@@ -3,7 +3,7 @@ use super::{
     AlarmFailure, AlarmPolicy, CentralObject, ObjectAddress, OrganizationId, statement_store,
 };
 use crate::store_wire::{OwnedBatch, OwnedStatement, OwnedStoreCall};
-use collaboration_central_core::{HeldPause, PausePoint};
+use fleet_runtime::{HeldPause, PausePoint};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap};
 use worker::{Env, Request, Response, Result};
@@ -13,12 +13,7 @@ mod fixture_admission;
 
 #[derive(Default)]
 pub(crate) struct Controls {
-    pub(super) engine_commit_fault:
-        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
-    pub(super) engine_read_fault:
-        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
-    pub(super) alarm_batch_failure:
-        std::sync::Arc<std::sync::Mutex<Option<central_storage::StoreFailure>>>,
+    pub(super) faults: std::sync::Arc<fleet_runtime::TestFaults>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
@@ -146,32 +141,24 @@ pub(super) async fn control(
     }
     let runtime = object.runtime(organization.clone()).await?;
     match path.as_str() {
-        "/test/legacy-unit-invocations" => Response::from_json(&runtime.legacy_unit_invocations()),
-        "/test/due-unit-starts" => Response::from_json(&runtime.due_unit_starts()),
-        "/test/engine-commit-fault-pending" => Response::from_json(
-            &object
-                .controls
-                .engine_commit_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .is_some(),
-        ),
+        "/test/completion-attempts" => {
+            Response::from_json(&runtime.runtime().completion_attempts())
+        }
+        "/test/legacy-unit-invocations" => {
+            Response::from_json(&runtime.runtime().legacy_unit_invocations())
+        }
+        "/test/due-unit-starts" => Response::from_json(&runtime.runtime().due_unit_starts()),
+        "/test/engine-commit-fault-pending" => {
+            Response::from_json(&object.controls.faults.commit_pending())
+        }
         "/test/engine-commit-fault" => {
             let fault = request.json().await?;
-            *object
-                .controls
-                .engine_commit_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            object.controls.faults.arm_commit(fault);
             Response::from_json(&true)
         }
         "/test/engine-read-fault" => {
             let fault = request.json().await?;
-            *object
-                .controls
-                .engine_read_fault
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            object.controls.faults.arm_read(fault);
             Response::from_json(&true)
         }
         "/test/machine-restore-failure" => {
@@ -223,11 +210,7 @@ pub(super) async fn control(
         }
         "/test/fail-alarm-batch" => {
             let failure = request.json().await?;
-            *object
-                .controls
-                .alarm_batch_failure
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
+            object.controls.faults.arm_alarm_batch(failure);
             Response::from_json(&true)
         }
         "/test/drain" => {
@@ -251,11 +234,10 @@ pub(super) async fn control(
             ) {
                 return Err(error("not a timer point"));
             }
-            object
-                .controls
-                .central_holds
-                .borrow_mut()
-                .insert(point, runtime.pause_points().hold_central(point.into()));
+            object.controls.central_holds.borrow_mut().insert(
+                point,
+                runtime.runtime().pause_points().hold_central(point.into()),
+            );
             Response::from_json(&true)
         }
         "/test/hold-engine" => {
@@ -263,6 +245,7 @@ pub(super) async fn control(
             let id = object.controls.next_engine_hold.get();
             object.controls.next_engine_hold.set(id + 1);
             let held = runtime
+                .runtime()
                 .pause_points()
                 .hold_engine(pause.point.into(), &pause.key);
             object.controls.engine_holds.borrow_mut().insert(id, held);
@@ -289,15 +272,17 @@ pub(super) async fn control(
         }
         "/test/until-central-waiting" => {
             let count: usize = request.json().await?;
-            runtime.until_central_waiting(count).await;
+            runtime.runtime().until_central_waiting(count).await;
             Response::from_json(&true)
         }
         "/test/until-admission-waiting" => {
             let count: usize = request.json().await?;
-            runtime.until_admission_waiting(count).await;
+            runtime.runtime().until_admission_waiting(count).await;
             Response::from_json(&true)
         }
-        "/test/admission-waiting" => Response::from_json(&runtime.admission_waiting_now()),
+        "/test/admission-waiting" => {
+            Response::from_json(&runtime.runtime().admission_waiting_now())
+        }
         "/test/engine-probe-admit" => {
             #[derive(Deserialize)]
             #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -351,9 +336,7 @@ pub(super) async fn control(
                     AlarmPolicy::Engine(
                         object.state.storage(),
                         object.clock.clone(),
-                        collaboration_central_core::engine_alarm_decider(
-                            object.due_batches.clone(),
-                        ),
+                        fleet_runtime::engine_alarm_decider(object.due_batches.clone()),
                     )
                 }
                 crate::store_wire::OwnedAlarmUpdate::Unchanged
@@ -407,11 +390,9 @@ pub(super) async fn control(
         "/test/central-failing-upgrade" => Response::from_json(
             &statement_store::migrate(
                 &object.connection,
-                std::sync::Arc::new(
-                    collaboration_central_core::workspace_migrations::failing_upgrade(
-                        collaboration_central_core::workspace_migrations::central_migrator(),
-                    ),
-                ),
+                std::sync::Arc::new(fleet_storage_schema::workspace_migrations::failing_upgrade(
+                    fleet_storage_schema::workspace_migrations::central_migrator(),
+                )),
             )
             .await
             .map_err(|error| error.to_string()),
@@ -424,12 +405,15 @@ pub(super) async fn control(
             Response::from_json(&true)
         }
         "/test/lose-reply" => {
-            runtime.lose_reply_after_apply(request.json().await?);
+            runtime
+                .runtime()
+                .lose_reply_after_apply(request.json().await?);
             Response::from_json(&true)
         }
         "/test/hold" => {
             let target: Pause = request.json().await?;
             let held = runtime
+                .runtime()
                 .pause_points()
                 .hold(&target.workspace, target.point.into());
             object
@@ -457,6 +441,7 @@ pub(super) async fn control(
             object.controls.observations.borrow_mut().insert(
                 wait.workspace.clone(),
                 runtime
+                    .runtime()
                     .pause_points()
                     .hold(&wait.workspace, PausePoint::AfterReads),
             );
@@ -473,6 +458,7 @@ pub(super) async fn control(
             let before_read = {
                 let read = held.until_held();
                 let waiting = runtime
+                    .runtime()
                     .workspace_turns()
                     .until_waiting(&wait.workspace, wait.count);
                 futures_util::pin_mut!(read, waiting);
@@ -495,6 +481,7 @@ pub(super) async fn control(
         "/test/until-waiting" => {
             let wait: Wait = request.json().await?;
             runtime
+                .runtime()
                 .workspace_turns()
                 .until_waiting(&wait.workspace, wait.count)
                 .await;

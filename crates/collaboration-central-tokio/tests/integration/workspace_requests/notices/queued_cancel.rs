@@ -42,6 +42,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         panic!("direct mail")
     };
     let mut fired = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::AfterTimerCommit);
     f.clock
@@ -49,7 +50,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         .await;
     f.advance(Duration::from_secs(900)).await;
     fired.until_held().await;
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT message_id,state,sender,body FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",
         args: vec![text(&recipient), text(&thread)],
     }).await.unwrap();
@@ -70,7 +71,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].position, position);
     let notice_id = notice_id.clone();
-    let windows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM mail_notification_window_items WHERE change_id=?)", args: vec![text(&recipient), text(&thread), text(&items[0].change_id)] }).await.unwrap();
+    let windows = runtime.runtime().statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM mail_notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM mail_notification_window_items WHERE change_id=?)", args: vec![text(&recipient), text(&thread), text(&items[0].change_id)] }).await.unwrap();
     assert_eq!(
         windows.rows,
         vec![vec![
@@ -94,9 +95,10 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         left.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    let after = runtime.statement_host().read(Statement { sql: "SELECT message_id,state FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
+    let after = runtime.runtime().statement_host().read(Statement { sql: "SELECT message_id,state FROM mail_messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
     assert_eq!(after.rows, vec![vec![text(&notice_id), text("cancelled")]]);
     let direct = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT message_id,state,message_kind FROM mail_messages WHERE message_id=?",

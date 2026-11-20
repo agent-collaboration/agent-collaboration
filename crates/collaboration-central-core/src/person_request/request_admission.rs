@@ -209,7 +209,7 @@ fn factor_fresh(second_factor_at: Option<i64>, now_ms: i64) -> bool {
 }
 
 fn corrupt(field: &str, _message: impl std::fmt::Display) -> StoreFailure {
-    crate::workspace_decode_error::corrupt(&format!("authorization_floors.{field}"))
+    fleet_runtime_ports::workspace_decode_error::corrupt(&format!("authorization_floors.{field}"))
 }
 
 #[cfg(test)]

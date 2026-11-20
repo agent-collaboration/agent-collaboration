@@ -29,8 +29,10 @@ pub async fn machine_login_control<H: CentralStore, S: WorkspaceStores>(
     runtime: &WorkspaceRuntime<H, S>,
     control: MachineLoginControl,
 ) -> Result<Option<EndedMachineClient>, StoreFailure> {
-    let _turn = runtime.take_central_turn().await;
-    let time = runtime.machine_login_time(&runtime.organization).await?;
+    let _turn = runtime.execution.take_central_turn().await;
+    let time = runtime
+        .machine_login_time(runtime.execution.organization())
+        .await?;
     match control {
         MachineLoginControl::Revoke {
             person_id,
@@ -44,8 +46,8 @@ pub async fn machine_login_control<H: CentralStore, S: WorkspaceStores>(
                 ..EnrollmentQuery::default()
             };
             let facts = crate::machine_login_reads::facts(
-                runtime.host.as_ref(),
-                runtime.organization.clone(),
+                runtime.execution.statement_host(),
+                runtime.execution.organization().clone(),
                 &query,
             )
             .await?;
@@ -62,7 +64,7 @@ pub async fn machine_login_control<H: CentralStore, S: WorkspaceStores>(
                 &operation_id,
                 "machine:revoke",
                 time,
-                runtime.ids.as_ref(),
+                runtime.execution.ids(),
             )?;
             runtime.apply_machine_login(&facts, decided, time).await
         }

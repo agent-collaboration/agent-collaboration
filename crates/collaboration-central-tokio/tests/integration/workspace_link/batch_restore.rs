@@ -87,6 +87,7 @@ async fn transient_admission_faults(fixture: &Fixture) -> Result<()> {
         }
     }
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT name FROM directory_workspaces ORDER BY name",

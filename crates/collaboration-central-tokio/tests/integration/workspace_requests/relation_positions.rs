@@ -94,6 +94,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
     ] {
         let (kind, id) = item.kind_and_id();
         let rows = runtime
+            .runtime()
             .inspect_workspace(
                 &f.workspace,
                 Statement {
@@ -112,7 +113,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
         .await;
     // A removal is filed under the source's thread, like the creation was.
     let removal = runtime
-        .inspect_workspace(
+        .runtime().inspect_workspace(
             &f.workspace,
             Statement {
                 sql: "SELECT change_kind,thread_id FROM workspace_changes WHERE item_id=? AND change_kind='removed'",
