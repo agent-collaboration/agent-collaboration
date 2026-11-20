@@ -2,8 +2,9 @@
 // Source identities and hashes are recorded in verification/schemas/pins.json.
 
 use super::{
-    CodexRequest, OpaqueJson, OpaqueJsonObject, StringAlternative, deserialize_object,
-    deserialize_present, deserialize_required_nullable, json_object_tag, sealed,
+    CodexRequest, CodexServerNotification, OpaqueJson, OpaqueJsonObject, StringAlternative,
+    deserialize_object, deserialize_present, deserialize_required_nullable, json_object_tag,
+    sealed,
 };
 
 // ModelAvailabilityNux through NonSteerableTurnKind in dependency order.
@@ -33,6 +34,10 @@ pub use agent_message_response_item::*;
 // WorkspaceWriteSandboxPolicy through TurnStartParams in dependency order.
 mod workspace_write_sandbox_policy;
 pub use workspace_write_sandbox_policy::*;
+
+// TurnStartedNotification through AgentMessageDeltaNotification in dependency order.
+mod observation_events;
+pub use observation_events::*;
 
 mod pair_model_list;
 
