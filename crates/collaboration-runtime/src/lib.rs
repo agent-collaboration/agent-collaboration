@@ -45,6 +45,7 @@ mod delivery_acceptance_effect;
 pub mod delivery_route_projection;
 #[cfg(any(test, feature = "test-support"))]
 pub use provider_session_event_hub::HeldSessionHistory;
+pub use provider_session_event_hub::owner_inbox;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
 pub use provider_session_record::{ProviderSessionRecord, ProviderSessionResumeInputs};
 mod app_server_event_forwarding;

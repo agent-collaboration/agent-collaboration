@@ -27,9 +27,13 @@ use collaboration_contracts::SessionEventHubError;
 mod inventory_metadata;
 use inventory_metadata::SessionInventoryMetadata;
 
+#[path = "provider_session_event_hub_inbox.rs"]
+pub mod owner_inbox;
+
 pub struct ProviderSessionEventHub {
     store: Arc<Mutex<ProviderOperationStore>>,
     histories: Mutex<BTreeMap<SessionRef, Arc<Mutex<SessionHistory>>>>,
+    owner_inboxes: std::sync::Mutex<BTreeMap<SessionRef, owner_inbox::HubSessionInbox>>,
     subscriber_capacity: usize,
 }
 
@@ -246,6 +250,7 @@ impl ProviderSessionEventHub {
         Self {
             store,
             histories: Mutex::new(BTreeMap::new()),
+            owner_inboxes: std::sync::Mutex::default(),
             subscriber_capacity: subscriber_capacity.max(1),
         }
     }
