@@ -10,6 +10,7 @@ use collaboration_central_core::engine_probe::{
 
 async fn count(runtime: &Runtime, sql: &'static str) -> SqlValue {
     runtime
+        .runtime()
         .statement_host()
         .read(Statement { sql, args: vec![] })
         .await
@@ -45,6 +46,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     );
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let due: String = match &runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT due_at FROM mail_notification_windows",
@@ -85,9 +87,11 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     // The native alarm driver would also find this work due; park it before its
     // drive guard so only this case's direct engine calls take the pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::BeforeTimerCommit);
     f.set_utc(due).await;
@@ -109,7 +113,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
     );
     let answer = tokio::select! {
         answer = request => answer.unwrap(),
-        () = runtime.until_central_waiting(1) => {
+        () = runtime.runtime().until_central_waiting(1) => {
             panic!("the request's due batch waited on the held window unit's central turn")
         }
     };
@@ -131,6 +135,7 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
 
     // Released, A delivers the window once; a later batch finds nothing.
     let mut committed = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::AfterTimerCommit);
     held.release();

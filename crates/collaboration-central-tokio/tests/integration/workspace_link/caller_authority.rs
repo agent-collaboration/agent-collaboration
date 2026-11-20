@@ -32,7 +32,7 @@ async fn rejected_callers(fixture: &Fixture) -> Result<()> {
         .host
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
-    let store = runtime.statement_host();
+    let store = runtime.runtime().statement_host();
     let forged_person = Caller::Person {
         machine_id: INSTALLATION.parse()?,
         person_id: signed::OWNER.parse()?,

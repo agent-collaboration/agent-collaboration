@@ -3,13 +3,15 @@ use crate::central_timer_rows::decode_automations;
 use crate::{
     WorkspaceRuntime,
     central_mail_store::{encode, timestamp},
-    guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, Statement, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    guarded_statements::{exact, text},
+    stored_values::string,
+    workspace_decode_error::corrupt,
+};
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::Timestamp;
 use workspace_model::central_mail as mail;
@@ -37,7 +39,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         target: target.clone(),
                     }));
                 }
-                let id: WakeId = self.mint()?;
+                let id: WakeId = self.execution.mint()?;
                 (
                     vec![exact(
                         "INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
@@ -58,7 +60,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }
             Op::CancelWake { wake_id } => {
                 let rows = self
-                    .host
+                    .execution
+                    .statement_host()
                     .read(Statement {
                         sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
                         args: vec![text(wake_id)],
@@ -143,7 +146,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         field: "anchorAt".to_owned(),
                     }));
                 };
-                let id: AutomationId = self.mint()?;
+                let id: AutomationId = self.execution.mint()?;
                 (
                     vec![exact(
                         "INSERT INTO automation_schedules(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
@@ -167,7 +170,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 )
             }
             Op::DisableAutomation { automation_id } => {
-                let rows=self.host.read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automation_schedules WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
+                let rows=self.execution.statement_host().read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automation_schedules WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
                 let rows = decode_automations(&rows)?;
                 let Some(row) = rows.first() else {
                     return Ok(Err(Refusal::AutomationNotFound {

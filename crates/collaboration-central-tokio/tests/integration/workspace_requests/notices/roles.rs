@@ -9,6 +9,7 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
     let (_, old_holder) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
@@ -40,7 +41,7 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
         granted.result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
-    let grant = runtime.statement_host().read(Statement {
+    let grant = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT COUNT(*) FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.workspace_id=? AND i.thread_id IS NULL",
         args: vec![text(&old_holder), text(&f.workspace)],
     }).await.unwrap();
@@ -49,6 +50,7 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
         vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
     );
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
@@ -84,7 +86,7 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
         pending.await.unwrap().result,
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE i.workspace_id=? AND i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM mail_notification_window_items WHERE workspace_id=i.workspace_id AND thread_id=i.thread_id) ORDER BY w.recipient_actor",
         args: vec![text(&f.workspace), text(&thread)],
     }).await.unwrap();

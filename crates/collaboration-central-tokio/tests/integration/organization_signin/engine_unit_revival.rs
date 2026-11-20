@@ -9,7 +9,7 @@ use crate::workspace_requests::engine_evidence::{
     assert_every_written_attempt_id_is_uuid_v7, install_attempt_id_witness,
 };
 use central_storage::SqlValue;
-use collaboration_central_core::EngineReadFault;
+use fleet_runtime::EngineReadFault;
 use serde_json::json;
 use workspace_model as m;
 
@@ -86,7 +86,7 @@ fn failing(count: i64, next: Time) -> Vec<Vec<SqlValue>> {
 #[tokio::test]
 async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry() {
     let engine = EngineOrg::new().await;
-    install_attempt_id_witness(engine.runtime().await.statement_host()).await;
+    install_attempt_id_witness(engine.runtime().await.runtime().statement_host()).await;
     let thread = engine.thread().await;
     let recipient = engine.observer(&thread).await;
     engine.post(&thread).await;
@@ -208,7 +208,7 @@ async fn the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_ret
         "no record remains"
     );
     assert_every_written_attempt_id_is_uuid_v7(
-        engine.runtime().await.statement_host(),
+        engine.runtime().await.runtime().statement_host(),
         "the_window_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry",
         &[],
     )
@@ -283,7 +283,7 @@ fn corrupt_drain(count: i64, next: Time) -> Vec<Vec<SqlValue>> {
 #[tokio::test]
 async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry() {
     let engine = EngineOrg::new().await;
-    install_attempt_id_witness(engine.runtime().await.statement_host()).await;
+    install_attempt_id_witness(engine.runtime().await.runtime().statement_host()).await;
     let thread = engine.thread().await;
     engine.observer(&thread).await;
     undrained_post(&engine, &thread).await;
@@ -411,7 +411,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
         "no record remains"
     );
     assert_every_written_attempt_id_is_uuid_v7(
-        engine.runtime().await.statement_host(),
+        engine.runtime().await.runtime().statement_host(),
         "the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_returns_by_retry",
         &[],
     )
@@ -422,7 +422,7 @@ async fn the_drain_unit_recovers_restarts_its_period_retires_at_60_days_and_retu
 #[tokio::test]
 async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run() {
     let engine = EngineOrg::new().await;
-    install_attempt_id_witness(engine.runtime().await.statement_host()).await;
+    install_attempt_id_witness(engine.runtime().await.runtime().statement_host()).await;
     let first = next_mark(engine.now());
     let wake = engine.wake(first, "wake behind a broken source").await;
     let automation = engine.automation(first, "other kind").await;
@@ -430,7 +430,10 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
     let fault = || EngineReadFault {
         kind: "wake_timer".into(),
     };
-    runtime.statement_host().inject_engine_read_fault(fault());
+    runtime
+        .runtime()
+        .statement_host()
+        .inject_engine_read_fault(fault());
     engine.set(first).await;
     engine.after_event().await;
     assert_eq!(
@@ -444,7 +447,10 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
     );
     assert_eq!(engine.wake_messages(&wake).await, 0);
 
-    runtime.statement_host().inject_engine_read_fault(fault());
+    runtime
+        .runtime()
+        .statement_host()
+        .inject_engine_read_fault(fault());
     engine.set(first + minutes(5)).await;
     engine.after_event().await;
     assert_eq!(
@@ -454,7 +460,10 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
     );
 
     // Arm one more read fault: it stays armed only if the kind is never read.
-    runtime.statement_host().inject_engine_read_fault(fault());
+    runtime
+        .runtime()
+        .statement_host()
+        .inject_engine_read_fault(fault());
     let later = engine
         .automation(first + minutes(15), "later other kind")
         .await;
@@ -528,7 +537,7 @@ async fn a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run()
             .is_empty()
     );
     assert_every_written_attempt_id_is_uuid_v7(
-        engine.runtime().await.statement_host(),
+        engine.runtime().await.runtime().statement_host(),
         "a_retired_engine_source_is_never_read_until_retry_and_other_kinds_run",
         &[],
     )

@@ -81,7 +81,7 @@ impl<H: fleet_runtime_ports::CentralStore, S: fleet_runtime_ports::WorkspaceStor
         organization: OrganizationId,
         input: PersonRequestInput,
     ) -> Result<OrganizationAdminAnswer, StoreFailure> {
-        if organization != self.organization {
+        if &organization != self.execution.organization() {
             return Ok(OrganizationAdminAnswer::Unauthenticated);
         }
         let answer = self.admin_person_request(&input).await;

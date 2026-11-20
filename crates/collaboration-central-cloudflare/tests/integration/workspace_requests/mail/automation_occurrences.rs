@@ -8,8 +8,8 @@ use super::super::engine_evidence::{
 use super::super::engine_v2_support::*;
 use super::super::support::*;
 use super::engine_probe_support::PauseControl;
-use collaboration_central_core::PausePoint;
 use fleet_contracts::AlarmResult;
+use fleet_runtime::PausePoint;
 use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as MailResult,

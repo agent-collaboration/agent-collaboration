@@ -9,10 +9,8 @@ use super::super::{
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::StoreFailure;
-use collaboration_central_core::{
-    PausePoint,
-    engine_probe::{EngineRequestOutcome, ProbeEvent},
-};
+use collaboration_central_core::engine_probe::{EngineRequestOutcome, ProbeEvent};
+use fleet_runtime::PausePoint;
 use workspace_model::central_mail::CentralMailResult;
 
 /// Moves every open window to `due`, keeping its items.

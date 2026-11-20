@@ -12,7 +12,7 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 31] = [
+const LAYER_POLICY: [(&str, &[&str]); 34] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -48,6 +48,7 @@ const LAYER_POLICY: [(&str, &[&str]); 31] = [
             "fleet-contracts",
             "fleet-identity-protocol",
             "fleet-runtime-ports",
+            "fleet-runtime",
             "message-board",
             "workspace-ids",
             "workspace-model",
@@ -63,6 +64,9 @@ const LAYER_POLICY: [(&str, &[&str]); 31] = [
             "fleet-contracts",
             "fleet-identity-protocol",
             "fleet-runtime-ports",
+            "fleet-runtime",
+            "fleet-storage-schema",
+            "fleet-store-sqlx",
             "router-clock",
             "workspace-ids",
             "workspace-model",
@@ -77,12 +81,31 @@ const LAYER_POLICY: [(&str, &[&str]); 31] = [
             "fleet-contracts",
             "fleet-identity-protocol",
             "fleet-runtime-ports",
+            "fleet-runtime",
+            "fleet-storage-schema",
             "message-board",
             "sqlx-durable-object",
             "sqlx-durable-object-core",
             "workspace-ids",
             "workspace-model",
         ],
+    ),
+    (
+        "fleet-runtime",
+        &[
+            "central-engine-model",
+            "central-storage",
+            "fleet-contracts",
+            "fleet-identity-protocol",
+            "fleet-runtime-ports",
+            "workspace-ids",
+            "workspace-model",
+        ],
+    ),
+    ("fleet-storage-schema", &[]),
+    (
+        "fleet-store-sqlx",
+        &["central-storage", "fleet-runtime-ports"],
     ),
     ("workspace-rules", &["workspace-model", "central-storage"]),
     ("router-clock", &[]),
@@ -405,6 +428,11 @@ fn fixture_graph(
         ("router-clock", "router-clock"),
         ("fleet-ports", "fleet-runtime-ports"),
         ("fleet-contracts", "fleet-contracts"),
+        ("fleet-runtime", "fleet-runtime"),
+        ("fleet-storage-schema", "fleet-storage-schema"),
+        ("fleet-store-sqlx", "fleet-store-sqlx"),
+        ("central-native", "collaboration-central-tokio"),
+        ("central-worker", "collaboration-central-cloudflare"),
     ]
     .into_iter()
     .map(|(id, name)| CargoPackage {
@@ -504,4 +532,26 @@ fn missing_policy_packages_are_skipped() {
         resolve: CargoResolve { nodes: Vec::new() },
     });
     assert!(graph.check_policy().is_ok());
+}
+
+#[test]
+fn only_the_native_central_host_can_reach_the_executor_directly() {
+    for kind in [None, Some(DependencyKind::Build)] {
+        let native = fixture_graph("central-native", "fleet-store-sqlx", vec![kind]);
+        assert!(native.check_policy().is_ok());
+
+        for (source, package) in [
+            ("central-worker", "collaboration-central-cloudflare"),
+            ("fleet-runtime", "fleet-runtime"),
+            ("fleet-storage-schema", "fleet-storage-schema"),
+        ] {
+            let graph = fixture_graph(source, "fleet-store-sqlx", vec![kind]);
+            let violation = graph
+                .check_policy()
+                .expect_err("the portable crate cannot use the native executor");
+            assert_eq!(violation.source_name, package);
+            assert_eq!(violation.destination_name, "fleet-store-sqlx");
+            assert_eq!(violation.kind, kind.unwrap_or(DependencyKind::Normal));
+        }
+    }
 }

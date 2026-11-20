@@ -16,12 +16,13 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         &self,
         request: &DecideDeviceLogin,
     ) -> Result<DeviceLoginDecision, StoreFailure> {
-        let received_at_ms = self.clock.now().unix_millis();
+        let received_at_ms = self.execution.clock().now().unix_millis();
         #[cfg(feature = "test-support")]
-        self.pauses
-            .reached_central(crate::PausePoint::BeforeSignInSample)
+        self.execution
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::BeforeSignInSample)
             .await;
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         let time = self.machine_login_time(&request.organization_id).await?;
         let query = EnrollmentQuery {
             machine_id: Some(request.machine_id.clone()),
@@ -30,8 +31,8 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             ..EnrollmentQuery::default()
         };
         let facts = crate::machine_login_reads::facts(
-            self.host.as_ref(),
-            self.organization.clone(),
+            self.execution.statement_host(),
+            self.execution.organization().clone(),
             &query,
         )
         .await?;
@@ -40,7 +41,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             &facts,
             received_at_ms,
             time,
-            self.ids.as_ref(),
+            self.execution.ids(),
         )?;
         self.apply_machine_login(&facts, decided, time).await
     }
@@ -50,23 +51,24 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         request: &DecideMachineToken,
     ) -> Result<MachineTokenDecision, StoreFailure> {
         #[cfg(feature = "test-support")]
-        self.pauses
-            .reached_central(crate::PausePoint::BeforeSignInSample)
+        self.execution
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::BeforeSignInSample)
             .await;
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         let time = self.machine_login_time(&request.organization_id).await?;
         let query = EnrollmentQuery {
             enrollment: Some(request.enrollment_id.clone()),
             ..EnrollmentQuery::default()
         };
         let facts = crate::machine_login_reads::facts(
-            self.host.as_ref(),
-            self.organization.clone(),
+            self.execution.statement_host(),
+            self.execution.organization().clone(),
             &query,
         )
         .await?;
         let decided =
-            machine_login::decide_machine_token(request, &facts, time, self.ids.as_ref())?;
+            machine_login::decide_machine_token(request, &facts, time, self.execution.ids())?;
         self.apply_machine_login(&facts, decided, time).await
     }
 
@@ -74,12 +76,12 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         &self,
         organization: &fleet_identity_protocol::OrganizationId,
     ) -> Result<DecisionTime, StoreFailure> {
-        if organization != &self.organization {
+        if organization != self.execution.organization() {
             return Err(StoreFailure::Unavailable);
         }
         self.prepare_signin_authority().await?;
         let time = DecisionTime {
-            now_ms: self.clock.now().unix_millis(),
+            now_ms: self.execution.clock().now().unix_millis(),
         };
         if self
             .signin_authority
@@ -106,19 +108,21 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
             Some(at) => at != time.now_ms || decided.changes.is_empty(),
             None => !decided.changes.is_empty(),
         } {
-            return Err(crate::workspace_decode_error::corrupt(
+            return Err(fleet_runtime_ports::workspace_decode_error::corrupt(
                 "machine_login.applying_time",
             ));
         }
         let statements =
             crate::machine_login_writes::statements(facts, &decided.changes, time.now_ms)?;
         #[cfg(feature = "test-support")]
-        self.pauses
-            .reached_central(crate::PausePoint::AfterSignInSample)
+        self.execution
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::AfterSignInSample)
             .await;
         if !statements.is_empty() {
             match self
-                .host
+                .execution
+                .statement_host()
                 .run_batch(StatementBatch {
                     statements,
                     alarm: AlarmUpdate::Unchanged,

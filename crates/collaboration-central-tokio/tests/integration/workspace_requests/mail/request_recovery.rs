@@ -35,6 +35,7 @@ async fn future_wake(f: &Fixture) -> TestResult<m::Timestamp> {
 async fn drop_alarm(f: &Fixture) -> TestResult<()> {
     let runtime = f.host.central(f.caller.organization_id()).await?;
     let applied = runtime
+        .runtime()
         .statement_host()
         .run_batch(central_storage::StatementBatch {
             statements: vec![],
@@ -51,11 +52,16 @@ async fn drop_alarm(f: &Fixture) -> TestResult<()> {
 }
 async fn alarm(f: &Fixture) -> TestResult<Option<i64>> {
     let runtime = f.host.central(f.caller.organization_id()).await?;
-    Ok(runtime.statement_host().alarm().map(|at| at.unix_millis()))
+    Ok(runtime
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|at| at.unix_millis()))
 }
 async fn fail_rearm(f: &Fixture) -> TestResult<()> {
     let runtime = f.host.central(f.caller.organization_id()).await?;
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
     Ok(())
@@ -67,6 +73,7 @@ async fn rows(
 ) -> TestResult<ReadOutcome> {
     let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime
+        .runtime()
         .statement_host()
         .read(Statement { sql, args })
         .await?)

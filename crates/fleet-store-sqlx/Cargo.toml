@@ -1,0 +1,17 @@
+[package]
+name = "fleet-store-sqlx"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Stock SQLx execution of FleetRuntime statement batches"
+
+[lints]
+workspace = true
+
+[dependencies]
+central-storage.workspace = true
+fleet-runtime-ports.workspace = true
+sqlx = { workspace = true, features = ["sqlite", "migrate"] }
+thiserror.workspace = true

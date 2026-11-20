@@ -37,6 +37,12 @@ if (launcherIndex !== -1) {
 }
 if (witness !== undefined && milliseconds === undefined)
   throw new Error("C2 witness requires an injected launcher clock");
+const persistenceIndex = arguments_.indexOf("--persistence-directory");
+const persistenceDirectory = persistenceIndex === -1 ? undefined : arguments_[persistenceIndex + 1];
+if (persistenceIndex !== -1) {
+  if (persistenceDirectory === undefined) throw new Error("persistence directory is required");
+  arguments_.splice(persistenceIndex, 2);
+}
 const [option, planPath] = arguments_;
 if (
   arguments_.length !== 0 &&
@@ -89,7 +95,10 @@ const host = await WorkerdStorage.start(
         organizations.add(organization);
         return workerdLauncherTimeSchema.parse(milliseconds);
       },
-  constructMiniflareWithOwnedSignalShutdown,
+  {
+    createRuntime: constructMiniflareWithOwnedSignalShutdown,
+    ...(persistenceDirectory === undefined ? {} : { persistenceDirectory }),
+  },
 );
 
 async function control(

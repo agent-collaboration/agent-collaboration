@@ -6,10 +6,10 @@ use crate::{
     machine_login_row_values::{seconds_timestamp, timestamp},
     machine_login_rows,
     organization_authority::machine_login::{MachineState, StoredEnrollmentState},
-    workspace_decode_error::corrupt,
 };
 use central_storage::{ReadOutcome, SafeInteger, SqlValue, StoreFailure};
 use fleet_identity_protocol::EnrollmentId;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use message_board::WorkspaceId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

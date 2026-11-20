@@ -35,6 +35,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     }).collect();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
@@ -48,6 +49,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
         f.workspace_batch("INSERT INTO workspace_thread_members(thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,'observer',1,NULL,?,?)", vec![text(id::<m::ThreadMemberId>(number)), text(&thread), text(actor), text("2026-11-13T00:00:00Z"), text("2026-11-13T00:00:00Z")]).await;
     }
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
@@ -84,9 +86,9 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     assert_eq!(result.skipped_recipients, 2);
     assert_eq!(result.notices_queued, 0);
     assert_eq!(result.window_items_added, 1);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM mail_notification_window_items WHERE thread_id=i.thread_id)", args: vec![text(&thread)] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM mail_notification_window_items WHERE thread_id=i.thread_id)", args: vec![text(&thread)] }).await.unwrap();
     assert_eq!(rows.rows, vec![vec![text(&agent)]]);
-    let workspace_rows = runtime.inspect_workspace(&f.workspace, Statement {
+    let workspace_rows = runtime.runtime().inspect_workspace(&f.workspace, Statement {
         sql: "SELECT c.position,m.actor_identity_id FROM workspace_changes c JOIN workspace_thread_members m ON m.thread_id=c.thread_id WHERE c.change_kind='posted' AND c.thread_id=? AND c.position=(SELECT MAX(position) FROM workspace_changes WHERE thread_id=c.thread_id AND change_kind='posted') AND m.actor_identity_id IN (?,?) AND m.left_at IS NULL AND m.notifications=1 ORDER BY m.actor_identity_id",
         args: vec![text(&thread), text(&person), text(&component)],
     }).await.unwrap();
@@ -95,6 +97,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     assert_eq!(workspace_rows.rows[0][1], text(&person));
     assert_eq!(workspace_rows.rows[1][1], text(&component));
     let cursor = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",

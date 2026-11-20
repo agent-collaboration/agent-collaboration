@@ -208,23 +208,32 @@ function clockedWorkerOptions(
   };
 }
 
+async function resolvePersistenceRoot(directory: string | undefined): Promise<string> {
+  if (directory === undefined) return mkdtemp(join(tmpdir(), "workerd-central-"));
+  const { privateDirectory } = await import("../machines/owned-process.ts");
+  await privateDirectory(directory);
+  return directory;
+}
+
 export class WorkerdStorage {
   readonly origin: string;
   private readonly runtime: Miniflare;
-  private readonly root: string;
-  private constructor(origin: string, runtime: Miniflare, root: string) {
+  private readonly temporaryRoot: string | undefined;
+  private constructor(origin: string, runtime: Miniflare, temporaryRoot: string | undefined) {
     this.origin = origin;
     this.runtime = runtime;
-    this.root = root;
+    this.temporaryRoot = temporaryRoot;
   }
 
   static async start(
     bundle: WorkerdBundle,
     signIn?: WorkerdSignInOptions,
     clock?: (organization: string) => number,
-    // Standalone bridges supply process ownership; in-process callers retain Miniflare’s policy.
-    createRuntime: (construct: () => Miniflare) => Miniflare | Promise<Miniflare> = (construct) =>
-      construct(),
+    options: {
+      readonly createRuntime?: (construct: () => Miniflare) => Miniflare | Promise<Miniflare>;
+      /** Existing directory that the caller owns and cleans up after this host closes. */
+      readonly persistenceDirectory?: string;
+    } = {},
   ): Promise<WorkerdStorage> {
     const require = createRequire(import.meta.url);
     z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
@@ -274,7 +283,11 @@ export class WorkerdStorage {
         },
       ];
     }
-    const root = await mkdtemp(join(tmpdir(), "workerd-central-"));
+    const { persistenceDirectory } = options;
+    const root = await resolvePersistenceRoot(persistenceDirectory);
+    const temporaryRoot = persistenceDirectory === undefined ? root : undefined;
+    const createRuntime =
+      options.createRuntime ?? ((construct: () => Miniflare): Miniflare => construct());
     let runtime: Miniflare | undefined;
     try {
       runtime = await createRuntime(
@@ -295,7 +308,7 @@ export class WorkerdStorage {
         [8787, 8788, 19741, 19742, 19743].includes(Number(ready.port))
       )
         throw new Error("workerd did not bind a permitted loopback port");
-      return new WorkerdStorage(ready.origin, runtime, root);
+      return new WorkerdStorage(ready.origin, runtime, temporaryRoot);
     } catch (error: unknown) {
       const failures: unknown[] = [error];
       try {
@@ -304,7 +317,7 @@ export class WorkerdStorage {
         failures.push(cleanup);
       }
       try {
-        await rm(root, { recursive: true, force: true });
+        if (temporaryRoot !== undefined) await rm(temporaryRoot, { recursive: true, force: true });
       } catch (cleanup: unknown) {
         failures.push(cleanup);
       }
@@ -322,7 +335,8 @@ export class WorkerdStorage {
       failures.push(error);
     }
     try {
-      await rm(this.root, { recursive: true, force: true });
+      if (this.temporaryRoot !== undefined)
+        await rm(this.temporaryRoot, { recursive: true, force: true });
     } catch (error: unknown) {
       failures.push(error);
     }

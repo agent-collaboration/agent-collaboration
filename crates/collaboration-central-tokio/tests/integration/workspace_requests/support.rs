@@ -62,6 +62,7 @@ pub(super) async fn seed_machine_for(
     ].into_iter().map(|(sql,args)| GuardedStatement { statement: Statement { sql,args }, expect: RowExpectation::Exactly(1) }).collect();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
@@ -145,7 +146,12 @@ pub(super) async fn create_workspace(
         alarm: AlarmUpdate::Unchanged,
     };
     assert!(matches!(
-        runtime.statement_host().run_batch(batch).await.unwrap(),
+        runtime
+            .runtime()
+            .statement_host()
+            .run_batch(batch)
+            .await
+            .unwrap(),
         BatchOutcome::Applied { .. }
     ));
     workspace.workspace_id
@@ -191,7 +197,7 @@ impl Fixture {
         use runtime_primitives::Clock;
         let now = clock.now().unix_millis().div_euclid(1000);
         let runtime = host.central(&organization()).await.unwrap();
-        assert!(runtime.statement_host().read(Statement { sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'", args: vec![] }).await.unwrap().rows.is_empty());
+        assert!(runtime.runtime().statement_host().read(Statement { sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'", args: vec![] }).await.unwrap().rows.is_empty());
         runtime
             .provision_organization(
                 &collaboration_central_core::identity_contract::ProvisionOrganization {
@@ -247,6 +253,7 @@ impl Fixture {
             .await
             .unwrap();
         let current = runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT organization_statement FROM signin_organization_identity",
@@ -274,7 +281,7 @@ impl Fixture {
         let at = chrono::DateTime::from_timestamp(at.timestamp(), 0)
             .unwrap()
             .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        assert!(matches!(runtime.statement_host().run_batch(StatementBatch {
+        assert!(matches!(runtime.runtime().statement_host().run_batch(StatementBatch {
             statements: vec![GuardedStatement { statement: Statement { sql: "UPDATE login_machine_approvals SET last_grant_at=?,updated_at=? WHERE state='enrolled'", args: vec![text(&at),text(&at)] }, expect: RowExpectation::Any }], alarm: AlarmUpdate::Unchanged,
         }).await.unwrap(), BatchOutcome::Applied { .. }));
         self.caller = self.fresh_caller(&self.caller).await;
@@ -421,7 +428,7 @@ impl Fixture {
                 .path()
                 .join("workspace-stores")
                 .join(format!("{}.sqlite", self.workspace)),
-            Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
         );
         assert!(matches!(
             store

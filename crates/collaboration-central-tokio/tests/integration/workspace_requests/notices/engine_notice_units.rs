@@ -120,7 +120,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
             stamp(failure + minutes(5))
         ]
     );
-    let gated = runtime.legacy_unit_invocations();
+    let gated = runtime.runtime().legacy_unit_invocations();
     let backstop = drain_due(&f).await;
 
     // Two workspace writes start due batches before the next try; a restart between.
@@ -135,7 +135,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
         )
         .await,
     );
-    let after_first = runtime.legacy_unit_invocations();
+    let after_first = runtime.runtime().legacy_unit_invocations();
     assert_eq!(
         (after_first.drains, after_first.request_drains),
         (gated.drains, gated.request_drains),
@@ -155,7 +155,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
         )
         .await,
     );
-    let after_second = runtime.legacy_unit_invocations();
+    let after_second = runtime.runtime().legacy_unit_invocations();
     assert_eq!(
         (after_second.drains, after_second.request_drains),
         (0, 0),
@@ -176,7 +176,7 @@ async fn a_failing_drain_unit_gates_due_batches_and_request_drains_until_its_nex
     f.set_utc(failure + minutes(5)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        runtime.legacy_unit_invocations().drains,
+        runtime.runtime().legacy_unit_invocations().drains,
         1,
         "runs once at its next try"
     );
@@ -203,7 +203,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
     let at = mark - chrono::Duration::seconds(10);
     f.set_utc(at).await;
     let cursor = corrupt_drain(&f, at + minutes(60)).await;
-    let before = runtime.legacy_unit_invocations();
+    let before = runtime.runtime().legacy_unit_invocations();
 
     let reply = f
         .call(
@@ -223,7 +223,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
         "the committed answer is returned: {reply:?}"
     );
     assert_eq!(
-        runtime.legacy_unit_invocations().request_drains,
+        runtime.runtime().legacy_unit_invocations().request_drains,
         before.request_drains + 1
     );
     let found = record(&runtime, DRAINS, "all").await;
@@ -258,7 +258,7 @@ async fn a_failing_request_drain_records_against_the_unit_and_keeps_its_committe
         .await;
     assert!(matches!(reply.result, m::WorkspaceResult::Done(_)));
     assert_eq!(
-        runtime.legacy_unit_invocations().request_drains,
+        runtime.runtime().legacy_unit_invocations().request_drains,
         before.request_drains + 2
     );
     assert_eq!(

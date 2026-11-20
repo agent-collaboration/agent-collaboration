@@ -9,8 +9,8 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{
-    ClockIds, OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings,
-    WorkspaceCaller, WorkspaceRuntime,
+    OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings, WorkspaceCaller,
+    WorkspaceRuntime,
     identity_contract::{
         AuthorizationRevision, AuthorizationRevisionAcknowledgement,
         OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,
@@ -20,6 +20,7 @@ use collaboration_central_core::{
 };
 use fleet_contracts::OrganizationProvisioningFailure;
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use router_clock::RuntimeClock;
@@ -67,7 +68,7 @@ impl TokioWorkspaceStores {
             .map_err(|_| StoreFailure::Unavailable)?;
         let store = Arc::new(ObjectStorage::new(
             self.root.join(format!("{id}.sqlite")),
-            Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
         ));
         stores.insert(id.clone(), store.clone());
         Ok(store)
@@ -171,27 +172,28 @@ impl TokioWorkspaceHost {
         let clock_handle = ClockHandle(self.clock.clone());
         let ids: Arc<dyn IdSource> = Arc::new(ClockIds::new(clock_handle.clone()));
         let clock: Arc<dyn Clock> = Arc::new(clock_handle);
-        let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+        let due_batches = Arc::new(fleet_runtime::DueBatchState::default());
         let storage = Arc::new(
             ObjectStorage::new(
                 self.root
                     .join("central")
                     .join(format!("{}.sqlite", organization.as_str())),
-                Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+                Arc::new(fleet_storage_schema::workspace_migrations::central_migrator()),
             )
             .with_engine_publication(
                 clock.clone(),
-                collaboration_central_core::engine_alarm_decider(due_batches.clone()),
+                fleet_runtime::engine_alarm_decider(due_batches.clone()),
             ),
         );
-        let runtime = WorkspaceRuntime::new(
+        let runtime = WorkspaceRuntime::new(FleetRuntime::open(
             organization.clone(),
             storage,
             self.stores.clone(),
             clock.clone(),
             ids,
             due_batches,
-        );
+            Arc::new(crate::native_logging::observe),
+        ));
         let runtime = match &self.sign_in {
             Some(trust) => match trust.for_organization(organization.clone(), clock) {
                 Ok(check) => runtime.with_sign_in_verification(check),
@@ -210,7 +212,6 @@ impl TokioWorkspaceHost {
         let revocation_org = organization.clone();
         let runtime = Arc::new(
             runtime
-                .with_sign_in_observer(Arc::new(crate::native_logging::observe))
                 .with_mail_delivery_observer(Arc::new(move |delivery| {
                     registry.offer(&organization_key, &delivery.machine_id, delivery.message_id);
                 }))
@@ -263,7 +264,7 @@ impl TokioWorkspaceHost {
         let runtime = self.orgs.lock().await.get(organization).cloned();
         match runtime {
             Some(runtime) => {
-                observe_signin_organization(runtime.statement_host(), organization).await
+                observe_signin_organization(runtime.runtime().statement_host(), organization).await
             }
             None => Ok(SignInObservation::nothing_stored()),
         }
@@ -281,7 +282,7 @@ impl TokioWorkspaceHost {
             alarm.close().await;
         }
         for runtime in self.orgs.lock().await.values() {
-            runtime.statement_host().close().await;
+            runtime.runtime().statement_host().close().await;
         }
         for store in self.stores.stores.lock().await.values() {
             store.close().await;

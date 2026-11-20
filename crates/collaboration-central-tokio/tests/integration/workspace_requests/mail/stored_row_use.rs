@@ -19,6 +19,7 @@ async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
         .await
         .unwrap();
     let outcome = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -87,6 +88,7 @@ async fn creator_window(fixture: &Fixture) -> SqlValue {
         .await
         .unwrap();
     let windows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT window_id FROM mail_notification_windows",
@@ -239,7 +241,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
         let work = work
             .unwrap_or_else(|error| panic!("{column}: the event failed: {error:?}"))
             .work;
-        let records = runtime.statement_host().read(Statement { sql: "SELECT machine_kind,subject_key,state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts", args: vec![] }).await.unwrap();
+        let records = runtime.runtime().statement_host().read(Statement { sql: "SELECT machine_kind,subject_key,state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts", args: vec![] }).await.unwrap();
         assert_eq!(records.rows.len(), 1, "{column}: {:?}", records.rows);
         assert_eq!(
             &records.rows[0][..5],
@@ -257,7 +259,7 @@ async fn invalid_timer_and_window_rows_fail_alone_at_their_own_use() {
             "{column}: {:?}",
             records.rows[0][5]
         );
-        let effects = runtime.statement_host().read(Statement { sql: "SELECT (SELECT state FROM automation_wakes WHERE wake_id=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice')", args: vec![text(&wake_id)] }).await.unwrap();
+        let effects = runtime.runtime().statement_host().read(Statement { sql: "SELECT (SELECT state FROM automation_wakes WHERE wake_id=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='automation'),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice')", args: vec![text(&wake_id)] }).await.unwrap();
         let (wake_state, wakes, automations) = match corrupt {
             Corrupt::WakeCreation => ("active", 0, 1),
             Corrupt::WindowDue => ("done", 1, 1),

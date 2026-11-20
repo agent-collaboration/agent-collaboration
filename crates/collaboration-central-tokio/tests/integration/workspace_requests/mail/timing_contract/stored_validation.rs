@@ -5,7 +5,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let actor = r
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT actor_identity_id FROM access_actor_identities WHERE json_extract(identity,'$.session.sessionId')='cadence-2'",
             args: vec![],
@@ -21,6 +21,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         "access_actor_identities.notice_cadence",
     )] {
         let before = r
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT notice_cadence FROM access_actor_identities WHERE actor_identity_id=?",
@@ -29,7 +30,8 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
             .await
             .unwrap();
         assert!(matches!(
-            r.statement_host()
+            r.runtime()
+                .statement_host()
                 .run_batch(StatementBatch {
                     statements: vec![GuardedStatement {
                         statement: Statement {
@@ -67,7 +69,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
             matches!(result, Ok(Result::Done(Answer::Queued { .. }))),
             "{result:?}"
         );
-        assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE access_actor_identities SET notice_cadence=? WHERE actor_identity_id=?",args:vec![before.rows[0][0].clone(),actor.clone()]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
+        assert!(matches!(r.runtime().statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE access_actor_identities SET notice_cadence=? WHERE actor_identity_id=?",args:vec![before.rows[0][0].clone(),actor.clone()]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     }
     let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
@@ -86,7 +88,8 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         panic!("stored horizon setup: {result:?}")
     };
     assert!(matches!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
@@ -119,7 +122,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
     // Embedded: CancelWake does not need the broken due time, so it succeeds,
     // disables the wake and leaves no failure record.
     assert!(matches!(invalid, Ok(Result::Done(_))), "{invalid:?}");
-    let cancelled = r.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM engine_work_attempts WHERE subject_key=?) FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id), text(&wake_id)] }).await.unwrap();
+    let cancelled = r.runtime().statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM engine_work_attempts WHERE subject_key=?) FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id), text(&wake_id)] }).await.unwrap();
     assert_eq!(
         cancelled.rows,
         vec![vec![
@@ -128,7 +131,8 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         ]]
     );
     assert!(matches!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
@@ -191,7 +195,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         panic!("stored wake setup: {wake:?}")
     };
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
-    let pending = runtime.statement_host().read(Statement {sql:"SELECT w.window_id FROM mail_notification_windows w JOIN access_actor_identities a ON a.actor_identity_id=w.recipient_actor WHERE json_extract(a.identity,'$.session.sessionId')='cadence-2'",args:vec![]}).await.unwrap();
+    let pending = runtime.runtime().statement_host().read(Statement {sql:"SELECT w.window_id FROM mail_notification_windows w JOIN access_actor_identities a ON a.actor_identity_id=w.recipient_actor WHERE json_extract(a.identity,'$.session.sessionId')='cadence-2'",args:vec![]}).await.unwrap();
     assert_eq!(pending.rows.len(), 1);
     for (index, select, update, row_id, invalid_value, column) in [
         (
@@ -238,6 +242,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         ),
     ] {
         let original = runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: select,
@@ -258,6 +263,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         };
         assert!(matches!(
             runtime
+                .runtime()
                 .statement_host()
                 .run_batch(batch(invalid_value.clone()))
                 .await
@@ -269,12 +275,13 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
             args: vec![],
         };
         let before = runtime
+            .runtime()
             .statement_host()
             .read(snapshot())
             .await
             .unwrap()
             .rows;
-        let alarm_before = runtime.statement_host().alarm();
+        let alarm_before = runtime.runtime().statement_host().alarm();
         let result = f
             .host
             .request_central(
@@ -300,6 +307,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         );
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .read(Statement {
                     sql: select,
@@ -312,6 +320,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         );
         assert!(matches!(
             runtime
+                .runtime()
                 .statement_host()
                 .run_batch(batch(original.rows[0][0].clone()))
                 .await
@@ -320,6 +329,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         ));
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .read(Statement {
                     sql: select,

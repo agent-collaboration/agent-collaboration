@@ -1,12 +1,12 @@
-use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::{json, string};
 use central_storage::{
     GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement, StoreFailure,
 };
+use fleet_runtime_ports::stored_values::{json, string};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model::{ActorIdentityId, RequestId, WorkspaceResult};
 
 #[derive(Clone, Copy)]
-pub(crate) enum RequestLogStore {
+pub enum RequestLogStore {
     Organization,
     Workspace,
 }
@@ -48,10 +48,10 @@ impl RequestLogStore {
 
 /// The request log's content digest; the one definition lives in workspace-model
 /// so the Router's outbox keeps the same digest for answered writes.
-pub(crate) fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {
+pub fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {
     workspace_model::operation_content_digest(operation).map_err(|_| corrupt("operation"))
 }
-pub(crate) fn lookup(store: RequestLogStore, request: &RequestId, cutoff: &str) -> Statement {
+pub fn lookup(store: RequestLogStore, request: &RequestId, cutoff: &str) -> Statement {
     Statement {
         sql: store.queries().lookup,
         args: vec![
@@ -60,7 +60,7 @@ pub(crate) fn lookup(store: RequestLogStore, request: &RequestId, cutoff: &str) 
         ],
     }
 }
-pub(crate) fn replay(
+pub fn replay(
     rows: &ReadOutcome,
     caller: &ActorIdentityId,
     digest: &str,
@@ -87,7 +87,7 @@ pub(crate) fn replay(
     }
     Ok(Some(answer))
 }
-pub(crate) fn retain(
+pub fn retain(
     store: RequestLogStore,
     request: &RequestId,
     caller: &ActorIdentityId,

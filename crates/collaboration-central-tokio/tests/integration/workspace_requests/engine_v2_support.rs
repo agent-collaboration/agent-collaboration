@@ -51,6 +51,7 @@ pub(super) async fn rows(
     args: Vec<SqlValue>,
 ) -> Vec<Vec<SqlValue>> {
     runtime
+        .runtime()
         .statement_host()
         .read(Statement { sql, args })
         .await
@@ -61,6 +62,7 @@ pub(super) async fn rows(
 pub(super) async fn raw(runtime: &Runtime, sql: &'static str, args: Vec<SqlValue>) {
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -76,6 +78,7 @@ pub(super) async fn raw(runtime: &Runtime, sql: &'static str, args: Vec<SqlValue
 }
 pub(super) fn alarm_ms(runtime: &Runtime) -> Option<i64> {
     runtime
+        .runtime()
         .statement_host()
         .alarm()
         .map(|time| time.unix_millis())

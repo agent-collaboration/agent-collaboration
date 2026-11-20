@@ -102,7 +102,10 @@ impl<R: EngineHost> Engine<'_, R> {
     ) -> FailureOutcome {
         #[cfg(feature = "test-support")]
         self.pauses()
-            .reached_engine(crate::PausePoint::BeforeEngineFailureWrite, &subject.key.0)
+            .reached_engine(
+                fleet_runtime::PausePoint::BeforeEngineFailureWrite,
+                &subject.key.0,
+            )
             .await;
         let (record, class) = match prior.map(|stored| &stored.record) {
             Some(Ok(record)) => (Some(record), class),
@@ -120,9 +123,11 @@ impl<R: EngineHost> Engine<'_, R> {
             Ok(FailureTransition::Record(record)) => record,
             Ok(FailureTransition::Unchanged) => return FailureOutcome::Superseded,
             Err(_) => {
-                return FailureOutcome::StoreDown(crate::workspace_decode_error::corrupt(
-                    "engine_work_attempts.failure_update",
-                ));
+                return FailureOutcome::StoreDown(
+                    fleet_runtime_ports::workspace_decode_error::corrupt(
+                        "engine_work_attempts.failure_update",
+                    ),
+                );
             }
         };
         let statement = match write_attempt(
@@ -162,7 +167,7 @@ impl<R: EngineHost> Engine<'_, R> {
             Err(ApplyFailure::StoreDown(failure)) => FailureOutcome::StoreDown(failure),
             // A rejected attempt write cannot charge another attempt or recurse.
             Err(ApplyFailure::Rejected(_)) => FailureOutcome::StoreDown(
-                crate::workspace_decode_error::corrupt("engine_work_attempts.write"),
+                fleet_runtime_ports::workspace_decode_error::corrupt("engine_work_attempts.write"),
             ),
         }
     }

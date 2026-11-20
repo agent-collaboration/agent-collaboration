@@ -2,7 +2,7 @@
 //! moves the clock, so that drive cannot finish after the move and pass for the
 //! dispatched alarm.
 use super::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 
 /// Resolves once the manual clock has reached `at`; yields, never sleeps.
 async fn clock_reaches(f: &Fixture, at: m::Timestamp) {
@@ -39,6 +39,7 @@ pub(super) async fn exercise_dispatch_settles_an_in_flight_drive(f: &Fixture) {
     // Every due batch reaches the drain unit's control clear; hold the drive
     // the jump past the first wake starts there.
     let mut held = r
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
     let overdue_at = first + chrono::Duration::seconds(20);
@@ -99,6 +100,7 @@ pub(super) async fn exercise_a_clock_move_settles_an_in_flight_drive(f: &Fixture
     };
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let mut held = r
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, "legacy_workspace_drains");
     let overdue_at = due + chrono::Duration::seconds(20);

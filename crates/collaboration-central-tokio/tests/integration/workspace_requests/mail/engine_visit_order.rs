@@ -27,6 +27,7 @@ async fn one_due_batch_starts_each_kind_earliest_first_then_the_notice_units() {
     due_batch_at(&fixture, &runtime, ten).await;
 
     let visited: Vec<_> = runtime
+        .runtime()
         .due_unit_starts()
         .into_iter()
         .filter(|unit| unit.batch_start_unix_millis == ten.timestamp_millis())

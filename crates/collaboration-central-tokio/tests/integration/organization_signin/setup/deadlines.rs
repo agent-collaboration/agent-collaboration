@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -42,6 +42,7 @@ async fn signed_create_deadlines_refuse_at_bound_and_apply_before() -> Result {
             )?;
             let runtime = f.runtime(A).await?;
             let mut held = runtime
+                .runtime()
                 .pause_points()
                 .hold_central(PausePoint::BeforeSignInSample);
             let before = all_effects(&f).await?;
@@ -99,6 +100,7 @@ async fn sampled_create_commits_original_time_while_revocation_waits_on_org_turn
     )?;
     let runtime = f.runtime(A).await?;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::AfterSignInSample);
     let client = f.client();
@@ -114,7 +116,8 @@ async fn sampled_create_commits_original_time_while_revocation_waits_on_org_turn
     ))?;
     let mut second =
         tokio::spawn(async move { post(&client, REVISIONS, revocation, vec![]).await });
-    let waiting = tokio::select! {()=runtime.until_central_waiting(1)=>true,_=&mut second=>false};
+    let waiting =
+        tokio::select! {()=runtime.runtime().until_central_waiting(1)=>true,_=&mut second=>false};
     assert!(waiting, "a second writer crossed the held org turn");
     f.clock.advance(Duration::from_secs(31)).await?;
     held.release();

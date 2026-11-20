@@ -22,7 +22,7 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         Result::Done(_)
     ));
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let row=r.statement_host().read(Statement{sql:"SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%shorter-cadence%'",args:vec![]}).await.unwrap();
+    let row=r.runtime().statement_host().read(Statement{sql:"SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%shorter-cadence%'",args:vec![]}).await.unwrap();
     let central_storage::SqlValue::Text(actor) = &row.rows[0][0] else {
         panic!("actor")
     };
@@ -68,6 +68,7 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         .unwrap();
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let row = r
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT due_at FROM mail_notification_windows WHERE recipient_actor=?",
@@ -85,7 +86,10 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         )]]
     );
     assert_eq!(
-        r.statement_host().alarm().map(|at| at.unix_millis()),
+        r.runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         Some(due.timestamp_millis())
     );
     drop(r);
@@ -95,7 +99,10 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     let next = due + chrono::Duration::minutes(15);
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
-        r.statement_host().alarm().map(|at| at.unix_millis()),
+        r.runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         Some(next.timestamp_millis())
     );
     drop(r);
@@ -132,6 +139,7 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
     assert_eq!(fired[0].created_at, first);
     let next = first + chrono::Duration::minutes(5);
     let row = r
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT next_due_at FROM automation_schedules WHERE automation_id=?",
@@ -174,7 +182,7 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     // A retired rule is not reinterpreted against the current timezone database.
-    assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE automation_schedules SET timing_rule=? WHERE automation_id=?",args:vec![text(r#"{"kind":"cron","expression":"*/5 * * * *","timezone":"Retired/Timezone"}"#),text(&automation_id)]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
+    assert!(matches!(r.runtime().statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE automation_schedules SET timing_rule=? WHERE automation_id=?",args:vec![text(r#"{"kind":"cron","expression":"*/5 * * * *","timezone":"Retired/Timezone"}"#),text(&automation_id)]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     assert!(matches!(
         request(
             f,
@@ -187,7 +195,7 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
         .await,
         Result::Done(_)
     ));
-    assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE mail_messages SET state='delivered',body='retired corrupt body' WHERE message_id=(SELECT message_id FROM mail_messages WHERE message_kind='notice' AND state='queued' LIMIT 1)",args:vec![]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
+    assert!(matches!(r.runtime().statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE mail_messages SET state='delivered',body='retired corrupt body' WHERE message_id=(SELECT message_id FROM mail_messages WHERE message_kind='notice' AND state='queued' LIMIT 1)",args:vec![]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     let area = f.area(46104).await;
     let thread = f.thread(46105, area).await;
     created(
@@ -225,12 +233,12 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     let area = f.area(46201).await;
     let thread = f.thread(46202, area).await;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let actor=r.statement_host().read(Statement{sql:"SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%late-drain-recipient%'",args:vec![]}).await.unwrap().rows[0][0].clone();
+    let actor=r.runtime().statement_host().read(Statement{sql:"SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%late-drain-recipient%'",args:vec![]}).await.unwrap().rows[0][0].clone();
     let central_storage::SqlValue::Text(id) = &actor else {
         panic!("recipient")
     };
     let actor_id = id.parse().unwrap();
-    assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER reject_review_late_drain BEFORE UPDATE OF drained_through_position ON mail_workspace_drains BEGIN SELECT RAISE(ABORT,'held drain'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
+    assert!(matches!(r.runtime().statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER reject_review_late_drain BEFORE UPDATE OF drained_through_position ON mail_workspace_drains BEGIN SELECT RAISE(ABORT,'held drain'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     let response = f
         .call(
             46203,
@@ -252,7 +260,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
         ),
         "{response:?}"
     );
-    let record = r.statement_host().read(Statement { sql: "SELECT state,last_failure FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
+    let record = r.runtime().statement_host().read(Statement { sql: "SELECT state,last_failure FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
     assert_eq!(
         record.rows,
         vec![vec![text("failing"), text("statement_rejected")]]
@@ -262,7 +270,8 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
         args: vec![actor.clone()],
     };
     assert!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .read(read())
             .await
             .unwrap()
@@ -272,22 +281,23 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     // The jump passes the failing drain's next try, so the driver retries it at
     // once. That retry finishes against the trigger, and moves the next try to
     // the next mark, before the trigger goes.
-    let drives = r.alarm_completion_count();
-    let failures = r.alarm_failures().len();
+    let drives = r.runtime().alarm_completion_count();
+    let failures = r.runtime().alarm_failures().len();
     advance_to(
         f,
         now(f) + chrono::Duration::minutes(30) + chrono::Duration::seconds(20),
     )
     .await;
     tokio::select! {
-        () = r.until_alarm_completed(drives + 1) => {}
-        () = r.until_alarm_failed(failures + 1) => panic!(
+        () = r.runtime().until_alarm_completed(drives + 1) => {}
+        () = r.runtime().until_alarm_failed(failures + 1) => panic!(
             "the overdue drive failed instead of retrying the drain: {:?}",
-            r.alarm_failures()
+            r.runtime().alarm_failures()
         ),
     }
     assert!(matches!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
@@ -306,7 +316,12 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(900) + 1) * 900, 0)
         .unwrap();
     assert_eq!(
-        r.statement_host().read(read()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(read())
+            .await
+            .unwrap()
+            .rows,
         vec![vec![text(
             due.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         )]]
@@ -315,7 +330,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     // which succeeds now and clears the record; the window then fires at its slot.
     let retry = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
-    let record = r.statement_host().read(Statement { sql: "SELECT state,next_try_at FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
+    let record = r.runtime().statement_host().read(Statement { sql: "SELECT state,next_try_at FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
     assert_eq!(
         record.rows,
         vec![vec![
@@ -329,7 +344,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
         dispatch_to(f, retry).await;
     }
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let record = r.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains'", args: vec![] }).await.unwrap();
+    let record = r.runtime().statement_host().read(Statement { sql: "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_workspace_drains'", args: vec![] }).await.unwrap();
     assert_eq!(
         record.rows,
         vec![vec![central_storage::SqlValue::Integer(
@@ -375,7 +390,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     let area = f.area(46301).await;
     let thread = f.thread(46302, area).await;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let actors = r.statement_host().read(Statement {sql:"SELECT actor_identity_id FROM access_actor_identities WHERE json_extract(identity,'$.session.sessionId')='rollback-cadence'",args:vec![]}).await.unwrap();
+    let actors = r.runtime().statement_host().read(Statement {sql:"SELECT actor_identity_id FROM access_actor_identities WHERE json_extract(identity,'$.session.sessionId')='rollback-cadence'",args:vec![]}).await.unwrap();
     assert_eq!(actors.rows.len(), 1);
     let actor = actors.rows[0][0].clone();
     let central_storage::SqlValue::Text(actor_id) = &actor else {
@@ -404,8 +419,20 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         sql: "SELECT request_id,caller,content_digest,answer,created_at,updated_at FROM runtime_request_log ORDER BY request_id",
         args: vec![],
     };
-    let before_ledger = r.statement_host().read(ledger()).await.unwrap().rows;
-    let before = r.statement_host().read(snapshot()).await.unwrap().rows;
+    let before_ledger = r
+        .runtime()
+        .statement_host()
+        .read(ledger())
+        .await
+        .unwrap()
+        .rows;
+    let before = r
+        .runtime()
+        .statement_host()
+        .read(snapshot())
+        .await
+        .unwrap()
+        .rows;
     // The schema permits one window for this actor, aggregating all its sources.
     assert_eq!(before.len(), 1);
     assert_eq!(before[0][0], text("m55"));
@@ -418,7 +445,11 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     assert_eq!(original_items.as_array().unwrap().len(), 1);
     let rewind: m::Timestamp = "2030-01-09T11:30:00Z".parse().unwrap();
     f.set_utc(rewind).await;
-    let prior_alarm = r.statement_host().alarm().map(|time| time.unix_millis());
+    let prior_alarm = r
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|time| time.unix_millis());
     let write = |sql| StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement { sql, args: vec![] },
@@ -426,7 +457,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         }],
         alarm: AlarmUpdate::Unchanged,
     };
-    assert!(matches!(r.statement_host().run_batch(write("CREATE TRIGGER reject_cadence_deadline BEFORE UPDATE OF due_at ON mail_notification_windows BEGIN SELECT RAISE(IGNORE); END")).await.unwrap(),BatchOutcome::Applied{..}));
+    assert!(matches!(r.runtime().statement_host().run_batch(write("CREATE TRIGGER reject_cadence_deadline BEFORE UPDATE OF due_at ON mail_notification_windows BEGIN SELECT RAISE(IGNORE); END")).await.unwrap(),BatchOutcome::Applied{..}));
     let change = Op::SetNoticeCadence {
         cadence: m::NoticeCadence::M15,
     };
@@ -435,20 +466,34 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         Result::Conflict
     );
     assert_eq!(
-        r.statement_host().read(snapshot()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(snapshot())
+            .await
+            .unwrap()
+            .rows,
         before,
         "cadence, every open window, source items and ledger must roll back together"
     );
     assert_eq!(
-        r.statement_host().read(ledger()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(ledger())
+            .await
+            .unwrap()
+            .rows,
         before_ledger
     );
     assert_eq!(
-        r.statement_host().alarm().map(|time| time.unix_millis()),
+        r.runtime()
+            .statement_host()
+            .alarm()
+            .map(|time| time.unix_millis()),
         prior_alarm
     );
     assert!(matches!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .run_batch(write("DROP TRIGGER reject_cadence_deadline"))
             .await
             .unwrap(),
@@ -467,7 +512,12 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     expected[0][7] = text("2030-01-09T11:30:00.000Z");
     expected[0][9] = text("2030-01-09T11:30:00.000Z");
     assert_eq!(
-        r.statement_host().read(snapshot()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(snapshot())
+            .await
+            .unwrap()
+            .rows,
         expected
     );
     assert_eq!(
@@ -477,7 +527,12 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         })
     );
     assert_eq!(
-        r.statement_host().read(snapshot()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(snapshot())
+            .await
+            .unwrap()
+            .rows,
         expected
     );
     assert!(
@@ -491,13 +546,21 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     f.reopen().await;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
-        r.statement_host().read(snapshot()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(snapshot())
+            .await
+            .unwrap()
+            .rows,
         expected
     );
     let due: m::Timestamp = "2030-01-09T11:45:00Z".parse().unwrap();
     assert!(due > rewind && due < activity);
     assert_eq!(
-        r.statement_host().alarm().map(|time| time.unix_millis()),
+        r.runtime()
+            .statement_host()
+            .alarm()
+            .map(|time| time.unix_millis()),
         Some(due.timestamp_millis())
     );
     drop(r);
@@ -519,7 +582,8 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     );
     assert_eq!(items[0].event, m::ChangeEvent::Posted);
     assert!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .read(snapshot())
             .await
             .unwrap()

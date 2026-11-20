@@ -1,7 +1,6 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
-mod clock_ids;
 mod engine;
 pub mod message_deadline;
 /// Test support: the engine's alarm-input aggregate, one row of
@@ -13,24 +12,12 @@ pub mod engine_owed_probe;
 #[cfg(feature = "test-support")]
 pub mod engine_probe;
 mod engine_wiring;
-#[cfg(feature = "test-support")]
-pub use engine::DueUnitStart;
-#[cfg(feature = "test-support")]
-pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineReadFault};
-pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
 pub mod machine_token;
 #[cfg(feature = "test-support")]
 pub mod signin_test_observation;
 #[cfg(feature = "test-support")]
 pub mod storage_conformance;
-pub use clock_ids::ClockIds;
-mod workspace_turns;
-pub use workspace_turns::{WorkspaceTurn, WorkspaceTurns};
-#[cfg(feature = "test-support")]
-mod pause_points;
-#[cfg(feature = "test-support")]
-pub use pause_points::{HeldPause, PausePoint, PausePoints};
 
 mod machine_connection;
 mod machine_connection_admission;
@@ -46,22 +33,17 @@ pub use machine_connection_admission::{MachineLinkRequestAuthority, MachineToken
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
-#[cfg(feature = "test-support")]
-pub use workspace_runtime::LegacyUnitInvocations;
 pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime};
 mod organization_workspace_plans;
 mod workspace_actor_identity;
 mod workspace_admission;
 mod workspace_change_records;
-mod workspace_decode_error;
 mod workspace_directory_requests;
 mod workspace_directory_rows;
 mod workspace_item_reads;
 mod workspace_json_records;
-pub mod workspace_migrations;
 mod workspace_read_queries;
 mod workspace_request_gate;
-mod workspace_request_log;
 mod workspace_request_status;
 mod workspace_row_codec;
 mod workspace_rule_dispatch;
@@ -85,7 +67,6 @@ mod central_timer_plans;
 mod central_timer_rows;
 mod central_timers;
 mod direct_message_rows;
-mod guarded_statements;
 mod notification_windows;
 mod workspace_drain;
 mod workspace_notice_plans;

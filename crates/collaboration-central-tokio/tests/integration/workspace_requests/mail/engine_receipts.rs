@@ -10,7 +10,7 @@ use router_clock::RuntimeClock;
 
 /// Every row a request could write: items, the group counter, receipts, records.
 async fn row_counts(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
-    runtime.statement_host().read(Statement {
+    runtime.runtime().statement_host().read(Statement {
         sql: "SELECT (SELECT COUNT(*) FROM engine_probe_items),(SELECT group_concat(state) FROM (SELECT state FROM engine_probe_items ORDER BY item_id)),(SELECT SUM(effect_count) FROM engine_probe_groups),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id IN (?,?,?,?)),(SELECT COUNT(*) FROM engine_work_attempts)",
         args: [9410, 9411, 9412, 9422]
             .map(|number| text(id::<workspace_model::RequestId>(number)))
@@ -171,7 +171,7 @@ async fn an_undecodable_stored_receipt_is_corrupt_and_changes_nothing() {
 async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_keys() {
     let fixture = Fixture::new().await;
     let runtime = runtime(&fixture).await;
-    let columns = runtime.statement_host().read(Statement {
+    let columns = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT name,type,\"notnull\",pk FROM pragma_table_info('engine_work_attempts') ORDER BY cid",
         args: vec![],
     }).await.unwrap().rows;
@@ -196,7 +196,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
             column("updated_at", "TEXT", 1, 0),
         ]
     );
-    let indexes = runtime.statement_host().read(Statement {
+    let indexes = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT name,\"unique\",(SELECT group_concat(name) FROM (SELECT name FROM pragma_index_info(l.name) ORDER BY seqno)) FROM pragma_index_list('engine_work_attempts') l WHERE origin='c' ORDER BY name",
         args: vec![],
     }).await.unwrap().rows;
@@ -216,6 +216,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
         ]
     );
     let table = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT sql FROM sqlite_master WHERE name='engine_work_attempts'",
@@ -242,6 +243,7 @@ async fn the_failure_table_has_the_p2_columns_and_indexes_no_check_and_uuid7_key
     fixture.set_utc(due).await;
     runtime.after_event().await.unwrap();
     let ids = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT attempt_id FROM engine_work_attempts",

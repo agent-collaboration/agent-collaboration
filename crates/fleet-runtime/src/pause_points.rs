@@ -17,6 +17,10 @@ pub enum PausePoint {
     AfterReads,
     /// After the store applied the batch, before the drain.
     AfterStoreApplied,
+    /// The workspace request has returned from execute.
+    AfterWorkspaceExecute,
+    /// The engine has entered completion and has yet to drive work.
+    EngineCompletionEntered,
     /// After the notices committed.
     AfterNoticesCommitted,
     BeforeDrainCommit,

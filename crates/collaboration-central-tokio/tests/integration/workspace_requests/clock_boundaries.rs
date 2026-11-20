@@ -93,11 +93,141 @@ async fn injected_clock_drives_uuid_minting_issuer_expiry_and_the_armed_alarm() 
     assert_eq!(wake_messages(&runtime, &second).await, 0);
     assert_eq!(alarm_ms(&runtime), Some(due.timestamp_millis()));
 
-    let next_completion = runtime.alarm_completion_count() + 1;
+    let next_completion = runtime.runtime().alarm_completion_count() + 1;
     fixture.advance(Duration::from_millis(1)).await;
-    runtime.until_alarm_completed(next_completion).await;
+    runtime
+        .runtime()
+        .until_alarm_completed(next_completion)
+        .await;
     assert_eq!(wake_messages(&runtime, &first).await, 1);
     assert_eq!(wake_messages(&runtime, &second).await, 1);
     assert_eq!(alarm_ms(&runtime), None);
+    fixture.host.close().await;
+}
+
+struct FailedDriveClock {
+    clock: Arc<GatedClock>,
+    first_alarm_ms: i64,
+    port_samples: std::sync::atomic::AtomicUsize,
+    retry_mark: tokio::sync::watch::Sender<Option<SyncTime>>,
+}
+
+impl Clock for FailedDriveClock {
+    fn now(&self) -> SyncTime {
+        use std::sync::atomic::Ordering;
+        let current = self.clock.now();
+        if current.unix_millis() != self.first_alarm_ms {
+            return current;
+        }
+        let offset = if self.port_samples.fetch_add(1, Ordering::SeqCst) == 0 {
+            2
+        } else {
+            1
+        };
+        SyncTime::from_unix_millis(self.first_alarm_ms - offset)
+    }
+}
+
+impl RuntimeClock for FailedDriveClock {
+    fn utc_now(&self) -> Time {
+        self.clock.utc_now()
+    }
+
+    fn monotonic_now(&self) -> ClockInstant {
+        self.clock.monotonic_now()
+    }
+
+    fn sleep_until(&self, deadline: ClockInstant) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        self.clock.sleep_until(deadline)
+    }
+
+    fn drive_guard(&self) -> Pin<Box<dyn Future<Output = Option<DriveGuard>> + Send + '_>> {
+        self.clock.drive_guard()
+    }
+
+    fn wall_deadline(&self, deadline: SyncTime) -> ClockInstant {
+        if self.clock.now().unix_millis() == self.first_alarm_ms {
+            self.retry_mark.send_if_modified(|observed| {
+                if observed.is_some() {
+                    return false;
+                }
+                *observed = Some(deadline);
+                true
+            });
+        }
+        self.clock.wall_deadline(deadline)
+    }
+}
+
+#[tokio::test]
+async fn a_failed_alarm_drive_uses_the_fresh_utc_sample_for_its_real_retry() {
+    use central_storage::{AlarmUpdate, BatchOutcome, Statement, StatementBatch, StoreFailure};
+
+    let (retry_mark, mut observed_retry) = tokio::sync::watch::channel(None);
+    let fixture = Fixture::with_host_clock(|clock| {
+        Arc::new(FailedDriveClock {
+            first_alarm_ms: clock.now().unix_millis() + 300_000,
+            clock,
+            port_samples: Default::default(),
+            retry_mark,
+        })
+    })
+    .await;
+    let runtime = runtime(&fixture).await;
+    let start = fixture.clock.utc_now();
+    let first_alarm = start + chrono::Duration::minutes(5);
+    let wake_due = start + chrono::Duration::minutes(10);
+    let wake = set_wake(&fixture, 7304, wake_due, "retry after failed drive").await;
+    let store = runtime.runtime().statement_host();
+    assert!(matches!(
+        store
+            .run_batch(StatementBatch {
+                statements: vec![],
+                alarm: AlarmUpdate::SetFromQuery(Statement {
+                    sql: "SELECT ?",
+                    args: vec![integer(first_alarm.timestamp_millis())],
+                }),
+            })
+            .await
+            .unwrap(),
+        BatchOutcome::Applied { .. }
+    ));
+    fixture
+        .clock
+        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
+        .await;
+    store.fail_next_alarm_batch(StoreFailure::Unavailable);
+
+    let completed = runtime.runtime().alarm_completion_count();
+    fixture.advance(Duration::from_secs(300)).await;
+    let scheduled = *observed_retry.wait_for(Option::is_some).await.unwrap();
+
+    assert_eq!(
+        scheduled,
+        Some(SyncTime::from_unix_millis(wake_due.timestamp_millis()))
+    );
+    assert_eq!(
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
+        Some(first_alarm.timestamp_millis() - 2),
+    );
+    assert_eq!(
+        store.failed_alarm_publication_at(),
+        Some(SyncTime::from_unix_millis(
+            first_alarm.timestamp_millis() - 1
+        )),
+    );
+    assert_eq!(runtime.runtime().alarm_failures().len(), 1);
+    assert_eq!(runtime.runtime().alarm_completion_count(), completed);
+    fixture.advance(Duration::from_millis(299_999)).await;
+    assert_eq!(wake_messages(&runtime, &wake).await, 0);
+    assert_eq!(runtime.runtime().alarm_completion_count(), completed);
+
+    fixture.advance(Duration::from_millis(1)).await;
+    runtime.runtime().until_alarm_completed(completed + 1).await;
+    assert_eq!(runtime.runtime().alarm_completion_count(), completed + 1);
+    assert_eq!(wake_messages(&runtime, &wake).await, 1);
     fixture.host.close().await;
 }

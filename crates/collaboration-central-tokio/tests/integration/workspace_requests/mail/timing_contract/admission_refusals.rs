@@ -8,12 +8,13 @@ pub(super) async fn exercise_refusals(f: &Fixture, target: &workspace_ids::Sessi
         args: vec![],
     };
     let before = runtime
+        .runtime()
         .statement_host()
         .read(snapshot())
         .await
         .unwrap()
         .rows;
-    let alarm_before = runtime.statement_host().alarm();
+    let alarm_before = runtime.runtime().statement_host().alarm();
     for (index, (timing, field, requirement)) in [
         (
             serde_json::json!({"kind":"after","seconds":605_100}),
@@ -110,6 +111,7 @@ pub(super) async fn exercise_refusals(f: &Fixture, target: &workspace_ids::Sessi
         );
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .read(snapshot())
                 .await
@@ -119,7 +121,7 @@ pub(super) async fn exercise_refusals(f: &Fixture, target: &workspace_ids::Sessi
             "admission case {index} wrote durable state"
         );
         assert_eq!(
-            runtime.statement_host().alarm(),
+            runtime.runtime().statement_host().alarm(),
             alarm_before,
             "admission case {index} changed the alarm"
         );

@@ -3,10 +3,10 @@ use crate::{
     identity_contract::{ClientId, MachineConnectionRefusal},
     machine_login_row_values::identifier,
     organization_authority::machine_login::{EnrollmentFacts, MachineState, StoredEnrollmentState},
-    workspace_decode_error::corrupt,
 };
 use central_storage::StoreFailure;
 use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use serde::{Deserialize, Serialize};
 use workspace_ids::MachineId;
 

@@ -128,6 +128,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
         })
     );
     let messages = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT sender,target_session,body FROM mail_messages WHERE message_kind='wake'",
@@ -167,7 +168,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
     observed.sort();
     ids.sort();
     assert_eq!(observed, ids);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM automation_wakes WHERE state='disabled')", args: vec![] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'), (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM automation_wakes WHERE state='disabled')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -176,7 +177,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
             central_storage::SqlValue::Integer(1.try_into().unwrap())
         ]]
     );
-    assert_eq!(runtime.statement_host().alarm(), None);
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
     fixture.host.close().await;
 }
 
@@ -190,8 +191,9 @@ async fn native_driver_fires_after_manual_clock_advance() {
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
     let mut held = runtime
+        .runtime()
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
+        .hold_central(fleet_runtime::PausePoint::AfterTimerCommit);
     let id = wake_id(request(&fixture, 1120, wake(session(&fixture.caller), due)).await);
     fixture
         .clock
@@ -199,7 +201,7 @@ async fn native_driver_fires_after_manual_clock_advance() {
         .await;
     fixture.advance(Duration::from_secs(300)).await;
     held.until_held().await;
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT state, (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(id)] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT state, (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -220,7 +222,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
         .await
         .unwrap();
     let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
-    let mut publication = runtime.statement_host().hold_alarm_publication();
+    let mut publication = runtime.runtime().statement_host().hold_alarm_publication();
     let caller = fixture.caller.clone();
     let task_runtime = runtime.clone();
     let target = session(&fixture.caller);
@@ -237,6 +239,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
     });
     publication.until_held().await;
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT COUNT(*) FROM automation_wakes WHERE state='active'",
@@ -250,7 +253,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
             1.try_into().unwrap()
         )]]
     );
-    assert_eq!(runtime.statement_host().alarm(), None);
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
     pending.abort();
     let _ = pending.await;
     drop(publication);
@@ -260,17 +263,18 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    assert!(reopened.statement_host().alarm().is_some());
+    assert!(reopened.runtime().statement_host().alarm().is_some());
     let mut held = reopened
+        .runtime()
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
+        .hold_central(fleet_runtime::PausePoint::AfterTimerCommit);
     fixture
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
     fixture.advance(Duration::from_secs(300)).await;
     held.until_held().await;
-    let rows = reopened.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
+    let rows = reopened.runtime().statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='done'), (SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![

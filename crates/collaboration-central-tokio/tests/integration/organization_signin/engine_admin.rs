@@ -5,7 +5,7 @@
 #![cfg(test)]
 use super::engine_admin_support::*;
 use super::support::text;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use serde_json::json;
 
 const REJECT_AUTOMATION: &str = "CREATE TRIGGER automation_reject BEFORE UPDATE OF evaluated_through_at ON automation_schedules BEGIN SELECT RAISE(ABORT,'automation rejected'); END";
@@ -396,6 +396,7 @@ async fn discard_runs_the_finishing_transition_and_refuses_unsupported_and_stale
     let (moved, moved_attempt) = retired_automation(&engine).await;
     let runtime = engine.runtime().await;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &moved);
     let change = async {

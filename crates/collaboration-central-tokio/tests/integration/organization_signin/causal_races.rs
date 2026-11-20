@@ -1,5 +1,5 @@
 use super::support::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Real private-link calls and a causal pre-sample hold determine exactly which first stamp commits."
@@ -17,6 +17,7 @@ async fn a_second_first_provision_commits_while_the_first_waits_and_identical_re
         };
         let runtime = f.runtime(A).await?;
         let mut held = runtime
+            .runtime()
             .pause_points()
             .hold_central(PausePoint::BeforeSignInSample);
         let client = f.client();
@@ -58,6 +59,7 @@ async fn a_held_renewal_loses_to_the_committed_second_renewal_without_new_effect
     let second = signed::renewal(A, &original, signed::NOW_SECONDS, 2)?;
     let runtime = f.runtime(A).await?;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_central(PausePoint::BeforeSignInSample);
     let client = f.client();

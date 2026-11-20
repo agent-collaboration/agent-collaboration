@@ -8,7 +8,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
     let f = Fixture::new().await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let schema = runtime
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT name, pk FROM pragma_table_info('login_machines') WHERE name IN ('machine_id', 'installation_id') ORDER BY cid",
             args: vec![],
@@ -23,7 +23,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         ]]
     );
     let link = runtime
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT \"table\", \"to\" FROM pragma_foreign_key_list('mail_messages') WHERE \"from\"='target_machine_id'",
             args: vec![],
@@ -35,6 +35,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         vec![vec![text("login_machines"), text("machine_id")]]
     );
     let legacy = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
@@ -125,6 +126,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         };
         assert!(matches!(
             runtime
+                .runtime()
                 .statement_host()
                 .run_batch(run(sql, vec![key.clone()]))
                 .await
@@ -150,6 +152,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
         };
         assert!(matches!(
             runtime
+                .runtime()
                 .statement_host()
                 .run_batch(run(restore, args))
                 .await
@@ -157,7 +160,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
             BatchOutcome::Applied { .. }
         ));
     }
-    let counts=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT (SELECT COUNT(*) FROM workspace_areas) AS areas,(SELECT COUNT(*) FROM workspace_changes) AS changes,(SELECT COUNT(*) FROM workspace_request_log) AS log",args:vec![]}).await.unwrap();
+    let counts=runtime.runtime().inspect_workspace(&f.workspace,Statement{sql:"SELECT (SELECT COUNT(*) FROM workspace_areas) AS areas,(SELECT COUNT(*) FROM workspace_changes) AS changes,(SELECT COUNT(*) FROM workspace_request_log) AS log",args:vec![]}).await.unwrap();
     for cell in &counts.rows[0] {
         assert_eq!(
             *cell,
@@ -183,8 +186,14 @@ async fn fresh_organization_and_workspace_store_use_the_approved_table_names() {
         sql: schema::APPLICATION_TABLE_NAMES,
         args: vec![],
     };
-    let organization = runtime.statement_host().read(names()).await.unwrap();
+    let organization = runtime
+        .runtime()
+        .statement_host()
+        .read(names())
+        .await
+        .unwrap();
     let workspace = runtime
+        .runtime()
         .inspect_workspace(&f.workspace, names())
         .await
         .unwrap();

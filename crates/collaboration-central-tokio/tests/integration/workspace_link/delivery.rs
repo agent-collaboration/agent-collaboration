@@ -123,6 +123,7 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(central_storage::Statement {
             sql: "SELECT state FROM mail_messages WHERE message_id=?",
@@ -168,7 +169,11 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
         sql: "SELECT message_id,message_kind,state,updated_at FROM mail_messages ORDER BY message_id",
         args: vec![],
     };
-    let before = runtime.statement_host().read(settled_rows()).await?;
+    let before = runtime
+        .runtime()
+        .statement_host()
+        .read(settled_rows())
+        .await?;
     fixture.clock.advance(Duration::from_secs(1))?;
     let mut reconnected = fixture.connect().await?;
     if !matches!(
@@ -182,7 +187,13 @@ async fn delivery_journey(fixture: &Fixture) -> Result<()> {
     if receive(&mut reconnected).await? != LinkFrame::Pong {
         return Err("the replayed Ack must remain silent and keep the socket open".into());
     }
-    if runtime.statement_host().read(settled_rows()).await? != before {
+    if runtime
+        .runtime()
+        .statement_host()
+        .read(settled_rows())
+        .await?
+        != before
+    {
         return Err("the replayed Ack rewrote a settled delivery or added an outcome".into());
     }
     Ok(())

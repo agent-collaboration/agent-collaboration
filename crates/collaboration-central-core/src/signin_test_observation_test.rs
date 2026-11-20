@@ -41,9 +41,9 @@ async fn empty_store() -> SqliteConnection {
         .await
         .unwrap();
     for migration in [
-        include_str!("../migrations/central/0001_workspace_requests.sql"),
-        include_str!("../migrations/central/0002_mail_notices_timers.sql"),
-        include_str!("../migrations/central/0003_signin_authority.sql"),
+        include_str!("../../fleet-storage-schema/migrations/central/0001_workspace_requests.sql"),
+        include_str!("../../fleet-storage-schema/migrations/central/0002_mail_notices_timers.sql"),
+        include_str!("../../fleet-storage-schema/migrations/central/0003_signin_authority.sql"),
     ] {
         connection.execute(migration).await.unwrap();
     }

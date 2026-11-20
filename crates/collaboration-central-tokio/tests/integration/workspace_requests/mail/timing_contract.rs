@@ -24,16 +24,16 @@ async fn advance_to(f: &Fixture, at: m::Timestamp) {
 /// or re-checks its published alarm and finds it not due at `at`.
 async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let failures = r.alarm_failures().len();
+    let failures = r.runtime().alarm_failures().len();
     let held = f.clock.hold_move().await;
     assert_eq!(
-        r.alarm_failures().len(),
+        r.runtime().alarm_failures().len(),
         failures,
         "a drive held across the dispatch to {at} failed: {:?}",
-        r.alarm_failures()
+        r.runtime().alarm_failures()
     );
-    let published = r.statement_host().alarm();
-    let count = r.alarm_completion_count();
+    let published = r.runtime().statement_host().alarm();
+    let count = r.runtime().alarm_completion_count();
     held.advance((at - now(f)).to_std().unwrap()).unwrap();
     drop(held);
     let not_due = async {
@@ -47,18 +47,18 @@ async fn dispatch_to(f: &Fixture, at: m::Timestamp) {
         }
     };
     tokio::select! {
-        () = r.until_alarm_completed(count + 1) => {}
-        () = r.until_alarm_failed(failures + 1) => panic!(
+        () = r.runtime().until_alarm_completed(count + 1) => {}
+        () = r.runtime().until_alarm_failed(failures + 1) => panic!(
             "the alarm driver failed at {at} instead of completing: {:?}; published alarm {published:?}; due batch {:?}",
-            r.alarm_failures(),
-            r.due_batch_snapshot()
+            r.runtime().alarm_failures(),
+            r.runtime().due_batch_snapshot()
         ),
         () = not_due => panic!(
             "the published alarm {published:?} is after the dispatch time {at}; due batch {:?}",
-            r.due_batch_snapshot()
+            r.runtime().due_batch_snapshot()
         ),
     }
-    assert_eq!(r.alarm_completion_count(), count + 1);
+    assert_eq!(r.runtime().alarm_completion_count(), count + 1);
 }
 async fn request(f: &Fixture, caller: &WorkspaceCaller, number: u32, operation: Op) -> Result {
     let renewed = f.fresh_caller(caller).await;
@@ -367,6 +367,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     };
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let earliest_cancel = r
+        .runtime()
         .statement_host()
         .read(super::super::Statement {
             sql: "SELECT MIN(cancel_due_at) FROM mail_messages WHERE state='queued'",
@@ -380,7 +381,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         panic!("each direct message stores its cancel mark")
     };
     assert_eq!(
-        r.statement_host().published_alarm().unwrap(),
+        r.runtime().statement_host().published_alarm().unwrap(),
         Some(earliest_cancel.parse().unwrap()),
         "delivery never arms the alarm; only the earliest cancel mark does"
     );
@@ -452,7 +453,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     );
     assert_eq!(r.queued_for_session(&target).await.unwrap(), queue);
     assert_eq!(
-        r.statement_host().published_alarm().unwrap(),
+        r.runtime().statement_host().published_alarm().unwrap(),
         Some(earliest_cancel.parse().unwrap()),
         "queued rows must not spin the alarm: it stays at the earliest cancel mark"
     );
@@ -496,7 +497,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     )
     .await;
     assert!(!matches!(refused.result, m::WorkspaceResult::Done(_)));
-    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence FROM access_actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
+    let policy=r.runtime().statement_host().read(Statement{sql:"SELECT notice_cadence FROM access_actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
     assert_eq!(policy.rows, vec![vec![text("m25")]]);
     drop(r);
     notices::exercise_notice_cadences(f).await;
@@ -535,6 +536,7 @@ async fn exercise_expiry(f: &mut Fixture) {
     };
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     let row = r
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT expires_at FROM automation_schedules WHERE automation_id=?",
@@ -556,7 +558,7 @@ async fn exercise_expiry(f: &mut Fixture) {
     )
     .await;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let row=r.statement_host().read(Statement{sql:"SELECT state,next_due_at,(SELECT COUNT(*) FROM mail_messages WHERE json_extract(body,'$.automation_id')=? OR json_extract(body,'$.automationId')=?) FROM automation_schedules WHERE automation_id=?",args:vec![text(&automation_id),text(&automation_id),text(&automation_id)]}).await.unwrap();
+    let row=r.runtime().statement_host().read(Statement{sql:"SELECT state,next_due_at,(SELECT COUNT(*) FROM mail_messages WHERE json_extract(body,'$.automation_id')=? OR json_extract(body,'$.automationId')=?) FROM automation_schedules WHERE automation_id=?",args:vec![text(&automation_id),text(&automation_id),text(&automation_id)]}).await.unwrap();
     assert_eq!(
         row.rows,
         vec![vec![

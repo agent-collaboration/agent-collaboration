@@ -65,7 +65,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         assert!(matches!(wake, MailResult::Done(Answer::WakeSet { .. })));
         let healthy_runtime = host.central(healthy.organization_id()).await?;
         let healthy_before = healthy_runtime
-            .statement_host()
+            .runtime().statement_host()
             .read(Statement {
                 sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
@@ -76,7 +76,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         // Host-level recomputation corruption, not a timer policy violation.
         // A second otherwise shaped identity remains invalid even after removing
         // the aggregate timer decoder from recompute_alarm.
-        let applied = bad_runtime.statement_host().run_batch(StatementBatch {
+        let applied = bad_runtime.runtime().statement_host().run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
                     sql: "INSERT INTO signin_organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'second retained identity',0,0)",
@@ -94,7 +94,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         };
         assert_eq!(bad_runtime.recompute_alarm().await, Err(expected.clone()));
         let bad_before = bad_runtime
-            .statement_host()
+            .runtime().statement_host()
             .read(Statement {
                 sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                 args: vec![],
@@ -115,6 +115,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         let healthy_runtime = reopened.central(healthy.organization_id()).await?;
         assert_eq!(
             healthy_runtime
+                .runtime()
                 .statement_host()
                 .alarm()
                 .map(|at| at.unix_millis()),
@@ -123,7 +124,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         );
         assert!(
             healthy_runtime
-                .statement_host()
+                .runtime().statement_host()
                 .read(Statement {
                     sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id",
                     args: vec![],
@@ -157,7 +158,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         let answer = reopened.request_central(&healthy, request.clone()).await?;
         assert!(matches!(answer, MailResult::Done(Answer::Queued { .. })));
         assert_eq!(reopened.request_central(&healthy, request).await?, answer);
-        let rows = healthy_runtime.statement_host().read(Statement {
+        let rows = healthy_runtime.runtime().statement_host().read(Statement {
             sql: "SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)",
             args: vec![text(id::<m::RequestId>(8503))],
         }).await?.rows;
@@ -170,6 +171,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
         );
         assert_eq!(
             healthy_runtime
+                .runtime()
                 .statement_host()
                 .alarm()
                 .map(|at| at.unix_millis()),
@@ -181,7 +183,7 @@ async fn one_corrupt_org_does_not_block_healthy_host_reopen_in_either_creation_o
             root.path()
                 .join("central")
                 .join(format!("{}.sqlite", bad.organization_id().as_str())),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrations::central_migrator()),
         );
         assert!(
             bad_store

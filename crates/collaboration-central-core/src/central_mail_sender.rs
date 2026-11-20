@@ -1,10 +1,10 @@
 //! Resolve display identity from current organization rows when delivering mail.
-use crate::{
-    WorkspaceRuntime, guarded_statements::text, workspace_decode_error::corrupt,
-    workspace_row_codec::string,
-};
+use crate::WorkspaceRuntime;
 use central_storage::{Statement, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    guarded_statements::text, stored_values::string, workspace_decode_error::corrupt,
+};
 use workspace_model::{
     Identity, ResolvedSender,
     central_mail::{MessageBody, MessageRecord, MessageSender},
@@ -23,7 +23,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let sender = match identity {
             Some(Identity::AgentSession { session }) => {
                 let rows = self
-                    .host
+                    .execution
+                    .statement_host()
                     .read(Statement {
                         sql: "SELECT label FROM login_machines WHERE machine_id=?",
                         args: vec![text(&session.machine_id)],

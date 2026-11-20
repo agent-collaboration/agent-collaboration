@@ -10,12 +10,14 @@ use crate::{
             raw_version,
         },
     },
-    guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::{
+    guarded_statements::{exact, text},
+    workspace_decode_error::corrupt,
+};
 use workspace_model::central_mail as mail;
 
 pub(crate) struct WakeStore<'a, R: EngineHost>(pub &'a R);

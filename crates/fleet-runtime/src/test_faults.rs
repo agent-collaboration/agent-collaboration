@@ -1,8 +1,81 @@
 //! Test-support faults are consumed at the actual host batch boundary, after
 //! core has constructed the real transaction. No stand-in replaces storage.
 use central_engine_model::InstanceKey;
-use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
+use central_storage::{
+    AlarmUpdate, BatchOutcome, CorruptReason, SqlValue, Statement, StatementBatch, StoreFailure,
+};
 use serde::{Deserialize, Serialize};
+use std::sync::{Mutex, PoisonError};
+
+#[derive(Default)]
+pub struct TestFaults {
+    commit: Mutex<Option<EngineCommitFault>>,
+    read: Mutex<Option<EngineReadFault>>,
+    alarm_batch: Mutex<Option<StoreFailure>>,
+}
+
+impl TestFaults {
+    pub fn arm_commit(&self, fault: EngineCommitFault) {
+        *self.commit.lock().unwrap_or_else(PoisonError::into_inner) = Some(fault);
+    }
+
+    pub fn commit_pending(&self) -> bool {
+        self.commit
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some()
+    }
+
+    pub fn take_commit(&self, batch: &StatementBatch) -> Option<EngineCommitFault> {
+        let mut armed = self.commit.lock().unwrap_or_else(PoisonError::into_inner);
+        if armed.as_ref().is_some_and(|fault| fault.matches(batch)) {
+            armed.take()
+        } else {
+            None
+        }
+    }
+
+    pub fn arm_read(&self, fault: EngineReadFault) {
+        *self.read.lock().unwrap_or_else(PoisonError::into_inner) = Some(fault);
+    }
+
+    pub fn take_read_failure(&self, statement: &Statement) -> Option<StoreFailure> {
+        let mut armed = self.read.lock().unwrap_or_else(PoisonError::into_inner);
+        if armed.as_ref().is_some_and(|fault| fault.matches(statement)) {
+            armed.take();
+            Some(StoreFailure::Corrupt {
+                reason: CorruptReason::BadValue {
+                    column: "engine.due_list".into(),
+                },
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn arm_alarm_batch(&self, failure: StoreFailure) {
+        *self
+            .alarm_batch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(failure);
+    }
+
+    pub fn take_alarm_batch_failure(&self, batch: &StatementBatch) -> Option<StoreFailure> {
+        if batch.statements.is_empty()
+            && matches!(
+                batch.alarm,
+                AlarmUpdate::SetFromQuery(_) | AlarmUpdate::SetEngineFromQuery { .. }
+            )
+        {
+            self.alarm_batch
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take()
+        } else {
+            None
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -87,4 +160,16 @@ impl EngineReadFault {
                 _ => false,
             }
     }
+}
+
+/// Test-support counts of whole notice-unit runs (V2 control gate).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LegacyUnitInvocations {
+    /// The due batch ran the notice-window unit.
+    pub windows: u64,
+    /// The due batch ran the workspace-drain unit.
+    pub drains: u64,
+    /// A request-triggered drain of one workspace ran (P5 change 5).
+    pub request_drains: u64,
 }

@@ -1,15 +1,17 @@
 //! Static guarded statements for a pure decision, in its declared atomic order.
 use crate::{
-    guarded_statements::{exact, text},
     identity_contract::EnrollmentRevocationReason,
     machine_login_row_values as values,
     organization_authority::machine_login::{
         EnrollmentChange, EnrollmentFacts, IDLE_EXPIRY_SECONDS, MachineRow, MachineState,
         StoredEnrollment, StoredEnrollmentState,
     },
-    workspace_decode_error::corrupt,
 };
 use central_storage::{GuardedStatement, SafeInteger, SqlValue, StoreFailure};
+use fleet_runtime_ports::{
+    guarded_statements::{exact, text},
+    workspace_decode_error::corrupt,
+};
 use serde::Serialize;
 use std::collections::BTreeMap;
 

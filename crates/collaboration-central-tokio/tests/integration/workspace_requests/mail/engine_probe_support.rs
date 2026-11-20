@@ -62,20 +62,21 @@ pub(super) async fn probe_facts(
     item: uuid::Uuid,
     group: uuid::Uuid,
 ) -> Vec<SqlValue> {
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT (SELECT state FROM engine_probe_items WHERE item_id=?),(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='engine_probe' AND subject_key=?)",
         args: vec![text(item), text(group), text(item)],
     }).await.unwrap();
     rows.rows.into_iter().next().unwrap()
 }
 pub(super) async fn attempt(runtime: &Runtime, item: uuid::Uuid) -> Vec<Vec<SqlValue>> {
-    runtime.statement_host().read(Statement {
+    runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='engine_probe' AND subject_key=?",
         args: vec![text(item)],
     }).await.unwrap().rows
 }
 pub(super) async fn receipts(runtime: &Runtime, request: u32) -> i64 {
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?",
@@ -95,6 +96,7 @@ pub(super) fn integer(value: i64) -> SqlValue {
 pub(super) async fn raw(runtime: &Runtime, sql: &'static str, args: Vec<SqlValue>) {
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(central_storage::StatementBatch {
                 statements: vec![GuardedStatement {
@@ -110,6 +112,7 @@ pub(super) async fn raw(runtime: &Runtime, sql: &'static str, args: Vec<SqlValue
 }
 pub(super) fn alarm_ms(runtime: &Runtime) -> Option<i64> {
     runtime
+        .runtime()
         .statement_host()
         .alarm()
         .map(|time| time.unix_millis())

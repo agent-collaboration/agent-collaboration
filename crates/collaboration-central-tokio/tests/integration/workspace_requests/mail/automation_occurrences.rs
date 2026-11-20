@@ -8,8 +8,8 @@ use super::super::engine_evidence::{
 use super::super::engine_v2_support::*;
 use super::super::support::*;
 use super::engine_alarm::driver_settled;
-use collaboration_central_core::PausePoint;
 use fleet_contracts::EventCompletion;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
@@ -26,7 +26,10 @@ async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) -> Event
     fixture.set_utc(time).await;
     let completion = runtime.after_event().await.unwrap();
     assert_eq!(
-        runtime.due_batch_snapshot().last_start_unix_millis,
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
         Some(time.timestamp_millis()),
         "a real due batch started at {time}"
     );
@@ -92,9 +95,10 @@ async fn a_second_due_for_an_already_fired_occurrence_is_superseded_without_a_me
     // occurrence); park it before its drive guard so only the two direct
     // batches take the load pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
-    let points = runtime.pause_points();
+    let points = runtime.runtime().pause_points();
     let mut first = points.hold_engine(PausePoint::AfterEngineLoad, &automation);
     let mut second = points.hold_engine(PausePoint::AfterEngineLoad, &automation);
     driver_settled(&fixture, &runtime).await;
@@ -136,12 +140,16 @@ async fn a_second_due_for_an_already_fired_occurrence_is_superseded_without_a_me
 
     assert_eq!(first_completion.work.automations_fired, 1);
     assert_eq!(
-        runtime.due_batch_snapshot().last_start_unix_millis,
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
         Some(at(start, 5, 30).timestamp_millis()),
         "the second event ran its own due batch"
     );
     assert!(
         runtime
+            .runtime()
             .due_unit_starts()
             .iter()
             .any(

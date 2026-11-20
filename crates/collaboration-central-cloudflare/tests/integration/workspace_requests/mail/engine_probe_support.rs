@@ -133,10 +133,10 @@ impl PauseControl for Runtime {
 impl RemotePauses {
     pub(super) async fn hold_engine(
         &self,
-        point: collaboration_central_core::PausePoint,
+        point: fleet_runtime::PausePoint,
         key: &str,
     ) -> RemoteHold {
-        use collaboration_central_core::PausePoint as P;
+        use fleet_runtime::PausePoint as P;
         let point = match point {
             P::AfterEngineAttemptGate => "afterEngineAttemptGate",
             P::AfterEngineLoad => "afterEngineLoad",

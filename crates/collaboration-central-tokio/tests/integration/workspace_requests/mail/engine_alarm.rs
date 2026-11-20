@@ -3,8 +3,8 @@
 use super::super::{Statement, support::*};
 use super::engine_probe_support::*;
 use central_storage::{SqlValue, StoreFailure};
-use collaboration_central_core::EngineReadFault;
 use fleet_contracts::AlarmNotPublished;
+use fleet_runtime::EngineReadFault;
 use router_clock::RuntimeClock;
 use runtime_primitives::SyncTime;
 use workspace_model::central_mail::{
@@ -63,6 +63,7 @@ async fn set_wake(fixture: &Fixture, number: u32, due: Time) -> workspace_ids::W
 }
 async fn fired_in_group(runtime: &Runtime, group: uuid::Uuid) -> SqlValue {
     runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT COUNT(*) FROM engine_probe_items WHERE group_id=? AND state='fired'",
@@ -74,7 +75,7 @@ async fn fired_in_group(runtime: &Runtime, group: uuid::Uuid) -> SqlValue {
         .clone()
 }
 async fn source_attempt(runtime: &Runtime, kind: &str) -> Vec<Vec<SqlValue>> {
-    runtime.statement_host().read(Statement {
+    runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,failure_count,last_failure FROM engine_work_attempts WHERE machine_kind='engine_source' AND subject_key=?",
         args: vec![text(kind)],
     }).await.unwrap().rows
@@ -297,6 +298,7 @@ async fn a_request_wake_before_the_alarm_moves_it_in_its_own_transaction() {
     // The event's own final publication fails, so only the request's
     // transaction can move the alarm.
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
 
@@ -304,7 +306,10 @@ async fn a_request_wake_before_the_alarm_moves_it_in_its_own_transaction() {
 
     assert_eq!(alarm_ms(&runtime), ms(at(start, 20, 0)));
     assert_eq!(
-        runtime.statement_host().failed_alarm_publication_at(),
+        runtime
+            .runtime()
+            .statement_host()
+            .failed_alarm_publication_at(),
         Some(SyncTime::from_unix_millis(
             at(start, 1, 10).timestamp_millis()
         )),
@@ -358,6 +363,7 @@ async fn a_failed_final_publication_fails_the_event_and_the_driver_retries_at_th
         .advance_to(SyncTime::from_unix_millis(held_now.timestamp_millis()))
         .await;
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
 
@@ -376,7 +382,10 @@ async fn a_failed_final_publication_fails_the_event_and_the_driver_retries_at_th
     );
     assert_eq!(alarm_ms(&runtime), None, "no alarm is fabricated");
     assert_eq!(
-        runtime.statement_host().failed_alarm_publication_at(),
+        runtime
+            .runtime()
+            .statement_host()
+            .failed_alarm_publication_at(),
         Some(SyncTime::from_unix_millis(held_now.timestamp_millis()))
     );
     let retry = SyncTime::from_unix_millis(at(start, 10, 0).timestamp_millis());
@@ -384,9 +393,9 @@ async fn a_failed_final_publication_fails_the_event_and_the_driver_retries_at_th
         .clock
         .not_due_check_now(fixture.clock.wall_deadline(retry))
         .await;
-    let callbacks = runtime.alarm_completion_count();
+    let callbacks = runtime.runtime().alarm_completion_count();
     fixture.advance_to(retry).await;
-    runtime.until_alarm_completed(callbacks + 1).await;
+    runtime.runtime().until_alarm_completed(callbacks + 1).await;
     assert_eq!(alarm_ms(&runtime), ms(at(start, 20, 0)));
     fixture.host.close().await;
 }
@@ -401,6 +410,7 @@ async fn a_failed_due_read_for_one_kind_still_handles_the_others() {
     let (item, group) = (probe_id(13101), probe_id(13102));
     seed_probe(&runtime, item, group, Some(at(start, 5, 0)), "unread").await;
     runtime
+        .runtime()
         .statement_host()
         .inject_engine_read_fault(EngineReadFault {
             kind: "engine_probe".into(),
@@ -412,6 +422,7 @@ async fn a_failed_due_read_for_one_kind_still_handles_the_others() {
 
     assert_eq!(completion.work.wakes_fired, 1);
     let wakes = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT state FROM automation_wakes WHERE wake_id=?",

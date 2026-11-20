@@ -1,6 +1,6 @@
-use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::WorkspaceRows;
 use central_storage::StoreFailure;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use workspace_model as m;
 use workspace_rules::{DeliverableReads, PositionedItem};
 

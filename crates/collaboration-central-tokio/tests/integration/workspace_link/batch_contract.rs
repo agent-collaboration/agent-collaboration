@@ -70,6 +70,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
     let allowance = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -189,7 +190,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
             .root_path()
             .join("modern/workspace-stores")
             .join(format!("{}.sqlite", workspace.workspace_id)),
-        Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
     );
     let areas = store
         .read(Statement {
@@ -229,6 +230,7 @@ async fn native_batch_keeps_order_and_continues_after_a_middle_semantic_refusal(
     );
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT wake_id FROM automation_wakes",
