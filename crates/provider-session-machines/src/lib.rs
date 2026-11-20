@@ -13,6 +13,7 @@ pub mod session_cell_machine;
 pub mod session_generation;
 pub mod session_lifecycle_answers;
 pub mod session_lifecycle_machine;
+pub mod session_owner;
 pub mod session_refusal_answers;
 pub mod session_run_claims;
 pub mod session_setting_machine;
