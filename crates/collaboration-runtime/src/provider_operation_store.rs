@@ -143,6 +143,10 @@ pub enum ProviderOperationAdmissionResult {
     Existing(ProviderOperationRecord),
 }
 
+#[path = "provider_uncertain_operations.rs"]
+mod uncertain_operations;
+pub use uncertain_operations::StoredUncertainOperation;
+
 pub struct ProviderOperationStore {
     pub(crate) connection: SqliteConnection,
     commits: CommitSignal,

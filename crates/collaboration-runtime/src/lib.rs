@@ -36,6 +36,7 @@ pub use codex_conversation_operation_recorder::{
 };
 mod provider_session_event_hub;
 mod provider_session_record;
+pub use provider_operation_store::StoredUncertainOperation;
 pub use provider_operation_store::{
     PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,
     ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,

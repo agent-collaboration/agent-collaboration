@@ -325,6 +325,7 @@ pub enum CloseOutcome {
     Confirmed,
     RouterOnly,
     DrainExpired,
+    NotEnqueued,
     RefusedLive,
     RefusedLoading,
     OutcomeUnknown,
@@ -335,9 +336,11 @@ impl CloseOutcome {
     pub const fn remote_effect(self) -> RemoteEffect {
         match self {
             Self::Confirmed => RemoteEffect::Applied,
-            Self::RouterOnly | Self::DrainExpired | Self::RefusedLive | Self::RefusedLoading => {
-                RemoteEffect::None
-            }
+            Self::RouterOnly
+            | Self::DrainExpired
+            | Self::NotEnqueued
+            | Self::RefusedLive
+            | Self::RefusedLoading => RemoteEffect::None,
             Self::OutcomeUnknown => RemoteEffect::Unknown,
         }
     }
@@ -356,6 +359,9 @@ impl CloseOutcome {
             }
             Self::DrainExpired => {
                 "the close wasn't sent because the running turn didn't stop in time; the Router released the session locally, and the harness may still be running that turn"
+            }
+            Self::NotEnqueued => {
+                "the Router couldn't send the close; it released the session locally (the harness wasn't told), and you can restore it"
             }
             Self::RefusedLive => "the close was refused; the session is still open",
             Self::RefusedLoading => {

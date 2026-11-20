@@ -678,16 +678,18 @@ impl OwnerTransition {
     }
 
     pub(super) fn close_deadline(&mut self, run: RunAttempt<CloseAttempt>) -> OwnerResult {
-        if !self.closing().is_some_and(|(pending, _)| pending == run) {
+        let Some((pending, phase)) = self.closing() else {
+            return Err(OwnerRejection::IgnoredLate);
+        };
+        if pending != run {
             return Err(OwnerRejection::IgnoredLate);
         }
-        let unsent = self.closing() == Some((run, ClosePhase::EndingTurn))
-            || self.next.ports.close_support.is_some();
+        let waiting_for_enqueue = self.next.ports.close_support.is_some();
         self.abandon_running_turn()?;
-        let outcome = if unsent {
-            CloseOutcome::DrainExpired
-        } else {
-            CloseOutcome::OutcomeUnknown
+        let outcome = match phase {
+            ClosePhase::EndingTurn => CloseOutcome::DrainExpired,
+            ClosePhase::Freeing if waiting_for_enqueue => CloseOutcome::NotEnqueued,
+            ClosePhase::Freeing => CloseOutcome::OutcomeUnknown,
         };
         self.complete_close(run, outcome)
     }
@@ -698,7 +700,7 @@ impl OwnerTransition {
         {
             return Err(OwnerRejection::IgnoredLate);
         }
-        self.complete_close(run, CloseOutcome::DrainExpired)
+        self.complete_close(run, CloseOutcome::NotEnqueued)
     }
 
     pub(super) fn complete_close(
