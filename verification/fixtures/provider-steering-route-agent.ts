@@ -69,7 +69,9 @@ if (mode === "active") {
   agent.endTurn(prompt);
 } else if (mode !== "none") {
   const prompt = await agent.read("session/prompt");
-  await sendSocketNotice(requireArgument(3), "active");
+  const control = requireArgument(3);
+  // The packed wire exchange already orders the foreground prompt before the steer.
+  if (control !== "--wire-only") await sendSocketNotice(control, "active");
   const steer = await agent.read("_session/steering");
   requireRoutedText(steer);
   if (mode === "drop") {
