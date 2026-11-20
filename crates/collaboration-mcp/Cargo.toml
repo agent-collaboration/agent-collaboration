@@ -50,7 +50,6 @@ fleet-sync-protocol.workspace = true
 runtime-primitives.workspace = true
 uuid.workspace = true
 agent-collaboration = { path = "../agent-collaboration", version = "0.1.30" }
-automation-storage = { path = "../automation-storage", version = "0.1.16" }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.30" }
 codex-router-host = { path = "../codex-router-host", version = "0.1.31" }
 codex-native-integration.workspace = true

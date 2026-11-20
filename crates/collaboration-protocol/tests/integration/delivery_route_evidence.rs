@@ -1,9 +1,9 @@
 use collaboration_protocol::{
-    DeliveryClientReceipt, DeliveryEvidence, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
-    DeliveryRejection, DeliveryRejectionReason, DeliveryRouteEvidence, NativeSendReceipt,
-    OperationId, SessionReachability,
+    DeliveryClientReceipt, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
+    DeliveryRejectionReason, DeliveryRouteEvidence, NativeSendReceipt, OperationId,
+    SessionReachability,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 
 fn native_receipt() -> Result<NativeSendReceipt, Box<dyn std::error::Error>> {
     Ok(serde_json::from_value(json!({
@@ -84,7 +84,7 @@ fn receipt_round_trips_selected_and_unselected_outcomes() -> Result<(), Box<dyn 
 }
 
 #[test]
-fn inspection_evidence_round_trips_each_selected_route() -> Result<(), Box<dyn std::error::Error>> {
+fn route_evidence_round_trips_each_selected_route() -> Result<(), Box<dyn std::error::Error>> {
     let native = json!({
         "kind":"codexAppServer",
         "target":null,"generation":null,"clientUserMessageId":null,
@@ -104,20 +104,6 @@ fn inspection_evidence_round_trips_each_selected_route() -> Result<(), Box<dyn s
         if serde_json::to_value(decoded)? != effect {
             return Err("route evidence lost its tagged variant".into());
         }
-        let inspection = json!({
-            "kind":"dispatching",
-            "attemptId":agent_automation::AttemptId::generate(),
-            "effects":effect
-        });
-        let decoded: DeliveryEvidence = serde_json::from_value(inspection.clone())?;
-        if serde_json::to_value(decoded)? != inspection {
-            return Err("inspection lost selected route evidence".into());
-        }
-    }
-    let pending = json!({"kind":"dispatching","attemptId":agent_automation::AttemptId::generate(),"effects":Value::Null});
-    let decoded: DeliveryEvidence = serde_json::from_value(pending.clone())?;
-    if serde_json::to_value(decoded)? != pending {
-        return Err("unselected attempt acquired route evidence".into());
     }
     Ok(())
 }

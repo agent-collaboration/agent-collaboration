@@ -30,7 +30,6 @@ message-board = { path = "../message-board", version = "0.1.20" }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
-automation-storage = { path = "../automation-storage", version = "0.1.16" }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 base64.workspace = true

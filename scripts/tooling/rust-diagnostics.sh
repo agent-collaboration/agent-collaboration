@@ -7,8 +7,8 @@ export SQLX_OFFLINE=true
 mode="${1:-}"
 package="${2:-}"
 case "$package" in
-  codex-router-selection|collaboration-protocol|codex-router-state|automation-storage) ;;
-  *) echo "choose an affected package: codex-router-selection, collaboration-protocol, codex-router-state, automation-storage" >&2; exit 2 ;;
+  codex-router-selection|collaboration-protocol|codex-router-state) ;;
+  *) echo "choose an affected package: codex-router-selection, collaboration-protocol, codex-router-state" >&2; exit 2 ;;
 esac
 "$repository_root/scripts/tooling/bootstrap-tools.sh" ci --check
 "$repository_root/scripts/tooling/bootstrap-tools.sh" diagnostic --check

@@ -207,7 +207,6 @@ dependencies = [
  "agent-collaboration-tui",
  "agent-session-inventory",
  "agent-session-tui",
- "automation-storage",
  "axum",
  "board-fleet-sync",
  "board-sync-protocol",
@@ -685,26 +684,6 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
-
-[[package]]
-name = "automation-storage"
-version = "0.1.157"
-dependencies = [
- "agent-automation",
- "chrono",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "message-board",
- "serde",
- "serde_json",
- "sqlite-storage-maintenance",
- "sqlx",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
 
 [[package]]
 name = "aws-lc-rs"
@@ -1452,7 +1431,6 @@ dependencies = [
  "acp-provider-adapters",
  "agent-automation",
  "agent-client-protocol",
- "automation-storage",
  "axum",
  "board-fleet-sync",
  "board-sync-protocol",
@@ -1726,7 +1704,6 @@ dependencies = [
 name = "collaboration-application-test-support"
 version = "0.1.157"
 dependencies = [
- "automation-storage",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-native-integration",
@@ -1889,7 +1866,6 @@ dependencies = [
 name = "collaboration-client"
 version = "0.1.157"
 dependencies = [
- "automation-storage",
  "board-fleet-sync",
  "board-sync-protocol",
  "codex-acp-adapter",
@@ -1965,7 +1941,6 @@ version = "0.1.157"
 dependencies = [
  "acp-provider-adapters",
  "agent-collaboration",
- "automation-storage",
  "axum",
  "board-fleet-sync",
  "board-sync-protocol",
@@ -2036,7 +2011,6 @@ version = "0.1.157"
 dependencies = [
  "acp-provider-adapters",
  "agent-automation",
- "automation-storage",
  "base64 0.22.1",
  "board-fleet-sync",
  "board-sync-protocol",
@@ -2084,7 +2058,6 @@ name = "collaboration-service"
 version = "0.1.157"
 dependencies = [
  "agent-automation",
- "automation-storage",
  "base64 0.22.1",
  "board-fleet-sync",
  "board-sync-protocol",
@@ -3957,7 +3930,6 @@ name = "interaction-storage"
 version = "0.1.157"
 dependencies = [
  "agent-automation",
- "automation-storage",
  "board-sync-protocol",
  "chrono",
  "collaboration-mail-protocol",

@@ -1,5 +1,4 @@
-//! Public timing inputs use bounded durations and the existing UTC timestamp contract.
-use crate::ObservationTimestamp;
+//! A whole number of seconds greater than zero.
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -36,28 +35,4 @@ impl From<PositiveSeconds> for u32 {
     fn from(value: PositiveSeconds) -> Self {
         value.0
     }
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-pub enum TimingRequest {
-    At {
-        at: ObservationTimestamp,
-    },
-    After {
-        seconds: PositiveSeconds,
-    },
-    Interval {
-        seconds: PositiveSeconds,
-    },
-    Cron {
-        expression: String,
-        timezone: String,
-    },
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-pub enum ExpiryRequest {
-    None,
-    At { at: ObservationTimestamp },
-    After { seconds: PositiveSeconds },
 }

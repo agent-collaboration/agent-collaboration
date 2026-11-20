@@ -41,10 +41,7 @@ fn is_collaboration(name: &str) -> bool {
         || name.starts_with("fleet-")
         || name.starts_with("workspace-")
         || name.starts_with("central-")
-        || matches!(
-            name,
-            "agent-collaboration" | "agent-automation" | "automation-storage"
-        )
+        || matches!(name, "agent-collaboration" | "agent-automation")
 }
 fn is_effectful(name: &str) -> bool {
     name.starts_with("tokio")
