@@ -15,6 +15,37 @@ fn initialization_authentication_requires_cursors_documented_agent_method() {
     );
 }
 
+#[test]
+fn restore_invalid_params_only_recognizes_cursors_exact_missing_session_message() {
+    let requested = "session-42";
+    for (data, missing) in [
+        (
+            serde_json::json!({"message":"Session \"session-42\" not found"}),
+            true,
+        ),
+        (
+            serde_json::json!({"message":"Session \"session-42-other\" not found"}),
+            false,
+        ),
+        (
+            serde_json::json!({"message":"Working directory for Session \"session-42\" not found"}),
+            false,
+        ),
+        (
+            serde_json::json!({"message":"Session \"session-42\" has invalid setup"}),
+            false,
+        ),
+        (serde_json::json!({"message":42}), false),
+        (serde_json::json!("Session \"session-42\" not found"), false),
+    ] {
+        assert_eq!(
+            CursorAcpBehavior.restore_invalid_params_means_session_not_found(requested, &data),
+            missing,
+            "{data}"
+        );
+    }
+}
+
 fn command(name: &str, description: &str) -> ProviderCommand {
     ProviderCommand {
         invocation_name: name.into(),

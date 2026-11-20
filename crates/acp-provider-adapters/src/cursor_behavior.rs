@@ -14,6 +14,19 @@ use std::collections::{HashMap, HashSet};
 pub struct CursorAcpBehavior;
 
 impl ProviderBehavior for CursorAcpBehavior {
+    fn restore_invalid_params_means_session_not_found(
+        &self,
+        requested_session_id: &str,
+        data: &serde_json::Value,
+    ) -> bool {
+        // Cursor reports a lost session as InvalidParams during restore (UW-17).
+        data.get("message")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|message| message.strip_prefix("Session \""))
+            .and_then(|message| message.strip_suffix("\" not found"))
+            == Some(requested_session_id)
+    }
+
     fn initialization_authentication(
         &self,
     ) -> acp_client_runtime::ProviderInitializationAuthentication {

@@ -232,11 +232,18 @@ pub(crate) fn acp_operation_error(
 
 pub(crate) fn acp_load_session_error(
     error: agent_client_protocol::Error,
+    requested_session_id: &str,
+    behavior: &dyn crate::ProviderBehavior,
 ) -> ExternalProviderRuntimeError {
     if agent_client_protocol::is_incoming_transport_closed(&error) {
         return ExternalProviderRuntimeError::RestoreDisconnected;
     }
-    if error.code == ErrorCode::ResourceNotFound {
+    if error.code == ErrorCode::ResourceNotFound
+        || (error.code == ErrorCode::InvalidParams
+            && error.data.as_ref().is_some_and(|data| {
+                behavior.restore_invalid_params_means_session_not_found(requested_session_id, data)
+            }))
+    {
         let reported_error_kind = ReportedProviderErrorKind::from_error_data(error.data.as_ref());
         let code = i64::from(i32::from(error.code));
         let correlation_id = log_provider_error(code, &error.message, reported_error_kind);

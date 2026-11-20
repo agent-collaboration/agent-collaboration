@@ -6,6 +6,9 @@ mod cancel_confirmation_tests;
 #[path = "restore_recovery/refusal_answers_test.rs"]
 mod refusal_answers_tests;
 
+#[path = "restore_recovery/cursor_lost_session_test.rs"]
+mod cursor_lost_session_tests;
+
 use super::*;
 use collaboration_contracts::{
     DeliveryPrecondition, LoadPolicy, SessionDeliveryRoute, UnstoredAttemptEvidenceSink,
@@ -89,6 +92,18 @@ impl RestoreRig {
     }
 
     async fn open_host_with(&self, behaviors: &[&str]) -> ExternalProviderSupervisor {
+        self.open_host_with_adapter(
+            behaviors,
+            Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+    }
+
+    async fn open_host_with_adapter(
+        &self,
+        behaviors: &[&str],
+        adapter: Arc<dyn acp_client_runtime::ProviderBehavior>,
+    ) -> ExternalProviderSupervisor {
         let store = Arc::new(Mutex::new(self.store().await));
         let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));
         let target: message_board::SessionRef =
@@ -113,7 +128,7 @@ impl RestoreRig {
             "http://127.0.0.1:1/mcp",
             hub,
             target.endpoint,
-            Arc::new(acp_provider_adapters::StandardAcpBehavior),
+            adapter,
             self.clock.clone(),
         )
         .await

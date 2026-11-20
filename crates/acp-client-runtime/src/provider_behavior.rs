@@ -63,6 +63,16 @@ pub trait ProviderBehavior: Send + Sync {
     ) -> Option<serde_json::Map<String, serde_json::Value>> {
         None
     }
+
+    /// Whether the adapter recognizes a missing session in an InvalidParams
+    /// reply to load or resume for this exact ID.
+    fn restore_invalid_params_means_session_not_found(
+        &self,
+        _requested_session_id: &str,
+        _data: &serde_json::Value,
+    ) -> bool {
+        false
+    }
 }
 
 /// The class of action a permission request asks for, as the in-folder

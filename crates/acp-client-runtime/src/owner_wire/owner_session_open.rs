@@ -227,11 +227,13 @@ impl OpenFrame {
                 let servers = config.mcp_servers.clone();
                 let config = config.clone();
                 let start = async move {
+                    let requested_session = SessionId::new(provider_id);
                     let sdk = match via {
                         RestoreVia::Load => {
-                            let mut request = LoadSessionRequest::new(provider_id, &setup.cwd)
-                                .mcp_servers(servers)
-                                .additional_directories(folders.additional_directories);
+                            let mut request =
+                                LoadSessionRequest::new(requested_session.clone(), &setup.cwd)
+                                    .mcp_servers(servers)
+                                    .additional_directories(folders.additional_directories);
                             request.meta = folders.meta;
                             connection
                                 .load_session_from(request)
@@ -241,9 +243,10 @@ impl OpenFrame {
                                 .map(|restored| restored.into_session())
                         }
                         RestoreVia::Resume => {
-                            let mut request = ResumeSessionRequest::new(provider_id, &setup.cwd)
-                                .mcp_servers(servers)
-                                .additional_directories(folders.additional_directories);
+                            let mut request =
+                                ResumeSessionRequest::new(requested_session.clone(), &setup.cwd)
+                                    .mcp_servers(servers)
+                                    .additional_directories(folders.additional_directories);
                             request.meta = folders.meta;
                             connection
                                 .resume_session_from(request)
@@ -253,7 +256,13 @@ impl OpenFrame {
                                 .map(|restored| restored.into_session())
                         }
                     }
-                    .map_err(acp_load_session_error)?;
+                    .map_err(|error| {
+                        acp_load_session_error(
+                            error,
+                            &requested_session.0,
+                            config.behavior.as_ref(),
+                        )
+                    })?;
                     let auth_status = config.auth_status.read().await.clone();
                     let mut opened = OwnerOpenedSession::new(
                         &sdk,

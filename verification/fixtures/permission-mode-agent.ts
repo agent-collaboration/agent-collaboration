@@ -18,6 +18,8 @@
 //   refuse-prompt: record the prompt and reject its ACP request.
 //   silent-first-restore: leave the first load or resume unanswered.
 //   disconnect-during-restore: exit after reading the load or resume.
+//   restore-session-not-found, restore-other-session-not-found, restore-invalid-cwd:
+//     reject load or resume with Cursor's Invalid params envelope.
 //   malformed-mode-reply: the first mode change gets a success with no
 //     configOptions, which a client cannot read; the mode stays and later
 //     changes are answered normally.
@@ -52,6 +54,9 @@ const known = [
   "refuse-prompt",
   "silent-first-restore",
   "disconnect-during-restore",
+  "restore-session-not-found",
+  "restore-other-session-not-found",
+  "restore-invalid-cwd",
   "malformed-mode-reply",
   "advertise-close",
   "hold-close-refusal",
@@ -264,6 +269,21 @@ requests: for (;;) {
       agent.receipt(receipt, observed);
       if (behaviours.has("disconnect-during-restore")) break requests;
       if (behaviours.has("silent-first-restore") && observed.restores.length === 1) break;
+      const invalidParams = behaviours.has("restore-session-not-found")
+        ? `Session "${sessionId}" not found`
+        : behaviours.has("restore-other-session-not-found")
+          ? `Session "${sessionId}-other" not found`
+          : behaviours.has("restore-invalid-cwd")
+            ? `Invalid working directory for session "${sessionId}"`
+            : undefined;
+      if (invalidParams !== undefined) {
+        agent.send({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32602, message: "Invalid params", data: { message: invalidParams } },
+        });
+        break;
+      }
       agent.respond(request, { configOptions: configOptions(sessionId) });
       break;
     }
