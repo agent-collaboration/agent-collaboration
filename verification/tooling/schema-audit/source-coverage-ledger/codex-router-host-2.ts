@@ -4,128 +4,14 @@ export const section: LedgerSection = {
   root: "crates/codex-router-host",
   files: [
     {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/notification_split_transport.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests/mail_notice_harness.rs:26; harness declared at mail_notice_events.rs:18, inside #[cfg(test)] mod mail_notice_events at machine_session.rs:55-61",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/notification_welcome.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests/mail_notice_harness.rs:22; harness declared at mail_notice_events.rs:18, inside #[cfg(test)] mod mail_notice_events at machine_session.rs:55-61",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/persisted_supersession.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests/notice_reactions.rs:19; notice_reactions declared at tests.rs:57, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/project_claim.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:61, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/project_creation_replies.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:78, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/project_integrity_refusal.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:64, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/read_copy_page_gate.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          'cfg(test)-only module: #[cfg(all(test, feature = "runtime-test-support"))] mod proof_gate declared at board_composition/central_read_copy.rs:42-44',
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/received_grants.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:66, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/returning_holder_expiry.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:71, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/shared_fleet_store_close.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:73, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/snapshot_install_child.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests/claim_restart.rs:23; claim_restart at tests.rs:41, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/snapshot_install_graceful.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests/claim_restart.rs:25; claim_restart at tests.rs:41, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/snapshot_restart.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared at board_composition/tests.rs:75, inside #[cfg(test)] mod tests at board_composition.rs:63-65",
-      },
-    },
-    {
       file: "crates/codex-router-host/src/collaboration_runtime/collaboration_api_serving.rs",
       disposition: { kind: "none" },
       note: "binds the loopback TCP and control.sock listeners and mounts collaboration_mcp::collaboration_api_router on each (60,74); the MCP shapes live in collaboration-mcp (N11)",
     },
     {
-      file: "crates/codex-router-host/src/collaboration_runtime/fleet_observation.rs",
-      disposition: { kind: "none" },
-      note: "reads the fleet link record and stuck-mail summary into FleetHostObservation (13-52); typed values, no message built",
-    },
-    {
       file: "crates/codex-router-host/src/collaboration_runtime/lifecycle.rs",
       disposition: { kind: "none" },
       note: "listener failure select and ordered shutdown of the runtime's tasks and stores (3-233)",
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/mail_delivery_composition.rs",
-      disposition: { kind: "none" },
-      note: "constructs MailDeliveryRuntime, with the debug Inbox limit under runtime-test-support (13-18)",
     },
     {
       file: "crates/codex-router-host/src/collaboration_runtime/native_backend.rs",
@@ -158,34 +44,9 @@ export const section: LedgerSection = {
       note: "hand schema digest hex encoder sha256:{hex} (101-109); collaboration_protocol EndpointRef to message_board SessionEndpointRef by String round trip of service_id and endpoint_id (681-690); typed ServiceManifest publication (747-767); composition otherwise",
     },
     {
-      file: "crates/codex-router-host/src/debug_inbox_limit.rs",
-      disposition: { kind: "none" },
-      note: "debug fixture file InboxLimitInput serde (6-10,38); compiled only under debug_assertions + runtime-test-support (lib.rs); not a message",
-    },
-    {
-      file: "crates/codex-router-host/src/debug_mail_clock.rs",
-      disposition: { kind: "none" },
-      note: "debug-only frozen clock control stream (ClockInput/ClockStep Deserialize, ClockReply Serialize, 15-33) on a private unix socket; compiled only under debug_assertions + runtime-test-support (lib.rs); a test fixture channel, not one of the four protocols",
-    },
-    {
       file: "crates/codex-router-host/src/debug_readiness_timing.rs",
       disposition: { kind: "none" },
       note: "opt-in debug timing line built with json! on stderr (9), diagnostic only",
-    },
-    {
-      file: "crates/codex-router-host/src/debug_runtime_barrier.rs",
-      disposition: { kind: "none" },
-      note: "debug causal barrier writes a fixed marker byte string to a private socket (10-11); compiled only under debug_assertions + runtime-test-support (lib.rs)",
-    },
-    {
-      file: "crates/codex-router-host/src/enrollment_reset.rs",
-      disposition: { kind: "none" },
-      note: "Router-owned enrollment-reset journal file (EnrollmentReset/ResetPhase serde 14-27, load/save 68-104); local state file, not a message",
-    },
-    {
-      file: "crates/codex-router-host/src/enrollment_session_transport.rs",
-      disposition: { kind: "none" },
-      note: "checks the enrollment journal before delegating the central machine-socket connect (23-51)",
     },
     {
       file: "crates/codex-router-host/src/explicit_app_server_restart.rs",
@@ -208,14 +69,6 @@ export const section: LedgerSection = {
         kind: "excluded",
         reason:
           "cfg(test)-only module: declared #[cfg(test)] at external_provider_runtime.rs:658-660",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/external_provider_runtime/approval_push_fixture.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared #[cfg(test)] at external_provider_runtime.rs:664-666",
       },
     },
     {
@@ -270,11 +123,6 @@ export const section: LedgerSection = {
       file: "crates/codex-router-host/src/external_provider_supervisor/provider_settings_control.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "ProviderSettingName to ProviderSettingKind table (77-81), the reverse of provider_operation_settlement provider_setting_name; ExternalProviderRuntimeError to ProviderSettingsFailureKind (195-266); ProviderSettingsFailureKind to CommandFailure (296-316); calls set_setting (83) and accept_session_settings (133)",
-    },
-    {
-      file: "crates/codex-router-host/src/fleet_enrollment_file.rs",
-      disposition: { kind: "none" },
-      note: "Router-owned enrollment file document FleetEnrollmentDocument/FleetAccess/FleetEnrollmentMetadata serde (18-79), read 161 and written 263; central fleet enrollment, not one of the six edges or four protocols",
     },
     {
       file: "crates/codex-router-host/src/global_claude_executable.rs",

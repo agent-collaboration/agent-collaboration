@@ -22,7 +22,7 @@ fn number(value: i64) -> TestResult<SqlValue> {
     Ok(SqlValue::Integer(value.try_into()?))
 }
 async fn rows(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) -> TestResult<ReadOutcome> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime
         .statement_host()
         .read(Statement { sql, args })
@@ -33,7 +33,7 @@ async fn batch(
     statements: Vec<GuardedStatement>,
     alarm: AlarmUpdate,
 ) -> TestResult<()> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     if !matches!(
         runtime
             .statement_host()
@@ -69,7 +69,7 @@ async fn clear_alarm(f: &Fixture) -> TestResult<()> {
     .await
 }
 async fn alarm(f: &Fixture) -> TestResult<Option<i64>> {
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime.statement_host().alarm().map(|at| at.unix_millis()))
 }
 async fn request(f: &Fixture, serial: u32, operation: Op) -> TestResult<MailResult> {
@@ -110,6 +110,9 @@ async fn send(f: &Fixture, serial: u32) -> TestResult<MailResult> {
         Op::SendMessage {
             to: session(&f.caller),
             body: "unrelated fresh mail".to_owned().try_into()?,
+            delivery: workspace_model::central_mail::MessageDelivery::Auto,
+            reply_to: None,
+            sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
         },
     )
     .await
@@ -117,7 +120,7 @@ async fn send(f: &Fixture, serial: u32) -> TestResult<MailResult> {
 async fn corrupt_done_history(f: &Fixture, serial: u32) -> TestResult<workspace_ids::WakeId> {
     let wake = set_wake(f, serial, now(f)? + chrono::Duration::seconds(300)).await?;
     // Direct SQL is legacy/corrupt-history setup, never an admitted product write.
-    execute(f, "UPDATE wakes SET state='done',target='not-json',created_at='not-a-timestamp' WHERE wake_id=?", vec![text(&wake)]).await?;
+    execute(f, "UPDATE automation_wakes SET state='done',target='not-json',created_at='not-a-timestamp' WHERE wake_id=?", vec![text(&wake)]).await?;
     Ok(wake)
 }
 
@@ -133,7 +136,7 @@ async fn corrupt_done_wake_does_not_block_fresh_mail_or_alarm_recomputation() ->
     let history = corrupt_done_history(&f, 8401).await?;
     let before = rows(
         &f,
-        "SELECT * FROM wakes WHERE wake_id=?",
+        "SELECT * FROM automation_wakes WHERE wake_id=?",
         vec![text(&history)],
     )
     .await?
@@ -147,7 +150,7 @@ async fn corrupt_done_wake_does_not_block_fresh_mail_or_alarm_recomputation() ->
         ),
         "terminal history must not refuse an unrelated admitted mail write"
     );
-    assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",vec![text(id::<m::RequestId>(8402))]).await?.rows,vec![vec![number(1)?,number(1)?]]);
+    assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)",vec![text(id::<m::RequestId>(8402))]).await?.rows,vec![vec![number(1)?,number(1)?]]);
     assert_eq!(
         alarm(&f).await?,
         Some(due.timestamp_millis()),
@@ -156,7 +159,7 @@ async fn corrupt_done_wake_does_not_block_fresh_mail_or_alarm_recomputation() ->
     assert!(
         rows(
             &f,
-            "SELECT * FROM wakes WHERE wake_id=?",
+            "SELECT * FROM automation_wakes WHERE wake_id=?",
             vec![text(history)]
         )
         .await?
@@ -180,14 +183,14 @@ async fn corrupt_done_wake_does_not_prevent_cold_runtime_startup() -> TestResult
     let history = corrupt_done_history(&f, 8411).await?;
     let before = rows(
         &f,
-        "SELECT * FROM wakes WHERE wake_id=?",
+        "SELECT * FROM automation_wakes WHERE wake_id=?",
         vec![text(&history)],
     )
     .await?
     .rows;
     clear_alarm(&f).await?;
     f.reopen().await;
-    let runtime = f.host.central(&f.caller.organization_id).await?;
+    let runtime = f.host.central(f.caller.organization_id()).await?;
     runtime.recompute_alarm().await?;
     assert_eq!(alarm(&f).await?, Some(due.timestamp_millis()));
     assert!(
@@ -200,7 +203,7 @@ async fn corrupt_done_wake_does_not_prevent_cold_runtime_startup() -> TestResult
     assert!(
         rows(
             &f,
-            "SELECT * FROM wakes WHERE wake_id=?",
+            "SELECT * FROM automation_wakes WHERE wake_id=?",
             vec![text(history)]
         )
         .await?
@@ -223,7 +226,7 @@ async fn malformed_active_due_does_not_rollback_mail_or_healthy_alarm_rearm() ->
     let malformed = set_wake(&f, 8421, due + chrono::Duration::seconds(300)).await?;
     execute(
         &f,
-        "UPDATE wakes SET due_at='not-a-timestamp' WHERE wake_id=?",
+        "UPDATE automation_wakes SET due_at='not-a-timestamp' WHERE wake_id=?",
         vec![text(malformed)],
     )
     .await?;
@@ -238,7 +241,7 @@ async fn malformed_active_due_does_not_rollback_mail_or_healthy_alarm_rearm() ->
         ),
         "one invalid active due must not roll back the unrelated request"
     );
-    assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM request_log WHERE request_id=?)",vec![text(id::<m::RequestId>(8422))]).await?.rows,vec![vec![number(1)?,number(1)?]]);
+    assert_eq!(rows(&f,"SELECT (SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?)",vec![text(id::<m::RequestId>(8422))]).await?.rows,vec![vec![number(1)?,number(1)?]]);
     // Disposition: the unreadable active due counts as due now, so the healthy
     // re-arm lands on the next five-minute mark rather than the healthy due.
     let next_mark = (now(&f)?.timestamp_millis().div_euclid(300_000) + 1) * 300_000;

@@ -8,7 +8,6 @@ use std::{io, path::PathBuf};
 pub(super) struct CollaborationLifecycle {
     owner_human_id: Option<message_board::HumanId>,
     directory: PathBuf,
-    router_root: PathBuf,
     codex_home: PathBuf,
     peer_registry_directory: Option<PathBuf>,
     backend_socket: PathBuf,
@@ -24,16 +23,6 @@ pub(super) struct CollaborationLifecycle {
     schema_digest: Option<[u8; 32]>,
 }
 impl CollaborationLifecycle {
-    pub(super) fn observe_fleet(&self) -> crate::collaboration_runtime::FleetObservationFuture {
-        match &self.runtime {
-            Some(runtime) => runtime.observe_fleet(),
-            None => Box::pin(async {
-                crate::FleetHostObservation::Unavailable {
-                    message: "collaboration runtime is unavailable".to_owned(),
-                }
-            }),
-        }
-    }
     pub(super) async fn start(
         config: &HostConfig,
         instance: &HostInstance,
@@ -60,11 +49,6 @@ impl CollaborationLifecycle {
         let mut owner = Self {
             owner_human_id: config.owner_human_id().cloned(),
             directory: directory.to_owned(),
-            router_root: config
-                .coordination_paths()
-                .router_root()
-                .ok_or_else(|| io::Error::other("fleet enrollment requires a Router root"))?
-                .to_owned(),
             codex_home: config
                 .collaboration_codex_home()
                 .ok_or_else(|| io::Error::other("collaboration requires explicit Codex home"))?
@@ -129,17 +113,6 @@ impl CollaborationLifecycle {
         }
         if self.runtime.is_none() {
             let inputs_started_at = std::time::Instant::now();
-            let router_root = self.router_root.clone();
-            crate::enrollment_reset::resume_enrollment_reset(
-                &crate::router_collaboration_directory(&router_root),
-                &self.directory,
-            )
-            .await?;
-            let board_session = tokio::task::spawn_blocking(move || {
-                crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
-            })
-            .await
-            .map_err(io::Error::other)??;
             use std::os::unix::fs::DirBuilderExt;
             match std::fs::DirBuilder::new()
                 .mode(0o700)
@@ -160,11 +133,7 @@ impl CollaborationLifecycle {
             );
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
-                    enrollment_reset_directory: crate::router_collaboration_directory(
-                        &self.router_root,
-                    ),
                     collaboration_runtime: CollaborationRuntimeInputs {
-                        board_session,
                         directory: self.directory.clone(),
                         codex_home: self.codex_home.clone(),
                         backend_socket: self.backend_socket.clone(),

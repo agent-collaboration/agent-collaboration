@@ -63,12 +63,6 @@ pub fn router_collaboration_directory(root: &Path) -> PathBuf {
     root.join("agent-communication")
 }
 
-/// Returns the enrollment file read when this Router's Host starts.
-#[must_use]
-pub fn router_fleet_enrollment_file(root: &Path) -> PathBuf {
-    root.join("fleet/enrollment.json")
-}
-
 /// Validated host inputs with router-owned and Codex-owned paths kept separate.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HostConfig {

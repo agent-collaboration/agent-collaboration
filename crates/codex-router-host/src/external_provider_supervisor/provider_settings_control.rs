@@ -138,7 +138,12 @@ pub(super) async fn apply(
             kind: ProviderSettingsFailureKind::InvalidSetting,
             stage: Some(collaboration_protocol::ConversationOperationFailureStage::Validation),
             target: Some(request.target),
-            message: "setting value is not offered for this session".to_owned(),
+            message: if kind == provider_session_machines::ProviderSettingKind::Fast {
+                "fast is not offered for the current model"
+            } else {
+                "setting value is not offered for this session"
+            }
+            .to_owned(),
             setting: Some(request.setting),
             value: Some(request.value),
             advertised,

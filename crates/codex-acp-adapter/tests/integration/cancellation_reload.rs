@@ -149,7 +149,6 @@ async fn rejected_interrupt_stays_blocked_through_active_reload_and_clears_after
             .unwrap(),
             schemas: Arc::new(NativePayloadSchemas::from_bundle(&bundle).unwrap()),
             stored_sessions: Arc::new(EmptyCatalog),
-            approval_broker: std::sync::Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder: Arc::new(TestBindingHolder::default()),
             recorder: Arc::new(AcceptingConversationRecorder),
             retired: tokio_util::sync::CancellationToken::new(),

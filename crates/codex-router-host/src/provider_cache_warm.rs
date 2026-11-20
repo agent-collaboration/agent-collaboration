@@ -12,12 +12,11 @@ mod supervisor_submitter;
 
 pub(crate) use supervisor_submitter::SupervisorWarmPromptSubmitter;
 
-use crate::provider_settings_section::CacheWarmSetting;
+use crate::{external_provider_supervisor::WarmRun, provider_settings_section::CacheWarmSetting};
 use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
 use provider_session_machines::cache_warm_machine::{
     CacheWarm, CacheWarmEffect, CacheWarmEvent, CacheWarmMachine, WarmCadence,
 };
-use provider_session_machines::{SessionGeneration, session_owner::OwnerAddress};
 use router_clock::{ClockInstant, RuntimeClock};
 use session_event_model::{InputId, SessionEvent, SessionState};
 use state_machine_core::StateMachine;
@@ -40,12 +39,6 @@ pub(crate) const WARM_PROMPT_TEXT: &str = "Cache warm: reply ok";
 /// The warm prompt was not sent: the session is busy, held, uncertain or gone.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct WarmPromptRefused;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct WarmRun {
-    pub(crate) owner: OwnerAddress,
-    pub(crate) generation: SessionGeneration,
-}
 
 pub(crate) type WarmPromptFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), WarmPromptRefused>> + Send + 'a>>;

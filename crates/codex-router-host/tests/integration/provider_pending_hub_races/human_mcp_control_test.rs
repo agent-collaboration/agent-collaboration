@@ -130,7 +130,7 @@ async fn tool(
 }
 
 #[tokio::test]
-async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime_and_broker() -> TestResult {
+async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime() -> TestResult {
     // Arrange: the external ACP executable alone is controlled. All owning components are real.
     let root = tempfile::tempdir()?;
     let runtime = start_host(root.path()).await?;
@@ -219,41 +219,12 @@ async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime_and_broker() 
         "requestedBy":human,"approver":{"humanId":"independent-approver"},
         "message":{"kind":"humanUser","text":"request permission"},"timeoutSeconds":5});
 
-    // Act: the peer holds the prompt at a real permission callback before cancellation.
+    // Act: the peer holds the prompt before terminal publication before cancellation.
     let prompt = tokio::spawn(async move {
         tool(&prompt_http, &prompt_url, "conversation_prompt", arguments).await
     });
-    let (request_id, initial_events) = wait_for_pending(&client, &mut observer).await?;
-    let approvals = client.list_approvals_with_options(true).await?;
-    let approval = approvals
-        .approvals
-        .iter()
-        .find(|approval| approval.request_id == request_id)
-        .ok_or("pending approval missing")?;
-    let approval = serde_json::to_value(approval)?;
-    check_eq!(approval["requester"], json!(target));
-    check_eq!(approval["approver"], approver);
-
-    // The reported requester has no authority to decide the independent Approver's offer.
-    let wrong_role = tool(
-        &http,
-        &url,
-        "approval_decide",
-        json!({
-            "requestId":request_id,"actor":human,"optionId":"allow-once"
-        }),
-    )
-    .await?;
-    check_eq!(wrong_role["result"]["isError"], true, "{wrong_role}");
-    check_eq!(
-        wrong_role["result"]["structuredContent"]["serviceKind"],
-        "wrongActor",
-        "{wrong_role}"
-    );
-    check!(
-        !prompt.is_finished(),
-        "wrong-role decision settled the held prompt"
-    );
+    let initial_events = watch_turn(&mut observer, "turnStarted", Vec::new()).await?;
+    check!(!prompt.is_finished(), "fixture did not hold the prompt");
     let cancel_id = OperationId::generate();
     let cancelled = tool(&http, &url, "conversation_cancel", json!({
         "operationId":cancel_id,"targetOperationId":prompt_id,"target":target,
@@ -268,7 +239,7 @@ async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime_and_broker() 
     use tokio::io::AsyncWriteExt as _;
     release.write_all(b"c").await?;
     let events = watch_turn(&mut observer, "turnEnded", initial_events).await?;
-    assert_interaction_settles_before_turn_end(&events)?;
+    assert_no_interaction_events(&events)?;
     let prompted = tokio::time::timeout(Duration::from_secs(5), prompt).await???;
     check_eq!(prompted["result"]["isError"], false, "{prompted}");
     check_eq!(
@@ -363,7 +334,6 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
     let release = root.path().join("release");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(message_board::HumanId::try_from(
                 "fixture-operator".to_owned(),
             )?),
@@ -528,7 +498,7 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
 #[tokio::test]
 async fn failed_held_observation_still_closes_the_owned_provider() -> TestResult {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-    const FAILURE: &str = "deliberate observation failure after the real permission callback";
+    const FAILURE: &str = "deliberate observation failure with the owned provider held";
     let root = tempfile::tempdir()?;
     let runtime = start_host(root.path()).await?;
     let socket = root.path().join("exit.sock");
@@ -538,7 +508,7 @@ async fn failed_held_observation_still_closes_the_owned_provider() -> TestResult
         let (target, actor, approver, generation) = create_session(&client, root.path()).await?;
         let mut observer = HubEventFollow::new(&client, &target);
         let (_operation, _prompt) = prompt(&client, &target, &actor, &approver, &generation)?;
-        let _pending = wait_for_pending(&client, &mut observer).await?;
+        watch_turn(&mut observer, "turnStarted", Vec::new()).await?;
         // Retain a genuine peer connection and the temp root across finalization.
         witness = Some(tokio::net::UnixStream::connect(&socket).await?);
         Err(FAILURE.into())

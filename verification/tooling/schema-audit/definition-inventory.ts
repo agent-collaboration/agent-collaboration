@@ -12,9 +12,6 @@ import { rows as agentCollaboration2 } from "./definition-inventory/agent-collab
 import { rows as agentCollaboration } from "./definition-inventory/agent-collaboration.ts";
 import { rows as agentSessionInventory } from "./definition-inventory/agent-session-inventory.ts";
 import { rows as agentSessionTui } from "./definition-inventory/agent-session-tui.ts";
-import { rows as automationStorage } from "./definition-inventory/automation-storage.ts";
-import { rows as boardFleetSync } from "./definition-inventory/board-fleet-sync.ts";
-import { rows as boardSyncProtocol } from "./definition-inventory/board-sync-protocol.ts";
 import { rows as claudeCodePeerMessaging } from "./definition-inventory/claude-code-peer-messaging.ts";
 import { rows as codexAcpAdapter } from "./definition-inventory/codex-acp-adapter.ts";
 import { rows as codexNativeIntegration } from "./definition-inventory/codex-native-integration.ts";
@@ -26,7 +23,6 @@ import { rows as codexRouterHost2 } from "./definition-inventory/codex-router-ho
 import { rows as codexRouterHost } from "./definition-inventory/codex-router-host.ts";
 import { rows as codexRouterProxy } from "./definition-inventory/codex-router-proxy.ts";
 import { rows as codexRouterTestSupport } from "./definition-inventory/codex-router-test-support.ts";
-import { rows as collaborationApplicationTestSupport } from "./definition-inventory/collaboration-application-test-support.ts";
 import { rows as collaborationCentralConformance } from "./definition-inventory/collaboration-central-conformance.ts";
 import { rows as collaborationCentralCore } from "./definition-inventory/collaboration-central-core.ts";
 import { rows as collaborationClient } from "./definition-inventory/collaboration-client.ts";
@@ -41,9 +37,7 @@ import { rows as collaborationService2 } from "./definition-inventory/collaborat
 import { rows as collaborationService3 } from "./definition-inventory/collaboration-service-3.ts";
 import { rows as collaborationService } from "./definition-inventory/collaboration-service.ts";
 import { rows as fleetIdentityProtocol } from "./definition-inventory/fleet-identity-protocol.ts";
-import { rows as interactionStorage } from "./definition-inventory/interaction-storage.ts";
 import { rows as lifecycleObservation } from "./definition-inventory/lifecycle-observation.ts";
-import { rows as messageBoardStorage } from "./definition-inventory/message-board-storage.ts";
 import { rows as messageBoard2 } from "./definition-inventory/message-board-2.ts";
 import { rows as messageBoard } from "./definition-inventory/message-board.ts";
 import { rows as providersClaudeAcp } from "./definition-inventory/providers-claude-acp.ts";
@@ -58,9 +52,6 @@ export const DEFINITION_INVENTORY: readonly InventoryRow[] = [
   ...agentCollaboration,
   ...agentSessionInventory,
   ...agentSessionTui,
-  ...automationStorage,
-  ...boardFleetSync,
-  ...boardSyncProtocol,
   ...claudeCodePeerMessaging,
   ...codexAcpAdapter,
   ...codexNativeIntegration,
@@ -72,7 +63,6 @@ export const DEFINITION_INVENTORY: readonly InventoryRow[] = [
   ...codexRouterHost,
   ...codexRouterProxy,
   ...codexRouterTestSupport,
-  ...collaborationApplicationTestSupport,
   ...collaborationCentralConformance,
   ...collaborationCentralCore,
   ...collaborationClient,
@@ -87,9 +77,7 @@ export const DEFINITION_INVENTORY: readonly InventoryRow[] = [
   ...collaborationService3,
   ...collaborationService,
   ...fleetIdentityProtocol,
-  ...interactionStorage,
   ...lifecycleObservation,
-  ...messageBoardStorage,
   ...messageBoard,
   ...messageBoard2,
   ...providersClaudeAcp,

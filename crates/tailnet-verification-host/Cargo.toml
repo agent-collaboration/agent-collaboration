@@ -10,12 +10,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-board-fleet-sync = { version = "0.1.126", path = "../board-fleet-sync" }
-codex-native-integration.workspace = true
-codex-router-host.workspace = true
-collaboration-runtime = { version = "0.1.126", path = "../collaboration-runtime" }
-fleet-sync-protocol.workspace = true
-fleet-sync-session.workspace = true
 tokio = { workspace = true, features = ["io-std"] }
 chrono = { workspace = true, features = ["serde"] }
 fs2.workspace = true

@@ -224,7 +224,7 @@ async fn node_tap_acp_prompt_on_the_public_connection_becomes_codex_calls_update
     let transcript = CodexTranscript::default();
     let script = vec![
         Step::Request("initialize", json!({})),
-        Step::Receive,
+        Step::Request("initialized", Value::Null),
         Step::Request(
             "thread/resume",
             json!({"cwd":"/work","thread":{"id":"thread-a","cwd":"/work","status":{"type":"idle"},"turns":[]}}),
@@ -273,7 +273,6 @@ async fn node_tap_acp_prompt_on_the_public_connection_becomes_codex_calls_update
             .unwrap_or_else(|error| panic!("generation: {error}")),
             schemas: native_schemas(),
             stored_sessions: Arc::new(NoStoredSessions),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder: Arc::new(NoHeldBindings),
             recorder: Arc::new(
                 crate::conversation_operation_recorder::AcceptingConversationRecorder,

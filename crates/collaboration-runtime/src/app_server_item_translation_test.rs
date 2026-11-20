@@ -149,10 +149,7 @@ fn confirmed_compaction_promotes_same_item_id_without_duplicate_start_or_complet
     use collaboration_contracts::HubEvent;
     use session_event_model::{InputId, SessionEvent, StopReason, TurnOutcome};
     let session: message_board::SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"compact-session"})).expect("session");
-    let actor = message_board::Identity::Session {
-        session: session.clone(),
-    };
-    let mut forwarding = AppServerEventForwarding::new(actor, None);
+    let mut forwarding = AppServerEventForwarding::new();
     let provisional = item(
         "compact-tool",
         SessionItemKind::ToolCall {

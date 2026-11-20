@@ -8,6 +8,7 @@ use codex_acp_adapter::{
 };
 use collaboration_contracts::SessionCommandPort;
 use collaboration_contracts::SessionEventHub;
+use collaboration_protocol::UuidIdentity;
 use message_board::SessionEndpointRef;
 use std::{io, path::Path, sync::Arc};
 use tokio::{sync::Semaphore, task::JoinSet};
@@ -15,14 +16,13 @@ use tokio_util::sync::CancellationToken;
 
 pub struct AcpChannelListener {
     socket: PrivateSocketListener,
+    service_id: UuidIdentity,
     generations: NativeGenerationGate,
     stored_sessions: Arc<dyn AcpStoredSessions>,
-    approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
     holder: Arc<crate::UnmaterializedThreadHolder>,
     recorder: Arc<dyn codex_acp_adapter::ConversationOperationRecorder>,
     scratch_scopes: Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
     providers: Vec<ProviderRouteBackend>,
-    interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     permits: Arc<Semaphore>,
     #[cfg(test)]
     fail_accept: bool,
@@ -30,9 +30,9 @@ pub struct AcpChannelListener {
 impl AcpChannelListener {
     pub fn bind(
         path: &Path,
+        service_id: UuidIdentity,
         generations: NativeGenerationGate,
         stored_sessions: Arc<dyn AcpStoredSessions>,
-        approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
         holder: Arc<crate::UnmaterializedThreadHolder>,
         recorder: Arc<dyn codex_acp_adapter::ConversationOperationRecorder>,
         scratch_scopes: Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
@@ -40,14 +40,13 @@ impl AcpChannelListener {
         let _schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
         Ok(Self {
             socket: PrivateSocketListener::bind(path)?,
+            service_id,
             generations,
             stored_sessions,
-            approval_broker,
             holder,
             recorder,
             scratch_scopes,
             providers: Vec::new(),
-            interaction_broker: None,
             permits: Arc::new(Semaphore::new(32)),
             #[cfg(test)]
             fail_accept: false,
@@ -72,11 +71,6 @@ impl AcpChannelListener {
         });
         self
     }
-    #[must_use]
-    pub fn with_interaction_broker(mut self, broker: Arc<crate::ServiceInteractionBroker>) -> Self {
-        self.interaction_broker = Some(broker);
-        self
-    }
     pub async fn run(self, shutdown: CancellationToken) -> io::Result<()> {
         let mut tasks = JoinSet::new();
         // Connections stop on the listener's shutdown, or when it fails.
@@ -97,13 +91,12 @@ impl AcpChannelListener {
                     let admission = GateCodexAdmissionSource {
                         generations: self.generations.clone(),
                         stored_sessions: Arc::clone(&self.stored_sessions),
-                        approval_broker: Arc::clone(&self.approval_broker),
                         holder: Arc::clone(&self.holder),
                         recorder: Arc::clone(&self.recorder),
                         scratch_scopes: Arc::clone(&self.scratch_scopes),
                     };
                     let mut routes: Vec<Box<dyn AcpSessionRoute>> = vec![
-                        lazy_codex_session_route(Arc::new(admission)),
+                        lazy_codex_session_route(Arc::new(admission), self.service_id.clone()),
                     ];
                     routes.extend(self.providers.iter().map(|provider| {
                         let route = ProviderAcpSessionRoute::new(
@@ -111,9 +104,6 @@ impl AcpChannelListener {
                             Arc::clone(&provider.commands),
                             Arc::clone(&provider.events),
                         );
-                        let route = if let Some(broker) = &self.interaction_broker {
-                            route.with_interaction_broker(Arc::clone(broker))
-                        } else { route };
                         Box::new(route) as Box<dyn AcpSessionRoute>
                     }));
                     let stop = connections_stop.child_token();
@@ -144,7 +134,6 @@ struct ProviderRouteBackend {
 struct GateCodexAdmissionSource {
     generations: NativeGenerationGate,
     stored_sessions: Arc<dyn AcpStoredSessions>,
-    approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
     holder: Arc<crate::UnmaterializedThreadHolder>,
     recorder: Arc<dyn codex_acp_adapter::ConversationOperationRecorder>,
     scratch_scopes: Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
@@ -162,7 +151,6 @@ impl CodexAdmissionSource for GateCodexAdmissionSource {
             generation: admission.generation().clone(),
             schemas,
             stored_sessions: Arc::clone(&self.stored_sessions),
-            approval_broker: Arc::clone(&self.approval_broker),
             holder: Arc::clone(&self.holder)
                 as Arc<dyn codex_acp_adapter::UnmaterializedBindingStore>,
             recorder: Arc::clone(&self.recorder),
@@ -203,9 +191,12 @@ mod tests {
             .spawn(async move { retirement.cancelled().await });
         let mut listener = AcpChannelListener::bind(
             &root.join("acp.sock"),
+            "00000000-0000-4000-8000-000000000001"
+                .to_owned()
+                .try_into()
+                .unwrap(),
             gate.clone(),
             Arc::new(NativeStoredSessions::new(root.clone(), "fixture".into())),
-            Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder,
             Arc::new(crate::UnavailableConversationOperationRecorder),
             Arc::new(crate::OpenScratchScopes::new()),

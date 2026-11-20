@@ -11,7 +11,7 @@ async fn business_migration_upgrade_failure_rolls_back_both_real_owners_and_all_
             f.root
                 .path()
                 .join("central")
-                .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
+                .join(format!("{}.sqlite", f.caller.organization_id().as_str())),
             workspace_migrations::central_migrator as fn() -> sqlx::migrate::Migrator,
             // 0001-0004 plus the probe fixture this test build appends (core always
             // has test-support here); workspace_migrations_test.rs proves a

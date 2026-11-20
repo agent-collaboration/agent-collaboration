@@ -34,19 +34,19 @@ pub(crate) fn workspace_view(row: DirectoryWorkspace) -> Result<WorkspaceView, S
             .workspace_id
             .to_string()
             .try_into()
-            .map_err(|_| corrupt("workspaces.workspace_id"))?,
+            .map_err(|_| corrupt("directory_workspaces.workspace_id"))?,
         name: row
             .name
             .as_str()
             .to_owned()
             .try_into()
-            .map_err(|_| corrupt("workspaces.name"))?,
+            .map_err(|_| corrupt("directory_workspaces.name"))?,
         description: row
             .description
             .as_str()
             .to_owned()
             .try_into()
-            .map_err(|_| corrupt("workspaces.description"))?,
+            .map_err(|_| corrupt("directory_workspaces.description"))?,
         state: match row.state {
             WorkspaceState::Active => message_board::WorkspaceState::Active,
             WorkspaceState::Archived => message_board::WorkspaceState::Archived,
@@ -58,9 +58,9 @@ fn retained_result(
     encoded: &str,
     request: &CreateWorkspaceRequest,
 ) -> Result<OrganizationAdminResult, StoreFailure> {
-    let value: serde_json::Value = json(encoded, "request_log.answer")?;
+    let value: serde_json::Value = json(encoded, "runtime_request_log.answer")?;
     let answer: OrganizationAdminResult =
-        serde_json::from_value(value.clone()).map_err(|_| corrupt("request_log.answer"))?;
+        serde_json::from_value(value.clone()).map_err(|_| corrupt("runtime_request_log.answer"))?;
     match &answer {
         OrganizationAdminResult::Applied { workspace }
             if workspace.workspace_id.as_str() == request.operation_id.as_str()
@@ -77,7 +77,7 @@ fn retained_result(
         OrganizationAdminResult::Refused {
             reason: AdminRefusal::NameInUse,
         } => Ok(answer),
-        _ => Err(corrupt("request_log.answer")),
+        _ => Err(corrupt("runtime_request_log.answer")),
     }
 }
 
@@ -103,15 +103,19 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
             .host
-            .read(crate::workspace_request_log::lookup(&operation, &cutoff))
+            .read(crate::workspace_request_log::lookup(
+                crate::workspace_request_log::RequestLogStore::Organization,
+                &operation,
+                &cutoff,
+            ))
             .await?;
         if logged.rows.len() > 1 {
-            return Err(corrupt("request_log.request_id"));
+            return Err(corrupt("runtime_request_log.request_id"));
         }
         if let Some(row) = logged.rows.first() {
             let stored_actor: ActorIdentityId = string(&logged, row, "caller")?
                 .parse()
-                .map_err(|_| corrupt("request_log.caller"))?;
+                .map_err(|_| corrupt("runtime_request_log.caller"))?;
             let (result, retained) = if stored_actor != actor.actor
                 || string(&logged, row, "content_digest")? != person.intent_digest
             {
@@ -189,6 +193,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             }
         };
         statements.extend(crate::workspace_request_log::retain(
+            crate::workspace_request_log::RequestLogStore::Organization,
             &operation,
             &actor.actor,
             &person.intent_digest,

@@ -26,7 +26,7 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
         .expect("persisted installation peer");
     let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("service identity")
-        .with_installation_peer(peer)
+        .with_installation_peer(peer.clone())
         .expect("installation identity")
         .with_machine_identity(machine_identity)
         .expect("machine identity");
@@ -39,7 +39,7 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
     assert!(text_output.status.success());
     let text = String::from_utf8(text_output.stdout).expect("UTF-8 text whoami output");
     assert!(text.contains(&format!("machine: {SERVICE_ID} · Sunbook-Pro-M4")));
-    assert!(text.contains(&format!("peer: {peer}")));
+    assert!(text.contains(&format!("peer: {}", peer.as_str())));
 
     let json_output = run_whoami(root.path(), true)
         .await
@@ -48,7 +48,7 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
     let json: Value = serde_json::from_slice(&json_output.stdout).expect("JSON whoami output");
     assert_eq!(json["result"]["record"]["machineId"], SERVICE_ID);
     assert_eq!(json["result"]["record"]["machineLabel"], "Sunbook-Pro-M4");
-    assert_eq!(json["result"]["record"]["peerId"], peer.to_string());
+    assert_eq!(json["result"]["record"]["peerId"], peer.as_str());
 
     served.stop().await.expect("collaboration API stops");
 }
@@ -61,7 +61,7 @@ async fn whoami_refuses_an_installation_rpc_from_a_different_service_identity() 
     let peer = collaboration_runtime::load_installation_peer(root.path()).expect("owned peer");
     let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("identity")
-        .with_installation_peer(peer)
+        .with_installation_peer(peer.clone())
         .expect("peer identity");
     let served = ServedCollaborationApi::start(root.path(), (identity).build())
         .expect("served actual collaboration API");

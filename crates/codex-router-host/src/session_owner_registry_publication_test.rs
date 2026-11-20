@@ -52,7 +52,7 @@ async fn a_refused_closed_batch_rebases_the_real_hub_without_another_owner_comma
     let fixture = StoreFixture::new().await;
     let target = fixture.record_session("publication").await;
     let board_session: message_board::SessionRef =
-        target.clone().try_into().expect("board session");
+        collaboration_protocol::ProviderIdentity::session_to_board(&target).expect("board session");
     let registry = SessionOwnerRegistry::new(
         fixture.store.clone(),
         fixture.clock.clone(),

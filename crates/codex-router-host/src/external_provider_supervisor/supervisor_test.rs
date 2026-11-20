@@ -32,25 +32,15 @@ struct PreparedPromptFixture {
 fn prepared_prompt_request(fixture: PreparedPromptFixture) -> ProviderPromptContentsRequest {
     let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
         .expect("UUIDv7 push id");
-    let line = MessageText::try_from(
-        collaboration_protocol::render_push_line(&collaboration_protocol::PushLineInput {
-            link: collaboration_protocol::RouterLink::new(
-                collaboration_protocol::MachineId::from(fixture.target.endpoint.service_id.clone()),
-                push_id,
-            ),
-            machine_label: collaboration_protocol::MachineLabel::try_from(
-                "fixture-host".to_owned(),
-            )
-            .expect("machine label"),
-            origin: collaboration_protocol::PushOrigin::Session(fixture.target.clone()),
-            header_facts: collaboration_protocol::PushHeaderFacts::DirectMessage {
-                sender_display_name: None,
-            },
-            body: Some(fixture.preview),
-        })
-        .expect("prepared push line"),
-    )
-    .expect("valid push text");
+    let link = collaboration_protocol::RouterLink::new(
+        collaboration_protocol::MachineId::from(fixture.target.endpoint.service_id.clone()),
+        push_id,
+    );
+    let line = MessageText::try_from(format!(
+        "✉️ Fixture agent @fixture-host → you · \"{}\" · {link}",
+        fixture.preview,
+    ))
+    .expect("valid prepared push");
     ProviderPromptContentsRequest::from_prepared_push(
         fixture.operation_id,
         fixture.input_id,

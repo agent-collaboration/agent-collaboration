@@ -28,7 +28,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 && stamp.organization_id() != &self.organization
             {
                 return Err(crate::workspace_decode_error::corrupt(
-                    "organization_identity.id",
+                    "signin_organization_identity.id",
                 ));
             }
             let verified = match &stored {

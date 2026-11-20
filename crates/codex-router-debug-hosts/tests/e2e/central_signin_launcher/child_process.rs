@@ -35,6 +35,8 @@ pub(super) fn launcher_command(
         .arg(signed::AUDIENCE)
         .arg("--admin-audience")
         .arg(signed::ADMIN_AUDIENCE)
+        .arg("--machine-audience")
+        .arg(signed::MACHINE_AUDIENCE)
         .arg("--public-origin")
         .arg(signed::PUBLIC_ORIGIN)
         .arg("--jwks-url")

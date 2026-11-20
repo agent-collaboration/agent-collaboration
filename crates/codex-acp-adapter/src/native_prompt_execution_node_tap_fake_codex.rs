@@ -20,12 +20,10 @@ pub(super) const MANAGED_CODEX_CONNECTION: &str = "managed-codex";
 
 /// One scripted step of the fake Codex app-server.
 pub(super) enum Step {
-    /// Receive one request, check its method, answer with this result.
+    /// Check the method of an inbound call, and answer if it has an ID.
     Request(&'static str, Value),
     /// Send one frame (a notification or a server request).
     Send(Value),
-    /// Receive one frame and answer nothing (a reply to a server request).
-    Receive,
 }
 
 /// Who sent one frame on the Codex socket.
@@ -74,7 +72,7 @@ pub(super) fn spawn_fake_codex(
                         .await
                         .unwrap_or_else(|error| panic!("send: {error}"));
                 }
-                Step::Request(_, _) | Step::Receive => {
+                Step::Request(method, result) => {
                     let frame = socket
                         .next()
                         .await
@@ -85,9 +83,9 @@ pub(super) fn spawn_fake_codex(
                     )
                     .unwrap_or_else(|error| panic!("JSON: {error}"));
                     transcript.push(FrameSender::Router, value.clone());
-                    if let Step::Request(method, result) = step {
-                        assert_eq!(value["method"], method);
-                        let reply = json!({"id":value["id"],"result":result});
+                    assert_eq!(value["method"], method);
+                    if let Some(id) = value.get("id") {
+                        let reply = json!({"id":id,"result":result});
                         transcript.push(FrameSender::FakeCodex, reply.clone());
                         socket
                             .send(Message::Text(reply.to_string().into()))

@@ -20,10 +20,6 @@ pub enum DeliveryContractError {
     InvalidEvidence,
     #[error("delivery client operation failed")]
     ClientOperation,
-    #[error("prepared target is owned by another schedule")]
-    PreparationOwnershipConflict,
-    #[error("schedule changed during preparation")]
-    PreparationChangeConflict,
 }
 
 /// Layer-0 contract introduced before all existing callers move to prepared pushes.
@@ -200,7 +196,4 @@ pub trait SessionDeliveryRoute: Send + Sync {
         &self,
         context: AttemptReconciliationContext,
     ) -> DeliveryFuture<'_, AttemptReconciliation>;
-    fn scheduled_runs(&self) -> Option<Arc<dyn crate::ScheduledRunRoute>> {
-        None
-    }
 }

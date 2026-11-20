@@ -9,10 +9,10 @@
 )]
 
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    PermissionModeReason, PermissionModeReport, ProviderBehavior, ProviderPersistenceTarget,
-    RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    HistoryReplayFuture, InteractionFuture, InteractionPort, PermissionModeReason,
+    PermissionModeReport, ProviderBehavior, ProviderPersistenceTarget, RefusedApprovalOffer,
+    RequestedProviderSettings, SessionEventSink, acp_owner_fixture::FixtureClient,
 };
 use acp_provider_adapters::{ClaudeAcpBehavior, ClaudeSkillSource, CursorAcpBehavior};
 use provider_session_machines::ProviderSettingKind;
@@ -81,9 +81,6 @@ impl InteractionPort for RecordingApprovals {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct NoopEventSink;
@@ -109,7 +106,7 @@ struct Fixture {
     scratch_root: PathBuf,
     receipt: PathBuf,
     approvals: Arc<RecordingApprovals>,
-    client: AgentSessionClient<RecordingApprovals>,
+    client: FixtureClient<RecordingApprovals>,
 }
 
 impl Fixture {
@@ -138,7 +135,7 @@ impl Fixture {
             asked: Mutex::new(Vec::new()),
             answer,
         });
-        let client = AgentSessionClient::initialize(
+        let client = FixtureClient::initialize(
             ExternalProviderLaunch {
                 executable: PathBuf::from("node"),
                 arguments,

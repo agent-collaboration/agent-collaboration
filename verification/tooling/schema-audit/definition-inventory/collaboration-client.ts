@@ -14,19 +14,6 @@ const toolNames = (file: string, line: number, names: string): InventoryRow => (
   disposition: "duplicate",
   fixedBy: "D1",
 });
-/** A family call that hand-matches the -32050 rejection code and decodes its data as the family failure. */
-const rejectionDecode = (file: string, line: number, failure: string): InventoryRow => ({
-  file: `${R}${file}`,
-  line,
-  owner: "mcp",
-  kind: "content-parser",
-  defines: `tool error with literal code -32050 decoded from its data as ${failure}; the overload body rebuilt through admission_overload`,
-  usedBy: [CLIENT],
-  duplicateGroup: "mcp-tool-error-bodies",
-  disposition: "duplicate",
-  fixedBy: "D1",
-});
-
 export const rows: InventoryRow[] = [
   {
     file: `${R}acp_conversation.rs`,
@@ -248,60 +235,6 @@ export const rows: InventoryRow[] = [
     disposition: "duplicate",
     fixedBy: "D1",
   },
-  toolNames(
-    "automation_configuration_operations.rs",
-    19,
-    "automation_configure, automation_status",
-  ),
-  rejectionDecode("automation_configuration_operations.rs", 36, "ConfigurationFailure"),
-  toolNames(
-    "automation_inspection_operations.rs",
-    24,
-    "run_reconcile, operation_show, automation_events, instruction_list, ... (12)",
-  ),
-  rejectionDecode("automation_inspection_operations.rs", 146, "AutomationInspectionFailure"),
-  toolNames(
-    "board_fleet_calls.rs",
-    19,
-    "project_show, adr_create, workspace_create, board_create, project_claim, ... (23)",
-  ),
-  rejectionDecode(
-    "board_operations.rs",
-    50,
-    "BoardError (board_mutation_call; L105 board_call_with_timeout repeats it)",
-  ),
-  toolNames(
-    "board_project_calls.rs",
-    17,
-    "workstream_create, task_create, subtask_add, role_grant, fact_record, feed_read, ... (43)",
-  ),
-  toolNames(
-    "board_read_calls.rs",
-    16,
-    "request_effects, discovery_search, post_search, post_list, inbox_fetch, ... (11 sites)",
-  ),
-  {
-    file: `${R}board_repository.rs`,
-    line: 77,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "the client's verified service id (UuidIdentity) converted by string to a message_board ServiceId for RepositoryRef::Local (L77-L85): a service identity, not a SessionRef",
-    usedBy: [CLIENT],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  toolNames(
-    "board_thread_calls.rs",
-    24,
-    "thread_renew, thread_post, thread_create, thread_subscribe, thread_wait, ... (17)",
-  ),
-  rejectionDecode("board_thread_calls.rs", 176, "BoardError (thread_wait)"),
-  toolNames(
-    "board_view_calls.rs",
-    12,
-    "view_work, view_card, view_owner, view_lead_load, view_session_context",
-  ),
   {
     file: `${R}collaboration_client.rs`,
     line: 50,
@@ -328,7 +261,7 @@ export const rows: InventoryRow[] = [
   toolNames(
     "collaboration_client.rs",
     204,
-    "sessions_list, session_inspect, turn_interrupt, approval_decide, journal_read, installation_show, ... (15 sites)",
+    "sessions_list, session_inspect, turn_interrupt, journal_read, installation_show, ...",
   ),
   {
     file: `${R}collaboration_client.rs`,
@@ -510,97 +443,6 @@ export const rows: InventoryRow[] = [
     disposition: "duplicate",
     fixedBy: "D2",
   },
-  toolNames(
-    "instruction_operations.rs",
-    21,
-    "instruction_create, instruction_update, instruction_show",
-  ),
-  rejectionDecode("instruction_operations.rs", 45, "InstructionFailure"),
-  {
-    file: `${R}message_operation.rs`,
-    line: 15,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MessageSendRequest and MessageReplyRequest L27 (schemars): public copies of SessionMessageSendParams and SessionMessageReplyParams, mapped by hand L140, L160",
-    usedBy: [{ part: "N11" }, { crate: "agent-collaboration" }],
-    duplicateGroup: "message-request-copies",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: `${R}message_operation.rs`,
-    line: 95,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "PublicMessageContent copies MessageContent without its Router variant; TryFrom L105 refuses Router, From L118",
-    usedBy: [{ part: "N11" }, { crate: "agent-collaboration" }],
-    duplicateGroup: "public-content-copies",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  toolNames("message_operation.rs", 191, "router_show, message_inbox L208, message_history L225"),
-  {
-    file: `${R}message_operation.rs`,
-    line: 232,
-    owner: "mcp",
-    kind: "content-parser",
-    defines:
-      "is_reply_pre_dispatch_rejection: failure data kind strings wrongService, unavailable, notFound, notPermitted, notDirectMessage, ownerReplyUnsupported, invalidField, mailboxFull, tooOld",
-    usedBy: [CLIENT],
-    duplicateGroup: "mcp-tool-error-bodies",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  toolNames("message_submission.rs", 46, "message_reply, message_send L88"),
-  {
-    file: `${R}message_submission.rs`,
-    line: 85,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "SessionMessageSendParams re-encoded through PublicMessageContent into MessageSendRequest as tool arguments (L85-L96)",
-    usedBy: [CLIENT],
-    duplicateGroup: "message-request-copies",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: `${R}message_submission.rs`,
-    line: 128,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "RouterLink rebuilt from the service id (as MachineId) and push id with the shared RouterLink codec and compared to the receipt link string; client_user_message_id compared to the push id as strings L182: a consistency check, not a SessionRef conversion or a second link codec",
-    usedBy: [CLIENT],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${R}message_submission.rs`,
-    line: 141,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "hand table pairing SessionReachability with DeliveryClientReceipt and MessageDelivery with DeliveryOutcome and NativeSendAcceptance (L141-L212)",
-    usedBy: [CLIENT],
-    duplicateGroup: "delivery-outcome-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: `${R}message_submission.rs`,
-    line: 223,
-    owner: "mcp",
-    kind: "content-parser",
-    defines:
-      "delivery_receipt: a tool failure carrying pushId and receipt has mcpResult, kind, message, effect removed and is read as the receipt",
-    usedBy: [CLIENT],
-    duplicateGroup: "mcp-tool-error-bodies",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
   {
     file: `${R}operation_error.rs`,
     line: 84,
@@ -699,25 +541,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   toolNames("provider_session_observation.rs", 345, "events_observe"),
-  toolNames("run_operations.rs", 13, "run_show, run_summary_retry, run_summary_skip"),
-  rejectionDecode("run_operations.rs", 37, "RunFailure"),
-  {
-    file: `${R}schedule_operations.rs`,
-    line: 76,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "operationId read from the request JSON by hand and from_value decoded as the typed OperationId for the frame-limit failure (an operation identity, not a SessionRef)",
-    usedBy: [CLIENT],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  toolNames(
-    "schedule_operations.rs",
-    19,
-    "schedule_import, schedule_create, schedule_update, schedule_prepare, ... (8)",
-  ),
-  rejectionDecode("schedule_operations.rs", 87, "ScheduleFailure"),
   {
     file: `${R}session_catalog/history.rs`,
     line: 162,
@@ -738,47 +561,6 @@ export const rows: InventoryRow[] = [
       "StoredSessionRecord: a hand stored-session record serialized for CLI output, beside the protocol session list rows",
     usedBy: [{ crate: "agent-collaboration" }],
     duplicateGroup: "hand-session-records",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  toolNames(
-    "wakeup_operations.rs",
-    17,
-    "wake_send, wake_show, wake_pause, wake_resume, wake_cancel, delivery_show, wake_list",
-  ),
-  rejectionDecode("wakeup_operations.rs", 65, "WakeFailure"),
-  {
-    file: `${R}wakeup_waiting.rs`,
-    line: 35,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "WakeWaitFailure with WakeWaitFailureKind L16 and WakeWaitEffects L49: the client's own wait-for-first-fire CLI failure (string stage, nextAction, derived firstFire, L76-L160), filled from tool failures after removing mcpResult L340-L343; not a copy of the MCP WakeFailure DTO",
-    usedBy: [CLIENT, { crate: "agent-collaboration" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  toolNames("wakeup_waiting.rs", 252, "wake_wait_until_first_fire"),
-  {
-    file: `${R}wakeup_waiting.rs`,
-    line: 303,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "WakeState mapped to WakeWaitOutcome L303 and WakeFailureReason to WakeWaitError L317; protocol wakeup_subscription_contract.rs:141 maps the different WakeChange contract, so no second copy of this mapping",
-    usedBy: [CLIENT],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${R}wakeup_waiting.rs`,
-    line: 370,
-    owner: "router-vocabulary",
-    kind: "json-in-string",
-    defines:
-      "wake event cursor string parsed as a JSON tuple [version 1, service, automation-events, sequence, at]: an independent copy of the opaque event cursor codec collaboration-service automation_event_cursor.rs:4 owns (the token encoding itself is legitimate; this second decoder is the duplicate)",
-    usedBy: [CLIENT],
-    duplicateGroup: "automation-event-cursor",
     disposition: "duplicate",
     fixedBy: "D2",
   },

@@ -1,5 +1,4 @@
 //! Projects shared provider Session events onto one ACP client connection.
-use crate::pending_snapshot_interactions::pending_snapshot_requests;
 use crate::provider_acp_session_route::failure;
 use crate::provider_acp_session_route::response;
 use collaboration_contracts::SessionEventHub;
@@ -7,17 +6,14 @@ use message_board::SessionRef;
 use serde_json::{Value, json};
 use session_event_model::session_profile_codec::{ProfileState, ProfileTurn, StateNotification};
 use session_event_model::{
-    CapabilityReport, PendingInteraction, SessionEvent, SessionItemKind, SessionState, StopReason,
-    ToolCallStatus, TurnLostReason, TurnOutcome,
+    CapabilityReport, SessionEvent, SessionItemKind, SessionState, StopReason, ToolCallStatus,
+    TurnLostReason, TurnOutcome,
 };
 use std::{
     collections::{BTreeSet, HashMap},
     sync::Arc,
 };
-use tokio::{
-    sync::{mpsc, watch},
-    task::JoinSet,
-};
+use tokio::{sync::watch, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 fn capabilities_from_snapshot(
@@ -196,7 +192,6 @@ pub(crate) struct ProviderSessionObservers {
     events: Arc<dyn SessionEventHub>,
     output: codex_acp_adapter::AcpOutputSender,
     supports_state: bool,
-    interaction_sender: mpsc::Sender<(SessionRef, PendingInteraction)>,
     pub(crate) tasks: JoinSet<()>,
     attached: BTreeSet<SessionRef>,
     pub(crate) observed_turns: HashMap<SessionRef, watch::Receiver<Option<String>>>,
@@ -208,13 +203,11 @@ impl ProviderSessionObservers {
         events: Arc<dyn SessionEventHub>,
         output: codex_acp_adapter::AcpOutputSender,
         supports_state: bool,
-        interaction_sender: mpsc::Sender<(SessionRef, PendingInteraction)>,
     ) -> Self {
         Self {
             events,
             output,
             supports_state,
-            interaction_sender,
             tasks: JoinSet::new(),
             attached: BTreeSet::new(),
             observed_turns: HashMap::new(),
@@ -237,7 +230,6 @@ impl ProviderSessionObservers {
         }
         let attachment = self.events.attach(session.clone()).await.map_err(|_| ())?;
         let report = capabilities_from_snapshot(&attachment.snapshot).ok_or(())?;
-        let pending_requests = pending_snapshot_requests(&attachment.snapshot);
         if self.attached.insert(session.clone()) {
             let (turn_sender, turn_receiver) = watch::channel(None);
             self.observed_turns.insert(session.clone(), turn_receiver);
@@ -246,16 +238,6 @@ impl ProviderSessionObservers {
                 .insert(session.clone(), cancellation.clone());
             let mut item_text = HashMap::new();
             let mut active_turn = None;
-            for event in &attachment.snapshot {
-                if let SessionEvent::InteractionRequested { interaction } = &event.event
-                    && pending_requests.contains(interaction.request_id())
-                {
-                    self.interaction_sender
-                        .send((session.clone(), interaction.clone()))
-                        .await
-                        .map_err(|_| ())?;
-                }
-            }
             if replay_history {
                 for event in &attachment.snapshot {
                     if let Some(notification) = event_notification(
@@ -273,7 +255,6 @@ impl ProviderSessionObservers {
             let output = self.output.clone();
             let events = Arc::clone(&self.events);
             let supports_state = self.supports_state;
-            let interaction_sender = self.interaction_sender.clone();
             self.tasks.spawn(async move {
                 loop {
                     let received = tokio::select! {
@@ -299,18 +280,7 @@ impl ProviderSessionObservers {
                         };
                         item_text.clear();
                         active_turn = None;
-                        let pending_requests = pending_snapshot_requests(&replacement.snapshot);
                         for historical in &replacement.snapshot {
-                            if let SessionEvent::InteractionRequested { interaction } =
-                                &historical.event
-                                && pending_requests.contains(interaction.request_id())
-                                && interaction_sender
-                                    .send((session.clone(), interaction.clone()))
-                                    .await
-                                    .is_err()
-                            {
-                                return;
-                            }
                             if let Some(notification) = event_notification(
                                 &historical.event,
                                 &session,
@@ -325,14 +295,6 @@ impl ProviderSessionObservers {
                         receiver = replacement.receiver;
                         continue;
                     };
-                    if let SessionEvent::InteractionRequested { interaction } = &event.event
-                        && interaction_sender
-                            .send((session.clone(), interaction.clone()))
-                            .await
-                            .is_err()
-                    {
-                        break;
-                    }
                     if let Some(notification) = event_notification(
                         &event.event,
                         &session,

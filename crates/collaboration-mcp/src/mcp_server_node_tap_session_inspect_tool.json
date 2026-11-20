@@ -286,7 +286,7 @@
             ]
           },
           {
-            "description": "The broker holds no access route for this thread, so the app-server\ndefault governs its access. Threads created before routes were recorded\nstill resume; their access is inherited rather than Router-selected.",
+            "description": "The Router has no recorded access route for this thread, so the\napp-server default governs its access. Threads created before routes were recorded\nstill resume; their access is inherited rather than Router-selected.",
             "type": "string",
             "const": "noRecordedAccessRoute"
           }

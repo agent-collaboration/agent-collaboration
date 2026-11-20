@@ -60,7 +60,7 @@ fn installation_peer_is_stable_uuidv7_and_preserves_the_existing_service_file() 
         load_installation_peer(directory.path()).expect("reopened peer"),
         first
     );
-    assert_eq!(first.to_string().as_bytes()[14], b'7');
+    assert_eq!(first.as_str().as_bytes()[14], b'7');
     assert_eq!(String::from(service.clone()).as_bytes()[14], b'4');
     assert_eq!(
         load_service_identity(directory.path()).expect("same service"),
@@ -144,17 +144,17 @@ fn configured_service_identity_cannot_replace_its_installation_peer() {
         "00000000-0000-4000-8000-000000000002",
     )
     .expect("query identity")
-    .with_installation_peer(first)
+    .with_installation_peer(first.clone())
     .expect("configured installation");
-    assert_eq!(identity.installation_peer(), Some(first));
+    assert_eq!(identity.installation_peer(), Some(first.clone()));
     assert!(identity.clone().with_installation_peer(second).is_err());
     assert_eq!(
         identity
             .clone()
-            .with_installation_peer(first)
+            .with_installation_peer(first.clone())
             .expect("same identity replay")
             .installation_peer(),
-        Some(first)
+        Some(first.clone())
     );
     assert_eq!(identity.installation_peer(), Some(first));
 }

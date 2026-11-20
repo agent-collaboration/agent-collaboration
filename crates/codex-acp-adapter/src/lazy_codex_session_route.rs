@@ -4,6 +4,7 @@ use crate::{
     AcpConnectionContext, AcpConnectionInputs, AcpOutputSender, AcpRouteFuture, AcpRouterChannels,
     AcpSessionRoute, bounded_acp_output,
 };
+use collaboration_protocol::UuidIdentity;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -20,11 +21,16 @@ pub trait CodexAdmissionSource: Send + Sync {
 
 pub fn lazy_codex_session_route(
     admission: Arc<dyn CodexAdmissionSource>,
+    service_id: UuidIdentity,
 ) -> Box<dyn AcpSessionRoute> {
-    Box::new(LazyCodexSessionRoute { admission })
+    Box::new(LazyCodexSessionRoute {
+        admission,
+        service_id,
+    })
 }
 
 struct LazyCodexSessionRoute {
+    service_id: UuidIdentity,
     admission: Arc<dyn CodexAdmissionSource>,
 }
 
@@ -38,7 +44,11 @@ impl AcpSessionRoute for LazyCodexSessionRoute {
         router: AcpRouterChannels,
         _context: AcpConnectionContext,
     ) -> AcpRouteFuture {
-        Box::pin(serve_lazy_codex_sessions(router, self.admission))
+        Box::pin(serve_lazy_codex_sessions(
+            router,
+            self.admission,
+            self.service_id,
+        ))
     }
 }
 
@@ -84,6 +94,7 @@ async fn retire_active_generation(
 async fn serve_lazy_codex_sessions(
     mut router: AcpRouterChannels,
     admission: Arc<dyn CodexAdmissionSource>,
+    service_id: UuidIdentity,
 ) -> io::Result<()> {
     let (event_sender, mut event_receiver) = mpsc::channel::<GenerationEvent>(1024);
     let mut active: Option<ActiveGeneration> = None;
@@ -141,8 +152,9 @@ async fn serve_lazy_codex_sessions(
                             let (output, mut output_receiver) = bounded_acp_output(closed.clone());
                             let inner = AcpRouterChannels { input: input_receiver, output, closed: closed.clone() };
                             let sender = event_sender.clone();
+                            let local_service = service_id.clone();
                             let task = tokio::spawn(async move {
-                                let run = route_codex_sessions(inner, inputs);
+                                let run = route_codex_sessions(inner, inputs, Some(local_service));
                                 let forward = async {
                                     while let Some(frame) = output_receiver.recv().await {
                                         if sender.send(GenerationEvent::Frame { epoch, frame: (*frame).clone() }).await.is_err() { break; }

@@ -194,6 +194,19 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
             responder.respond(json!({"outcome":{"outcome":"cancelled"}}))?;
             return Ok(Handled::Yes);
         };
+        let port = Arc::clone(&self.interaction_port);
+        if let Some(refusal) = port.managed_refusal() {
+            let response_guard = context
+                .responses
+                .track("cursor/ask_question", responder.id());
+            connection.spawn(async move {
+                let queued = responder.respond(refusal.acp_question());
+                drop(response_guard);
+                context.cancel_after_refusal(port, refusal).await;
+                queued
+            })?;
+            return Ok(Handled::Yes);
+        }
         let canonical = match Self::request_from_cursor(&session_id, responder.id(), cursor) {
             Ok(canonical) => canonical,
             Err(error) => {
@@ -212,7 +225,6 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
                 | QuestionField::MultiChoice { field_id, .. } => field_id.clone(),
             })
             .collect::<Vec<_>>();
-        let port = Arc::clone(&self.interaction_port);
         let request_cancellation = responder.cancellation();
         let response_guard = context
             .responses

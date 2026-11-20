@@ -1,5 +1,9 @@
 //! ACP frames submitted through the session owner's ordered writer.
 
+pub mod owner_session_open;
+pub mod owner_session_setting;
+pub mod owner_session_stream;
+
 use crate::acp_transport::{
     AcpTransport, CallbackKind, CallbackResolution, OrderedOutput, SlotEvidence, TransportRefusal,
     TransportRun,

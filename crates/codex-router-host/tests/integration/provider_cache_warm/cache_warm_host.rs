@@ -35,8 +35,9 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::host_clock_control::{self, HostClockControl};
 use crate::provider_conversation_submission::{submit_provider_create, submit_provider_load};
+use router_clock::{ManualClock, RuntimeClock as _};
+use std::sync::Arc;
 
 /// The text of every warm prompt the Host sends.
 pub(super) const WARM_PROMPT: &str = "Cache warm: reply ok";
@@ -167,7 +168,7 @@ pub(super) struct CacheWarmHost {
     root: tempfile::TempDir,
     pub(super) receipt: PathBuf,
     runtime: CollaborationRuntime,
-    clock: HostClockControl,
+    clock: Arc<ManualClock>,
     client: CollaborationClient,
     endpoint: EndpointRef,
     owner: ProviderIdentity,
@@ -193,8 +194,7 @@ impl CacheWarmHost {
             receipt.display().to_string(),
         ];
         arguments.extend(behaviours.iter().map(|behaviour| (*behaviour).to_owned()));
-        let clock_listener =
-            host_clock_control::prepare(root.path()).expect("Host clock control input");
+        let clock = Arc::new(ManualClock::new(chrono::DateTime::UNIX_EPOCH));
         let mut binding = ExternalProviderLaunchBinding::claude(
             node_test_fixture::node_executable().expect("Node"),
             arguments,
@@ -206,25 +206,24 @@ impl CacheWarmHost {
             &mut binding.launch.environment,
         )
         .expect("declare test-owned global Claude executable");
-        let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
-            CollaborationRuntimeInputs {
-                board_session: None,
-                directory: root.path().to_owned(),
-                codex_home: root.path().to_owned(),
-                backend_socket: root.path().join("backend.sock"),
-                mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-                native_schema: None,
-                peer_registry_directory: None,
-                remote_control_server_name: None,
-                owner_human_id: None,
-            },
-            vec![ExternalProviderStartup::Launch(binding)],
-        ))
+        let runtime = Box::pin(
+            CollaborationRuntime::runtime_test_start_with_provider_clock(
+                CollaborationRuntimeInputs {
+                    directory: root.path().to_owned(),
+                    codex_home: root.path().to_owned(),
+                    backend_socket: root.path().join("backend.sock"),
+                    mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+                    native_schema: None,
+                    peer_registry_directory: None,
+                    remote_control_server_name: None,
+                    owner_human_id: None,
+                },
+                vec![ExternalProviderStartup::Launch(binding)],
+                clock.clone(),
+            ),
+        )
         .await
         .expect("Host starts through startup composition");
-        let clock = HostClockControl::connected(clock_listener)
-            .await
-            .expect("Host clock control");
         let client = CollaborationClient::connect(root.path(), "cache-warm", "1")
             .await
             .expect("collaboration API client");
@@ -261,9 +260,8 @@ impl CacheWarmHost {
         }
     }
 
-    /// Moves the Host's one clock; the Host acknowledges the step.
-    pub(super) async fn advance(&mut self, by: Duration) {
-        self.clock.advance(by).await.expect("Host clock step");
+    pub(super) fn advance(&self, by: Duration) {
+        self.clock.advance(by).expect("Host clock step");
     }
 
     /// A session's warm timer was armed at the current instant: a sleep 55
@@ -271,12 +269,12 @@ impl CacheWarmHost {
     pub(super) async fn until_warm_timer_armed(&self) {
         // Says what a timed-out case was waiting for.
         eprintln!("waiting for a warm timer armed at the current instant");
-        while !self
-            .runtime
-            .runtime_test_sleep_was_checked(FIFTY_FIVE_MINUTES)
-        {
-            tokio::task::yield_now().await;
-        }
+        let deadline = self
+            .clock
+            .monotonic_now()
+            .checked_add(FIFTY_FIVE_MINUTES)
+            .expect("cache warm deadline");
+        self.clock.not_due_check_now(deadline).await;
     }
 
     pub(super) async fn until_warm_prompts_to(&self, session: &SessionRef, expected: usize) {
@@ -487,7 +485,7 @@ impl CacheWarmHost {
 pub(super) struct StoppedCacheWarmHost {
     _root: tempfile::TempDir,
     pub(super) receipt: PathBuf,
-    clock: HostClockControl,
+    clock: Arc<ManualClock>,
     stopped: Result<(), String>,
 }
 
@@ -496,8 +494,12 @@ impl StoppedCacheWarmHost {
         assert!(self.stopped.is_ok(), "Host shutdown: {:?}", self.stopped);
     }
 
-    /// Tries to move the stopped Host's clock.
-    pub(super) async fn advance(&mut self, by: Duration) -> std::io::Result<()> {
-        self.clock.advance(by).await
+    pub(super) fn advance_after_stop(&self, by: Duration) {
+        assert_eq!(
+            Arc::strong_count(&self.clock),
+            1,
+            "the stopped Host released its clock"
+        );
+        self.clock.advance(by).expect("advance after Host shutdown");
     }
 }

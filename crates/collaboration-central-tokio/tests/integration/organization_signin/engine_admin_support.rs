@@ -46,15 +46,7 @@ impl EngineOrg {
         let f = Fixture::new().await.unwrap();
         f.ready().await.unwrap();
         f.seed_machine().await.unwrap();
-        let caller = WorkspaceCaller {
-            organization_id: org(A).unwrap(),
-            caller: m::Caller::Session(m::SessionAddress {
-                machine_id: MACHINE.to_owned().try_into().unwrap(),
-                endpoint: "codex-local".to_owned().try_into().unwrap(),
-                session_id: "engine-admin".to_owned().try_into().unwrap(),
-            }),
-            credential_hash: "signin-fixture-hash".to_owned(),
-        };
+        let caller = f.machine_caller("engine-admin").await.unwrap();
         let mut engine = Self {
             f,
             caller,
@@ -79,10 +71,10 @@ impl EngineOrg {
             .f
             .apply(
                 A,
-                "UPDATE machines SET allowed_workspaces=? WHERE machine_id=?",
+                "UPDATE login_machines SET allowed_workspaces=? WHERE machine_id=?",
                 vec![
                     text(serde_json::to_string(&vec![engine.workspace.clone()]).unwrap()),
-                    text(MACHINE),
+                    text(INSTALLATION),
                 ],
             )
             .await
@@ -132,10 +124,11 @@ impl EngineOrg {
         workspace: Option<m::WorkspaceId>,
         operation: m::WorkspaceOperation,
     ) -> m::WorkspaceReply {
+        let caller = self.f.machine_caller("engine-admin").await.unwrap();
         self.f
             .host
             .request(
-                &self.caller,
+                &caller,
                 m::WorkspaceRequest {
                     request_id: operation
                         .is_write()
@@ -161,6 +154,7 @@ impl EngineOrg {
         let m::ItemRef::Area(area_id) = self
             .write(m::WorkspaceOperation::CreateArea {
                 name: format!("Area {}", self.bump()).try_into().unwrap(),
+                description: "Test description".to_owned().try_into().unwrap(),
             })
             .await
         else {
@@ -170,6 +164,8 @@ impl EngineOrg {
             .write(m::WorkspaceOperation::CreateThread {
                 area_id,
                 title: "Engine thread".to_owned().try_into().unwrap(),
+                body: "First post".to_owned().try_into().unwrap(),
+                addressees: vec![],
             })
             .await
         else {
@@ -184,11 +180,7 @@ impl EngineOrg {
     }
     /// Joins a second session as observer and returns its actor identity.
     pub async fn observer(&self, thread: &m::ThreadId) -> m::ActorIdentityId {
-        let mut observer = self.caller.clone();
-        let m::Caller::Session(address) = &mut observer.caller else {
-            panic!("session caller")
-        };
-        address.session_id = "engine-observer".to_owned().try_into().unwrap();
+        let observer = self.f.machine_caller("engine-observer").await.unwrap();
         let joined = self
             .f
             .host
@@ -211,7 +203,7 @@ impl EngineOrg {
         );
         let actors = self
             .rows(
-                "SELECT actor_identity_id,identity FROM actor_identities",
+                "SELECT actor_identity_id,identity FROM access_actor_identities",
                 vec![],
             )
             .await;
@@ -236,10 +228,11 @@ impl EngineOrg {
         .await;
     }
     pub async fn central(&self, operation: CentralMailOperation) -> CentralMailResult {
+        let caller = self.f.machine_caller("engine-admin").await.unwrap();
         self.f
             .host
             .request_central(
-                &self.caller,
+                &caller,
                 CentralMailRequest {
                     request_id: self.fresh().try_into().unwrap(),
                     operation,
@@ -248,8 +241,8 @@ impl EngineOrg {
             .await
             .unwrap()
     }
-    pub fn target(&self) -> m::SessionAddress {
-        let m::Caller::Session(address) = &self.caller.caller else {
+    pub fn target(&self) -> workspace_ids::SessionRef {
+        let m::Caller::Session(address) = self.caller.caller() else {
             panic!("session caller")
         };
         address.clone()
@@ -284,7 +277,7 @@ impl EngineOrg {
     }
     pub async fn wake_messages(&self, wake: &str) -> i64 {
         self.count(
-            "SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
+            "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?",
             vec![text(wake)],
         )
         .await
@@ -292,7 +285,7 @@ impl EngineOrg {
     /// (state, failure_count, next_try_at, last_failure)
     pub async fn record(&self, kind: &str, key: &str) -> Vec<Vec<SqlValue>> {
         self.rows(
-            "SELECT state,failure_count,next_try_at,last_failure FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+            "SELECT state,failure_count,next_try_at,last_failure FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
             vec![text(kind), text(key)],
         )
         .await
@@ -300,7 +293,7 @@ impl EngineOrg {
     pub async fn attempt_id(&self, kind: &str, key: &str) -> String {
         match &self
             .rows(
-                "SELECT attempt_id FROM central_work_attempts WHERE machine_kind=? AND subject_key=?",
+                "SELECT attempt_id FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
                 vec![text(kind), text(key)],
             )
             .await[..]

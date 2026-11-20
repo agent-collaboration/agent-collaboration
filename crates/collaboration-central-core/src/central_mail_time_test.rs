@@ -65,15 +65,14 @@ fn cron_checks_every_selected_minute_and_utc_occurrences() {
 
 #[test]
 fn relative_durations_over_seven_days_report_the_horizon() {
-    use workspace_model::SessionAddress;
+    use workspace_ids::SessionRef;
     use workspace_model::central_mail::{
         CentralMailOperation, CentralMailRefusal, TimingRequirement,
     };
 
     let now = timestamp("2026-11-14T12:00:00Z");
-    let target = SessionAddress {
+    let target = SessionRef {
         machine_id: "018f0000-0000-7000-8000-000000000001".parse().unwrap(),
-        endpoint: "codex-local".to_owned().try_into().unwrap(),
         session_id: "test-session".to_owned().try_into().unwrap(),
     };
     for timing in [

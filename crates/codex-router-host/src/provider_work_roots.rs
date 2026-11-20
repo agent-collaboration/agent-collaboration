@@ -90,10 +90,7 @@ pub(crate) fn install_work_roots_hook(directory: &Path) -> io::Result<PathBuf> {
     fs::create_dir_all(directory)?;
     fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
     let hook = directory.join(WORK_ROOTS_HOOK_FILE);
-    let staged = directory.join(format!(
-        ".{WORK_ROOTS_HOOK_FILE}.{}",
-        durable_steps::Uuid::now_v7()
-    ));
+    let staged = directory.join(format!(".{WORK_ROOTS_HOOK_FILE}.{}", uuid::Uuid::now_v7()));
     {
         let mut file = fs::OpenOptions::new()
             .write(true)

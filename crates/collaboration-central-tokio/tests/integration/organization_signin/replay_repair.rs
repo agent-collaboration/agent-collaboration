@@ -1,12 +1,7 @@
 use super::support::*;
 use central_storage::StoreFailure;
-use collaboration_central_core::WorkspaceCaller;
 use collaboration_central_core::identity_contract::ProvisionOrganization;
 use collaboration_central_core::organization_authority::OrganizationProvisioningFailure;
-use router_clock::RuntimeClock;
-use workspace_model::central_mail::{
-    CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
-};
 #[expect(
     clippy::panic_in_result_fn,
     reason = "A cancelled real commit followed by a failed alarm reconciliation must preserve retry classification and exact stored effects."
@@ -16,39 +11,8 @@ async fn known_provisioning_commit_reconciles_on_same_host_and_failed_repair_is_
 {
     let f = Fixture::new().await?;
     f.seed_machine().await?;
-    let target = workspace_model::SessionAddress {
-        machine_id: MACHINE.to_owned().try_into()?,
-        endpoint: "codex-local".to_owned().try_into()?,
-        session_id: "provision-repair".to_owned().try_into()?,
-    };
-    let caller = WorkspaceCaller {
-        organization_id: org(A)?,
-        caller: workspace_model::Caller::Session(target.clone()),
-        credential_hash: "signin-fixture-hash".to_owned(),
-    };
-    let due = chrono::DateTime::from_timestamp(
-        (f.clock.utc_now().timestamp().div_euclid(300) + 1) * 300,
-        0,
-    )
-    .ok_or("wake grid mark exceeds timestamp range")?;
-    let wake = f
-        .host
-        .request_central(
-            &caller,
-            CentralMailRequest {
-                request_id: signed::fresh_request_id(signed::NOW_SECONDS)?.try_into()?,
-                operation: CentralMailOperation::SetWake {
-                    target,
-                    due_at: due,
-                    text: "before stamp".to_owned().try_into()?,
-                },
-            },
-        )
-        .await?;
-    assert!(matches!(
-        wake,
-        CentralMailResult::Done(CentralMailAnswer::WakeSet { .. })
-    ));
+    // Pending durable work predates provisioning; C2 correctly cannot authenticate an unstamped org.
+    let (_wake_id, due) = f.seed_pending_wake("provision-repair").await?;
     let runtime = f.runtime(A).await?;
     assert_eq!(runtime.statement_host().alarm(), None);
     let mut held = runtime.statement_host().hold_alarm_publication();

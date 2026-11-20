@@ -43,7 +43,9 @@ async fn operation(
 async fn owner_door_uses_the_real_acp_connection_for_restore_prompt_and_close() {
     let fixture = StoreFixture::new().await;
     let target = fixture.record_session("saved-session").await;
-    let board: message_board::SessionRef = target.clone().try_into().expect("board identity");
+    let board: message_board::SessionRef =
+        collaboration_protocol::ProviderIdentity::session_to_board(&target)
+            .expect("board identity");
     let hub = Arc::new(ProviderSessionEventHub::new(fixture.store.clone()));
     let wire_receipt = fixture.path.with_file_name("owner-wire.json");
     let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(

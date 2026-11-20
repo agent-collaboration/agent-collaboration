@@ -97,7 +97,7 @@ async fn audit_pages_follow_three_committed_records_once_and_end_after_the_last_
         (200, json!({"result":"records","records":[]}))
     );
     assert_eq!(
-        f.read("SELECT id FROM organization_change_records")
+        f.read("SELECT id FROM signin_change_records")
             .await
             .rows
             .len(),

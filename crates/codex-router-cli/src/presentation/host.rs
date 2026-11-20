@@ -125,7 +125,7 @@ pub(crate) fn render_restart_result<W: Write>(
             writeln!(
                 stdout,
                 "result: {}",
-                classification_label(response.classification(), response.snapshot().fleet())
+                classification_label(response.classification())
             )?;
             writeln!(stdout, "message: {}", response.message())?;
             render_snapshot(stdout, response.snapshot())
@@ -149,7 +149,7 @@ pub(crate) fn render_terminal_frame<W: Write>(
         writeln!(
             stdout,
             "result: {}",
-            classification_label(response.classification(), response.snapshot().fleet())
+            classification_label(response.classification())
         )?;
         writeln!(stdout, "message: {}", response.message())?;
         render_snapshot(stdout, response.snapshot())?;
@@ -226,14 +226,13 @@ pub(crate) fn render_update_result<W: Write>(
 }
 
 fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io::Result<()> {
-    render_fleet_status(stdout, snapshot.fleet())?;
     if let Some(outcome) = snapshot.last_login_reload() {
         writeln!(stdout, "last_login_reload: {}", outcome.description())?;
     }
     writeln!(
         stdout,
         "readiness: {}",
-        readiness_label(snapshot.hosted_readiness(), snapshot.fleet())
+        readiness_label(snapshot.hosted_readiness())
     )?;
     writeln!(stdout, "phase: {}", phase_label(snapshot.phase()))?;
     writeln!(stdout, "router: {}", router_label(snapshot.router()))?;
@@ -308,125 +307,14 @@ fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io
     )
 }
 
-fn render_fleet_status<W: Write>(
-    stdout: &mut W,
-    observation: &codex_router_host::FleetHostObservation,
-) -> std::io::Result<()> {
-    use codex_router_host::FleetHostObservation;
-    use collaboration_protocol::FleetLinkState;
-    match observation {
-        FleetHostObservation::NotObserved => writeln!(stdout, "central: not observed"),
-        FleetHostObservation::Unavailable { message } => {
-            writeln!(stdout, "central: unavailable ({message})")
-        }
-        FleetHostObservation::Available {
-            central,
-            stuck_mail,
-        } => {
-            match central {
-                None => writeln!(stdout, "central: not configured")?,
-                Some(link) => {
-                    match &link.state {
-                        FleetLinkState::Disconnected { since } => {
-                            write!(stdout, "central: disconnected since {since}")
-                        }
-                        FleetLinkState::Connecting { since, attempts } => {
-                            write!(
-                                stdout,
-                                "central: connecting since {since}; attempts {attempts}"
-                            )
-                        }
-                        FleetLinkState::Connected {
-                            since,
-                            last_contact,
-                        } => write!(
-                            stdout,
-                            "central: connected since {since}; last message from central {last_contact}"
-                        ),
-                        FleetLinkState::Refused { reason, at } => {
-                            write!(stdout, "central: refused {reason:?} at {at}")
-                        }
-                    }?;
-                    if let Some(drop) = &link.last_drop {
-                        write!(
-                            stdout,
-                            "; last drop {} at {}",
-                            drop.reason.as_str(),
-                            drop.at
-                        )?;
-                    }
-                    if let Some(failure) = &link.last_failure {
-                        let reason = serde_json::to_string(&failure.reason)
-                            .map_err(std::io::Error::other)?;
-                        write!(stdout, "; last failure {reason} at {}", failure.at)?;
-                    }
-                    write!(
-                        stdout,
-                        "; instance {}; connection {}; revision {}",
-                        link.instance, link.connection, link.revision
-                    )?;
-                    if !matches!(link.state, FleetLinkState::Connected { .. })
-                        && let Some(last_frame_at) = link.last_frame_at
-                    {
-                        write!(stdout, "; last message from central {last_frame_at}")?;
-                    }
-                    writeln!(stdout)?;
-                    writeln!(
-                        stdout,
-                        "central peer: {}; endpoint: {}",
-                        link.peer, link.endpoint
-                    )?;
-                }
-            }
-            match stuck_mail {
-                collaboration_protocol::StuckMailSummary::Unavailable { message } => {
-                    writeln!(stdout, "outbox: unavailable ({message})")
-                }
-                collaboration_protocol::StuckMailSummary::AgeUnknown {
-                    recovered_count,
-                    known_stuck,
-                } => {
-                    if let Some(known) = known_stuck {
-                        write!(
-                            stdout,
-                            "outbox: {} items sent longer than 5 minutes; oldest age {}s; ",
-                            known.count, known.oldest_age_seconds
-                        )?;
-                    } else {
-                        write!(stdout, "outbox: ")?;
-                    }
-                    writeln!(
-                        stdout,
-                        "{recovered_count} outstanding sent items; age unknown (recovered)"
-                    )
-                }
-                collaboration_protocol::StuckMailSummary::Empty => {
-                    writeln!(stdout, "outbox: 0 items sent longer than 5 minutes")
-                }
-                collaboration_protocol::StuckMailSummary::Stuck {
-                    count,
-                    oldest_age_seconds,
-                } => writeln!(
-                    stdout,
-                    "outbox: {count} items sent longer than 5 minutes; oldest age {oldest_age_seconds}s"
-                ),
-            }
-        }
-    }
-}
-
-fn classification_label(
-    classification: codex_router_host::TerminalClassification,
-    fleet: &codex_router_host::FleetHostObservation,
-) -> String {
+fn classification_label(classification: codex_router_host::TerminalClassification) -> String {
     match classification {
         codex_router_host::TerminalClassification::Ready => {
-            readiness_label(codex_router_host::HostedReadiness::Ready, fleet)
+            readiness_label(codex_router_host::HostedReadiness::Ready)
         }
-        codex_router_host::TerminalClassification::LocalReadyRemoteDegraded => readiness_label(
-            codex_router_host::HostedReadiness::LocalReadyRemoteDegraded,
-            fleet,
-        ),
+        codex_router_host::TerminalClassification::LocalReadyRemoteDegraded => {
+            readiness_label(codex_router_host::HostedReadiness::LocalReadyRemoteDegraded)
+        }
         codex_router_host::TerminalClassification::Unavailable => "unavailable".to_owned(),
         codex_router_host::TerminalClassification::Succeeded => "succeeded".to_owned(),
         codex_router_host::TerminalClassification::Failed => "failed".to_owned(),
@@ -434,28 +322,8 @@ fn classification_label(
     }
 }
 
-fn readiness_label(
-    readiness: codex_router_host::HostedReadiness,
-    fleet: &codex_router_host::FleetHostObservation,
-) -> String {
-    use codex_router_host::{FleetHostObservation, HostedReadiness};
-    use collaboration_protocol::FleetLinkState;
-    if let FleetHostObservation::Available {
-        central: Some(record),
-        ..
-    } = fleet
-        && let FleetLinkState::Refused { reason, .. } = &record.state
-    {
-        match readiness {
-            HostedReadiness::Ready => return format!("local ready (central refused: {reason:?})"),
-            HostedReadiness::LocalReadyRemoteDegraded => {
-                return format!(
-                    "local ready (Remote Control degraded, central refused: {reason:?})"
-                );
-            }
-            HostedReadiness::Unavailable => {}
-        }
-    }
+fn readiness_label(readiness: codex_router_host::HostedReadiness) -> String {
+    use codex_router_host::HostedReadiness;
     match readiness {
         HostedReadiness::Ready => "ready".to_owned(),
         HostedReadiness::LocalReadyRemoteDegraded => {

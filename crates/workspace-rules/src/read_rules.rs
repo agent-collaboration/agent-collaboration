@@ -1,8 +1,9 @@
 use crate::statement_plans::{RulePlan, WriteContext, exact, text};
 use central_storage::{AlarmUpdate, SafeInteger, SqlValue, StatementBatch};
 use workspace_model::{
-    Change, ChangePosition, InboxEntry, ItemRef, ItemView, MembershipState, NotificationSetting,
-    ReadMark, ReadMarkId, ReadScope, RefusalReason, RuleAnswer, Thread, ThreadMember, WorkLogEntry,
+    ActorIdentityId, Change, ChangePosition, InboxEntry, ItemRef, ItemView, MembershipState,
+    NotificationSetting, ReadMark, ReadMarkId, ReadScope, RefusalReason, RuleAnswer, Thread,
+    ThreadMember, ThreadReaderView, WorkLogEntry,
 };
 
 /// Mark advancement ports the existing maximum rule, without writer leases/epochs.
@@ -33,7 +34,7 @@ pub fn mark_read(
         vec![]
     } else {
         vec![exact(
-            "INSERT INTO read_marks (read_mark_id,actor_identity_id,scope,through_position,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(actor_identity_id,scope) DO UPDATE SET through_position=excluded.through_position,updated_at=excluded.updated_at WHERE read_marks.through_position < excluded.through_position",
+            "INSERT INTO workspace_read_marks (read_mark_id,actor_identity_id,scope,through_position,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(actor_identity_id,scope) DO UPDATE SET through_position=excluded.through_position,updated_at=excluded.updated_at WHERE workspace_read_marks.through_position < excluded.through_position",
             vec![
                 text(read_mark_id),
                 text(&context.actor),
@@ -53,6 +54,7 @@ pub fn mark_read(
     })
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct PositionedItem<T> {
     pub position: ChangePosition,
     pub item: T,
@@ -327,6 +329,42 @@ pub fn search_posts(
         statement,
         items: ordered_page(&matching, after, limit),
     })
+}
+
+/// A thread as the reader sees it: their current membership and thread read
+/// mark, when they are a member. Building it moves no mark.
+#[must_use]
+pub fn thread_view(
+    thread: &Thread,
+    reader: &ActorIdentityId,
+    memberships: &[ThreadMember],
+    marks: &[ReadMark],
+) -> ItemView {
+    let me = memberships
+        .iter()
+        .find(|row| {
+            row.thread_id == thread.thread_id
+                && row.actor_identity_id == *reader
+                && row.state == MembershipState::Joined
+        })
+        .map(|member| ThreadReaderView {
+            role: member.role,
+            notifications: member.notifications,
+            read_through: marks
+                .iter()
+                .find(|mark| {
+                    mark.actor_identity_id == *reader
+                        && mark.scope
+                            == (ReadScope::Thread {
+                                thread_id: thread.thread_id.clone(),
+                            })
+                })
+                .map(|mark| mark.through_position),
+        });
+    ItemView::Thread {
+        thread: thread.clone(),
+        me,
+    }
 }
 
 #[cfg(test)]

@@ -22,12 +22,12 @@ const fn minutes(count: u64) -> Duration {
 /// ManualClock; a real Claude-fixture session ends a turn; the clock advances
 /// 55 minutes, then 55 more; then the Host shuts down. Expect two warm prompts
 /// at the fixture, none after shutdown. ... Zero session/cancel calls
-/// throughout." After shutdown the Host's clock control is gone with it, so a
-/// further advance is refused and still nothing reaches the agent.
+/// throughout." Shutdown releases the Host's clock. Advancing it afterward
+/// sends nothing to the agent.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cache_warm_runs_through_host_composition() {
     // Arrange: a real turn ends on a session created after startup.
-    let mut host = CacheWarmHost::start(&[]).await;
+    let host = CacheWarmHost::start(&[]).await;
     host.release("release");
     let session = host.create().await;
     let real = host.prompt(&session, "real work").await;
@@ -36,22 +36,18 @@ async fn cache_warm_runs_through_host_composition() {
     let before_any_step = warm_prompts(&host.receipt);
 
     // Act: 55 minutes, then 55 more, then shutdown with a timer armed.
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&session, 1).await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&session, 2).await;
     host.until_warm_timer_armed().await;
-    let mut stopped = host.shutdown().await;
-    let after_shutdown = stopped.advance(FIFTY_FIVE_MINUTES * 2).await;
+    let stopped = host.shutdown().await;
+    stopped.advance_after_stop(FIFTY_FIVE_MINUTES * 2);
 
     // Assert
     stopped.assert_stopped();
     assert_eq!(before_any_step, 0, "nothing before the clock moves");
-    assert!(
-        after_shutdown.is_err(),
-        "the Host's one clock stops with the Host: {after_shutdown:?}"
-    );
     assert_eq!(
         warm_prompts_to(&stopped.receipt, &session),
         2,
@@ -72,23 +68,23 @@ async fn cache_warm_runs_through_host_composition() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn session_created_after_startup_arms_itself() {
     // Arrange: the Host has run two hours with no session.
-    let mut host = CacheWarmHost::start(&[]).await;
+    let host = CacheWarmHost::start(&[]).await;
     host.release("release");
-    host.advance(minutes(120)).await;
+    host.advance(minutes(120));
 
     // Act: the first session is created, works, and is warmed.
     let first = host.create().await;
     let first_turn = host.prompt(&first, "first real work").await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&first, 1).await;
     host.until_warm_timer_armed().await;
     // Act: a second session is created after that warm prompt.
     let second = host.create().await;
-    host.advance(ONE_MINUTE).await;
+    host.advance(ONE_MINUTE);
     let second_turn = host.prompt(&second, "second real work").await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&second, 1).await;
     host.until_warm_prompts_to(&first, 2).await;
     let stopped = host.shutdown().await;
@@ -124,30 +120,30 @@ async fn session_created_after_startup_arms_itself() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn steered_real_message_restarts_the_keep_warm_limit() {
     // Arrange: every prompt ends at once except the second, the first warm prompt.
-    let mut host = CacheWarmHost::start(&["hold-each-prompt"]).await;
+    let host = CacheWarmHost::start(&["hold-each-prompt"]).await;
     host.release_prompts_except(&[2], 16);
     let session = host.create().await;
     let real = host.prompt(&session, "real work").await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&session, 1).await;
 
     // Act: a real message is steered into the running warm turn.
     let steered = host.prompt(&session, "steered real work").await;
-    host.advance(minutes(395)).await;
+    host.advance(minutes(395));
     let warm_while_turn_runs = warm_prompts_to(&host.receipt, &session);
     host.release("release-2");
     host.until_warm_timer_armed().await;
     // Act: 8h25 from the first real turn, 55 minutes after the steered turn ended.
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&session, 2).await;
     host.until_warm_timer_armed().await;
     // Act: 16h, past 8 hours since the steered turn ended at 7h30.
-    host.advance(minutes(455)).await;
+    host.advance(minutes(455));
     let witness = host.create().await;
     let witness_turn = host.prompt(&witness, "witness work").await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&witness, 1).await;
     let stopped = host.shutdown().await;
     let receipt = &stopped.receipt;
@@ -187,7 +183,7 @@ async fn steered_real_message_restarts_the_keep_warm_limit() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn replayed_history_neither_arms_nor_counts() {
     // Arrange: a created session, and a loaded one whose old turn is replayed.
-    let mut host = CacheWarmHost::start(&["replay-on-load"]).await;
+    let host = CacheWarmHost::start(&["replay-on-load"]).await;
     host.release("release");
     let witness = host.create().await;
     let (loaded, load) = host.load("replayed-session").await;
@@ -195,15 +191,15 @@ async fn replayed_history_neither_arms_nor_counts() {
     host.until_warm_timer_armed().await;
 
     // Act: 55 minutes after the replay and the witness's real turn.
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&witness, 1).await;
     host.until_warm_timer_armed().await;
     let loaded_after_replay = warm_prompts_to(&host.receipt, &loaded);
     // Act: the loaded session's first real turn.
-    host.advance(ONE_MINUTE).await;
+    host.advance(ONE_MINUTE);
     let loaded_turn = host.prompt(&loaded, "real work after load").await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&loaded, 1).await;
     host.until_warm_prompts_to(&witness, 2).await;
     let stopped = host.shutdown().await;
@@ -254,7 +250,7 @@ async fn replayed_history_neither_arms_nor_counts() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn held_settings_and_unknown_outcome_get_no_warm_prompt() {
     // Arrange: an unknown steer outcome on the first session.
-    let mut host =
+    let host =
         CacheWarmHost::start(&["first-steer-unknown", "first-effort-change-unconfirmed"]).await;
     let unknown = host.create().await;
     let held = host.create().await;
@@ -270,17 +266,17 @@ async fn held_settings_and_unknown_outcome_get_no_warm_prompt() {
     let running = running.await.expect("first prompt task");
     host.until_warm_timer_armed().await;
     // Arrange: a real turn, then an effort change the agent does not confirm.
-    host.advance(ONE_MINUTE).await;
+    host.advance(ONE_MINUTE);
     let held_turn = host.prompt(&held, "held real work").await;
     host.until_warm_timer_armed().await;
     let unconfirmed = host.set_effort(&held, "high").await;
     // Arrange: the witness's real turn.
-    host.advance(ONE_MINUTE).await;
+    host.advance(ONE_MINUTE);
     let witness_turn = host.prompt(&witness, "witness work").await;
     host.until_warm_timer_armed().await;
 
     // Act: all three warm prompts fall due in one step.
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&witness, 1).await;
     // The witness's timer runs independently. Keep the effort hold in place
     // until the held session's real prompt and first warm attempt have settled.
@@ -290,10 +286,10 @@ async fn held_settings_and_unknown_outcome_get_no_warm_prompt() {
     let unknown_after_due = warm_prompts_to(&host.receipt, &unknown);
     // Act: the setting is confirmed, then the held session's next real turn.
     let confirmed = host.set_effort(&held, "high").await;
-    host.advance(ONE_MINUTE).await;
+    host.advance(ONE_MINUTE);
     let held_again = host.prompt(&held, "held real work again").await;
     host.until_warm_timer_armed().await;
-    host.advance(FIFTY_FIVE_MINUTES).await;
+    host.advance(FIFTY_FIVE_MINUTES);
     host.until_warm_prompts_to(&held, 1).await;
     host.until_warm_prompts_to(&witness, 2).await;
     let stopped = host.shutdown().await;

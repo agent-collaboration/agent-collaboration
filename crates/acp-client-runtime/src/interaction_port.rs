@@ -35,6 +35,16 @@ pub trait InteractionPort: Send + Sync + 'static {
     type Context: Clone + Send + Sync + 'static;
     type OperationId: Clone + Eq + Hash + Send + Sync + 'static;
 
+    fn managed_refusal(
+        &self,
+    ) -> Option<session_event_model::managed_interaction_refusal::ManagedInteractionRefusal> {
+        None
+    }
+
+    fn cancel_after_managed_refusal(&self, _context: Self::Context) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+
     fn operation_id(context: &Self::Context) -> Self::OperationId;
 
     fn binding_retirement(context: &Self::Context) -> CancellationToken;
@@ -48,28 +58,37 @@ pub trait InteractionPort: Send + Sync + 'static {
 
     fn request_approval(
         &self,
-        context: Self::Context,
-        request: ApprovalRequest,
-        turn_cancellation: CancellationToken,
-        agent_cancellation: CancellationToken,
-    ) -> InteractionFuture<'_, ApprovalPortOutcome>;
+        _context: Self::Context,
+        _request: ApprovalRequest,
+        _turn_cancellation: CancellationToken,
+        _agent_cancellation: CancellationToken,
+    ) -> InteractionFuture<'_, ApprovalPortOutcome> {
+        Box::pin(async { ApprovalPortOutcome::Unavailable })
+    }
 
     fn request_question(
         &self,
-        context: Self::Context,
-        request: QuestionRequest,
-        turn_cancellation: CancellationToken,
-        agent_cancellation: CancellationToken,
-    ) -> InteractionFuture<'_, QuestionResponse>;
+        _context: Self::Context,
+        _request: QuestionRequest,
+        _turn_cancellation: CancellationToken,
+        _agent_cancellation: CancellationToken,
+    ) -> InteractionFuture<'_, QuestionResponse> {
+        Box::pin(async { QuestionResponse::Cancelled })
+    }
 
     fn record_refusal(
         &self,
-        context: Self::Context,
-        refusal: RefusedApprovalOffer,
-    ) -> InteractionFuture<'_, ()>;
+        _context: Self::Context,
+        _refusal: RefusedApprovalOffer,
+    ) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
 
-    fn cancel_all(&self, context: Self::Context, reason: &'static str)
-    -> InteractionFuture<'_, ()>;
-
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()>;
+    fn cancel_all(
+        &self,
+        _context: Self::Context,
+        _reason: &'static str,
+    ) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }

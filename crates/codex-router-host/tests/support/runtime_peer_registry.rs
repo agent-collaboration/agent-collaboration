@@ -3,23 +3,19 @@ use super::*;
 #[path = "runtime_peer_registry_cleanup.rs"]
 mod cleanup;
 use cleanup::require_process_absent;
-use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessageContent};
+use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
-    ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryOutcome, EndpointId,
-    EndpointRef, MessageDelivery, NativeSessionScope, NativeSessionSource, NativeSessionView,
-    ProviderSessionListParams, ProviderSessionSummary, PushDeliveryState, PushRecordShowParams,
-    SessionReachability,
+    ChannelDescription, CodexGeneration, EndpointId, EndpointRef, NativeSessionScope,
+    NativeSessionSource, NativeSessionView, ProviderSessionListParams, ProviderSessionSummary,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::process::{Child, Command};
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -152,14 +148,9 @@ fn host_config(root: &Path, router: std::net::SocketAddr) -> HostConfig {
     .with_collaboration_directory(root.join("api"), root.join("codex-home"))
 }
 
-struct PeerFrames {
-    auth: Value,
-    user: Value,
-}
 struct PeerObserver {
     stop: CancellationToken,
     task: JoinHandle<std::io::Result<()>>,
-    received: mpsc::Receiver<PeerFrames>,
     count: Arc<AtomicUsize>,
 }
 
@@ -185,49 +176,22 @@ impl PeerObserver {
             &registry.join(format!("{pid}.{digest:x}.key")),
             &serde_json::to_vec(&json!({"peerToken":PEER_TOKEN}))?,
         )?;
-        let (sender, received) = mpsc::channel(4);
         let count = Arc::new(AtomicUsize::new(0));
         let task_count = Arc::clone(&count);
         let stop = CancellationToken::new();
         let task_stop = stop.clone();
         let task = tokio::spawn(async move {
             loop {
-                let connection = tokio::select! {
-                    () = task_stop.cancelled() => return Ok(()),
-                    accepted = listener.accept() => accepted?,
-                };
-                let read_and_publish = async {
-                    let mut lines = BufReader::new(connection.0).lines();
-                    let auth = lines
-                        .next_line()
-                        .await?
-                        .ok_or_else(|| std::io::Error::other("missing auth frame"))?;
-                    let user = lines
-                        .next_line()
-                        .await?
-                        .ok_or_else(|| std::io::Error::other("missing user frame"))?;
-                    let frames = PeerFrames {
-                        auth: serde_json::from_str(&auth).map_err(std::io::Error::other)?,
-                        user: serde_json::from_str(&user).map_err(std::io::Error::other)?,
-                    };
-                    task_count.fetch_add(1, Ordering::Relaxed);
-                    sender
-                        .send(frames)
-                        .await
-                        .map_err(|_| std::io::Error::other("peer observer receiver closed"))
-                };
                 tokio::select! {
                     () = task_stop.cancelled() => return Ok(()),
-                    result = read_and_publish => result?,
+                    accepted = listener.accept() => {
+                        let _connection = accepted?;
+                        task_count.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }
         });
-        Ok(Self {
-            stop,
-            task,
-            received,
-            count,
-        })
+        Ok(Self { stop, task, count })
     }
 }
 
@@ -310,7 +274,7 @@ impl RegistryCase {
             .await?
             .first()
             .ok_or("native PID missing")?;
-        self.deliver(&client, "registry before restart").await?;
+        self.inspect_registry(&client).await?;
         if inject_failure {
             return Err(InjectedScenarioFailure.into());
         }
@@ -342,16 +306,16 @@ impl RegistryCase {
             "backend PID did not change",
         )?;
         require_process_absent(before_pid)?;
-        self.deliver(&client, "registry after restart").await?;
+        self.inspect_registry(&client).await?;
         let peer = self.peer.as_ref().ok_or("peer observer missing")?;
         check_equal(
             peer.count.load(Ordering::Relaxed),
-            2,
-            "no peer input replay or cross-delivery",
+            0,
+            "read-only registry discovery must not submit peer input",
         )
     }
 
-    async fn deliver(&mut self, client: &CollaborationClient, body: &str) -> TestResult {
+    async fn inspect_registry(&mut self, client: &CollaborationClient) -> TestResult {
         let endpoint = EndpointRef {
             service_id: client.identity().service_id.clone(),
             endpoint_id: EndpointId::try_from("claude-local".to_owned())?,
@@ -379,89 +343,15 @@ impl RegistryCase {
                 _ => None,
             })
             .ok_or("private registry peer missing from public discovery")?;
-        let sent = client
-            .send_message(MessageSendRequest {
-                item_id: None,
-                target: target.clone(),
-                message: PublicMessageContent::HumanUser {
-                    text: body.to_owned().try_into()?,
-                },
-                delivery: MessageDelivery::Auto,
-                generation_guard: None,
-            })
-            .await?;
-        let collaboration_protocol::MessageSendResult::Local(sent) = sent else {
-            return Err("local registry peer returned remote sender custody".into());
-        };
-        check_equal(sent.target.clone(), target.clone(), "public target changed")?;
-        check_equal(
-            sent.delivery_state,
-            PushDeliveryState::Delivered,
-            "push not stored Delivered",
-        )?;
-        check_equal(
-            sent.receipt.outcome,
-            DeliveryOutcome::PeerMessageWritten,
-            "peer route did not accept write",
-        )?;
-        check_equal(
-            sent.receipt.reachability,
-            Some(SessionReachability::ClaudeCodePeer),
-            "wrong delivery route",
-        )?;
-        check(
-            matches!(
-                sent.receipt.client,
-                Some(DeliveryClientReceipt::ClaudeCodePeer)
-            ),
-            "wrong client receipt",
-        )?;
-        let shown = client
-            .router_show(PushRecordShowParams {
-                caller: target.clone(),
-                reference: sent.push_id.as_str().into(),
-            })
-            .await?;
-        let collaboration_client::protocol::MessageShowResult::Local(shown) = shown else {
-            return Err("native proof expected a stored local push".into());
-        };
-        check_equal(shown.record.target, target, "store target changed")?;
-        check_equal(
-            shown.record.body.as_deref(),
-            Some(body),
-            "store body changed",
-        )?;
-        check_equal(
-            shown.record.delivery_state,
-            PushDeliveryState::Delivered,
-            "stored push not settled",
-        )?;
         check_equal(
             client.machine_label().as_str(),
             "shared-host-fixture",
             "fixture machine label changed",
         )?;
-        let link = format!(
-            "router://{}/push/{}",
-            String::from(client.identity().service_id.clone()),
-            sent.push_id.as_str()
-        );
-        check_equal(sent.link, link.clone(), "full link changed")?;
-        let expected =
-            format!("🧑 Owner (unverified) @shared-host-fixture → you · \"{body}\" · {link}");
-        let peer = self.peer.as_mut().ok_or("peer observer missing")?;
-        let received = tokio::time::timeout(WAIT, peer.received.recv())
-            .await?
-            .ok_or("peer observer stopped")?;
         check_equal(
-            received.auth,
-            json!({"type":"auth","token":PEER_TOKEN}),
-            "literal auth frame changed",
-        )?;
-        check_equal(
-            received.user,
-            json!({"type":"user","message":{"role":"user","content":expected}}),
-            "literal recipient frame changed",
+            target.endpoint.service_id,
+            client.identity().service_id.clone(),
+            "public target service changed",
         )
     }
 }

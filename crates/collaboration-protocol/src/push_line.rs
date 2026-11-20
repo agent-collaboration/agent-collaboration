@@ -1,17 +1,12 @@
 //! Stored push identities and the one-line Router delivery format.
 
-use crate::{SessionDisplayName, SessionRef, UuidIdentity};
-use agent_automation::{RunId, ScheduleId};
+use crate::UuidIdentity;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt};
 
 pub const MAX_PUSH_LINE_BYTES: usize = 1024;
 pub const MAX_MACHINE_LABEL_SCALARS: usize = 120;
-const PREVIEW_MAX_SCALARS: usize = 100;
-const MAX_SUBSCRIPTION_ROOTS: u8 = 20;
-const MAX_HELD_SINCE_SCALARS: usize = 64;
-const MAX_SUBSCRIPTION_SCOPE_SCALARS: usize = 64;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
@@ -193,79 +188,6 @@ pub enum PushKind {
     BoardNotification,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PushOrigin {
-    Session(SessionRef),
-    OwnerUnverified,
-    Router(PushKind),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum PushHeaderFacts {
-    BoardNotification {
-        project: message_board::ProjectId,
-        intent: message_board::NotifyIntentId,
-        cause: message_board::RecordRef,
-        summary: crate::MessageText,
-    },
-    DirectMessage {
-        sender_display_name: Option<SessionDisplayName>,
-    },
-    Wake,
-    ScheduleRun {
-        schedule_id: ScheduleId,
-        run_id: RunId,
-    },
-    Approval {
-        requester: SessionRef,
-        requester_display_name: Option<SessionDisplayName>,
-    },
-    Question {
-        requester: SessionRef,
-        requester_display_name: Option<SessionDisplayName>,
-    },
-    SubscriptionActivity {
-        root_count: u8,
-        message_count: u64,
-        held_since: Option<String>,
-        thread_resolved: bool,
-    },
-    SubscriptionExpiry {
-        scope: String,
-    },
-}
-
-impl PushHeaderFacts {
-    #[must_use]
-    pub const fn kind(&self) -> PushKind {
-        match self {
-            Self::DirectMessage { .. } => PushKind::DirectMessage,
-            Self::Wake => PushKind::Wake,
-            Self::ScheduleRun { .. } => PushKind::ScheduleRun,
-            Self::Approval { .. } => PushKind::Approval,
-            Self::Question { .. } => PushKind::Question,
-            Self::SubscriptionActivity { .. } => PushKind::SubscriptionActivity,
-            Self::SubscriptionExpiry { .. } => PushKind::SubscriptionExpiry,
-            Self::BoardNotification { .. } => PushKind::BoardNotification,
-        }
-    }
-}
-
-pub struct PushLineInput {
-    pub link: RouterLink,
-    pub machine_label: MachineLabel,
-    pub origin: PushOrigin,
-    pub header_facts: PushHeaderFacts,
-    pub body: Option<String>,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParsedPushLineHeader {
     pub kind: PushKind,
@@ -288,24 +210,6 @@ pub enum PushIdError {
     Link,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum PushLineError {
-    #[error("push origin and header kind do not agree")]
-    OriginKindMismatch,
-    #[error("push body is required for this kind")]
-    MissingBody,
-    #[error("subscription notices cannot carry a preview body")]
-    UnexpectedBody,
-    #[error("invalid push header facts")]
-    InvalidHeaderFacts,
-    #[error("the fixed push header and link exceed the line byte budget")]
-    FixedLineExceedsBudget,
-}
-
-#[path = "push_line_render.rs"]
-mod rendering;
-pub use rendering::{escape_push_line_field, parse_push_line_header, render_push_line};
-
 #[path = "push_line_parse.rs"]
 mod parsing;
-pub use parsing::parse_push_line;
+pub use parsing::{escape_push_line_field, parse_push_line, parse_push_line_header};

@@ -28,6 +28,24 @@ use reporting::{
 mod lifecycle;
 pub(super) use lifecycle::{run_close, run_resume};
 
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub(super) enum ConversationDelivery {
+    Auto,
+    Queue,
+    Steer,
+}
+
+impl ConversationDelivery {
+    const fn message_delivery(self) -> collaboration_client::protocol::MessageDelivery {
+        use collaboration_client::protocol::MessageDelivery;
+        match self {
+            Self::Auto => MessageDelivery::Auto,
+            Self::Queue => MessageDelivery::Queue,
+            Self::Steer => MessageDelivery::Steer,
+        }
+    }
+}
+
 pub(super) fn run_create(args: CreateArguments) -> i32 {
     if let Err(failure) = validate_create_endpoint_options(&args) {
         return crate::endpoint_commands::report_failure(

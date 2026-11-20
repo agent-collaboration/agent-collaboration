@@ -14,6 +14,8 @@ test-support = ["collaboration-central-core/test-support", "router-clock/test-su
 
 [dependencies]
 central-storage.workspace = true
+central-link-protocol.workspace = true
+futures-util.workspace = true
 router-clock.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
@@ -35,6 +37,9 @@ collaboration-central-core = { version = "0.1.96", path = "../collaboration-cent
 sqlx = { workspace = true, features = ["sqlite", "migrate"] }
 
 [dev-dependencies]
+collaboration-central-tokio = { path = ".", features = ["test-support"] }
+central-link-client = { path = "../central-link-client", version = "0.1.152" }
+reqwest-websocket = "=0.5.1"
 router-clock = { workspace = true, features = ["test-support"] }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core", features = ["test-support"] }
 uuid.workspace = true

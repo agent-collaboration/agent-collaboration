@@ -3,11 +3,10 @@
 use crate::api_test_harness::{
     ServedApi, TEST_PROTOCOL_VERSION, TEST_SERVICE_ID, api_config, test_identity,
 };
-use collaboration_service::CollaborationApplication;
+use crate::request_slot_holder::RequestSlotHolder;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use std::time::Duration;
 
 fn private_directory() -> tempfile::TempDir {
     use std::os::unix::fs::PermissionsExt as _;
@@ -18,30 +17,6 @@ fn private_directory() -> tempfile::TempDir {
     directory
 }
 
-async fn automation_store(
-    directory: &std::path::Path,
-) -> Arc<Mutex<automation_storage::AutomationStore>> {
-    let automation =
-        automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .expect("automation store");
-    Arc::new(Mutex::new(automation))
-}
-
-async fn wake_application(directory: &std::path::Path) -> CollaborationApplication {
-    (test_identity().with_automation_store(automation_store(directory).await)).build()
-}
-
-/// One application clock, held still, so every read stamps the same time.
-fn fixed_clock() -> Arc<router_clock::ManualClock> {
-    Arc::new(
-        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_792_432_800_000,
-        ))
-        .expect("fixed application time"),
-    )
-}
-
 fn structured(result: &rmcp::model::CallToolResult) -> Value {
     result
         .structured_content
@@ -49,84 +24,11 @@ fn structured(result: &rmcp::model::CallToolResult) -> Value {
         .expect("structured tool result")
 }
 
-fn wake_send_arguments() -> Value {
-    json!({
-        "operationId": collaboration_protocol::OperationId::generate(),
-        "message": {
-            "target": {
-                "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "codex-local"},
-                "sessionId": "wake-target"
-            },
-            "content": {"kind": "humanUser", "text": "wake proof"},
-            "delivery": "auto",
-            "generationGuard": null
-        },
-        "timing": {"kind": "after", "seconds": 600},
-        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
-    })
-}
-
-#[tokio::test]
-async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change() {
-    // Arrange
-    let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
-    let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let wake = api.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
-    let first = api
-        .call_tool(
-            "wake_wait_until_first_fire",
-            json!({"wakeupId": wakeup_id, "timeoutSeconds": 1}),
-        )
-        .await;
-    let cursor = structured(&first)["cursor"].clone();
-    // The wake pauses and resumes between the two waits: only the cursor still sees it.
-    for operation in ["wake_pause", "wake_resume"] {
-        let changed = api
-            .call_tool(
-                operation,
-                json!({
-                    "operationId": collaboration_protocol::OperationId::generate(),
-                    "wakeupId": wakeup_id
-                }),
-            )
-            .await;
-        assert_eq!(changed.is_error, Some(false), "{operation}: {changed:?}");
-    }
-
-    // Act
-    let resumed = api
-        .call_tool(
-            "wake_wait_until_first_fire",
-            json!({"wakeupId": wakeup_id, "after": cursor, "timeoutSeconds": 1}),
-        )
-        .await;
-    let fresh = api
-        .call_tool(
-            "wake_wait_until_first_fire",
-            json!({"wakeupId": wakeup_id, "timeoutSeconds": 1}),
-        )
-        .await;
-
-    // Assert
-    assert_eq!(structured(&first)["outcome"]["kind"], "timedOut");
-    assert!(cursor.is_string(), "the bounded wait returns its cursor");
-    assert_eq!(structured(&resumed)["outcome"]["kind"], "paused");
-    assert_ne!(structured(&resumed)["cursor"], cursor);
-    assert_eq!(
-        structured(&fresh)["outcome"]["kind"],
-        "timedOut",
-        "a wait without the cursor starts from the current state and never sees the pause"
-    );
-    api.stop().await;
-}
-
 #[tokio::test]
 async fn arguments_that_do_not_decode_get_a_structured_validation_failure_on_both_listeners() {
     // Arrange: tools whose arguments rmcp decodes before the handler runs.
     let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let config = api_config(test_identity().build(), directory.path());
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let target = json!({
@@ -136,7 +38,6 @@ async fn arguments_that_do_not_decode_get_a_structured_validation_failure_on_bot
     let malformed = [
         ("session_rename", json!({"target": target, "name": null})),
         ("session_rename", json!({"target": target})),
-        ("approval_decide", json!({"requestId": 7})),
         ("events_observe", json!({})),
     ];
 
@@ -167,33 +68,27 @@ async fn arguments_that_do_not_decode_get_a_structured_validation_failure_on_bot
 
 #[tokio::test]
 async fn a_listener_past_its_request_limit_answers_overloaded() {
-    // Arrange
+    // Arrange: the only slot is held by a call that ends when the holder releases it.
     let directory = private_directory();
-    let mut config = api_config(wake_application(directory.path()).await, directory.path());
+    let (identity, holder) =
+        RequestSlotHolder::install(test_identity(), TEST_SERVICE_ID, directory.path())
+            .await
+            .expect("slot holder");
+    let mut config = api_config(identity.build(), directory.path());
     config.concurrent_requests = 1;
     let api = ServedApi::tcp(&config).await;
     // Raw stateless calls: an rmcp client's handshake would itself take the only slot.
-    let (_, wake) = api
-        .post(
-            &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
-                "name":"wake_send","arguments":wake_send_arguments()
-            }}),
-        )
-        .await;
-    let wakeup_id = wake["result"]["structuredContent"]["definition"]["wakeupId"].clone();
     let url = api.url();
+    let hold = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+        "name": RequestSlotHolder::TOOL, "arguments": holder.arguments()
+    }});
     let holding = tokio::spawn(async move {
         reqwest::Client::new()
             .post(url)
             .header(CONTENT_TYPE, "application/json")
             .header(ACCEPT, "application/json, text/event-stream")
             .header("mcp-protocol-version", TEST_PROTOCOL_VERSION)
-            .json(
-                &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
-                    "name":"wake_wait_until_first_fire",
-                    "arguments":{"wakeupId": wakeup_id, "timeoutSeconds": 2}
-                }}),
-            )
+            .json(&hold)
             .send()
             .await
             .expect("holding call")
@@ -216,6 +111,7 @@ async fn a_listener_past_its_request_limit_answers_overloaded() {
     assert_eq!(shed["result"]["isError"], true);
     assert_eq!(shed["result"]["structuredContent"]["kind"], "overloaded");
     assert_eq!(shed["result"]["structuredContent"]["effect"], "none");
+    holder.release().await.expect("release the slot");
     assert!(holding.await.expect("holding call join").is_success());
     let (_, admitted) = api
         .post(
@@ -238,7 +134,7 @@ mod call_lifecycle;
 async fn a_foreign_browser_origin_is_refused_before_dispatch() {
     // Arrange: the default listener, with no proxy authority configured.
     let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let config = api_config(test_identity().build(), directory.path());
     let api = ServedApi::tcp(&config).await;
 
     // Act
@@ -261,7 +157,7 @@ async fn a_foreign_browser_origin_is_refused_before_dispatch() {
 async fn the_api_serves_on_ipv6_loopback() {
     // Arrange
     let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
+    let config = api_config(test_identity().build(), directory.path());
     let api = ServedApi::tcp_at(&config, "[::1]:0").await;
 
     // Act
@@ -281,23 +177,22 @@ async fn the_api_serves_on_ipv6_loopback() {
 
 #[tokio::test]
 async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
-    // Arrange: one wake, written through TCP, on a still application clock.
+    // Arrange: one installation read on a still application clock.
     let directory = private_directory();
     let application = test_identity()
-        .with_runtime_clock(fixed_clock())
-        .with_automation_store(automation_store(directory.path()).await)
+        .with_installation_peer(
+            collaboration_protocol::InstallationPeerId::try_from(uuid::Uuid::now_v7().to_string())
+                .expect("installation peer"),
+        )
+        .expect("installation peer")
         .build();
     let config = api_config(application, directory.path());
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
-    assert_eq!(wake.is_error, Some(false), "{wake:?}");
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
-    let show = json!({"wakeupId": wakeup_id});
 
     // Act
-    let over_tcp = tcp.call_tool("wake_show", show.clone()).await;
-    let over_unix = unix.call_tool("wake_show", show).await;
+    let over_tcp = tcp.call_tool("installation_show", json!({})).await;
+    let over_unix = unix.call_tool("installation_show", json!({})).await;
     let tcp_tools = tcp
         .client()
         .await
@@ -312,12 +207,9 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
         .expect("Unix tools");
 
     // Assert
+    assert_eq!(over_tcp.is_error, Some(false), "{over_tcp:?}");
     assert_eq!(structured(&over_tcp), structured(&over_unix));
-    assert_eq!(
-        structured(&over_tcp)["definition"]["wakeupId"],
-        wakeup_id,
-        "both listeners read the wake the TCP call wrote"
-    );
+    assert_eq!(structured(&over_tcp)["serviceId"], TEST_SERVICE_ID);
     assert_eq!(tcp_tools, unix_tools, "both listeners offer the same tools");
     tcp.stop().await;
     unix.stop().await;
@@ -356,12 +248,6 @@ async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
             !encoded.contains("missing field") && !encoded.contains("requires "),
             "{name} rejected the schema-required input as incomplete: {encoded}"
         );
-        if name == "wake_send" {
-            assert!(
-                !encoded.contains("explicit nullable generationGuard"),
-                "wake_send must accept an omitted optional generationGuard: {encoded}"
-            );
-        }
     }
     api.stop().await;
 }

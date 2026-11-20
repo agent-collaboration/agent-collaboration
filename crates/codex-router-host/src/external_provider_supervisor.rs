@@ -9,6 +9,7 @@ mod provider_operation_failure;
 mod provider_operation_finish;
 mod provider_owner_operations;
 mod provider_owner_prompt;
+pub(crate) use provider_owner_prompt::{SessionQueuePlan, WarmRun};
 mod provider_prompt_contents;
 pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
 mod provider_conversation_backend;
@@ -246,14 +247,6 @@ impl ExternalProviderSupervisor {
         }
     }
 
-    /// Announces a completion as a live operation publishing its result does.
-    #[cfg(test)]
-    pub(crate) fn announce_completion(&self) {
-        self.inner
-            .completions
-            .send_modify(|revision| *revision = revision.wrapping_add(1));
-    }
-
     /// Records `operation_id` as an unknown outcome on its binding's
     /// uncertainty cell, as its live owner or the start-up seed would.
     #[cfg(test)]
@@ -426,18 +419,6 @@ impl ExternalProviderSupervisor {
             binding.owners.install_snapshot_observer(observer);
             true
         })
-    }
-
-    pub async fn install_approval_broker(
-        &self,
-        broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
-    ) {
-        for binding in self.inner.bindings.values() {
-            binding
-                .runtime
-                .install_approval_broker(Arc::clone(&broker))
-                .await;
-        }
     }
 
     #[expect(
@@ -771,8 +752,10 @@ fn failure_with_provider_code(
     operation_failure
 }
 
+#[cfg(test)]
 mod provider_delivery_submission;
 #[cfg(test)]
 #[path = "external_provider_supervisor/supervisor_test.rs"]
 mod tests;
+#[cfg(test)]
 pub(crate) use provider_delivery_submission::ProviderPromptDispatch;

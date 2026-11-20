@@ -8,18 +8,9 @@ cargo nextest run --locked --profile ci -p codex-router-host --features keychain
 
 `integration/main.rs` gathers the external roots, including native model and skill bridge cases. Each root keeps its
 module namespace. The cases cover Host startup and configuration, singleton
-ownership, child process groups, update and restart lifecycles, enrollment,
-collaboration composition, provider routes, wakes and native inventory.
-`shared_fleet_store` starts the real runtime on a fresh root and checks it keeps
-one Fleet database (`fleet.sqlite`, no older store beside it), that a second
-process asking to write it gets the store's lock error, and that a restart keeps
-the board cursor key the composition installed.
-`runtime_shutdown_stalled_provider_load` starts an enrolled Host whose Cursor
-provider never answers `session/load`, lets a Wake follow batch reach that load,
-and requires Host shutdown to return anyway. After a provider-less restart, the
-reader's subscription view must show that cut-off delivery as outcome-unknown,
-written either by shutdown or by durable mail recovery (the test does not tell
-which): neither lost nor recorded delivered, so reconcile has it to settle.
+ownership, child process groups, update and restart lifecycles,
+collaboration composition, provider routes and native inventory.
+The local mail composition test covers startup with a fresh directory and with old board files present.
 Runtime replacement cases hold a real status probe across an app-server schema
 change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.
@@ -76,3 +67,8 @@ one session's mode change between the agent applying it and its record write,
 and tell a test when a later change waits for that session's turn
 (`external_provider_supervisor::start_mode_tests`, Lead V6b). Cases that prove a private invariant
 stay unit tests next to their code.
+
+The files under `fixtures/predecessor-mail/` came from opening a fresh
+interaction store with Router revision `a2bae5ef8`. The fixture preserves the
+database and its WAL from that open. The Host test copies these files as bytes
+and compares them after startup and shutdown.

@@ -69,9 +69,6 @@ impl InteractionPort for CountingApprovals {
     fn cancel_all(&self, _context: (), _reason: &'static str) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct IgnoredEvents;

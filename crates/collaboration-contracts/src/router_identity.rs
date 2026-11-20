@@ -1,20 +1,19 @@
 //! Immutable validated facts identifying one Router installation and run.
 use crate::MachineIdentity;
-use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::PeerId;
+use collaboration_protocol::{InstallationPeerId, UuidIdentity};
 
 #[derive(Clone, Debug)]
 pub struct RouterIdentity {
     service_id: UuidIdentity,
     service_epoch: UuidIdentity,
-    installation_peer: Option<PeerId>,
+    installation_peer: Option<InstallationPeerId>,
     machine_identity: MachineIdentity,
 }
 impl RouterIdentity {
     pub fn new(
         service_id: UuidIdentity,
         service_epoch: UuidIdentity,
-        installation_peer: Option<PeerId>,
+        installation_peer: Option<InstallationPeerId>,
         machine_identity: MachineIdentity,
     ) -> Result<Self, RouterIdentityError> {
         if machine_identity.service_id() != &service_id {
@@ -36,8 +35,8 @@ impl RouterIdentity {
         &self.service_epoch
     }
     #[must_use]
-    pub fn installation_peer(&self) -> Option<PeerId> {
-        self.installation_peer
+    pub fn installation_peer(&self) -> Option<InstallationPeerId> {
+        self.installation_peer.clone()
     }
     #[must_use]
     pub fn machine_identity(&self) -> &MachineIdentity {
@@ -55,8 +54,7 @@ pub enum RouterIdentityError {
 mod tests {
     use super::{RouterIdentity, RouterIdentityError};
     use crate::MachineIdentity;
-    use collaboration_protocol::UuidIdentity;
-    use fleet_sync_protocol::PeerId;
+    use collaboration_protocol::{InstallationPeerId, UuidIdentity};
 
     #[test]
     fn router_identity_rejects_a_machine_from_another_service() {
@@ -88,11 +86,12 @@ mod tests {
             .to_owned()
             .try_into()
             .expect("epoch");
-        let peer = PeerId::new(uuid::Uuid::now_v7()).expect("peer");
+        let peer = InstallationPeerId::try_from(uuid::Uuid::now_v7().to_string()).expect("peer");
         let machine =
             MachineIdentity::new(service.clone(), Some("Router machine")).expect("machine");
-        let identity = RouterIdentity::new(service.clone(), epoch.clone(), Some(peer), machine)
-            .expect("identity");
+        let identity =
+            RouterIdentity::new(service.clone(), epoch.clone(), Some(peer.clone()), machine)
+                .expect("identity");
 
         let cloned = identity.clone();
         assert_eq!(identity.service_id(), &service);

@@ -1,22 +1,6 @@
-//! Opt-in real board listeners and stores, without a native process. With the
-//! runtime-test-support feature, a `fixture-provider-acp.json` in the directory starts
-//! one fixture ACP provider on the Cursor endpoint, as an e2e recipient that can be held for.
-//!
-//! Run with `<directory> <MCP port> [<private fixture session JSON>]`.
-//! Port 0 asks the OS for a free port. Read the published service.json for its URL.
-//! CLI clients select this directory with --service-directory. Stop with SIGTERM
-//! or Ctrl-C; restart on the same directory to exercise durable board recovery.
-use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs, load_fleet_enrollment};
+//! Isolated collaboration listener for owned Host startup and shutdown tests.
+use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_protocol::ServiceManifest;
-#[cfg(feature = "runtime-test-support")]
-#[path = "board-debug-runtime/fixture_provider.rs"]
-mod fixture_provider;
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-#[path = "board-debug-runtime/local_cancel_observation.rs"]
-mod local_cancel_observation;
-#[cfg(feature = "runtime-test-support")]
-#[path = "board-debug-runtime/mail_faults.rs"]
-mod mail_faults;
 #[path = "board-debug-runtime/shutdown_signals.rs"]
 mod shutdown_signals;
 use std::{
@@ -57,29 +41,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err("board-debug-runtime requires a debug build".into());
     }
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
-    let [directory, port, extra @ ..] = arguments.as_slice() else {
-        return Err("usage: board-debug-runtime <private temporary directory> <MCP port> [<private fixture session JSON>]".into());
+    let [directory, port] = arguments.as_slice() else {
+        return Err("usage: board-debug-runtime <private temporary directory> <MCP port>".into());
     };
     let port: u16 = port.to_str().ok_or("port must be UTF-8")?.parse()?;
     let directory = validate_debug_directory(Path::new(directory), port)?;
-    let board_session = match extra {
-        [] => None,
-        [path] => {
-            let path = PathBuf::from(path);
-            let root = directory.clone();
-            Some(
-                tokio::task::spawn_blocking(move || load_fleet_enrollment(&path, &root))
-                    .await
-                    .map_err(io::Error::other)??,
-            )
-        }
-        _ => return Err("expected at most one private fixture session JSON path".into()),
-    };
     let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME unavailable")?);
     // Keep the normal Codex state path. No native process or stored-session read
     // is requested by this launcher; the native endpoint remains unavailable.
     let inputs = CollaborationRuntimeInputs {
-        board_session,
         owner_human_id: None,
         directory: directory.clone(),
         codex_home: home.join(".codex"),
@@ -89,19 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         peer_registry_directory: Some(directory.join("absent-peer-registry")),
         remote_control_server_name: None,
     };
-    #[cfg(feature = "runtime-test-support")]
-    let providers = fixture_provider::startups(&directory)?;
-    #[cfg(not(feature = "runtime-test-support"))]
-    let providers = Vec::new();
-    let mut runtime =
-        CollaborationRuntime::start_with_external_providers(inputs, providers).await?;
-    #[cfg(feature = "runtime-test-support")]
-    if let Err(error) = mail_faults::install(&runtime, &directory).await {
-        return match runtime.shutdown().await {
-            Ok(()) => Err(error.into()),
-            Err(cleanup) => Err(format!("mail fault setup: {error}; cleanup: {cleanup}").into()),
-        };
-    }
+    let mut runtime = CollaborationRuntime::start(inputs).await?;
     let manifest: ServiceManifest =
         serde_json::from_slice(&std::fs::read(directory.join("service.json"))?)?;
     let mut shutdown_signals = match shutdown_signals::ShutdownSignals::register_handlers() {
@@ -123,18 +81,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "mcpUrl":manifest.mcp.url,"nativeBackend":"absent"})
     );
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    let outcome = if hold_before_serve {
+    if hold_before_serve {
         println!(
             "{}",
             serde_json::json!({"kind":"boardDebugRuntimeBeforeServeHeld","directory":directory})
         );
-        // Stay before query-loop entry until the real, already-armed signal
-        // owner receives shutdown. No stdin EOF or elapsed delay releases it.
-        wait_for_shutdown(&mut runtime, &mut shutdown_signals).await
-    } else {
-        local_cancel_observation::serve_until_shutdown(&mut runtime, &mut shutdown_signals).await
-    };
-    #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
+    }
     let outcome = wait_for_shutdown(&mut runtime, &mut shutdown_signals).await;
     let shutdown = runtime.shutdown().await;
     outcome?;

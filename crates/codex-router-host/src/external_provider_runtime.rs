@@ -12,10 +12,9 @@ use acp_client_runtime::AgentSessionClient;
 #[cfg(test)]
 pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
 #[cfg(test)]
-use collaboration_protocol::{CodexGeneration, SessionRef};
+use collaboration_protocol::SessionRef;
 use collaboration_protocol::{OperationId, ProviderPromptStopReason};
 use collaboration_runtime::ProviderSessionEventHub;
-use collaboration_runtime::ServiceInteractionBroker;
 use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 
@@ -93,7 +92,6 @@ mod initialization_authentication_tests;
 
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
-    interaction_port: Arc<HostInteractionPort>,
     owner_ingress: Arc<SessionOwnerIngress>,
     owner_door: std::sync::OnceLock<Arc<crate::session_owner_door::SessionOwnerDoor>>,
     #[cfg(test)]
@@ -164,11 +162,8 @@ impl ExternalProviderRuntime {
         launch: ExternalProviderLaunch,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
         let owner_ingress = Arc::new(SessionOwnerIngress::default());
-        interaction_port
-            .install_event_sink(owner_ingress.clone())
-            .await;
+        let interaction_port = Arc::new(HostInteractionPort(owner_ingress.clone()));
         let client = AgentSessionClient::initialize(
             launch,
             Arc::clone(&interaction_port),
@@ -178,7 +173,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             owner_ingress,
             owner_door: std::sync::OnceLock::new(),
             #[cfg(test)]
@@ -198,11 +192,8 @@ impl ExternalProviderRuntime {
         server_url: impl Into<String>,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
         let owner_ingress = Arc::new(SessionOwnerIngress::default());
-        interaction_port
-            .install_event_sink(owner_ingress.clone())
-            .await;
+        let interaction_port = Arc::new(HostInteractionPort(owner_ingress.clone()));
         let client = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
@@ -216,7 +207,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             owner_ingress,
             owner_door: std::sync::OnceLock::new(),
             #[cfg(test)]
@@ -243,11 +233,8 @@ impl ExternalProviderRuntime {
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
         clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
         let owner_ingress = Arc::new(SessionOwnerIngress::default());
-        interaction_port
-            .install_event_sink(owner_ingress.clone())
-            .await;
+        let interaction_port = Arc::new(HostInteractionPort(owner_ingress.clone()));
         let client = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
@@ -261,7 +248,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             owner_ingress,
             owner_door: std::sync::OnceLock::new(),
             #[cfg(test)]
@@ -301,11 +287,8 @@ impl ExternalProviderRuntime {
         initialize_timeout: Duration,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
         let owner_ingress = Arc::new(SessionOwnerIngress::default());
-        interaction_port
-            .install_event_sink(owner_ingress.clone())
-            .await;
+        let interaction_port = Arc::new(HostInteractionPort(owner_ingress.clone()));
         let client = AgentSessionClient::initialize_with_timeout(
             launch,
             initialize_timeout,
@@ -316,7 +299,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             owner_ingress,
             owner_door: std::sync::OnceLock::new(),
             preparation_fixture: Arc::default(),
@@ -326,10 +308,6 @@ impl ExternalProviderRuntime {
             fixture_hub: None,
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
         })
-    }
-
-    pub async fn install_approval_broker(&self, broker: Arc<ServiceInteractionBroker>) {
-        self.interaction_port.install_broker(broker).await;
     }
 
     pub(crate) fn take_permission_refusal(
@@ -458,6 +436,10 @@ mod fixture_tests;
 use fixture_tests::*;
 
 #[cfg(test)]
+#[path = "external_provider_runtime/owner_fixture.rs"]
+mod owner_fixture;
+
+#[cfg(test)]
 #[path = "external_provider_runtime/live_test.rs"]
 mod live_tests;
 #[cfg(test)]
@@ -473,10 +455,3 @@ pub(crate) mod acp_scripted_fixture;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_dispatch_test.rs"]
 mod approval_dispatch_tests;
-#[cfg(test)]
-#[path = "external_provider_runtime/approval_push_fixture.rs"]
-mod approval_push_fixture;
-
-#[cfg(test)]
-#[path = "external_provider_runtime/owner_fixture.rs"]
-mod owner_fixture;

@@ -125,281 +125,137 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
 
 #[cfg(unix)]
 #[tokio::test]
-async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected_option()
--> TestResult {
+async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult {
     let root = tempfile::tempdir()?;
-    let provider_endpoint = endpoint("cursor-local")?;
-    let requester = actor(provider_endpoint.clone(), "requester")?;
-    let approver = actor(endpoint("codex-local")?, "approver")?;
+    let provider_endpoint = endpoint("claude-local")?;
     let runtime = ExternalProviderRuntime::initialize(
-        permission_allow_fixture(),
+        cancel_fixture(&root.path().join("shutdown.log")),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await?;
     let backend = supervisor(
         &root,
-        vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
+        vec![(binding(provider_endpoint.clone(), "claude")?, runtime)],
     )
     .await?;
-    let (broker, native_backend) =
-        approval_broker_fixture(&root, &provider_endpoint.service_id, &approver).await?;
-    backend.install_approval_broker(Arc::clone(&broker)).await;
-
-    let create_operation_id = OperationId::generate();
+    let requester = actor(provider_endpoint.clone(), "requester")?;
+    let create_id = OperationId::generate();
     operation(
         backend
             .create(ConversationCreateRequest {
-                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
-                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                    ..Default::default()
                 }),
-                operation_id: create_operation_id.clone(),
+                work_roots: Vec::new(),
+                operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
                 working_directory: working_directory()?,
                 created_by: (requester.clone()).into(),
-                approver: (approver.clone()).into(),
+                approver: (requester.clone()).into(),
                 requested_policy: policy(),
             })
             .await,
     )?;
-    let created = operation(wait(&backend, create_operation_id).await)?;
+    let created = operation(wait(&backend, create_id).await)?;
     let target = match created.output {
         ConversationOperationWaitOutput::Available {
             settlement: ConversationOperationSettlement::Created { target, .. },
         } => target,
-        output => return Err(format!("unexpected create output: {output:?}").into()),
+        other => return Err(format!("unexpected create output: {other:?}").into()),
     };
-
-    let prompt_operation_id = OperationId::generate();
+    let prompt_id = OperationId::generate();
     operation(
         backend
             .prompt(ConversationPromptRequest {
-                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
-                operation_id: prompt_operation_id.clone(),
+                delivery: collaboration_protocol::MessageDelivery::Auto,
+                operation_id: prompt_id.clone(),
                 target,
                 generation: Some(generation()?),
-                requested_by: (requester).into(),
-                approver: (approver.clone()).into(),
+                requested_by: (requester.clone()).into(),
+                approver: (requester).into(),
                 prompt: MessageContent::HumanUser {
-                    text: MessageText::try_from("request permission".to_owned())?,
+                    text: MessageText::try_from("hold".to_owned())?,
                 },
             })
             .await,
     )?;
-    let pending = tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if let Some(record) = broker.list_typed_approvals(true).await.into_iter().next() {
-                break record;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await?;
-    let while_live = operation(
-        backend
-            .reconcile(ConversationOperationReconcileRequest {
-                operation_id: prompt_operation_id.clone(),
-            })
-            .await,
-    )?;
-    ensure_eq!(while_live.stage, ProviderOperationStage::MayHaveDispatched);
-    ensure_eq!(
-        while_live.reconciliation,
-        ProviderReconciliationState::Unresolved
-    );
-    ensure_eq!(
-        pending
-            .options
-            .iter()
-            .next()
-            .map(|option| option.option_id.as_str()),
-        Some("allow-exact-once")
-    );
-    let pending_history = broker.list_interactions().await;
-    let Some(collaboration_runtime::InteractionHistoryRecord::Approval {
-        requester: recorded_requester,
-        approver: recorded_approver,
-        ..
-    }) = pending_history
-        .iter()
-        .find(|record| record.request_id() == pending.request_id)
-    else {
-        return Err("typed approval missing from history".into());
-    };
-    ensure_eq!(
-        serde_json::to_value(recorded_requester)?,
-        serde_json::to_value(actor(endpoint("cursor-local")?, "fixture-session")?)?
-    );
-    ensure_eq!(
-        serde_json::to_value(recorded_approver)?,
-        json!({"kind":"session","session":approver.clone()})
-    );
-    let native_requests = tokio::time::timeout(std::time::Duration::from_secs(5), native_backend)
+    await_admission(&backend, &prompt_id).await?;
+    backend
+        .shutdown()
         .await
-        .map_err(|_| "native approver fixture did not complete")??
-        .map_err(|error| format!("native approver fixture failed: {error}"))?;
-    ensure_eq!(native_requests.len(), 4);
-    let decision = broker
-        .decide_typed_interaction(
-            &pending.request_id,
-            &serde_json::from_value(json!({"kind":"session","session":approver.clone()}))?,
-            collaboration_runtime::TypedInteractionDecision::SelectApproval {
-                option_id: "allow-exact-once".into(),
-                acknowledge_persistent: false,
-                note: None,
-            },
-        )
+        .map_err(|message| message.to_owned())?;
+    let failure = wait(&backend, prompt_id)
         .await
-        .map_err(|error| format!("approval decision failed: {error}"))?;
-    ensure!(matches!(decision,
-        collaboration_runtime::TypedInteractionDecisionOutcome::ApprovalSelected { option_id }
-            if option_id.as_str() == "allow-exact-once"));
-
-    let settled = operation(wait(&backend, prompt_operation_id).await)?;
-    ensure!(matches!(
-        settled.output,
-        ConversationOperationWaitOutput::Available {
-            settlement: ConversationOperationSettlement::PromptCompleted {
-                stop_reason: ProviderPromptStopReason::EndTurn,
-                ..
-            }
-        }
-    ));
-    ensure_eq!(broker.list_typed_approvals(false).await.len(), 1);
+        .expect_err("shutdown-held prompt cannot succeed");
+    ensure_eq!(failure.effect, ProviderOperationEffect::Unknown);
     Ok(())
 }
 
 #[cfg(unix)]
 #[tokio::test]
-async fn retired_provider_binding_cancels_pending_approval_before_selection() -> TestResult {
+async fn supervisor_shutdown_drains_saturated_load_completions_and_preserves_unknown_effect()
+-> TestResult {
     let root = tempfile::tempdir()?;
-    let provider_endpoint = endpoint("cursor-local")?;
-    let requester = actor(provider_endpoint.clone(), "requester")?;
-    let approver = actor(endpoint("codex-local")?, "approver")?;
+    let admission_log = root.path().join("load-admissions.log");
+    let process_id_path = root.path().join("provider.pid");
+    let provider_endpoint = endpoint("claude-local")?;
     let runtime = ExternalProviderRuntime::initialize(
-        permission_cancel_fixture(),
+        saturated_load_fixture(&admission_log, &process_id_path),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await?;
-    let binding_retirement = runtime.retirement();
     let backend = supervisor(
         &root,
-        vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
+        vec![(binding(provider_endpoint.clone(), "claude")?, runtime)],
     )
     .await?;
-    let (broker, native_backend) =
-        approval_broker_fixture(&root, &provider_endpoint.service_id, &approver).await?;
-    backend.install_approval_broker(Arc::clone(&broker)).await;
-    let create_operation_id = OperationId::generate();
-    operation(
-        backend
-            .create(ConversationCreateRequest {
-                work_roots: Vec::new(),
-                settings: Some(collaboration_protocol::ProviderRequestedSettings {
-                    mode: Some("auto".into()),
-                    ..collaboration_protocol::ProviderRequestedSettings::default()
-                }),
-                operation_id: create_operation_id.clone(),
-                endpoint: provider_endpoint,
-                generation: Some(generation()?),
-                working_directory: working_directory()?,
-                created_by: (requester.clone()).into(),
-                approver: (approver.clone()).into(),
-                requested_policy: policy(),
-            })
-            .await,
-    )?;
-    let created = operation(wait(&backend, create_operation_id).await)?;
-    let target = match created.output {
-        ConversationOperationWaitOutput::Available {
-            settlement: ConversationOperationSettlement::Created { target, .. },
-        } => target,
-        output => return Err(format!("unexpected create output: {output:?}").into()),
-    };
-    let prompt_operation_id = OperationId::generate();
-    operation(
-        backend
-            .prompt(ConversationPromptRequest {
-                delivery: collaboration_protocol::MessageDelivery::Auto,
-                input_id: None,
-                operation_id: prompt_operation_id.clone(),
-                target,
-                generation: Some(generation()?),
-                requested_by: (requester).into(),
-                approver: (approver.clone()).into(),
-                prompt: MessageContent::HumanUser {
-                    text: MessageText::try_from("request permission".to_owned())?,
-                },
-            })
-            .await,
-    )?;
-    let pending = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+    let requester = actor(provider_endpoint.clone(), "requester")?;
+    let mut operation_ids = Vec::new();
+    for index in 0..40 {
+        let operation_id = OperationId::generate();
+        operation(
+            backend
+                .load(ConversationLoadRequest {
+                    operation_id: operation_id.clone(),
+                    target: actor(provider_endpoint.clone(), &format!("held-load-{index}"))?,
+                    generation: Some(generation()?),
+                    working_directory: working_directory()?,
+                    requested_by: (requester.clone()).into(),
+                    approver: (requester.clone()).into(),
+                    requested_policy: policy(),
+                })
+                .await,
+        )?;
+        operation_ids.push(operation_id);
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
-            if let Some(record) = broker.list_typed_approvals(true).await.into_iter().next() {
-                break record;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .map_err(|_| "approval did not enter pending state")?;
-    let native_requests = tokio::time::timeout(std::time::Duration::from_secs(5), native_backend)
-        .await
-        .map_err(|_| "native approver fixture did not complete")??
-        .map_err(|error| format!("native approver fixture failed: {error}"))?;
-    ensure_eq!(native_requests.len(), 4);
-    binding_retirement.cancel();
-    let retirement_settled = tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if broker.list_typed_approvals(true).await.is_empty() {
+            if std::fs::read_to_string(&admission_log)
+                .unwrap_or_default()
+                .lines()
+                .count()
+                == 40
+            {
                 break;
             }
             tokio::task::yield_now().await;
         }
     })
-    .await;
-    if retirement_settled.is_err() {
-        return Err(format!(
-            "retired approval remained pending: {:?}",
-            broker.list_interactions().await
-        )
-        .into());
-    }
-    ensure!(matches!(
-        broker
-            .decide_typed_interaction(
-                &pending.request_id,
-                &serde_json::from_value(json!({"kind":"session","session":approver}))?,
-                collaboration_runtime::TypedInteractionDecision::SelectApproval {
-                    option_id: "allow-exact-once".into(),
-                    acknowledge_persistent: false,
-                    note: None,
-                },
-            )
-            .await,
-        Err(collaboration_runtime::InteractionHistoryError::AlreadySettled)
-    ));
-    let history = broker.list_interactions().await;
-    ensure!(
-        history
-            .iter()
-            .any(|record| record.request_id() == pending.request_id
-                && matches!(
-                    record.approval_state(),
-                    Some(collaboration_runtime::InteractionHistoryState::Cancelled { .. })
-                ))
-    );
-    let failure = wait(&backend, prompt_operation_id)
+    .await?;
+    backend
+        .shutdown()
         .await
-        .expect_err("retired runtime cannot claim a successful prompt settlement");
-    ensure_eq!(
-        failure.kind,
-        ConversationOperationFailureKind::OutcomeUnknown
-    );
-    backend.shutdown().await?;
+        .map_err(|message| message.to_owned())?;
+    for operation_id in operation_ids {
+        let failure = wait(&backend, operation_id)
+            .await
+            .expect_err("shutdown-held load cannot succeed");
+        ensure_eq!(failure.effect, ProviderOperationEffect::Unknown);
+    }
+    assert_process_reaped(&process_id_path).await?;
     Ok(())
 }
 

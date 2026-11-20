@@ -73,6 +73,8 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
         Some(event)
     );
     f.clock.0.store(event, Ordering::SeqCst);
+    // The clock moved past the fixture token; this request carries one for now.
+    let fresh_caller = super::super::support::fresh_auth(&f.host, &f.caller);
     let _: bool = runtime
         .control("hold-central", &"beforeTimerCommit")
         .await
@@ -91,11 +93,12 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     };
     let pending_request = tokio::spawn({
         let runtime = runtime.clone();
-        let caller = f.caller.clone();
+        let caller = fresh_caller.clone();
         async move { runtime.request_central(&caller, new_request).await }
     });
     let _: bool = runtime
-        .control("until-central-waiting", &1_usize)
+        // The request first waits on the held central turn at its admission.
+        .control("until-admission-waiting", &1_usize)
         .await
         .unwrap();
     assert!(!pending_request.is_finished());
@@ -123,7 +126,7 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
     let rows = runtime
         .read(Statement {
-            sql: "SELECT state,COUNT(*) FROM wakes GROUP BY state ORDER BY state",
+            sql: "SELECT state,COUNT(*) FROM automation_wakes GROUP BY state ORDER BY state",
             args: vec![],
         })
         .await

@@ -207,6 +207,12 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
             .responses
             .track("cursor/create_plan", responder.id());
         connection.spawn(async move {
+            if let Some(refusal) = port.managed_refusal() {
+                let queued = responder.respond(refusal.acp_cursor_plan());
+                drop(response_guard);
+                context.cancel_after_refusal(port, refusal).await;
+                return queued;
+            }
             let agent_cancellation = CancellationToken::new();
             let decision = port.request_approval(
                 context.approval,

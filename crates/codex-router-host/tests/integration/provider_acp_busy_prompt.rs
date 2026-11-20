@@ -97,7 +97,6 @@ async fn acp_busy_prompt_through_the_host_command_port() {
     .expect("Cursor binding");
     let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(
                 message_board::HumanId::try_from("acp-owner".to_owned()).expect("owner"),
             ),

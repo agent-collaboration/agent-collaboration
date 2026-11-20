@@ -9,8 +9,8 @@ use collaboration_protocol::{
     ConversationOperationFailureKind, ConversationOperationReconcileRequest,
     ConversationOperationSettlement, ConversationOperationShowRequest,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, ConversationPromptRequest,
-    ConversationResumeRequest, EndpointDescription, EndpointId, EndpointRef, GenerationNumber,
-    MessageContent, MessageText, NonEmptyText, OperationId, PositiveSeconds, ProviderBindingId,
+    ConversationResumeRequest, EndpointId, EndpointRef, GenerationNumber, MessageContent,
+    MessageText, NonEmptyText, OperationId, PositiveSeconds, ProviderBindingId,
     ProviderBindingIdentity, ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence,
     ProviderCapabilityName, ProviderCapabilityStatus, ProviderKind, ProviderOperationEffect,
     ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
@@ -19,19 +19,10 @@ use collaboration_protocol::{
     ProviderSettingsFailureKind, ProviderSettingsSetRequest, ProviderTransport,
     ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_runtime::EndpointDirectory;
-use collaboration_runtime::NativeControlBackend;
-use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ProviderOperationStore;
-use collaboration_runtime::ServiceInteractionBroker;
-use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
-use tokio_tungstenite::tungstenite::Message;
-
-#[path = "../../src/external_provider_runtime/approval_push_fixture.rs"]
-mod approval_push_fixture;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -153,20 +144,6 @@ fn resume_close_fixture() -> ExternalProviderLaunch {
     )
 }
 
-fn permission_allow_fixture() -> ExternalProviderLaunch {
-    launch(
-        "supervisor-integration-agent.ts",
-        vec!["permission".to_owned()],
-    )
-}
-
-fn permission_cancel_fixture() -> ExternalProviderLaunch {
-    launch(
-        "supervisor-integration-agent.ts",
-        vec!["retirement".to_owned()],
-    )
-}
-
 fn authentication_then_create_fixture() -> ExternalProviderLaunch {
     launch(
         "supervisor-integration-agent.ts",
@@ -218,149 +195,6 @@ async fn assert_process_reaped(process_id_path: &std::path::Path) -> TestResult 
     })
     .await?;
     Ok(())
-}
-
-async fn approval_broker_fixture(
-    root: &tempfile::TempDir,
-    service_id: &UuidIdentity,
-    approver: &SessionRef,
-) -> TestResult<(
-    Arc<ServiceInteractionBroker>,
-    tokio::task::JoinHandle<Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>>>,
-)> {
-    let socket_path = root.path().join("native-approver.sock");
-    let listener = tokio::net::UnixListener::bind(&socket_path)?;
-    let native_generation = generation()?;
-    let mut definitions = serde_json::Map::new();
-    for operation in [
-        "ThreadRead",
-        "ThreadResume",
-        "ThreadStart",
-        "ThreadLoadedList",
-        "TurnStart",
-        "TurnSteer",
-        "TurnInterrupt",
-        "ThreadQueueAdd",
-    ] {
-        definitions.insert(format!("{operation}Params"), json!({"type":"object"}));
-        definitions.insert(format!("{operation}Response"), json!({"type":"object"}));
-    }
-    let bundle = codex_native_integration::NativeSchemaBundle::from_documents(BTreeMap::from([(
-        "codex_app_server_protocol.schemas.json".to_owned(),
-        serde_json::to_vec(&json!({"definitions":{"v2":definitions}}))?,
-    )]))?;
-    let schemas = Arc::new(codex_native_integration::NativePayloadSchemas::from_bundle(
-        &bundle,
-    )?);
-    let gate = NativeGenerationGate::default();
-    gate.activate(
-        native_generation.clone(),
-        socket_path,
-        Some(schemas.clone()),
-    )?;
-    let endpoint_description: EndpointDescription = serde_json::from_value(json!({
-        "endpoint": approver.endpoint,
-        "label": "Fixture approver",
-        "availability": {"state":"available","observedAt":"2026-09-20T00:00:00Z"},
-        "channels": [{
-            "kind":"nativeCodex",
-            "transport":"unixWebSocket",
-            "path":"native-approver.sock",
-            "schemaDigest":schemas.schema_digest(),
-            "generation":native_generation
-        }]
-    }))?;
-    let endpoints = EndpointDirectory::new(service_id.clone());
-    endpoints.publish(endpoint_description)?;
-    let native_backend = NativeControlBackend {
-        codex_home: root.path().to_path_buf(),
-        endpoint: approver.endpoint.clone(),
-        gate,
-    };
-    let interaction_store = Arc::new(
-        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
-    );
-    let broker = ServiceInteractionBroker::load(
-        service_id.clone(),
-        native_backend.clone(),
-        interaction_store,
-    )
-    .await?;
-    let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
-        Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
-            service_id.clone(),
-            endpoints,
-            native_backend,
-            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
-        ));
-    broker.install_session_delivery(Arc::new(
-        collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
-    ))?;
-    let push_fixture =
-        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
-            .await
-            .map_err(|error| format!("approval push fixture composition: {error}"))?;
-    let captured_approver = approver.clone();
-    let backend = tokio::spawn(async move {
-        let (stream, _) =
-            tokio::time::timeout(std::time::Duration::from_secs(2), listener.accept())
-                .await
-                .map_err(|_| "native approval push did not connect")??;
-        let mut socket = tokio_tungstenite::accept_async(stream).await?;
-        let mut requests = Vec::new();
-        for expected_method in ["initialize", "initialized", "thread/read", "turn/start"] {
-            let frame = tokio::time::timeout(std::time::Duration::from_secs(2), socket.next())
-                .await
-                .map_err(|error| {
-                    std::io::Error::other(format!(
-                        "native approver timed out waiting for {expected_method}: {error}"
-                    ))
-                })?
-                .ok_or_else(|| {
-                    std::io::Error::other(format!(
-                        "native approver connection closed while waiting for {expected_method}"
-                    ))
-                })?
-                .map_err(|error| {
-                    std::io::Error::other(format!(
-                        "native approver websocket failed while waiting for {expected_method}: {error}"
-                    ))
-                })?;
-            let request: Value = serde_json::from_str(frame.to_text()?)?;
-            ensure_eq!(
-                request.get("method").and_then(Value::as_str),
-                Some(expected_method)
-            );
-            if expected_method == "turn/start" {
-                let delivered_line = request
-                    .pointer("/params/input/0/text")
-                    .and_then(Value::as_str)
-                    .ok_or("native approver input omitted its push line")?;
-                let _record = push_fixture
-                    .captured_approval(delivered_line, &captured_approver)
-                    .await?;
-            }
-            requests.push(request.clone());
-            if expected_method == "initialized" {
-                continue;
-            }
-            let result = match expected_method {
-                "thread/read" => json!({"thread":{"id":"approver","status":{"type":"idle"}}}),
-                "turn/start" => json!({"turn":{"id":"approval-turn"}}),
-                _ => json!({}),
-            };
-            socket
-                .send(Message::Text(
-                    json!({"id":request.get("id").ok_or("native request ID missing")?,"result":result})
-                        .to_string()
-                        .into(),
-                ))
-                .await?;
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(requests)
-    });
-    Ok((broker, backend))
 }
 
 async fn supervisor(

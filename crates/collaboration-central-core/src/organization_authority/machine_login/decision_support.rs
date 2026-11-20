@@ -7,7 +7,6 @@ use fleet_identity_protocol::UnixSeconds;
 use runtime_primitives::IdSource;
 use uuid::Uuid;
 
-pub(super) const MACHINE_GRANT_LIFETIME_SECONDS: i64 = 600;
 pub(crate) const IDLE_EXPIRY_SECONDS: i64 = 30 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

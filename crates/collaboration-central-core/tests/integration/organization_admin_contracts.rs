@@ -72,7 +72,7 @@ fn organization_admin_result_wire_contract() {
             json!({"result":"refused","reason":"rejected"}),
             json!({"result":"engineHealth","kinds":[{"kind":"wake_timer","failing":1,"retired":0,"oldestFirstFailedAt":"2030-01-01T10:05:00Z","lastFailure":"corrupt_row"},{"kind":"automation_timer","failing":0,"retired":0,"oldestFirstFailedAt":null,"lastFailure":null}],"alarm":"2030-01-01T10:10:00Z","alarmMissing":false}),
             json!({"result":"engineHealth","kinds":[],"alarm":null,"alarmMissing":true}),
-            json!({"result":"engineRetired","items":[{"attemptId":"019a3dce-2000-7000-8000-000000000020","kind":"wake_timer","subjectKey":"019a3dce-2000-7000-8000-000000000021","failureClass":"corrupt_row","count":2,"retiredAt":"2030-01-01T10:10:00Z","lastFailure":"wakes.target"}],"next":"019a3dce-2000-7000-8000-000000000020"}),
+            json!({"result":"engineRetired","items":[{"attemptId":"019a3dce-2000-7000-8000-000000000020","kind":"wake_timer","subjectKey":"019a3dce-2000-7000-8000-000000000021","failureClass":"corrupt_row","count":2,"retiredAt":"2030-01-01T10:10:00Z","lastFailure":"automation_wakes.target"}],"next":"019a3dce-2000-7000-8000-000000000020"}),
             json!({"result":"engineRetired","items":[],"next":null}),
             json!({"result":"engineRetried"}),
             json!({"result":"engineDiscarded"}),

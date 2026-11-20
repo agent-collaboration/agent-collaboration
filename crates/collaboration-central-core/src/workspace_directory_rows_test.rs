@@ -102,7 +102,7 @@ fn padded_empty_and_over_256_byte_names_are_rejected_without_trimming() {
         let mut rows = stored_row();
         replace_cell(&mut rows, "name", text(name));
 
-        assert_bad_value(&rows, "workspaces.name");
+        assert_bad_value(&rows, "directory_workspaces.name");
     }
 }
 
@@ -119,7 +119,7 @@ fn stored_descriptions_over_the_2048_byte_write_bound_are_corrupt() {
         let mut rows = stored_row();
         replace_cell(&mut rows, "description", text(description));
 
-        assert_bad_value(&rows, "workspaces.description");
+        assert_bad_value(&rows, "directory_workspaces.description");
     }
 }
 
@@ -129,7 +129,7 @@ fn unknown_stored_state_is_rejected_instead_of_becoming_active() {
         let mut rows = stored_row();
         replace_cell(&mut rows, "state", text(state));
 
-        assert_bad_value(&rows, "workspaces.state");
+        assert_bad_value(&rows, "directory_workspaces.state");
     }
 }
 
@@ -151,7 +151,7 @@ fn malformed_or_non_v7_workspace_identity_is_corrupt() {
         let mut rows = stored_row();
         replace_cell(&mut rows, "workspace_id", text(id));
 
-        assert_bad_value(&rows, "workspaces.workspace_id");
+        assert_bad_value(&rows, "directory_workspaces.workspace_id");
     }
 }
 
@@ -160,7 +160,7 @@ fn duplicate_directory_rows_are_corrupt_even_when_identical() {
     let mut rows = stored_row();
     rows.rows.push(rows.rows.first().unwrap().clone());
 
-    assert_bad_value(&rows, "workspaces.workspace_id");
+    assert_bad_value(&rows, "directory_workspaces.workspace_id");
 }
 
 #[test]

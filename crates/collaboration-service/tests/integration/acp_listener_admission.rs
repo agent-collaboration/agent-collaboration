@@ -37,9 +37,9 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
     let gate = NativeGenerationGate::default();
     let listener = AcpChannelListener::bind(
         &path,
+        "00000000-0000-4000-8000-000000000001".to_owned().try_into().unwrap(),
         gate.clone(),
         Arc::new(NativeStoredSessions::new(root.clone(), "fixture".into())),
-        Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
         Arc::new(AcceptingConversationRecorder),
         Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),

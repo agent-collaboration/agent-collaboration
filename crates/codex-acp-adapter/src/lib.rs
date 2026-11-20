@@ -1,11 +1,10 @@
 //! ACP-agent connection routing and Codex Session translation.
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 extern crate self as codex_acp_adapter;
 mod acp_connection_dispatch;
 mod acp_connection_router;
 mod acp_connection_transport;
 mod acp_frame_transport;
-mod approval_broker;
 mod assistant_text_projection;
 mod connection_negotiation;
 mod conversation_operation_recorder;
@@ -14,7 +13,6 @@ mod history_projection;
 mod lazy_codex_session_route;
 mod mcp_configuration;
 mod native_prompt_execution;
-mod permission_address;
 mod permission_translation;
 mod prompt_connection_task;
 mod prompt_content_translation;
@@ -24,7 +22,7 @@ mod scratch_scope_register;
 mod session_connection_registry;
 mod session_creation;
 mod stored_session_listing;
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub use acp_connection_dispatch::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
 pub use acp_connection_router::{
@@ -35,10 +33,6 @@ pub use acp_connection_transport::{
     AcpRouterChannels, AcpWireChannels, acp_connection_channels, run_acp_transport,
 };
 pub use acp_frame_transport::{read_acp_frame, write_acp_frame};
-pub use approval_broker::{
-    ApprovalBroker, ApprovalBrokerError, ApprovalRoute, BrokeredApprovalOutcome,
-    BrokeredApprovalRequest, RejectingApprovalBroker,
-};
 pub use lazy_codex_session_route::{CodexAdmissionSource, lazy_codex_session_route};
 pub use prompt_connection_task::{
     PromptCommand, PromptTaskCompletion, PromptTaskInputs, run_prompt_task,
@@ -66,9 +60,7 @@ pub use prompt_content_translation::{
     PromptContentError, TranslatedPrompt, translate_prompt_content,
 };
 pub use prompt_settlement::{NativeInterruptionState, NativePromptTerminal, PromptSettlement};
-pub use session_creation::{
-    AcpSessionBinding, RecordedSessionResume, SessionSetupError, SessionSetupInputs,
-};
+pub use session_creation::{AcpSessionBinding, SessionSetupError, SessionSetupInputs};
 pub use tool_progress_projection::{ToolProjectionError, project_tool_progress};
 
 mod session_setup_task;

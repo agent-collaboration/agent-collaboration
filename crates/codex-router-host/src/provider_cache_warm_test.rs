@@ -2,6 +2,7 @@
 //! for the supervisor's prompt path. No session, cancel or steer call exists on it.
 use super::*;
 use collaboration_protocol::EndpointId;
+use provider_session_machines::{SessionGeneration, session_owner::OwnerAddress};
 use router_clock::ManualClock;
 use session_event_model::{StopReason, TurnOutcome};
 use std::sync::atomic::{AtomicUsize, Ordering};

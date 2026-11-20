@@ -3,7 +3,6 @@ import type { LedgerSection, SendSiteCoverage } from "../schema-audit-types.ts";
 const R = "crates/codex-native-integration/src/";
 const N10 = { part: "N10" } as const;
 const TAP = "crates/codex-native-integration/src/validated_native_request_node_tap_test.rs";
-const APPROVAL_TAP = "crates/codex-acp-adapter/src/native_prompt_execution_node_tap_test.rs";
 /**
  * N11's native-control case drives the real NativeProtocolConnection::connect (through the
  * service's native_call, session_native_control.rs:302) against a fake Codex socket and records
@@ -221,9 +220,8 @@ export const section: LedgerSection = {
       owner: N10,
       origin: "product",
       coverage: {
-        kind: "tap",
-        testFile: APPROVAL_TAP,
-        cases: ["node_tap_legacy_codex_approval_goes_to_broker_and_cancel_returns_to_codex"],
+        kind: "uncovered",
+        reason: "The scripted managed refusal test checks the native callback response.",
       },
     },
     {

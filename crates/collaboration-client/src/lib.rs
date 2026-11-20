@@ -3,21 +3,12 @@
 pub use collaboration_protocol as protocol;
 /// Message-board request, result and validated domain types.
 pub mod board {
-    pub use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
-    pub use message_board::public_replies::{
-        DecisionEffectsPage, RequestDecision, RequestEffectsRead, RequestEffectsRequest,
-        RequestResult, WriteReply,
-    };
     pub use message_board::*;
 }
 mod admission_overload;
 mod api_connection;
-#[cfg(test)]
-mod board_project_read_timeout_test;
 mod collaboration_access;
 mod collaboration_client;
-mod message_operation;
-mod message_submission;
 mod provider_conversations;
 pub use collaboration_access::{CollaborationAccess, LocalCollaboration, LocalFuture};
 pub use provider_conversations::ProviderConversations;
@@ -26,13 +17,6 @@ pub use collaboration_client::{ClientError, CollaborationClient, RouterIdentity}
 pub use collaboration_protocol::EndpointInventory;
 pub use collaboration_protocol::{
     AdapterOperationFailure as OperationFailure, OperationEffect, OperationFailureKind,
-};
-pub use collaboration_protocol::{
-    PushRecordHistoryParams, PushRecordListParams, PushRecordShowParams,
-};
-pub use message_operation::{
-    MessageReplyError, MessageReplyRequest, MessageSendError, MessageSendRequest,
-    PublicMessageContent,
 };
 pub use operation_error::{OperationError, operation_failure_from_client_error};
 static OBSERVED_SERVICE_VERSION: std::sync::OnceLock<std::sync::Mutex<String>> =
@@ -180,28 +164,6 @@ pub use conversation_contract::{
 };
 mod acp_transport_connection;
 pub use acp_transport_connection::AcpTransportConnection;
-mod instruction_operations;
-pub use instruction_operations::InstructionClientError;
-mod wakeup_operations;
-pub use wakeup_operations::WakeClientError;
-
-mod wakeup_waiting;
-pub use wakeup_waiting::{WakeWaitConnection, WakeWaitError};
-pub use wakeup_waiting::{WakeWaitFailure, WakeWaitFailureKind};
-mod automation_inspection_operations;
-mod schedule_operations;
-pub use automation_inspection_operations::AutomationInspectionClientError;
-pub use schedule_operations::ScheduleClientError;
-mod run_operations;
-pub use run_operations::RunClientError;
-mod automation_configuration_operations;
-pub use automation_configuration_operations::ConfigurationClientError;
-
-mod board_operations;
-pub use board_operations::BoardClientError;
-
-mod board_repository;
-pub use board_repository::{BoardRepositoryError, BoardRepositoryLocation};
 
 mod service_directory;
 pub use service_directory::{

@@ -28,29 +28,9 @@ export const section: LedgerSection = {
       note: "NativeRouteClaim L6: Rust-only wrapper pairing the serde RouteClaim (session_delivery_contract.rs:117) with an internal UnsentCause; adds no wire shape. Inline #[cfg(test)] mod tests at L63.",
     },
     {
-      file: "crates/collaboration-contracts/src/project_claim.rs",
-      disposition: { kind: "none" },
-      note: "ProjectClaim trait L12 over board_sync_protocol::{ProjectClaimRequest, ProjectClaimReply} (L2); the request and reply shapes are owned and listed by board-sync-protocol, this file only names them in a Rust port.",
-    },
-    {
-      file: "crates/collaboration-contracts/src/project_registration.rs",
-      disposition: { kind: "none" },
-      note: "ProjectRegistration trait L27 and ProjectRegistrationState L7 (no serde) around fleet_sync_writer::WriterRegistrationOutcome: a Rust port to the Host's writer runtime, not a message shape.",
-    },
-    {
-      file: "crates/collaboration-contracts/src/project_replication_position.rs",
-      disposition: { kind: "none" },
-      note: "ProjectReplicationPosition trait L15 over message_board feed cursors and fleet_sync_protocol::Epoch; UnacknowledgedProjectReplication stand-in L34. No serde.",
-    },
-    {
       file: "crates/collaboration-contracts/src/provider_conversation_backend.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary"] },
       note: "Host-owned execution boundary for external ACP conversation operations: ProviderConversationBackend trait L32 over the collaboration-protocol request and failure types; default inspect/settings refusals built at L39 and settings_unavailable L100. No serde of its own.",
-    },
-    {
-      file: "crates/collaboration-contracts/src/router_delivery_types.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "RouterLocalObservation L11 (serde: receipt, scheduledRetryAt, routeEvidence) journaled beside the fleet SDK outcome; RouterDeliveryTypes L28 and RouterConsumerProtocol L53 bind the board fleet delivery types with MAX_LOCAL_OBSERVATION_BYTES L44.",
     },
     {
       file: "crates/collaboration-contracts/src/router_identity.rs",

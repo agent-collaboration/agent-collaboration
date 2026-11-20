@@ -1,9 +1,26 @@
 //! Organization commands share one refusal vocabulary and keep reads separate.
 use super::CommandId;
-use fleet_identity_protocol::{InstallationId, OrganizationId};
+use fleet_identity_protocol::OrganizationId;
 use message_board::{ResourceName, SessionRef, WorkspaceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use workspace_ids::MachineId;
+
+/// Permission required for the private machine revocation command.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum RevokePermission {
+    #[serde(rename = "machine:revoke")]
+    MachineRevoke,
+}
+
+impl RevokePermission {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::MachineRevoke => "machine:revoke",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateOrganization {
@@ -38,21 +55,21 @@ pub struct RemoveSignIn {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AllowMachine {
     pub organization_id: OrganizationId,
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub workspace_id: WorkspaceId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WithdrawMachineAllowance {
     pub organization_id: OrganizationId,
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub workspace_id: WorkspaceId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RevokeMachineEnrollment {
     pub organization_id: OrganizationId,
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -89,7 +106,7 @@ pub enum CommandRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MachineAllowance {
-    pub installation: InstallationId,
+    pub machine_id: MachineId,
     pub workspace_id: WorkspaceId,
     pub state: AllowanceState,
 }

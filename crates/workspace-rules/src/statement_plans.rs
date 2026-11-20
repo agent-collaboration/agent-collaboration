@@ -44,18 +44,7 @@ pub(crate) fn plan(
     mut statements: Vec<GuardedStatement>,
     answer: RuleAnswer,
 ) -> RulePlan {
-    let (kind, id) = item.kind_and_id();
-    let thread = match &item {
-        ItemRef::Thread(id) => text(id),
-        _ => SqlValue::Null,
-    };
-    let project = match &item {
-        ItemRef::Project(id) => text(id),
-        _ => SqlValue::Null,
-    };
-    statements.push(exact(
-        "INSERT INTO changes (change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) VALUES (?,(SELECT COALESCE(MAX(position),0)+1 FROM changes),?,?,?,?,?,?,?,?,?,?)",
-        vec![text(&context.change_id), text(event), text(kind), text(id), thread, project, text(&context.actor), SqlValue::Null, SqlValue::Null, text(context.now.to_rfc3339()), text(context.now.to_rfc3339())]));
+    statements.push(change_row(context, &context.change_id, event, &item));
     RulePlan {
         batch: StatementBatch {
             statements,
@@ -63,6 +52,40 @@ pub(crate) fn plan(
         },
         answer,
     }
+}
+/// One `changes` row; thread/project/subject/role columns start from the item
+/// and are refined by [`change_metadata`] when this is the batch's last row.
+pub(crate) fn change_row(
+    context: &WriteContext,
+    change_id: &ChangeId,
+    event: &'static str,
+    item: &ItemRef,
+) -> GuardedStatement {
+    let (kind, id) = item.kind_and_id();
+    let thread = match item {
+        ItemRef::Thread(id) => text(id),
+        _ => SqlValue::Null,
+    };
+    let project = match item {
+        ItemRef::Project(id) => text(id),
+        _ => SqlValue::Null,
+    };
+    exact(
+        "INSERT INTO workspace_changes (change_id,position,change_kind,item_kind,item_id,thread_id,project_id,actor,subject_actor,role,created_at,updated_at) VALUES (?,(SELECT COALESCE(MAX(position),0)+1 FROM workspace_changes),?,?,?,?,?,?,?,?,?,?)",
+        vec![
+            text(change_id),
+            text(event),
+            text(kind),
+            text(id),
+            thread,
+            project,
+            text(&context.actor),
+            SqlValue::Null,
+            SqlValue::Null,
+            text(context.now.to_rfc3339()),
+            text(context.now.to_rfc3339()),
+        ],
+    )
 }
 pub(crate) fn unchanged() -> RulePlan {
     RulePlan {

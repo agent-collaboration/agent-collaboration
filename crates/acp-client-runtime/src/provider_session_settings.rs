@@ -186,20 +186,22 @@ impl ProviderSettingsCatalog {
             .unwrap_or_default()
     }
 
-    /// Lists the valid values if a model or effort selection is unavailable.
+    /// Lists the valid choices when an explicit catalog selection is unavailable.
     pub fn unavailable_selection(
         &self,
         kind: ProviderSettingKind,
         requested: &str,
     ) -> Option<Vec<String>> {
-        if !matches!(
-            kind,
-            ProviderSettingKind::Model | ProviderSettingKind::Effort
-        ) {
-            return None;
+        match kind {
+            ProviderSettingKind::Model | ProviderSettingKind::Effort => {
+                let advertised = self.advertised_values(kind);
+                (!advertised.iter().any(|value| value == requested)).then_some(advertised)
+            }
+            ProviderSettingKind::Fast if requested == "off" && !self.offers_fast() => {
+                Some(Vec::new())
+            }
+            ProviderSettingKind::Mode | ProviderSettingKind::Fast => None,
         }
-        let advertised = self.advertised_values(kind);
-        (!advertised.iter().any(|value| value == requested)).then_some(advertised)
     }
 
     #[must_use]

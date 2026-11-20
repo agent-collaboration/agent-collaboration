@@ -1,10 +1,8 @@
-//! Owned process and public listener access for the real board Host fixture.
+//! Owns and joins one debug Host child for listener startup proof.
 use codex_router_test_support::FixtureResult;
 use owned_process_test_support::owned_cli_process::run_cli_output;
 use serde::Deserialize;
-use serde_json::{Value, json};
 use std::{
-    ffi::OsStr,
     fs::OpenOptions,
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
@@ -18,7 +16,6 @@ use tokio::{
 
 const READY_BOUND: Duration = Duration::from_secs(45);
 const STOP_BOUND: Duration = Duration::from_secs(20);
-const CALL_BOUND: Duration = Duration::from_secs(20);
 const MAX_START_ATTEMPTS: usize = 3;
 
 enum ReadyListener {
@@ -70,11 +67,6 @@ impl StoppedHost {
     // Shared by targets that exercise joined SIGKILL readback.
 }
 
-pub struct McpReply {
-    pub is_error: bool,
-    pub value: Value,
-}
-
 pub fn artifact_command(binary: &Path) -> FixtureResult<Command> {
     if !binary.is_absolute() || !binary.is_file() {
         return Err(format!(
@@ -97,8 +89,8 @@ pub fn artifact_command(binary: &Path) -> FixtureResult<Command> {
 }
 
 impl BoardHost {
-    pub async fn start(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
-        Self::start_with_port_reports(directory, session, std::convert::identity)
+    pub async fn start(directory: &Path) -> FixtureResult<Self> {
+        Self::start_with_port_reports(directory, std::convert::identity)
             .await
             .map(|(host, _)| host)
     }
@@ -106,13 +98,12 @@ impl BoardHost {
     /// Port reports can force rejection, but cannot permit a protected actual listener.
     pub async fn start_with_port_reports(
         directory: &Path,
-        session: Option<&Path>,
         mut report_port: impl FnMut(u16) -> u16,
     ) -> FixtureResult<(Self, Vec<StoppedHost>)> {
         let mut rejected_ports = Vec::new();
         let mut stopped_attempts = Vec::new();
         for _ in 0..MAX_START_ATTEMPTS {
-            let mut host = Self::spawn_owned(directory, session)?;
+            let mut host = Self::spawn_owned(directory)?;
             match host.read_ready(&mut report_port).await {
                 Ok(ReadyListener::Accepted) => return Ok((host, stopped_attempts)),
                 Ok(ReadyListener::ProtectedPort(port)) => {
@@ -140,7 +131,7 @@ impl BoardHost {
         .into())
     }
 
-    fn spawn_owned(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
+    fn spawn_owned(directory: &Path) -> FixtureResult<Self> {
         let binary = std::env::var_os("CODEX_ROUTER_E2E_HOST_BINARY")
             .map(PathBuf::from)
             .ok_or(
@@ -153,16 +144,6 @@ impl BoardHost {
             .open(directory.join(format!("host-{}.stderr", uuid::Uuid::now_v7())))?;
         let mut command = artifact_command(&binary)?;
         command.arg(directory).arg("0");
-        let status_interval = directory.join("fixture-mail-status-interval-ms");
-        if status_interval.is_file() {
-            command.env(
-                "CODEX_ROUTER_TEST_MAIL_STATUS_INTERVAL_MS",
-                std::fs::read_to_string(status_interval)?.trim(),
-            );
-        }
-        if let Some(session) = session {
-            command.arg(session);
-        }
         command
             .env_remove("CODEX_ROUTER_HOST_INHERITED_LOCK")
             .stdin(Stdio::piped())
@@ -235,111 +216,6 @@ impl BoardHost {
             return Err("pre-serve hold acknowledgement names a different Host".into());
         }
         Ok(())
-    }
-
-    // Only takeover targets need the private replay observation.
-
-    pub async fn cli_output(&self, arguments: &[&OsStr]) -> FixtureResult<std::process::Output> {
-        let mut command = artifact_command(Path::new(env!("CARGO_BIN_EXE_agent-collaboration")))?;
-        command
-            .args(arguments)
-            .arg("--service-directory")
-            .arg(&self.directory)
-            .arg("--json");
-        run_cli_output(command, CALL_BOUND).await
-    }
-
-    pub async fn cli(&self, arguments: &[&OsStr]) -> FixtureResult<Value> {
-        let output = self.cli_output(arguments).await?;
-        let reply: Value = serde_json::from_slice(&output.stdout).map_err(|error| {
-            format!(
-                "CLI JSON failed: {error}; status={}; stderr={}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            )
-        })?;
-        if !output.status.success() {
-            return Err(format!(
-                "CLI status {:?}: {reply}; stderr={}",
-                output.status.code(),
-                String::from_utf8_lossy(&output.stderr)
-            )
-            .into());
-        }
-        reply
-            .get("result")
-            .cloned()
-            .ok_or_else(|| "CLI omitted result envelope".into())
-    }
-
-    pub async fn mcp(&self, tool: &str, arguments: Value) -> FixtureResult<Value> {
-        let reply = self.mcp_reply(tool, arguments).await?;
-        if reply.is_error {
-            return Err(format!("MCP tool refusal: {}", reply.value).into());
-        }
-        Ok(reply.value)
-    }
-
-    pub async fn mcp_reply(&self, tool: &str, arguments: Value) -> FixtureResult<McpReply> {
-        let response = reqwest::Client::builder().no_proxy().timeout(CALL_BOUND).build()?
-            .post(&self.mcp_url)
-            .header("Accept", "application/json, text/event-stream")
-            .header("MCP-Protocol-Version", "2025-11-25")
-            .json(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":tool,"arguments":arguments}}))
-            .send().await?.error_for_status()?;
-        let event_stream = response
-            .headers()
-            .get("content-type")
-            .and_then(|h| h.to_str().ok())
-            .is_some_and(|h| h.contains("text/event-stream"));
-        let text = String::from_utf8(response.bytes().await?.to_vec())?;
-        let packets: Vec<Value> = if event_stream {
-            text.replace("\r\n", "\n")
-                .split("\n\n")
-                .filter_map(|event| {
-                    let data = event
-                        .lines()
-                        .filter_map(|line| line.strip_prefix("data:"))
-                        .map(str::trim_start)
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    (!data.is_empty()).then(|| serde_json::from_str(&data))
-                })
-                .collect::<Result<_, _>>()?
-        } else {
-            vec![serde_json::from_str(&text)?]
-        };
-        let reply = packets
-            .into_iter()
-            .find(|packet| packet.get("id") == Some(&json!(1)))
-            .ok_or("MCP stream omitted the correlated reply")?;
-        if let Some(error) = reply.get("error") {
-            return Err(format!("MCP RPC refusal: {error}").into());
-        }
-        let result = reply.get("result").ok_or("MCP omitted result")?;
-        let structured = result
-            .get("structuredContent")
-            .ok_or("MCP omitted structured content")?;
-        for item in result
-            .get("content")
-            .and_then(Value::as_array)
-            .ok_or("MCP omitted content")?
-        {
-            if item.get("type") == Some(&json!("text")) {
-                let rendered: Value = serde_json::from_str(
-                    item.get("text")
-                        .and_then(Value::as_str)
-                        .ok_or("MCP text content missing")?,
-                )?;
-                if &rendered != structured {
-                    return Err("MCP rendered/structured results disagree".into());
-                }
-            }
-        }
-        Ok(McpReply {
-            is_error: result.get("isError") == Some(&json!(true)),
-            value: structured.clone(),
-        })
     }
 
     pub async fn stop_for_readback(self) -> FixtureResult<StoppedHost> {

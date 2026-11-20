@@ -34,6 +34,7 @@ url = "2.5.8"
 tokio.workspace = true
 
 [dev-dependencies]
+acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.114", features = ["test-support"] }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4", default-features = false }
 tempfile = "3.27.0"
 tokio-util.workspace = true

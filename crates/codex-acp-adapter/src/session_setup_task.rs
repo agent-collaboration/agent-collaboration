@@ -19,7 +19,6 @@ pub(crate) struct SetupTaskInputs {
     pub operation_id: Option<OperationId>,
     pub recorder: Arc<dyn ConversationOperationRecorder>,
     pub cancellation_barrier: Option<crate::CancellationBarrier>,
-    pub approval_broker: Arc<dyn crate::ApprovalBroker>,
     pub scratch_scopes: Arc<dyn crate::ScratchScopeRegister>,
 }
 pub(crate) struct SetupTaskOutput {
@@ -125,7 +124,6 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             schemas: inputs.schemas,
             generation: inputs.generation,
             params: inputs.params,
-            approval_broker: inputs.approval_broker,
             operation_id: operation_id.clone(),
             recorder: Arc::clone(&inputs.recorder),
             scratch_scopes: inputs.scratch_scopes,
@@ -135,7 +133,7 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             let session_id = SessionId::try_from(session.session_id().to_owned())
                 .map_err(|_| SessionSetupError::OutcomeUnknown)?;
             if let Some(operation_id) = operation_id.as_ref() {
-                // A created session always carries its Router access route.
+                // The created binding reports its native permission mode.
                 let permission_mode = session
                     .permission_mode_report()
                     .ok_or(SessionSetupError::OutcomeUnknown)?;
@@ -209,7 +207,7 @@ mod tests {
     }
     use crate::{
         AcpSchemaCatalog, AcpSessionBinding, ConversationOperationRecorder,
-        ConversationRecordFuture, RejectingApprovalBroker, SessionSetupInputs,
+        ConversationRecordFuture, SessionSetupInputs,
     };
     use codex_native_integration::{
         NativePayloadSchemas, NativeProtocolConnection, NativeSchemaBundle,
@@ -345,21 +343,17 @@ mod tests {
                 schemas: Arc::clone(&schemas),
                 generation: generation.clone(),
                 params: params.clone(),
-                approval_broker: Arc::new(RejectingApprovalBroker),
             },
         )
         .await
         .unwrap_or_else(|error| panic!("initial load: {error}"));
         assert!(initial_history.is_empty());
-        let actor: collaboration_protocol::SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap();
-        // Fixture: this existing binding has a recorded Router profile; native omits it.
-        binding.access_route = Some(crate::ApprovalRoute {
-            thread_id: "thread-a".into(),
-            created_by: actor.clone(),
-            approver: actor,
+        binding.created_profile = Some(crate::session_creation::CreatedSessionProfile {
             access: collaboration_protocol::RouterAccess::WorkspaceWrite,
-            scratch_path: "/recorded-scratch".into(),
-            root_message_id: None,
+            scratch_lease: crate::ScratchScopeLease::open(
+                &(Arc::new(IgnoredScratchScopes) as Arc<dyn crate::ScratchScopeRegister>),
+                std::path::Path::new("/recorded-scratch"),
+            ),
         });
 
         let resumed = run_session_setup(SetupTaskInputs {
@@ -374,7 +368,6 @@ mod tests {
             operation_id: None,
             recorder: Arc::new(AcceptingRecorder),
             cancellation_barrier: None,
-            approval_broker: Arc::new(RejectingApprovalBroker),
         })
         .await;
         let (_history, result) = resumed
@@ -399,7 +392,6 @@ mod tests {
             operation_id: None,
             recorder: Arc::new(AcceptingRecorder),
             cancellation_barrier: None,
-            approval_broker: Arc::new(RejectingApprovalBroker),
         })
         .await;
         let (_, result) = adopted.outcome.unwrap();

@@ -18,7 +18,6 @@ mod codex_conversation_recording_composition;
 #[cfg(test)]
 mod host_manifest_publication_tests;
 pub use claude_code_peer_delivery_route::ClaudeCodePeerDeliveryRoute;
-mod claude_code_peer_scheduled_runs;
 mod codex_update_preparation;
 mod explicit_app_server_restart;
 mod explicit_router_restart;
@@ -50,7 +49,6 @@ pub use provider_acp_delivery_route::{
     ProviderQueueAdmissionError, ProviderSteerContentsError,
 };
 mod external_provider_approval_context;
-mod provider_acp_scheduled_runs;
 mod provider_acp_session_loading;
 pub use external_provider_approval_context::ExternalProviderApprovalContext;
 pub use external_provider_runtime::{
@@ -61,25 +59,7 @@ mod external_provider_supervisor;
 pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-mod debug_inbox_limit;
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-mod debug_mail_clock;
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-mod debug_runtime_barrier;
-mod enrollment_reset;
-mod enrollment_session_transport;
-mod fleet_enrollment_file;
-pub use enrollment_reset::{
-    ENROLLMENT_RESTART_INSTRUCTION, completed_enrollment_reset_journal,
-    finish_enrollment_reset_for_update, fleet_enrollment_restart_required,
-};
 mod global_claude_executable;
-pub use fleet_enrollment_file::{
-    FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
-    FleetEnrollmentPublishError, SelfHostedAccessReference, load_fleet_enrollment,
-    open_fleet_enrollment_store, persist_fleet_enrollment, read_fleet_enrollment_document,
-};
 mod host_configuration;
 mod host_port_selection;
 pub use host_port_selection::{HostPortSelection, HostPortSource, SelectedHostPort};
@@ -152,7 +132,6 @@ pub use host_configuration::HostDeadlineError;
 pub use host_configuration::HostDeadlineInputs;
 pub use host_configuration::HostDeadlines;
 pub use host_configuration::router_collaboration_directory;
-pub use host_configuration::router_fleet_enrollment_file;
 pub use host_singleton_authority::HostInstance;
 pub use host_singleton_authority::HostInstanceLock;
 pub use host_singleton_authority::InstanceAcquireError;
@@ -166,7 +145,6 @@ pub use lifecycle_owner::ManagedUpdateInputs;
 pub use lifecycle_owner::PreExecTelemetry;
 pub use lifecycle_state::AppServerCondition;
 pub use lifecycle_state::ExecutableRelation;
-pub use lifecycle_state::FleetHostObservation;
 pub use lifecycle_state::HostOperation;
 pub use lifecycle_state::HostPhase;
 pub use lifecycle_state::HostSnapshot;
@@ -220,7 +198,5 @@ pub use collaboration_runtime::{
 
 mod native_schema_cache;
 
-mod automation_settings_file;
 mod debug_readiness_timing;
-pub use automation_settings_file::AutomationSettingsFile;
 pub use debug_readiness_timing::record as record_debug_readiness_timing;

@@ -49,7 +49,7 @@ pub(crate) struct ReceiptClaim {
 impl ReceiptClaim {
     pub fn lookup(&self) -> Statement {
         Statement {
-            sql: "SELECT caller,content_digest,answer FROM request_log WHERE request_id=? AND created_at>=?",
+            sql: "SELECT caller,content_digest,answer FROM runtime_request_log WHERE request_id=? AND created_at>=?",
             args: vec![text(&self.request), text(timestamp(self.cutoff))],
         }
     }
@@ -60,27 +60,28 @@ impl ReceiptClaim {
         let row = match rows.rows.as_slice() {
             [] => return Ok(None),
             [row] => row,
-            _ => return Err(corrupt("request_log.request_id")),
+            _ => return Err(corrupt("runtime_request_log.request_id")),
         };
         if string(rows, row, "caller")? != self.caller.as_str()
             || string(rows, row, "content_digest")? != self.digest
         {
             return Ok(Some(EngineReceipt::RequestIdReused));
         }
-        json(string(rows, row, "answer")?, "request_log.answer").map(Some)
+        json(string(rows, row, "answer")?, "runtime_request_log.answer").map(Some)
     }
     pub fn statements(
         &self,
         answer: &impl Serialize,
     ) -> Result<Vec<GuardedStatement>, StoreFailure> {
-        let encoded = serde_json::to_string(answer).map_err(|_| corrupt("request_log.answer"))?;
+        let encoded =
+            serde_json::to_string(answer).map_err(|_| corrupt("runtime_request_log.answer"))?;
         Ok(vec![
             any(
-                "DELETE FROM request_log WHERE request_id=? AND created_at<?",
+                "DELETE FROM runtime_request_log WHERE request_id=? AND created_at<?",
                 vec![text(&self.request), text(timestamp(self.cutoff))],
             ),
             exact(
-                "INSERT INTO request_log(request_id,caller,content_digest,answer,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                "INSERT INTO runtime_request_log(request_id,caller,content_digest,answer,created_at,updated_at) VALUES (?,?,?,?,?,?)",
                 vec![
                     text(&self.request),
                     text(&self.caller),

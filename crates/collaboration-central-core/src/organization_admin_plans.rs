@@ -1,10 +1,11 @@
 //! Person proof admission and read operations on modern org central.
 use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminAnswer, OrganizationAdminResult, WorkspaceRuntime,
+    AdminRefusal, MachineEnrollmentRevocationRefusal, MachineEnrollmentRevocationResult,
+    ObjectHost, OrganizationAdminAnswer, OrganizationAdminResult, WorkspaceRuntime,
     WorkspaceStoreCalls,
     organization_authority_cache::StampStanding,
     person_admission_plans::prepare_person_admission,
-    person_request::{AdminOperation, PersonRequestInput, PersonRequestRefusal},
+    person_request::{AdminOperation, AdmissionRefusal, PersonRequestInput, PersonRequestRefusal},
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
 impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
@@ -56,6 +57,12 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let plan = match prepare_person_admission(self.host.as_ref(), &verified, now).await? {
             Ok(plan) => plan,
             Err(reason) => {
+                if matches!(
+                    verified.operation,
+                    AdminOperation::RevokeMachineEnrollment(_)
+                ) {
+                    return Ok(revocation_admission_refusal(reason));
+                }
                 return Ok(OrganizationAdminAnswer::Answered(
                     OrganizationAdminResult::Refused {
                         reason: reason.into(),
@@ -69,6 +76,16 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let mut alarm = central_storage::AlarmUpdate::Unchanged;
         let mut guard_failed = AdminRefusal::Conflict;
         let result = match &verified.operation {
+            AdminOperation::RevokeMachineEnrollment(revocation) => {
+                return self
+                    .revoke_machine_enrollment_from_admin(
+                        &verified,
+                        &revocation.request.enrollment_id,
+                        statements,
+                        now.timestamp_millis(),
+                    )
+                    .await;
+            }
             AdminOperation::CreateWorkspace(request) => {
                 let created = self
                     .prepare_workspace_create(&verified, request, now)
@@ -162,4 +179,17 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             )),
         }
     }
+}
+
+fn revocation_admission_refusal(reason: AdmissionRefusal) -> OrganizationAdminAnswer {
+    let reason = match reason {
+        AdmissionRefusal::NotPermitted => MachineEnrollmentRevocationRefusal::NotPermitted,
+        AdmissionRefusal::SecondFactorRequired => {
+            MachineEnrollmentRevocationRefusal::FactorNotRecent
+        }
+        _ => return OrganizationAdminAnswer::Unauthenticated,
+    };
+    OrganizationAdminAnswer::MachineEnrollmentRevocation(
+        MachineEnrollmentRevocationResult::Refused { reason },
+    )
 }

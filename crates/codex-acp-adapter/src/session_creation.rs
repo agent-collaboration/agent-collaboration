@@ -48,13 +48,15 @@ pub enum SessionSetupError {
     HostLocationsUnavailable { location: String },
 }
 mod codex_permission_mode;
-mod recorded_session_resume;
 mod router_permission_profile;
-pub use recorded_session_resume::RecordedSessionResume;
 /// Retains one connection and a receipt minted only by successful fresh thread/start.
 mod session_load_adoption;
 use router_permission_profile::{RouterSessionProfile, access_name};
 pub(crate) use session_load_adoption::{NativeThreadActivity, native_thread_activity};
+
+#[cfg(test)]
+#[path = "session_creation_pinned_native_test.rs"]
+mod pinned_native_tests;
 
 pub struct AcpSessionBinding {
     pub(crate) session_id: String,
@@ -67,19 +69,18 @@ pub struct AcpSessionBinding {
     pub(crate) requested_access: Option<String>,
     pub(crate) settings_observation: SettingsObservation,
     pub(crate) permission_differences: Vec<collaboration_protocol::PermissionDifference>,
-    pub(crate) access_route: Option<crate::ApprovalRoute>,
+    pub(crate) created_profile: Option<CreatedSessionProfile>,
     /// The permission mode the creator asked for; absent on load and resume.
     pub(crate) requested_mode: Option<String>,
-    pub(crate) approval_broker: std::sync::Arc<dyn crate::ApprovalBroker>,
     /// The reasoning effort the resumed thread already carried, when the native
     /// resume reported one. Absent for a thread this connection created.
     pub(crate) persisted_effort: Option<String>,
-    /// Keeps the binding's scratch scope open in the Host until the binding drops.
-    #[expect(
-        dead_code,
-        reason = "Held for its drop, which reports the close to the Host."
-    )]
-    pub(crate) scratch_lease: Option<crate::ScratchScopeLease>,
+}
+
+/// The profile and scratch lease belong to the live binding created by Router.
+pub(crate) struct CreatedSessionProfile {
+    pub(crate) access: RouterAccess,
+    pub(crate) scratch_lease: crate::ScratchScopeLease,
 }
 
 struct RouterModelChoice<'a> {
@@ -88,10 +89,7 @@ struct RouterModelChoice<'a> {
     effort: Option<&'a str>,
     fork_thread_id: Option<&'a str>,
     access: RouterAccess,
-    created_by: collaboration_protocol::SessionRef,
-    approver: collaboration_protocol::SessionRef,
     scratch_path: &'a str,
-    root_message_id: Option<&'a str>,
     /// The permission mode the caller asked for: only `auto` (or none) for Codex.
     requested_mode: Option<&'a str>,
 }
@@ -170,20 +168,7 @@ fn router_model_choice(params: &Value) -> Result<RouterModelChoice<'_>, SessionS
         "workspace-write" => RouterAccess::WorkspaceWrite,
         _ => return Err(SessionSetupError::InvalidParameters),
     };
-    let created_by = serde_json::from_value(
-        router
-            .get("createdBy")
-            .cloned()
-            .ok_or(SessionSetupError::InvalidParameters)?,
-    )
-    .map_err(|_| SessionSetupError::InvalidParameters)?;
-    let approver = serde_json::from_value(
-        router
-            .get("approver")
-            .cloned()
-            .ok_or(SessionSetupError::InvalidParameters)?,
-    )
-    .map_err(|_| SessionSetupError::InvalidParameters)?;
+    validate_create_actors(params, None)?;
     let scratch_path = router
         .get("scratchPath")
         .and_then(Value::as_str)
@@ -208,19 +193,35 @@ fn router_model_choice(params: &Value) -> Result<RouterModelChoice<'_>, SessionS
         effort,
         fork_thread_id,
         access,
-        created_by,
-        approver,
         scratch_path,
-        root_message_id,
         requested_mode,
     })
 }
+pub(crate) fn validate_create_actors(
+    params: &Value,
+    local_service: Option<&collaboration_protocol::UuidIdentity>,
+) -> Result<(), SessionSetupError> {
+    for field in ["createdBy", "approver"] {
+        let actor: collaboration_protocol::SessionRef = serde_json::from_value(
+            params
+                .pointer("/_meta/codexRouter")
+                .and_then(|metadata| metadata.get(field))
+                .cloned()
+                .ok_or(SessionSetupError::InvalidParameters)?,
+        )
+        .map_err(|_| SessionSetupError::InvalidParameters)?;
+        if local_service.is_some_and(|service| actor.endpoint.service_id != *service) {
+            return Err(SessionSetupError::ConfigurationMismatch);
+        }
+    }
+    Ok(())
+}
+
 pub struct SessionSetupInputs {
     pub connection: NativeProtocolConnection,
     pub schemas: Arc<NativePayloadSchemas>,
     pub generation: CodexGeneration,
     pub params: Value,
-    pub approval_broker: std::sync::Arc<dyn crate::ApprovalBroker>,
     pub operation_id: Option<OperationId>,
     pub recorder: std::sync::Arc<dyn crate::ConversationOperationRecorder>,
     /// Told when the binding opens and later drops its scratch scope.
@@ -419,19 +420,13 @@ impl AcpSessionBinding {
             .filter(|id| !id.is_empty())
             .ok_or(SessionSetupError::OutcomeUnknown)?
             .to_owned();
-        let access_route = crate::ApprovalRoute {
-            thread_id: session_id.clone(),
-            created_by: choice.created_by,
-            approver: choice.approver,
+        let created_profile = CreatedSessionProfile {
             access: choice.access,
-            scratch_path: choice.scratch_path.to_owned(),
-            root_message_id: choice.root_message_id.map(str::to_owned),
+            scratch_lease: crate::ScratchScopeLease::open(
+                &inputs.scratch_scopes,
+                Path::new(choice.scratch_path),
+            ),
         };
-        inputs
-            .approval_broker
-            .register_route(access_route.clone())
-            .await
-            .map_err(|_| SessionSetupError::ConfigurationMismatch)?;
         Ok(Self {
             session_id,
             generation: inputs.generation,
@@ -443,14 +438,9 @@ impl AcpSessionBinding {
             requested_access: Some(access_name(choice.access).to_owned()),
             settings_observation,
             permission_differences,
-            access_route: Some(access_route),
+            created_profile: Some(created_profile),
             requested_mode: choice.requested_mode.map(str::to_owned),
-            approval_broker: inputs.approval_broker,
             persisted_effort: None,
-            scratch_lease: Some(crate::ScratchScopeLease::open(
-                &inputs.scratch_scopes,
-                Path::new(choice.scratch_path),
-            )),
         })
     }
     #[must_use]
@@ -486,7 +476,7 @@ impl AcpSessionBinding {
     pub(crate) fn permission_mode_report(
         &self,
     ) -> Option<collaboration_protocol::CodexPermissionModeReport> {
-        let access = self.access_route.as_ref()?.access;
+        let access = self.created_profile.as_ref()?.access;
         Some(codex_permission_mode::codex_permission_mode(
             access,
             self.requested_mode.as_deref(),
@@ -555,11 +545,6 @@ impl AcpSessionBinding {
                 .ok_or(SessionSetupError::InvalidParameters)?,
         )
         .await?;
-        let route = inputs
-            .approval_broker
-            .route(&session_id)
-            .await
-            .map_err(|_| SessionSetupError::Unavailable)?;
         let mut session = Self {
             session_id,
             generation: inputs.generation.clone(),
@@ -568,22 +553,11 @@ impl AcpSessionBinding {
             configuration: None,
             connection: inputs.connection,
             schemas: inputs.schemas,
-            requested_access: route
-                .as_ref()
-                .map(|route| access_name(route.access).to_owned()),
-            settings_observation: unavailable_settings(if route.is_some() {
-                SettingsUnavailableReason::NotObservedBeforeResume
-            } else {
-                SettingsUnavailableReason::NoRecordedAccessRoute
-            }),
-            scratch_lease: route.as_ref().map(|route| {
-                crate::ScratchScopeLease::open(
-                    &inputs.scratch_scopes,
-                    Path::new(&route.scratch_path),
-                )
-            }),
-            access_route: route,
-            approval_broker: inputs.approval_broker,
+            requested_access: None,
+            settings_observation: unavailable_settings(
+                SettingsUnavailableReason::NoRecordedAccessRoute,
+            ),
+            created_profile: None,
             persisted_effort: None,
             permission_differences: Vec::new(),
             requested_mode: None,
@@ -605,11 +579,8 @@ impl AcpSessionBinding {
             .or_else(|| response.get("reasoningEffort"))
             .and_then(Value::as_str)
             .map(str::to_owned);
-        session.settings_observation = observe_settings(
-            &response,
-            SettingsObservationSource::ThreadResume,
-            session.access_route.as_ref().map(|route| route.access),
-        );
+        session.settings_observation =
+            observe_settings(&response, SettingsObservationSource::ThreadResume, None);
         if barrier.is_some_and(|barrier| !barrier.resolved_by_resume(&response)) {
             return Err(SessionSetupError::CancellationUnresolved);
         }

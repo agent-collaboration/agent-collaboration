@@ -7,18 +7,19 @@ use crate::identity_contract::{
     DecideDeviceLogin, DecideMachineToken, EnrollPermission, MachineTokenDecision,
     MachineTokenRefusal, PersonId,
 };
-use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use message_board::{MachineLabel, WorkspaceId};
 use runtime_primitives::IdSource;
 use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
+use workspace_ids::MachineId;
 
 pub(super) const NOW_MS: i64 = 1_800_000_000_123;
 pub(super) const NOW_S: i64 = NOW_MS / 1000;
 pub(super) fn id(suffix: u64) -> String {
     format!("018f1111-2222-7000-8000-{suffix:012x}")
 }
-pub(super) fn installation() -> InstallationId {
+pub(super) fn machine_id() -> MachineId {
     id(10).try_into().unwrap()
 }
 pub(super) fn workspace(suffix: u64) -> WorkspaceId {
@@ -67,8 +68,7 @@ pub(super) fn approval() -> DecideDeviceLogin {
         approver: person(),
         permission_checked: EnrollPermission::MachineEnroll,
         request_id: id(30).try_into().unwrap(),
-        installation: installation(),
-        peer: id(10).try_into().unwrap(),
+        machine_id: machine_id(),
         label: label("original"),
         allowed_workspaces: vec![workspace(50), workspace(51)].try_into().unwrap(),
         approver_second_factor_at: None,
@@ -77,8 +77,7 @@ pub(super) fn approval() -> DecideDeviceLogin {
 }
 pub(super) fn machine(generation: u64) -> MachineRow {
     MachineRow {
-        id: Uuid::parse_str(&id(11)).unwrap(),
-        installation: installation(),
+        machine_id: machine_id(),
         label: label("original"),
         allowed_workspaces: vec![workspace(50), workspace(51)],
         generation: generation.try_into().unwrap(),
@@ -88,8 +87,7 @@ pub(super) fn machine(generation: u64) -> MachineRow {
 pub(super) fn approved(suffix: u64, generation: u64) -> StoredEnrollment {
     StoredEnrollment {
         id: EnrollmentId::try_from(id(suffix)).unwrap(),
-        machine_id: machine(generation).id,
-        installation: installation(),
+        machine_id: machine_id(),
         request_id: id(suffix + 100).try_into().unwrap(),
         approved_by: person(),
         label: label("original"),

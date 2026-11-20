@@ -39,10 +39,12 @@ async fn active_grant_retry_reconstructs_the_same_superseded_client_after_reopen
         first_grant,
         (200, grant(&b, INSTALLATION, f.now(), Some((&a, &a))))
     );
-    let activation = f.rows("SELECT approval_id,state,machine_client_id,base_generation FROM machine_approvals ORDER BY approval_id").await?;
-    let generation = f.rows("SELECT enrollment_generation FROM machines").await?;
+    let activation = f.rows("SELECT approval_id,state,machine_client_id,base_generation FROM login_machine_approvals ORDER BY approval_id").await?;
+    let generation = f
+        .rows("SELECT enrollment_generation FROM login_machines")
+        .await?;
     let records = f
-        .rows("SELECT * FROM organization_change_records ORDER BY id")
+        .rows("SELECT * FROM signin_change_records ORDER BY id")
         .await?;
     for reopen in [false, true] {
         if reopen {
@@ -54,10 +56,14 @@ async fn active_grant_retry_reconstructs_the_same_superseded_client_after_reopen
             (200, grant(&b, INSTALLATION, f.now(), Some((&a, &a)))),
             "active retry must retain the exact ended predecessor across reopen"
         );
-        assert!(f.rows("SELECT approval_id,state,machine_client_id,base_generation FROM machine_approvals ORDER BY approval_id").await? == activation);
-        assert!(f.rows("SELECT enrollment_generation FROM machines").await? == generation);
+        assert!(f.rows("SELECT approval_id,state,machine_client_id,base_generation FROM login_machine_approvals ORDER BY approval_id").await? == activation);
         assert!(
-            f.rows("SELECT * FROM organization_change_records ORDER BY id")
+            f.rows("SELECT enrollment_generation FROM login_machines")
+                .await?
+                == generation
+        );
+        assert!(
+            f.rows("SELECT * FROM signin_change_records ORDER BY id")
                 .await?
                 == records,
             "notice recovery must not emit another revocation or activation"
@@ -67,12 +73,12 @@ async fn active_grant_retry_reconstructs_the_same_superseded_client_after_reopen
     // Corruption below is setup; the real route must refuse without effects.
     for (damage, repair) in [
         (
-            "UPDATE organization_change_records SET permission_checked='machine:revoke' WHERE kind='machineRevoked'",
-            "UPDATE organization_change_records SET permission_checked='machine:enroll' WHERE kind='machineRevoked'",
+            "UPDATE signin_change_records SET permission_checked='machine:revoke' WHERE kind='machineRevoked'",
+            "UPDATE signin_change_records SET permission_checked='machine:enroll' WHERE kind='machineRevoked'",
         ),
         (
-            "UPDATE machine_approvals SET end_reason='owner' WHERE end_reason='superseded'",
-            "UPDATE machine_approvals SET end_reason='superseded' WHERE end_reason='owner'",
+            "UPDATE login_machine_approvals SET end_reason='owner' WHERE end_reason='superseded'",
+            "UPDATE login_machine_approvals SET end_reason='superseded' WHERE end_reason='owner'",
         ),
     ] {
         let healthy = snapshot(&f).await?;
@@ -143,11 +149,11 @@ async fn two_valid_supersession_predecessors_refuse_without_effects_then_repair_
     let b = &activated[1];
     let c = &activated[2];
     assert_eq!(
-        f.rows("SELECT state,end_reason FROM machine_approvals WHERE label IN ('Notice A','Notice B') ORDER BY label").await?,
+        f.rows("SELECT state,end_reason FROM login_machine_approvals WHERE label IN ('Notice A','Notice B') ORDER BY label").await?,
         vec![vec![text("ended"), text("superseded")], vec![text("ended"), text("superseded")]]
     );
     assert_eq!(
-        f.rows("SELECT approval_id FROM machine_approvals WHERE state='enrolled'")
+        f.rows("SELECT approval_id FROM login_machine_approvals WHERE state='enrolled'")
             .await?,
         vec![vec![text(c)]]
     );
@@ -156,11 +162,11 @@ async fn two_valid_supersession_predecessors_refuse_without_effects_then_repair_
     // Seed only the ambiguous association: clone A's real revocation record
     // (created by B), preserving every validated scalar and timestamp.
     f.execute(
-        "INSERT INTO organization_change_records(id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at) SELECT ?,?||':machineRevoked:'||target_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id=? AND target_id=?",
+        "INSERT INTO signin_change_records(id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at) SELECT ?,?||':machineRevoked:'||target_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records WHERE kind='machineRevoked' AND request_id=? AND target_id=?",
         vec![text(&seeded_id), text(id(0xe503)), text(format!("{}:machineRevoked:{a}", id(0xe502))), text(a)],
     ).await?;
     assert_eq!(
-        f.rows("SELECT COUNT(*) FROM organization_change_records WHERE kind='machineRevoked' AND request_id='019f0000-0000-7000-8000-00000000e503:machineRevoked:'||target_id").await?,
+        f.rows("SELECT COUNT(*) FROM signin_change_records WHERE kind='machineRevoked' AND request_id='019f0000-0000-7000-8000-00000000e503:machineRevoked:'||target_id").await?,
         vec![vec![number(2)]]
     );
     let ambiguous = snapshot(&f).await?;
@@ -177,7 +183,7 @@ async fn two_valid_supersession_predecessors_refuse_without_effects_then_repair_
     // Delete exactly the seeded row, restoring the real chain. C's live retry
     // again names B, proving neither candidate was merely malformed or missing.
     f.execute(
-        "DELETE FROM organization_change_records WHERE id=?",
+        "DELETE FROM signin_change_records WHERE id=?",
         vec![text(&seeded_id)],
     )
     .await?;

@@ -89,7 +89,6 @@ async fn main() -> ExampleResult<()> {
         .await?;
     let mut runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: None,
             directory: service_directory.clone(),
             codex_home: empty_catalog,

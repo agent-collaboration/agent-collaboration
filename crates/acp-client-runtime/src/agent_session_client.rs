@@ -1,8 +1,6 @@
 //! ACP provider process admission and connection lifetime.
 
 mod external_approval_dispatch;
-mod provider_approval_dispatch;
-pub use provider_approval_dispatch::{OwnerApprovalBindings, OwnerApprovalLease};
 mod provider_auth_status_update;
 mod provider_client_initialization;
 mod provider_client_operations;
@@ -16,7 +14,7 @@ mod provider_model_discovery;
 mod provider_request_fallback;
 mod provider_transport;
 use crate::ProviderCapabilityReport;
-use crate::approval_turn_cancellation::ActiveApprovalContext;
+use crate::approval_turn_cancellation::{ActiveApprovalContext, OwnerApprovalBindings};
 pub(crate) use crate::provider_acp_error_mapping::acp_operation_error;
 #[cfg(feature = "test-observation")]
 pub(crate) use crate::provider_client_contract::sanitized_acp_error;
@@ -62,24 +60,6 @@ const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(15);
 /// keeping each provider connection's transport memory bounded.
 pub(crate) const MAX_ACP_FRAME_BYTES: usize = 64 * 1024 * 1024;
 
-struct ApprovalContextGuard<P: InteractionPort> {
-    contexts: Arc<std::sync::Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
-    provider_session_id: String,
-    operation_id: P::OperationId,
-}
-
-impl<P: InteractionPort> Drop for ApprovalContextGuard<P> {
-    fn drop(&mut self) {
-        if let Ok(mut contexts) = self.contexts.lock()
-            && contexts
-                .get(&self.provider_session_id)
-                .is_some_and(|context| P::operation_id(&context.approval) == self.operation_id)
-        {
-            contexts.remove(&self.provider_session_id);
-        }
-    }
-}
-
 struct ProviderCommand {
     cwd: Option<PathBuf>,
     reply: tokio::sync::oneshot::Sender<
@@ -119,6 +99,14 @@ pub struct AgentSessionClient<P: InteractionPort> {
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {
+    #[must_use]
+    pub fn owner_approval_bindings(&self) -> OwnerApprovalBindings<P> {
+        OwnerApprovalBindings::new(
+            Arc::clone(&self.approval_contexts),
+            Arc::clone(&self.interaction_port),
+        )
+    }
+
     #[must_use]
     pub fn owner_wire(&self) -> Arc<crate::owner_wire::OwnerAcpWire> {
         Arc::clone(&self.owner_wire)

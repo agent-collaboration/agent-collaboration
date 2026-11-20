@@ -43,9 +43,6 @@ impl InteractionPort for NoopInteractions {
     fn cancel_all(&self, _: u64, _: &'static str) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct CapturedSink {

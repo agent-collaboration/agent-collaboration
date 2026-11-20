@@ -20,10 +20,7 @@ async fn stale_strict_generation_stops_before_evidence_or_native_io()
         std::path::PathBuf::from("/tmp/no-native-route.sock"),
         None,
     )?;
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         EndpointDirectory::new(service_id),
         NativeControlBackend {
@@ -62,30 +59,38 @@ async fn stale_strict_generation_stops_before_evidence_or_native_io()
 #[tokio::test]
 async fn prepared_push_reconciles_only_on_matching_codex_route_identity_and_line()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_prepared_push_route(Some("preview")).await
+    exercise_prepared_push_route(r#"🧑 Owner (unverified) @Fixture → you · "preview" · "#).await
 }
 
 #[tokio::test]
 async fn truncated_prepared_push_delivers_exact_cue_and_link_through_native_route()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_prepared_push_route(Some(&"N".repeat(1_340))).await
+    exercise_prepared_push_route(&format!(
+        "🧑 Owner (unverified) @Fixture → you · \"{}…\" (+1240) 📖 Load full message → ",
+        "N".repeat(100),
+    ))
+    .await
 }
 
 #[tokio::test]
 async fn bodyless_prepared_push_delivers_through_native_route()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_prepared_push_route(None).await
+    exercise_prepared_push_route("🧵 Router: subscription expired @Fixture · fixture · ").await
 }
 
 #[tokio::test]
 async fn escaped_short_and_truncated_previews_deliver_through_native_route()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_prepared_push_route(Some("\"\\λ")).await?;
-    exercise_prepared_push_route(Some(&"\"\\λ".repeat(34))).await
+    exercise_prepared_push_route(r#"🧑 Owner (unverified) @Fixture → you · "\"\\λ" · "#).await?;
+    exercise_prepared_push_route(&format!(
+        "🧑 Owner (unverified) @Fixture → you · \"{}\\\"…\" (+2) 📖 Load full message → ",
+        r#"\"\\λ"#.repeat(33),
+    ))
+    .await
 }
 
 async fn exercise_prepared_push_route(
-    body: Option<&str>,
+    line_before_link: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let root = tempfile::tempdir()?;
     let socket_path = root.path().join("native.sock");
@@ -96,58 +101,14 @@ async fn exercise_prepared_push_route(
         collaboration_protocol::MachineId::from(service_id.clone()),
         push_id.clone(),
     );
-    let line: MessageText =
-        collaboration_protocol::render_push_line(&collaboration_protocol::PushLineInput {
-            link: link.clone(),
-            machine_label: "Fixture".to_owned().try_into()?,
-            origin: if body.is_some() {
-                collaboration_protocol::PushOrigin::OwnerUnverified
-            } else {
-                collaboration_protocol::PushOrigin::Router(
-                    collaboration_protocol::PushKind::SubscriptionExpiry,
-                )
-            },
-            header_facts: if body.is_some() {
-                collaboration_protocol::PushHeaderFacts::DirectMessage {
-                    sender_display_name: None,
-                }
-            } else {
-                collaboration_protocol::PushHeaderFacts::SubscriptionExpiry {
-                    scope: "fixture".to_owned(),
-                }
-            },
-            body: body.map(str::to_owned),
-        })?
-        .try_into()?;
-    if body.is_some_and(|text| text.chars().count() == 1_340) {
-        let expected_line = format!(
-            "🧑 Owner (unverified) @Fixture → you · \"{}…\" (+1240) 📖 Load full message → {link}",
-            "N".repeat(100)
-        );
-        if line.as_str() != expected_line {
-            return Err("renderer did not preserve the independent literal cue/count/link".into());
-        }
-    } else if body.is_some_and(|text| text.chars().count() == 102) {
-        let expected_line = format!(
-            "🧑 Owner (unverified) @Fixture → you · \"{}\\\"…\" (+2) 📖 Load full message → {link}",
-            "\\\"\\\\λ".repeat(33)
-        );
-        if line.as_str() != expected_line {
-            return Err(
-                "renderer changed the independent escaped scalar preview/count/link".into(),
-            );
-        }
-    }
+    let line = MessageText::try_from(format!("{line_before_link}{link}"))?;
     let target: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"},
         "sessionId":"thread-one"
     }))?;
 
     // A prepared push must reject an ID mismatch before route effects or native I/O.
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let mismatched_request_route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         EndpointDirectory::new(service_id.clone()),
         NativeControlBackend {
@@ -220,7 +181,6 @@ async fn exercise_prepared_push_route(
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path.clone(), Some(schemas))?;
     let route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         directory,
         NativeControlBackend {
@@ -580,10 +540,7 @@ async fn retiring_during_thread_read_returns_retryable_unavailable()
     }))?)?;
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path, Some(schemas))?;
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = Arc::new(CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id,
         directory,
         NativeControlBackend {
@@ -688,10 +645,7 @@ async fn malformed_prepared_push_suffixes_stop_before_evidence_or_native_io()
     let generation = serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path, None)?;
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         EndpointDirectory::new(service_id),
         NativeControlBackend {

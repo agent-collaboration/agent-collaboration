@@ -1,7 +1,6 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
 use crate::{
-    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{self, insert_message},
+    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls, central_mail_store,
     workspace_decode_error::corrupt,
     workspace_row_codec::{json, string},
 };
@@ -32,10 +31,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
         use mail::{CentralMailRefusal as Refusal, CentralMailResult as Result};
+        let _turn = self.take_central_turn().await;
         if let Err(reason) = self.admit_workspace(caller, None).await? {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
-        let identity = match &caller.caller {
+        let identity = match caller.caller() {
             m::Caller::Session(session) => m::Identity::AgentSession {
                 session: session.clone(),
             },
@@ -44,12 +44,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             },
         };
         let digest = crate::workspace_request_log::digest(&request.operation)?;
-        let _turn = self.take_central_turn().await;
         let now = self.now()?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let rows = self
             .host
             .read(crate::workspace_request_log::lookup(
+                crate::workspace_request_log::RequestLogStore::Organization,
                 &request.request_id,
                 &cutoff,
             ))
@@ -63,12 +63,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     m::RefusalReason::RequestIdReused,
                 )));
             }
-            let answer: Result = json(string(&rows, row, "answer")?, "request_log.answer")?;
+            let answer: Result = json(string(&rows, row, "answer")?, "runtime_request_log.answer")?;
             if matches!(
                 answer,
                 Result::Conflict | Result::OutcomeUnknown | Result::CentralUnavailable
             ) {
-                return Err(corrupt("request_log.answer"));
+                return Err(corrupt("runtime_request_log.answer"));
             }
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
@@ -98,17 +98,18 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             return Ok(Result::Refused(reason));
         }
         let actor = self.resolve_identity(&identity).await?;
+        let mut delivery_ready = None;
         let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
             &request.operation
         {
-            if !matches!(caller.caller, m::Caller::Session(_)) {
+            if !matches!(caller.caller(), m::Caller::Session(_)) {
                 Err(Refusal::NotSession)
             } else {
                 let encoded =
                     serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
                 let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
                 let mut statements = vec![crate::guarded_statements::exact(
-                    "UPDATE actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
+                    "UPDATE access_actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
                     vec![
                         crate::guarded_statements::text(cadence_text),
                         crate::guarded_statements::text(central_mail_store::timestamp(now)),
@@ -125,7 +126,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 {
                     let due = Self::notice_due_with_cadence(now, *cadence)?;
                     statements.push(crate::guarded_statements::exact(
-                        "UPDATE notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
+                        "UPDATE mail_notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![
                             crate::guarded_statements::text(central_mail_store::timestamp(due)),
                             crate::guarded_statements::text(central_mail_store::timestamp(now)),
@@ -138,19 +139,39 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     mail::CentralMailAnswer::NoticeCadenceSet { cadence: *cadence },
                 ))
             }
-        } else if let mail::CentralMailOperation::SendMessage { to, body } = &request.operation {
+        } else if let mail::CentralMailOperation::SendMessage {
+            to,
+            body,
+            delivery,
+            reply_to,
+            sent_at,
+        } = &request.operation
+        {
             if !self.known_session(to).await? {
                 Err(Refusal::UnknownSession { target: to.clone() })
             } else {
                 let message = self.prepare_message_record(
                     mail::MessageSender::Actor(actor.clone()),
                     to.clone(),
-                    mail::MessageBody::Direct { body: body.clone() },
+                    mail::MessageBody::Direct {
+                        body: body.clone(),
+                        delivery: *delivery,
+                        reply_to: reply_to.clone(),
+                    },
                     None,
                     now,
                 )?;
+                delivery_ready = Some(crate::MailDeliveryReady::from(&message));
                 Ok((
-                    vec![insert_message(&message)?],
+                    vec![crate::central_mail_rows::insert_message_due(
+                        &message,
+                        Some(&crate::central_mail_rows::DirectMessageTerms {
+                            cancel_due_at: crate::message_deadline::cancel_due_at(*sent_at, now),
+                            delivery_window_ends_at:
+                                crate::message_deadline::delivery_window_ends_at(*sent_at, now),
+                            sender_request_id: request.request_id.clone(),
+                        }),
+                    )?],
                     mail::CentralMailAnswer::Queued {
                         message_id: message.message_id,
                     },
@@ -165,6 +186,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         };
 
         statements.extend(crate::workspace_request_log::retain(
+            crate::workspace_request_log::RequestLogStore::Organization,
             &request.request_id,
             &actor,
             &digest,
@@ -187,6 +209,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Err(StoreFailure::AnswerLost) => return Ok(Result::OutcomeUnknown),
             Err(StoreFailure::Unavailable) => return Ok(Result::CentralUnavailable),
             Err(error) => return Err(error),
+        }
+        if let Some(delivery) = delivery_ready {
+            (self.mail_delivery_ready)(delivery);
         }
         #[cfg(feature = "test-support")]
         if self.take_lost_reply(&request.request_id) {

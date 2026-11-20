@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the key saved by this serialized main run, then remove its predecessors.
+# Keep the key saved in each cache family by this serialized main run, then remove its predecessors.
 set -euo pipefail
 
 prune_mode="${1:-}"
@@ -22,7 +22,7 @@ if [[ "$prune_mode" == --apply ]]; then
     --attempt "$GITHUB_RUN_ATTEMPT" --json jobs)"
   writers_started_at="$(printf '%s\n' "$cache_jobs" | jq -er '
     [.jobs[] | select(.name == "Static validation" or (.name | startswith("Test Rust workspace ("))
-      or .name == "Rust local end-to-end" or .name == "Central Worker build and local workerd conformance")
+      or .name == "Rust local end-to-end" or (.name | startswith("Central Worker build and local workerd conformance (")))
       | select(.conclusion != "skipped" and .startedAt != null and .startedAt != "0001-01-01T00:00:00Z")
       | .startedAt] | min // error("No cache writer start time")')"
   cache_inventory="$(gh cache list --repo "$GITHUB_REPOSITORY" \
@@ -36,8 +36,10 @@ fi
 # rust-cache exposes no primary-key output. Main runs are serialized by the
 # workflow concurrency group, and this job waits for every writer's post hook.
 # A key created since the first writer started therefore belongs to this run.
-# Cache hits create no entry: a single existing key needs no pruning. Refuse an
-# ambiguous family rather than guess from last-access order or delete its key.
+# CI writes only to v1-rust with one writer per family. Require a replacement
+# before retiring v0 CI keys. A cache hit creates no entry, so a sole existing
+# v1 key can finish retiring v0 keys after an interrupted prune.
+# A restore-only job can still use a different v1 prefix without saving a key.
 # The release workflow saves its own Apple Silicon cache from manual main
 # dispatches; GitHub expires older entries, so this job leaves that family alone.
 cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_started_at" '
@@ -46,10 +48,20 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
       // error("Expected a UTC cache-writer timestamp"))
     | .whole + "." + (((.fraction // "") + "000000000")[0:9]) + "Z";
   def family($key):
-    ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
-     "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
-     "v0-rust-e2e-", "v0-rust-wasm-", "node-cache-Linux-x64-pnpm-"]
-    | map(. as $prefix | select($key | startswith($prefix))) | first;
+    if $key | test("^v[0-9]+-rust-") then
+      if $key | test("^v0-rust-release-arm64-background-Darwin-arm64-[0-9a-f]{8}-[0-9a-f]{8}$") then null
+      else
+        # Group by family to find replacements for retired v0 entries.
+        ($key | capture("^v[01]-rust-(?<ci_family>(static|test|e2e|wasm)-Linux-x64)-[0-9a-f]{8}-[0-9a-f]{8}$")
+         | "v1-rust-" + .ci_family)
+        // error("Unexpected rust-cache key: " + $key)
+      end
+    else
+      ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
+       "Linux-X64-worker-build-", "node-cache-Linux-x64-pnpm-"]
+      | map(. as $prefix | select($key | startswith($prefix))) | first
+    end;
+  def restore_prefix: sub("-[0-9a-f]{8}$"; "");
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
       error("Cache inventory must be a complete array with fewer than 1000 entries")
@@ -63,21 +75,21 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
   | group_by(.family)
   | map(
       . as $entries
-      | (map(.key) | unique) as $keys
-      | (map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
-      # pnpm caching is disabled in this workflow. Older main stores are
-      # obsolete; a new store signals an unexpected writer and is protected.
-      | if .[0].family == "node-cache-Linux-x64-pnpm-" then
-          if ($saved | length) != 0 then error("Unexpected pnpm cache writer in this run")
-          else {family: .[0].family, keepKey: null, retired: true,
-                delete: [$entries[] | {id, key, sizeInBytes}]} end
-        else
-          (if ($keys | length) == 1 then $keys[0]
-           elif ($saved | length) == 1 then $saved[0]
-           else error("Cannot identify the saved key for " + .[0].family) end) as $keep
-          | {family: .[0].family, keepKey: $keep,
-             delete: [$entries[] | select(.key != $keep) | {id, key, sizeInBytes}]}
-        end)
+      | (map(select(.key | startswith("v0-rust-") | not))) as $active
+      | ($active | map(.key) | unique) as $active_keys
+      | ($active | map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
+      | (if ($saved | length) > 1 then error("Multiple keys saved in this run for " + .[0].family)
+         elif ($saved | length) == 1 then {keepKey: $saved[0]}
+         elif ($active | length) == 0 then {keepKey: null, reason: "No stable CI replacement available"}
+         elif ($active_keys | length) == 1 and ($active | length) < ($entries | length) then
+           {keepKey: $active_keys[0], reason: "Stable CI replacement already present"}
+         else {keepKey: null, reason: "No key saved in this run"} end)
+      | . + {family: $entries[0].family,
+             delete: [.keepKey as $keep | $entries[]
+               | select($keep != null and .key != $keep)
+               | select((.key | startswith("v1-rust-") | not)
+                        or (.key | restore_prefix) == ($keep | restore_prefix))
+               | {id, key, sizeInBytes}]})
 ')"
 
 # Selection must succeed for the entire inventory before any delete is issued.

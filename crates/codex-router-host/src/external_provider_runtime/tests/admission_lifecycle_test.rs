@@ -610,7 +610,7 @@ async fn explicit_cancel_remains_responsive_while_prompt_is_active() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn unavailable_broker_refuses_permission_once_without_payload_retention() {
+async fn managed_permission_refuses_once_without_payload_retention() {
     let runtime = ExternalProviderRuntime::initialize(
         permission_request_fixture(),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
@@ -633,7 +633,9 @@ async fn unavailable_broker_refuses_permission_once_without_payload_retention() 
     assert_eq!(outcome.stop_reason, ProviderPromptStopReason::EndTurn);
     assert_eq!(
         outcome.permission_refusal_reason,
-        Some(ExternalProviderApprovalRefusalReason::ApprovalBrokerUnavailable)
+        Some(ExternalProviderApprovalRefusalReason::Managed(
+            session_event_model::managed_interaction_refusal::ManagedInteractionRefusal::ApprovalsUnavailableOnBuild,
+        ))
     );
     assert_eq!(
         runtime.approval_refusal_warnings(),
@@ -641,7 +643,9 @@ async fn unavailable_broker_refuses_permission_once_without_payload_retention() 
             endpoint: "cursor-local".to_owned(),
             provider_session_id: "fixture-session".to_owned(),
             method: "session/request_permission",
-            reason_code: ExternalProviderApprovalRefusalReason::ApprovalBrokerUnavailable,
+            reason_code: ExternalProviderApprovalRefusalReason::Managed(
+            session_event_model::managed_interaction_refusal::ManagedInteractionRefusal::ApprovalsUnavailableOnBuild,
+        ),
         }]
     );
     assert_eq!(

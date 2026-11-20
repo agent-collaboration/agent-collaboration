@@ -14,7 +14,6 @@ use collaboration_protocol::{
     NativeSessionListResult, ProviderSessionListParams, ProviderSessionListResult,
 };
 pub struct SessionOperations {
-    link: board_fleet_sync::FleetLinkObservation,
     identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native: NativeSessionControl,
@@ -32,7 +31,6 @@ impl SessionOperations {
         journal: super::journal_operations::JournalOperations,
     ) -> Self {
         Self {
-            link: board_fleet_sync::FleetLinkObservation::Unconfigured,
             identity,
             directory,
             native,
@@ -52,12 +50,7 @@ impl SessionOperations {
             endpoints: inventory.endpoints,
         })
     }
-    pub fn with_fleet_link(mut self, link: board_fleet_sync::FleetLinkObservation) -> Self {
-        self.link = link;
-        self
-    }
-
-    pub async fn installation_show(
+    pub fn installation_show(
         &self,
     ) -> Result<collaboration_protocol::InstallationIdentity, InstallationIdentityUnavailable> {
         let peer = self
@@ -67,19 +60,7 @@ impl SessionOperations {
         Ok(collaboration_protocol::InstallationIdentity {
             service_id: self.identity.service_id().clone(),
             machine_label: self.identity.machine_identity().machine_label().clone(),
-            peer_id: peer
-                .to_string()
-                .try_into()
-                .map_err(|_| InstallationIdentityUnavailable::Identity)?,
-            central: match self.link.read().await {
-                Ok(Some(record)) => collaboration_protocol::CentralLinkObservation::Available {
-                    record: Box::new(record),
-                },
-                Ok(None) => collaboration_protocol::CentralLinkObservation::NotConfigured,
-                Err(error) => collaboration_protocol::CentralLinkObservation::Unavailable {
-                    message: error.to_string(),
-                },
-            },
+            peer_id: peer,
         })
     }
     pub async fn codex_session_list(

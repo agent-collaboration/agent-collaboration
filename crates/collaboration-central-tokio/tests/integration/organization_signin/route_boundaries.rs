@@ -68,7 +68,7 @@ async fn unstamped_private_reads_and_revisions_reveal_nothing_and_unknown_routes
         unknown.body.is_empty(),
         "an unknown private route revealed a response payload"
     );
-    let counts=f.rows(A,"SELECT (SELECT COUNT(*) FROM organization_identity),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM organization_authorization_floors),(SELECT COUNT(*) FROM person_organization_authorization_floors),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM workspaces)",vec![]).await?;
+    let counts=f.rows(A,"SELECT (SELECT COUNT(*) FROM signin_organization_identity),(SELECT COUNT(*) FROM signin_change_records),(SELECT COUNT(*) FROM admin_used_requests),(SELECT COUNT(*) FROM signin_authorization_floors),(SELECT COUNT(*) FROM signin_person_authorization_floors),(SELECT COUNT(*) FROM runtime_request_log),(SELECT COUNT(*) FROM directory_workspaces)",vec![]).await?;
     assert!(
         counts == vec![vec![number(0)?; 7]],
         "refused private requests wrote business, proof or decision rows"

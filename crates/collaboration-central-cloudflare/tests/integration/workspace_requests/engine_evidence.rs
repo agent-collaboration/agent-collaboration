@@ -51,12 +51,12 @@ async fn run(runtime: &RemoteRuntime, sql: &'static str) {
 pub(super) async fn dump_attempts(runtime: &RemoteRuntime, receipt: &str, step: &str) {
     let table = read(
         runtime,
-        "SELECT * FROM central_work_attempts ORDER BY machine_kind,subject_key",
+        "SELECT * FROM engine_work_attempts ORDER BY machine_kind,subject_key",
     )
     .await;
     append_receipt(
         receipt,
-        &serde_json::json!({ "step": step, "central_work_attempts": table }).to_string(),
+        &serde_json::json!({ "step": step, "engine_work_attempts": table }).to_string(),
     );
 }
 
@@ -72,12 +72,12 @@ pub(super) async fn install_attempt_id_witness(runtime: &RemoteRuntime) {
     .await;
     run(
         runtime,
-        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_insert AFTER INSERT ON central_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'insert'); END",
+        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_insert AFTER INSERT ON engine_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'insert'); END",
     )
     .await;
     run(
         runtime,
-        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_update AFTER UPDATE ON central_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'update'); END",
+        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_update AFTER UPDATE ON engine_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'update'); END",
     )
     .await;
 }

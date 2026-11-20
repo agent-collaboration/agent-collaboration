@@ -11,25 +11,49 @@ use super::{
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
     retain_operation, runtime_failure,
 };
-use crate::provider_acp_session_loading::SessionQueuePlan;
-use crate::provider_cache_warm::WarmRun;
 use crate::session_owner_delivery_evidence::{
     OwnerDeliveryEvidence, ProviderDeliveryEvidence, placement_evidence,
 };
+use acp_client_runtime::acp_transport::TransportRun;
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_protocol::{
     ConversationOperationQueueState, MessageDelivery, ProviderOperationStage,
     ProviderPromptStopReason,
 };
 use provider_session_machines::{
+    SessionGeneration,
     session_lifecycle_machine::SessionLifecycle,
-    session_owner::{OwnerInput, PromptAdmission, RemoteEffect, SessionOwnerReply},
+    session_owner::{OwnerAddress, OwnerInput, PromptAdmission, RemoteEffect, SessionOwnerReply},
     session_turn_machine::{SessionTurn, TurnId},
 };
 use uuid::Uuid;
 
 #[derive(Clone, Copy)]
+pub(crate) enum SessionQueuePlan {
+    OnRun(TransportRun),
+    Restore {
+        run: TransportRun,
+        attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
+    },
+}
+
+impl SessionQueuePlan {
+    pub(crate) fn run(self) -> TransportRun {
+        match self {
+            Self::OnRun(run) | Self::Restore { run, .. } => run,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct WarmRun {
+    pub(crate) owner: OwnerAddress,
+    pub(crate) generation: SessionGeneration,
+}
+
+#[derive(Clone, Copy)]
 enum DeliveryAdmission {
+    #[cfg(test)]
     Direct,
     Requested(MessageDelivery),
     SteerExisting(TurnId),
@@ -315,7 +339,7 @@ fn retained_prompt(
             ConversationOperationFailureKind::PermissionRejected,
             ConversationOperationFailureStage::Settlement,
             ProviderOperationEffect::Applied,
-            refusal.code(),
+            refusal.message(),
             operation,
             Some(target.clone()),
         )),
@@ -458,6 +482,7 @@ impl ExternalProviderSupervisor {
         clippy::result_large_err,
         reason = "Retains a typed conversation failure for delivery."
     )]
+    #[cfg(test)]
     pub(super) async fn submit_owned_direct_delivery(
         &self,
         request: ProviderPromptContentsRequest,
@@ -647,6 +672,7 @@ impl ExternalProviderSupervisor {
                 input: input.clone(),
                 supported: steering_supported,
             },
+            #[cfg(test)]
             DeliveryAdmission::Direct => SessionOwnerCommand::Prompt {
                 input: input.clone(),
                 admission: PromptAdmission::Direct,

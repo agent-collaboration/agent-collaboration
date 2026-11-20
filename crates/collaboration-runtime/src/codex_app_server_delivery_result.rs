@@ -119,7 +119,7 @@ pub fn interpret_native_response(
             } else if kind == NOT_LOADED_REASON {
                 (
                     DeliveryOutcome::NotSubmitted {
-                        retryable: true,
+                        retryable: false,
                         reason: NOT_LOADED_REASON.into(),
                     },
                     None,

@@ -143,8 +143,8 @@ async function serveSharedSettings(peer: {
 //   advertise-close: initialize advertises session/close.
 //   advertise-steering: initialize advertises steering; _session/steering is
 //     answered injected while a held-open turn runs, promptRequired otherwise.
-//   prompt-directives: a prompt whose text is "ask-permission" asks a
-//     permission for a fetch before ending its turn; one whose text is
+//   prompt-directives: "ask-permission" asks for a fetch, expects the refusal,
+//     and waits for session/cancel before ending its turn; one whose text is
 //     "unknown-stop" ends with the stop reason "future_reason"; one whose
 //     text is "hold-open" stays running, as hold-first-prompt-open, until a
 //     session/cancel ends it.
@@ -356,17 +356,18 @@ function promptText(request: Record<string, unknown>): string | undefined {
 
 let permissionRequests = 0;
 
-/** Answers a prompt as its text directs (prompt-directives). */
+/** Answers a directed prompt or returns the request that is waiting for cancel. */
 async function answerDirectedPrompt(
   peer: ReactivePeer,
   request: Record<string, unknown>,
-): Promise<void> {
-  const text = promptText(request);
+): Promise<Record<string, unknown> | undefined> {
+  const text = peer.behaviours.has("prompt-directives") ? promptText(request) : undefined;
   if (text === "ask-permission") {
     permissionRequests += 1;
+    const callbackId = `permission-${permissionRequests}`;
     peer.send({
       jsonrpc: "2.0",
-      id: `permission-${permissionRequests}`,
+      id: callbackId,
       method: "session/request_permission",
       params: {
         sessionId: requestParameters(request).sessionId,
@@ -381,10 +382,13 @@ async function answerDirectedPrompt(
         ],
       },
     });
-    // The client's answer is the next frame; the receipt records it.
-    await peer.readRequest();
+    const refused = await peer.readRequest();
+    assert.equal(refused?.id, callbackId);
+    assert.deepEqual(refused?.result, { outcome: { outcome: "cancelled" } });
+    return request;
   }
   peer.reply(request, { stopReason: text === "unknown-stop" ? "future_reason" : "end_turn" });
+  return undefined;
 }
 
 let steerPermissionRequests = 0;
@@ -490,8 +494,7 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
           heldOpen = request;
           break;
         }
-        if (peer.behaviours.has("prompt-directives")) await answerDirectedPrompt(peer, request);
-        else peer.reply(request, { stopReason: "end_turn" });
+        heldOpen = (await answerDirectedPrompt(peer, request)) ?? heldOpen;
         break;
       case "session/cancel":
         if (heldOpen !== undefined) {

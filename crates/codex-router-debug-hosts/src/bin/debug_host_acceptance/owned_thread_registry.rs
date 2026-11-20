@@ -58,41 +58,6 @@ impl OwnedThreadRegistry {
     ) -> Result<String, Box<dyn Error>> {
         self.create_with_config(client, cwd, None, "never").await
     }
-    pub async fn create_with_user_review(
-        &mut self,
-        client: &mut NativeProtocolConnection,
-        cwd: &Path,
-    ) -> Result<String, Box<dyn Error>> {
-        self.create_with_config(client, cwd, None, "untrusted")
-            .await
-    }
-    pub async fn create_with_socket_access(
-        &mut self,
-        client: &mut NativeProtocolConnection,
-        cwd: &Path,
-        service_socket: &Path,
-    ) -> Result<String, Box<dyn Error>> {
-        let socket = std::fs::canonicalize(service_socket)?;
-        let profile = "debug-agent-collaboration";
-        let configuration = json!({
-            "permissions":{profile:{"extends":":read-only","network":{
-                "enabled":true,"domains":{},
-                "unix_sockets":{socket.to_str().ok_or("socket path is not UTF-8")?:"allow"},
-                "allow_local_binding":false,"allow_upstream_proxy":false,
-                "dangerously_allow_all_unix_sockets":false
-            }}},
-            "features.network_proxy":{
-                "enabled":true,"credential_broker":false,
-                "proxy_url":"http://127.0.0.1:0","enable_socks5":false,
-                "domains":{},
-                "unix_sockets":{socket.to_str().ok_or("socket path is not UTF-8")?:"allow"},
-                "allow_local_binding":false,"allow_upstream_proxy":false,
-                "dangerously_allow_all_unix_sockets":false
-            }
-        });
-        self.create_with_config(client, cwd, Some(configuration), "never")
-            .await
-    }
     async fn create_with_config(
         &mut self,
         client: &mut NativeProtocolConnection,
@@ -212,6 +177,7 @@ impl OwnedThreadRegistry {
         })
     }
 
+    #[cfg(test)]
     pub async fn observe_turn(
         &self,
         client: &mut NativeProtocolConnection,

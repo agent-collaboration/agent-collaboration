@@ -67,6 +67,9 @@ pub(super) async fn send_message(
                 operation: CentralMailOperation::SendMessage {
                     to: session(&fixture.caller),
                     body: "traffic".to_owned().try_into().unwrap(),
+                    delivery: workspace_model::central_mail::MessageDelivery::Auto,
+                    reply_to: None,
+                    sent_at: "2100-01-01T00:00:00Z".parse().unwrap(),
                 },
             },
         )
@@ -88,7 +91,7 @@ pub(super) async fn count(runtime: &Runtime, sql: &'static str, args: Vec<SqlVal
 pub(super) async fn notices(runtime: &Runtime) -> i64 {
     count(
         runtime,
-        "SELECT COUNT(*) FROM messages WHERE message_kind='notice'",
+        "SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice'",
         vec![],
     )
     .await
@@ -97,7 +100,7 @@ pub(super) async fn wake_state(runtime: &Runtime, wake: &workspace_ids::WakeId) 
     runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT state FROM wakes WHERE wake_id=?",
+            sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
             args: vec![text(wake)],
         })
         .await
@@ -148,7 +151,7 @@ pub(super) async fn window_due(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
     runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT DISTINCT due_at FROM notification_windows",
+            sql: "SELECT DISTINCT due_at FROM mail_notification_windows",
             args: vec![],
         })
         .await
@@ -167,7 +170,7 @@ pub(super) async fn preset_drain(fixture: &Fixture, runtime: &Runtime, due: Time
             .run_batch(central_storage::StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
-                        sql: "INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
+                        sql: "INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=excluded.drain_due_at",
                         args: vec![
                             text(&fixture.workspace),
                             stamp(due),
@@ -188,7 +191,7 @@ pub(super) async fn drain_due(fixture: &Fixture, runtime: &Runtime) -> SqlValue 
     runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drain_due_at FROM workspace_drains WHERE workspace_id=?",
+            sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&fixture.workspace)],
         })
         .await

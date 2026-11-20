@@ -111,7 +111,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         #[cfg(any(test, feature = "test-observation"))]
         let callback_permission_outcome = Arc::clone(&permission_outcome);
         let callback_interaction_port = Arc::clone(&interaction_port);
-        let task_interaction_port = Arc::clone(&interaction_port);
+
         let approval_contexts = Arc::new(std::sync::Mutex::new(HashMap::<
             String,
             ActiveApprovalContext<P>,
@@ -190,7 +190,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             "provider stdout closed",
                         ))
                     }));
-            let final_interaction_port = Arc::clone(&callback_interaction_port);
+
             let connection = Client.builder().name("codex-router-host")
                 .with_handler(ProviderRequestSessionGuard::new(request_routes))
                 .with_handler(crate::owner_callback_routing::OwnerToolCallHandler::new(Arc::clone(&callbacks)))
@@ -226,6 +226,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             }).cloned()
                         });
                         if context.is_some()
+                            && callback_interaction_port.managed_refusal().is_none()
                             && let Some(option) = permission_callbacks.in_folder_grant(request.session_id.0.as_ref()).and_then(|grant| {
                                 grant.allow_once(&request.tool_call, &request.options, &|action, title| {
                                     permission_behavior.stated_permission_target(action, title)
@@ -368,7 +369,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         }
                         task_connection_retirement.cancel();
                         task_shutdown.cancel();
-                        task_interaction_port.cancel_retired().await;
+
                         while let Some(result) = executors.join_next().await {
                             if result.is_err() { task_shutdown_failed.store(true, Ordering::Relaxed); }
                         }
@@ -390,7 +391,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 },
             };
             connection_retirement.cancel();
-            final_interaction_port.cancel_retired().await;
+
             if !child_exited {
                 lifetime.end().await;
             }

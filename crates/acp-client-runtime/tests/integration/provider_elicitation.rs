@@ -75,9 +75,6 @@ impl InteractionPort for QuestionPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct NoopEventSink;

@@ -14,20 +14,8 @@ use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_protocol::{
     OperationId, ProviderOperationEffect, ProviderOperationStage, SessionReachability, SessionRef,
 };
-use std::sync::Arc;
 
 impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
-    fn scheduled_runs(&self) -> Option<Arc<dyn collaboration_contracts::ScheduledRunRoute>> {
-        Some(Arc::new(
-            crate::provider_acp_scheduled_runs::ProviderAcpScheduledRuns::new(
-                self.service_id.clone(),
-                Arc::clone(&self.supervisor),
-                Arc::clone(&self.store),
-                Arc::clone(&self.ownership),
-            ),
-        ))
-    }
-
     fn reachability(&self) -> SessionReachability {
         SessionReachability::ProviderAcp
     }

@@ -238,17 +238,6 @@ export const rows: InventoryRow[] = [
     fixedBy: "D1",
   },
   {
-    file: `${R}permission_address.rs`,
-    line: 4,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "PermissionAddress {session, turn, sequence} encoded as permission:{json} (L9-L21) for the ACP request_permission request id generated at native_prompt_execution.rs:189-196: the one typed opaque permission-id codec (D2 R82 keeps it as a boundary encoding); callers keep the id and never reparse it",
-    usedBy: [...N8, { part: "N7" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: `${R}permission_translation.rs`,
     line: 48,
     owner: "codex",
@@ -366,18 +355,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${R}session_creation/recorded_session_resume.rs`,
-    line: 45,
-    owner: "codex",
-    kind: "hand-json",
-    defines:
-      "thread/resume params {threadId, permissions, config, excludeTurns}; loaded-thread form (:56); validate_response reads thread.id, cwd and thread.cwd (60-76)",
-    usedBy: [...N8N10],
-    duplicateGroup: "codex-hand-shapes",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
     file: `${R}session_creation/router_permission_profile.rs`,
     line: 231,
     owner: "codex",
@@ -445,17 +422,6 @@ export const rows: InventoryRow[] = [
     duplicateGroup: "tool-kind-mapping",
     disposition: "duplicate",
     fixedBy: "D2",
-  },
-  {
-    file: `${R}approval_broker.rs`,
-    line: 8,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "ApprovalRoute {threadId, createdBy SessionRef, approver SessionRef, access RouterAccess, scratchPath, rootMessageId} Serialize/Deserialize deny_unknown_fields, handed to the Host broker; BrokeredApprovalRequest.request (18) carries the untyped ACP session/request_permission Value",
-    usedBy: [...N8, { part: "N7" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
   },
   {
     file: `${R}acp_connection_router.rs`,

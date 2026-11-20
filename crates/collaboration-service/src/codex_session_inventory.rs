@@ -177,7 +177,6 @@ pub struct CodexSessionInventory {
     identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native_backend: Option<collaboration_runtime::NativeControlBackend>,
-    display_names: collaboration_runtime::SessionDisplayNameCache,
     journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
 }
 impl CodexSessionInventory {
@@ -185,14 +184,12 @@ impl CodexSessionInventory {
         identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
-        display_names: collaboration_runtime::SessionDisplayNameCache,
         journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     ) -> Self {
         Self {
             identity,
             directory,
             native_backend,
-            display_names,
             journal,
         }
     }
@@ -201,7 +198,6 @@ impl CodexSessionInventory {
         params: NativeSessionListParams,
         budget: ResultByteBudget,
     ) -> Result<NativeSessionListResult, NativeSessionFailure> {
-        let display_names = &self.display_names;
         if !(1..=100).contains(&params.page_size) {
             return Err(NativeSessionFailure::InvalidRequest(
                 INVALID_INVENTORY_PARAMETERS,
@@ -265,7 +261,7 @@ impl CodexSessionInventory {
                     INVALID_INVENTORY_PARAMETERS,
                 ));
             }
-            stored_page(&backend.codex_home, &params, cursor, display_names, budget).await
+            stored_page(&backend.codex_home, &params, cursor, budget).await
         } else {
             let Ok(admission) = backend.gate.acquire() else {
                 return Err(failed(NativeSessionFailureKind::Unavailable));
@@ -287,7 +283,7 @@ impl CodexSessionInventory {
             let retired = admission.retirement();
             tokio::select! {
                 _=retired.cancelled()=>Err(()),
-                result=runtime_page(&params,cursor,&admission,&schemas,display_names)=>result,
+                result=runtime_page(&params,cursor,&admission,&schemas)=>result,
             }
         };
         let Ok(page) = result else {
@@ -324,7 +320,6 @@ async fn stored_page(
     home: &std::path::Path,
     params: &NativeSessionListParams,
     cursor: Option<InventoryCursor>,
-    display_names: &collaboration_runtime::SessionDisplayNameCache,
     budget: ResultByteBudget,
 ) -> Result<NativeSessionListResult, ()> {
     let catalog = StoredThreadCatalog::open(home).await.map_err(|_| ())?;
@@ -381,16 +376,7 @@ async fn stored_page(
         let reasoning_effort: Option<String> = row.try_get("reasoning_effort").map_err(|_| ())?;
         let name: Option<String> = row.try_get("name").map_err(|_| ())?;
         let title: Option<String> = row.try_get("title").map_err(|_| ())?;
-        let session_ref = collaboration_protocol::SessionRef {
-            endpoint: params.endpoint.clone(),
-            session_id: id.clone().try_into().map_err(|_| ())?,
-        };
-        let cached_name = name.as_deref().filter(|value| !value.trim().is_empty());
-        if let Some(cached_name) = cached_name {
-            display_names.remember(session_ref, cached_name);
-        } else {
-            display_names.forget(session_ref);
-        }
+        let session_id = collaboration_protocol::SessionId::try_from(id.clone()).map_err(|_| ())?;
         let git_branch: Option<String> = row.try_get("git_branch").map_err(|_| ())?;
         let source_value: Option<String> = row.try_get("source").map_err(|_| ())?;
         let thread_source: Option<String> = row.try_get("thread_source").map_err(|_| ())?;
@@ -437,7 +423,7 @@ async fn stored_page(
             .ok_or(())?
             .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let idle_seconds = idle_seconds_since_ms(time.ok_or(())?);
-        let session = json!({"target":{"endpoint":params.endpoint,"sessionId":id},"name":name,"title":title.unwrap_or_default(),"source":source,"gitBranch":git_branch,"workingDirectory":cwd,"observation":{"kind":"stored","updatedAt":updated},"model":model,"reasoningEffort":reasoning_effort,"idleSeconds":idle_seconds});
+        let session = json!({"target":{"endpoint":params.endpoint,"sessionId":session_id},"name":name,"title":title.unwrap_or_default(),"source":source,"gitBranch":git_branch,"workingDirectory":cwd,"observation":{"kind":"stored","updatedAt":updated},"model":model,"reasoningEffort":reasoning_effort,"idleSeconds":idle_seconds});
         let row_bytes = serde_json::to_vec(&session)
             .map_err(|_| ())?
             .len()
@@ -465,7 +451,6 @@ async fn runtime_page(
     cursor: Option<InventoryCursor>,
     admission: &collaboration_runtime::NativeAdmission,
     schemas: &codex_native_integration::NativePayloadSchemas,
-    display_names: &collaboration_runtime::SessionDisplayNameCache,
 ) -> Result<NativeSessionListResult, ()> {
     let mut native = NativeProtocolConnection::connect(admission.backend_path())
         .await
@@ -512,16 +497,8 @@ async fn runtime_page(
             .get("title")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let session_ref = collaboration_protocol::SessionRef {
-            endpoint: params.endpoint.clone(),
-            session_id: id.to_owned().try_into().map_err(|_| ())?,
-        };
-        let cached_name = name.filter(|value| !value.trim().is_empty());
-        if let Some(cached_name) = cached_name {
-            display_names.remember(session_ref, cached_name);
-        } else {
-            display_names.forget(session_ref);
-        }
+        let session_id =
+            collaboration_protocol::SessionId::try_from(id.to_owned()).map_err(|_| ())?;
         let source = classify_source(
             thread.get("source").and_then(Value::as_str),
             thread.get("threadSource").and_then(Value::as_str),
@@ -537,7 +514,7 @@ async fn runtime_page(
         {
             continue;
         }
-        let session = json!({"target":{"endpoint":params.endpoint,"sessionId":id},"name":name,"title":title,"source":source,"gitBranch":thread.pointer("/gitInfo/branch").and_then(Value::as_str),"workingDirectory":thread.get("cwd").ok_or(())?,"observation":{"kind":"runtime","status":status,"turnId":active_turn_id(status)},"model":thread.get("model").and_then(Value::as_str),"reasoningEffort":thread.get("reasoningEffort").and_then(Value::as_str),"idleSeconds":idle_seconds_from_thread(thread)});
+        let session = json!({"target":{"endpoint":params.endpoint,"sessionId":session_id},"name":name,"title":title,"source":source,"gitBranch":thread.pointer("/gitInfo/branch").and_then(Value::as_str),"workingDirectory":thread.get("cwd").ok_or(())?,"observation":{"kind":"runtime","status":status,"turnId":active_turn_id(status)},"model":thread.get("model").and_then(Value::as_str),"reasoningEffort":thread.get("reasoningEffort").and_then(Value::as_str),"idleSeconds":idle_seconds_from_thread(thread)});
         loaded_threads.push((id.to_owned(), thread.clone(), session));
     }
     let mut sessions = Vec::new();

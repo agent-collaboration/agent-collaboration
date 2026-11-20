@@ -7,9 +7,9 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
     let project = f.project(2201, area.clone()).await;
     let target = m::ItemRef::Deliverable(f.deliverable(2202, project).await);
     let item = add_backlog(&f, 2203, area).await;
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let cursor_query = || Statement {
-        sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?",
+        sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         args: vec![text(&f.workspace)],
     };
     let before = runtime.statement_host().read(cursor_query()).await.unwrap();
@@ -31,7 +31,7 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
         u64::try_from(position.get() + 1).unwrap()
     );
     let changes = runtime.inspect_workspace(&f.workspace, Statement {
-        sql: "SELECT position,change_kind,item_kind FROM changes WHERE position>? ORDER BY position",
+        sql: "SELECT position,change_kind,item_kind FROM workspace_changes WHERE position>? ORDER BY position",
         args: vec![SqlValue::Integer(position)],
     }).await.unwrap();
     assert_eq!(
@@ -63,7 +63,7 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
         after
     );
     assert_eq!(runtime.inspect_workspace(&f.workspace,Statement {
-        sql:"SELECT position,change_kind,item_kind FROM changes WHERE position>? ORDER BY position",args:vec![SqlValue::Integer(position)],
+        sql:"SELECT position,change_kind,item_kind FROM workspace_changes WHERE position>? ORDER BY position",args:vec![SqlValue::Integer(position)],
     }).await.unwrap(),changes);
     f.host.close().await;
 }

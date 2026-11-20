@@ -1,6 +1,6 @@
 //! Connection-local callback identity and turn eligibility.
 
-use crate::acp_transport::TransportRun;
+use crate::transport_run::TransportRun;
 use provider_session_machines::{
     session_turn_machine::TurnId,
     tool_ownership::{

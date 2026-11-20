@@ -2,12 +2,10 @@
 use crate::NativeControlBackend;
 use crate::message_effect_state::MessageEffects;
 use crate::message_effect_state::NativeFailureKind;
-use crate::message_effect_state::NativeMessageAttemptEvidence;
 use crate::message_effect_state::NativeMessageFailure;
 use codex_native_integration::{
     NativeConnectionError, NativeOperation, NativePayloadSchemas, NativeProtocolConnection,
 };
-use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{
     AcceptedResumeEffect, ChannelDescription, CodexGeneration, EndpointDescription,
     MessageDelivery, MessageInputKind, MessageRepresentation, MessageText,
@@ -28,7 +26,6 @@ pub(crate) enum NativeThreadStatus {
 
 pub(crate) struct NativeThreadSnapshot {
     pub status: NativeThreadStatus,
-    pub working_directory: Option<String>,
 }
 
 pub(crate) enum NativeThreadStatusReadError {
@@ -110,24 +107,16 @@ pub(crate) async fn read_native_thread_status(
         Some(_) => NativeThreadStatus::Other,
         None => return Err(NativeThreadStatusReadError::InvalidResponse),
     };
-    Ok(NativeThreadSnapshot {
-        status,
-        working_directory: thread.get("cwd").and_then(Value::as_str).map(str::to_owned),
-    })
+    Ok(NativeThreadSnapshot { status })
 }
 
 pub struct NativeMessageRequest<'a> {
-    pub attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     pub params: NativeMessageParams,
     pub id: Value,
     pub service_id: &'a UuidIdentity,
     pub backend: &'a NativeControlBackend,
     pub endpoints: &'a [EndpointDescription],
     pub held_connection: Option<&'a mut NativeProtocolConnection>,
-    pub load_policy: LoadPolicy,
-    pub approval_broker: Option<&'a std::sync::Weak<dyn codex_acp_adapter::ApprovalBroker>>,
-    pub recorded_route:
-        Option<&'a crate::native_recorded_policy::RecordedNativeRouteClassification>,
     pub attempt_deadline: Option<tokio::time::Instant>,
 }
 
@@ -163,7 +152,6 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
         .attempt_deadline
         .unwrap_or_else(|| tokio::time::Instant::now() + std::time::Duration::from_secs(30));
     let mut effects = MessageEffects::new(request.id);
-    let load_policy = request.load_policy;
     let mut params = request.params;
     if &params.target.endpoint.service_id != request.service_id {
         return NativeMessageOutcome::Failed(
@@ -240,16 +228,6 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
     };
     effects.correlation = Some(correlation.clone());
     let retired = admission.retirement();
-    let recorded_route = match request.recorded_route {
-        Some(classification) => classification.clone(),
-        None => tokio::select! {
-            biased;
-            () = retired.cancelled() => crate::native_recorded_policy::RecordedNativeRouteClassification::UnresolvedAuthority,
-            result = tokio::time::timeout_at(deadline, crate::native_recorded_policy::classify_recorded_native_route(request.approval_broker, &params.target)) => {
-                result.unwrap_or(crate::native_recorded_policy::RecordedNativeRouteClassification::UnresolvedAuthority)
-            }
-        },
-    };
     if retired.is_cancelled() || tokio::time::Instant::now() >= deadline {
         return NativeMessageOutcome::Failed(
             effects.failure(NativeFailureKind::Unavailable, "inspect"),
@@ -286,13 +264,11 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
         },
     };
     let mut session = MessageSession {
-        attempt_evidence: request.attempt_evidence,
         deadline,
         connection,
         schemas,
         retired,
         effects,
-        permission_differences: Vec::new(),
     };
     let target_id = String::from(params.target.session_id.clone());
     let delivery_context = NativeMessageDeliveryContext {
@@ -300,8 +276,6 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
         params: &params,
         correlation: &correlation,
         held_unmaterialized: held,
-        load_policy,
-        recorded_route: &recorded_route,
     };
     let result = session.deliver(&delivery_context).await;
     let acceptance = match result {
@@ -321,25 +295,19 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
         input_kind: rendered.kind,
         representation: rendered.representation,
         client_user_message_id: correlation,
-        resume_effect: if session.effects.resume == "accepted" {
-            AcceptedResumeEffect::Accepted
-        } else {
-            AcceptedResumeEffect::NotRequested
-        },
-        permission_differences: session.permission_differences,
+        resume_effect: AcceptedResumeEffect::NotRequested,
+        permission_differences: Vec::new(),
         acceptance,
     };
     NativeMessageOutcome::Accepted(receipt)
 }
 
 struct MessageSession<'a> {
-    attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     deadline: tokio::time::Instant,
     connection: &'a mut NativeProtocolConnection,
     schemas: Arc<NativePayloadSchemas>,
     retired: CancellationToken,
     effects: MessageEffects,
-    permission_differences: Vec<collaboration_protocol::PermissionDifference>,
 }
 
 struct NativeMessageDeliveryContext<'a> {
@@ -347,8 +315,6 @@ struct NativeMessageDeliveryContext<'a> {
     params: &'a NativeMessageParams,
     correlation: &'a str,
     held_unmaterialized: bool,
-    load_policy: LoadPolicy,
-    recorded_route: &'a crate::native_recorded_policy::RecordedNativeRouteClassification,
 }
 
 impl MessageSession<'_> {
@@ -499,88 +465,14 @@ impl MessageSession<'_> {
         let status = thread_snapshot
             .as_ref()
             .map_or(NativeThreadStatus::Idle, |snapshot| snapshot.status);
-        if status == NativeThreadStatus::NotLoaded && request.load_policy == LoadPolicy::LoadedOnly
-        {
+        if status == NativeThreadStatus::NotLoaded {
             return Err(self.effects.failure(NativeFailureKind::NotLoaded, "start"));
-        }
-        if request.params.delivery == MessageDelivery::Queue
-            && status == NativeThreadStatus::NotLoaded
-        {
-            return Err(self
-                .effects
-                .failure(NativeFailureKind::ThreadNotLoaded, "queue"));
         }
         if request.params.delivery == MessageDelivery::Steer && status != NativeThreadStatus::Active
         {
             return Err(self
                 .effects
                 .failure(NativeFailureKind::NoActiveTurn, "steer"));
-        }
-        let prepared = if request.held_unmaterialized {
-            None
-        } else {
-            self.prepare_recorded_resume(request, thread_snapshot.as_ref())
-                .await?
-        };
-        if status == NativeThreadStatus::NotLoaded || prepared.is_some() {
-            let parameters = prepared.as_ref().map_or_else(
-                || json!({"threadId":request.thread_id,"excludeTurns":true}),
-                |prepared| {
-                    if status == NativeThreadStatus::NotLoaded {
-                        prepared.native_parameters()
-                    } else {
-                        prepared.native_parameters_for_loaded_thread()
-                    }
-                },
-            );
-            let resumed = self
-                .call(NativeOperation::ResumeThread, parameters, "resume")
-                .await?;
-            self.effects.resume = "accepted";
-            if resumed.pointer("/thread/id").and_then(Value::as_str) != Some(request.thread_id) {
-                return Err(self
-                    .effects
-                    .failure(NativeFailureKind::OutcomeUnknown, "resume"));
-            }
-            if let Some(prepared) = prepared {
-                let validation = tokio::select! {
-                    biased;
-                    () = self.retired.cancelled() => return Err(self.effects.failure(NativeFailureKind::Unavailable, "resume")),
-                    result = tokio::time::timeout_at(self.deadline, prepared.validate_response(&resumed)) => result,
-                };
-                match validation {
-                    Ok(Ok(differences)) => {
-                        if let Some(attempt) = &mut self.attempt_evidence
-                            && attempt
-                                .observe_permission_differences(&differences)
-                                .await
-                                .is_err()
-                        {
-                            return Err(self
-                                .effects
-                                .failure(NativeFailureKind::Unavailable, "resume"));
-                        }
-                        self.permission_differences = differences;
-                    }
-                    Ok(Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown)) => {
-                        return Err(self
-                            .effects
-                            .failure(NativeFailureKind::OutcomeUnknown, "resume"));
-                    }
-                    Ok(Err(error)) => {
-                        return Err(self.effects.recorded_policy_failure(
-                            &error,
-                            "resume",
-                            NativeDeliveryFailureCause::InvalidResumeResponse,
-                        ));
-                    }
-                    Err(_) => {
-                        return Err(self
-                            .effects
-                            .failure(NativeFailureKind::Unavailable, "resume"));
-                    }
-                }
-            }
         }
         if request.params.delivery == MessageDelivery::Queue {
             let result = self
@@ -621,30 +513,6 @@ impl MessageSession<'_> {
         })
     }
 
-    async fn prepare_recorded_resume(
-        &self,
-        request: &NativeMessageDeliveryContext<'_>,
-        snapshot: Option<&NativeThreadSnapshot>,
-    ) -> Result<Option<codex_acp_adapter::RecordedSessionResume>, NativeMessageFailure> {
-        let preparation = crate::native_recorded_policy::prepare_classified_native_policy(
-            request.recorded_route,
-            &request.params.target,
-            snapshot.and_then(|snapshot| snapshot.working_directory.as_deref()),
-        );
-        tokio::select! {
-            biased;
-            () = self.retired.cancelled() => Err(self.effects.failure(NativeFailureKind::Unavailable, "resume")),
-            result = tokio::time::timeout_at(self.deadline, preparation) => {
-                match result {
-                    Ok(Ok(prepared)) => Ok(prepared),
-                    Ok(Err(codex_acp_adapter::SessionSetupError::Unavailable)) | Err(_) => {
-                        Err(self.effects.failure(NativeFailureKind::Unavailable, "resume"))
-                    }
-                    Ok(Err(error)) => Err(self.effects.recorded_policy_failure(&error, "resume", NativeDeliveryFailureCause::RecordedResumePreparationFailed)),
-                }
-            }
-        }
-    }
     fn receipt_id(
         &self,
         result: &Value,

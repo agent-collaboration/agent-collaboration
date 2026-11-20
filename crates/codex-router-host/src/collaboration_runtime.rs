@@ -12,12 +12,8 @@ use collaboration_runtime::new_service_uuid;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
-#[path = "collaboration_runtime/fleet_observation.rs"]
-mod fleet_observation;
 
 pub struct CollaborationRuntimeInputs {
-    /// Enrollment/configuration supplies inputs; this Host owns the session itself.
-    pub board_session: Option<board_fleet_sync::BoardSessionInputs>,
     pub owner_human_id: Option<message_board::HumanId>,
     pub directory: PathBuf,
     pub codex_home: PathBuf,
@@ -33,7 +29,6 @@ pub struct CollaborationRuntimeInputs {
 
 /// Host-owned startup facts that are not part of the public collaboration runtime inputs.
 pub(crate) struct HostCollaborationInputs {
-    pub enrollment_reset_directory: PathBuf,
     pub collaboration_runtime: CollaborationRuntimeInputs,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,
@@ -135,31 +130,14 @@ pub enum CollaborationFailure {
 }
 pub struct CollaborationRuntime {
     clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-    fleet_link: board_fleet_sync::FleetLinkObservation,
-    interactions: std::sync::Weak<interaction_storage::InteractionStore>,
-    #[cfg(test)]
-    startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
-    #[cfg(test)]
-    startup_test_broker: std::sync::Weak<collaboration_runtime::ServiceInteractionBroker>,
-    #[cfg(test)]
-    startup_test_display_names: collaboration_runtime::SessionDisplayNameCache,
-    #[cfg(feature = "runtime-test-support")]
-    runtime_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
-    notification_publisher: Option<std::sync::Arc<collaboration_service::NotificationPublisher>>,
-    board_session: Option<board_composition::RunningMachineSession>,
-    /// The Host's one Fleet database, closed after every user of its connection stops.
-    fleet_store: Option<message_board_storage::FleetStore>,
     owner_human_id: Option<message_board::HumanId>,
-    project_admission: Option<std::sync::Arc<collaboration_service::ProjectAdmission>>,
-    subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
-    automation_store:
-        Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
     /// Keeps Claude's prompt cache warm; stopped before the supervisor so nothing submits after.
     provider_cache_warm: Option<std::sync::Arc<crate::provider_cache_warm::ProviderCacheWarm>>,
     provider_delivery_route: Option<std::sync::Arc<crate::ProviderAcpDeliveryRoute>>,
+    session_delivery_router: Option<std::sync::Arc<collaboration_runtime::SessionDeliveryRouter>>,
     provider_retention: Option<tokio::task::JoinHandle<()>>,
     /// Scratch scopes with a Codex session open in this Host.
     open_scratch_scopes: std::sync::Arc<collaboration_runtime::OpenScratchScopes>,
@@ -170,7 +148,7 @@ pub struct CollaborationRuntime {
     native_digest: Option<SchemaDigest>,
     payload_cache: crate::native_schema_cache::NativeSchemaCache,
     service_id: UuidIdentity,
-    installation_peer: fleet_sync_protocol::PeerId,
+    installation_peer: collaboration_protocol::InstallationPeerId,
     service_epoch: UuidIdentity,
     publication: BackendPublication,
     shutdown: CancellationToken,
@@ -178,113 +156,21 @@ pub struct CollaborationRuntime {
     provider_retirement_tasks: JoinSet<io::Result<()>>,
     journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     maintenance: Option<tokio::task::JoinHandle<Result<(), lifecycle_observation::JournalError>>>,
-    automation_task: Option<tokio::task::JoinHandle<()>>,
-    schedule_task: Option<tokio::task::JoinHandle<()>>,
-    automation_maintenance: Option<tokio::task::JoinHandle<()>>,
-    fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
-    /// One re-check per observation retry while lifecycle observation is unavailable.
-    observation_rechecks: observation_recheck::ObservationRechecks,
-    /// Re-checks on the observation backoff when the journal failed to open.
-    journal_unavailable_rechecks: Option<tokio::task::JoinHandle<()>>,
-    /// What the scheduler loop reports, for composition tests.
-    #[cfg(test)]
-    schedule_observation: Option<collaboration_runtime::WorkerObservation>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
-pub(crate) use fleet_observation::FleetObservationFuture;
 
 impl CollaborationRuntime {
-    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    #[must_use]
-    pub fn runtime_test_sleep_was_checked(&self, delay: std::time::Duration) -> bool {
-        self.clock
-            .has_not_due_check_now(self.clock.monotonic_now() + delay)
+    /// Delivery routes share the provider and native resources of this Host run.
+    pub fn session_delivery(&self) -> Option<&collaboration_runtime::SessionDeliveryRouter> {
+        self.session_delivery_router.as_deref()
     }
 
-    pub(crate) fn observe_fleet(&self) -> FleetObservationFuture {
-        let link = self.fleet_link.clone();
-        let interactions = self.interactions.clone();
-        Box::pin(
-            async move { fleet_observation::observe_fleet_sources(&link, &interactions).await },
-        )
-    }
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    pub async fn runtime_test_drain_project_publisher(
-        &self,
-        project: &message_board::ProjectId,
-    ) -> io::Result<()> {
-        let publisher = self
-            .notification_publisher
-            .as_ref()
-            .ok_or_else(|| io::Error::other("test project publisher is unavailable"))?;
-        publisher
-            .queue_project(project.clone())
-            .await
-            .map_err(io::Error::other)?;
-        publisher.wait_project_idle_for_test(project).await;
-        Ok(())
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    pub async fn runtime_test_replicate_project(
-        &self,
-        project: &message_board::ProjectId,
-    ) -> io::Result<()> {
-        self.board_session
-            .as_ref()
-            .ok_or_else(|| io::Error::other("test project runtime is unavailable"))?
-            .replicate_project_for_test(project)
-            .await
-    }
-
-    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    pub async fn runtime_test_has_local_cancel_delivery(
-        &self,
-        cancel: fleet_sync_protocol::ItemId,
-    ) -> io::Result<bool> {
-        self.runtime_test_mail
-            .as_ref()
-            .and_then(std::sync::Weak::upgrade)
-            .ok_or_else(|| io::Error::other("test mail runtime is unavailable"))?
-            .runtime_test_has_local_cancel_delivery(cancel)
-            .await
-            .map_err(io::Error::other)
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    pub const RUNTIME_TEST_MAIL_FAULT_FILE: &str = "messaging-test-fault.json";
-
-    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    pub const RUNTIME_TEST_INBOX_LIMIT_FILE: &str = crate::debug_inbox_limit::FILE_NAME;
-
-    #[cfg(feature = "runtime-test-support")]
-    pub async fn runtime_test_install_mail_fault(
-        &self,
-        fault: interaction_storage::MailStoreTestFault,
-    ) -> io::Result<()> {
-        self.runtime_test_mail
-            .as_ref()
-            .and_then(std::sync::Weak::upgrade)
-            .ok_or_else(|| io::Error::other("test mail runtime is unavailable"))?
-            .runtime_test_install_mail_fault(fault)
-            .await
-            .map_err(io::Error::other)
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    #[must_use]
-    pub fn runtime_test_project_admission(
-        &self,
-    ) -> Option<std::sync::Arc<collaboration_service::ProjectAdmission>> {
-        self.project_admission.clone()
     }
 
     #[must_use]
@@ -297,8 +183,8 @@ impl CollaborationRuntime {
         &self.service_id
     }
     #[must_use]
-    pub fn installation_peer(&self) -> fleet_sync_protocol::PeerId {
-        self.installation_peer
+    pub fn installation_peer(&self) -> collaboration_protocol::InstallationPeerId {
+        self.installation_peer.clone()
     }
     #[must_use]
     pub fn service_epoch(&self) -> &UuidIdentity {
@@ -309,12 +195,8 @@ impl CollaborationRuntime {
 #[path = "collaboration_runtime/collaboration_api_serving.rs"]
 mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
-#[path = "collaboration_runtime/board_composition.rs"]
-mod board_composition;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
-#[path = "collaboration_runtime/mail_delivery_composition.rs"]
-mod mail_delivery_composition;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
 mod observation_recheck;
@@ -323,41 +205,10 @@ mod schema_bundle_retention;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
 
-#[cfg(feature = "runtime-test-support")]
-impl CollaborationRuntime {
-    pub async fn runtime_test_start_with_provider_clock(
-        inputs: CollaborationRuntimeInputs,
-        providers: Vec<crate::ExternalProviderStartup>,
-        clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-    ) -> io::Result<Self> {
-        Box::pin(Self::start_with_optional_router_proxy_endpoint(
-            inputs,
-            providers,
-            std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
-                RouterExecutableRelation::Match,
-            )),
-            None,
-            None,
-            None,
-            Some(clock),
-        ))
-        .await
-    }
-}
-#[cfg(test)]
-#[path = "collaboration_runtime/startup_contract_tests.rs"]
-mod startup_contract_tests;
-
 impl Drop for CollaborationRuntime {
     fn drop(&mut self) {
         self.manifest.take();
         self.shutdown.cancel();
-        if let Some(publisher) = &self.notification_publisher {
-            publisher.cancel();
-        }
-        if let Some(service) = &self.subscription_delivery {
-            service.cancel();
-        }
         let _retire = self.publication.admission_gate().retire();
     }
 }

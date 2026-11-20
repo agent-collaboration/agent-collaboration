@@ -137,9 +137,6 @@ impl ExternalProviderRuntime {
                     let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));
                     (Some(directory), store, hub, binding)
                 };
-                self.interaction_port
-                    .install_event_sink(self.owner_ingress.clone())
-                    .await;
                 let door = self.session_owner_door(store.clone(), hub);
                 Ok(RuntimeFixture {
                     _directory: directory,

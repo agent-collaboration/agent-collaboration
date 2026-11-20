@@ -32,6 +32,9 @@
 //! };
 //! ```
 
+#[cfg(feature = "test-support")]
+#[path = "test_support/acp_owner_fixture.rs"]
+pub mod acp_owner_fixture;
 mod acp_protocol_version;
 pub mod acp_transport;
 mod agent_session_client;
@@ -44,11 +47,9 @@ mod interaction_port;
 mod owner_callback_routing;
 mod owner_restore_updates;
 pub mod owner_session_creation;
-pub mod owner_session_open;
 mod owner_session_replay;
-pub mod owner_session_setting;
-pub mod owner_session_stream;
 pub mod owner_wire;
+pub use owner_wire::{owner_session_open, owner_session_setting, owner_session_stream};
 mod permission_mode_plan;
 mod provider_acp_error_mapping;
 mod provider_behavior;
@@ -77,6 +78,7 @@ mod session_start_folders;
 #[cfg(feature = "test-support")]
 pub mod sim_points;
 pub use session_runs::SessionRuns;
+mod transport_run;
 
 #[cfg(test)]
 extern crate self as acp_client_runtime;
@@ -91,7 +93,9 @@ mod test_behavior;
 pub use acp_protocol_version::AcpProtocolVersion;
 pub use agent_session_client::*;
 pub(crate) use approval_presentation::reviewed_approval_fields;
-pub use approval_turn_cancellation::{OwnerApprovalDrain, OwnerCancelDrainExecutor};
+pub use approval_turn_cancellation::{
+    OwnerApprovalBindings, OwnerApprovalDrain, OwnerApprovalLease, OwnerCancelDrainExecutor,
+};
 pub use external_permission_options::RefusedPermissionOption;
 pub(crate) use external_permission_options::map_permission_options;
 pub use interaction_port::{

@@ -193,28 +193,4 @@ export const rows: InventoryRow[] = [
     disposition: "duplicate",
     fixedBy: "D1",
   },
-  {
-    file: `${R}d1_native_runtime.rs`,
-    line: 130,
-    owner: "codex",
-    kind: "hand-json",
-    defines:
-      "hand-built account/read params {refreshToken:false} sent through NativeProtocolConnection::request",
-    usedBy: [{ crate: "tailnet-verification-host" }],
-    duplicateGroup: "codex-method-tables",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
-    file: `${R}d1_native_runtime.rs`,
-    line: 133,
-    owner: "codex",
-    kind: "content-parser",
-    defines:
-      "hand reads of the account/read result requiresOpenaiAuth==false and account==null: a second reading of the shape AccountReadiness (d1_host_lifecycle.rs:142) decodes",
-    usedBy: [{ crate: "tailnet-verification-host" }],
-    duplicateGroup: "codex-hand-shapes",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
 ];

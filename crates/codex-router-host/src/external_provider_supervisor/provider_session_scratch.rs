@@ -16,7 +16,9 @@ pub(super) async fn prepare_provider_session_scratch(
     let Some(scratch_root) = scratch_root else {
         return Ok(None);
     };
-    let folder = scratch_root.join(format!("session-{}", durable_steps::Uuid::now_v7()));
+    let scope = collaboration_runtime::new_service_uuid()
+        .map_err(|_| "session scratch scope could not be minted")?;
+    let folder = scratch_root.join(format!("session-{}", String::from(scope)));
     let prepared = folder.clone();
     tokio::task::spawn_blocking(move || codex_native_integration::prepare_scratch_scope(&prepared))
         .await

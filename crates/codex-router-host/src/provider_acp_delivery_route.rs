@@ -43,7 +43,6 @@ use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
 pub struct ProviderAcpDeliveryRoute {
-    service_id: UuidIdentity,
     claim: ProviderAcpRouteClaim,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
@@ -101,14 +100,13 @@ impl ProviderAcpDeliveryRoute {
         _clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let claim = ProviderAcpRouteClaim::new(
-            service_id.clone(),
+            service_id,
             provider_endpoints,
             directory,
             Arc::clone(&supervisor),
             Arc::clone(&store),
         );
         Self {
-            service_id,
             claim,
             supervisor,
             store,

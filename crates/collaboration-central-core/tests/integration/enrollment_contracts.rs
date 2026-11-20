@@ -13,7 +13,7 @@ fn admission_ref_wire_contract() {
         "AdmissionRef",
         vec![
             json!({"kind":"admission","admissionId":"019a3dce-2000-7000-8000-000000000001"}),
-            json!({"kind":"machine","installation":"019a3dce-2000-7000-8000-000000000001"}),
+            json!({"kind":"machine","machineId":"019a3dce-2000-7000-8000-000000000001"}),
         ],
         false,
     );
@@ -35,13 +35,13 @@ fn machine_enrollment_wire_contract() {
     contract_artifacts::assert_contract::<MachineEnrollment>(
         "MachineEnrollment",
         vec![
-            json!({"state":"enrolled","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"state":"enrolled","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","endsAt":1793448000_i64}),
-            json!({"state":"revoked","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","reason":{"kind":"owner"}}),
-            json!({"state":"revoked","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","endsAt":1793448000_i64,"reason":{"kind":"owner"}}),
-            json!({"state":"expired","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"state":"expired","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","endsAt":1793448000_i64}),
-            json!({"state":"revoked","enrollmentId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","reason":{"kind":"superseded"}}),
+            json!({"state":"enrolled","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"state":"enrolled","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","endsAt":1793448000_i64}),
+            json!({"state":"revoked","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","reason":{"kind":"owner"}}),
+            json!({"state":"revoked","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","endsAt":1793448000_i64,"reason":{"kind":"owner"}}),
+            json!({"state":"expired","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"state":"expired","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","endsAt":1793448000_i64}),
+            json!({"state":"revoked","enrollmentId":"019a3dce-2000-7000-8000-000000000002","machineId":"019a3dce-2000-7000-8000-000000000001","authorizedBy":{"kind":"deviceCodeApproval","personId":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002"},"machineClientId":"019a3dce-2000-7000-8000-000000000002","reason":{"kind":"superseded"}}),
         ],
         false,
     );

@@ -50,12 +50,12 @@ async fn run(host: &impl ObjectHost, sql: &'static str) {
 pub(crate) async fn dump_attempts(host: &impl ObjectHost, receipt: &str, step: &str) {
     let table = read(
         host,
-        "SELECT * FROM central_work_attempts ORDER BY machine_kind,subject_key",
+        "SELECT * FROM engine_work_attempts ORDER BY machine_kind,subject_key",
     )
     .await;
     append_receipt(
         receipt,
-        &serde_json::json!({ "step": step, "central_work_attempts": table }).to_string(),
+        &serde_json::json!({ "step": step, "engine_work_attempts": table }).to_string(),
     );
 }
 
@@ -71,12 +71,12 @@ pub(crate) async fn install_attempt_id_witness(host: &impl ObjectHost) {
     .await;
     run(
         host,
-        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_insert AFTER INSERT ON central_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'insert'); END",
+        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_insert AFTER INSERT ON engine_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'insert'); END",
     )
     .await;
     run(
         host,
-        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_update AFTER UPDATE ON central_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'update'); END",
+        "CREATE TRIGGER IF NOT EXISTS test_attempt_id_witness_update AFTER UPDATE ON engine_work_attempts BEGIN INSERT INTO test_attempt_id_witness(attempt_id,write_kind) VALUES (NEW.attempt_id,'update'); END",
     )
     .await;
 }
@@ -123,7 +123,7 @@ pub(crate) async fn assert_every_written_attempt_id_is_uuid_v7(
 pub(super) async fn witness_fixture_attempt_ids(fixture: &super::support::Fixture) {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     install_attempt_id_witness(runtime.statement_host()).await;
@@ -135,7 +135,7 @@ pub(super) async fn assert_fixture_attempt_ids_are_uuid_v7(
 ) -> usize {
     let runtime = fixture
         .host
-        .central(&fixture.caller.organization_id)
+        .central(fixture.caller.organization_id())
         .await
         .unwrap();
     assert_every_written_attempt_id_is_uuid_v7(runtime.statement_host(), test, planted).await

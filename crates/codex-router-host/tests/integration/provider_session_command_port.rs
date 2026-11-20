@@ -54,7 +54,6 @@ async fn protocol_door_create_succeeds_in_auto() {
     let (provider, provider_arguments) = claude_permission_fixture(root.path());
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(
                 message_board::HumanId::try_from("acp-owner".to_owned()).expect("owner"),
             ),

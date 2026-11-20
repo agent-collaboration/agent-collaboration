@@ -8,7 +8,7 @@ use super::support::*;
 async fn approval_late_record_failure_rolls_back_all_rows_then_same_request_applies_once()
 -> Result<()> {
     let f = MachineFixture::new().await?;
-    f.execute("CREATE TRIGGER fail_login_approval BEFORE INSERT ON organization_change_records WHEN NEW.kind='allowanceChanged' AND NEW.target_id='019f0000-0000-7000-8000-00000000bc04' BEGIN SELECT RAISE(ABORT,'fixture last allowance record failure'); END",vec![]).await?;
+    f.execute("CREATE TRIGGER fail_login_approval BEFORE INSERT ON signin_change_records WHEN NEW.kind='allowanceChanged' AND NEW.target_id='019f0000-0000-7000-8000-00000000bc04' BEGIN SELECT RAISE(ABORT,'fixture last allowance record failure'); END",vec![]).await?;
     let body = approval(
         0xc901,
         INSTALLATION,
@@ -30,7 +30,7 @@ async fn approval_late_record_failure_rolls_back_all_rows_then_same_request_appl
     let committed = snapshot(&f).await?;
     assert_eq!(f.post(DEVICE, &body).await?, approved);
     assert!(snapshot(&f).await? == committed);
-    assert_eq!(f.rows("SELECT (SELECT COUNT(*) FROM machines),(SELECT COUNT(*) FROM machine_approvals),(SELECT COUNT(*) FROM organization_change_records WHERE kind='allowanceChanged')").await?,vec![vec![number(1)?,number(1)?,number(2)?]]);
+    assert_eq!(f.rows("SELECT (SELECT COUNT(*) FROM login_machines),(SELECT COUNT(*) FROM login_machine_approvals),(SELECT COUNT(*) FROM signin_change_records WHERE kind='allowanceChanged')").await?,vec![vec![number(1)?,number(1)?,number(2)?]]);
     f.close().await
 }
 
@@ -59,7 +59,7 @@ async fn superseding_grant_last_record_failure_restores_old_login_generation_and
         .await?
         .1,
     )?;
-    f.execute("CREATE TRIGGER fail_login_activation BEFORE INSERT ON organization_change_records WHEN NEW.kind='machineEnrolled' BEGIN SELECT RAISE(ABORT,'fixture last activation record failure'); END",vec![]).await?;
+    f.execute("CREATE TRIGGER fail_login_activation BEFORE INSERT ON signin_change_records WHEN NEW.kind='machineEnrolled' BEGIN SELECT RAISE(ABORT,'fixture last activation record failure'); END",vec![]).await?;
     let before = snapshot(&f).await?;
     assert_eq!(f.post(TOKEN, &token(&b, &b)).await?, (503, Value::Null));
     assert!(
@@ -78,19 +78,20 @@ async fn superseding_grant_last_record_failure_restores_old_login_generation_and
         (200, grant(&b, INSTALLATION, f.now(), Some((&a, &a))))
     );
     assert_eq!(
-        f.rows("SELECT enrollment_generation FROM machines").await?,
+        f.rows("SELECT enrollment_generation FROM login_machines")
+            .await?,
         vec![vec![number(2)?]]
     );
-    assert_eq!(f.rows("SELECT kind,COUNT(*) FROM organization_change_records WHERE kind IN ('machineRevoked','machineEnrolled') GROUP BY kind ORDER BY kind").await?,vec![vec![text("machineEnrolled"),number(2)?],vec![text("machineRevoked"),number(1)?]]);
+    assert_eq!(f.rows("SELECT kind,COUNT(*) FROM signin_change_records WHERE kind IN ('machineRevoked','machineEnrolled') GROUP BY kind ORDER BY kind").await?,vec![vec![text("machineEnrolled"),number(2)?],vec![text("machineRevoked"),number(1)?]]);
     let records = f
-        .rows("SELECT * FROM organization_change_records ORDER BY id")
+        .rows("SELECT * FROM signin_change_records ORDER BY id")
         .await?;
     assert_eq!(
         f.post(TOKEN, &token(&b, &b)).await?,
         (200, grant(&b, INSTALLATION, f.now(), Some((&a, &a))))
     );
     assert_eq!(
-        f.rows("SELECT * FROM organization_change_records ORDER BY id")
+        f.rows("SELECT * FROM signin_change_records ORDER BY id")
             .await?,
         records
     );

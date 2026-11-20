@@ -3,13 +3,18 @@ pub mod central_mail;
 mod entity_records;
 mod item_references;
 mod request_contract;
+mod request_digest;
+mod resolved_sender;
 mod rule_commands;
 mod rule_results;
 mod validated_values;
+pub use central_mail::NoticeCadence;
 pub use request_contract::*;
 
 pub use entity_records::*;
 pub use item_references::*;
+pub use request_digest::{DigestError, operation_content_digest};
+pub use resolved_sender::{PersonDisplayName, ResolvedSender};
 pub use rule_commands::*;
 pub use rule_results::*;
 pub use validated_values::*;
@@ -23,7 +28,7 @@ pub fn encode_json(value: &impl serde::Serialize) -> Result<String, ValueValidat
 }
 pub use workspace_ids::{
     ActorIdentityId, AreaId, BacklogItemId, ChangeId, DeliverableId, DeliverableRoleId,
-    DependencyId, InitiativeId, IssueId, LinkId, MachineId, PersonId, PostId, ProjectId,
+    DependencyId, InitiativeId, IssueId, LinkId, MessageId, PersonId, PostId, ProjectId,
     ProjectRoleId, ReadMarkId, ReferenceId, RequestId, ThreadId, ThreadMemberId, WorkLogEntryId,
     WorkLogTagId, WorkspaceId,
 };

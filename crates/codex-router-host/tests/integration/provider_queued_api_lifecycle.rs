@@ -128,9 +128,8 @@ async fn queue_full_is_refused() {
 /// permission refusal settles as a refusal, as an unqueued one does".
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn queued_api_prompt_permission_refusal_settles_as_refused() {
-    // Arrange: a held turn and a queued prompt whose turn asks a permission
-    // the Router refuses: the prompt names the session itself as approver,
-    // and a session never approves its own request.
+    // Arrange: a held turn and a queued prompt whose turn requests a
+    // permission the managed Router refuses.
     let staging = tempfile::tempdir().expect("receipt folder");
     let receipt = staging.path().join("wire.json");
     let host = LifecycleHost::start(cursor_reactive(
@@ -148,14 +147,8 @@ async fn queued_api_prompt_permission_refusal_settles_as_refused() {
         SHORT_WAIT,
     );
     until_recorded(&receipt, "session/prompt", 1).await;
-    let session_approver = collaboration_protocol::ProviderIdentity::Session(target.clone());
     let queued = host
-        .queue_in_order_as(
-            &target,
-            &owner,
-            &session_approver,
-            &["ask-permission".to_owned()],
-        )
+        .queue_in_order_as(&target, &owner, &owner, &["ask-permission".to_owned()])
         .await;
     let queued = queued.first().expect("one queued prompt").clone();
 
@@ -167,7 +160,7 @@ async fn queued_api_prompt_permission_refusal_settles_as_refused() {
         .prompt_as(
             &target,
             &owner,
-            &session_approver,
+            &owner,
             unqueued.clone(),
             "ask-permission",
             SETTLING_WAIT,
@@ -196,6 +189,10 @@ async fn queued_api_prompt_permission_refusal_settles_as_refused() {
     assert_eq!(queued_failure.effect, ProviderOperationEffect::Applied);
     assert_eq!(queued_failure.effect, unqueued_failure.effect);
     assert_eq!(queued_failure.message, unqueued_failure.message);
+    assert_eq!(
+        String::from(queued_failure.message),
+        "approvals are not available on this build"
+    );
     assert!(unqueued_answer.is_err(), "{unqueued_answer:?}");
     stopped.expect("Host shutdown");
 }
@@ -428,12 +425,14 @@ async fn pruned_operation_is_reported_as_no_record() {
     let staging = tempfile::tempdir().expect("receipt folder");
     let receipt = staging.path().join("wire.json");
     let root = lifecycle_host::private_root();
-    let clock_listener =
-        crate::host_clock_control::prepare(root.path()).expect("Host clock control input");
-    let mut host = LifecycleHost::start_in(root, cursor_reactive(&receipt, &[])).await;
-    let mut clock = crate::host_clock_control::HostClockControl::connected(clock_listener)
-        .await
-        .expect("Host clock control");
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let mut host = LifecycleHost::start_on_clock(
+        lifecycle_host::HostRoot::Owned(root),
+        cursor_reactive(&receipt, &[]),
+        "cursor-local",
+        Some(clock.clone()),
+    )
+    .await;
     let owner = human("retention-owner");
     let target = host.create(&owner).await;
     let pruned = OperationId::generate();
@@ -450,7 +449,6 @@ async fn pruned_operation_is_reported_as_no_record() {
     // settlement stamp, and retention prunes the operation.
     clock
         .advance(Duration::from_secs(3_650 * 24 * 60 * 60))
-        .await
         .expect("clock advanced");
     let shown_after = loop {
         match host.show(&pruned).await {

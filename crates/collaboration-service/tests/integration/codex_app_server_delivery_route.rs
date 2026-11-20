@@ -1,6 +1,4 @@
-use crate::native_mail_owner;
 use crate::native_permission_echo;
-use crate::served_api;
 use agent_automation::{
     ClaudeCodePeerEffectEvidence, PeerProcessId, PeerSessionReference, PeerWriteEffect,
     RouteEffectEvidence, SubmissionEffect,
@@ -12,7 +10,6 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_contracts::LoadPolicy;
-use collaboration_contracts::ScheduledRunPayload;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
@@ -133,51 +130,10 @@ mod generation_tests;
 #[tokio::test]
 async fn held_empty_codex_thread_rejects_steer_then_starts_first_message_on_its_connection()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(None).await
+    exercise_held_empty_thread().await
 }
 
-#[tokio::test]
-async fn scheduled_run_uses_held_empty_thread_without_read_or_second_connection()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Started)).await
-}
-
-#[tokio::test]
-async fn scheduled_run_busy_binding_does_not_dispatch_and_restores_binding()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Busy)).await
-}
-
-#[tokio::test]
-async fn scheduled_run_native_rejection_restores_binding()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Rejected)).await
-}
-
-#[tokio::test]
-async fn scheduled_run_admission_refusal_restores_binding()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::AdmissionRefused)).await
-}
-
-#[tokio::test]
-async fn scheduled_run_stale_generation_rejects_and_finishes_binding()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Stale)).await
-}
-
-#[derive(Clone, Copy)]
-enum ScheduledScenario {
-    Started,
-    Busy,
-    Rejected,
-    AdmissionRefused,
-    Stale,
-}
-
-async fn exercise_held_empty_thread(
-    scenario: Option<ScheduledScenario>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn exercise_held_empty_thread() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use codex_acp_adapter::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
     use std::{future::Future, io, pin::Pin};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -187,12 +143,11 @@ async fn exercise_held_empty_thread(
             Box::pin(async { Ok(json!({"sessions":[]})) })
         }
     }
-    let run_id = agent_automation::RunId::generate();
-    let run_suffix = run_id
-        .as_str()
+    let root_id = uuid::Uuid::now_v7().to_string();
+    let root_suffix = root_id
         .get(24..)
-        .ok_or("run id must have an ASCII UUID suffix")?;
-    let root = std::env::temp_dir().join(format!("held-{run_suffix}"));
+        .ok_or("root id must have an ASCII UUID suffix")?;
+    let root = std::env::temp_dir().join(format!("held-{root_suffix}"));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let scratch_scope = "session-00000000-0000-4000-8000-000000000099";
     let scratch_parent = root.join("scratch");
@@ -249,43 +204,27 @@ async fn exercise_held_empty_thread(
         gate,
         codex_home: root.clone(),
     };
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = Arc::new(CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         directory,
-        backend_config.clone(),
+        backend_config,
         Arc::clone(&holder),
     ));
     let evidence = Arc::new(RecordingEvidenceSink(Mutex::new(Vec::new())));
     let observed = Arc::clone(&evidence);
-    let run_id = agent_automation::RunId::generate();
-    let scheduled_push_id = PushId::try_from(uuid::Uuid::now_v7().to_string())?;
-    let expected_scheduled_push_id = scheduled_push_id.clone();
     let (delivery_prepared, mut delivery_ready) = tokio::sync::oneshot::channel();
     let backend = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
         let mut wire = tokio_tungstenite::accept_async(stream).await?;
-        let methods: &[&str] = match scenario {
-            Some(ScheduledScenario::Started | ScheduledScenario::Rejected) => {
-                &["initialize", "initialized", "thread/start", "turn/start"]
-            }
-            Some(
-                ScheduledScenario::Busy
-                | ScheduledScenario::AdmissionRefused
-                | ScheduledScenario::Stale,
-            ) => &["initialize", "initialized", "thread/start"],
-            None => &[
-                "initialize",
-                "initialized",
-                "thread/start",
-                "thread/queue/add",
-                "turn/start",
-            ],
-        };
+        let methods: &[&str] = &[
+            "initialize",
+            "initialized",
+            "thread/start",
+            "thread/queue/add",
+            "turn/start",
+        ];
         for &method in methods {
-            if method == "turn/start" && scenario.is_none() {
+            if method == "turn/start" {
                 // Real app-server connections remain idle during local store
                 // setup. Start the RPC deadline when the caller can send it.
                 tokio::time::timeout(Duration::from_secs(30), &mut delivery_ready).await??;
@@ -303,24 +242,12 @@ async fn exercise_held_empty_thread(
                 continue;
             }
             if method == "turn/start" {
-                if scenario.is_some() {
-                    if request
-                        .pointer("/params/clientUserMessageId")
-                        .and_then(Value::as_str)
-                        != Some(expected_scheduled_push_id.as_str())
-                    {
-                        return Err(
-                            "Codex clientUserMessageId did not match the scheduled push ID".into(),
-                        );
-                    }
-                } else {
-                    let effects = observed.0.lock().map_err(|_| "evidence lock")?;
-                    if !effects.iter().any(|effect| {
-                        matches!(effect, RouteEffectEvidence::CodexAppServer(native)
-                        if native.submission == SubmissionEffect::Dispatching)
-                    }) {
-                        return Err("held message reached native I/O before evidence".into());
-                    }
+                let effects = observed.0.lock().map_err(|_| "evidence lock")?;
+                if !effects.iter().any(|effect| {
+                    matches!(effect, RouteEffectEvidence::CodexAppServer(native)
+                    if native.submission == SubmissionEffect::Dispatching)
+                }) {
+                    return Err("held message reached native I/O before evidence".into());
                 }
             }
             let result = match method {
@@ -334,13 +261,7 @@ async fn exercise_held_empty_thread(
                 "thread/queue/add" => json!({"queuedSubmission":{"id":"queued-one"}}),
                 _ => json!({"turn":{"id":"first-turn"}}),
             };
-            let response = if method == "turn/start"
-                && matches!(scenario, Some(ScheduledScenario::Rejected))
-            {
-                json!({"id":request.get("id"),"error":{"code":-32602,"message":"fixture rejected turn"}})
-            } else {
-                json!({"id":request.get("id"),"result":result})
-            };
+            let response = json!({"id":request.get("id"),"result":result});
             wire.send(Message::Text(response.to_string().into()))
                 .await?;
         }
@@ -348,7 +269,7 @@ async fn exercise_held_empty_thread(
             .await
             .is_ok()
         {
-            return Err("scheduled run opened a second native connection".into());
+            return Err("held thread delivery opened a second native connection".into());
         }
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     });
@@ -361,7 +282,6 @@ async fn exercise_held_empty_thread(
             generation,
             schemas: Arc::clone(&schemas),
             stored_sessions: Arc::new(EmptyStoredSessions),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder: holder.clone(),
             recorder: Arc::new(AcceptingConversationRecorder),
             retired: tokio_util::sync::CancellationToken::new(),
@@ -399,154 +319,6 @@ async fn exercise_held_empty_thread(
     if !holder.contains("empty-thread") {
         return Err("closing session/new did not hold its empty native thread".into());
     }
-    if let Some(scenario) = scenario {
-        use collaboration_contracts::RunEvidenceDisposition;
-        use collaboration_contracts::RunEvidenceSink;
-        use collaboration_contracts::RunSubmission;
-        use collaboration_contracts::ScheduledRunExecution;
-        struct ScheduledEvidenceSink {
-            records: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
-            refuse_dispatch: bool,
-        }
-        impl RunEvidenceSink for ScheduledEvidenceSink {
-            fn record(
-                &self,
-                evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
-            ) -> DeliveryFuture<'_, RunEvidenceDisposition> {
-                let dispatching = matches!(&evidence, RouteEffectEvidence::CodexAppServer(native) if native.submission == SubmissionEffect::Dispatching);
-                if self
-                    .records
-                    .lock()
-                    .map(|mut records| records.push(evidence))
-                    .is_err()
-                {
-                    return Box::pin(async {
-                        Err(collaboration_contracts::DeliveryContractError::EvidencePersistence)
-                    });
-                }
-                if dispatching && self.refuse_dispatch {
-                    return Box::pin(async { Ok(RunEvidenceDisposition::AdmissionRefused) });
-                }
-                Box::pin(async {
-                    Ok(RunEvidenceDisposition::Recorded {
-                        timing: agent_automation::ExecutionTiming::start(1_000, 120),
-                    })
-                })
-            }
-            fn record_stop_intent(&self) -> DeliveryFuture<'_, RunEvidenceDisposition> {
-                Box::pin(async { Ok(RunEvidenceDisposition::AdmissionRefused) })
-            }
-        }
-        let inputs = serde_json::from_value(json!({
-            "scheduleChangeId":agent_automation::ChangeId::generate(),
-            "instructionRevisionId":agent_automation::RevisionId::generate(),
-            "instructionText":"Check work","continuity":{"kind":"none"},
-            "executionConfiguration":{"destination":{"kind":"ownedThread","target":target,"cwd":"/work"},
-                "executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}
-        }))?;
-        let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
-            runtime_clock.clone(),
-            backend_config.clone(),
-            Arc::clone(&holder),
-        );
-        let sink = ScheduledEvidenceSink {
-            records: Mutex::new(Vec::new()),
-            refuse_dispatch: matches!(scenario, ScheduledScenario::AdmissionRefused),
-        };
-        let prepared = route
-            .prepare_existing_target(&target, "/work", &sink)
-            .await?;
-        if matches!(scenario, ScheduledScenario::Stale) {
-            let stale_generation: CodexGeneration = serde_json::from_value(json!({
-                "serviceEpoch":service_id,"generation":2
-            }))?;
-            backend_config.gate.retire()?;
-            backend_config.gate.activate(
-                stale_generation,
-                socket_path.clone(),
-                Some(Arc::clone(&schemas)),
-            )?;
-        }
-        let busy_binding = if matches!(scenario, ScheduledScenario::Busy) {
-            use codex_acp_adapter::UnmaterializedBindingStore;
-            match holder.checkout("empty-thread") {
-                codex_acp_adapter::HeldBindingCheckout::Ready(binding) => Some(binding),
-                _ => return Err("fixture binding was not ready".into()),
-            }
-        } else {
-            None
-        };
-        let submission = route
-            .submit_run(
-                collaboration_contracts::ScheduledRunSubmission {
-                    run_id,
-                    target: target.clone(),
-                    payload: ScheduledRunPayload::Existing {
-                        prepared: PreparedPush {
-                            push_id: scheduled_push_id,
-                            line: MessageText::try_from("scheduled hello".to_owned())?,
-                            load_policy: LoadPolicy::MayLoad,
-                        },
-                    },
-                    precondition: DeliveryPrecondition::Unpinned,
-                    inputs,
-                    recorded: prepared.evidence,
-                },
-                &sink,
-            )
-            .await?;
-        match scenario {
-            ScheduledScenario::Started
-                if matches!(submission, RunSubmission::Started(_))
-                    && !holder.contains("empty-thread") => {}
-            ScheduledScenario::Busy
-                if matches!(submission, RunSubmission::NotStartedBusy)
-                    && holder.contains("empty-thread") => {}
-            ScheduledScenario::AdmissionRefused
-                if matches!(submission, RunSubmission::NotStartedBusy)
-                    && holder.contains("empty-thread") => {}
-            ScheduledScenario::Rejected
-                if matches!(submission, RunSubmission::Rejected(_))
-                    && holder.contains("empty-thread") => {}
-            ScheduledScenario::Stale
-                if matches!(submission, RunSubmission::Rejected(_))
-                    && !holder.contains("empty-thread") => {}
-            _ => {
-                return Err(format!(
-                    "unexpected scheduled submission or holder state: {submission:?}"
-                )
-                .into());
-            }
-        }
-        if matches!(scenario, ScheduledScenario::Stale) {
-            let recorded = sink.records.lock().map_err(|_| "evidence lock")?;
-            if !matches!(recorded.last(), Some(RouteEffectEvidence::CodexAppServer(native)) if native.submission == SubmissionEffect::NotDispatched)
-            {
-                return Err("stale generation omitted NotDispatched evidence".into());
-            }
-        }
-        if matches!(
-            scenario,
-            ScheduledScenario::AdmissionRefused | ScheduledScenario::Rejected
-        ) {
-            use codex_acp_adapter::UnmaterializedBindingStore;
-            let restored = match holder.checkout("empty-thread") {
-                codex_acp_adapter::HeldBindingCheckout::Ready(binding) => binding,
-                _ => return Err("scheduled refusal left the binding busy or missing".into()),
-            };
-            holder.restore(*restored);
-        }
-        if let Some(binding) = busy_binding {
-            use codex_acp_adapter::UnmaterializedBindingStore;
-            holder.restore(*binding);
-        }
-        backend.await??;
-        std::fs::remove_file(socket_path)?;
-        std::fs::remove_dir(scratch)?;
-        std::fs::remove_dir(scratch_parent)?;
-        std::fs::remove_dir(root)?;
-        return Ok(());
-    }
     let make_request = |mode| prepared_request(target.clone(), "hello", mode);
     let steer = route
         .deliver(make_request(MessageDelivery::Steer)?, evidence.as_ref())
@@ -567,102 +339,27 @@ async fn exercise_held_empty_thread(
         return Err("queue did not use and retain the held native connection".into());
     }
     let routed: Arc<dyn SessionDeliveryRoute> = route;
-    let delivery_router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
-        routed,
-    ]));
-    let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> =
-        delivery_router.clone();
-    let presence: Arc<dyn collaboration_contracts::TargetPresenceProbe> = delivery_router;
-    let automation_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
-    ));
-    let machine_identity = collaboration_contracts::MachineIdentity::new(
-        service_id.clone(),
-        Some("held-thread-route-test"),
-    )?;
-    let interactions = Arc::new(
-        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
-    );
-    let subscription_delivery = collaboration_service::SubscriptionDeliveryService::new(
-        collaboration_service::SubscriptionDeliveryServiceProps {
-            board_availability: collaboration_service::BoardAvailability::Unavailable,
-            push_store: interactions.clone(),
-            delivery: Arc::clone(&delivery),
-            presence: Arc::clone(&presence),
-            machine_identity: machine_identity.clone(),
-            clock: runtime_clock.clone(),
-        },
-    );
-    subscription_delivery.start().await?;
-    let identity = collaboration_service::ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000001",
-    )
-    .map_err(std::io::Error::other)?
-    .with_automation_store(Arc::clone(&automation_store))
-    .with_endpoints(vec![description])
-    .map_err(std::io::Error::other)?
-    .with_session_delivery(delivery)
-    .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
-    let (identity, native_mail) = native_mail_owner::start(
-        identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
-        collaboration_service::MailPushDeliveryProps {
-            interactions,
-            actors: subscription_delivery.clone(),
-            presence,
-            machine: machine_identity,
-            clock: runtime_clock.clone(),
-        },
-    )?;
-    let served = served_api::ServedApi::start(identity)?;
-    let control = served.client("held-thread-message").await?;
+    let delivery = collaboration_runtime::SessionDeliveryRouter::new(vec![routed]);
     delivery_prepared
         .send(())
         .map_err(|_| "native fixture stopped before delivery setup")?;
-    let started = control
-        .send_message(collaboration_client::MessageSendRequest {
-            item_id: None,
-            target: target.clone(),
-            message: collaboration_client::PublicMessageContent::HumanUser {
-                text: "hello".to_owned().try_into()?,
-            },
-            delivery: MessageDelivery::Auto,
-            generation_guard: None,
-        })
-        .await?;
-    let collaboration_protocol::MessageSendResult::Local(started) = started else {
-        return Err("local held connection returned remote custody".into());
-    };
-    if !matches!(started.receipt.outcome, DeliveryOutcome::Started)
+    let started = collaboration_contracts::SessionMessageDelivery::deliver(
+        &delivery,
+        make_request(MessageDelivery::Auto)?,
+        evidence.as_ref(),
+    )
+    .await?
+    .into_receipt();
+    if !matches!(started.outcome, DeliveryOutcome::Started)
         || !matches!(
-            started.receipt.client,
+            started.client,
             Some(DeliveryClientReceipt::CodexAppServer(_))
         )
         || holder.contains("empty-thread")
     {
         return Err("first message did not start through the held connection".into());
     }
-    served.stop().await?;
-    subscription_delivery.shutdown().await;
-    drop(subscription_delivery);
     backend.await??;
-    native_mail.close().await?;
-    let automation_store = Arc::try_unwrap(automation_store)
-        .map_err(|_| std::io::Error::other("service retained automation store"))?
-        .into_inner();
-    automation_store.close().await?;
-    std::fs::remove_file(root.join("automation.sqlite"))?;
-    for name in [
-        "interaction.sqlite",
-        "interaction.sqlite-wal",
-        "interaction.sqlite-shm",
-    ] {
-        let path = root.join(name);
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-    }
     std::fs::remove_file(socket_path)?;
     std::fs::remove_dir(scratch)?;
     std::fs::remove_dir(scratch_parent)?;

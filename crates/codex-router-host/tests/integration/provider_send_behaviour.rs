@@ -19,9 +19,8 @@ use collaboration_client::{
 use collaboration_protocol::{
     ConversationCreateRequest, ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, DeliveryClientReceipt, DeliveryOutcome, EndpointRef,
-    MessageDelivery, MessageSendResult, MessageText, OperationId, PositiveSeconds,
-    ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionReachability, SessionRef,
+    MessageDelivery, OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, RouterAccess, SessionReachability, SessionRef,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
@@ -61,7 +60,6 @@ impl ComposedHost {
         .expect("declare test-owned global Claude executable");
         let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
-                board_session: None,
                 directory: root.path().to_owned(),
                 codex_home: root.path().to_owned(),
                 backend_socket: root.path().join("backend.sock"),
@@ -150,25 +148,14 @@ impl ComposedHost {
         }
     }
 
-    /// One Auto mail to `target` from a human, as `message send` sends it.
+    /// One prepared Auto message routed through the composed Host.
     async fn mail(&self, target: &SessionRef) -> collaboration_protocol::DeliveryReceipt {
-        let sent = self
-            .client
-            .send_message(collaboration_client::MessageSendRequest {
-                item_id: None,
-                target: target.clone(),
-                message: collaboration_client::PublicMessageContent::HumanUser {
-                    text: MessageText::try_from("second".to_owned()).expect("mail text"),
-                },
-                delivery: MessageDelivery::Auto,
-                generation_guard: None,
-            })
-            .await
-            .expect("mail receipt");
-        match sent {
-            MessageSendResult::Local(sent) => sent.receipt,
-            MessageSendResult::Queued { .. } => panic!("a local session took sender custody"),
-        }
+        crate::session_message_route_composition::route_fixture::deliver_text(
+            &self.runtime,
+            target.clone(),
+            "second",
+        )
+        .await
     }
 
     /// One API prompt as `approver`, answered after at most `wait`.

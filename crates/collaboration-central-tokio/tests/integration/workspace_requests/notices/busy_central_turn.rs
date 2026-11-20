@@ -23,17 +23,17 @@ type Runtime = std::sync::Arc<
         collaboration_central_tokio::TokioWorkspaceStores,
     >,
 >;
-const NOTICES: &str = "SELECT COUNT(*) FROM messages WHERE message_kind='notice'";
-const WINDOWS: &str = "SELECT COUNT(*) FROM notification_windows";
+const NOTICES: &str = "SELECT COUNT(*) FROM mail_messages WHERE message_kind='notice'";
+const WINDOWS: &str = "SELECT COUNT(*) FROM mail_notification_windows";
 const WINDOW_RECORDS: &str =
-    "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_notice_windows'";
+    "SELECT COUNT(*) FROM engine_work_attempts WHERE machine_kind='legacy_notice_windows'";
 fn integer(value: i64) -> SqlValue {
     SqlValue::Integer(value.try_into().unwrap())
 }
 
 #[tokio::test]
 async fn a_held_window_unit_never_delays_another_instances_engine_request() {
-    let f = Fixture::new().await;
+    let mut f = Fixture::new().await;
     witness_fixture_attempt_ids(&f).await;
     let area = f.area(9700).await;
     let thread = f.thread(9701, area).await;
@@ -43,11 +43,11 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
         matches!(reply.result, m::WorkspaceResult::Done(_)),
         "{reply:?}"
     );
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let due: String = match &runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT due_at FROM notification_windows",
+            sql: "SELECT due_at FROM mail_notification_windows",
             args: vec![],
         })
         .await
@@ -75,6 +75,10 @@ async fn a_held_window_unit_never_delays_another_instances_engine_request() {
             .unwrap(),
         central_storage::BatchOutcome::Applied { .. }
     ));
+
+    // One token minted at the due instant covers every request below.
+    f.set_utc(due).await;
+    f.refresh_caller().await;
 
     // Due batch A starts at the window's due instant and is held inside its
     // window unit, before the commit, while it holds the central turn.

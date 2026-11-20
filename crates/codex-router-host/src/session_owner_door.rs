@@ -179,9 +179,7 @@ impl SessionOwnerDoor {
         work_roots: crate::provider_work_roots::ProviderWorkRoots,
     ) -> Result<(Arc<SessionOwnerAddress>, SessionOwnerExecution), OwnerDoorError> {
         let session_id = String::from(target.session_id.clone());
-        let board: message_board::SessionRef = target
-            .clone()
-            .try_into()
+        let board = collaboration_protocol::ProviderIdentity::session_to_board(&target)
             .map_err(|_| OwnerDoorError::Unavailable)?;
         let (inbox, publisher_task) = self
             .hub

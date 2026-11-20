@@ -90,7 +90,31 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
                 invalid.push(wrong_params);
             }
         }
-        "DecideDeviceLogin" | "PresentedMachine" | "AdmittedMachine" => {
+        "AdmitMachineConnection" | "AdmittedMachine" | "MachineConnectionAdmission" => {
+            if let Some(first) = literals.first() {
+                let legacy_fields: &[&str] = if name == "AdmitMachineConnection" {
+                    &["installation"]
+                } else {
+                    &["installation", "peer"]
+                };
+                for field in legacy_fields {
+                    let mut value = first.clone();
+                    let target = if name == "MachineConnectionAdmission" {
+                        &mut value["machine"]
+                    } else {
+                        &mut value
+                    };
+                    target[*field] = json!("019a3dce-2000-7000-8000-000000000001");
+                    invalid.push(value);
+                }
+                if name == "AdmittedMachine" {
+                    for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {
+                        let mut value = first.clone(); value["peer"] = json!(peer); invalid.push(value);
+                    }
+                }
+            }
+        }
+        "DecideDeviceLogin" | "PresentedMachine" => {
             if let Some(first) = literals.first() {
                 for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {
                     let mut value = first.clone(); value["peer"] = json!(peer); invalid.push(value);
@@ -211,6 +235,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             json!(["019A3DCE-2000-7000-8000-000000000001"]),
         ]),
         "EnrollPermission" => invalid.extend([json!("machine:revoke"), json!("Machine:Enroll")]),
+        "RevokePermission" => invalid.extend([json!("machine:enroll"), json!("Machine:Revoke")]),
         "DeviceLoginRefusal" => invalid.extend([
             json!({"kind":"notOwner"}),
             json!({"kind":"formerServiceLinkedElsewhere"}),

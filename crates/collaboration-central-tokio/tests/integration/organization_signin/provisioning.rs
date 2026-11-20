@@ -12,15 +12,29 @@ async fn provision_repeat_restart_and_predecessor_renewal_preserve_existing_mode
 {
     let mut f = Fixture::new().await?;
     f.seed_machine().await?;
-    f.apply(A,"INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES (?,'existing workspace','active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(WORKSPACE)]).await?;
+    f.apply(A,"INSERT INTO directory_workspaces(workspace_id,name,state,created_at,updated_at) VALUES (?,'existing workspace','active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(WORKSPACE)]).await?;
     let business = (
-        f.rows(A, "SELECT * FROM workspaces ORDER BY workspace_id", vec![])
-            .await?,
-        f.rows(A, "SELECT * FROM machines ORDER BY machine_id", vec![])
-            .await?,
         f.rows(
             A,
-            "SELECT * FROM machine_credentials ORDER BY credential_id",
+            "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+            vec![],
+        )
+        .await?,
+        f.rows(
+            A,
+            "SELECT * FROM login_machines ORDER BY machine_id",
+            vec![],
+        )
+        .await?,
+        f.rows(
+            A,
+            "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+            vec![],
+        )
+        .await?,
+        f.rows(
+            A,
+            "SELECT * FROM login_machine_approvals ORDER BY approval_id",
             vec![],
         )
         .await?,
@@ -97,18 +111,32 @@ async fn provision_repeat_restart_and_predecessor_renewal_preserve_existing_mode
     assert_eq!(f.snapshot().await?.1.len(), 3);
     assert!(
         (
-            f.rows(A, "SELECT * FROM workspaces ORDER BY workspace_id", vec![])
-                .await?,
-            f.rows(A, "SELECT * FROM machines ORDER BY machine_id", vec![])
-                .await?,
             f.rows(
                 A,
-                "SELECT * FROM machine_credentials ORDER BY credential_id",
+                "SELECT * FROM directory_workspaces ORDER BY workspace_id",
+                vec![]
+            )
+            .await?,
+            f.rows(
+                A,
+                "SELECT * FROM login_machines ORDER BY machine_id",
+                vec![]
+            )
+            .await?,
+            f.rows(
+                A,
+                "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
+                vec![]
+            )
+            .await?,
+            f.rows(
+                A,
+                "SELECT * FROM login_machine_approvals ORDER BY approval_id",
                 vec![]
             )
             .await?,
         ) == business,
-        "provisioning preserves every modern workspace, machine and credential column"
+        "provisioning preserves every modern workspace, machine and enrollment column; credential schema stays absent"
     );
     f.close().await
 }
@@ -215,7 +243,7 @@ async fn cold_tampered_foreign_and_retired_stamps_refuse_without_rewriting_store
             "signature" => {
                 f.apply(
                     A,
-                    "UPDATE organization_identity SET organization_statement=?",
+                    "UPDATE signin_organization_identity SET organization_statement=?",
                     vec![text(signed::tamper_signature(&original)?)],
                 )
                 .await?
@@ -223,7 +251,7 @@ async fn cold_tampered_foreign_and_retired_stamps_refuse_without_rewriting_store
             "foreign" => {
                 f.apply(
                     A,
-                    "UPDATE organization_identity SET organization_statement=?",
+                    "UPDATE signin_organization_identity SET organization_statement=?",
                     vec![text(signed::stamp(B, signed::NOW_SECONDS)?)],
                 )
                 .await?
@@ -417,7 +445,7 @@ async fn concurrent_first_statements_and_competing_renewals_keep_one_winner() ->
 #[tokio::test]
 async fn a_late_record_failure_rolls_back_the_stamp_and_retry_commits_both() -> Result {
     let f = Fixture::new().await?;
-    f.apply(A,"CREATE TRIGGER signin_record_failure BEFORE INSERT ON organization_change_records BEGIN SELECT RAISE(ABORT,'fixture organization record failure'); END",vec![]).await?;
+    f.apply(A,"CREATE TRIGGER signin_record_failure BEFORE INSERT ON signin_change_records BEGIN SELECT RAISE(ABORT,'fixture organization record failure'); END",vec![]).await?;
     let statement = signed::stamp(A, signed::NOW_SECONDS)?;
     assert_eq!(f.provision(A, &statement).await?.status, 503);
     assert_eq!(

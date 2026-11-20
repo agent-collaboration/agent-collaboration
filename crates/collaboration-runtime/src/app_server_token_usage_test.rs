@@ -1,7 +1,7 @@
 use crate::app_server_event_forwarding::AppServerEventForwarding;
 use crate::router_session_app_server::thread_alias;
 use collaboration_contracts::HubEvent;
-use message_board::{Identity, SessionRef};
+use message_board::SessionRef;
 use serde_json::{Value, json};
 use session_event_model::{
     InputId, SessionEvent, SessionItem, SessionItemKind, StopReason, TurnOutcome,
@@ -13,9 +13,7 @@ fn usage_fixture() -> (SessionRef, AppServerEventForwarding) {
         "sessionId":uuid::Uuid::now_v7()
     }))
     .expect("session");
-    let actor: Identity =
-        serde_json::from_value(json!({"kind":"human","humanId":"owner"})).expect("actor");
-    (session, AppServerEventForwarding::new(actor, None))
+    (session, AppServerEventForwarding::new())
 }
 
 fn start_turn(forwarding: &mut AppServerEventForwarding, session: &SessionRef) {

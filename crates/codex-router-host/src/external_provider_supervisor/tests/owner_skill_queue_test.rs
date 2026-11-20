@@ -43,7 +43,8 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .await
         .expect("saved setup");
     let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));
-    let board: message_board::SessionRef = target.clone().try_into().expect("board address");
+    let board: message_board::SessionRef =
+        collaboration_protocol::ProviderIdentity::session_to_board(&target).expect("board address");
     let runtime = ExternalProviderRuntime::initialize(
         ExternalProviderLaunch {
             executable: "node".into(),

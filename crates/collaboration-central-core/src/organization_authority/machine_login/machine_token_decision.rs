@@ -1,7 +1,5 @@
 //! Activation is generation-fenced; renewal rechecks live client and idle state.
-use super::decision_support::{
-    DecisionIds, DecisionTime, IDLE_EXPIRY_SECONDS, MACHINE_GRANT_LIFETIME_SECONDS,
-};
+use super::decision_support::{DecisionIds, DecisionTime, IDLE_EXPIRY_SECONDS};
 use super::enrollment_records::{
     Decided, EnrollmentChange, EnrollmentFacts, MachineRow, MachineState, StoredEnrollment,
     StoredEnrollmentState,
@@ -10,6 +8,7 @@ use crate::identity_contract::{
     DecideMachineToken, EndedMachineClient, EnrollmentRevocationReason, MachineTokenDecision,
     MachineTokenRefusal,
 };
+use crate::machine_token::MACHINE_TOKEN_LIFETIME_SECONDS;
 use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use central_storage::StoreFailure;
 use fleet_identity_protocol::UnixSeconds;
@@ -164,10 +163,10 @@ fn grant(
     let decided_at = time.seconds();
     let expires = decided_at
         .0
-        .checked_add(MACHINE_GRANT_LIFETIME_SECONDS)
+        .checked_add(MACHINE_TOKEN_LIFETIME_SECONDS)
         .ok_or(StoreFailure::Unavailable)?;
     Ok(MachineTokenDecision::Grant {
-        installation: enrollment.installation.clone(),
+        machine_id: enrollment.machine_id.clone(),
         enrollment_id: enrollment.id.clone(),
         decided_at,
         grant_expires_at: UnixSeconds(expires),

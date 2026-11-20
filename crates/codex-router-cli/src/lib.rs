@@ -21,10 +21,11 @@ use codex_router_secret_store::file_backend::FileSecretStore;
 use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
 
 pub mod account;
+#[cfg(unix)]
+mod central_command;
 mod credential_runtime;
 mod credential_upkeep_worker;
 pub mod doctor;
-mod fleet_command;
 mod host_command;
 mod live;
 mod presentation;
@@ -36,7 +37,6 @@ mod telemetry;
 pub mod token;
 
 use account::AccountCommand;
-use fleet_command::FleetCommand;
 use host_command::HostCommand;
 use live::LiveCommand;
 use profile::CodexRouterProfile;
@@ -98,10 +98,10 @@ pub async fn run_async() -> i32 {
     let context = CliContext::from_process();
     let parsed_command = CliCommand::parse(args.clone());
     let uses_async_dispatch = matches!(&parsed_command, Ok(CliCommand::Quota(_)))
-        || matches!(
-            &parsed_command,
-            Ok(CliCommand::Host(_) | CliCommand::Fleet(_))
-        );
+        || matches!(&parsed_command, Ok(CliCommand::Host(_)));
+    #[cfg(unix)]
+    let uses_async_dispatch =
+        uses_async_dispatch || matches!(&parsed_command, Ok(CliCommand::Central(_)));
     if !uses_async_dispatch {
         return std::thread::spawn(move || run_sync_process_args(args))
             .join()
@@ -208,8 +208,9 @@ where
             .await?;
             stderr.flush().map_err(CliError::Stderr)
         }
-        CliCommand::Fleet(command) => {
-            fleet_command::run_fleet_command(command, stdout).await?;
+        #[cfg(unix)]
+        CliCommand::Central(command) => {
+            central_command::run_central_command(command, stdout).await?;
             stderr.flush().map_err(CliError::Stderr)
         }
         CliCommand::Host(command) => {
@@ -623,8 +624,15 @@ where
         CliCommand::Quota(_) => return Err(QuotaCommandError::AsyncDispatchRequired.into()),
         CliCommand::Live(command) => live::run_live_command(stdout, command)?,
         CliCommand::Host(_) => return Err(CliError::HostRequiresAsyncDispatch),
-        CliCommand::Fleet(_) => {
-            return Err(fleet_command::FleetCommandError::AsyncDispatchRequired.into());
+        #[cfg(unix)]
+        CliCommand::Central(central_command::CentralCommand::Help(text)) => {
+            stdout
+                .write_all(text.as_bytes())
+                .map_err(CliError::Stdout)?;
+        }
+        #[cfg(unix)]
+        CliCommand::Central(_) => {
+            return Err(central_command::CentralCommandError::AsyncDispatchRequired.into());
         }
         CliCommand::Version => {
             writeln!(stdout, "codex-router {}", env!("CARGO_PKG_VERSION"))
@@ -833,7 +841,7 @@ commands:
   host app-server restart        Restart managed Codex without updating it
   host app-server update         Update managed Codex and activate it if changed
   host router restart            Restart the router when host-owned
-  fleet status                  Inspect enrollment metadata without restarting
+  central serve --config FILE   Run a self-hosted central
   doctor                        Diagnose local router setup
   profile print                 Print the Codex profile snippet
 

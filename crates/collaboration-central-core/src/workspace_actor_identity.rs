@@ -14,25 +14,21 @@ fn text(value: impl ToString) -> SqlValue {
 }
 
 fn identity_fields(identity: &Identity) -> Result<(&'static str, String), StoreFailure> {
-    let kind = match identity {
-        Identity::AgentSession { .. } => "agentSession",
-        Identity::RouterComponent { .. } => "routerComponent",
-        Identity::Person { .. } => "person",
-    };
+    let kind = identity.stored_kind();
     let encoded = serde_json_canonicalizer::to_string(identity).map_err(|_| corrupt("identity"))?;
     Ok((kind, encoded))
 }
 
 fn identity_lookup(kind: &str, encoded: &str) -> Statement {
     Statement {
-        sql: "SELECT actor_identity_id FROM actor_identities WHERE identity_kind=? AND identity=?",
+        sql: "SELECT actor_identity_id FROM access_actor_identities WHERE identity_kind=? AND identity=?",
         args: vec![text(kind), text(encoded)],
     }
 }
 
 fn identity_insert(actor: &ActorIdentityId, kind: &str, encoded: &str, now: &str) -> Statement {
     Statement {
-        sql: "INSERT INTO actor_identities (actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(identity_kind,identity) DO NOTHING",
+        sql: "INSERT INTO access_actor_identities (actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(identity_kind,identity) DO NOTHING",
         args: vec![text(actor), text(kind), text(encoded), text(now), text(now)],
     }
 }
@@ -44,6 +40,31 @@ pub(crate) struct ActorIdentityPlan {
 }
 
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+    /// Find the caller's actor without minting one on a status read.
+    pub(crate) async fn existing_caller_actor(
+        &self,
+        caller: &workspace_model::Caller,
+    ) -> Result<Option<ActorIdentityId>, StoreFailure> {
+        let identity = match caller {
+            workspace_model::Caller::Session(session) => Identity::AgentSession {
+                session: session.clone(),
+            },
+            workspace_model::Caller::Person { person_id, .. } => Identity::Person {
+                person_id: person_id.clone(),
+            },
+        };
+        let (kind, encoded) = identity_fields(&identity)?;
+        let rows = self.host.read(identity_lookup(kind, &encoded)).await?;
+        match rows.rows.as_slice() {
+            [] => Ok(None),
+            [row] => string(&rows, row, "actor_identity_id")?
+                .parse()
+                .map(Some)
+                .map_err(|_| corrupt("access_actor_identities.actor_identity_id")),
+            _ => Err(corrupt("access_actor_identities.identity")),
+        }
+    }
+
     /// Caller holds the org turn and supplies its sole applying time sample.
     pub(crate) async fn prepare_identity(
         &self,
@@ -53,12 +74,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let (kind, encoded) = identity_fields(identity)?;
         let rows = self.host.read(identity_lookup(kind, &encoded)).await?;
         if rows.rows.len() > 1 {
-            return Err(corrupt("actor_identities.identity"));
+            return Err(corrupt("access_actor_identities.identity"));
         }
         if let Some(row) = rows.rows.first() {
             let actor = string(&rows, row, "actor_identity_id")?
                 .parse()
-                .map_err(|_| corrupt("actor_identities.actor_identity_id"))?;
+                .map_err(|_| corrupt("access_actor_identities.actor_identity_id"))?;
             return Ok(ActorIdentityPlan {
                 actor,
                 statements: vec![],
@@ -145,7 +166,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             return Ok(vec![]);
         }
         let encoded = serde_json::to_string(ids).map_err(|_| corrupt("actor ids"))?;
-        let rows=self.host.read(Statement {sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id IN (SELECT value FROM json_each(?))",args:vec![text(encoded)]}).await?;
+        let rows=self.host.read(Statement {sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id IN (SELECT value FROM json_each(?))",args:vec![text(encoded)]}).await?;
         let mut actors = Vec::new();
         for row in &rows.rows {
             actors.push(ActorView::from(decode_actor(&rows, row)?));
@@ -164,14 +185,17 @@ fn decode_actor(
     rows: &central_storage::ReadOutcome,
     row: &[SqlValue],
 ) -> Result<ActorIdentity, StoreFailure> {
-    let identity: Identity = json(string(rows, row, "identity")?, "actor_identities.identity")?;
+    let identity: Identity = json(
+        string(rows, row, "identity")?,
+        "access_actor_identities.identity",
+    )?;
     let expected = match identity {
         Identity::AgentSession { .. } => "agentSession",
         Identity::RouterComponent { .. } => "routerComponent",
         Identity::Person { .. } => "person",
     };
     if string(rows, row, "identity_kind")? != expected {
-        return Err(corrupt("actor_identities.identity_kind"));
+        return Err(corrupt("access_actor_identities.identity_kind"));
     }
     Ok(ActorIdentity {
         actor_identity_id: string(rows, row, "actor_identity_id")?
@@ -182,13 +206,18 @@ fn decode_actor(
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
-        let rows=self.host.read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
-        match rows.rows.first() {
-            Some(row) => {
-                decode_actor(&rows, row)?;
-                Ok(true)
-            }
-            None => Ok(false),
+        Ok(self.read_actor_identity(actor).await?.is_some())
+    }
+
+    pub(crate) async fn read_actor_identity(
+        &self,
+        actor: &ActorIdentityId,
+    ) -> Result<Option<Identity>, StoreFailure> {
+        let rows=self.host.read(Statement{sql:"SELECT actor_identity_id,identity_kind,identity FROM access_actor_identities WHERE actor_identity_id=?",args:vec![text(actor)]}).await?;
+        match rows.rows.as_slice() {
+            [] => Ok(None),
+            [row] => Ok(Some(decode_actor(&rows, row)?.identity)),
+            _ => Err(corrupt("access_actor_identities.actor_identity_id")),
         }
     }
 }

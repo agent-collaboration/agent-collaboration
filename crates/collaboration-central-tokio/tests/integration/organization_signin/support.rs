@@ -16,7 +16,8 @@ use std::sync::Arc;
 pub(super) const A: &str = signed::ORGANIZATION;
 pub(super) const B: &str = "019f0000-0000-7000-8000-00000000b2b1";
 pub(super) const WORKSPACE: &str = "019f0000-0000-7000-8000-00000000b301";
-pub(super) const MACHINE: &str = "019f0000-0000-7000-8000-00000000b302";
+pub(super) const INSTALLATION: &str = "019f0000-0000-7000-8000-00000000b303";
+pub(super) const ENROLLMENT: &str = "019f0000-0000-7000-8000-00000000b304";
 pub(super) const PROVISION: &str = "/internal/organization-provisioning";
 pub(super) const DIGEST: &str = "/internal/organization-statement-digest";
 pub(super) const REVISIONS: &str = "/internal/organization-authorization-revisions";
@@ -82,6 +83,10 @@ impl Fixture {
         let host = Arc::new(
             TokioWorkspaceHost::open_with_signin(root.path(), clock.clone(), trust).await?,
         );
+        let schema = host.central(&org(A)?).await?.statement_host().read(Statement { sql: "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'", args: vec![] }).await?;
+        if !schema.rows.is_empty() {
+            return Err("modern credential schema must be absent".into());
+        }
         let link = OrganizationSignInLink::start(host.clone(), &socket)?;
         let client = reqwest::Client::builder()
             .no_proxy()
@@ -170,7 +175,7 @@ impl Fixture {
         Ok(())
     }
     pub async fn snapshot(&self) -> Result<(Vec<Vec<SqlValue>>, Vec<Vec<SqlValue>>)> {
-        Ok((self.rows(A,"SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",vec![]).await?,self.rows(A,"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records ORDER BY id",vec![]).await?))
+        Ok((self.rows(A,"SELECT id,organization_statement,created_at,updated_at FROM signin_organization_identity ORDER BY id",vec![]).await?,self.rows(A,"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM signin_change_records ORDER BY id",vec![]).await?))
     }
     pub async fn ready(&self) -> Result {
         if self
@@ -226,9 +231,53 @@ impl Fixture {
         self.keys.shutdown().await?;
         Ok(())
     }
+    pub async fn machine_caller(
+        &self,
+        session: &str,
+    ) -> Result<collaboration_central_core::WorkspaceCaller> {
+        let token = signed::machine_token(
+            A,
+            INSTALLATION,
+            ENROLLMENT,
+            self.clock_time(),
+            self.clock_time() + 600,
+        )?;
+        let connection = self
+            .runtime(A)
+            .await?
+            .admit_machine_connection(&token)
+            .await?
+            .map_err(|_| "machine fixture admission refused")?;
+        Ok(collaboration_central_core::WorkspaceCaller::new(
+            connection,
+            workspace_model::Caller::Session(workspace_ids::SessionRef {
+                machine_id: INSTALLATION.to_owned().try_into()?,
+                session_id: session.to_owned().try_into()?,
+            }),
+        )
+        .map_err(|_| "machine fixture caller refused")?)
+    }
+    pub async fn seed_pending_wake(
+        &self,
+        session: &str,
+    ) -> Result<(workspace_ids::WakeId, workspace_model::Timestamp)> {
+        use router_clock::RuntimeClock;
+        let now = self.clock.utc_now();
+        let due = chrono::DateTime::from_timestamp((now.timestamp().div_euclid(300) + 1) * 300, 0)
+            .ok_or("wake grid out of range")?;
+        let wake = "019f0000-0000-7000-8000-00000000b306"
+            .to_owned()
+            .try_into()?;
+        let target = workspace_ids::SessionRef {
+            machine_id: INSTALLATION.to_owned().try_into()?,
+            session_id: session.to_owned().try_into()?,
+        };
+        self.apply(A,"INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",vec![text(&wake),text(serde_json::to_string(&target)?),text(due.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(serde_json::to_string("pending before first stamp")?),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)),text(now.to_rfc3339_opts(chrono::SecondsFormat::Millis,true))]).await?;
+        Ok((wake, due))
+    }
     pub async fn seed_machine(&self) -> Result {
-        self.apply(A,"INSERT INTO machines(machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,'existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(MACHINE),text("019f0000-0000-7000-8000-00000000b303")]).await?;
-        self.apply(A,"INSERT INTO machine_credentials(credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,'signin-fixture-hash','2033-05-18T03:33:20Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text("019f0000-0000-7000-8000-00000000b304"),text(MACHINE)]).await
+        self.apply(A,"INSERT INTO login_machines(machine_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,'existing machine','enrolled','[]','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(INSTALLATION)]).await?;
+        self.apply(A,"INSERT INTO login_machine_approvals(approval_id,request_id,machine_id,label,allowed_workspaces,state,approved_by_person_id,permission_checked,base_generation,code_expires_at,machine_client_id,last_grant_at,created_at,updated_at) VALUES (?,?,?,'existing machine','[]','enrolled',?,'machine:enroll',0,'2030-03-17T17:46:40Z',?,'2030-03-17T17:46:40Z','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(ENROLLMENT),text("019f0000-0000-7000-8000-00000000b305"),text(INSTALLATION),text(signed::OWNER),text(ENROLLMENT)]).await
     }
 }
 pub(super) async fn post(
@@ -255,6 +304,7 @@ fn settings(url: &str) -> Result<SignInTrustSettings> {
         issuer: signed::ISSUER.into(),
         audience: signed::AUDIENCE.into(),
         admin_audience: signed::ADMIN_AUDIENCE.into(),
+        machine_audience: signed::MACHINE_AUDIENCE.into(),
         public_origin: signed::PUBLIC_ORIGIN.into(),
         jwks_url: url.into(),
         service_id: Some(

@@ -77,9 +77,6 @@ impl InteractionPort for PlanPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct PlanEventSink {

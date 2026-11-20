@@ -121,7 +121,7 @@ impl<R: EngineHost> Engine<'_, R> {
             Ok(FailureTransition::Unchanged) => return FailureOutcome::Superseded,
             Err(_) => {
                 return FailureOutcome::StoreDown(crate::workspace_decode_error::corrupt(
-                    "central_work_attempts.failure_update",
+                    "engine_work_attempts.failure_update",
                 ));
             }
         };
@@ -162,7 +162,7 @@ impl<R: EngineHost> Engine<'_, R> {
             Err(ApplyFailure::StoreDown(failure)) => FailureOutcome::StoreDown(failure),
             // A rejected attempt write cannot charge another attempt or recurse.
             Err(ApplyFailure::Rejected(_)) => FailureOutcome::StoreDown(
-                crate::workspace_decode_error::corrupt("central_work_attempts.write"),
+                crate::workspace_decode_error::corrupt("engine_work_attempts.write"),
             ),
         }
     }

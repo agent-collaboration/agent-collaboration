@@ -17,6 +17,9 @@ the in-process `simulated_races/scripted_line_agent.rs`. They use the crate's
 `test-support` feature (the in-process transport and the named-point hook, which
 they forward to Turmoil's barriers); Turmoil is a dev-dependency only.
 
+The ACP adapter suite shares the owner fixture through this crate's non-default
+`test-support` feature. Both test targets drive the same owner and wire paths.
+
 Case expansions and fixture data retain their existing directories. The aggregate declares the shared provider-behavior helper once, and
 `acp_wire_capture.rs`, which records a fixture agent's complete stdio capture (written by
 `verification/fixtures/acp-stdio.ts` when given `wireCapture`) as raw wire frames on N6 tap cases;

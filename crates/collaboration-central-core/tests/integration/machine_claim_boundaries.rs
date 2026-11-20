@@ -9,7 +9,7 @@ fn full_issuer_payload_keeps_registered_claims_outside_extension_ownership() {
     let payload = json!({
         "iss":"https://issuer.example.invalid", "sub":"owner-account", "aud":"https://central.example.invalid/machine",
         "exp":1793448600, "iat":1793448000, "jti":"019a3dce-2000-7000-8000-000000000001", "client_id":"019a3dce-2000-7000-8000-000000000002",
-        "principal":{"kind":"machine","installation_id":"019a3dce-2000-7000-8000-000000000001","enrollment_id":"019a3dce-2000-7000-8000-000000000002"},
+        "principal":{"kind":"machine","machine_id":"019a3dce-2000-7000-8000-000000000001","enrollment_id":"019a3dce-2000-7000-8000-000000000002"},
         "organization_id":"019a3dce-2000-7000-8000-000000000001", "grant_expires_at":1793448600
     });
     let claims: MachineTokenClaims = serde_json::from_value(payload.clone()).unwrap();

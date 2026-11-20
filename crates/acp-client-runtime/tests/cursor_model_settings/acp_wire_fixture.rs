@@ -90,9 +90,6 @@ impl InteractionPort for NoopInteractionPort {
     fn cancel_all(&self, _: (), _: &'static str) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 #[derive(Default)]

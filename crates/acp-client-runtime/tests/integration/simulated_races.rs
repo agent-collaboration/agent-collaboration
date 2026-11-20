@@ -71,9 +71,6 @@ impl InteractionPort for NoInteraction {
     fn cancel_all(&self, _context: (), _reason: &'static str) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 /// Accepts every event and keeps none.

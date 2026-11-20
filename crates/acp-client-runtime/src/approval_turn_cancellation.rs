@@ -2,9 +2,9 @@
 //! context, its cancellation token and the barrier its permission responses
 //! drain through. The client's cancel and the session actor both use it.
 
-use crate::InteractionPort;
 use crate::{
-    OwnerApprovalBindings,
+    ExternalProviderRuntimeError, InteractionPort,
+    acp_transport::TransportRun,
     owner_wire::OwnerAcpWire,
     session_owner_task::{OwnerCompletionPort, OwnerTaskError},
 };
@@ -100,7 +100,126 @@ impl<P: InteractionPort> Clone for ActiveApprovalContext<P> {
     }
 }
 
-pub(crate) fn active_turn_cancellation<P: InteractionPort>(
+impl<P: InteractionPort> ActiveApprovalContext<P> {
+    pub(crate) async fn cancel_after_refusal(
+        self,
+        interaction_port: Arc<P>,
+        refusal: session_event_model::managed_interaction_refusal::ManagedInteractionRefusal,
+    ) {
+        tracing::warn!(
+            reason_code = refusal.code(),
+            reason = refusal.reason(),
+            "managed provider interaction refused"
+        );
+        interaction_port
+            .cancel_after_managed_refusal(self.approval)
+            .await;
+    }
+}
+
+struct ApprovalContextGuard<P: InteractionPort> {
+    contexts: Arc<std::sync::Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
+    provider_session_id: String,
+    operation_id: P::OperationId,
+}
+
+impl<P: InteractionPort> Drop for ApprovalContextGuard<P> {
+    fn drop(&mut self) {
+        if let Ok(mut contexts) = self.contexts.lock()
+            && contexts
+                .get(&self.provider_session_id)
+                .is_some_and(|context| P::operation_id(&context.approval) == self.operation_id)
+        {
+            contexts.remove(&self.provider_session_id);
+        }
+    }
+}
+
+pub struct OwnerApprovalBindings<P: InteractionPort> {
+    active: Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
+    interaction_port: Arc<P>,
+}
+
+impl<P: InteractionPort> Clone for OwnerApprovalBindings<P> {
+    fn clone(&self) -> Self {
+        Self {
+            active: Arc::clone(&self.active),
+            interaction_port: Arc::clone(&self.interaction_port),
+        }
+    }
+}
+
+pub struct OwnerApprovalLease<P: InteractionPort> {
+    _lease: ApprovalContextGuard<P>,
+}
+
+impl<P: InteractionPort> OwnerApprovalBindings<P> {
+    pub(crate) fn new(
+        active: Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
+        interaction_port: Arc<P>,
+    ) -> Self {
+        Self {
+            active,
+            interaction_port,
+        }
+    }
+
+    pub fn install(
+        &self,
+        provider_session_id: String,
+        run: TransportRun,
+        turn: provider_session_machines::session_turn_machine::TurnId,
+        mut context: P::Context,
+    ) -> Result<OwnerApprovalLease<P>, ExternalProviderRuntimeError> {
+        let mut active = self.active.lock().map_err(|_| {
+            ExternalProviderRuntimeError::Operation(
+                "provider approval context unavailable".to_owned(),
+            )
+        })?;
+        if active.contains_key(&provider_session_id) {
+            return Err(ExternalProviderRuntimeError::Operation(
+                "a provider approval context is already active".to_owned(),
+            ));
+        }
+        let operation_id = P::operation_id(&context);
+        P::bind_owner_scope(&mut context, run.generation, turn);
+        active.insert(
+            provider_session_id.clone(),
+            ActiveApprovalContext {
+                approval: context,
+                generation: run.generation,
+                incarnation: run.incarnation,
+                turn: Some(turn),
+                cancelling: tokio_util::sync::CancellationToken::new(),
+                responses: Arc::new(PermissionResponseBarrier::default()),
+            },
+        );
+        Ok(OwnerApprovalLease {
+            _lease: ApprovalContextGuard {
+                contexts: Arc::clone(&self.active),
+                provider_session_id,
+                operation_id,
+            },
+        })
+    }
+
+    pub fn begin_cancel(
+        &self,
+        provider_session_id: &str,
+        authorization: &DispatchAuthorization,
+    ) -> Option<OwnerApprovalDrain<P>> {
+        let drain = active_turn_cancellation(
+            &self.active,
+            &self.interaction_port,
+            provider_session_id,
+            authorization,
+        )?;
+        drain.mark_cancelling();
+        Some(drain)
+    }
+}
+
+fn active_turn_cancellation<P: InteractionPort>(
     contexts: &Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
     interaction_port: &Arc<P>,
     provider_session_id: &str,

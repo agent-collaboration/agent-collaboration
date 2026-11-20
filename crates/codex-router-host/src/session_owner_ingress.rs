@@ -1,8 +1,12 @@
 //! Pass Host and provider interaction facts through the session owner mailbox.
 
-use crate::session_owner_door::SessionOwnerDoor;
+use crate::{
+    acp_interaction_port::RefusedTurnCancellation,
+    external_provider_approval_context::OwnerApprovalScope, session_owner_door::SessionOwnerDoor,
+};
 use acp_client_runtime::{
-    EventSinkClosed, GenerationPublication, HistoryReplayFuture, SessionEventSink,
+    EventSinkClosed, GenerationPublication, HistoryReplayFuture, InteractionFuture,
+    SessionEventSink,
 };
 use provider_session_machines::{
     SessionGeneration, session_lifecycle_machine::SessionLifecycle, session_owner::OwnerEvent,
@@ -26,6 +30,20 @@ impl SessionOwnerIngress {
             .get()?
             .upgrade()?
             .existing_provider_session(session)
+    }
+}
+
+impl RefusedTurnCancellation for SessionOwnerIngress {
+    fn cancel_refused_turn(
+        &self,
+        session: String,
+        scope: OwnerApprovalScope,
+    ) -> InteractionFuture<'_, ()> {
+        Box::pin(async move {
+            if let Some(owner) = self.owner(&session) {
+                let _settlement = owner.cancel_turn(scope.run, scope.turn).await;
+            }
+        })
     }
 }
 

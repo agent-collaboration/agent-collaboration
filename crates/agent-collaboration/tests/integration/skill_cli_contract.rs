@@ -350,12 +350,25 @@ mod tests {
     }
 
     #[test]
+    fn conversation_prompt_help_uses_a_surviving_first_input_command() {
+        let (succeeded, help) = help_text(&["conversation".to_owned(), "prompt".to_owned()]);
+
+        assert!(succeeded);
+        assert!(!help.contains("message send"), "{help}");
+        assert!(help.contains("conversation prompt --new"), "{help}");
+        assert!(help_documents_flag(&help, "--new"));
+    }
+
+    #[test]
     fn flag_detection_matches_whole_words_and_rejects_absent_flags() {
         // Arrange: real help for a real path, so the detector is proved against it.
-        let (succeeded, help) = help_text(&["thread".to_owned()]);
+        let (succeeded, help) = help_text(&["conversation".to_owned(), "prompt".to_owned()]);
 
         // Assert
-        assert!(succeeded, "`{CLI_NAME} thread --help` must succeed");
+        assert!(
+            succeeded,
+            "`{CLI_NAME} conversation prompt --help` must succeed"
+        );
         assert!(help_documents_flag(&help, "--help"));
         assert!(
             !help_documents_flag(&help, "--not-a-real-flag"),

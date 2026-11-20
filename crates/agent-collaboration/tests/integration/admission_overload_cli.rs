@@ -3,18 +3,12 @@
 //! untyped command as the retryable overload, never as a connection failure or protocol
 //! violation.
 
-use automation_storage::AutomationStore;
-use collaboration_application_test_support::native_registry;
-use collaboration_contracts::MachineIdentity;
+use collaboration_mcp::request_slot_holder::RequestSlotHolder;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
-use collaboration_protocol::OperationId;
 use collaboration_service::ApplicationFixture;
 
-use collaboration_service::ProjectAdmission;
-use collaboration_service::ProjectAdmissionProps;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
@@ -36,50 +30,16 @@ async fn run_cli(
 
 #[tokio::test]
 async fn shed_commands_report_an_overload_to_retry() {
-    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-        chrono::DateTime::from_timestamp_millis(1792432800000).expect("fixed fixture time"),
-    ));
-
-    // Arrange: one request slot, held by a first-fire wait.
+    // Arrange: one request slot, held by the slot holder.
     let directory = tempfile::Builder::new()
         .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir_in("/tmp")
         .expect("private directory");
-    // A local, unenrolled machine: the Fleet client has no session and no central.
-    let fleet = collaboration_runtime::FleetClient::new(
-        &message_board_storage::FleetStore::open(
-            &directory
-                .path()
-                .join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await
-        .expect("local Fleet store"),
-        Arc::new(native_registry::PendingRegistration),
-        None,
-    );
-    let admission = Arc::new(
-        ProjectAdmission::new(ProjectAdmissionProps {
-            clock: clock.clone(),
-            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
-                .await
-                .expect("native registry"),
-            fleet: Arc::new(fleet),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
-                    .expect("service fixture"),
-                Some("overload proof"),
-            )
-            .expect("identity fixture"),
-        })
-        .expect("admission fixture"),
-    );
-    let automation = AutomationStore::open(&directory.path().join("automation.sqlite"))
-        .await
-        .expect("automation store");
     let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-        .expect("service identity")
-        .with_project_admission(admission)
-        .with_automation_store(Arc::new(Mutex::new(automation)));
+        .expect("service identity");
+    let (identity, holder) = RequestSlotHolder::install(identity, SERVICE_ID, directory.path())
+        .await
+        .expect("slot holder");
     let served = Arc::new(
         ServedCollaborationApi::start_with(
             directory.path(),
@@ -91,70 +51,38 @@ async fn shed_commands_report_an_overload_to_retry() {
         )
         .expect("served API"),
     );
-    let wake = served
-        .call(
-            "wake_send",
-            json!({
-                "operationId": OperationId::generate(),
-                "message": {
-                    "target": {
-                        "endpoint": {"serviceId": SERVICE_ID, "endpointId": "codex-local"},
-                        "sessionId": "overload-target"
-                    },
-                    "content": {"kind": "humanUser", "text": "overload proof"},
-                    "delivery": "auto",
-                    "generationGuard": null
-                },
-                "timing": {"kind": "after", "seconds": 600},
-                "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
-            }),
-        )
-        .await
-        .expect("wake send");
-    let wakeup_id = wake["result"]["definition"]["wakeupId"].clone();
+    // The holding call keeps the only request slot once a probe sent after it is shed. A
+    // probe that wins the slot first sheds the holding call instead, which then ends, so it
+    // is started again.
+    let hold = |served: &Arc<ServedCollaborationApi>| {
+        let served = Arc::clone(served);
+        let arguments = holder.arguments();
+        tokio::spawn(async move {
+            let _answer = served.call(RequestSlotHolder::TOOL, arguments).await;
+        })
+    };
     let held = tokio::time::timeout(Duration::from_secs(10), async {
+        let mut held = hold(&served);
         loop {
-            let holder = Arc::clone(&served);
-            let held_wakeup = wakeup_id.clone();
-            let held = tokio::spawn(async move {
-                let _answer = holder
-                    .call(
-                        "wake_wait_until_first_fire",
-                        json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
-                    )
-                    .await;
-            });
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            if held.is_finished() {
-                continue;
-            }
             let probe = served
-                .call("automation_status", json!({}))
+                .call("endpoints_list", json!({}))
                 .await
                 .expect("probe");
             if probe["error"]["data"]["kind"] == "overloaded" {
                 break Some(held);
             }
-            held.abort();
+            if held.is_finished() {
+                held = hold(&served);
+            }
+            tokio::task::yield_now().await;
         }
     })
     .await
     .ok()
     .flatten()
-    .expect("the wake wait holds the only request slot");
+    .expect("the holding call holds the only request slot");
 
     // Act
-    let (board_exit, board) = run_cli(
-        directory.path(),
-        &[
-            "project",
-            "list",
-            "--board-id",
-            message_board::BoardId::generate().as_str(),
-        ],
-    )
-    .await
-    .expect("board command output");
     let (endpoints_exit, endpoints) = run_cli(directory.path(), &["endpoints", "list"])
         .await
         .expect("endpoints command output");
@@ -166,16 +94,6 @@ async fn shed_commands_report_an_overload_to_retry() {
         .await
         .expect("native bridge output");
 
-    // Assert: the board refusal is its typed overload; the untyped command reports the
-    // retryable overload with no effect.
-    assert_eq!(board_exit, Some(4), "{board}");
-    assert_eq!(board["error"]["kind"], "overloaded", "{board}");
-    assert!(
-        board["error"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("not run")),
-        "{board}"
-    );
     assert_eq!(endpoints_exit, Some(3), "{endpoints}");
     assert_eq!(endpoints["error"]["kind"], "overloaded", "{endpoints}");
     assert_eq!(endpoints["error"]["effect"], "none", "{endpoints}");
@@ -190,7 +108,7 @@ async fn shed_commands_report_an_overload_to_retry() {
             && native_stderr.contains("Next action: retryLater"),
         "the native bridge names the retryable overload: {native_stderr}"
     );
-    held.abort();
+    holder.release().await.expect("release the slot");
     let _ended = held.await;
     if let Ok(served) = Arc::try_unwrap(served) {
         served.stop().await.expect("API stops");

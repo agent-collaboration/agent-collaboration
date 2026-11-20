@@ -84,11 +84,6 @@ export const section: LedgerSection = {
       note: 'events listen/observe NDJSON records with json!: listenerReady L200, connectionClosed L214, L217, L239, nativeMessage/providerSessionEvent L230, observationEvent L281, error records L256, L395; reads kind and event.kind "resyncRequired" from provider events L224-L229; OperationFailure to exit L249, L388; SessionRef assembled from discovered service id + ids L332.',
     },
     {
-      file: "crates/agent-collaboration/src/failure_line.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "Renders DeliveryRejection as one human text line: reason labels L154 over every DeliveryRejectionReason, next steps from DeliveryNextAction L178, peer-claim list L45; MAX_FAILURE_LINE_SCALARS L5. Human prose only, no wire shape, so no inventory row.",
-    },
-    {
       file: "crates/agent-collaboration/src/instruction_commands.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "clap types InstructionArguments L20, InstructionCommand L29, InstructionAction L36, TextInput L62; typed InstructionCreate/Update/ShowParams L225-L249; result envelope input json! L179; hand-built error envelopes L184, L190 (outcomeUnknown/unavailable with nextAction).",
@@ -109,26 +104,6 @@ export const section: LedgerSection = {
       note: "Binary entry and first-argument dispatch; hand-built invalidUsage error envelope json! L33 ({kind:error, error:{kind,stage,message,nextAction,details}}).",
     },
     {
-      file: "crates/agent-collaboration/src/message_commands.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "clap types MessageArguments L21, MessageCommand L27, InboxArguments L39, HistoryArguments L49, ReplyArguments L62, PushRecordShowArguments L86; invalidShape envelope json! L131, L135; OperationFailure.service_kind string literals matched L168-L176 and in the exit mapping L194-L219.",
-    },
-    {
-      file: "crates/agent-collaboration/src/message_commands/message_send_reply.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "message send/reply build typed MessageSendRequest L72 and MessageReplyRequest L141; results wrapped with result_envelope L191, L244, L292; hand error envelopes json! L203, L305; PushDeliveryState to exit L361; DeliveryOutcome text labels L345.",
-    },
-    {
-      file: "crates/agent-collaboration/src/message_commands/push_record_queries.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "show/inbox/history over typed requests (MessageShowRequest L132, PushRecordListParams L149, PushRecordHistoryParams L157); SessionRef from --with JSON L52; remote mail wrapper json! L196, L265; push_record_show_envelope L259 splices link and activityRanges into the result envelope; error envelope L248.",
-    },
-    {
-      file: "crates/agent-collaboration/src/message_input_arguments.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "clap types DeliveryChoice L12, SendArguments L18, MessageSendArguments L50; CodexGeneration built as json! {serviceEpoch,generation} and decoded with from_value L132, L172; sender SessionRef from --from JSON L161; DeliveryChoice to MessageDelivery L186-L190; PreparedMessage L202 resolves to SavedMessage/MessageContent L218-L251.",
-    },
-    {
       file: "crates/agent-collaboration/src/native_session_commands.rs",
       disposition: { kind: "converts", owners: ["codex", "router-vocabulary", "mcp"] },
       note: "session inspect/rename and turn interrupt over the typed client, results turned into Value with json! L159-L205; fabricated MCP rejection {code:-32050,data:{kind:unavailable}} L200; reads previousName and kind from results for mutation effects L216, L220; Rejected.data kind/message read and kind mapped to exit L239-L257.",
@@ -147,11 +122,6 @@ export const section: LedgerSection = {
       file: "crates/agent-collaboration/src/provider_conversation_commands.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "Shared reporting for conversation operation commands: success through result_envelope L9; failure envelopes json! L36, L41, L72; ConversationOperationFailureKind to exit L54-L70 (same table as conversation_client_command_reporting.rs L246).",
-    },
-    {
-      file: "crates/agent-collaboration/src/question_commands.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "clap types QuestionArguments L19, QuestionCommand L25, OutputArguments L51; typed QuestionAnswerParams L114 with QuestionAnswerValue map decoded from --content JSON L88; OperationFailureKind to exit L194-L201; error envelope json! L206.",
     },
     {
       file: "crates/agent-collaboration/src/run_commands.rs",
@@ -405,21 +375,6 @@ export const section: LedgerSection = {
       "SessionObservation::observe_bounded, provider endpoint branch -> tools/call events_observe (collaboration-client provider_session_observation.rs:128-154,345)",
     ),
     mcp(
-      "instruction_commands.rs",
-      159,
-      "CollaborationClient::create_instruction -> tools/call instruction_create",
-    ),
-    mcp(
-      "instruction_commands.rs",
-      160,
-      "CollaborationClient::update_instruction -> tools/call instruction_update",
-    ),
-    mcp(
-      "instruction_commands.rs",
-      161,
-      "CollaborationClient::read_instruction -> tools/call instruction_show",
-    ),
-    mcp(
       "journal_read_commands.rs",
       106,
       "CollaborationClient::read_journal -> tools/call journal_read",
@@ -428,31 +383,6 @@ export const section: LedgerSection = {
       "journal_read_commands.rs",
       110,
       "CollaborationClient::journal_status -> tools/call journal_status",
-    ),
-    mcp(
-      "message_commands/message_send_reply.rs",
-      82,
-      "CollaborationClient::send_message -> tools/call message_send",
-    ),
-    mcp(
-      "message_commands/message_send_reply.rs",
-      141,
-      "CollaborationClient::reply_to_push -> tools/call message_reply",
-    ),
-    mcp(
-      "message_commands/push_record_queries.rs",
-      132,
-      "CollaborationClient::router_show -> tools/call router_show",
-    ),
-    mcp(
-      "message_commands/push_record_queries.rs",
-      149,
-      "CollaborationClient::message_inbox -> tools/call message_inbox",
-    ),
-    mcp(
-      "message_commands/push_record_queries.rs",
-      157,
-      "CollaborationClient::message_history -> tools/call message_history",
     ),
     mcp(
       "native_session_commands.rs",
@@ -518,63 +448,6 @@ export const section: LedgerSection = {
       },
     },
     mcp(
-      "question_commands.rs",
-      156,
-      "CollaborationClient::answer_question -> tools/call question_answer",
-    ),
-    mcp(
-      "question_commands.rs",
-      161,
-      "CollaborationClient::list_questions -> tools/call question_list",
-    ),
-    mcp("run_commands.rs", 158, "CollaborationClient::read_run -> tools/call run_show"),
-    mcp(
-      "run_commands.rs",
-      159,
-      "CollaborationClient::retry_summary -> tools/call run_summary_retry",
-    ),
-    mcp("run_commands.rs", 160, "CollaborationClient::skip_summary -> tools/call run_summary_skip"),
-    mcp(
-      "schedule_commands.rs",
-      200,
-      "CollaborationClient::import_schedule -> tools/call schedule_import",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      203,
-      "CollaborationClient::export_schedule -> tools/call schedule_export",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      211,
-      "CollaborationClient::prepare_schedule -> tools/call schedule_prepare",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      219,
-      "CollaborationClient::create_schedule -> tools/call schedule_create",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      222,
-      "CollaborationClient::update_schedule -> tools/call schedule_update",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      225,
-      "CollaborationClient::read_schedule -> tools/call schedule_show",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      228,
-      "CollaborationClient::enable_schedule -> tools/call schedule_enable",
-    ),
-    mcp(
-      "schedule_commands.rs",
-      231,
-      "CollaborationClient::disable_schedule -> tools/call schedule_disable",
-    ),
-    mcp(
       "session_inventory_commands.rs",
       202,
       "CollaborationClient::list_endpoints -> tools/call endpoints_list",
@@ -588,22 +461,6 @@ export const section: LedgerSection = {
       "session_inventory_commands.rs",
       217,
       "CollaborationClient::list_provider_sessions -> tools/call provider_sessions_list",
-    ),
-    mcp("wakeup_commands.rs", 166, "CollaborationClient::send_wakeup -> tools/call wake_send"),
-    mcp("wakeup_commands.rs", 191, "CollaborationClient::read_wakeup -> tools/call wake_show"),
-    mcp("wakeup_commands.rs", 194, "CollaborationClient::list_wakeups -> tools/call wake_list"),
-    mcp("wakeup_commands.rs", 197, "CollaborationClient::pause_wakeup -> tools/call wake_pause"),
-    mcp("wakeup_commands.rs", 198, "CollaborationClient::resume_wakeup -> tools/call wake_resume"),
-    mcp("wakeup_commands.rs", 199, "CollaborationClient::cancel_wakeup -> tools/call wake_cancel"),
-    mcp(
-      "wakeup_wait_output.rs",
-      17,
-      "CollaborationClient::subscribe_wakeup -> tools/call wake_show",
-    ),
-    mcp(
-      "wakeup_wait_output.rs",
-      19,
-      "WakeWaitConnection::wait_until_first_fire -> tools/call wake_wait_until_first_fire",
     ),
     mcp(
       "whoami_command.rs",

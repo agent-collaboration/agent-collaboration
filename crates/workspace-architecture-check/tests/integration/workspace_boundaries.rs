@@ -4,7 +4,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const PURE_CRATES: [(&str, &[&str]); 7] = [
     ("workspace-ids", &[]),
-    ("workspace-model", &["workspace-ids", "agent-automation"]),
+    (
+        "workspace-model",
+        &[
+            "workspace-ids",
+            "agent-automation",
+            // The delivery frame reuses the pure session and machine label contracts.
+            "collaboration-mail-protocol",
+            "message-board",
+        ],
+    ),
     (
         "central-link-protocol",
         &["workspace-ids", "workspace-model"],
@@ -32,10 +41,7 @@ fn is_collaboration(name: &str) -> bool {
         || name.starts_with("fleet-")
         || name.starts_with("workspace-")
         || name.starts_with("central-")
-        || matches!(
-            name,
-            "agent-collaboration" | "agent-automation" | "automation-storage"
-        )
+        || matches!(name, "agent-collaboration" | "agent-automation")
 }
 fn is_effectful(name: &str) -> bool {
     name.starts_with("tokio")
@@ -212,6 +218,13 @@ fn pure_package_tree_rejects_effectful_transitive_dependencies() {
 fn mail_contract_dependency_keeps_model_and_link_transitively_driver_free() {
     for kind in [DependencyKind::Normal, DependencyKind::Build] {
         assert!(check_boundaries(&graph(&[("workspace-model", "agent-automation", kind)])).is_ok());
+        assert!(
+            check_boundaries(&graph(&[
+                ("workspace-model", "collaboration-mail-protocol", kind),
+                ("workspace-model", "message-board", kind),
+            ]))
+            .is_ok()
+        );
         assert!(
             check_boundaries(&graph(&[
                 ("workspace-model", "agent-automation", kind),

@@ -17,7 +17,6 @@ use collaboration_contracts::AttemptReconciliationContext;
 use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::DeliveryPrecondition;
-use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::RoutePresence;
 use collaboration_contracts::RouteUnavailableReason;
 use collaboration_contracts::SessionDeliveryRoute;
@@ -29,19 +28,16 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 pub struct CodexAppServerDeliveryRoute {
-    clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     service_id: UuidIdentity,
     endpoints: EndpointDirectory,
     backend: NativeControlBackend,
     holder: std::sync::Arc<crate::UnmaterializedThreadHolder>,
-    approval_broker: Option<std::sync::Weak<dyn codex_acp_adapter::ApprovalBroker>>,
 }
 
 struct NativeRouteDeliveryRequest {
     target: SessionRef,
     body: NativeMessageBody,
     mode: MessageDelivery,
-    load_policy: LoadPolicy,
     precondition: DeliveryPrecondition,
     correlation: DeliveryCorrelationId,
     attempt: agent_automation::AttemptId,
@@ -50,31 +46,17 @@ struct NativeRouteDeliveryRequest {
 impl CodexAppServerDeliveryRoute {
     #[must_use]
     pub fn new(
-        clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
         service_id: UuidIdentity,
         endpoints: EndpointDirectory,
         backend: NativeControlBackend,
         holder: std::sync::Arc<crate::UnmaterializedThreadHolder>,
     ) -> Self {
         Self {
-            clock,
             service_id,
             endpoints,
             backend,
             holder,
-            approval_broker: None,
         }
-    }
-
-    /// Borrows the existing route owner without retaining the broker's delivery cycle.
-    #[must_use]
-    pub fn with_approval_broker(
-        mut self,
-        broker: &std::sync::Arc<crate::ServiceInteractionBroker>,
-    ) -> Self {
-        let broker_port: std::sync::Arc<dyn codex_acp_adapter::ApprovalBroker> = broker.clone();
-        self.approval_broker = Some(std::sync::Arc::downgrade(&broker_port));
-        self
     }
 
     async fn deliver_native(
@@ -106,14 +88,6 @@ impl CodexAppServerDeliveryRoute {
         }
         let generation = admission.generation().clone();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        let retirement = admission.retirement();
-        let recorded_route = tokio::select! {
-            biased;
-            () = retirement.cancelled() => crate::native_recorded_policy::RecordedNativeRouteClassification::UnresolvedAuthority,
-            result = tokio::time::timeout_at(deadline, crate::native_recorded_policy::classify_recorded_native_route(self.approval_broker.as_ref(), &request.target)) => {
-                result.unwrap_or(crate::native_recorded_policy::RecordedNativeRouteClassification::UnresolvedAuthority)
-            }
-        };
         let mut effects = NativeEffectEvidence {
             permission_differences: Vec::new(),
             target: Some(request.target.clone()),
@@ -122,12 +96,7 @@ impl CodexAppServerDeliveryRoute {
             native_turn_id: None,
             native_submission_id: None,
             allocation: PreparationEffect::NotRequested,
-            // This same classification pins dispatch; a generic queue cannot attach later.
-            resume: if request.mode == MessageDelivery::Auto || recorded_route.may_resume() {
-                PreparationEffect::Unknown
-            } else {
-                PreparationEffect::NotRequested
-            },
+            resume: PreparationEffect::NotRequested,
             submission: SubmissionEffect::Dispatching,
             cessation: CessationEvidence::NotApplicable,
         };
@@ -140,7 +109,6 @@ impl CodexAppServerDeliveryRoute {
             .and_then(|subscription| subscription.snapshot())
             .map_err(|_| DeliveryContractError::ClientOperation)?
             .endpoints;
-        let load_policy = request.load_policy;
         let params = NativeMessageParams {
             target: request.target.clone(),
             generation: generation.clone(),
@@ -185,22 +153,13 @@ impl CodexAppServerDeliveryRoute {
                     .await?;
                 let mut response = crate::native_message_dispatch::dispatch_message(
                     crate::native_message_dispatch::NativeMessageRequest {
-                        attempt_evidence: Some(
-                            crate::message_effect_state::NativeMessageAttemptEvidence {
-                                effects: &mut effects,
-                                sink,
-                            },
-                        ),
                         params,
                         id: json!(request.attempt.as_str()),
                         service_id: &self.service_id,
                         backend: &self.backend,
                         endpoints: &endpoints,
-                        approval_broker: self.approval_broker.as_ref(),
-                        recorded_route: Some(&recorded_route),
                         attempt_deadline: Some(deadline),
                         held_connection: Some(binding.connection_mut()),
-                        load_policy,
                     },
                 )
                 .await;
@@ -251,22 +210,13 @@ impl CodexAppServerDeliveryRoute {
             HeldBindingCheckout::Missing => {
                 let response = crate::native_message_dispatch::dispatch_message(
                     crate::native_message_dispatch::NativeMessageRequest {
-                        attempt_evidence: Some(
-                            crate::message_effect_state::NativeMessageAttemptEvidence {
-                                effects: &mut effects,
-                                sink,
-                            },
-                        ),
                         params,
                         id: json!(request.attempt.as_str()),
                         service_id: &self.service_id,
                         backend: &self.backend,
                         endpoints: &endpoints,
-                        approval_broker: self.approval_broker.as_ref(),
-                        recorded_route: Some(&recorded_route),
                         attempt_deadline: Some(deadline),
                         held_connection: None,
-                        load_policy,
                     },
                 )
                 .await;
@@ -393,19 +343,6 @@ impl CodexAppServerDeliveryRoute {
 }
 
 impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
-    fn scheduled_runs(
-        &self,
-    ) -> Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunRoute>> {
-        Some(std::sync::Arc::new(
-            crate::CodexAppServerScheduledRuns::new(
-                self.clock.clone(),
-                self.backend.clone(),
-                std::sync::Arc::clone(&self.holder),
-            )
-            .with_approval_broker(self.approval_broker.clone()),
-        ))
-    }
-
     fn reachability(&self) -> SessionReachability {
         SessionReachability::CodexAppServer
     }
@@ -458,7 +395,6 @@ impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
                     target: request.target,
                     body: NativeMessageBody::PreparedPush(request.payload.line),
                     mode: request.mode,
-                    load_policy: request.payload.load_policy,
                     precondition: request.precondition,
                     correlation: request.correlation,
                     attempt: request.attempt,

@@ -1,4 +1,5 @@
 use super::*;
+use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{ClockIds, WorkspaceRuntime, WorkspaceStoreCalls};
 use collaboration_central_tokio::ObjectStorage;
@@ -46,7 +47,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             f.root
                 .path()
                 .join("central")
-                .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
+                .join(format!("{}.sqlite", f.caller.organization_id().as_str())),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
         .with_engine_publication(
@@ -61,22 +62,30 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             .join(format!("{}.sqlite", f.workspace)),
         Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
     ));
+    let lose = Arc::new(AtomicBool::new(true));
     let runtime = WorkspaceRuntime::new(
-        f.caller.organization_id.clone(),
+        f.caller.organization_id().clone(),
         central.clone(),
         LoseFirstRead {
             store: store.clone(),
-            lose: Arc::new(AtomicBool::new(true)),
+            lose: lose.clone(),
         },
         f.shared_for_runtime(),
         Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
         due_batches,
+    )
+    .with_sign_in_verification(
+        collaboration_central_tokio::NativeSignInTrust::new(settings(&f.keys.url))
+            .unwrap()
+            .for_organization(f.caller.organization_id().clone(), f.clock.clone())
+            .unwrap(),
     );
     let request = m::WorkspaceRequest {
         request_id: Some(id(891)),
         workspace_id: Some(f.workspace.clone()),
         operation: m::WorkspaceOperation::CreateArea {
             name: name("After read loss"),
+            description: "Test description".to_owned().try_into().unwrap(),
         },
     };
     assert_eq!(
@@ -90,7 +99,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     assert!(
         store
             .read(Statement {
-                sql: "SELECT request_id FROM request_log WHERE request_id=?",
+                sql: "SELECT request_id FROM workspace_request_log WHERE request_id=?",
                 args: vec![text(id::<m::RequestId>(891))]
             })
             .await
@@ -104,6 +113,20 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
     assert_eq!(runtime.request(&f.caller, request).await.unwrap(), replay);
+
+    let status = RequestStatusQuery {
+        request_id: id(891),
+        scope: RequestScope::Workspace(f.workspace.clone()),
+    };
+    lose.store(true, Ordering::SeqCst);
+    assert_eq!(
+        runtime.request_status(&f.caller, &status).await,
+        Err(StoreFailure::AnswerLost)
+    );
+    assert_eq!(
+        runtime.request_status(&f.caller, &status).await.unwrap(),
+        RequestStatusAnswer::Answered(ReplyPayload::Workspace(replay))
+    );
     central.close().await;
     store.close().await;
 }

@@ -11,8 +11,8 @@ workspace = true
 
 [features]
 test-observation = []
-# Scenario tests only (design note §11.8): the in-process transport and the
-# named-point hook. Enabled only from this crate's own dev-dependencies.
+# Scenario tests use the owner fixture, in-process transport, and named-point hook.
+# Enabled only by dev-dependencies.
 test-support = []
 
 [dependencies]

@@ -23,7 +23,6 @@ async fn start_host(root: &Path, fixture: &str, arguments: Vec<String>) -> Colla
         .expect("private Host root");
     Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.to_owned(),
             codex_home: root.to_owned(),
             backend_socket: root.join("backend.sock"),

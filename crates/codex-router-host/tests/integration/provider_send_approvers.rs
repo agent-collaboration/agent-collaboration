@@ -1,14 +1,8 @@
-//! Who approves a send, and when an earlier unknown outcome refuses one,
-//! through the real client → API → ConversationOperations → supervisor path
-//! (D1 spec R12, C1, C2; V22). A steered message joins the running turn, so
-//! that turn's approver keeps deciding its permissions; a queued message runs
-//! as its own turn, approved by the approver it named. A send made while an
-//! unknown outcome is unresolved, fresh or queued, reaches the agent never.
+//! Provider send consent and unknown-outcome fencing through the composed Host.
 //! Each Host runs one fixture whose receipt records every frame it reads.
 
 #![expect(
     clippy::expect_used,
-    clippy::panic,
     reason = "A Host or fixture that cannot start or answer must fail its test."
 )]
 
@@ -18,7 +12,6 @@ use collaboration_client::{
     ConversationOperationResult, ConversationPromptInput, ConversationSettlementDetail,
 };
 use collaboration_protocol::{
-    ApprovalDecideParams, ApprovalDetailedRecord, ApprovalOptionEffect, ApprovalOptionViewScope,
     ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationSettlement, ConversationOperationShowRequest,
     ConversationOperationSnapshot, ConversationOperationWaitOutput,
@@ -116,32 +109,6 @@ async fn show(
 
 /// The session's events on the Host's hub, as (kind, inputId) pairs (V22,
 /// Lead 2026-11-16: the IDs live inside the Router, never on the ACP wire).
-async fn input_events(host: &ComposedHost, target: &SessionRef) -> Vec<(String, String)> {
-    host.client
-        .observe_provider_session(collaboration_protocol::BoundedObservationRequest {
-            target: target.clone(),
-            timeout_seconds: 1,
-            max_events: 4096,
-            max_bytes: 1_048_576,
-            after_sequence: None,
-            epoch: None,
-        })
-        .await
-        .expect("provider observation")
-        .events
-        .iter()
-        .filter_map(|record| record.get("event"))
-        .filter_map(|event| {
-            let kind = event.get("kind").and_then(Value::as_str)?;
-            let input_id = event.get("inputId").and_then(Value::as_str)?;
-            (kind == "inputAccepted" || kind == "turnStarted")
-                .then(|| (kind.to_owned(), input_id.to_owned()))
-        })
-        .collect()
-}
-
-/// Waits on the Host until the operation settles; a settled failure is the
-/// client's error.
 async fn settled(
     host: &ComposedHost,
     operation_id: &OperationId,
@@ -184,93 +151,10 @@ fn carrying(receipt: &Path, method: &str, text: &str) -> usize {
 }
 
 /// The text of every prompt the fixture read, in order.
-fn prompt_texts(receipt: &Path) -> Vec<String> {
-    frames(receipt)
-        .iter()
-        .filter(|frame| frame.get("method").and_then(Value::as_str) == Some("session/prompt"))
-        .filter_map(|frame| {
-            frame
-                .pointer("/params/prompt/0/text")
-                .and_then(Value::as_str)
-        })
-        .map(str::to_owned)
-        .collect()
-}
-
-/// The client's answer to the fixture's permission request `request_id`.
-fn permission_answer(receipt: &Path, request_id: &str) -> Option<Value> {
-    frames(receipt).into_iter().find(|frame| {
-        frame.get("method").is_none() && frame.get("id").and_then(Value::as_str) == Some(request_id)
-    })
-}
-
-/// The first pending approval; fails at once if the fixture's permission
-/// request was answered without one.
-async fn pending_approval(
-    host: &ComposedHost,
-    receipt: &Path,
-    request_id: &str,
-) -> ApprovalDetailedRecord {
-    loop {
-        let pending = host
-            .client
-            .list_approvals_with_options(true)
-            .await
-            .expect("pending approvals")
-            .approvals;
-        if let Some(approval) = pending.into_iter().next() {
-            return approval;
-        }
-        if let Some(answer) = permission_answer(receipt, request_id) {
-            panic!("the permission was answered without an approval: {answer}");
-        }
-        tokio::task::yield_now().await;
-    }
-}
-
-/// Decides `approval` with its allow-once option, as the approver it
-/// reached, so the test observes whoever that was.
-async fn allow_once_as_its_approver(host: &ComposedHost, approval: &ApprovalDetailedRecord) {
-    let option = approval
-        .options
-        .iter()
-        .find(|option| {
-            option.effect == ApprovalOptionEffect::Allow
-                && option.scope == ApprovalOptionViewScope::Once
-        })
-        .expect("an allow-once option");
-    host.client
-        .decide_approval(ApprovalDecideParams {
-            request_id: approval.request_id.clone(),
-            decision: None,
-            option_id: Some(option.option_id.clone()),
-            note: None,
-            acknowledge_persistent: false,
-            actor: approval.approver.clone(),
-        })
-        .await
-        .expect("approval decision");
-}
-
-async fn until_answered(receipt: &Path, request_id: &str) -> Value {
-    loop {
-        if let Some(answer) = permission_answer(receipt, request_id) {
-            return answer;
-        }
-        tokio::task::yield_now().await;
-    }
-}
-
-/// Ends the fixture's held first turn.
 fn release(receipt: &Path) {
     node_test_fixture::release_fixture(receipt, ".release").expect("release the held turn");
 }
 
-fn same_session(approval: &ApprovalDetailedRecord, target: &SessionRef) -> bool {
-    serde_json::to_value(&approval.requester).ok() == serde_json::to_value(target).ok()
-}
-
-/// The send-race fixture as a Claude binding, recording to `receipt`.
 fn claude_send_race(receipt: &Path, behaviours: &[&str]) -> ExternalProviderLaunchBinding {
     let mut arguments = vec![
         node_test_fixture::fixture_program("provider-steering-agent.ts")
@@ -285,258 +169,6 @@ fn claude_send_race(receipt: &Path, behaviours: &[&str]) -> ExternalProviderLaun
         arguments,
     )
     .expect("Claude binding")
-}
-
-/// Oracle: D1 V22 (R12, C1) — "the held turn is owned by approver A; the
-/// second message names approver B. Steered: a permission request raised
-/// after the injection goes to A, and the result names A as the turn's
-/// approver." The first, held turn is started through the same client.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn steered_permission_after_injection_goes_to_the_turn_approver() {
-    // Arrange: a session owned by neither approver, and a held turn that the
-    // owner started naming approver A; the agent steers, and asks a
-    // permission in the running turn right after an injection.
-    let staging = tempfile::tempdir().expect("receipt folder");
-    let receipt = staging.path().join("wire.json");
-    let host = ComposedHost::start(
-        cursor_reactive(
-            &receipt,
-            &[
-                "hold-first-prompt-open",
-                "advertise-steering",
-                "permission-after-steer",
-            ],
-        ),
-        "cursor-local",
-    )
-    .await;
-    let owner = ComposedHost::human("session-owner");
-    let approver_a = ComposedHost::human("approver-a");
-    let approver_b = ComposedHost::human("approver-b");
-    let target = host.create(&owner).await;
-    let first = OperationId::generate();
-    let held = send(
-        &host,
-        &target,
-        &owner,
-        &approver_a,
-        &first,
-        "first",
-        SHORT_WAIT,
-    )
-    .await;
-    until_recorded(&receipt, "session/prompt", 1).await;
-
-    // Act: B's message is steered; the permission that follows is decided
-    // by whoever it reached; then the turn ends.
-    let second = OperationId::generate();
-    let steered = send(
-        &host,
-        &target,
-        &approver_b,
-        &approver_b,
-        &second,
-        "second",
-        SETTLE_WAIT,
-    )
-    .await;
-    let approval = pending_approval(&host, &receipt, "steer-permission-1").await;
-    allow_once_as_its_approver(&host, &approval).await;
-    let answer = until_answered(&receipt, "steer-permission-1").await;
-    release(&receipt);
-    let first_settled = settled(&host, &first).await;
-    let approvals = host
-        .client
-        .list_approvals_with_options(false)
-        .await
-        .expect("approval history")
-        .approvals;
-    let steers = carrying(&receipt, "_session/steering", "second");
-    let prompts = prompt_texts(&receipt);
-    let cancels = recorded(&receipt, "session/cancel");
-    let events = input_events(&host, &target).await;
-    host.runtime.shutdown().await.expect("Host shutdown");
-    let turn_inputs: Vec<&String> = events
-        .iter()
-        .filter(|(kind, _)| kind == "turnStarted")
-        .map(|(_, input_id)| input_id)
-        .collect();
-    let injected = events
-        .iter()
-        .filter(|(kind, input_id)| kind == "inputAccepted" && !turn_inputs.contains(&input_id))
-        .count();
-    assert_eq!(
-        (turn_inputs.len(), injected),
-        (1, 1),
-        "one turn ran, and the running turn took one more input under its own ID: {events:?}"
-    );
-
-    // Assert: steered under B's ID, naming A; the permission reached A only.
-    assert!(
-        matches!(held, Ok(ConversationOperationResult::Pending { .. })),
-        "the first turn is held: {held:?}"
-    );
-    match steered {
-        Ok(ConversationOperationResult::Completed {
-            operation_id,
-            settlement,
-            ..
-        }) => {
-            assert_eq!(
-                operation_id.as_ref(),
-                Some(&second),
-                "under the caller's ID"
-            );
-            match settlement.detail {
-                ConversationSettlementDetail::ProviderSteered { turn_approver } => assert_eq!(
-                    turn_approver,
-                    Some(approver_a.clone()),
-                    "the result names the running turn's approver"
-                ),
-                other => panic!("expected steered, got {other:?}"),
-            }
-        }
-        other => panic!("expected a steered completion, got {other:?}"),
-    }
-    assert_eq!(
-        approval.approver,
-        approver_a.to_board_identity().expect("A"),
-        "the permission after the injection goes to A: {approval:?}"
-    );
-    assert!(same_session(&approval, &target), "{approval:?}");
-    assert_eq!(
-        approvals.len(),
-        1,
-        "one permission, asked once: {approvals:?}"
-    );
-    assert_eq!(
-        answer.pointer("/result/outcome/optionId"),
-        Some(&Value::from("allow")),
-        "the decision reached the agent: {answer}"
-    );
-    assert!(
-        matches!(
-            first_settled,
-            Ok(ConversationOperationSettlement::PromptCompleted { .. })
-        ),
-        "the held turn ran to its end: {first_settled:?}"
-    );
-    assert_eq!(steers, 1, "the message was steered once");
-    assert_eq!(prompts, vec!["first".to_owned()], "and never prompted");
-    assert_eq!(cancels, 0, "no send interrupts a turn");
-}
-
-/// Oracle: D1 V22 (R12, C1) — "the held turn is owned by approver A; the
-/// second message names approver B. ... Queued: its own turn's permission
-/// request goes to B", and "the non-steering fixture records no second
-/// prompt until the first turn ends, then exactly one".
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn queued_turn_permission_goes_to_its_own_approver() {
-    // Arrange: a held turn owned by A on an agent that can't steer.
-    let staging = tempfile::tempdir().expect("receipt folder");
-    let receipt = staging.path().join("wire.json");
-    let host = ComposedHost::start(
-        cursor_reactive(&receipt, &["hold-first-prompt", "prompt-directives"]),
-        "cursor-local",
-    )
-    .await;
-    let owner = ComposedHost::human("session-owner");
-    let approver_a = ComposedHost::human("approver-a");
-    let approver_b = ComposedHost::human("approver-b");
-    let target = host.create(&owner).await;
-    let first = OperationId::generate();
-    let held = send(
-        &host,
-        &target,
-        &owner,
-        &approver_a,
-        &first,
-        "first",
-        SHORT_WAIT,
-    )
-    .await;
-    until_recorded(&receipt, "session/prompt", 1).await;
-
-    // Act: B's message waits in the line; the turn ends; B's own turn asks a
-    // permission, decided by whoever it reached.
-    let second = OperationId::generate();
-    let queued = send_with_delivery(
-        &host,
-        &target,
-        (&approver_b, &approver_b),
-        &second,
-        "ask-permission",
-        SHORT_WAIT,
-        collaboration_protocol::MessageDelivery::Queue,
-    )
-    .await;
-    let prompts_while_held = prompt_texts(&receipt);
-    let queued_input = show(&host, &second)
-        .await
-        .and_then(|snapshot| snapshot.input_id)
-        .map(String::from);
-    let pending_while_held = host
-        .client
-        .list_approvals_with_options(true)
-        .await
-        .expect("pending approvals")
-        .approvals;
-    release(&receipt);
-    let approval = pending_approval(&host, &receipt, "permission-1").await;
-    allow_once_as_its_approver(&host, &approval).await;
-    let answer = until_answered(&receipt, "permission-1").await;
-    let second_settled = settled(&host, &second).await;
-    let prompts_after = prompt_texts(&receipt);
-    let cancels = recorded(&receipt, "session/cancel");
-    let events = input_events(&host, &target).await;
-    host.runtime.shutdown().await.expect("Host shutdown");
-    let queued_input = queued_input.expect("show names the waiting operation's input ID");
-    assert!(
-        events
-            .iter()
-            .any(|(kind, input_id)| kind == "turnStarted" && input_id == &queued_input),
-        "its own turn started under the operation's input ID {queued_input}: {events:?}"
-    );
-
-    // Assert: queued under B's ID, run once after the turn, approved by B.
-    assert!(
-        matches!(held, Ok(ConversationOperationResult::Pending { .. })),
-        "the first turn is held: {held:?}"
-    );
-    assert!(
-        matches!(&queued, Ok(ConversationOperationResult::Queued { operation_id, .. }) if operation_id == &second),
-        "the second message is queued under the caller's ID: {queued:?}"
-    );
-    assert_eq!(
-        prompts_while_held,
-        vec!["first".to_owned()],
-        "no second prompt while the first turn runs"
-    );
-    assert!(pending_while_held.is_empty(), "{pending_while_held:?}");
-    assert_eq!(
-        approval.approver,
-        approver_b.to_board_identity().expect("B"),
-        "the queued turn's permission goes to B: {approval:?}"
-    );
-    assert!(same_session(&approval, &target), "{approval:?}");
-    assert_eq!(
-        answer.pointer("/result/outcome/optionId"),
-        Some(&Value::from("allow")),
-        "the decision reached the agent: {answer}"
-    );
-    assert!(
-        matches!(
-            second_settled,
-            Ok(ConversationOperationSettlement::PromptCompleted { .. })
-        ),
-        "the queued prompt ran to its end: {second_settled:?}"
-    );
-    assert_eq!(
-        prompts_after,
-        vec!["first".to_owned(), "ask-permission".to_owned()],
-        "then exactly one more prompt"
-    );
-    assert_eq!(cancels, 0, "no send interrupts a turn");
 }
 
 /// Oracle: D1 V22 (R12, C2) — "a same-process unknown failure whose completed
@@ -753,20 +385,11 @@ async fn steer_into_a_mail_started_turn_names_its_approver() {
     let approver_a = ComposedHost::human("approver-a");
     let approver_b = ComposedHost::human("approver-b");
     let target = host.create(&approver_a).await;
-    let mailed = host
-        .client
-        .send_message(collaboration_client::MessageSendRequest {
-            item_id: None,
-            target: target.clone(),
-            message: collaboration_client::PublicMessageContent::HumanUser {
-                text: collaboration_protocol::MessageText::try_from("first".to_owned())
-                    .expect("mail text"),
-            },
-            delivery: collaboration_protocol::MessageDelivery::Auto,
-            generation_guard: None,
-        })
-        .await
-        .expect("mail receipt");
+    let mailed = crate::session_message_route_composition::route_fixture::deliver(
+        &host.runtime,
+        target.clone(),
+    )
+    .await;
     until_recorded(&receipt, "session/prompt", 1).await;
 
     // Act: an API prompt naming B, while the mail-started turn runs.
@@ -787,9 +410,8 @@ async fn steer_into_a_mail_started_turn_names_its_approver() {
     // Assert: mail started the turn; the steer names that turn's approver.
     assert!(
         matches!(
-            &mailed,
-            collaboration_protocol::MessageSendResult::Local(sent)
-                if matches!(sent.receipt.outcome, collaboration_protocol::DeliveryOutcome::Started)
+            mailed.outcome,
+            collaboration_protocol::DeliveryOutcome::Started
         ),
         "{mailed:?}"
     );

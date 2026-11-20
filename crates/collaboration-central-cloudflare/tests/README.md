@@ -15,9 +15,17 @@ implementation (`src/*_test.rs`).
   `verification/targets/workerd-central-storage.test.ts`; the production bundle check
   refuses a bundle that carries any of these routes.
 
-The O1 bundle is built with `--features test-support`. That bundle's only fetch
-entry answers these test-support routes and returns `404` for anything else; the
-production Worker has no fetch entry.
+The O1 bundle is built with `--features test-support`. The default Worker
+dispatches `/v1/organizations/{organization}/link` through the `CENTRAL`
+binding. The test bundle adds fixture routes. The separate `link` build
+serves the private sign-in routes.
+
+The `machine_link` integration module opens real workerd sockets with signed
+machine tokens. It exercises admission, batch replies, renewal, alarm rearm,
+delivery and acknowledgement replay, and private signed revocation of an idle
+link. The witness cases distinguish object eviction and restored attachments
+from warm-socket behavior. The production bundle guard excludes the witness
+controls.
 
 ## Modern workspace request integration tests
 

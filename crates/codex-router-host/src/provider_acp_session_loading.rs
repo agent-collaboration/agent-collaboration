@@ -1,4 +1,5 @@
 //! Load a recorded provider session only after checking live peer ownership.
+use crate::external_provider_supervisor::SessionQueuePlan;
 use crate::{
     ExternalProviderRuntime, ExternalProviderRuntimeError, ExternalProviderSupervisor,
     LiveSessionOwnership, LiveSessionOwnershipCheck, ProviderSessionActivity,
@@ -199,23 +200,6 @@ async fn checked_loadability(
     .unwrap_or_else(|_| ProviderSessionLoadability::Unavailable {
         reason: "the Router could not read the session setup in time".to_owned(),
     })
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum SessionQueuePlan {
-    OnRun(TransportRun),
-    Restore {
-        run: TransportRun,
-        attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
-    },
-}
-
-impl SessionQueuePlan {
-    pub(crate) fn run(self) -> TransportRun {
-        match self {
-            Self::OnRun(run) | Self::Restore { run, .. } => run,
-        }
-    }
 }
 
 pub(crate) async fn session_queue_plan(

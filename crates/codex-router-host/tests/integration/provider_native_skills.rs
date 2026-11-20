@@ -84,7 +84,6 @@ async fn native_selected_refusal_is_correlated_before_any_send_and_valid_input_k
     let receipt = root.path().join("wire.jsonl");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(message_board::HumanId::try_from(
                 "native-skill-owner".to_owned(),
             )?),
@@ -336,7 +335,6 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
     let receipt = root.path().join("settings.jsonl");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(message_board::HumanId::try_from(
                 "native-settings-owner".to_owned(),
             )?),

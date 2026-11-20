@@ -87,7 +87,7 @@ async fn an_unpublishable_alarm_rolls_back_rows_and_keeps_the_real_deadline() {
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
-                    sql: "UPDATE wakes SET text='must roll back' WHERE wake_id=?",
+                    sql: "UPDATE automation_wakes SET text='must roll back' WHERE wake_id=?",
                     args: vec![text(&wake_id)],
                 },
                 expect: RowExpectation::Exactly(1),
@@ -109,7 +109,7 @@ async fn an_unpublishable_alarm_rolls_back_rows_and_keeps_the_real_deadline() {
     );
     let rows = runtime
         .read(Statement {
-            sql: "SELECT text FROM wakes WHERE wake_id=?",
+            sql: "SELECT text FROM automation_wakes WHERE wake_id=?",
             args: vec![text(&wake_id)],
         })
         .await

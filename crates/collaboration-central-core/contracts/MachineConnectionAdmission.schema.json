@@ -6,22 +6,14 @@
         "enrollmentId": {
           "$ref": "#/$defs/EnrollmentId"
         },
-        "installation": {
-          "$ref": "#/$defs/InstallationId"
-        },
         "organizationId": {
           "$ref": "#/$defs/OrganizationId"
-        },
-        "peer": {
-          "$ref": "#/$defs/RecordId"
         },
         "tokenExpiresAt": {
           "$ref": "#/$defs/UnixSeconds"
         }
       },
       "required": [
-        "installation",
-        "peer",
         "organizationId",
         "enrollmentId",
         "tokenExpiresAt"
@@ -33,13 +25,6 @@
       "minLength": 36,
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
-    },
-    "InstallationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 36
     },
     "MachineConnectionRefusal": {
       "oneOf": [
@@ -111,12 +96,6 @@
       ]
     },
     "OrganizationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-      "type": "string"
-    },
-    "RecordId": {
       "maxLength": 36,
       "minLength": 36,
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",

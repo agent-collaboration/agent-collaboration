@@ -9,9 +9,7 @@ fn assert_live_delta_text(kind: SessionItemKind, initial: &str, updates: &[&str]
         "endpointId":"claude-local"},"sessionId":"stream-delta-session"
     }))
     .expect("session");
-    let actor: Identity =
-        serde_json::from_value(json!({"kind":"human","humanId":"owner"})).expect("actor");
-    let mut projector = AppServerEventForwarding::new(actor, None);
+    let mut projector = AppServerEventForwarding::new();
     projector.project(
         &session,
         &HubEvent {
@@ -165,8 +163,7 @@ fn item_completion_without_an_active_turn_is_not_sent() -> Result<(), Box<dyn st
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
-    let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
-    let mut projector = AppServerEventForwarding::new(actor, None);
+    let mut projector = AppServerEventForwarding::new();
     projector.project(
         &session,
         &HubEvent {
@@ -204,8 +201,7 @@ fn reasoning_update_streams_summary_text_delta() -> Result<(), Box<dyn std::erro
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
-    let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
-    let mut projector = AppServerEventForwarding::new(actor, None);
+    let mut projector = AppServerEventForwarding::new();
     projector.project(
         &session,
         &HubEvent {
@@ -303,8 +299,7 @@ fn plan_item_projects_only_one_plan_surface() -> Result<(), Box<dyn std::error::
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
-    let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
-    let mut projector = AppServerEventForwarding::new(actor, None);
+    let mut projector = AppServerEventForwarding::new();
     projector.project(
         &session,
         &HubEvent {
@@ -377,8 +372,7 @@ fn item_lifecycle_uses_typed_v2_notifications() -> Result<(), Box<dyn std::error
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
         "sessionId":"provider-1"
     }))?;
-    let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
-    let mut projector = AppServerEventForwarding::new(actor, None);
+    let mut projector = AppServerEventForwarding::new();
     let turn = projector.project(
         &session,
         &HubEvent {

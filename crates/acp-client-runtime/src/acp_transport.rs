@@ -2,6 +2,7 @@
 
 use crate::callback_router::CallbackRouter;
 pub use crate::callback_router::{CallbackKind, CallbackResolution};
+pub use crate::transport_run::TransportRun;
 use provider_session_machines::{
     SessionGeneration,
     session_lifecycle_machine::CloseAttempt,
@@ -18,21 +19,6 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 use tokio::sync::mpsc;
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct TransportRun {
-    pub incarnation: OwnerIncarnation,
-    pub generation: SessionGeneration,
-}
-
-impl TransportRun {
-    fn of(authorization: &DispatchAuthorization) -> Self {
-        Self {
-            incarnation: authorization.incarnation,
-            generation: authorization.run,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SlotEvidence {

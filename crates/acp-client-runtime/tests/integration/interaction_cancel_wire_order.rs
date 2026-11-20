@@ -95,9 +95,6 @@ impl InteractionPort for HeldInteractionPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct NoopEventSink;

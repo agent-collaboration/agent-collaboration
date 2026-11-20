@@ -122,8 +122,17 @@ impl LifecycleHost {
     /// Starts a Host on `root` serving the provider endpoint `endpoint_id`.
     pub(super) async fn start_on(
         root: HostRoot,
+        binding: ExternalProviderLaunchBinding,
+        endpoint_id: &str,
+    ) -> Self {
+        Self::start_on_clock(root, binding, endpoint_id, None).await
+    }
+
+    pub(super) async fn start_on_clock(
+        root: HostRoot,
         mut binding: ExternalProviderLaunchBinding,
         endpoint_id: &str,
+        clock: Option<std::sync::Arc<router_clock::ManualClock>>,
     ) -> Self {
         if let Err(error) =
             codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
@@ -133,21 +142,23 @@ impl LifecycleHost {
         {
             panic!("declare test-owned global Claude executable: {error}");
         }
-        let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
-            CollaborationRuntimeInputs {
-                board_session: None,
-                directory: root.path().to_owned(),
-                codex_home: root.path().to_owned(),
-                backend_socket: root.path().join("backend.sock"),
-                mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-                native_schema: None,
-                peer_registry_directory: None,
-                remote_control_server_name: None,
-                owner_human_id: None,
-            },
-            vec![ExternalProviderStartup::Launch(binding)],
-        ))
-        .await
+        let inputs = CollaborationRuntimeInputs {
+            directory: root.path().to_owned(),
+            codex_home: root.path().to_owned(),
+            backend_socket: root.path().join("backend.sock"),
+            mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            native_schema: None,
+            peer_registry_directory: None,
+            remote_control_server_name: None,
+            owner_human_id: None,
+        };
+        let providers = vec![ExternalProviderStartup::Launch(binding)];
+        let runtime = if let Some(clock) = clock {
+            CollaborationRuntime::runtime_test_start_with_provider_clock(inputs, providers, clock)
+                .await
+        } else {
+            CollaborationRuntime::start_with_external_providers(inputs, providers).await
+        }
         .unwrap_or_else(|error| panic!("collaboration runtime: {error}"));
         let client = CollaborationClient::connect(root.path(), "queued-api-lifecycle", "1")
             .await

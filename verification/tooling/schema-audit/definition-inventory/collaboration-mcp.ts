@@ -2,16 +2,6 @@ import type { InventoryRow } from "../schema-audit-types.ts";
 
 export const rows: InventoryRow[] = [
   {
-    file: "crates/collaboration-mcp/src/mcp_server/catalog_tools.rs",
-    line: 24,
-    owner: "mcp",
-    kind: "schema-mechanism",
-    defines: "schemars derive via rmcp schema_for_type for board, automation tools (L24, L26, L77)",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "schema-mechanism",
-    disposition: "boundary-encoding",
-  },
-  {
     file: "crates/collaboration-mcp/src/mcp_server/conversation_operation_tools.rs",
     line: 14,
     owner: "mcp",
@@ -28,37 +18,6 @@ export const rows: InventoryRow[] = [
     kind: "schema-mechanism",
     defines:
       "hand-written schemars extend(allOf if/then) hard-coding per-endpoint required fields (L11, L48)",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "schema-mechanism",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 166,
-    owner: "mcp",
-    kind: "schema-mechanism",
-    defines: "manual JsonSchema impl UndecodedMessageSend delegating to MessageSendRequest",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "schema-mechanism",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/board_argument_classification.rs",
-    line: 70,
-    owner: "mcp",
-    kind: "schema-mechanism",
-    defines: "manual JsonSchema impl UndecodedBoardArguments delegating to the board request",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "schema-mechanism",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/project_tool_schemas.rs",
-    line: 22,
-    owner: "mcp",
-    kind: "schema-mechanism",
-    defines:
-      "post-generation schema narrowing (const and variant selection, reachable-definition pruning)",
     usedBy: [{ part: "N11" }],
     duplicateGroup: "schema-mechanism",
     disposition: "boundary-encoding",
@@ -165,18 +124,6 @@ export const rows: InventoryRow[] = [
     fixedBy: "D1",
   },
   {
-    file: "crates/collaboration-mcp/src/mcp_server/board_argument_classification.rs",
-    line: 120,
-    owner: "mcp",
-    kind: "method-table",
-    defines:
-      "ACTOR_METHODS and READER_METHODS tool-name tables (L120, L149) plus tool-name literal matches in classify_failure L84 and validate_reader L189: further copies of the tool names catalog_tools.rs registers",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "mcp-tool-name-literals",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
     file: "crates/collaboration-mcp/src/mcp_server/catalog_descriptions.rs",
     line: 1,
     owner: "mcp",
@@ -233,30 +180,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: "crates/collaboration-mcp/src/mcp_server/board_argument_classification.rs",
-    line: 80,
-    owner: "mcp",
-    kind: "content-parser",
-    defines:
-      "classify_failure re-parses undecodable board tool arguments field by field by wire name (about, actor, reader, actingFor, workspaceId/boardId/projectId/postId/rootPostId/threadId, placement/scope/record/references ids, selection cursors, title/name/description/text, page, repository), a second reading of the board request shapes",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "mcp-argument-classification",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/board_variant_validation.rs",
-    line: 10,
-    owner: "mcp",
-    kind: "content-parser",
-    defines:
-      "validate_closed_variants decodes single argument fields into closed message_board unions per tool-name literal (discovery_search, post_search, post_list, inbox_fetch, inbox_acknowledge, thread_subscribe, thread_unsubscribe) to name the failing field",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "mcp-argument-classification",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
     file: "crates/collaboration-mcp/src/mcp_server/carrier_tools.rs",
     line: 280,
     owner: "mcp",
@@ -264,17 +187,6 @@ export const rows: InventoryRow[] = [
     defines:
       "observationEvent notification params built by serde_json::to_value(ObservationEventNotification) into an rmcp CustomNotification (L285)",
     usedBy: [{ part: "N11" }, { crate: "collaboration-client" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/catalog_tools.rs",
-    line: 284,
-    owner: "mcp",
-    kind: "rust-type",
-    defines:
-      "EmptyToolInput: typed inbound arguments of the no-argument tools (deny_unknown_fields)",
-    usedBy: [{ part: "N11" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
   },
@@ -313,56 +225,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: "crates/collaboration-mcp/src/mcp_server/interaction_tools.rs",
-    line: 131,
-    owner: "mcp",
-    kind: "rust-type",
-    defines:
-      "staged_failure_result sets the stage field of the typed AdapterOperationFailure to the literals approval-decision (L36) and question-answer (L63), then encodes it through operation_error_result; no hand-built body",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 25,
-    owner: "mcp",
-    kind: "content-parser",
-    defines:
-      "message_send re-decodes itemId alone as Option<MailItemId> after MessageSendRequest fails to decode, to answer invalidShape instead of the decoder message",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "mcp-argument-classification",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 46,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MessageSendRequest to SessionMessageSendParams field by field (delivery to mode, message.into()) L46, and MessageReplyRequest to SessionMessageReplyParams L98: two vocabularies for one send and one reply",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-client" },
-      { crate: "collaboration-protocol" },
-    ],
-    duplicateGroup: "message-request-params-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 134,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "rejected_before_submission: MessageFailureKind to effect none (ItemConflict ... OwnerReplyUnsupported) or unknown (ForeignMachine, OutcomeUnknown)",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "failure-kind-mapping",
-    disposition: "boundary-encoding",
-  },
-  {
     file: "crates/collaboration-mcp/src/mcp_server/result_converters.rs",
     line: 77,
     owner: "mcp",
@@ -384,18 +246,6 @@ export const rows: InventoryRow[] = [
     usedBy: [{ part: "N11" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/wait_tools.rs",
-    line: 72,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "WakeWaitFailure NotFound/Unavailable to collaboration_client::WakeWaitError (L72-L77); InvalidField to an operation failure (L78)",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "failure-kind-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
   },
   {
     file: "crates/collaboration-mcp/src/test_support.rs",

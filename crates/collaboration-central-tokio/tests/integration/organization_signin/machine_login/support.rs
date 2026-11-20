@@ -23,13 +23,13 @@ pub(super) type RevokeResult = std::result::Result<
 >;
 pub(super) fn revoke_control(
     serial: u16,
-    installation: &str,
+    machine_id: &str,
     enrollment: &str,
 ) -> Result<collaboration_central_core::MachineLoginControl> {
     Ok(collaboration_central_core::MachineLoginControl::Revoke {
         person_id: signed::OWNER.to_owned().try_into()?,
         operation_id: id(serial).try_into()?,
-        installation: installation.to_owned().try_into()?,
+        machine_id: machine_id.to_owned().try_into()?,
         enrollment_id: enrollment.to_owned().try_into()?,
     })
 }
@@ -38,13 +38,13 @@ impl MachineFixture {
     pub async fn revoke(
         &self,
         serial: u16,
-        installation: &str,
+        machine_id: &str,
         enrollment: &str,
     ) -> Result<RevokeResult> {
         let runtime = self.inner.runtime(ORG).await?;
         Ok(collaboration_central_core::machine_login_control(
             runtime.as_ref(),
-            revoke_control(serial, installation, enrollment)?,
+            revoke_control(serial, machine_id, enrollment)?,
         )
         .await)
     }
@@ -75,13 +75,13 @@ pub(super) fn text(value: impl ToString) -> SqlValue {
 }
 pub(super) fn approval(
     serial: u16,
-    installation: &str,
+    machine_id: &str,
     label: &str,
     workspaces: &[&str],
     now: i64,
 ) -> Value {
     json!({"organizationId":ORG,"approver":signed::OWNER,"permissionChecked":"machine:enroll",
- "requestId":id(serial),"installation":installation,"peer":installation,"label":label,
+ "requestId":id(serial),"machineId":machine_id,"label":label,
  "allowedWorkspaces":workspaces,"approverSecondFactorAt":now-60,"codeExpiresAt":now+600})
 }
 pub(super) fn token(enrollment: &str, client: &str) -> Value {
@@ -102,13 +102,13 @@ pub(super) fn enrollment(answer: &Value) -> Result<String> {
 }
 pub(super) fn grant(
     enrollment: &str,
-    installation: &str,
+    machine_id: &str,
     now: i64,
     superseded: Option<(&str, &str)>,
 ) -> Value {
     let mut answer = serde_json::Map::from_iter([
         ("result".to_owned(), json!("grant")),
-        ("installation".to_owned(), json!(installation)),
+        ("machineId".to_owned(), json!(machine_id)),
         ("enrollmentId".to_owned(), json!(enrollment)),
         ("decidedAt".to_owned(), json!(now)),
         ("grantExpiresAt".to_owned(), json!(now + LIFETIME)),
@@ -127,10 +127,10 @@ pub(super) fn refused(reason: &str) -> Value {
 pub(super) async fn snapshot(f: &MachineFixture) -> Result<Vec<Vec<Vec<SqlValue>>>> {
     let mut rows = vec![];
     for sql in [
-        "SELECT * FROM machines ORDER BY machine_id",
-        "SELECT * FROM machine_approvals ORDER BY approval_id",
-        "SELECT * FROM organization_change_records ORDER BY id",
-        "SELECT * FROM machine_credentials ORDER BY credential_id",
+        "SELECT * FROM login_machines ORDER BY machine_id",
+        "SELECT * FROM login_machine_approvals ORDER BY approval_id",
+        "SELECT * FROM signin_change_records ORDER BY id",
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name='machine_credentials'",
     ] {
         rows.push(f.rows(sql).await?);
     }
@@ -143,7 +143,7 @@ pub(super) async fn seed_workspaces(f: &MachineFixture) -> Result<()> {
         (WORKSPACE, "Login workspace"),
         (WORKSPACE_TWO, "Second login workspace"),
     ] {
-        f.execute("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES (?,?,'active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(workspace),text(name)]).await?;
+        f.execute("INSERT INTO directory_workspaces(workspace_id,name,state,created_at,updated_at) VALUES (?,?,'active','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z')",vec![text(workspace),text(name)]).await?;
     }
     Ok(())
 }

@@ -61,7 +61,6 @@ async fn start_model_fixture_on_clock(
     clock: Option<Arc<ManualClock>>,
 ) -> Result<CollaborationRuntime, Box<dyn std::error::Error>> {
     let inputs = CollaborationRuntimeInputs {
-        board_session: None,
         owner_human_id: Some(message_board::HumanId::try_from("model-owner".to_owned())?),
         directory: root.into(),
         codex_home: root.into(),

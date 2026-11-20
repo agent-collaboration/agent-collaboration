@@ -197,7 +197,6 @@ impl AcpBusyHost {
             .unwrap_or_else(|error| panic!("owner: {error}"));
         let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
-                board_session: None,
                 owner_human_id: Some(owner),
                 directory: root.path().to_owned(),
                 codex_home: root.path().to_owned(),

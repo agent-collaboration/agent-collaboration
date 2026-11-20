@@ -1,7 +1,6 @@
 //! Original test roots retain their case namespaces.
 
-#[path = "../support/acp_owner_fixture.rs"]
-mod acp_owner_fixture;
+use acp_client_runtime::acp_owner_fixture;
 #[path = "../support/provider_behavior.rs"]
 mod test_behavior;
 

@@ -76,9 +76,6 @@ impl InteractionPort for NoopInteractionPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);

@@ -6,12 +6,19 @@ use crate::{
 };
 use codex_native_integration::{NativeConnectionError, NativeOperation};
 use serde_json::{Value, json};
+use session_event_model::managed_interaction_refusal::ManagedInteractionRefusal;
 
 pub enum PromptEvent {
     Update(Value),
     Terminal(Value),
     /// The connection dispatcher must translate and correlate this callback; never auto-approve.
     NativeCallback(Value),
+    InteractionRefused {
+        id: Value,
+        response: Value,
+        refusal: ManagedInteractionRefusal,
+        interrupt_turn: bool,
+    },
     /// Other native items remain available to the tool/plan projection owner.
     NativeNotification(Value),
 }
@@ -52,7 +59,6 @@ fn thread_idle_seconds(thread: &Value) -> Result<u64, PromptExecutionError> {
 }
 
 pub struct PendingAcpPrompt {
-    next_permission: u64,
     detached: bool,
     session: AcpSessionBinding,
     settlement: PromptSettlement,
@@ -89,7 +95,6 @@ impl PendingAcpPrompt {
             return Err(PromptExecutionError::InvalidPrompt);
         }
         let mut pending = Self {
-            next_permission: 0,
             detached: false,
             session,
             settlement: PromptSettlement::new(request_id)
@@ -169,82 +174,34 @@ impl PendingAcpPrompt {
             self.final_reply
                 .observe_completed_item(&self.session.session_id, &turn_id, &message);
         }
-        if message.get("id").is_some() && message.get("method").is_some() {
-            if matches!(
-                message.get("method").and_then(Value::as_str),
-                Some(
-                    "item/commandExecution/requestApproval"
-                        | "item/fileChange/requestApproval"
-                        | "item/permissions/requestApproval"
-                )
-            ) {
-                let params = message
-                    .get("params")
-                    .ok_or(PromptExecutionError::Projection)?;
-                if params.get("threadId").and_then(Value::as_str) != Some(&self.session.session_id)
-                    || params.get("turnId").and_then(Value::as_str) != self.settlement.turn_id()
-                {
-                    return Ok(None);
-                }
-                let id = crate::permission_address::permission_id(
-                    &self.session.session_id,
-                    self.settlement
-                        .turn_id()
-                        .ok_or(PromptExecutionError::Projection)?,
-                    self.next_permission,
-                )
-                .map_err(|_| PromptExecutionError::Projection)?;
-                self.next_permission = self
-                    .next_permission
-                    .checked_add(1)
-                    .ok_or(PromptExecutionError::Projection)?;
-                let permission = crate::PendingPermission::translate(
-                    catalog,
-                    self.session.generation.clone(),
-                    id.clone(),
-                    &message,
-                )
-                .map_err(|_| PromptExecutionError::Projection)?;
-                let request = permission.request().clone();
-                let outcome = self
-                    .session
-                    .approval_broker
-                    .request(crate::BrokeredApprovalRequest {
-                        thread_id: self.session.session_id.clone(),
-                        generation: self.session.generation.clone(),
-                        request,
-                    })
-                    .await
-                    .map_err(|_| PromptExecutionError::Projection)?;
-                let outcome = match outcome {
-                    crate::BrokeredApprovalOutcome::Selected { option_id } => {
-                        json!({"outcome":"selected","optionId":option_id})
-                    }
-                    crate::BrokeredApprovalOutcome::Cancelled => json!({"outcome":"cancelled"}),
-                };
-                let response = json!({"jsonrpc":"2.0","id":id,"result":{"outcome":outcome}});
-                let reply = permission
-                    .resolve(catalog, &self.session.generation, &response)
-                    .map_err(|_| PromptExecutionError::Projection)?;
-                let native_id = reply
-                    .native_response
-                    .get("id")
-                    .ok_or(PromptExecutionError::Projection)?
-                    .clone();
-                let result = reply
-                    .native_response
-                    .get("result")
-                    .ok_or(PromptExecutionError::Projection)?
-                    .clone();
-                self.session
-                    .connection
-                    .submit_callback_response(native_id, result)
-                    .await?;
-                return Ok(Some(PromptEvent::NativeNotification(json!({
-                    "kind":"approvalDecisionSubmitted"
-                }))));
+        if let Some(id) = message.get("id")
+            && let Some(method) = message.get("method").and_then(Value::as_str)
+        {
+            let refusal = ManagedInteractionRefusal::ApprovalsUnavailableOnBuild;
+            let Some(response) = refusal.codex_response(method) else {
+                return Ok(Some(PromptEvent::NativeCallback(message)));
+            };
+            let params = message
+                .get("params")
+                .ok_or(PromptExecutionError::Projection)?;
+            let turn_id = params.get("turnId").and_then(Value::as_str);
+            let matched_turn = turn_id.is_some() && turn_id == self.settlement.turn_id();
+            // Codex may emit an MCP elicitation with no active turn at its
+            // source. Refuse that request on its own ID without cancelling a
+            // turn that happened to start by the time we received it.
+            let standalone = method == "mcpServer/elicitation/request" && turn_id.is_none();
+            if self.settlement.is_settled()
+                || params.get("threadId").and_then(Value::as_str) != Some(self.session.session_id())
+                || !(matched_turn || standalone)
+            {
+                return Ok(None);
             }
-            return Ok(Some(PromptEvent::NativeCallback(message)));
+            return Ok(Some(PromptEvent::InteractionRefused {
+                id: id.clone(),
+                response,
+                refusal,
+                interrupt_turn: matched_turn,
+            }));
         }
         if !self.settlement.is_settled()
             && let Some(turn_id) = self.settlement.turn_id()
@@ -375,27 +332,48 @@ impl PendingAcpPrompt {
         Ok(Some(PromptEvent::NativeNotification(message)))
     }
     pub async fn cancel(&mut self) -> Option<Value> {
+        self.cancel_prompt(false).await
+    }
+
+    pub(crate) async fn write_callback_refusal(
+        &mut self,
+        id: Value,
+        response: Value,
+    ) -> Result<(), NativeConnectionError> {
+        self.session
+            .connection
+            .submit_callback_response(id, response)
+            .await
+    }
+
+    pub(crate) async fn cancel_after_refusal(&mut self) -> Option<Value> {
+        self.cancel_prompt(true).await
+    }
+
+    async fn cancel_prompt(&mut self, reconcile_rejection: bool) -> Option<Value> {
         if self.settlement.is_settled() {
             return None;
         }
         self.settlement.request_cancel();
-        let mut response =
-            match tokio::time::timeout(std::time::Duration::from_secs(30), self.cancel_inner())
-                .await
-            {
-                Ok(response) => response,
-                Err(_) => {
-                    self.detached = true;
-                    self.settlement
-                        .settle_cancel(NativeInterruptionState::Unknown)
-                }
-            };
+        let mut response = match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            self.cancel_inner(reconcile_rejection),
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(_) => {
+                self.detached = true;
+                self.settlement
+                    .settle_cancel(NativeInterruptionState::Unknown)
+            }
+        };
         if let Some(response) = response.as_mut() {
             attach_final_reply(response, self.final_reply.metadata());
         }
         response
     }
-    async fn cancel_inner(&mut self) -> Option<Value> {
+    async fn cancel_inner(&mut self, reconcile_rejection: bool) -> Option<Value> {
         let target = self.settlement.request_cancel().map(str::to_owned);
         let outcome = if let Some(turn_id) = target {
             match self
@@ -409,6 +387,10 @@ impl PendingAcpPrompt {
                 .await
             {
                 Ok(_) => NativeInterruptionState::Confirmed,
+                // The refusal may have ended this turn before the interrupt reached Codex.
+                Err(NativeConnectionError::Rejected { .. }) if reconcile_rejection => {
+                    self.reconcile_refused_turn().await
+                }
                 Err(NativeConnectionError::Rejected { .. }) => NativeInterruptionState::Rejected,
                 Err(_) => NativeInterruptionState::Unknown,
             }
@@ -417,6 +399,33 @@ impl PendingAcpPrompt {
         };
         self.settlement.settle_cancel(outcome)
     }
+
+    async fn reconcile_refused_turn(&mut self) -> NativeInterruptionState {
+        let barrier = self.cancellation_barrier();
+        match self
+            .session
+            .connection
+            .request_validated(
+                &self.session.schemas,
+                NativeOperation::ReadThread,
+                json!({"threadId":self.session.session_id,"includeTurns":true}),
+            )
+            .await
+        {
+            Ok(thread)
+                if thread.pointer("/thread/id").and_then(Value::as_str)
+                    == Some(self.session.session_id())
+                    && barrier.resolved_by_resume(&thread) =>
+            {
+                NativeInterruptionState::Confirmed
+            }
+            Ok(_) | Err(NativeConnectionError::Rejected { .. }) => {
+                NativeInterruptionState::Rejected
+            }
+            Err(_) => NativeInterruptionState::Unknown,
+        }
+    }
+
     #[must_use]
     pub fn blocks_next_prompt(&self) -> bool {
         self.detached || self.settlement.blocks_next_prompt()

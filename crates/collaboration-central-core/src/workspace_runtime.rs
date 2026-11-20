@@ -1,5 +1,5 @@
 //! One org's request owner. Stores execute statements; only this core makes decisions.
-use crate::{ObjectHost, WorkspaceTurns};
+use crate::{MailDeliveryReady, ObjectHost, WorkspaceTurns};
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
@@ -15,12 +15,47 @@ pub trait WorkspaceStoreCalls: Clone + Send + Sync + 'static {
         call: StoreCall,
     ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
 }
-/// Transport-stamped context. No workspace allowance is accepted from the caller.
+/// A semantic caller bound to core-validated machine_id provenance.
 #[derive(Clone)]
 pub struct WorkspaceCaller {
-    pub organization_id: OrganizationId,
-    pub caller: Caller,
-    pub credential_hash: String,
+    connection: crate::ValidatedMachineConnection,
+    caller: Caller,
+}
+impl WorkspaceCaller {
+    pub fn new(
+        connection: crate::ValidatedMachineConnection,
+        caller: Caller,
+    ) -> Result<Self, workspace_model::RefusalReason> {
+        if caller.machine_id() != connection.machine_id() {
+            return Err(workspace_model::RefusalReason::MachineRevoked);
+        }
+        Ok(Self { connection, caller })
+    }
+    /// A public machine link carries only sessions bound to its validated machine.
+    pub fn from_machine_link(
+        connection: crate::ValidatedMachineConnection,
+        caller: Caller,
+    ) -> Result<Self, workspace_model::RefusalReason> {
+        if !matches!(caller, Caller::Session(_)) {
+            return Err(workspace_model::RefusalReason::InvalidInput {
+                field: "caller".to_owned(),
+            });
+        }
+        Self::new(connection, caller)
+    }
+
+    #[must_use]
+    pub fn organization_id(&self) -> &OrganizationId {
+        self.connection.organization_id()
+    }
+    #[must_use]
+    pub fn caller(&self) -> &Caller {
+        &self.caller
+    }
+    #[must_use]
+    pub fn connection(&self) -> &crate::ValidatedMachineConnection {
+        &self.connection
+    }
 }
 
 #[cfg(feature = "test-support")]
@@ -37,6 +72,8 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) due_batches: Arc<crate::DueBatchState>,
     pub(crate) turns: WorkspaceTurns,
     pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+    pub(crate) mail_delivery_ready: Arc<dyn Fn(MailDeliveryReady) + Send + Sync>,
+    pub(crate) machine_revoked: Arc<dyn Fn(workspace_ids::MachineId) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-support")]
@@ -48,12 +85,18 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     central_waiting: tokio::sync::watch::Sender<usize>,
+    /// Test-support count of machine admissions waiting on the central turn,
+    /// kept apart from every other wait on it.
+    #[cfg(feature = "test-support")]
+    admission_waiting: tokio::sync::watch::Sender<usize>,
     #[cfg(feature = "test-support")]
     pub(crate) pauses: crate::PausePoints,
     #[cfg(feature = "test-support")]
     pub(crate) legacy_invocations: std::sync::Mutex<LegacyUnitInvocations>,
     #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
+    #[cfg(feature = "test-support")]
+    pub(crate) machine_restore_failure: std::sync::Mutex<Option<(usize, StoreFailure)>>,
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub fn new(
@@ -81,14 +124,20 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             legacy_invocations: Default::default(),
             signin_authority: Default::default(),
             signin_observer: Arc::new(|_| {}),
+            mail_delivery_ready: Arc::new(|_| {}),
+            machine_revoked: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
             central_waiting: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            admission_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             lost_provisioning_reply: Default::default(),
             #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
             #[cfg(feature = "test-support")]
             lost_answers: Default::default(),
+            #[cfg(feature = "test-support")]
+            machine_restore_failure: Default::default(),
         }
     }
     #[cfg(feature = "test-support")]
@@ -106,6 +155,20 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
     ) -> Self {
         self.signin_observer = observer;
+        self
+    }
+    pub fn with_mail_delivery_observer(
+        mut self,
+        observer: Arc<dyn Fn(MailDeliveryReady) + Send + Sync>,
+    ) -> Self {
+        self.mail_delivery_ready = observer;
+        self
+    }
+    pub fn with_machine_revocation_observer(
+        mut self,
+        observer: Arc<dyn Fn(workspace_ids::MachineId) + Send + Sync>,
+    ) -> Self {
+        self.machine_revoked = observer;
         self
     }
     pub fn with_sign_in_verification(
@@ -185,13 +248,34 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         }
         #[cfg(feature = "test-support")]
         {
+            self.take_central_turn_counted(&self.central_waiting).await
+        }
+    }
+    /// Machine admission and restoration take the same central turn; test support
+    /// counts their waits separately from the work they admit.
+    pub(crate) async fn take_central_turn_for_admission(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        #[cfg(not(feature = "test-support"))]
+        {
+            self.central_turn.lock().await
+        }
+        #[cfg(feature = "test-support")]
+        {
+            self.take_central_turn_counted(&self.admission_waiting)
+                .await
+        }
+    }
+    #[cfg(feature = "test-support")]
+    async fn take_central_turn_counted(
+        &self,
+        counter: &tokio::sync::watch::Sender<usize>,
+    ) -> tokio::sync::MutexGuard<'_, ()> {
+        {
             use std::future::Future;
             let mut acquisition = std::pin::pin!(self.central_turn.lock());
             let mut waiting = None;
             std::future::poll_fn(|context| match acquisition.as_mut().poll(context) {
                 std::task::Poll::Pending => {
-                    waiting
-                        .get_or_insert_with(|| CentralWaiter::enter(self.central_waiting.clone()));
+                    waiting.get_or_insert_with(|| CentralWaiter::enter(counter.clone()));
                     std::task::Poll::Pending
                 }
                 ready @ std::task::Poll::Ready(_) => ready,
@@ -203,6 +287,16 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub async fn until_central_waiting(&self, count: usize) {
         let mut waiting = self.central_waiting.subscribe();
         let _ = waiting.wait_for(|waiting| *waiting >= count).await;
+    }
+    #[cfg(feature = "test-support")]
+    pub async fn until_admission_waiting(&self, count: usize) {
+        let mut waiting = self.admission_waiting.subscribe();
+        let _ = waiting.wait_for(|waiting| *waiting >= count).await;
+    }
+    #[cfg(feature = "test-support")]
+    #[must_use]
+    pub fn admission_waiting_now(&self) -> usize {
+        *self.admission_waiting.borrow()
     }
     pub(crate) fn mint<T: TryFrom<String>>(&self) -> Result<T, StoreFailure> {
         T::try_from(self.ids.new_id().to_string())

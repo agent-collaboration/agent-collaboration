@@ -31,7 +31,8 @@ async fn steered_busy_prompt_answers_when_the_running_turn_ends() {
     host.release("release");
     let first = host.response(3).await;
     let second = host.response(4).await;
-    let turns = HubTurns::from_observed(&host.hub_events().await);
+    let events = host.hub_events().await;
+    let turns = HubTurns::from_observed(&events);
     let steers = agent_frames(&host.receipt, "_session/steering", Some(SECOND));
     let second_prompts = agent_frames(&host.receipt, "session/prompt", Some(SECOND));
     let cancels = agent_frames(&host.receipt, "session/cancel", None);
@@ -49,7 +50,11 @@ async fn steered_busy_prompt_answers_when_the_running_turn_ends() {
         !answered_while_running,
         "unanswered while the turn runs: {second}"
     );
-    assert_eq!(turns.started.len(), 1, "no other turn starts: {turns:?}");
+    assert_eq!(
+        turns.started.len(),
+        1,
+        "no other turn starts: {turns:?}; observed {events:?}"
+    );
     let running_turn = turns.started[0].0.as_str();
     assert!(
         turns.accepted.iter().any(|(_, turn)| turn == running_turn),

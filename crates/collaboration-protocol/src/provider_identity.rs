@@ -35,27 +35,33 @@ impl ProviderIdentity {
     pub fn to_board_identity(&self) -> Result<BoardIdentity, &'static str> {
         match self {
             Self::Session(session) => Ok(BoardIdentity::Session {
-                session: message_board::SessionRef {
-                    endpoint: message_board::SessionEndpointRef {
-                        service_id: message_board::ServiceId::try_from(String::from(
-                            session.endpoint.service_id.clone(),
-                        ))
-                        .map_err(|_| "invalid board service ID")?,
-                        endpoint_id: message_board::EndpointId::try_from(String::from(
-                            session.endpoint.endpoint_id.clone(),
-                        ))
-                        .map_err(|_| "invalid board endpoint ID")?,
-                    },
-                    session_id: message_board::SessionId::try_from(String::from(
-                        session.session_id.clone(),
-                    ))
-                    .map_err(|_| "invalid board Session ID")?,
-                },
+                session: Self::session_to_board(session)?,
             }),
             Self::Human { human_id } => Ok(BoardIdentity::Human {
                 human_id: human_id.clone(),
             }),
         }
+    }
+
+    pub fn session_to_board(
+        session: &SessionRef,
+    ) -> Result<message_board::SessionRef, &'static str> {
+        Ok(message_board::SessionRef {
+            endpoint: message_board::SessionEndpointRef {
+                service_id: message_board::ServiceId::try_from(String::from(
+                    session.endpoint.service_id.clone(),
+                ))
+                .map_err(|_| "invalid board service ID")?,
+                endpoint_id: message_board::EndpointId::try_from(String::from(
+                    session.endpoint.endpoint_id.clone(),
+                ))
+                .map_err(|_| "invalid board endpoint ID")?,
+            },
+            session_id: message_board::SessionId::try_from(String::from(
+                session.session_id.clone(),
+            ))
+            .map_err(|_| "invalid board Session ID")?,
+        })
     }
 
     pub fn from_board_identity(identity: &BoardIdentity) -> Result<Self, &'static str> {

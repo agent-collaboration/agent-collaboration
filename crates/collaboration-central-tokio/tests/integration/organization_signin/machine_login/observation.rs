@@ -30,7 +30,7 @@ async fn machine_observation_rejects_corrupt_rows_without_partial_facts_or_write
         (200, grant(&enrollment_id, INSTALLATION, f.now(), None))
     );
     let machine = f
-        .rows("SELECT machine_id,enrollment_generation FROM machines")
+        .rows("SELECT machine_id,enrollment_generation FROM login_machines")
         .await?;
     assert_eq!(machine.len(), 1);
     let (SqlValue::Text(machine_id), SqlValue::Integer(generation)) =
@@ -39,7 +39,7 @@ async fn machine_observation_rejects_corrupt_rows_without_partial_facts_or_write
         panic!("machine row")
     };
     let original_grant = f
-        .rows("SELECT last_grant_at FROM machine_approvals")
+        .rows("SELECT last_grant_at FROM login_machine_approvals")
         .await?;
     let SqlValue::Text(last_grant) = &original_grant[0][0] else {
         panic!("grant timestamp")
@@ -58,7 +58,7 @@ async fn machine_observation_rejects_corrupt_rows_without_partial_facts_or_write
         .ok_or("machine approvals missing")?;
     assert_eq!((machines.len(), approvals.len()), (1, 1));
     assert_eq!(machines[0]["machineId"], *machine_id);
-    assert_eq!(machines[0]["installationId"], INSTALLATION);
+    assert_eq!(machines[0]["machineId"], INSTALLATION);
     assert_eq!(machines[0]["state"], "enrolled");
     assert_eq!(machines[0]["enrollmentGeneration"], generation.get());
     assert_eq!(machines[0]["allowedWorkspaces"], json!([WORKSPACE]));
@@ -82,16 +82,16 @@ async fn machine_observation_rejects_corrupt_rows_without_partial_facts_or_write
     let baseline = snapshot(&f).await?;
     for (corrupt, repair, original, field) in [
         (
-            "UPDATE machines SET enrollment_generation=-1 WHERE machine_id=?",
-            "UPDATE machines SET enrollment_generation=? WHERE machine_id=?",
+            "UPDATE login_machines SET enrollment_generation=-1 WHERE machine_id=?",
+            "UPDATE login_machines SET enrollment_generation=? WHERE machine_id=?",
             SqlValue::Integer(*generation),
-            "machines.enrollment_generation",
+            "login_machines.enrollment_generation",
         ),
         (
-            "UPDATE machine_approvals SET last_grant_at='not-a-time' WHERE machine_id=?",
-            "UPDATE machine_approvals SET last_grant_at=? WHERE machine_id=?",
+            "UPDATE login_machine_approvals SET last_grant_at='not-a-time' WHERE machine_id=?",
+            "UPDATE login_machine_approvals SET last_grant_at=? WHERE machine_id=?",
             text(last_grant),
-            "machine_approvals.last_grant_at",
+            "login_machine_approvals.last_grant_at",
         ),
     ] {
         f.execute(corrupt, vec![text(machine_id)]).await?;

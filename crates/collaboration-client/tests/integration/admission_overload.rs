@@ -1,41 +1,28 @@
 //! A request the API sheds at its request limit was not run. Each family client reports it as
 //! its own typed `overloaded` failure with "retry later", never as a protocol violation or an
-//! uncertain outcome. The served API runs one request at a time on its socket; a held wake
-//! wait takes that one, so every other call is shed.
+//! uncertain outcome. The served API runs one request at a time on its socket; a held call
+//! takes that one, so every other call is shed.
 
-use automation_storage::AutomationStore;
-use collaboration_application_test_support::native_registry;
 use collaboration_client::{
-    AutomationInspectionClientError, BoardClientError, ClientError, CollaborationAccess,
-    CollaborationClient, ConfigurationClientError, InstructionClientError,
-    NativeTransportConnection, NativeTransportError, OperationEffect, RunClientError,
-    ScheduleClientError, WakeClientError, WakeWaitError, operation_failure_from_client_error,
+    ClientError, CollaborationAccess, CollaborationClient, NativeTransportConnection,
+    NativeTransportError, OperationEffect, operation_failure_from_client_error,
     resolve_public_native,
 };
-use collaboration_contracts::MachineIdentity;
+use collaboration_mcp::request_slot_holder::RequestSlotHolder;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
-use collaboration_protocol::{
-    AutomationInspectionFailureKind, ConfigurationFailureKind, ConfigurationNextAction, EndpointId,
-    InstructionFailureKind, InstructionNextAction, OperationFailureKind, OperationId,
-    RunFailureKind, RunNextAction, ScheduleFailureKind, ScheduleNextAction, WakeFailureReason,
-    WakeNextAction, WakeShowRequest,
-};
+use collaboration_protocol::{EndpointId, OperationFailureKind};
 use collaboration_service::ApplicationFixture;
 
-use collaboration_service::ProjectAdmission;
-use collaboration_service::ProjectAdmissionProps;
-use message_board::{BoardFailureKind, BoardNextAction};
-use serde_json::{Value, json};
+use serde_json::json;
 use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
-/// A served API that runs one request at a time, with that one held by a wake wait.
+/// A served API that runs one request at a time, with that one held by the slot holder.
 struct SaturatedApi {
     served: Arc<ServedCollaborationApi>,
     client: CollaborationClient,
-    wakeup_id: Value,
+    holder: RequestSlotHolder,
     held: tokio::task::JoinHandle<()>,
     directory: tempfile::TempDir,
 }
@@ -44,39 +31,14 @@ type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error>>;
 
 impl SaturatedApi {
     async fn start() -> TestResult<Self> {
-        let clock = Arc::new(router_clock::SystemRuntimeClock::new());
-
         use std::os::unix::fs::PermissionsExt;
         let directory = tempfile::Builder::new()
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir_in("/tmp")?;
-        // A local, unenrolled machine: the Fleet client has no session and no central.
-        let fleet = collaboration_runtime::FleetClient::new(
-            &message_board_storage::FleetStore::open(
-                &directory
-                    .path()
-                    .join(message_board_storage::FleetStore::FILE_NAME),
-            )
-            .await?,
-            Arc::new(native_registry::PendingRegistration),
-            None,
-        );
-        let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
-            clock: clock.clone(),
-            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
-                .await
-                .map_err(|error| std::io::Error::other(error.to_string()))?,
-            fleet: Arc::new(fleet),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
-                Some("overload proof"),
-            )?,
-        })?);
-        let automation = AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
         let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-            .map_err(std::io::Error::other)?
-            .with_project_admission(admission)
-            .with_automation_store(Arc::new(Mutex::new(automation)));
+            .map_err(std::io::Error::other)?;
+        let (identity, holder) =
+            RequestSlotHolder::install(identity, SERVICE_ID, directory.path()).await?;
         let served = Arc::new(ServedCollaborationApi::start_with(
             directory.path(),
             (identity).build(),
@@ -86,244 +48,52 @@ impl SaturatedApi {
             },
         )?);
         let client = served.client("overload-proof").await?;
-        let wake = served.call("wake_send", wake_send_arguments()).await?;
-        let wakeup_id = wake
-            .pointer("/result/definition/wakeupId")
-            .filter(|wakeup_id| wakeup_id.is_string())
-            .cloned()
-            .ok_or_else(|| format!("wake send failed: {wake}"))?;
-        // The wait holds the only request slot once a probe sent after it is shed. A probe
-        // that wins the slot first would shed the wait instead, so the wait is started again.
+        // The holding call keeps the only request slot once a probe sent after it is shed. A
+        // probe that wins the slot first sheds the holding call instead, which then ends, so
+        // it is started again.
         let held = tokio::time::timeout(Duration::from_secs(10), async {
+            let mut held = Self::hold(&served, &holder);
             loop {
-                let holder = Arc::clone(&served);
-                let held_wakeup = wakeup_id.clone();
-                let held = tokio::spawn(async move {
-                    let _answer = holder
-                        .call(
-                            "wake_wait_until_first_fire",
-                            json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
-                        )
-                        .await;
-                });
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if held.is_finished() {
-                    continue;
-                }
-                let probe = served.call("automation_status", json!({})).await?;
+                let probe = served.call("endpoints_list", json!({})).await?;
                 if probe.pointer("/error/data/kind") == Some(&json!("overloaded")) {
                     break Ok::<_, std::io::Error>(held);
                 }
-                held.abort();
+                if held.is_finished() {
+                    held = Self::hold(&served, &holder);
+                }
+                tokio::task::yield_now().await;
             }
         })
         .await
-        .map_err(|_| "the wake wait never held the only request slot")??;
+        .map_err(|_| "the holding call never held the only request slot")??;
         Ok(Self {
             served,
             client,
-            wakeup_id,
+            holder,
             held,
             directory,
         })
     }
 
+    fn hold(
+        served: &Arc<ServedCollaborationApi>,
+        holder: &RequestSlotHolder,
+    ) -> tokio::task::JoinHandle<()> {
+        let served = Arc::clone(served);
+        let arguments = holder.arguments();
+        tokio::spawn(async move {
+            let _answer = served.call(RequestSlotHolder::TOOL, arguments).await;
+        })
+    }
+
     async fn stop(self) -> TestResult<()> {
-        self.held.abort();
+        self.holder.release().await?;
         let _ended = self.held.await;
         if let Ok(served) = Arc::try_unwrap(self.served) {
             served.stop().await?;
         }
         Ok(())
     }
-}
-
-fn wake_send_arguments() -> Value {
-    json!({
-        "operationId": OperationId::generate(),
-        "message": {
-            "target": {
-                "endpoint": {"serviceId": SERVICE_ID, "endpointId": "codex-local"},
-                "sessionId": "overload-target"
-            },
-            "content": {"kind": "humanUser", "text": "overload proof"},
-            "delivery": "auto",
-            "generationGuard": null
-        },
-        "timing": {"kind": "after", "seconds": 600},
-        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
-    })
-}
-
-fn from_json<TValue: serde::de::DeserializeOwned>(value: Value) -> serde_json::Result<TValue> {
-    serde_json::from_value(value)
-}
-
-#[tokio::test]
-async fn a_shed_board_call_is_a_typed_retryable_board_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .project_list(
-            from_json(json!({"boardId":message_board::BoardId::generate(), "page": {}}))
-                .expect("request JSON"),
-        )
-        .await;
-    let Err(BoardClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed board rejection, got {shed:?}");
-    };
-    assert_eq!(failure.kind, BoardFailureKind::Overloaded);
-    assert_eq!(failure.next_action, BoardNextAction::RetryLater);
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_board_write_is_not_an_unknown_outcome() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .project_create(
-            from_json(json!({
-                "projectId": OperationId::generate(),
-                "boardId":message_board::BoardId::generate(), "title": "Shed",
-                "requestId":message_board::RequestId::generate(), "protocolVersion":1,"actingFor":null,
-                "actor": {"kind": "human", "humanId": "owner"}
-            }))
-            .expect("request JSON"),
-        )
-        .await;
-    let Err(BoardClientError::Rejected(failure)) = shed else {
-        panic!("a shed write must not read as an unknown outcome: {shed:?}");
-    };
-    assert_eq!(failure.kind, BoardFailureKind::Overloaded);
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_wake_call_is_a_typed_retryable_wake_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let operation_id = OperationId::generate();
-    let mut arguments = wake_send_arguments();
-    arguments["operationId"] = json!(operation_id);
-    let shed = api
-        .client
-        .send_wakeup(from_json(arguments).expect("request JSON"))
-        .await;
-    let Err(WakeClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed wake rejection, got {shed:?}");
-    };
-    assert!(matches!(failure.reason, WakeFailureReason::Overloaded));
-    assert!(matches!(failure.next_action, WakeNextAction::RetryLater));
-    assert_eq!(failure.operation_id, Some(operation_id));
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_first_fire_wait_can_be_started_again() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .clone()
-        .subscribe_wakeup(WakeShowRequest {
-            wakeup_id: from_json(api.wakeup_id.clone()).expect("request JSON"),
-        })
-        .await;
-    assert!(
-        matches!(shed, Err(WakeWaitError::Unavailable { .. })),
-        "{:?}",
-        shed.err()
-    );
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_schedule_call_is_a_typed_retryable_schedule_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .read_schedule(
-            from_json(json!({"scheduleId": OperationId::generate()})).expect("request JSON"),
-        )
-        .await;
-    let Err(ScheduleClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed schedule rejection, got {shed:?}");
-    };
-    assert!(matches!(failure.kind, ScheduleFailureKind::Overloaded));
-    assert!(matches!(
-        failure.next_action,
-        ScheduleNextAction::RetryLater
-    ));
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_run_call_is_a_typed_retryable_run_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .read_run(from_json(json!({"runId": OperationId::generate()})).expect("request JSON"))
-        .await;
-    let Err(RunClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed run rejection, got {shed:?}");
-    };
-    assert!(matches!(failure.kind, RunFailureKind::Overloaded));
-    assert!(matches!(failure.next_action, RunNextAction::RetryLater));
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_instruction_call_is_a_typed_retryable_instruction_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .read_instruction(
-            from_json(json!({"instructionId": OperationId::generate()})).expect("request JSON"),
-        )
-        .await;
-    let Err(InstructionClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed instruction rejection, got {shed:?}");
-    };
-    assert!(matches!(failure.kind, InstructionFailureKind::Overloaded));
-    assert!(matches!(
-        failure.next_action,
-        InstructionNextAction::RetryLater
-    ));
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_configuration_call_is_a_typed_retryable_configuration_failure() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api.client.automation_status().await;
-    let Err(ConfigurationClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed configuration rejection, got {shed:?}");
-    };
-    assert!(matches!(
-        failure.kind,
-        ConfigurationFailureKind::AutomationUnavailable
-    ));
-    assert!(matches!(
-        failure.next_action,
-        ConfigurationNextAction::RetryLater
-    ));
-    api.stop().await.expect("API stops");
-}
-
-#[tokio::test]
-async fn a_shed_inspection_call_is_a_typed_retryable_inspection_overload() {
-    let api = SaturatedApi::start().await.expect("saturated API");
-    let shed = api
-        .client
-        .reconcile_run(from_json(json!({"runId": OperationId::generate()})).expect("request JSON"))
-        .await;
-    let Err(AutomationInspectionClientError::Rejected(failure)) = shed else {
-        panic!("expected a typed inspection rejection, got {shed:?}");
-    };
-    assert!(matches!(
-        failure.kind,
-        AutomationInspectionFailureKind::Overloaded
-    ));
-    api.stop().await.expect("API stops");
 }
 
 #[tokio::test]

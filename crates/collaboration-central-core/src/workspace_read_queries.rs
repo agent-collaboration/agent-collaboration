@@ -18,6 +18,7 @@ pub(crate) fn read_statement(
             SqlValue::Null,
         ),
         Op::ArchiveArea { area_id }
+        | Op::UpdateArea { area_id, .. }
         | Op::CreateProject { area_id, .. }
         | Op::CreateThread { area_id, .. }
         | Op::AddBacklogItem { area_id, .. } => (
@@ -32,6 +33,16 @@ pub(crate) fn read_statement(
         Op::CreateInitiative { .. } => (
             include_str!("workspace_sql/organization.sql"),
             SqlValue::Null,
+            SqlValue::Null,
+        ),
+        Op::UpdateProject { project_id, .. } => (
+            include_str!("workspace_sql/organization.sql"),
+            text(project_id),
+            SqlValue::Null,
+        ),
+        Op::UpdateIssue { issue_id, .. } => (
+            include_str!("workspace_sql/statuses.sql"),
+            text(issue_id),
             SqlValue::Null,
         ),
         Op::UpdateInitiative { initiative_id, .. } => (
@@ -66,7 +77,7 @@ pub(crate) fn read_statement(
         | Op::LeaveThread { thread_id }
         | Op::SetNotifications { thread_id, .. }
         | Op::ThreadPost { thread_id, .. }
-        | Op::ResolveThread { thread_id } => (
+        | Op::ResolveThread { thread_id, .. } => (
             include_str!("workspace_sql/threads.sql"),
             text(thread_id),
             SqlValue::Null,
@@ -142,13 +153,20 @@ pub(crate) fn read_statement(
             SqlValue::Null,
             SqlValue::Null,
         ),
-        Op::Show { .. } | Op::List { .. } | Op::Inbox { .. } | Op::CreateWorkspace { .. } => (
+        Op::Show { .. }
+        | Op::List { .. }
+        | Op::Inbox { .. }
+        | Op::CreateWorkspace { .. }
+        | Op::UpdateWorkspace { .. }
+        | Op::ArchiveWorkspace => (
             include_str!("workspace_sql/views.sql"),
             SqlValue::Null,
             SqlValue::Null,
         ),
     };
-    let second = if let Op::ThreadPost { addressees, .. } = operation {
+    let second = if let Op::ThreadPost { addressees, .. } | Op::CreateThread { addressees, .. } =
+        operation
+    {
         text(serde_json::to_string(addressees).map_err(|_| corrupt("addressees"))?)
     } else {
         second

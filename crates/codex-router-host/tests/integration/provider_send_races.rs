@@ -191,7 +191,6 @@ impl ComposedHost {
         .expect("declare test-owned global Claude executable");
         let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
-                board_session: None,
                 directory: root.path().to_owned(),
                 codex_home: root.path().to_owned(),
                 backend_socket: root.path().join("backend.sock"),

@@ -23,6 +23,7 @@ mod storage_cases;
 mod store_wire;
 mod worker_clock;
 mod workspace_central_object;
+mod workspace_link_entry;
 mod workspace_store_object;
 #[cfg(feature = "test-support")]
 pub use driver_scenarios::DriverScenarioObject;
@@ -31,18 +32,21 @@ pub use storage_cases::StorageCaseObject;
 pub use workspace_central_object::CentralObject;
 pub use workspace_store_object::WorkspaceStoreObject;
 
-/// The test-support bundle's fetch entry: it answers only the storage and workspace
-/// case routes. The public Worker has no fetch entry; the private link Worker
-/// (`--features link`) mounts its own.
-#[cfg(all(feature = "test-support", not(feature = "link")))]
+/// Carrier-facing ingress for the machine link.
+#[cfg(not(feature = "link"))]
 #[worker::event(fetch)]
 pub async fn main(
     request: worker::Request,
     env: worker::Env,
     _context: worker::Context,
 ) -> worker::Result<worker::Response> {
-    match storage_cases::route(request, &env).await? {
-        Ok(response) => Ok(response),
-        Err(_) => worker::Response::error("no such route", 404),
+    #[cfg(feature = "test-support")]
+    let request = match storage_cases::route(request, &env).await? {
+        Ok(response) => return Ok(response),
+        Err(request) => request,
+    };
+    if workspace_link_entry::organization(&request.path()).is_some() {
+        return workspace_link_entry::forward(request, &env).await;
     }
+    worker::Response::error("no such route", 404)
 }
