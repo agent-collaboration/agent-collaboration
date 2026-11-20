@@ -36,6 +36,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
+ "vendor-protocol",
 ]
 
 [[package]]
@@ -5915,6 +5916,8 @@ name = "vendor-protocol"
 version = "0.1.156"
 dependencies = [
  "agent-client-protocol-schema",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

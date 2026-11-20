@@ -12,7 +12,7 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 27] = [
+const LAYER_POLICY: [(&str, &[&str]); 28] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -66,6 +66,10 @@ const LAYER_POLICY: [(&str, &[&str]); 27] = [
     ("vendor-protocol", &[]),
     ("acp-client-runtime", &["vendor-protocol"]),
     (
+        "acp-provider-adapters",
+        &["acp-client-runtime", "vendor-protocol"],
+    ),
+    (
         "collaboration-runtime",
         &[
             "collaboration-contracts",
@@ -116,6 +120,7 @@ const LAYER_POLICY: [(&str, &[&str]); 27] = [
         "codex-router-host",
         &[
             "acp-client-runtime",
+            "acp-provider-adapters",
             "router-clock",
             "collaboration-contracts",
             "collaboration-runtime",

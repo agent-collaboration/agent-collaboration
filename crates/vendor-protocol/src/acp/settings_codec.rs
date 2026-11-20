@@ -82,25 +82,43 @@ fn observe_config_option(option: &SessionConfigOption) -> Option<ObservedSetting
     })
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AdvertisedEffort {
+    ThinkingToggle,
+    Explicit,
+    Categorized,
+    Unclassified,
+}
+
+pub(super) fn classify_advertised_effort(
+    category: Option<&SessionConfigOptionCategory>,
+    id: &str,
+) -> AdvertisedEffort {
+    // Cursor advertises both the thinking toggle and reasoning effort under thought_level.
+    match (id, category) {
+        ("thinking", _) => AdvertisedEffort::ThinkingToggle,
+        ("effort", _) => AdvertisedEffort::Explicit,
+        (_, Some(SessionConfigOptionCategory::ThoughtLevel)) => AdvertisedEffort::Categorized,
+        _ => AdvertisedEffort::Unclassified,
+    }
+}
+
 fn setting_category(
     category: Option<&SessionConfigOptionCategory>,
     id: &str,
 ) -> Option<SettingCategory> {
-    // Cursor advertises both the thinking toggle and reasoning effort under thought_level.
-    match id {
-        "thinking" => return None,
-        "effort" => return Some(SettingCategory::Effort),
-        _ => {}
-    }
-    match category {
-        Some(SessionConfigOptionCategory::Mode) => Some(SettingCategory::Mode),
-        Some(SessionConfigOptionCategory::Model) => Some(SettingCategory::Model),
-        Some(SessionConfigOptionCategory::ThoughtLevel) => Some(SettingCategory::Effort),
-        _ => match id {
-            "mode" => Some(SettingCategory::Mode),
-            "model" => Some(SettingCategory::Model),
-            "thought_level" => Some(SettingCategory::Effort),
-            _ => None,
+    match classify_advertised_effort(category, id) {
+        AdvertisedEffort::ThinkingToggle => None,
+        AdvertisedEffort::Explicit | AdvertisedEffort::Categorized => Some(SettingCategory::Effort),
+        AdvertisedEffort::Unclassified => match category {
+            Some(SessionConfigOptionCategory::Mode) => Some(SettingCategory::Mode),
+            Some(SessionConfigOptionCategory::Model) => Some(SettingCategory::Model),
+            _ => match id {
+                "mode" => Some(SettingCategory::Mode),
+                "model" => Some(SettingCategory::Model),
+                "thought_level" => Some(SettingCategory::Effort),
+                _ => None,
+            },
         },
     }
 }
