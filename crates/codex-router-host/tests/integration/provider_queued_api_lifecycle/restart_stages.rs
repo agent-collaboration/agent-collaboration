@@ -8,8 +8,15 @@ use super::lifecycle_host::{
     private_root, prompt_texts, recorded, release, until_recorded,
 };
 use codex_router_host::{ExternalProviderLaunchBinding, HostCoordinationPaths, HostInstance};
-use collaboration_protocol::{OperationId, ProviderOperationEffect, ProviderOperationStage};
+use collaboration_client::{ConversationClientError, ConversationOperationResult};
+use collaboration_protocol::{
+    ConversationCancelRequest, ConversationOperationFailureKind, ConversationOperationSettlement,
+    ConversationOperationWaitOutput, OperationId, ProviderOperationEffect, ProviderOperationStage,
+    ProviderReconciliationState,
+};
+use router_clock::{ManualClock, RuntimeClock as _};
 use std::path::{Path, PathBuf};
+use std::{sync::Arc, time::Duration};
 
 /// The endpoint the send-race steering fixture serves.
 const CLAUDE_ENDPOINT: &str = "claude-local";
@@ -18,6 +25,253 @@ const HARD_STOP_EXIT: i32 = 72;
 const CHILD_ROOT: &str = "D1_R14_CHILD_ROOT";
 const CHILD_RECEIPT: &str = "D1_R14_CHILD_RECEIPT";
 const CHILD_RECORD: &str = "D1_R14_CHILD_RECORD";
+
+/// Cursor peer that records cancels without replying to the held prompt.
+fn cancel_confirmation_peer(
+    receipt: &Path,
+    additional_behaviors: &[&str],
+) -> Result<ExternalProviderLaunchBinding, Box<dyn std::error::Error>> {
+    let mut arguments = vec![
+        node_test_fixture::fixture_program("permission-mode-agent.ts")
+            .to_string_lossy()
+            .into_owned(),
+        receipt.display().to_string(),
+        "cursor".to_owned(),
+        "no-directories".to_owned(),
+        "advertise-restore".to_owned(),
+        "plain-prompts".to_owned(),
+    ];
+    arguments.extend(
+        additional_behaviors
+            .iter()
+            .map(|behavior| (*behavior).to_owned()),
+    );
+    Ok(ExternalProviderLaunchBinding::cursor(
+        node_test_fixture::node_executable()?,
+        arguments,
+    )?)
+}
+
+/// Wait for a fixture wire observation. Nextest supplies the process bound.
+async fn wait_for_cancel_wire(receipt: &Path, field: &str) {
+    while !std::fs::read(receipt)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .is_some_and(|wire| {
+            wire.get(field)
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|records| !records.is_empty())
+        })
+    {
+        tokio::task::yield_now().await;
+    }
+}
+
+/// Ruling 11. A new Host epoch releases the hold and preserves the unknown prompt record.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unconfirmed_cancel_hold_ends_at_new_host_epoch() {
+    let staging = tempfile::tempdir().expect("fixture receipts");
+    let first_wire = staging.path().join("first-wire.json");
+    let successor_wire = staging.path().join("successor-wire.json");
+    let clock = Arc::new(ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let confirmation_budget = Duration::from_secs(30);
+    let prompt_wait = Duration::from_secs(120);
+    let first = LifecycleHost::start_on_clock(
+        HostRoot::Owned(private_root()),
+        cancel_confirmation_peer(&first_wire, &["silent-prompts", "advertise-close"])
+            .expect("first Cursor fixture binding"),
+        super::lifecycle_host::CURSOR_ENDPOINT,
+        Some(clock.clone()),
+    )
+    .await;
+    let first_epoch = first.runtime.service_epoch().clone();
+    let owner = human("cancel-restart-owner");
+    let target = first.create(&owner).await;
+    let foreground = OperationId::generate();
+    let held = first.spawn_prompt(
+        &target,
+        &owner,
+        foreground.clone(),
+        "held prompt",
+        prompt_wait,
+    );
+    wait_for_cancel_wire(&first_wire, "prompts").await;
+
+    let cancel = OperationId::generate();
+    crate::provider_conversation_submission::submit_provider_cancel(
+        &first.client,
+        ConversationCancelRequest {
+            operation_id: cancel.clone(),
+            target_operation_id: foreground.clone(),
+            target: target.clone(),
+            generation: None,
+            requested_by: owner.clone(),
+            approver: owner.clone(),
+        },
+    )
+    .await
+    .expect("cancel admitted");
+    let cancelled = first
+        .wait(&cancel)
+        .await
+        .expect("cancel settles at writer take");
+    assert!(matches!(
+        cancelled.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::CancelRequested { ref target_operation_id, .. }
+        } if target_operation_id == &foreground
+    ));
+    wait_for_cancel_wire(&first_wire, "cancels").await;
+    clock
+        .not_due_check_now(clock.monotonic_now().after(confirmation_budget))
+        .await;
+    clock
+        .advance(confirmation_budget)
+        .expect("cancel confirmation deadline");
+    let unknown = match held.await.expect("prompt task") {
+        Err(ConversationClientError::Client(error)) => conversation_failure(&error),
+        other => panic!("unconfirmed cancel must settle the prompt as unknown: {other:?}"),
+    };
+    assert_eq!(
+        unknown.kind,
+        ConversationOperationFailureKind::OutcomeUnknown
+    );
+    assert_eq!(unknown.effect, ProviderOperationEffect::Unknown);
+    assert_eq!(
+        String::from(unknown.message),
+        "the harness didn't stop the turn; close the session to recover"
+    );
+
+    let close = OperationId::generate();
+    first
+        .close(&target, &owner, close.clone())
+        .await
+        .expect("close admitted");
+    clock
+        .not_due_check_now(clock.monotonic_now().after(confirmation_budget))
+        .await;
+    clock
+        .advance(confirmation_budget)
+        .expect("close drain deadline");
+    let close_failure = first
+        .wait(&close)
+        .await
+        .expect_err("close releases locally without a turn end");
+    let close_failure = conversation_failure(&close_failure);
+    assert_eq!(close_failure.effect, ProviderOperationEffect::None);
+    assert!(
+        String::from(close_failure.message).contains("the Router released the session locally")
+    );
+    let (root, stopped) = first.stop().await;
+    stopped.expect("first Host shutdown");
+
+    let successor = LifecycleHost::start_on_clock(
+        HostRoot::Owned(root),
+        cancel_confirmation_peer(&successor_wire, &[]).expect("second Cursor fixture binding"),
+        super::lifecycle_host::CURSOR_ENDPOINT,
+        Some(clock),
+    )
+    .await;
+    let successor_epoch = successor.runtime.service_epoch().clone();
+    assert_eq!(successor.endpoint, target.endpoint);
+    assert_ne!(
+        successor_epoch, first_epoch,
+        "startup must mint a new Host service epoch"
+    );
+    let stored = successor
+        .show(&foreground)
+        .await
+        .expect("original operation survived restart");
+    assert_eq!(stored.stage, ProviderOperationStage::Terminal);
+    assert_eq!(stored.effect, ProviderOperationEffect::Unknown);
+    assert_eq!(
+        stored.reconciliation,
+        ProviderReconciliationState::Unresolved
+    );
+    let stored_binding = stored
+        .binding
+        .external_provider()
+        .expect("original provider binding");
+    assert_eq!(stored_binding.generation.service_epoch, first_epoch);
+
+    let refused = match successor
+        .prompt(
+            &target,
+            &owner,
+            OperationId::generate(),
+            "before load",
+            prompt_wait,
+        )
+        .await
+    {
+        Err(ConversationClientError::Client(error)) => conversation_failure(&error),
+        other => panic!("the session must be loaded before prompting: {other:?}"),
+    };
+    assert_eq!(
+        String::from(refused.message),
+        "session is not loaded; load it or resume it",
+        "the hold from the previous Host epoch must be gone"
+    );
+    assert_eq!(refused.effect, ProviderOperationEffect::None);
+
+    let loaded = successor
+        .load(&target, &owner)
+        .await
+        .expect("load succeeds while the earlier outcome is unknown");
+    assert!(matches!(
+        loaded,
+        ConversationOperationResult::Completed { .. }
+    ));
+    let after_load = OperationId::generate();
+    successor
+        .prompt(
+            &target,
+            &owner,
+            after_load.clone(),
+            "after load",
+            prompt_wait,
+        )
+        .await
+        .expect("a new prompt is admitted after load");
+    let completed = successor
+        .wait(&after_load)
+        .await
+        .expect("new prompt settles");
+    assert!(matches!(
+        completed.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. }
+        }
+    ));
+    let accepted_binding = completed
+        .operation
+        .binding
+        .external_provider()
+        .expect("successor provider binding");
+    assert_eq!(accepted_binding.generation.service_epoch, successor_epoch);
+    assert_ne!(accepted_binding.generation, stored_binding.generation);
+    let wire: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&successor_wire).expect("successor wire receipt"))
+            .expect("successor wire receipt is JSON");
+    assert_eq!(
+        wire["prompts"],
+        serde_json::json!([target.session_id]),
+        "the second Host sends exactly one prompt, after load"
+    );
+    let retained = successor
+        .show(&foreground)
+        .await
+        .expect("original record remains readable after the successor prompt");
+    assert_eq!(retained.stage, ProviderOperationStage::Terminal);
+    assert_eq!(retained.effect, ProviderOperationEffect::Unknown);
+    assert_eq!(
+        retained.reconciliation,
+        ProviderReconciliationState::Unresolved
+    );
+    assert_eq!(retained.binding, stored.binding);
+    let (_root, stopped) = successor.stop().await;
+    stopped.expect("second Host shutdown");
+}
 
 /// The Claude binding for the send-race steering fixture with `behaviours`.
 #[expect(

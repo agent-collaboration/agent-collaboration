@@ -155,7 +155,7 @@ async fn unconfirmed_cancel_keeps_a_fence_until_the_exact_late_prompt_end_is_rec
 }
 
 #[tokio::test]
-async fn unconfirmed_cancel_close_and_restart_require_deliberate_operation_reconcile() {
+async fn unconfirmed_cancel_same_generation_store_reopen_requires_reconcile() {
     let rig = RestoreRig::new();
     rig.seed_session().await;
     let host = rig
