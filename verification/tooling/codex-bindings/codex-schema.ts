@@ -415,7 +415,7 @@ function references(shape: ValueShape): readonly string[] {
   }
 }
 
-function definitionReferences(definition: Definition): readonly string[] {
+export function definitionReferences(definition: Definition): readonly string[] {
   switch (definition.kind) {
     case "object":
       return definition.fields.flatMap((field) => references(field.shape));

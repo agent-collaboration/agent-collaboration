@@ -5,16 +5,22 @@ error[E0277]: the trait bound `ModelListResponse: CodexRequest` is not satisfied
   |                    ^^^^^^^^^^^^^^^^^ the trait `CodexRequest` is not implemented for `ModelListResponse`
   |
 help: the following other types implement trait `CodexRequest`
- --> src/codex/generated.rs
+ --> src/codex/generated/pair_model_list.rs
   |
   | impl super::CodexRequest for ModelListParams {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ModelListParams`
-...
+  |
+ ::: src/codex/generated/pair_thread_read.rs
+  |
   | impl super::CodexRequest for ThreadReadParams {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ThreadReadParams`
-...
+  |
+ ::: src/codex/generated/pair_thread_resume.rs
+  |
   | impl super::CodexRequest for ThreadResumeParams {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ThreadResumeParams`
-...
+  |
+ ::: src/codex/generated/pair_turn_start.rs
+  |
   | impl super::CodexRequest for TurnStartParams {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `TurnStartParams`
