@@ -528,6 +528,14 @@ async fn connection_descriptors_reach_initial_native_catalog_and_cursor_context_
         rows[1]["defaultReasoningEffort"], "high",
         "vendor descriptor default differs from live low"
     );
+    assert_eq!(
+        rows[1]["supportedReasoningEfforts"],
+        json!([
+            {"reasoningEffort":"low","description":"Low"},
+            {"reasoningEffort":"high","description":"High"}
+        ]),
+        "the native model list presents the connection descriptor's choices and labels"
+    );
     assert_eq!(created["result"]["reasoningEffort"], "low");
     for id in [4, 5] {
         let turn = rpc(&mut client, id, "turn/start", json!({"threadId":thread,"collaborationMode":{"mode":"default","settings":{"model":"new","reasoning_effort":"high","developer_instructions":null}},"input":[{"type":"text","text":"ordinary"}]})).await?;

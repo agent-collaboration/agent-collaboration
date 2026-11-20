@@ -2,7 +2,7 @@
 use super::{DependencyKind, NonDevDependencyGraph};
 use std::collections::{BTreeMap, BTreeSet};
 
-const PURE_CRATES: [(&str, &[&str]); 7] = [
+const PURE_CRATES: [(&str, &[&str]); 8] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -25,6 +25,7 @@ const PURE_CRATES: [(&str, &[&str]); 7] = [
         &["central-storage", "state-machine-core"],
     ),
     ("workspace-rules", &["workspace-model", "central-storage"]),
+    ("vendor-protocol", &[]),
 ];
 const PROXY_CRATES: &[&str] = &[
     "codex-router-proxy",

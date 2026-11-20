@@ -1,10 +1,10 @@
-//! Decode ACP session options once into a provider-neutral settings catalog.
+//! Build and refresh the runtime settings catalog from provider observations.
 
-use agent_client_protocol::schema::v1::{
-    NewSessionResponse, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
-    SessionConfigSelectOptions, SessionUpdate,
-};
+use agent_client_protocol::schema::v1::{NewSessionResponse, SessionConfigOption, SessionUpdate};
 use provider_session_machines::ProviderSettingKind;
+use vendor_protocol::acp::settings_codec::{
+    ObservedSetting, ObservedSettingValue, SettingCategory, observe_config_options,
+};
 
 use crate::{
     ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice, ProviderSettingsCatalog,
@@ -36,13 +36,7 @@ pub(crate) fn catalog_from_session_response(
         current_mode,
         mode_observation: crate::ProviderModeObservation::FromCatalogue,
         modes,
-        config_options: response
-            .config_options
-            .as_deref()
-            .unwrap_or_default()
-            .iter()
-            .filter_map(project_config_option)
-            .collect(),
+        config_options: catalog_config_options(response.config_options.as_deref()),
     };
     apply_model_metadata(&mut catalog, behavior, response.meta.as_ref());
     catalog
@@ -67,7 +61,7 @@ pub(crate) fn replace_catalog_config_options(
     catalog: &mut ProviderSettingsCatalog,
     options: &[SessionConfigOption],
 ) {
-    catalog.config_options = options.iter().filter_map(project_config_option).collect();
+    catalog.config_options = catalog_config_options(Some(options));
     if catalog
         .config_option(ProviderSettingKind::Mode)
         .is_some_and(|option| matches!(option.current_value, ProviderConfigValue::Select(_)))
@@ -111,78 +105,42 @@ pub(crate) fn apply_settings_update(
     }
 }
 
-fn project_config_option(option: &SessionConfigOption) -> Option<ProviderConfigOption> {
-    let (current_value, choices) = match &option.kind {
-        SessionConfigKind::Select(select) => {
-            let choices = match &select.options {
-                SessionConfigSelectOptions::Ungrouped(options) => options
-                    .iter()
-                    .map(|choice| ProviderSettingChoice {
-                        value: choice.value.0.to_string(),
-                        label: choice.name.clone(),
-                    })
-                    .collect(),
-                SessionConfigSelectOptions::Grouped(groups) => groups
-                    .iter()
-                    .flat_map(|group| &group.options)
-                    .map(|choice| ProviderSettingChoice {
-                        value: choice.value.0.to_string(),
-                        label: choice.name.clone(),
-                    })
-                    .collect(),
-                _ => Vec::new(),
-            };
-            (
-                ProviderConfigValue::Select(select.current_value.0.to_string()),
-                choices,
-            )
-        }
-        SessionConfigKind::Boolean(boolean) => (
-            ProviderConfigValue::Boolean(boolean.current_value),
-            Vec::new(),
-        ),
-        _ => return None,
-    };
-    let id = option.id.0.to_string();
-    Some(ProviderConfigOption {
-        category: setting_category(option.category.as_ref(), &id),
-        id,
-        name: option.name.clone(),
-        current_value,
-        choices,
-    })
+fn catalog_config_options(options: Option<&[SessionConfigOption]>) -> Vec<ProviderConfigOption> {
+    observe_config_options(options)
+        .unwrap_or_default()
+        .into_iter()
+        .map(catalog_config_option)
+        .collect()
 }
 
-fn setting_category(
-    category: Option<&SessionConfigOptionCategory>,
-    id: &str,
-) -> Option<ProviderSettingKind> {
-    // Cursor gives both toggled thinking and reasoning effort the broad
-    // thought_level category. Their advertised identities remain distinct.
-    if id == "thinking" {
-        return None;
-    }
-    if id == "effort" {
-        return Some(ProviderSettingKind::Effort);
-    }
-    match category {
-        Some(SessionConfigOptionCategory::Mode) => return Some(ProviderSettingKind::Mode),
-        Some(SessionConfigOptionCategory::Model) => return Some(ProviderSettingKind::Model),
-        Some(SessionConfigOptionCategory::ThoughtLevel) => {
-            return Some(ProviderSettingKind::Effort);
+fn catalog_config_option(option: ObservedSetting<'_>) -> ProviderConfigOption {
+    let (current_value, choices) = match option.value {
+        ObservedSettingValue::Select { current, offered } => (
+            ProviderConfigValue::Select(current.0.to_string()),
+            offered
+                .unwrap_or_default()
+                .into_iter()
+                .map(|choice| ProviderSettingChoice {
+                    value: choice.value.0.to_string(),
+                    label: choice.name.clone(),
+                })
+                .collect(),
+        ),
+        ObservedSettingValue::Boolean(current) => {
+            (ProviderConfigValue::Boolean(current), Vec::new())
         }
-        Some(SessionConfigOptionCategory::ModelConfig)
-        | Some(SessionConfigOptionCategory::Other(_))
-        | None => {}
-        _ => {}
-    }
-    match id {
-        "mode" => Some(ProviderSettingKind::Mode),
-        "model" => Some(ProviderSettingKind::Model),
-        "effort" | "thought_level" => Some(ProviderSettingKind::Effort),
-        // Cursor tags its fast option model_config (D1 Change 3).
-        "fast" => Some(ProviderSettingKind::Fast),
-        _ => None,
+    };
+    ProviderConfigOption {
+        category: option.category.map(|category| match category {
+            SettingCategory::Mode => ProviderSettingKind::Mode,
+            SettingCategory::Model => ProviderSettingKind::Model,
+            SettingCategory::Effort => ProviderSettingKind::Effort,
+            SettingCategory::Fast => ProviderSettingKind::Fast,
+        }),
+        id: option.id.0.to_string(),
+        name: option.name.to_owned(),
+        current_value,
+        choices,
     }
 }
 

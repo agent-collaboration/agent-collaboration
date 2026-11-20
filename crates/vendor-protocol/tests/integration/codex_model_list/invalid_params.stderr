@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `ModelListResponse: CodexRequest` is not satisfied
+ --> tests/integration/codex_model_list/invalid_params.rs:4:20
+  |
+4 |     let _method = <ModelListResponse as CodexRequest>::METHOD;
+  |                    ^^^^^^^^^^^^^^^^^ the trait `CodexRequest` is not implemented for `ModelListResponse`
+  |
+help: the trait `CodexRequest` is implemented for `ModelListParams`
+ --> src/codex/generated.rs
+  |
+  | impl super::CodexRequest for ModelListParams {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

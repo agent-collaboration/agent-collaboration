@@ -15,6 +15,7 @@ members = [
     "crates/message-board",
     "crates/fleet-identity-protocol",
     "crates/session-event-model",
+    "crates/vendor-protocol",
     "crates/acp-client-runtime",
     "crates/acp-provider-adapters",
     "crates/agent-automation",
@@ -80,6 +81,8 @@ runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collab
 aes-gcm = { version = "=0.11.1", features = ["zeroize"] }
 apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
 agent-client-protocol = "=2.2.0"
+agent-client-protocol-schema = "=1.9.1"
+vendor-protocol = { path = "crates/vendor-protocol", version = "0.1.156" }
 croner = "=4.0.0"
 chrono-tz = "0.10.4"
 fs2 = "=0.4.3"
