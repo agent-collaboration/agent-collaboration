@@ -256,7 +256,7 @@ async fn deliver_then_kill(
     let listener = UnixListener::bind(root.path().join("ready.sock")).expect("readiness socket");
     let log = std::fs::File::create(root.path().join("child.log")).expect("child log");
     let mut child = tokio::process::Command::new(std::env::current_exe().expect("test binary"))
-        .args(["--exact", &child_selector(), "--nocapture"])
+        .args(["--exact", &child_selector(), "--ignored", "--nocapture"])
         .env(CHILD_ROOT, root.path())
         .env(CHILD_STAGE, loss_point.name())
         .stdin(Stdio::null())
@@ -436,6 +436,7 @@ async fn a_direct_message_whose_process_dies_after_settlement_keeps_its_receipt_
 }
 
 #[tokio::test]
+#[ignore = "the process-loss child; its parent re-executes it with --ignored"]
 async fn direct_message_process_loss_child_entry() {
     let (Some(root), Some(stage)) = (
         std::env::var_os(CHILD_ROOT).map(PathBuf::from),

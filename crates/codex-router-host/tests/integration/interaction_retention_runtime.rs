@@ -84,12 +84,15 @@ async fn stored(directory: &Path, push_id: &PushId) -> TestResult<bool> {
 async fn host_trims_a_settled_push_at_its_cutoff_on_its_clock_and_keeps_current_ones() -> TestResult
 {
     // Arrange: the Host's clock starts at 2026-11-04T00:00:00Z (host_clock_control). One push
-    // reaches its two-calendar-month cutoff one second later; the other is current.
+    // reaches its two-calendar-month cutoff one second later; the other is current. An
+    // unreadable automation store sits beside them: retention must not depend on it, as it did
+    // when the automation worker owned this trimming.
     let root = std::path::PathBuf::from("/tmp").join(format!(
         "interaction-retention-{}",
         OperationId::generate().as_str()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+    std::fs::write(root.join("automation.sqlite"), b"not a database")?;
     let aging = seed_delivered(&root, direct_message("2026-09-04T00:00:01Z")?).await?;
     let current = seed_delivered(&root, direct_message("2026-11-03T00:00:00Z")?).await?;
     let clock_listener = crate::host_clock_control::prepare(&root)?;
