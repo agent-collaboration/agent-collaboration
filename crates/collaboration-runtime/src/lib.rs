@@ -1,6 +1,4 @@
 //! Resource-backed collaboration execution, provider adapters, durable owners and workers.
-mod interaction_retention_worker;
-pub use interaction_retention_worker::InteractionRetentionWorker;
 mod endpoint_directory;
 pub use endpoint_directory::{EndpointDirectory, EndpointInventoryReader, EndpointSnapshot};
 mod native_channel_relay;
@@ -10,7 +8,6 @@ pub use native_channel_relay::{
 mod native_generation_gate;
 pub use native_generation_gate::{NativeAdmission, NativeGenerationGate};
 mod native_relay_listener;
-mod pending_snapshot_interactions;
 mod private_socket_listener;
 pub use native_relay_listener::NativeRelayListener;
 pub use private_socket_listener::{OwnerOnlySocket, SocketCleanup};
@@ -37,22 +34,15 @@ mod app_server_token_usage;
 mod native_session_notifications;
 mod native_user_receipts;
 pub use app_server_item_translation::{
-    ApprovalPresentation, ApprovalReply, HistoricalTurn, InteractionDisplayContext,
-    InteractionReplyError, QuestionPresentation, QuestionReply, TranslatedSessionItem,
-    group_historical_turns, map_approval_reply, map_question_form_reply,
-    map_request_user_input_reply, render_historical_turn, translate_approval_request,
-    translate_question_request, translate_session_item,
+    HistoricalTurn, TranslatedSessionItem, group_historical_turns, render_historical_turn,
+    translate_session_item,
 };
-#[cfg(test)]
-#[path = "app_server_interaction_translation_tests.rs"]
-mod app_server_interaction_translation_tests;
 #[cfg(test)]
 #[path = "app_server_item_translation_test.rs"]
 mod app_server_item_translation_tests;
 mod native_skill_reference;
 mod provider_acp_content_translation;
 mod provider_acp_event_projection;
-mod provider_acp_interaction;
 mod provider_acp_session_route;
 mod router_session_app_server;
 pub use app_server_model_catalog::{
@@ -74,24 +64,13 @@ pub use service_identity_storage::{
 mod manifest_publication;
 pub use manifest_publication::ManifestPublication;
 mod native_control_backend;
-mod session_display_name_cache;
 pub use native_control_backend::NativeControlBackend;
-pub use session_display_name_cache::SessionDisplayNameCache;
 mod codex_app_server_delivery_route;
 mod codex_queue_reconciliation;
-mod interaction_broker;
 mod message_effect_state;
 pub use message_effect_state::classify_native_rejection;
 mod native_message_dispatch;
-mod native_recorded_policy;
 pub use codex_app_server_delivery_route::CodexAppServerDeliveryRoute;
-pub use interaction_broker::{
-    ApprovalDecisionError, InteractionHistoryError, InteractionHistoryRecord,
-    InteractionHistoryState, QuestionHistoryState, QuestionResponse, RefusedApprovalOption,
-    RefusedTypedApproval, ServiceInteractionBroker, TypedApprovalLegacyContext,
-    TypedApprovalResolution, TypedApprovalSelection, TypedInteractionDecision,
-    TypedInteractionDecisionOutcome,
-};
 mod acp_channel_listener;
 pub use acp_channel_listener::AcpChannelListener;
 mod open_scratch_scopes;
@@ -110,17 +89,6 @@ pub use wake_driven_worker_loop::{BatchOutcome, WakeDrivenWorkerLoop, WakeSource
 pub use wake_driven_worker_observation::WorkerObservation;
 #[cfg(any(test, feature = "test-support"))]
 pub use wake_driven_worker_observation::{LoopSnapshot, SleepGate};
-pub mod received_mail_push;
-pub use received_mail_push::received_mail_push;
-mod outgoing_mail_message;
-pub use outgoing_mail_message::outgoing_mail_message;
-pub mod mail_push_preparation;
-pub use mail_push_preparation::MailPushPreparation;
-mod mail_delivery_projection;
-pub use mail_delivery_projection::{
-    project_cancelled_after_delivery, project_mail_cancel_outcome, project_mail_outcome,
-    project_received_mail,
-};
 
 /// Test-only hooks for causal runtime steps observed through the application.
 #[cfg(feature = "test-support")]

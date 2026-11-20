@@ -60,10 +60,7 @@ impl SessionOperations {
         Ok(collaboration_protocol::InstallationIdentity {
             service_id: self.identity.service_id().clone(),
             machine_label: self.identity.machine_identity().machine_label().clone(),
-            peer_id: peer
-                .to_string()
-                .try_into()
-                .map_err(|_| InstallationIdentityUnavailable::Identity)?,
+            peer_id: peer,
         })
     }
     pub async fn codex_session_list(

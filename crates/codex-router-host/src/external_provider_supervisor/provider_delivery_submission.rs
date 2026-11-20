@@ -31,11 +31,7 @@ impl ExternalProviderSupervisor {
             .runtime_binding(&target.endpoint, &operation_id, Some(target.clone()))
             .map_err(Box::new)?;
         let approval_context = crate::ExternalProviderApprovalContext {
-            requester: request.requested_by,
-            approver: request.approver,
-            target: target.clone(),
             operation_id: operation_id.clone(),
-            binding_generation: binding.generation.clone(),
             binding_retirement: runtime.retirement(),
         };
         let prepared = self

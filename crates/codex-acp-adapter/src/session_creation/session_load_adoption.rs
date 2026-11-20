@@ -1,6 +1,6 @@
 //! Attach held or persisted Codex sessions while preserving the original binding evidence.
 use super::{
-    AcpSchemaCatalog, AcpSessionBinding, CodexGeneration, McpConfiguration, NativeOperation, Path,
+    AcpSchemaCatalog, AcpSessionBinding, CodexGeneration, McpConfiguration, NativeOperation,
     RouterSessionProfile, SessionSetupError, Value, json, map_native_failure, normalized_directory,
 };
 
@@ -73,12 +73,12 @@ impl AcpSessionBinding {
         if !self.accepts_configuration(generation, session_id, &configuration) {
             return Err(SessionSetupError::ConfigurationMismatch);
         }
-        let profile = match self.access_route.as_ref() {
-            Some(route) => Some(
+        let profile = match self.created_profile.as_ref() {
+            Some(created) => Some(
                 RouterSessionProfile::for_session(
-                    route.access,
+                    created.access,
                     &requested_cwd,
-                    Path::new(&route.scratch_path),
+                    created.scratch_lease.scope_folder(),
                 )
                 .await?,
             ),

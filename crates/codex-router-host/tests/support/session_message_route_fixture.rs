@@ -1,5 +1,9 @@
-//! ACP, peer, subscription, and approval fixtures for Host composition proof.
-use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessageContent};
+//! ACP and peer fixtures for the Host delivery composition.
+use collaboration_client::CollaborationClient;
+use collaboration_contracts::{
+    AttemptEvidenceSink, DeliveryFuture, DeliveryPrecondition, LoadPolicy, SessionMessageDelivery,
+    layer_zero::{DeliveryRequest, PreparedPush},
+};
 use collaboration_protocol::{
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationSettlement,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, EndpointRef,
@@ -9,6 +13,95 @@ use collaboration_protocol::{
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path};
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "Unexpected native fixture frames and setup failures fail the route proof immediately."
+)]
+pub(super) async fn native_delivery_fixture(
+    root: &Path,
+) -> (
+    std::sync::Arc<codex_native_integration::NativeSchemaExport>,
+    tokio::task::JoinHandle<()>,
+) {
+    use futures_util::{SinkExt as _, StreamExt as _};
+    use tokio_tungstenite::tungstenite::Message;
+    let mut definitions = serde_json::Map::new();
+    for name in [
+        "ThreadRead",
+        "ThreadList",
+        "ThreadResume",
+        "ThreadStart",
+        "ThreadLoadedList",
+        "TurnStart",
+        "TurnSteer",
+        "TurnInterrupt",
+    ] {
+        definitions.insert(format!("{name}Params"), json!({"type":"object"}));
+        definitions.insert(format!("{name}Response"), json!({"type":"object"}));
+    }
+    let schema = json!({"definitions":{"v2":definitions}});
+    let generator = root.join("schema-generator");
+    std::fs::write(
+        &generator,
+        format!("#!/bin/sh\ncat > \"$5/codex_app_server_protocol.schemas.json\" <<'SCHEMA'\n{schema}\nSCHEMA\n"),
+    ).expect("native schema generator");
+    std::fs::set_permissions(&generator, std::fs::Permissions::from_mode(0o700))
+        .expect("native schema generator permissions");
+    let identity = codex_native_integration::executable_identity(&generator)
+        .await
+        .expect("generator identity");
+    let export = codex_native_integration::NativeSchemaExport::generate(
+        &identity,
+        &root.join("native-schema"),
+    )
+    .await
+    .expect("native schema export");
+    let listener =
+        tokio::net::UnixListener::bind(root.join("backend.sock")).expect("native socket");
+    let backend = tokio::spawn(async move {
+        let mut connections = tokio::task::JoinSet::new();
+        loop {
+            tokio::select! {
+                result = connections.join_next(), if !connections.is_empty() => {
+                    result.expect("connection joined").expect("native fixture connection");
+                }
+                accepted = listener.accept() => {
+                    let (stream, _) = accepted.expect("accept native connection");
+                    connections.spawn(async move {
+                        let mut socket = tokio_tungstenite::accept_async(stream)
+                            .await.expect("native websocket");
+                        while let Some(Ok(Message::Text(text))) = socket.next().await {
+                            let request: serde_json::Value = serde_json::from_str(&text)
+                                .expect("native request");
+                            let Some(id) = request.get("id") else { continue };
+                            let result = match request["method"].as_str() {
+                                Some("initialize") => json!({}),
+                                Some("thread/list" | "thread/loaded/list") => json!({"data":[],"nextCursor":null}),
+                                Some("thread/read") => json!({
+                                    "thread":{"id":request["params"]["threadId"],"cwd":"/work","status":{"type":if request["params"]["threadId"] == "unloaded" { "notLoaded" } else { "idle" }}}
+                                }),
+                                Some("turn/start") => {
+                                    assert_ne!(request["params"]["threadId"], "unloaded");
+                                    assert!(request["params"]["input"][0]["text"]
+                                        .as_str().expect("delivery line").contains("routed message"));
+                                    json!({"turn":{"id":"delivered-turn"}})
+                                }
+                                Some("thread/resume") => panic!("delivery must not resume a Codex thread"),
+                                _ => json!({}),
+                            };
+                            socket.send(Message::Text(json!({"id":id,"result":result})
+                                .to_string().into())).await.expect("native response");
+                        }
+                    });
+                }
+            }
+        }
+    });
+    (std::sync::Arc::new(export), backend)
+}
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn provider_fixture(path: &Path) {
@@ -20,92 +113,79 @@ pub(super) fn provider_fixture(path: &Path) {
     .expect("provider fixture");
 }
 
-#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-pub(super) fn message(target: SessionRef) -> MessageSendRequest {
-    MessageSendRequest {
-        item_id: None,
-        target,
-        message: PublicMessageContent::HumanUser {
-            text: MessageText::try_from("routed message".to_owned()).expect("message"),
-        },
-        delivery: MessageDelivery::Auto,
-        generation_guard: None,
+#[derive(Default)]
+struct RouteEvidence(
+    tokio::sync::Mutex<
+        Vec<
+            agent_automation::RouteEffectEvidence<
+                SessionRef,
+                collaboration_protocol::CodexGeneration,
+            >,
+        >,
+    >,
+);
+
+impl AttemptEvidenceSink for RouteEvidence {
+    fn record(
+        &self,
+        evidence: agent_automation::RouteEffectEvidence<
+            SessionRef,
+            collaboration_protocol::CodexGeneration,
+        >,
+    ) -> DeliveryFuture<'_, ()> {
+        Box::pin(async {
+            self.0.lock().await.push(evidence);
+            Ok(())
+        })
     }
 }
 
-#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
-pub(super) async fn wait_for_prompt_text(path: &Path, text: &str) -> String {
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            if let Some(observed_text) = std::fs::read_to_string(path).ok().and_then(|log| {
-                log.lines()
-                    .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-                    .find(|entry| provider_prompt_contains(entry, text))
-                    .and_then(|entry| {
-                        entry
-                            .get("params")?
-                            .get("prompt")?
-                            .as_array()?
-                            .iter()
-                            .find_map(|part| {
-                                part.get("text")?
-                                    .as_str()
-                                    .filter(|value| value.contains(text))
-                                    .map(str::to_owned)
-                            })
-                    })
-            }) {
-                break observed_text;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| {
-        panic!(
-            "provider prompt log deadline; log: {}",
-            std::fs::read_to_string(path).unwrap_or_default()
-        )
-    })
-}
-
-fn provider_prompt_contains(entry: &serde_json::Value, text: &str) -> bool {
-    entry.get("method").and_then(serde_json::Value::as_str) == Some("session/prompt")
-        && entry
-            .get("params")
-            .and_then(|params| params.get("prompt"))
-            .and_then(serde_json::Value::as_array)
-            .is_some_and(|parts| {
-                parts.iter().any(|part| {
-                    part.get("text")
-                        .and_then(serde_json::Value::as_str)
-                        .is_some_and(|value| value.contains(text))
-                })
-            })
-}
-
-#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
-pub(super) async fn wait_for_completed_provider_prompts(path: &Path, expected_count: usize) {
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            let completed_count = std::fs::read_to_string(path)
-                .unwrap_or_default()
-                .lines()
-                .filter(|line| line.contains("fixturePromptCompleted"))
-                .count();
-            if completed_count >= expected_count {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| {
-        panic!(
-            "provider fixture completion deadline; log: {}",
-            std::fs::read_to_string(path).unwrap_or_default()
-        )
-    });
+#[expect(clippy::expect_used, reason = "Fail malformed fixed route fixtures.")]
+pub(crate) async fn deliver(
+    runtime: &codex_router_host::CollaborationRuntime,
+    target: SessionRef,
+) -> collaboration_protocol::DeliveryReceipt {
+    let evidence = RouteEvidence::default();
+    let item = uuid::Uuid::now_v7().to_string();
+    let line = format!(
+        "✉️ sender · \"routed message\" · router://{}/push/{item}",
+        String::from(target.endpoint.service_id.clone()),
+    );
+    let load_policy = if String::from(target.endpoint.endpoint_id.clone()) == "codex-local" {
+        LoadPolicy::MayLoad
+    } else {
+        LoadPolicy::LoadedOnly
+    };
+    let request = DeliveryRequest {
+        payload: PreparedPush {
+            push_id: item.clone().try_into().expect("push id"),
+            line: MessageText::try_from(line).expect("message"),
+            load_policy,
+        },
+        target,
+        mode: MessageDelivery::Auto,
+        precondition: DeliveryPrecondition::Unpinned,
+        correlation: item.try_into().expect("delivery correlation"),
+        attempt: agent_automation::AttemptId::generate(),
+    };
+    let routed = runtime
+        .session_delivery()
+        .expect("Host composition")
+        .deliver(request, &evidence)
+        .await
+        .expect("router receipt")
+        .into_receipt();
+    if matches!(
+        routed.outcome,
+        collaboration_protocol::DeliveryOutcome::Started
+            | collaboration_protocol::DeliveryOutcome::PeerMessageWritten
+    ) {
+        assert!(
+            !evidence.0.lock().await.is_empty(),
+            "chosen carrier recorded attempt evidence"
+        );
+    }
+    routed
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
@@ -267,10 +347,4 @@ pub(super) async fn load_provider_target(
 }
 
 use crate::provider_conversation_submission;
-use provider_conversation_submission::{
-    spawn_provider_prompt, submit_provider_create, submit_provider_load,
-};
-
-#[path = "session_message_approval_fixture.rs"]
-mod approval_fixture;
-pub(super) use approval_fixture::prompt_and_approve_from_peer_provider;
+use provider_conversation_submission::{submit_provider_create, submit_provider_load};

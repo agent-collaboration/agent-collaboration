@@ -131,7 +131,6 @@ pub struct ProviderSessionInventory {
     provider_operations:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
     provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
-    display_names: collaboration_runtime::SessionDisplayNameCache,
     claude_code_sessions:
         Option<std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>>,
     claude_background_jobs:
@@ -145,7 +144,6 @@ impl ProviderSessionInventory {
             std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,
         >,
         provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
-        display_names: collaboration_runtime::SessionDisplayNameCache,
         claude_code_sessions: Option<
             std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>,
         >,
@@ -158,7 +156,6 @@ impl ProviderSessionInventory {
             directory,
             provider_operations,
             provider_session_hub,
-            display_names,
             claude_code_sessions,
             claude_background_jobs,
         }
@@ -292,11 +289,6 @@ impl ProviderSessionInventory {
                     })
                 {
                     continue;
-                }
-                if let Some(name) = name {
-                    self.display_names.remember(summary.target().clone(), name);
-                } else {
-                    self.display_names.forget(summary.target().clone());
                 }
                 rows.push(ProviderInventoryRow {
                     sort_time_ms,

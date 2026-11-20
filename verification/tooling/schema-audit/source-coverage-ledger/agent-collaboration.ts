@@ -34,11 +34,6 @@ export const section: LedgerSection = {
       note: "addresses list: clap AddressArguments L17 / AddressCommand L22; calls client.list_addresses L91 and prints the typed snapshot through result_envelope(json!(snapshot)) L102 (plain serialization of one type) or text L105-L125. No hand-built or hand-converted message shape.",
     },
     {
-      file: "crates/agent-collaboration/src/approval_commands.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "approval list/decide: --allow/--allow-for-session/--deny flags to ApprovalDecision L128-L136; hand error envelopes {kind:error,error:OperationFailure} L219, L237; parse_actor L249 decodes typed Identity, or a bare SessionRef wrapped as Identity::Session when no kind field. Typed approval records serialized with to_value L179-L196; OperationFailureKind to exit codes L62.",
-    },
-    {
       file: "crates/agent-collaboration/src/automation_argument_feedback.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "parse_arguments: clap failure under --json becomes a hand-built invalidField error envelope with json! L18-L28 (kind, operationId, error{kind,stage,message,field,constraint,effects,nextAction}).",
@@ -136,8 +131,5 @@ export const section: LedgerSection = {
       },
     },
     cliToolCall(`${AC}address_book_commands.rs`, 91, "list_addresses", "addresses_list"),
-    cliToolCall(`${AC}approval_commands.rs`, 181, "decide_approval", "approval_decide"),
-    cliToolCall(`${AC}approval_commands.rs`, 187, "list_approvals_with_options", "approval_list"),
-    cliToolCall(`${AC}approval_commands.rs`, 193, "list_pending_approvals", "approval_list"),
   ],
 };

@@ -1,10 +1,8 @@
 //! The Host's record of which scratch scopes have a Codex session open.
 //!
-//! A session binding that carries a Router access route holds a
-//! [`ScratchScopeLease`] on its scratch folder for as long as it lives: it is
-//! taken when the binding is created, loaded or resumed and released when the
-//! binding is dropped. The Host's scratch sweep skips every folder with an
-//! open lease. The register is the Host's; this crate only reports to it.
+//! A binding created by Router holds a [`ScratchScopeLease`] until it drops.
+//! The Host's scratch sweep skips every folder with an open lease. The
+//! register is the Host's; this crate only reports to it.
 
 use std::{
     path::{Path, PathBuf},
@@ -29,6 +27,10 @@ pub struct ScratchScopeLease {
 }
 
 impl ScratchScopeLease {
+    pub(crate) fn scope_folder(&self) -> &Path {
+        &self.scope_folder
+    }
+
     #[must_use]
     pub fn open(register: &Arc<dyn ScratchScopeRegister>, scope_folder: &Path) -> Self {
         register.opened(scope_folder);

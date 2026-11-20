@@ -20,10 +20,6 @@ mod proof_context {
         }
     }
 }
-use collaboration_client::protocol::{
-    DeliveryClientReceipt, MessageContent, MessageDelivery, NativeSendReceipt,
-    SessionMessageSendParams,
-};
 use proof_context::{ProofContext, ProofResult};
 use serde_json::{Value, json};
 
@@ -43,36 +39,17 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
         .max_connections(1)
         .connect_with(options)
         .await?;
-    let receipt = proof
-        .client
-        .send_agent_message(SessionMessageSendParams {
-            item_id: None,
-            target: target.clone(),
-            generation_guard: Some(proof.generation.clone()),
-            message: MessageContent::Agent {
-                sender: target.clone(),
-                text: "Output exactly HISTORY_READY. Do not call tools or other agents."
-                    .to_owned()
-                    .try_into()?,
-            },
-            mode: MessageDelivery::Auto,
-        })
-        .await?;
-    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
-        return Err("Local history probe returned remote sender custody".into());
-    };
-    let receipt = receipt.receipt;
-    let turn_id = match &receipt.client {
-        Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
-            acceptance:
-                collaboration_client::protocol::NativeSendAcceptance::NativeInputAccepted {
-                    turn_id,
-                    ..
-                },
-            ..
-        })) => String::from(turn_id.clone()),
-        _ => return Err("Fresh history probe did not receive an exact native turn".into()),
-    };
+    let receipt = proof.native.request_validated(
+        &proof.schemas,
+        codex_native_integration::NativeOperation::StartTurn,
+        json!({"threadId":thread_id,"input":[
+            {"type":"text","text":"Output exactly HISTORY_READY. Do not call tools or other agents."}
+        ]}),
+    ).await?;
+    let turn_id = receipt["turn"]["id"]
+        .as_str()
+        .ok_or("exact native turn missing")?
+        .to_owned();
     proof.record("historyProbeInputAccepted", json!(receipt))?;
     let started = tokio::time::Instant::now();
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));

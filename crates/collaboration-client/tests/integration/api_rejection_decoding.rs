@@ -1,8 +1,5 @@
-//! Published rejections and refused deliveries keep their typed evidence through the client.
-use collaboration_client::protocol::{
-    DeliveryNextAction, DeliveryOutcome, DeliveryRejectionReason, OperationEffect,
-    SessionMessageSendParams,
-};
+//! Published rejections keep their typed evidence through the client.
+use collaboration_client::protocol::OperationEffect;
 use collaboration_client::{ClientError, CollaborationClient, operation_failure_from_client_error};
 use serde_json::{Value, json};
 
@@ -30,52 +27,6 @@ async fn client_preserves_valid_cursor_errors() {
             "{tool}"
         );
     }
-}
-
-#[tokio::test]
-async fn message_result_preserves_native_rejection_reason_action_and_code() {
-    let (api, mut calls) = ScriptedApi::start().unwrap();
-    let fixture = tokio::spawn(async move {
-        let request = calls.next().await.unwrap();
-        assert_eq!(request.tool, "message_send");
-        let push_id = "01900000-0000-7000-8000-000000000003";
-        let target = request.arguments["target"].clone();
-        request.fail(json!({
-            "mcpResult":"error",
-            "kind":"rejected",
-            "message":"Delivery was rejected",
-            "effect":"none",
-            "pushId":push_id,
-            "link":format!("router://{SCRIPTED_SERVICE_ID}/push/{push_id}"),
-            "target":target,
-            "targetIdentity":"fixture",
-            "deliveryState":"rejected",
-            "receipt":{
-                "outcome":{"kind":"rejected","reason":"childThread","nextAction":"inspectTarget","clientCode":-32000,"detail":null},
-                "reachability":"codexAppServer","client":null
-            }
-        }));
-    });
-    let client = CollaborationClient::connect(api.directory(), "error-contract", "1")
-        .await
-        .unwrap();
-    let request: SessionMessageSendParams = serde_json::from_value(json!({
-        "target":{"endpoint":{"serviceId":SCRIPTED_SERVICE_ID,"endpointId":"codex-local"},"sessionId":"owned"},
-        "message":{"kind":"humanUser","text":"fixture"},"mode":"auto",
-        "generationGuard":null
-    }))
-    .unwrap();
-    let receipt = client.send_human_input(request).await.unwrap();
-    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
-        panic!("local rejection returned remote sender custody");
-    };
-    assert!(
-        matches!(receipt.receipt.outcome, DeliveryOutcome::Rejected(rejection)
-        if rejection.reason == DeliveryRejectionReason::ChildThread
-            && rejection.next_action == DeliveryNextAction::InspectTarget
-            && rejection.client_code == Some(-32000))
-    );
-    fixture.await.unwrap();
 }
 
 /// The tool error the Router publishes for a rejection, as its presentation builds it.

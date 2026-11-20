@@ -286,10 +286,6 @@ jobs:
         run: |
           scripts/tooling/bootstrap-tools.sh sqlx
           node verification/tooling/prepare-sqlx.ts --check
-      - name: Check Turso SQLx metadata against native migrations
-        id: turso_metadata
-        run: |
-          node verification/tooling/prepare-sqlx-turso.ts --check
       - name: Save pinned SQLx tool
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.sqlx_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

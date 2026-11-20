@@ -75,7 +75,6 @@ async fn assert_early_cancellation(cancellation_point: CancellationPoint) -> Tes
         schemas,
         generation,
         params: json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}}),
-        approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
     };
     let session = AcpSessionBinding::create(&mut catalog, setup_inputs).await?;
     let retired = tokio_util::sync::CancellationToken::new();

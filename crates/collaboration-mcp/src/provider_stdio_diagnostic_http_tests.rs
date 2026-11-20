@@ -14,7 +14,6 @@ use std::{
 
 const CREATE_OPERATION: &str = "019f0000-0000-7000-8000-000000000301";
 const PROMPT_OPERATION: &str = "019f0000-0000-7000-8000-000000000302";
-const CANCEL_OPERATION: &str = "019f0000-0000-7000-8000-000000000303";
 const FULL_INPUT: &str = "Complete the SQLite proof.\nKeep this exact second line PRIVATE_CANARY.";
 
 #[derive(Clone, Default)]
@@ -55,7 +54,7 @@ async fn tool(client: &reqwest::Client, url: &str, name: &str, arguments: Value)
         .find_map(|line| line.strip_prefix("data: "))
         .unwrap_or(&body);
     let envelope: Value = serde_json::from_str(payload).expect("MCP result");
-    assert_eq!(envelope["result"]["isError"], false, "{name}: {envelope}");
+    assert!(envelope.get("error").is_none(), "{name}: {envelope}");
     envelope["result"]["structuredContent"].clone()
 }
 
@@ -133,7 +132,7 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
             backend_socket: root.path().join("unused-backend.sock"),
             mcp_bind: ([127, 0, 0, 1], 0).into(),
             native_schema: None,
-            peer_registry_directory: None,
+            peer_registry_directory: Some(root.path().join("claude-sessions")),
             remote_control_server_name: None,
             owner_human_id: None,
         },
@@ -176,7 +175,7 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
         "humanUser" => json!({"kind":"humanUser","text":FULL_INPUT}),
         _ => panic!("unsupported fixture message"),
     };
-    let pending = tool(
+    let prompt = tool(
         &client,
         &manifest.mcp.url,
         "conversation_prompt",
@@ -186,32 +185,13 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
         }),
     )
     .await;
-    assert_eq!(
-        pending["kind"], "pending",
-        "caller wait detaches: {pending}"
+    assert!(
+        matches!(
+            prompt["kind"].as_str(),
+            Some("pending" | "completed" | "permissionRejected")
+        ),
+        "{prompt}"
     );
-    let (list_tool, list_field) = if interaction_kind == "approval" {
-        ("approval_list", "approvals")
-    } else {
-        ("question_list", "questions")
-    };
-    let list_args = if interaction_kind == "approval" {
-        json!({"pending":true,"includeOptions":true})
-    } else {
-        json!({"pending":true})
-    };
-    let pending_interactions = tool(&client, &manifest.mcp.url, list_tool, list_args).await;
-    assert_eq!(
-        pending_interactions[list_field]
-            .as_array()
-            .expect("pending interactions")
-            .len(),
-        1,
-        "{pending_interactions}"
-    );
-    tool(&client,&manifest.mcp.url,"conversation_cancel",json!({
-        "operationId":CANCEL_OPERATION,"targetOperationId":PROMPT_OPERATION,"target":target,"requestedBy":actor,"approver":human
-    })).await;
     let settled = tool(
         &client,
         &manifest.mcp.url,
@@ -219,11 +199,22 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
         json!({"operationId":PROMPT_OPERATION,"timeoutSeconds":2}),
     )
     .await;
-    assert_eq!(settled["output"]["kind"], "available", "{settled}");
-    assert_eq!(
-        settled["output"]["settlement"]["stopReason"], "cancelled",
-        "{settled}"
-    );
+    if interaction_kind == "approval" {
+        assert_eq!(settled["kind"], "permissionRejected", "{settled}");
+        assert_eq!(settled["stage"], "settlement", "{settled}");
+        assert_eq!(settled["effect"], "applied", "{settled}");
+        assert_eq!(settled["operationId"], PROMPT_OPERATION);
+        assert_eq!(
+            settled["message"],
+            "approvals are not available on this build"
+        );
+    } else {
+        assert_eq!(settled["output"]["kind"], "available", "{settled}");
+        assert_eq!(
+            settled["output"]["settlement"]["stopReason"], "cancelled",
+            "{settled}"
+        );
+    }
     let wire: Value =
         serde_json::from_slice(&std::fs::read(&receipt_path).expect("real provider wire receipt"))
             .expect("wire JSON");

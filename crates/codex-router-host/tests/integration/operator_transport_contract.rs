@@ -161,9 +161,9 @@ fn terminal_frames_preserve_busy_classification_and_live_snapshot()
 }
 
 #[test]
-fn older_host_terminal_frames_without_fleet_remain_decodable()
+fn terminal_frames_encode_and_decode_the_v1_snapshot_without_fleet()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Arrange: the unchanged v1 envelope and snapshot of an older running Host.
+    // Arrange: a terminal status for each request in the retained v1 envelope.
     for request in [
         OperatorRequest::Status,
         OperatorRequest::StopHost,
@@ -172,35 +172,28 @@ fn older_host_terminal_frames_without_fleet_remain_decodable()
         OperatorRequest::UpdateCodex,
     ] {
         let frame = OperatorFrame::busy(request.clone(), ready_snapshot(), "busy".to_owned());
-        let mut older: serde_json::Value = serde_json::from_slice(&encode_operator_frame(&frame)?)?;
-        let snapshot = older
-            .pointer_mut("/frame/payload/snapshot")
-            .and_then(serde_json::Value::as_object_mut)
+        let encoded: serde_json::Value = serde_json::from_slice(&encode_operator_frame(&frame)?)?;
+        let snapshot = encoded
+            .pointer("/frame/payload/snapshot")
+            .and_then(serde_json::Value::as_object)
             .ok_or("terminal snapshot missing")?;
         check(
-            snapshot.remove("fleet").is_some(),
-            "fixture did not remove fleet",
+            !snapshot.contains_key("fleet"),
+            "terminal snapshot must omit fleet state",
         )?;
 
         // Act: use the actual installed-CLI decoder, including protocol validation.
-        let decoded = decode_operator_frame(&serde_json::to_vec(&older)?)?;
+        let decoded = decode_operator_frame(&serde_json::to_vec(&encoded)?)?;
 
         // Assert: missing observation neither hides the result nor invents a link.
         let OperatorFrame::Terminal(response) = decoded else {
-            return Err("older Host terminal became nonterminal".into());
+            return Err("decoded Host terminal became nonterminal".into());
         };
-        check_equal(response.request(), &request, "older Host request preserved")?;
+        check_equal(response.request(), &request, "terminal request preserved")?;
         check_equal(
             response.classification(),
             TerminalClassification::Busy,
-            "older Host classification preserved",
-        )?;
-        check(
-            matches!(
-                response.snapshot().fleet(),
-                codex_router_host::FleetHostObservation::NotObserved
-            ),
-            "older Host invented a Fleet observation",
+            "terminal classification preserved",
         )?;
     }
     Ok(())

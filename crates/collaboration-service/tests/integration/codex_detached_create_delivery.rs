@@ -2,10 +2,8 @@
 use crate::native_permission_echo;
 use codex_acp_adapter::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
 use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
-use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
-use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, NonEmptyText, OperationId, SessionRef, UuidIdentity,
 };
@@ -20,10 +18,6 @@ use collaboration_runtime::ProviderOperationStore;
 
 use collaboration_runtime::SessionDeliveryRouter;
 
-use collaboration_service::SubscriptionDeliveryService;
-use collaboration_service::SubscriptionDeliveryServiceProps;
-
-use crate::native_mail_owner;
 use crate::served_api;
 use collaboration_runtime::UnmaterializedThreadHolder;
 use futures_util::{SinkExt, StreamExt};
@@ -121,7 +115,6 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
         gate,
         codex_home: root.clone(),
     };
-    let runtime_clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
         service_id.clone(),
         directory,
@@ -130,39 +123,12 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     ));
     let delivery_router = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
-    let presence: Arc<dyn TargetPresenceProbe> = delivery_router;
-    let machine_identity = MachineIdentity::new(service_id.clone(), None)?;
-    let interactions = Arc::new(
-        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
-    );
-    let subscription_delivery =
-        SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            push_store: interactions.clone(),
-            delivery: Arc::clone(&delivery),
-            presence: Arc::clone(&presence),
-            machine_identity: machine_identity.clone(),
-            clock: runtime_clock.clone(),
-        });
-    subscription_delivery.start().await?;
     let identity =
         ApplicationFixture::new(&String::from(service_id.clone()), &String::from(service_id))?
-            .with_runtime_clock(runtime_clock.clone())
             .with_endpoints(vec![description])?
             .with_native_backend(backend_config)?
             .with_provider_operation_store(Arc::clone(&store))
             .with_codex_conversation_recorder(Arc::clone(&recorder));
-    let (identity, native_mail) = native_mail_owner::start(
-        identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
-        collaboration_service::MailPushDeliveryProps {
-            interactions,
-            actors: subscription_delivery.clone(),
-            presence,
-            machine: machine_identity,
-            clock: runtime_clock.clone(),
-        },
-    )?;
-
     let (native_started_tx, native_started_rx) = tokio::sync::oneshot::channel();
     let (release_native_tx, release_native_rx) = tokio::sync::oneshot::channel();
     let native = tokio::spawn(async move {
@@ -247,7 +213,6 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
             generation,
             schemas,
             stored_sessions: Arc::new(EmptyStoredSessions),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder: Arc::clone(&holder) as Arc<dyn codex_acp_adapter::UnmaterializedBindingStore>,
             recorder: recorder.clone(),
             retired: tokio_util::sync::CancellationToken::new(),
@@ -296,32 +261,44 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     if !holder.contains("detached-thread") {
         return Err("detached create lost its empty native binding".into());
     }
-    let sent = api_call(
-        &served,
-        "message_send",
-        json!({"target":target,"message":{"kind":"humanUser","text":"hello"},
-            "delivery":"auto","generationGuard":null}),
-    )
-    .await?;
-    if sent["result"]["receipt"]["outcome"]["kind"] != "started"
-        || sent["result"]["receipt"]["client"]["kind"] != "codexAppServer"
+    let item = uuid::Uuid::now_v7().to_string();
+    let sent = delivery
+        .deliver(
+            collaboration_contracts::layer_zero::DeliveryRequest {
+                payload: collaboration_contracts::layer_zero::PreparedPush {
+                    push_id: item.clone().try_into()?,
+                    line: collaboration_protocol::MessageText::try_from(format!(
+                        "✉️ 🧑 Owner (unverified) @fixture · \"hello\" · router://{}/push/{item}",
+                        String::from(target.endpoint.service_id.clone())
+                    ))?,
+                    load_policy: collaboration_contracts::LoadPolicy::LoadedOnly,
+                },
+                target,
+                mode: collaboration_protocol::MessageDelivery::Auto,
+                precondition: collaboration_contracts::DeliveryPrecondition::Unpinned,
+                correlation: item.try_into()?,
+                attempt: agent_automation::AttemptId::generate(),
+            },
+            &collaboration_contracts::UnstoredAttemptEvidenceSink,
+        )
+        .await?
+        .into_receipt();
+    if sent.outcome != collaboration_protocol::DeliveryOutcome::Started
+        || !matches!(
+            sent.client,
+            Some(collaboration_protocol::DeliveryClientReceipt::CodexAppServer(_))
+        )
         || holder.contains("detached-thread")
     {
-        return Err(format!("first API message did not start native turn: {sent}").into());
+        return Err(format!("first delivery did not start the native turn: {sent:?}").into());
     }
     served.stop().await?;
     native.await??;
-    subscription_delivery.shutdown().await;
-    drop(subscription_delivery);
-    native_mail.close().await?;
     drop(store);
     for name in [
         "operations.sqlite",
         "operations.sqlite-wal",
         "operations.sqlite-shm",
-        "interaction.sqlite",
-        "interaction.sqlite-wal",
-        "interaction.sqlite-shm",
         "native.sock",
     ] {
         let file = root.join(name);

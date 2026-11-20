@@ -226,7 +226,6 @@ pub(crate) fn render_update_result<W: Write>(
 }
 
 fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io::Result<()> {
-    render_fleet_status(stdout, snapshot.fleet())?;
     if let Some(outcome) = snapshot.last_login_reload() {
         writeln!(stdout, "last_login_reload: {}", outcome.description())?;
     }
@@ -306,52 +305,6 @@ fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io
         "last_lifecycle_outcome: {}",
         outcome_label(snapshot.last_lifecycle_outcome())
     )
-}
-
-fn render_fleet_status<W: Write>(
-    stdout: &mut W,
-    observation: &codex_router_host::FleetHostObservation,
-) -> std::io::Result<()> {
-    use codex_router_host::FleetHostObservation;
-    match observation {
-        FleetHostObservation::NotObserved => writeln!(stdout, "outbox: not observed"),
-        FleetHostObservation::Unavailable { message } => {
-            writeln!(stdout, "outbox: unavailable ({message})")
-        }
-        FleetHostObservation::Available { stuck_mail } => match stuck_mail {
-            collaboration_protocol::StuckMailSummary::Unavailable { message } => {
-                writeln!(stdout, "outbox: unavailable ({message})")
-            }
-            collaboration_protocol::StuckMailSummary::AgeUnknown {
-                recovered_count,
-                known_stuck,
-            } => {
-                if let Some(known) = known_stuck {
-                    write!(
-                        stdout,
-                        "outbox: {} items sent longer than 5 minutes; oldest age {}s; ",
-                        known.count, known.oldest_age_seconds
-                    )?;
-                } else {
-                    write!(stdout, "outbox: ")?;
-                }
-                writeln!(
-                    stdout,
-                    "{recovered_count} outstanding sent items; age unknown (recovered)"
-                )
-            }
-            collaboration_protocol::StuckMailSummary::Empty => {
-                writeln!(stdout, "outbox: 0 items sent longer than 5 minutes")
-            }
-            collaboration_protocol::StuckMailSummary::Stuck {
-                count,
-                oldest_age_seconds,
-            } => writeln!(
-                stdout,
-                "outbox: {count} items sent longer than 5 minutes; oldest age {oldest_age_seconds}s"
-            ),
-        },
-    }
 }
 
 fn classification_label(classification: codex_router_host::TerminalClassification) -> String {

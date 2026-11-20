@@ -150,7 +150,6 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
                         schemas,
                         generation: generation.clone(),
                         params: json!({"cwd":"/work/project","mcpServers":[server_config],"_meta":{"codexRouter":{"model":"gpt-5.6-sol","effort":"medium","access":"write-restricted","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}}),
-                        approval_broker: std::sync::Arc::new(codex_acp_adapter::RejectingApprovalBroker),
                     },
                 )
                 .await
@@ -167,9 +166,6 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
                     schemas,
                     generation: generation.clone(),
                     params: json!({"sessionId":"new-thread","cwd":"/work/project","mcpServers":[]}),
-                    approval_broker: std::sync::Arc::new(
-                        codex_acp_adapter::RejectingApprovalBroker,
-                    ),
                 },
             )
             .await
@@ -284,7 +280,7 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
         let frame = server.next().await.unwrap().unwrap();
         let request: Value = serde_json::from_str(frame.to_text().unwrap()).unwrap();
         assert_eq!(request["method"], "thread/resume");
-        assert_eq!(request["params"]["threadId"], "long-thread");
+        assert_eq!(request["params"], json!({"threadId":"long-thread"}));
         server.send(Message::Text(json!({
             "id":request["id"],
             "result":{"cwd":"/work","thread":{"id":"long-thread","cwd":"/work","status":{"type":"idle"},"turns":[{"id":"turn-1","status":"completed","items":items}]}}
@@ -309,7 +305,6 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
                 "mcpServers":[],
                 "_meta":{"codex-router/replayHistory":false}
             }),
-            approval_broker: Arc::new(RecordedRouteBroker),
         },
     )
     .await;
@@ -317,17 +312,14 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
     let (session, history) = result.unwrap_or_else(|error| panic!("cold aggregate load: {error}"));
     assert_eq!(session.session_id(), "long-thread");
     assert!(history.is_empty());
-    use crate::recording_scratch_scopes::ScratchScopeEvent::{Closed, Opened};
-    let scope = std::path::PathBuf::from(TEST_SCRATCH);
-    assert_eq!(
-        scratch_scopes.events(),
-        vec![Opened(scope.clone())],
-        "a loaded session with a recorded route holds its scratch scope open"
+    assert!(
+        scratch_scopes.events().is_empty(),
+        "cold reopen acquires no scratch lease"
     );
     drop(session);
-    assert_eq!(
-        scratch_scopes.events(),
-        vec![Opened(scope.clone()), Closed(scope)]
+    assert!(
+        scratch_scopes.events().is_empty(),
+        "cold reopen releases no scratch lease"
     );
     fixture.await.unwrap();
 }
@@ -490,9 +482,6 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
                     }) }
                 }
             }),
-            approval_broker: std::sync::Arc::new(
-                codex_acp_adapter::RejectingApprovalBroker,
-            ),
         },
     )
     .await
@@ -524,67 +513,5 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
             vec![Opened(scope.clone()), Closed(scope)],
             "dropping the binding closes its scratch scope"
         );
-    }
-}
-
-/// Answers every thread with one recorded Router route whose scratch is TEST_SCRATCH.
-struct RecordedRouteBroker;
-
-#[expect(clippy::panic, reason = "A malformed fixed fixture fails the test.")]
-impl codex_acp_adapter::ApprovalBroker for RecordedRouteBroker {
-    fn register_route(
-        &self,
-        _route: codex_acp_adapter::ApprovalRoute,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<(), codex_acp_adapter::ApprovalBrokerError>>
-                + Send
-                + '_,
-        >,
-    > {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn request(
-        &self,
-        _request: codex_acp_adapter::BrokeredApprovalRequest,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<
-                        codex_acp_adapter::BrokeredApprovalOutcome,
-                        codex_acp_adapter::ApprovalBrokerError,
-                    >,
-                > + Send
-                + '_,
-        >,
-    > {
-        Box::pin(async { Ok(codex_acp_adapter::BrokeredApprovalOutcome::Cancelled) })
-    }
-
-    fn route(
-        &self,
-        thread_id: &str,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<
-                        Option<codex_acp_adapter::ApprovalRoute>,
-                        codex_acp_adapter::ApprovalBrokerError,
-                    >,
-                > + Send
-                + '_,
-        >,
-    > {
-        let creator: collaboration_protocol::SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap_or_else(|error| panic!("creator: {error}"));
-        let route = codex_acp_adapter::ApprovalRoute {
-            thread_id: thread_id.to_owned(),
-            created_by: creator.clone(),
-            approver: creator,
-            access: collaboration_protocol::RouterAccess::WorkspaceWrite,
-            scratch_path: TEST_SCRATCH.to_owned(),
-            root_message_id: None,
-        };
-        Box::pin(async move { Ok(Some(route)) })
     }
 }

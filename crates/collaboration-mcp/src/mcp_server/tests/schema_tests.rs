@@ -121,36 +121,6 @@ fn advertised_tool_output_schemas_have_object_roots() {
     );
 }
 
-#[test]
-fn described_success_types_keep_their_output_root_description() {
-    let server = CollaborationMcpServer::catalog_only();
-    for name in ["message_send", "message_reply"] {
-        let schema = server
-            .resolved_tools()
-            .into_iter()
-            .find(|tool| tool.name == name)
-            .and_then(|tool| tool.output_schema)
-            .expect("described output schema");
-        let schema = Value::Object((*schema).clone());
-        let success_ref = schema["anyOf"][0]["$ref"]
-            .as_str()
-            .expect("success branch reference");
-        let definition = schema
-            .pointer(success_ref.trim_start_matches('#'))
-            .expect("success definition");
-        let description = definition
-            .get("description")
-            .and_then(Value::as_str)
-            .filter(|description| !description.trim().is_empty())
-            .unwrap_or_else(|| panic!("{name} success definition needs a description"));
-        assert_eq!(
-            schema.get("description").and_then(Value::as_str),
-            Some(description),
-            "{name} root description moved into $defs"
-        );
-    }
-}
-
 fn schema_contains_boolean_subschema(schema: &serde_json::Value) -> bool {
     match schema {
         serde_json::Value::Bool(_) => true,
@@ -268,7 +238,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         .into_iter()
         .filter_map(|tool| tool.output_schema.map(|schema| (tool.name, schema)))
         .collect::<std::collections::BTreeMap<_, _>>();
-    assert_eq!(advertised.len(), 33);
+    assert_eq!(advertised.len(), 24);
 
     let provider_endpoint = serde_json::json!({
         "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"
@@ -295,7 +265,6 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
     let mut close_operation = provider_operation.clone();
     close_operation["operation"] = serde_json::json!("conversationClose");
     let valid_instances = std::collections::BTreeMap::from([
-        ("approval_list", serde_json::json!({"approvals":[]})),
         (
             "conversation_create",
             serde_json::json!({"kind":"pending","operationId":OperationId::generate()}),
@@ -359,11 +328,6 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
                     "authStatus":{"kind":"apiKey","label":"API key"}}
             }),
         ),
-        ("question_list", serde_json::json!({"questions":[]})),
-        (
-            "question_answer",
-            serde_json::json!({"requestId":"question-1","state":"cancelled"}),
-        ),
         (
             "events_observe",
             serde_json::json!({
@@ -401,31 +365,6 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
                 .unwrap_or_else(|error| {
                     panic!("success result narrowed for {name}: {error}; {valid}")
                 });
-        }
-        if name.as_ref() == "approval_list" {
-            let requester = serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
-                "sessionId":"requester"
-            });
-            for result in [
-                serde_json::json!({"approvals":[{
-                    "requestId":"legacy", "requester":requester, "approver":requester,
-                    "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
-                    "state":"pendingClientDecision", "decision":null, "operation":{},
-                    "expiresAt":"2026-09-27T00:00:00Z"
-                }]}),
-                serde_json::json!({"approvals":[{
-                    "requestId":"refused", "requester":requester,
-                    "approver":{"kind":"human","humanId":"owner"},
-                    "state":"refused", "reason":"malformed options", "title":"Run command",
-                    "description":null, "options":[]
-                }]}),
-            ] {
-                assert!(
-                    advertised_validator.is_valid(&result),
-                    "approval list success branch rejected {result}"
-                );
-            }
         }
         let error = super::super::structured_tool_error(serde_json::json!({
             "kind":"protocolViolation", "stage":"validation", "effect":"none",
@@ -508,7 +447,7 @@ async fn real_tools_list_reports_input_and_output_bytes_separately() {
         output_bytes += serde_json::to_vec(&tool["outputSchema"]).unwrap().len();
         jsonschema::validator_for(&tool["inputSchema"]).expect("all local references resolve");
     }
-    assert_eq!(tools.len(), 33);
+    assert_eq!(tools.len(), 24);
     println!(
         "tools={} input_bytes={input_bytes} output_bytes={output_bytes}",
         tools.len()

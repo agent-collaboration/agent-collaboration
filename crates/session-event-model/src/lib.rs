@@ -4,6 +4,7 @@ mod approval_choice;
 mod capability_report;
 mod input_identity;
 mod interaction_request;
+pub mod managed_interaction_refusal;
 mod prompt_content;
 mod provider_skill;
 mod provider_submission;

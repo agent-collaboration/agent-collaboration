@@ -522,11 +522,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         }],
     };
     let context = crate::ExternalProviderApprovalContext {
-        requester: target.clone().into(),
-        approver: target.clone().into(),
-        target: target.clone(),
         operation_id: OperationId::generate(),
-        binding_generation: binding.generation.clone(),
         binding_retirement: runtime.retirement(),
     };
     runtime

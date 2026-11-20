@@ -37,11 +37,10 @@ threads-required = "num-test-threads"
 # starving the archive or Serve child crosses their unchanged request and
 # shutdown deadlines. The renewal proof gates its NotWriter reply explicitly.
 [[profile.ci.overrides]]
-filter = "package(=codex-router-host) & (test(tailscale_exposure::) | test(tailscale_process::) | test(collaboration_runtime::startup_contract_tests::))"
+filter = "package(=codex-router-host) & (test(tailscale_exposure::) | test(tailscale_process::))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# Enrollment fixtures retain their existing process reservation and deadlines.
 [[profile.ci.overrides]]
 filter = "(package(=codex-router-host) | package(=collaboration-service)) & binary(=integration) & test(/^native_claude_catalogue::/)"
 test-group = "process-runtime"
@@ -72,21 +71,6 @@ threads-required = "num-test-threads"
 # deadlines intact, but allow only one heavy case while ordinary tests retain
 # the remaining scheduler slots. Process-runtime cases still require every slot.
 [[profile.ci.overrides]]
-filter = "package(=collaboration-service) & binary(=integration) & test(/^held_queue_depth::/)"
-test-group = "heavy-tests"
-threads-required = 1
-slow-timeout = { period = "60s", terminate-after = 15 }
-
-# These branch-added fixture workloads were also slow in the retained Linux CI
-# run. Bound concurrent heavy work instead of adding another timing exception.
-[[profile.ci.overrides]]
-filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^subscription_delivery::tests::direct_message_process_loss_proofs::a_direct_message_whose_process_dies_/))"
-test-group = "process-runtime"
-threads-required = "num-test-threads"
-
-# Snapshot-install restart journeys own parent/child processes and real receivers.
-# Reserve their scheduling window without changing any step deadline.
-[[profile.ci.overrides]]
 filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
@@ -104,7 +88,7 @@ filter = "(package(=codex-router-host) & binary(=integration) & test(/^update_re
 priority = 100
 
 [[profile.ci.overrides]]
-filter = "package(=codex-router-host) & (test(tailscale_exposure::) | test(tailscale_process::) | test(collaboration_runtime::startup_contract_tests::))"
+filter = "package(=codex-router-host) & (test(tailscale_exposure::) | test(tailscale_process::))"
 priority = 100
 
 [[profile.ci.overrides]]
@@ -120,23 +104,11 @@ filter = "package(=codex-router-host) & test(=external_provider_supervisor::test
 priority = 100
 
 [[profile.ci.overrides]]
-filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^subscription_delivery::tests::direct_message_process_loss_proofs::a_direct_message_whose_process_dies_/))"
-priority = 100
-
-[[profile.ci.overrides]]
 filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 priority = 100
 
 [[profile.ci.overrides]]
-filter = "package(=collaboration-service) & binary(=integration) & test(/^held_queue_depth::/)"
-priority = 90
-
-[[profile.ci.overrides]]
 filter = "package(=acp-client-runtime) & binary(=integration) & test(=create_settings_order::settings_tail_tests::silent_setting_response_expires_to_unknown_and_gates_session)"
-priority = 50
-
-[[profile.ci.overrides]]
-filter = "package(=agent-collaboration) & binary(=integration) & test(=local_mail_failures_cli_mcp::full_inbox_refuses_cli_and_mcp_sends_and_replies_without_effect_or_target)"
 priority = 50
 
 [[profile.ci.overrides]]

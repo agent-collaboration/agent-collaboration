@@ -89,9 +89,7 @@ codex-router-state = { path = "../codex-router-state", version = "0.1.4" }
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
-fleet-sync-protocol.workspace = true
 futures-util.workspace = true
-interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 message-board = { path = "../message-board", version = "0.1.20" }
 node-test-fixture = { path = "../node-test-fixture", version = "0.1.105" }
 rustix = { workspace = true, features = ["event", "pipe"] }

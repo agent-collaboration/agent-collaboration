@@ -15,64 +15,6 @@ use codex_router_host::TerminalClassification;
 use super::*;
 
 #[test]
-fn status_shows_stuck_mail_age() {
-    let observation = codex_router_host::FleetHostObservation::Available {
-        stuck_mail: collaboration_protocol::StuckMailSummary::Stuck {
-            count: std::num::NonZeroU64::new(2).unwrap(),
-            oldest_age_seconds: 601,
-        },
-    };
-    let mut output = Vec::new();
-    render_fleet_status(&mut output, &observation).unwrap();
-    let output = String::from_utf8(output).unwrap();
-    assert_eq!(
-        output,
-        "outbox: 2 items sent longer than 5 minutes; oldest age 601s\n"
-    );
-}
-
-#[test]
-fn status_shows_recovered_sent_age_and_mail_read_errors() {
-    for known_stuck in [
-        None,
-        Some(collaboration_protocol::KnownStuckMail {
-            count: std::num::NonZeroU64::MIN,
-            oldest_age_seconds: 601,
-        }),
-    ] {
-        let has_known_age = known_stuck.is_some();
-        let observation = codex_router_host::FleetHostObservation::Available {
-            stuck_mail: collaboration_protocol::StuckMailSummary::AgeUnknown {
-                recovered_count: std::num::NonZeroU64::MIN,
-                known_stuck,
-            },
-        };
-        let mut output = Vec::new();
-        render_fleet_status(&mut output, &observation).unwrap();
-        let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("1 outstanding sent items; age unknown (recovered)"));
-        assert!(!output.contains("outbox: 0"));
-        if has_known_age {
-            assert!(output.contains("1 items sent longer than 5 minutes; oldest age 601s"));
-        } else {
-            assert!(!output.contains("oldest age"));
-        }
-    }
-    let mut output = Vec::new();
-    render_fleet_status(
-        &mut output,
-        &codex_router_host::FleetHostObservation::Available {
-            stuck_mail: collaboration_protocol::StuckMailSummary::Unavailable {
-                message: "mail reader unavailable".to_owned(),
-            },
-        },
-    )
-    .unwrap();
-    let output = String::from_utf8(output).unwrap();
-    assert!(output.contains("outbox: unavailable (mail reader unavailable)"));
-}
-
-#[test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."

@@ -41,12 +41,6 @@ mod external_provider_supervisor;
 pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-mod debug_inbox_limit;
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-mod debug_mail_clock;
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-mod debug_runtime_barrier;
 mod global_claude_executable;
 mod host_configuration;
 mod host_port_selection;
@@ -129,7 +123,6 @@ pub use lifecycle_owner::ManagedUpdateInputs;
 pub use lifecycle_owner::PreExecTelemetry;
 pub use lifecycle_state::AppServerCondition;
 pub use lifecycle_state::ExecutableRelation;
-pub use lifecycle_state::FleetHostObservation;
 pub use lifecycle_state::HostOperation;
 pub use lifecycle_state::HostPhase;
 pub use lifecycle_state::HostSnapshot;

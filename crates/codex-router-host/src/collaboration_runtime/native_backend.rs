@@ -74,26 +74,21 @@ impl CollaborationRuntime {
             generation: Some(admission.generation().clone()),
             observer_id: new_service_uuid()?,
         };
-        let rechecks = self.observation_rechecks.clone();
         let clock = self.clock.clone();
         self.observer_task = Some(tokio::spawn(async move {
             let retired = admission.retirement();
-            let attempt = |retry: super::observation_recheck::ObserverRetry| {
+            let attempt = |failures_so_far: u32| {
                 let admission = &admission;
                 let (store, scope, schemas) = (&store, &scope, &schemas);
-                let (rechecks, retired, clock) = (&rechecks, retired.clone(), clock.clone());
+                let (retired, clock) = (retired.clone(), clock.clone());
                 async move {
                     use super::observation_recheck::ObserverAttempt;
                     let connection = codex_native_integration::NativeProtocolConnection::connect(
                         admission.backend_path(),
                     )
                     .await;
-                    if retry.is_retry {
-                        // Whatever completed while observation was down is found now.
-                        rechecks.recheck();
-                    }
                     let Ok(connection) = connection else {
-                        if retry.failures_so_far == 0 {
+                        if failures_so_far == 0 {
                             record_coverage_lost(store, scope, &*clock).await;
                             tracing::warn!(
                                 "native lifecycle observation connection unavailable; it retries with backoff"
@@ -122,7 +117,7 @@ impl CollaborationRuntime {
                             } else {
                                 // Connected but never observed: one warning per run of
                                 // failures, and the backoff keeps growing.
-                                if retry.failures_so_far == 0 {
+                                if failures_so_far == 0 {
                                     tracing::warn!(
                                         "native lifecycle observation failed before restoring coverage; it retries with backoff"
                                     );

@@ -6,7 +6,7 @@ use crate::{
     UnmaterializedBindingStore, serve_acp_router_connection,
 };
 use codex_native_integration::NativePayloadSchemas;
-use collaboration_protocol::{CodexGeneration, OperationId};
+use collaboration_protocol::{CodexGeneration, OperationId, UuidIdentity};
 use serde_json::{Value, json};
 use std::{future::Future, io, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -22,7 +22,6 @@ pub struct AcpConnectionInputs {
     pub schemas: Arc<NativePayloadSchemas>,
     pub stored_sessions: Arc<dyn AcpStoredSessions>,
     pub retired: CancellationToken,
-    pub approval_broker: Arc<dyn crate::ApprovalBroker>,
     pub holder: Arc<dyn UnmaterializedBindingStore>,
     pub recorder: Arc<dyn ConversationOperationRecorder>,
     /// The Host's record of scratch scopes with an open session.
@@ -49,13 +48,14 @@ impl AcpSessionRoute for CodexAcpSessionRoute {
         router: AcpRouterChannels,
         _context: AcpConnectionContext,
     ) -> AcpRouteFuture {
-        Box::pin(route_codex_sessions(router, self.inputs))
+        Box::pin(route_codex_sessions(router, self.inputs, None))
     }
 }
 
 pub(crate) async fn route_codex_sessions(
     mut router: AcpRouterChannels,
     inputs: AcpConnectionInputs,
+    local_service: Option<UuidIdentity>,
 ) -> io::Result<()> {
     let mut schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
     let actor_retirement = inputs.retired.child_token();
@@ -145,6 +145,11 @@ pub(crate) async fn route_codex_sessions(
                             None => {router.output.send(error(id,-32602,"Create requires a UUIDv7 operation ID")).await?;continue;}
                         }
                     } else {None};
+                    if create_new && let Some(service) = &local_service
+                        && let Err(failure) = crate::session_creation::validate_create_actors(&params, Some(service)) {
+                        router.output.send(setup_error(id, &failure)).await?;
+                        continue;
+                    }
                     if setup_requests.len()>=64 || (create_new && !sessions.has_setup_capacity(setup_requests.len())) {
                         router.output.send(error(id,-32603,"Session setup capacity unavailable")).await?;continue;
                     }
@@ -172,7 +177,7 @@ pub(crate) async fn route_codex_sessions(
                         }
                     }
                     let cancellation_barrier=requested_session.as_ref().and_then(|session| sessions.cancellation_barrier(session));
-                    let setup=SetupTaskInputs { cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), approval_broker:Arc::clone(&inputs.approval_broker), scratch_scopes:Arc::clone(&inputs.scratch_scopes) };
+                    let setup=SetupTaskInputs { cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), scratch_scopes:Arc::clone(&inputs.scratch_scopes) };
                     let holder=Arc::clone(&inputs.holder);
                     if create_new {
                         let (result_sender,result_receiver)=tokio::sync::oneshot::channel();

@@ -10,16 +10,7 @@ pub mod native_message_dispatch {
 /// Test-only native boundary inputs and observations.
 pub mod message_effect_state {
     pub use crate::message_effect_state::{
-        MessageEffects, NativeFailureDisposition, NativeFailureKind, NativeMessageAttemptEvidence,
-        NativeMessageFailure,
-    };
-}
-
-/// Test-only native boundary inputs and observations.
-pub mod native_recorded_policy {
-    pub use crate::native_recorded_policy::{
-        RecordedNativeRouteClassification, classify_recorded_native_route,
-        prepare_classified_native_policy,
+        MessageEffects, NativeFailureDisposition, NativeFailureKind, NativeMessageFailure,
     };
 }
 

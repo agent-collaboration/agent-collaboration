@@ -5,9 +5,7 @@ mod tests {
     use collaboration_client::{ClientError, JournalStatus};
     use collaboration_mcp::test_support::ServedCollaborationApi;
     use collaboration_protocol::{
-        MachineId, MachineLabel, NativeSessionListParams, NativeSessionScope, NativeSessionSource,
-        NativeSessionView, PushHeaderFacts, PushId, PushLineInput, PushOrigin, RouterLink,
-        SessionDisplayNameLookup, parse_push_line_header, render_push_line, session_identity,
+        NativeSessionListParams, NativeSessionScope, NativeSessionSource, NativeSessionView,
     };
     use collaboration_runtime::NativeControlBackend;
     use collaboration_runtime::NativeGenerationGate;
@@ -21,7 +19,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn stored_inventory_does_not_cache_a_short_title_as_display_name() {
+    async fn stored_inventory_keeps_a_short_title_distinct_from_a_display_name() {
         let root = tempfile::tempdir().unwrap();
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
         let home = root.path().join("native-home");
@@ -75,7 +73,6 @@ mod tests {
                 codex_home: home,
             })
             .unwrap();
-        let display_names = identity.session_display_name_cache();
         let served = ServedCollaborationApi::start(root.path(), (identity).build()).unwrap();
         let client = served.client("stored-title-test").await.unwrap();
         let inventory = client
@@ -102,27 +99,6 @@ mod tests {
         assert_eq!(session.title, "Fix the retry path");
         assert!(
             collaboration_protocol::SessionDisplayName::try_from(session.title.clone()).is_ok()
-        );
-        assert_eq!(display_names.display_name_for(&session.target), Ok(None));
-        let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned()).unwrap();
-        let line = render_push_line(&PushLineInput {
-            link: RouterLink::new(
-                MachineId::from(session.target.endpoint.service_id.clone()),
-                push_id,
-            ),
-            machine_label: MachineLabel::try_from("fixture-host".to_owned()).unwrap(),
-            origin: PushOrigin::Session(session.target.clone()),
-            header_facts: PushHeaderFacts::DirectMessage {
-                sender_display_name: None,
-            },
-            body: Some("stored display fallback proof".to_owned()),
-        })
-        .unwrap();
-        let fallback_name = session_identity(&session.target, None);
-        assert!(line.starts_with(&format!("✉️ {fallback_name} @fixture-host → you · ")));
-        assert_eq!(
-            parse_push_line_header(&line).map(|header| header.kind),
-            Some(collaboration_protocol::PushKind::DirectMessage)
         );
     }
 

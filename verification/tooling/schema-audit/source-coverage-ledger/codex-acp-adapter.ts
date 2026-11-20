@@ -14,7 +14,6 @@ const wire = () => ({ kind: "tap" as const, testFile: WIRE_TAP, cases: [WIRE] })
 const UNIT_TYPED_ONLY =
   "the unit taps record PendingAcpPrompt::next_event results as TypedOutcome, not frames; the wire tap carries only agent_message_chunk";
 const START = "node_tap_acp_prompt_becomes_codex_thread_read_and_turn_start";
-const APPROVAL = "node_tap_legacy_codex_approval_goes_to_broker_and_cancel_returns_to_codex";
 const DONE = "node_tap_codex_turn_completed_becomes_acp_prompt_response";
 
 export const section: LedgerSection = {
@@ -39,11 +38,6 @@ export const section: LedgerSection = {
       file: `${R}acp_frame_transport.rs`,
       disposition: { kind: "sends", owners: ["acp"] },
       note: "read_acp_frame and write_acp_frame: newline-delimited JSON framing (:43)",
-    },
-    {
-      file: `${R}approval_broker.rs`,
-      disposition: { kind: "defines", owners: ["router-vocabulary", "acp"] },
-      note: "ApprovalRoute Serialize/Deserialize with SessionRef createdBy and approver and RouterAccess (:6-15), handed to the Host broker; BrokeredApprovalRequest.request is an untyped ACP session/request_permission Value (:18-22)",
     },
     {
       file: `${R}assistant_text_projection.rs`,
@@ -89,12 +83,7 @@ export const section: LedgerSection = {
     {
       file: `${R}native_prompt_execution.rs`,
       disposition: { kind: "converts", owners: ["codex", "acp", "router-extension"] },
-      note: "ACP prompt to Codex thread/read and turn/start (:103-132); Codex notifications and requestApproval to ACP updates (:176-262); broker outcome to ACP permission response (:219-225); turn/completed status mapping (:277-291); thread/read receipt read by hand (:304-320); turn/interrupt (:404); reads _meta.codexRouter.effort (:76); writes _meta codexRouter and codex-router/finalReply (:352-371, :444-448); idle seconds from chrono::Utc::now (:46)",
-    },
-    {
-      file: `${R}permission_address.rs`,
-      disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "PermissionAddress {session, turn, sequence} (:4) serialized into the ACP permission id string 'permission:' + JSON (:15-22)",
+      note: "ACP prompt and native completion carrier. Correlates managed callbacks to the exact turn, replies with the protocol refusal and reuses interruption and terminal evidence.",
     },
     {
       file: `${R}permission_translation.rs`,
@@ -140,11 +129,6 @@ export const section: LedgerSection = {
       file: `${R}session_creation/codex_permission_mode.rs`,
       disposition: { kind: "converts", owners: ["codex", "router-extension"] },
       note: "native thread sandbox, permission profile and approval policy to CodexPermissionModeReport (:19-70)",
-    },
-    {
-      file: `${R}session_creation/recorded_session_resume.rs`,
-      disposition: { kind: "converts", owners: ["codex"] },
-      note: "builds thread/resume params json! (:45-57); other json! (:87-117) are tests",
     },
     {
       file: `${R}session_creation/router_permission_profile.rs`,
@@ -239,7 +223,7 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}native_prompt_execution.rs`,
-      line: 304,
+      line: 255,
       edge: "managed-codex",
       sends: "thread/read for the terminal receipt",
       owner: N8,
@@ -248,21 +232,23 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}native_prompt_execution.rs`,
-      line: 404,
+      line: 365,
       edge: "managed-codex",
       sends: "turn/interrupt",
       owner: N8,
       origin: "product",
-      coverage: noTap("the approval tap cancels through the broker; no tap records turn/interrupt"),
+      coverage: noTap(
+        "the scripted managed refusal test checks the correlated interrupt on the native wire",
+      ),
     },
     {
       file: `${R}native_prompt_execution.rs`,
-      line: 241,
+      line: 194,
       edge: "managed-codex",
-      sends: "reply to requestApproval (decision or permissions scope)",
+      sends: "reply to command, file, permissions or user-input request with the protocol refusal",
       owner: N8,
       origin: "product",
-      coverage: tap(APPROVAL),
+      coverage: noTap("the scripted managed refusal tests assert each exact native wire response"),
     },
     {
       file: `${R}session_creation.rs`,

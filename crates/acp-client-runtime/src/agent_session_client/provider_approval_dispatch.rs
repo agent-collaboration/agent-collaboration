@@ -40,6 +40,7 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                     approval: context,
                     cancelling: tokio_util::sync::CancellationToken::new(),
                     responses: Arc::new(PermissionResponseBarrier::default()),
+                    commands: self.commands.downgrade(),
                 },
             );
         }

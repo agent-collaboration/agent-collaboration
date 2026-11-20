@@ -5,32 +5,21 @@ mod acp_provider_backend;
 #[path = "../support/native_delivery.rs"]
 mod native_delivery;
 use codex_acp_adapter::test_support::native_permission_echo;
-#[path = "../support/read_cost_counter.rs"]
-mod read_cost_counter;
 #[path = "../support/served_api.rs"]
 mod served_api;
 
-use collaboration_application_test_support::native_mail_owner;
-use read_cost_counter::sql_cost_classification;
-
 mod acp_listener_admission;
 mod acp_listener_socket_cleanup;
-mod acp_provider_interactions;
-mod app_server_client_rejection;
-mod app_server_provider_interactions;
 mod codex_app_server_delivery_route;
 mod codex_app_server_held_thread_route;
 mod codex_conversation_operation_inspection;
 mod codex_detached_create_delivery;
 mod codex_empty_thread_recovery;
 mod codex_session_list_shape;
-mod collaboration_application_boundaries;
 mod endpoint_address_isolation;
 mod endpoint_publication;
-mod interaction_schema_ownership;
 mod journal_rpc;
 mod local_listener;
-mod message_admission;
 mod message_delivery_paths;
 mod native_channel_relay;
 mod native_claude_catalogue;
@@ -48,14 +37,8 @@ mod provider_session_observation_control;
 mod provider_session_records;
 mod public_observation_recovery;
 mod public_process_recovery;
-mod push_surface;
-mod question_api_path;
-mod read_cost_counter_contracts;
 mod service_identity_storage;
 mod session_delivery_contract;
-mod session_delivery_dependency_boundaries;
 mod session_delivery_presence;
 mod session_delivery_router;
 mod stored_inventory_journal;
-
-mod machine_sender_binding;

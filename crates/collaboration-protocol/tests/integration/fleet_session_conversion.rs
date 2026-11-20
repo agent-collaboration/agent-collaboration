@@ -1,4 +1,4 @@
-//! Fleet registration uses the existing mail boundary without changing provider identities.
+//! Provider session identities agree at the Router and board wire boundary.
 use collaboration_protocol::{EndpointId, SessionId, SessionRef, UuidIdentity};
 use proptest::prelude::*;
 use serde_json::{Value, json};
@@ -33,11 +33,6 @@ fn assert_lossless_session(wire: Value) {
         serde_json::to_vec(&router).unwrap(),
         serde_json::to_vec(&fleet).unwrap()
     );
-    assert_eq!(
-        message_board::SessionRef::try_from(router.clone()).unwrap(),
-        fleet
-    );
-    assert_eq!(SessionRef::try_from(fleet).unwrap(), router);
 }
 
 #[test]

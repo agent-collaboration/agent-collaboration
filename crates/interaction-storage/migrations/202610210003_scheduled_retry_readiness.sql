@@ -1,2 +1,0 @@
-CREATE INDEX local_delivery_retries_readiness
-ON local_delivery_retries(item_id, scheduled_retry_at);

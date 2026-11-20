@@ -312,7 +312,7 @@ async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
     assert!(matches!(
         receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
-            retryable: true,
+            retryable: false,
             ref reason,
         } if reason == "notLoaded"
     ));
@@ -324,7 +324,7 @@ async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
     clippy::panic_in_result_fn,
     reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
-async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
+async fn may_load_refuses_not_loaded_codex_thread_without_resuming_it()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;
     let target = fixture.target.clone();
@@ -339,7 +339,7 @@ async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
         let read = receive_native_frame(&mut socket).await?;
         if read.get("method").and_then(Value::as_str) != Some("thread/read") {
             return Err::<(), Box<dyn std::error::Error + Send + Sync>>(
-                "message send did not inspect thread status".into(),
+                "native delivery did not inspect thread status".into(),
             );
         }
         let read_id = required_json_field(&read, "id")?;
@@ -349,23 +349,7 @@ async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
             json!({"thread":{"id":"thread-one","status":{"type":"notLoaded"}}}),
         )
         .await?;
-        let resume = receive_native_frame(&mut socket).await?;
-        if resume.get("method").and_then(Value::as_str) != Some("thread/resume") {
-            return Err("MayLoad did not resume the not-loaded thread".into());
-        }
-        let resume_id = required_json_field(&resume, "id")?;
-        send_native_result(
-            &mut socket,
-            resume_id,
-            json!({"thread":{"id":"thread-one"}}),
-        )
-        .await?;
-        let start = receive_native_frame(&mut socket).await?;
-        if start.get("method").and_then(Value::as_str) != Some("turn/start") {
-            return Err("message send did not start after resume".into());
-        }
-        let start_id = required_json_field(&start, "id")?;
-        send_native_result(&mut socket, start_id, json!({"turn":{"id":"turn-one"}})).await?;
+        expect_native_connection_closed_without_followup(&mut socket).await?;
         Ok(())
     });
 
@@ -396,7 +380,7 @@ async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
     server.await??;
     assert!(matches!(
         receipt.receipt().outcome.clone(),
-        DeliveryOutcome::StartedOrSteered
+        DeliveryOutcome::NotSubmitted { retryable: false, ref reason } if reason == "notLoaded"
     ));
     Ok(())
 }

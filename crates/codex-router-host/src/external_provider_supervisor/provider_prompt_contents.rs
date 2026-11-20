@@ -94,11 +94,7 @@ impl ExternalProviderSupervisor {
                 Some(target.clone()),
             )?;
             let approval_context = crate::ExternalProviderApprovalContext {
-                requester: request.requested_by.clone(),
-                approver: request.approver.clone(),
-                target: target.clone(),
                 operation_id: request.operation_id.clone(),
-                binding_generation: binding.generation.clone(),
                 binding_retirement: runtime.retirement(),
             };
             let prepared = backend
@@ -135,7 +131,7 @@ impl ExternalProviderSupervisor {
                                 ConversationOperationFailureKind::PermissionRejected,
                                 ConversationOperationFailureStage::Settlement,
                                 ProviderOperationEffect::Applied,
-                                reason.code(),
+                                reason.message(),
                                 operation_id,
                                 Some(completion_target),
                             )),

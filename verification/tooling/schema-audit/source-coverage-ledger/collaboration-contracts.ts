@@ -33,11 +33,6 @@ export const section: LedgerSection = {
       note: "Host-owned execution boundary for external ACP conversation operations: ProviderConversationBackend trait L32 over the collaboration-protocol request and failure types; default inspect/settings refusals built at L39 and settings_unavailable L100. No serde of its own.",
     },
     {
-      file: "crates/collaboration-contracts/src/router_delivery_types.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "RouterLocalObservation L11 (serde: receipt, scheduledRetryAt, routeEvidence) journaled beside the fleet SDK outcome; RouterDeliveryTypes L28 and RouterConsumerProtocol L53 bind the board fleet delivery types with MAX_LOCAL_OBSERVATION_BYTES L44.",
-    },
-    {
       file: "crates/collaboration-contracts/src/router_identity.rs",
       disposition: { kind: "none" },
       note: "RouterIdentity L7: Rust-only validated service id, epoch, installation PeerId and MachineIdentity; no serde. Inline #[cfg(test)] mod tests at L54.",

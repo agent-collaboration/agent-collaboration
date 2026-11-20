@@ -690,27 +690,4 @@ export const rows: InventoryRow[] = [
     disposition: "duplicate",
     fixedBy: "D2",
   },
-  {
-    file: `${R}interaction_broker.rs`,
-    line: 83,
-    owner: "router-vocabulary",
-    kind: "method-table",
-    defines:
-      "InteractionHistoryError to ApprovalDecisionError codes wrongActor, alreadySettled, selfDecision, approvalNotPending, invalidOptionId, invalidQuestion, invalidAnswer, unavailable, decisionNotOffered, persistentChoiceNotAcknowledged with detail json! {offeredOptions}|{persistentTarget} (:55-104); further literal codes invalidSelection, expired, oldGeneration (:632, :705, :723)",
-    usedBy: [{ part: "N7" }],
-    duplicateGroup: "failure-kind-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: `${R}interaction_broker.rs`,
-    line: 504,
-    owner: "router-vocabulary",
-    kind: "method-table",
-    defines:
-      "projection of stored InteractionHistoryState Pending|Decided|Cancelled into the public ApprovalState of the approval list (:504-511), and of a stored refusal's reason text approverUnreachable to ApprovalState::ApproverUnreachable (:482-489); scope nativeSession text (:779-780). Stored history and the public unit state are different contracts: a projection, not a copy",
-    usedBy: [{ part: "N7" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
 ];

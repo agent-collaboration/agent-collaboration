@@ -66,24 +66,9 @@ export const section: LedgerSection = {
       note: "typed ConversationOperationFailure built in local_failure l594; provider calls go through the ProviderConversationBackend port (its implementers own the ACP/app-server sends)",
     },
     {
-      file: "crates/collaboration-service/src/collaboration_application/interaction_operations.rs",
-      disposition: { kind: "converts", owners: ["mcp", "router-vocabulary"] },
-      note: "InteractionFailure::payload l148 built by payload.insert l158-168 plus ApprovalDecisionError detail l164; question_record_view l219 converts requester SessionRef l229 and question fields l236 by serde_json round trip; InteractionHistoryError mapped l201",
-    },
-    {
       file: "crates/collaboration-service/src/collaboration_application/journal_operations.rs",
       disposition: { kind: "converts", owners: ["mcp"] },
       note: "JournalFailure Serialize l185 hand-builds failure bodies (json! l191-196); JournalError mapped onto JournalFailure l60-76, l110-117",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/message_operations.rs",
-      disposition: { kind: "defines", owners: ["mcp", "router-vocabulary"] },
-      note: "defines MCP failure body MessageFailure l463 {kind,stage,message,existing} with MessageFailureKind l473 and MessageFailureStage l497; MailRefusal/PushDeliveryFailure mapped l384; MailItemId to PushId l93",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/message_status_operations.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "public_status l342 copies fleet_sync_protocol DeliveryStatus/DeliveryRefusal onto collaboration_protocol RemoteDeliveryStatus; PushId to MailItemId to fleet ItemId l105-112; caller SessionRef to message_board SessionRef l246",
     },
     {
       file: "crates/collaboration-service/src/collaboration_application/mod.rs",
@@ -154,45 +139,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-service/src/lib.rs",
       disposition: { kind: "none" },
       note: "module wiring; re-exports codex_acp_adapter::ACP_SCHEMA_DIGEST l37 (digest owned by codex-acp-adapter)",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_projection_fixture.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test) module declared at crates/collaboration-service/src/mail_delivery_projection_tests.rs:6 (that module is #[cfg(test)] at lib.rs:81)",
-      },
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_projection_intake.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test) module declared at crates/collaboration-service/src/mail_delivery_projection_fixture.rs:472 (inside the cfg(test) chain from lib.rs:81)",
-      },
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runner_probe.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test) module declared at crates/collaboration-service/src/mail_push_delivery_tests.rs:5 (that module is #[cfg(test)] at mail_push_delivery.rs:150)",
-      },
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "mail recipient address to SessionRef by try_into l448; fleet ItemId to PushId through its UUID string l478; service id UuidIdentity to message_board::ServiceId l277; the fleet_sync_delivery engine itself is central mail custody",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/custody_backfill.rs",
-      disposition: { kind: "none" },
-      note: "fleet_sync_delivery startup backfill (central fleet mail custody, not one of the four protocols): admit_existing_record_removals l14, backfill_submitters l39",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/held_readiness.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "PushId to fleet ItemId by Uuid::parse_str l46; held mail release through fleet_sync_delivery Inbox l51",
     },
   ],
   sendSites: [

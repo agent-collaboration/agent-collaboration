@@ -125,8 +125,8 @@ fn success_schema_branches_match_main_golden_snapshot() {
         std::fs::write(snapshot_path, snapshot).expect("write resolved MCP success schemas");
         return;
     }
-    assert_eq!(actual.len(), 33);
-    assert_eq!(expected.len(), 33);
+    assert_eq!(actual.len(), 24);
+    assert_eq!(expected.len(), 24);
     for (name, success) in actual {
         assert_eq!(success, expected[&name], "{name} success schema drifted");
     }

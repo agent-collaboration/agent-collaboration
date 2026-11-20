@@ -19,7 +19,6 @@ pub(crate) struct SessionMessageRouteInputs {
     pub(crate) provider_endpoints: HashSet<EndpointRef>,
     pub(crate) directory: EndpointDirectory,
     pub(crate) native_backend: NativeControlBackend,
-    pub(crate) approval_broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
     pub(crate) unmaterialized_threads: Arc<collaboration_runtime::UnmaterializedThreadHolder>,
     pub(crate) provider_supervisor: Option<Arc<ExternalProviderSupervisor>>,
     pub(crate) provider_store: Option<Arc<Mutex<ProviderOperationStore>>>,
@@ -33,22 +32,19 @@ pub(crate) fn compose_session_message_routes(
         provider_endpoints,
         directory,
         native_backend,
-        approval_broker,
         unmaterialized_threads,
         provider_supervisor,
         provider_store,
         peer_registry_directory,
     } = inputs;
     let service_id = native_backend.endpoint.service_id.clone();
-    let codex_route: Arc<dyn SessionDeliveryRoute> = Arc::new(
-        collaboration_runtime::CodexAppServerDeliveryRoute::new(
+    let codex_route: Arc<dyn SessionDeliveryRoute> =
+        Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
             service_id.clone(),
             directory.clone(),
             native_backend,
             unmaterialized_threads,
-        )
-        .with_approval_broker(&approval_broker),
-    );
+        ));
     let peer_route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
         EndpointRef {
             service_id: service_id.clone(),

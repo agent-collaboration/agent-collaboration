@@ -2,8 +2,7 @@
 use collaboration_contracts::NativeRefusalCode;
 use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryNextAction, DeliveryRejectionReason, NativeDeliveryFailureCause,
-    PermissionDifference, SessionRef,
+    DeliveryNextAction, DeliveryRejectionReason, NativeDeliveryFailureCause,
 };
 use serde_json::{Value, json};
 
@@ -17,7 +16,6 @@ pub enum NativeFailureKind {
     ThreadMissingOrUnmaterialized,
     LocalRejection(UnsentCause),
     NotLoaded,
-    ThreadNotLoaded,
     NoActiveTurn,
 }
 impl NativeFailureKind {
@@ -31,7 +29,6 @@ impl NativeFailureKind {
             Self::ThreadMissingOrUnmaterialized => "threadMissingOrUnmaterialized",
             Self::LocalRejection(_) => "localRejection",
             Self::NotLoaded => collaboration_contracts::NOT_LOADED_REASON,
-            Self::ThreadNotLoaded => "threadNotLoaded",
             Self::NoActiveTurn => "noActiveTurn",
         }
     }
@@ -48,10 +45,7 @@ impl NativeFailureKind {
             },
             Self::StaleGeneration => UnsentCause::Refused(Code::Rejection(Reason::StaleGeneration)),
             Self::LocalRejection(cause) => cause,
-            Self::NotLoaded => UnsentCause::Holdable {
-                otherwise: Code::ThreadNotLoaded,
-            },
-            Self::ThreadNotLoaded => UnsentCause::Refused(Code::ThreadNotLoaded),
+            Self::NotLoaded => UnsentCause::Refused(Code::ThreadNotLoaded),
             Self::NoActiveTurn => UnsentCause::Refused(Code::NoActiveTurn),
             Self::OutcomeUnknown => return NativeFailureDisposition::Uncertain,
         })
@@ -70,21 +64,6 @@ pub struct NativeMessageFailure {
 
 pub(crate) const HELD_BY_ANOTHER_CLIENT_GUIDANCE: &str =
     "Message it from the Codex client that holds it.";
-
-pub struct NativeMessageAttemptEvidence<'a> {
-    pub effects: &'a mut agent_automation::NativeEffectEvidence<SessionRef, CodexGeneration>,
-    pub sink: &'a dyn collaboration_contracts::AttemptEvidenceSink,
-}
-impl NativeMessageAttemptEvidence<'_> {
-    pub async fn observe_permission_differences(
-        &mut self,
-        differences: &[PermissionDifference],
-    ) -> Result<(), collaboration_contracts::DeliveryContractError> {
-        self.effects.permission_differences = differences.to_vec();
-        self.effects.resume = agent_automation::PreparationEffect::Accepted;
-        self.sink.record(self.effects.clone().into()).await
-    }
-}
 
 pub struct MessageEffects {
     pub id: Value,
@@ -110,38 +89,6 @@ impl MessageEffects {
             fields.insert("clientUserMessageId".to_owned(), json!(id));
         }
         self.classified_failure(json!({"jsonrpc":"2.0","id":self.id,"error":{"code":-32050,"message":"Message operation failed","data":data}}), disposition)
-    }
-    pub fn recorded_policy_failure(
-        &self,
-        error: &codex_acp_adapter::SessionSetupError,
-        stage: &str,
-        failure_cause: NativeDeliveryFailureCause,
-    ) -> NativeMessageFailure {
-        use codex_acp_adapter::SessionSetupError as Error;
-        let cause = match error {
-            Error::InvalidParameters => UnsentCause::InvalidInput,
-            Error::ConfigurationMismatch
-            | Error::ModelMismatch { .. }
-            | Error::AccessMismatch { .. } => UnsentCause::Refused(NativeRefusalCode::Rejection(
-                DeliveryRejectionReason::SettingsUnresolved,
-            )),
-            Error::Busy => {
-                UnsentCause::Refused(NativeRefusalCode::Rejection(DeliveryRejectionReason::Busy))
-            }
-            Error::SchemaUnavailable => UnsentCause::Refused(NativeRefusalCode::Rejection(
-                DeliveryRejectionReason::UnsupportedCapability,
-            )),
-            Error::NativeRejected => UnsentCause::Refused(NativeRefusalCode::Rejection(
-                DeliveryRejectionReason::Unknown,
-            )),
-            Error::Unavailable | Error::CancellationUnresolved => {
-                UnsentCause::Refused(NativeRefusalCode::NativeUnavailable)
-            }
-            Error::HostLocationsUnavailable { .. }
-            | Error::NativeThreadStatusUnavailable
-            | Error::OutcomeUnknown => UnsentCause::ProcessingFailure,
-        };
-        self.local_rejection("thread/resume", stage, failure_cause, cause)
     }
     pub fn local_rejection(
         &self,

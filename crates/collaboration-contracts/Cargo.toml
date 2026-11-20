@@ -13,10 +13,6 @@ test-support = []
 workspace = true
 
 [dependencies]
-board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-fleet-sync-protocol.workspace = true
-runtime-primitives.workspace = true
-collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
@@ -28,6 +24,5 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 uuid.workspace = true

@@ -49,7 +49,7 @@ pub(super) async fn record_permission_refusal<P: InteractionPort>(
         provider_session_id,
         method = "session/request_permission",
         reason_code = reason.code(),
-        "provider permission request refused before approval broker",
+        "provider permission request refused",
     );
     #[cfg(any(test, feature = "test-observation"))]
     if let Ok(mut warnings) = state.refusal_warnings.lock() {
@@ -79,6 +79,36 @@ pub(super) fn spawn_external_approval_dispatch<P: InteractionPort>(
     let request_cancellation = responder.cancellation();
     let response_guard = context.as_ref().map(|context| context.responses.track());
     connection.spawn(async move {
+        if let (Some(context), Some(refusal)) =
+            (context.as_ref(), state.interaction_port.managed_refusal())
+        {
+            let provider_session_id = request.session_id.0.to_string();
+            let response: RequestPermissionResponse =
+                serde_json::from_value(refusal.acp_permission())
+                    .map_err(|_| Error::internal_error())?;
+            record_permission_refusal(
+                &state,
+                &provider_session_id,
+                Some(P::operation_id(&context.approval)),
+                ExternalProviderApprovalRefusalReason::Managed(refusal),
+            )
+            .await;
+            #[cfg(any(test, feature = "test-observation"))]
+            state
+                .permission_outcome
+                .store(1, std::sync::atomic::Ordering::Relaxed);
+            let queued = responder.respond(response);
+            drop(response_guard);
+            context
+                .clone()
+                .cancel_after_refusal(
+                    Arc::clone(&state.interaction_port),
+                    provider_session_id,
+                    refusal,
+                )
+                .await;
+            return queued;
+        }
         let outcome = match context {
             Some(context) => {
                 handle_contextual_permission_request(

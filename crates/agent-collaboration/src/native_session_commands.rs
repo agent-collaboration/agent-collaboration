@@ -155,7 +155,7 @@ pub fn run_native_session_command(arguments: Vec<OsString>) -> i32 {
                             matches!(channel, ChannelDescription::ExternalProvider { .. })
                         })
                     });
-                if provider {
+                let mut inspection = if provider {
                     json!(
                         client
                             .inspect_provider_session(
@@ -167,7 +167,12 @@ pub fn run_native_session_command(arguments: Vec<OsString>) -> i32 {
                     )
                 } else {
                     json!(client.inspect_session(&target).await?)
-                }
+                };
+                let fields = inspection
+                    .as_object_mut()
+                    .ok_or(ClientError::Protocol("invalid session inspection"))?;
+                fields.insert("pendingInteractions".to_owned(), json!([]));
+                inspection
             }
             RequestedOperation::Rename(name) => {
                 mutation_started = true;

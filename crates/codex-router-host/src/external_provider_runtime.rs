@@ -6,11 +6,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::AgentSessionClient;
 pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
-use collaboration_protocol::{
-    CodexGeneration, OperationId, ProviderIdentity, ProviderPromptStopReason, SessionRef,
-};
+use collaboration_protocol::{OperationId, ProviderPromptStopReason};
 use collaboration_runtime::ProviderSessionEventHub;
-use collaboration_runtime::ServiceInteractionBroker;
 use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 
@@ -36,11 +33,7 @@ pub use acp_client_runtime::{
 
 #[derive(Clone, Debug)]
 pub struct ExternalProviderApprovalContext {
-    pub requester: ProviderIdentity,
-    pub approver: ProviderIdentity,
-    pub target: SessionRef,
     pub operation_id: OperationId,
-    pub binding_generation: CodexGeneration,
     pub binding_retirement: CancellationToken,
 }
 
@@ -93,7 +86,6 @@ mod initialization_authentication_tests;
 
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
-    interaction_port: Arc<HostInteractionPort>,
     event_sink: Option<Arc<HubSessionEventSink>>,
 }
 
@@ -111,7 +103,7 @@ impl ExternalProviderRuntime {
         launch: ExternalProviderLaunch,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let client = AgentSessionClient::initialize(
             launch,
             Arc::clone(&interaction_port),
@@ -121,7 +113,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             event_sink: None,
         })
     }
@@ -133,7 +124,7 @@ impl ExternalProviderRuntime {
         server_url: impl Into<String>,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let client = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
@@ -146,7 +137,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             event_sink: None,
         })
     }
@@ -160,12 +150,9 @@ impl ExternalProviderRuntime {
         endpoint: SessionEndpointRef,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let event_sink = Arc::new(HubSessionEventSink::new(hub, endpoint));
         let published_sink: Arc<dyn acp_client_runtime::SessionEventSink> = event_sink.clone();
-        interaction_port
-            .install_event_sink(Arc::clone(&published_sink))
-            .await;
         let result = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
@@ -185,7 +172,6 @@ impl ExternalProviderRuntime {
         };
         Ok(Self {
             client,
-            interaction_port,
             event_sink: Some(event_sink),
         })
     }
@@ -196,7 +182,7 @@ impl ExternalProviderRuntime {
         initialize_timeout: Duration,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let client = AgentSessionClient::initialize_with_timeout(
             launch,
             initialize_timeout,
@@ -207,13 +193,8 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             event_sink: None,
         })
-    }
-
-    pub async fn install_approval_broker(&self, broker: Arc<ServiceInteractionBroker>) {
-        self.interaction_port.install_broker(broker).await;
     }
 
     pub fn admission(&self) -> &ExternalProviderAdmission {
@@ -526,7 +507,7 @@ impl ExternalProviderRuntime {
         self.prompt_with_approval_context(
             provider_session_id.clone(),
             prompt,
-            test_approval_context(&provider_session_id, None),
+            test_approval_context(None),
         )
         .await
     }
@@ -600,7 +581,7 @@ impl ExternalProviderRuntime {
             acp_client_runtime::ProviderTurnInput::Prompt(
                 session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
             ),
-            test_approval_context(&provider_session_id, operation_id),
+            test_approval_context(operation_id),
             dispatch,
         )
         .await
@@ -616,25 +597,9 @@ fn text_contents(
 }
 
 #[cfg(test)]
-fn test_approval_context(
-    provider_session_id: &str,
-    operation_id: Option<OperationId>,
-) -> ExternalProviderApprovalContext {
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint": {"serviceId": service_id, "endpointId": "cursor-local"},
-        "sessionId": provider_session_id,
-    }))
-    .expect("test provider target");
+fn test_approval_context(operation_id: Option<OperationId>) -> ExternalProviderApprovalContext {
     ExternalProviderApprovalContext {
-        requester: target.clone().into(),
-        approver: target.clone().into(),
-        target,
         operation_id: operation_id.unwrap_or_else(OperationId::generate),
-        binding_generation: serde_json::from_value(serde_json::json!({
-            "serviceEpoch": service_id, "generation": 1
-        }))
-        .expect("test generation"),
         binding_retirement: CancellationToken::new(),
     }
 }
@@ -661,6 +626,3 @@ pub(crate) mod acp_scripted_fixture;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_dispatch_test.rs"]
 mod approval_dispatch_tests;
-#[cfg(test)]
-#[path = "external_provider_runtime/approval_push_fixture.rs"]
-mod approval_push_fixture;

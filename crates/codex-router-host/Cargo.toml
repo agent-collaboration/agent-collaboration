@@ -9,8 +9,6 @@ publish.workspace = true
 [features]
 runtime-test-support = [
     "router-clock/test-support",
-    "collaboration-service/runtime-test-support",
-    "collaboration-runtime/runtime-test-support",
     "collaboration-runtime/test-support",
 ]
 keychain-test-support = [
@@ -26,13 +24,9 @@ router-clock.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
-interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 sqlx = { workspace = true, features = ["sqlite"] }
-durable-steps.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-tokio-runner.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }
 acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.118" }
@@ -70,9 +64,7 @@ owned-process-test-support = { path = "../owned-process-test-support", version =
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 codex-router-host = { path = ".", features = ["runtime-test-support"] }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false, features = ["runtime-tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
-fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 axum = { workspace = true, features = ["ws"] }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40", features = ["test-observation"] }

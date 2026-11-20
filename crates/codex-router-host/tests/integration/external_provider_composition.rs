@@ -2,7 +2,7 @@ use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
     ExternalProviderStartup,
 };
-use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessageContent};
+use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCreateRequest,
     ConversationOperationSettlement, ConversationOperationWaitOutput,
@@ -177,23 +177,10 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
         } if settled_target == target
     ));
 
-    let receipt = client
-        .send_message(MessageSendRequest {
-            item_id: None,
-            target,
-            message: PublicMessageContent::HumanUser {
-                text: MessageText::try_from("routed provider message".to_owned()).expect("message"),
-            },
-            delivery: collaboration_protocol::MessageDelivery::Auto,
-            generation_guard: None,
-        })
-        .await
-        .expect("message receipt");
-    let collaboration_protocol::MessageSendResult::Local(receipt) = receipt else {
-        panic!("local provider returned remote sender custody");
-    };
+    let receipt =
+        crate::session_message_route_composition::route_fixture::deliver(&runtime, target).await;
     assert!(
-        matches!(receipt.receipt.outcome, DeliveryOutcome::Started),
+        matches!(receipt.outcome, DeliveryOutcome::Started),
         "{receipt:?}"
     );
 

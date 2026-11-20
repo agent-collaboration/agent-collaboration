@@ -175,9 +175,6 @@ async fn frontend_eof_detaches_active_turn_and_reconnect_is_busy_until_native_id
                     let _sent = turn_started_tx.send(());
                     publish_update_rx.await.unwrap();
                     wire.send(Message::Text(json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"message-a","delta":"detached output"}}).to_string().into())).await?;
-                    wire.send(Message::Text(json!({"id":901,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"tool-a","command":"cargo test","availableDecisions":["accept","decline"]}}).to_string().into())).await?;
-                    let approval = read_native_request(&mut wire).await;
-                    assert_eq!(approval, json!({"id":901,"result":{"decision":"cancel"}}));
                     tokio::select! {
                         _ = finish_turn_rx => {},
                         message = wire.next() => panic!("frontend detach sent native request before completion: {message:?}"),
@@ -240,7 +237,6 @@ async fn frontend_eof_detaches_active_turn_and_reconnect_is_busy_until_native_id
         generation: generation.clone(),
         schemas: Arc::clone(&schemas),
         stored_sessions: Arc::new(EmptyCatalog),
-        approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         holder: holder.clone(),
         recorder: Arc::new(AcceptingConversationRecorder),
         retired: tokio_util::sync::CancellationToken::new(),
@@ -422,7 +418,6 @@ async fn native_callback_after_prompt_command_eof_interrupts_active_turn() {
             schemas: fixture_schemas(),
             generation,
             params: json!({"sessionId":"thread-callback-eof","cwd":"/work","mcpServers":[]}),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         },
     )
     .await
@@ -529,7 +524,6 @@ async fn native_callback_after_frontend_eof_interrupts_turn_and_finishes_actor()
         generation,
         schemas,
         stored_sessions: Arc::new(EmptyCatalog),
-        approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         holder: Arc::new(TestBindingHolder::default()),
         recorder: Arc::new(AcceptingConversationRecorder),
         retired: tokio_util::sync::CancellationToken::new(),
@@ -643,7 +637,6 @@ async fn session_load_without_native_thread_status_fails_closed() {
         generation,
         schemas,
         stored_sessions: Arc::new(EmptyCatalog),
-        approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         holder,
         recorder: Arc::new(AcceptingConversationRecorder),
         retired: tokio_util::sync::CancellationToken::new(),

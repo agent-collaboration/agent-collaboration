@@ -44,15 +44,15 @@ async fn installation_rpc_returns_the_same_persisted_peer_after_a_host_restart()
             .installation_show()
             .await
             .expect("installation read RPC");
-        assert_eq!(identity.peer_id.as_str(), peer.to_string());
+        assert_eq!(identity.peer_id, peer);
         assert_eq!(&identity.service_id, runtime.service_id());
         assert_eq!(
             collaboration_runtime::load_installation_peer(root.path()).expect("persisted peer"),
             peer
         );
         assert_eq!(service_manifest(root.path()).version, 3);
-        if let Some(expected) = original {
-            assert_eq!(peer, expected);
+        if let Some(expected) = &original {
+            assert_eq!(&peer, expected);
         } else {
             original = Some(peer);
         }
@@ -100,6 +100,96 @@ async fn direct_runtime_publication_omits_the_host_router_proxy_endpoint() {
     runtime.shutdown().await.expect("runtime shutdown");
 
     assert_eq!(manifest.router_proxy_endpoint, None);
+}
+
+#[tokio::test]
+async fn host_discovers_and_closes_its_stores_without_touching_predecessor_mail() {
+    const PREDECESSOR: &[u8] =
+        include_bytes!("../tests/fixtures/predecessor-mail/interaction.sqlite");
+    const PREDECESSOR_WAL: &[u8] =
+        include_bytes!("../tests/fixtures/predecessor-mail/interaction.sqlite-wal");
+    const MAIL_FILES: [&str; 4] = [
+        "interaction.sqlite",
+        "interaction.sqlite-wal",
+        "interaction.sqlite-shm",
+        "interaction.sqlite-journal",
+    ];
+    let roots: [(&str, [Option<&[u8]>; 4]); 3] = [
+        ("empty", [None, None, None, None]),
+        (
+            "predecessor",
+            [Some(PREDECESSOR), Some(PREDECESSOR_WAL), None, None],
+        ),
+        (
+            "corrupt",
+            [
+                Some(b"invalid database"),
+                Some(b"invalid wal"),
+                Some(b"invalid shm"),
+                Some(b"invalid rollback journal"),
+            ],
+        ),
+    ];
+    for (root_kind, contents) in roots {
+        let root = tempfile::tempdir().expect("isolated collaboration directory");
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("private collaboration directory");
+        for (name, bytes) in MAIL_FILES.into_iter().zip(contents) {
+            if let Some(bytes) = bytes {
+                std::fs::write(root.path().join(name), bytes).expect("seed inert mail fixture");
+            }
+        }
+
+        let runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
+            HostCollaborationInputs {
+                remote_access: None,
+                collaboration_runtime: runtime_inputs(root.path()),
+                router_proxy_endpoint: SocketAddr::from(([127, 0, 0, 1], 18787)),
+            },
+            Vec::new(),
+            std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
+                RouterExecutableRelation::Match,
+            )),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("{root_kind}: Host startup: {error}"));
+        let client = collaboration_client::CollaborationClient::connect(
+            root.path(),
+            "storeless-startup-proof",
+            "1",
+        )
+        .await
+        .expect("connect through Host discovery");
+        assert_eq!(
+            &client
+                .installation_show()
+                .await
+                .expect("retained installation tool")
+                .service_id,
+            runtime.service_id(),
+        );
+        assert!(client.journal_status().await.is_ok());
+        drop(client);
+        runtime
+            .shutdown()
+            .await
+            .expect("Host releases provider store and journal");
+        assert!(root.path().join("session-registry.sqlite").is_file());
+        assert!(root.path().join("provider-operations.sqlite").is_file());
+        assert!(!root.path().join("service.json").exists());
+        for (name, expected) in MAIL_FILES.into_iter().zip(contents) {
+            let path = root.path().join(name);
+            if let Some(bytes) = expected {
+                assert_eq!(
+                    std::fs::read(&path).expect("seed remains in place"),
+                    bytes,
+                    "{root_kind}: {name}",
+                );
+            } else {
+                assert!(!path.exists(), "{root_kind}: {name} was created");
+            }
+        }
+    }
 }
 
 /// A Codex native schema export from a generator fixture, as the Host receives at startup.

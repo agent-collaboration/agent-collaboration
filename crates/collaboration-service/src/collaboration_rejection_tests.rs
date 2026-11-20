@@ -3,10 +3,9 @@
 //! published `-32050` payload kinds, never the mapping code itself.
 use super::{CollaborationRejection, CollaborationRejectionReason as Reason};
 use crate::collaboration_application::{
-    ConversationFailure, INVALID_NATIVE_PARAMETERS, InteractionFailure, JournalFailure,
-    JournalUnavailableKind, MessageFailure, MessageFailureKind, MessageFailureStage,
+    ConversationFailure, INVALID_NATIVE_PARAMETERS, JournalFailure, JournalUnavailableKind,
     NativeSessionFailure, NativeSessionFailureKind, NativeSessionStage, ObservationFailure,
-    ProviderInventoryFailure, ProviderInventoryFailureKind, QuestionRejection,
+    ProviderInventoryFailure, ProviderInventoryFailureKind,
 };
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
@@ -112,42 +111,7 @@ fn conversation_failures_map_only_overload() {
 }
 
 #[test]
-fn message_interaction_and_observation_payloads_keep_their_kinds() {
-    // Arrange, act and assert: messages.
-    let invalid = MessageFailure {
-        existing: None,
-        kind: MessageFailureKind::InvalidField,
-        stage: MessageFailureStage::Discovery,
-        message: "Invalid push id or Router link".into(),
-    };
-    assert_eq!(invalid.rejection_reason(), Some(Reason::InvalidShape));
-    assert_eq!(
-        serde_json::to_value(&invalid).expect("message failure encodes"),
-        json!({"kind":"invalidField","stage":"discovery","message":"Invalid push id or Router link"})
-    );
-    let foreign = MessageFailure {
-        existing: None,
-        kind: MessageFailureKind::ForeignMachine,
-        stage: MessageFailureStage::Inspect,
-        message: "lives elsewhere".into(),
-    };
-    assert_eq!(foreign.rejection_reason(), None);
-    assert_eq!(wire_kind(&foreign), "foreignMachine");
-
-    // Interactions are family-specific.
-    let answer = InteractionFailure::QuestionRejected(QuestionRejection::InvalidAnswer {
-        field_id: "choice".into(),
-    });
-    assert_eq!(answer.rejection_reason(), None);
-    assert_eq!(
-        answer.payload(),
-        json!({"kind":"invalidAnswer","stage":"inspect","message":"Question response rejected","fieldId":"choice"})
-    );
-    assert_eq!(
-        InteractionFailure::BrokerUnavailable.payload(),
-        json!({"kind":"unavailable","stage":"inspect","message":"Approval service unavailable"})
-    );
-
+fn observation_payloads_keep_their_kinds() {
     // Observation.
     assert_eq!(
         ObservationFailure::InvalidField.rejection_reason(),

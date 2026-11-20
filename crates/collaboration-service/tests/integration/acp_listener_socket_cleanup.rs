@@ -47,9 +47,9 @@ async fn acp_listener_cleans_its_owned_socket_after_shutdown() {
     let path = root.join("codex-acp.sock");
     let listener = AcpChannelListener::bind(
         &path,
+        "00000000-0000-4000-8000-000000000001".to_owned().try_into().unwrap(),
         gate.clone(),
         Arc::new(NativeStoredSessions::new(root.clone(), "fixture".into())),
-        Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
         Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
         Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),

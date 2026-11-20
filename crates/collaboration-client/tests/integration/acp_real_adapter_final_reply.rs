@@ -312,7 +312,6 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
                 schemas: native_payload_schemas().unwrap(),
                 stored_sessions: Arc::new(EmptyStoredSessionCatalog),
                 retired: CancellationToken::new(),
-                approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
                 holder: Arc::new(EmptyUnmaterializedBindings::default()),
                 recorder: Arc::new(AcceptingConversationRecorder),
             },

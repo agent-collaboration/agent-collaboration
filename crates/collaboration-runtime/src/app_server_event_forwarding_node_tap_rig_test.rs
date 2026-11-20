@@ -23,20 +23,12 @@ pub(crate) fn tap_session() -> SessionRef {
     .expect("session")
 }
 
-pub(crate) fn tap_actor() -> Identity {
-    serde_json::from_value(json!({"kind":"human","humanId":"owner"})).expect("actor")
-}
-
 impl Rig {
     pub(crate) fn new() -> Self {
-        Self::with_broker(None)
-    }
-
-    pub(crate) fn with_broker(broker: Option<Arc<ServiceInteractionBroker>>) -> Self {
         let session = tap_session();
         Self {
             thread_id: thread_alias(&session),
-            forwarding: AppServerEventForwarding::new(tap_actor(), broker),
+            forwarding: AppServerEventForwarding::new(),
             session,
         }
     }
@@ -90,20 +82,6 @@ impl Rig {
                 .iter()
                 .filter_map(|(id, _, text)| text.as_ref().map(|text| format!("{id}={text}"))),
         );
-        let mut pending = self
-            .forwarding
-            .pending
-            .values()
-            .map(|interaction| match interaction {
-                PendingAppServerInteraction::Approval { request, .. } => {
-                    format!("approval:{}", request.request_id)
-                }
-                PendingAppServerInteraction::Question { request, .. } => {
-                    format!("question:{}", request.request_id)
-                }
-            })
-            .collect::<Vec<_>>();
-        pending.sort();
         NodeStateSnapshot::new()
             .field(
                 "active_turn",
@@ -114,7 +92,7 @@ impl Rig {
             )
             .field("stored_items", stored_items)
             .field("text_already_sent", text_sent)
-            .field("pending_interactions", render_or_none(pending.into_iter()))
+            .field("pending_interactions", "none")
             .field(
                 "working_directory",
                 if self.forwarding.working_directories.contains_key(session) {

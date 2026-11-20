@@ -1,6 +1,6 @@
 //! Queue reconciliation on the native delivery route: a real `deliver` whose queue reply is
 //! lost, then `reconcile_attempt` against the native queue. Native replies and schema are
-//! stand-ins; the route, its evidence and the broker's approval routes are real.
+//! stand-ins. The route and its evidence are real.
 use super::*;
 use agent_automation::{AttemptId, PreparationEffect};
 use collaboration_contracts::{
@@ -33,24 +33,15 @@ struct QueueObservation {
 
 #[derive(Clone, Copy)]
 enum QueueProbeCase {
-    MatchingItem,
     WrongItem,
     DuplicateItem,
     GenericRoute,
-    GenericRegistersDuringNativeRead,
 }
 
 /// Delivers one queued input whose `thread/queue/add` reply is lost, then reconciles the
 /// attempt from its recorded evidence against the native queue the stand-in reports.
 async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError> {
-    let fixture = if matches!(
-        case,
-        QueueProbeCase::GenericRoute | QueueProbeCase::GenericRegistersDuringNativeRead
-    ) {
-        RecordedPolicyFixture::create_without_route().await?
-    } else {
-        RecordedPolicyFixture::create().await?
-    };
+    let fixture = NativeDeliveryFixture::create()?;
     let directory =
         collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
@@ -59,8 +50,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         directory,
         fixture.backend.clone(),
         Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
-    )
-    .with_approval_broker(&fixture.broker);
+    );
     let push_id = PushId::try_from(OperationId::generate().as_str().to_owned())?;
     let link = RouterLink::new(
         MachineId::from(fixture.backend.endpoint.service_id.clone()),
@@ -79,23 +69,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         attempt: AttemptId::generate(),
     };
     let listener = tokio::net::UnixListener::bind(fixture.directory.path().join("native.sock"))?;
-    let mutation_broker = fixture.broker.clone();
-    let mutation_scratch = fixture
-        .directory
-        .path()
-        .join("scratch")
-        .to_string_lossy()
-        .into_owned();
     let cwd = fixture.directory.path().to_string_lossy().into_owned();
-    let mut roots = fixture
-        .filesystem
-        .iter()
-        .filter(|(_, access)| *access == &json!("write"))
-        .map(|(path, _)| path.clone())
-        .collect::<Vec<_>>();
-    if matches!(case, QueueProbeCase::MatchingItem) {
-        roots.push("/literal-extra-queue-root".to_owned());
-    }
     let native = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
         let mut socket = tokio_tungstenite::accept_async(stream).await?;
@@ -107,22 +81,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                 "initialize" => json!({}),
                 "initialized" => continue,
                 "thread/read" => {
-                    if matches!(case, QueueProbeCase::GenericRegistersDuringNativeRead) {
-                        mutation_broker
-                            .register_route(ApprovalRoute {
-                                thread_id: THREAD.into(),
-                                created_by: target(),
-                                approver: target(),
-                                access: collaboration_protocol::RouterAccess::WorkspaceWrite,
-                                scratch_path: mutation_scratch.clone(),
-                                root_message_id: None,
-                            })
-                            .await?;
-                    }
                     json!({"thread":{"id":THREAD,"cwd":cwd,"status":{"type":"idle"}}})
-                }
-                "thread/resume" => {
-                    json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"excludeTmpdirEnvVar":true,"excludeSlashTmp":true,"writableRoots":roots}})
                 }
                 // The reply to the queue mutation is lost: the connection closes first.
                 "thread/queue/add" => {
@@ -219,32 +178,10 @@ fn queued_receipt(
 }
 
 #[tokio::test]
-async fn policy_queue_accepted_resume_reconciliation_causal() {
-    let (resume, receipt) =
-        queued_receipt(queue_probe(QueueProbeCase::MatchingItem).await.unwrap()).unwrap();
-    assert_eq!(resume, PreparationEffect::Accepted);
-    assert!(
-        matches!(receipt.outcome, DeliveryOutcome::Queued),
-        "exact queue item must resolve accepted-resume submission"
-    );
-    let Some(DeliveryClientReceipt::CodexAppServer(client)) = receipt.client else {
-        panic!("client receipt missing");
-    };
-    assert_eq!(
-        client.resume_effect,
-        collaboration_protocol::AcceptedResumeEffect::Accepted
-    );
-    assert_eq!(
-        client.permission_differences,
-        vec![collaboration_protocol::PermissionDifference::WritableRoots]
-    );
-}
-
-#[tokio::test]
 async fn policy_queue_wrong_or_duplicate_item_stays_uncertain() {
     for case in [QueueProbeCase::WrongItem, QueueProbeCase::DuplicateItem] {
         let observed = queue_probe(case).await.unwrap();
-        assert_eq!(observed.resume, PreparationEffect::Accepted);
+        assert_eq!(observed.resume, PreparationEffect::NotRequested);
         assert!(matches!(
             observed.reconciliation,
             AttemptReconciliation::StillUnknown
@@ -267,38 +204,15 @@ async fn policy_queue_generic_route_reconciles_without_inventing_resume() {
     );
 }
 
-#[tokio::test]
-async fn policy_generic_membership_is_pinned_before_native_io() {
-    let (resume, receipt) = queued_receipt(
-        queue_probe(QueueProbeCase::GenericRegistersDuringNativeRead)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        resume,
-        PreparationEffect::NotRequested,
-        "generic attempt reclassified and resumed after native read"
-    );
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Queued));
-    let Some(DeliveryClientReceipt::CodexAppServer(client)) = receipt.client else {
-        panic!("client receipt missing");
-    };
-    assert_eq!(
-        client.resume_effect,
-        collaboration_protocol::AcceptedResumeEffect::NotRequested
-    );
-}
-
 /// The recorded native effects a queued Codex attempt leaves before its outcome is known.
 fn recorded_codex_effects(
-    fixture: &RecordedPolicyFixture,
+    fixture: &NativeDeliveryFixture,
 ) -> RouteEffectEvidence<SessionRef, CodexGeneration> {
     serde_json::from_value(json!({"kind":"codexAppServer","target":target(),"generation":fixture.generation,"clientUserMessageId":"loaded-policy-input","nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"notDispatched","cessation":"notApplicable"})).unwrap()
 }
 #[tokio::test]
 async fn policy_queue_invalid_effects_never_inspect_or_accept_a_queue_item() {
-    let fixture = RecordedPolicyFixture::create().await.unwrap();
+    let fixture = NativeDeliveryFixture::create().unwrap();
     let listener =
         tokio::net::UnixListener::bind(fixture.directory.path().join("native.sock")).unwrap();
     let push: collaboration_protocol::PushId = OperationId::generate()

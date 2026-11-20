@@ -1,7 +1,13 @@
 //! Connection-level answer for agent requests that no implemented handler owns.
 
+use agent_client_protocol::schema::v1::RequestId;
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
-use std::{collections::HashSet, sync::Arc};
+use session_event_model::managed_interaction_refusal::ManagedInteractionRefusal;
+use std::{
+    collections::HashSet,
+    hash::{BuildHasher as _, RandomState},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 #[derive(Clone, Default)]
@@ -25,13 +31,28 @@ impl ProviderKnownSessions {
     }
 }
 
+#[derive(Eq, Hash, PartialEq)]
+struct CallbackIdentity {
+    request_id: RequestId,
+    method: String,
+    params_digest: [u64; 2],
+}
+
 pub(super) struct ProviderRequestSessionGuard {
     known_sessions: ProviderKnownSessions,
+    managed_refusal: bool,
+    params_hashers: [RandomState; 2],
+    claimed_callbacks: HashSet<CallbackIdentity>,
 }
 
 impl ProviderRequestSessionGuard {
-    pub(super) fn new(known_sessions: ProviderKnownSessions) -> Self {
-        Self { known_sessions }
+    pub(super) fn new(known_sessions: ProviderKnownSessions, managed_refusal: bool) -> Self {
+        Self {
+            known_sessions,
+            managed_refusal,
+            params_hashers: std::array::from_fn(|_| RandomState::new()),
+            claimed_callbacks: HashSet::new(),
+        }
     }
 }
 
@@ -42,6 +63,26 @@ impl HandleDispatchFrom<Agent> for ProviderRequestSessionGuard {
         _connection: ConnectionTo<Agent>,
     ) -> Result<Handled<Dispatch>, Error> {
         if let Dispatch::Request(request, responder) = message {
+            // Retain claims through connection retirement so a late replay
+            // cannot claim the next turn. A provider can reuse an ID.
+            if self.managed_refusal
+                && ManagedInteractionRefusal::owns_acp_callback(request.method())
+            {
+                let mut params = request.params().clone();
+                params.sort_all_objects();
+                let canonical_params = params.to_string();
+                let identity = CallbackIdentity {
+                    request_id: responder.id().clone(),
+                    method: request.method().to_owned(),
+                    params_digest: self
+                        .params_hashers
+                        .each_ref()
+                        .map(|hasher| hasher.hash_one(&canonical_params)),
+                };
+                if !self.claimed_callbacks.insert(identity) {
+                    return Ok(Handled::Yes);
+                }
+            }
             let session_id = request
                 .params()
                 .get("sessionId")

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:net";
 import { z } from "zod";
-import { field, textField } from "../exact-json.ts";
+import { textField } from "../exact-json.ts";
 import { AcpExchange } from "./acp-exchange.ts";
 import { wireJson } from "./acp-stdio.ts";
 
@@ -43,25 +43,12 @@ export async function runFixture(_configuration: unknown): Promise<void> {
       const session = textField(request, "params", "sessionId");
       if (session === "fixture-1") {
         pending.set(session, request.id);
-        agent.send({
-          jsonrpc: "2.0",
-          id: 91,
-          method: "session/request_permission",
-          params: {
-            sessionId: session,
-            toolCall: { toolCallId: "permission-tool" },
-            options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" }],
-          },
-        });
         await cancelledPromptReleased;
         finishCancelled(session);
       } else agent.endTurn(request);
     } else if (request.method === "session/cancel") {
       const session = textField(request, "params", "sessionId");
       if (!responded.has(session)) finishCancelled(session);
-    } else if (request.id === 91n) {
-      assert.equal(field(request, "result", "outcome", "outcome"), "cancelled");
-      if (!responded.has("fixture-1")) finishCancelled("fixture-1");
     } else assert.fail(wireJson(request));
   }
   agent.close();
