@@ -4,7 +4,8 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_conformance::signin_fixtures as signed;
-use collaboration_central_core::{AlarmResult, DrainResult};
+use collaboration_central_core::DrainResult;
+use fleet_contracts::AlarmResult;
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};

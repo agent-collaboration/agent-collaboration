@@ -2,17 +2,18 @@
 //! only `EngineHost`; this module, outside engine/, implements that port for the
 //! runtime and keeps the runtime's public event entry.
 use crate::engine::{
-    AlarmNotPublished, DueBatchState, EventCompletion,
+    DueBatchState,
     legacy_units::LegacyUnitOutcome,
     port::{Engine, EngineHost},
 };
-use crate::{
-    CentralObservation, MailDeliveryReady, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-};
+use crate::{MailDeliveryReady, WorkspaceRuntime};
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_contracts::CentralObservation;
+use fleet_contracts::{AlarmNotPublished, EventCompletion};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> EngineHost for WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> {
     type Host = H;
     fn host(&self) -> &H {
         self.host.as_ref()
@@ -20,7 +21,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> EngineHost for WorkspaceRuntime<H, S
     fn now(&self) -> Result<EngineTime, StoreFailure> {
         WorkspaceRuntime::now(self)
     }
-    fn ids(&self) -> &dyn runtime_primitives::IdSource {
+    fn ids(&self) -> &dyn fleet_runtime_ports::IdSource {
         self.ids.as_ref()
     }
     fn due_batches(&self) -> &DueBatchState {
@@ -57,7 +58,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> EngineHost for WorkspaceRuntime<H, S
     }
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     /// Every event reaches this after its own work: the due batch when the
     /// spacing allows, then the alarm (P4).
     pub async fn after_event(&self) -> Result<EventCompletion, AlarmNotPublished> {

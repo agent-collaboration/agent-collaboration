@@ -8,7 +8,6 @@ use super::{
     port::EngineHost,
     probe_machine::{EngineProbe, ProbeEffect, ProbeState},
 };
-use crate::ObjectHost as _;
 use crate::{
     central_mail_rows::timestamp,
     guarded_statements::{exact, text},
@@ -17,6 +16,7 @@ use crate::{
 };
 use central_engine_model::{EngineTime, InstanceKey, StateTag};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore as _;
 
 pub(crate) struct ProbeStore<'a, R: EngineHost>(pub &'a R);
 const FAILURE: &str = guarded_attempt_sql!(

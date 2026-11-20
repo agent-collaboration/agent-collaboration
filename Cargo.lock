@@ -1396,7 +1396,9 @@ dependencies = [
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
+ "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime-ports",
  "futures-channel",
  "futures-util",
  "http",
@@ -1453,14 +1455,15 @@ dependencies = [
  "central-link-protocol",
  "central-storage",
  "chrono",
+ "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime-ports",
  "futures-util",
  "hegeltest",
  "http",
  "jsonschema",
  "message-board",
  "ring",
- "runtime-primitives",
  "schemars 1.2.2",
  "serde",
  "serde_json",
@@ -1491,7 +1494,9 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "collaboration-central-tokio",
+ "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-runtime-ports",
  "futures-util",
  "hegeltest",
  "reqwest 0.12.28",
@@ -2357,6 +2362,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-contracts"
+version = "0.1.156"
+dependencies = [
+ "central-engine-model",
+ "central-storage",
+ "fleet-identity-protocol",
+ "fleet-runtime-ports",
+ "serde",
+ "thiserror 2.0.18",
+ "workspace-model",
+]
+
+[[package]]
 name = "fleet-identity-protocol"
 version = "0.1.156"
 dependencies = [
@@ -2366,6 +2384,17 @@ dependencies = [
  "schemars 1.2.2",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fleet-runtime-ports"
+version = "0.1.156"
+dependencies = [
+ "central-engine-model",
+ "central-storage",
+ "serde",
+ "uuid",
+ "workspace-ids",
 ]
 
 [[package]]
@@ -4385,13 +4414,10 @@ name = "runtime-primitives"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "chrono",
- "futures-util",
  "serde",
  "thiserror 2.0.18",
  "tokio",
  "uuid",
- "worker",
 ]
 
 [[package]]

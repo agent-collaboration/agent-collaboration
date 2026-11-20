@@ -461,6 +461,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     host.close().await;
 }
 
+mod clock_boundaries;
 mod initiatives_and_members;
 mod read_projection_cases;
 mod relations;

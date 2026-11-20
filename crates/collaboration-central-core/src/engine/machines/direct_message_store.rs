@@ -2,7 +2,6 @@
 //! message's own columns; the sender's session is read from actor_identities,
 //! which owns the actor-to-session mapping, and is not part of the version.
 use super::direct_message::{self as direct, DirectMessage, DirectMessageSubject};
-use crate::ObjectHost as _;
 use crate::{
     central_mail_rows::{insert_message, timestamp},
     direct_message_rows::{
@@ -22,6 +21,7 @@ use crate::{
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore as _;
 
 pub(crate) struct DirectMessageStore<'a, R: EngineHost>(pub &'a R);
 

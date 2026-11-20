@@ -19,6 +19,5 @@ pub use request_admission::{
     PersonFloor, PersonFloorState, SECOND_FACTOR_WINDOW_SECONDS,
 };
 pub use request_verifier::{
-    Es256Verification, PersonRequestInput, PersonRequestPolicy, PersonRequestVerifier, ProofJwk,
-    VerifiedPersonRequest,
+    PersonRequestInput, PersonRequestPolicy, PersonRequestVerifier, VerifiedPersonRequest,
 };

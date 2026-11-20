@@ -18,7 +18,7 @@ macro_rules! machine_id {
 
         impl $name {
             pub fn new(value: Uuid) -> Result<Self, MachineIdError> {
-                if !runtime_primitives::uuid_v7(value) {
+                if !fleet_runtime_ports::uuid_v7(value) {
                     return Err(MachineIdError { kind: stringify!($name) });
                 }
                 Ok(Self(value))
@@ -42,7 +42,7 @@ macro_rules! machine_id {
         impl TryFrom<String> for $name {
             type Error = MachineIdError;
             fn try_from(value: String) -> Result<Self, Self::Error> {
-                if !runtime_primitives::canonical_uuid_v7(&value) {
+                if !fleet_runtime_ports::canonical_uuid_v7(&value) {
                     return Err(MachineIdError { kind: stringify!($name) });
                 }
                 let parsed = Uuid::parse_str(&value)

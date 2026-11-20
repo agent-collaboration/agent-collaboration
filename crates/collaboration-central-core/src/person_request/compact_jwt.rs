@@ -65,7 +65,7 @@ pub(crate) fn uuid_v7(
     refusal: PersonRequestRefusal,
 ) -> Result<Uuid, PersonRequestRefusal> {
     let id = Uuid::parse_str(value).map_err(|_| refusal)?;
-    if !runtime_primitives::uuid_v7(id) || id.to_string() != value {
+    if !fleet_runtime_ports::uuid_v7(id) || id.to_string() != value {
         return Err(refusal);
     }
     Ok(id)

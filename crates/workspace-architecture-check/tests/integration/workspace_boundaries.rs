@@ -2,7 +2,7 @@
 use super::{DependencyKind, NonDevDependencyGraph};
 use std::collections::{BTreeMap, BTreeSet};
 
-const PURE_CRATES: [(&str, &[&str]); 7] = [
+const PURE_CRATES: [(&str, &[&str]); 9] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -20,6 +20,20 @@ const PURE_CRATES: [(&str, &[&str]); 7] = [
     ),
     ("central-storage", &[]),
     ("central-engine-model", &["central-storage"]),
+    (
+        "fleet-runtime-ports",
+        &["central-engine-model", "central-storage", "workspace-ids"],
+    ),
+    (
+        "fleet-contracts",
+        &[
+            "central-engine-model",
+            "central-storage",
+            "fleet-identity-protocol",
+            "fleet-runtime-ports",
+            "workspace-model",
+        ],
+    ),
     ("workspace-rules", &["workspace-model", "central-storage"]),
     ("vendor-protocol", &[]),
 ];
@@ -259,6 +273,31 @@ fn central_owners_reject_direct_legacy_protocol_edges() {
             )]))
             .is_ok()
         );
+    }
+}
+
+#[test]
+fn fleet_interfaces_reject_upward_normal_and_build_edges() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        assert!(
+            check_boundaries(&graph(&[("fleet-contracts", "fleet-runtime-ports", kind)])).is_ok()
+        );
+    }
+    for interface in ["fleet-runtime-ports", "fleet-contracts"] {
+        for owner in [
+            "collaboration-central-core",
+            "collaboration-central-tokio",
+            "collaboration-central-cloudflare",
+        ] {
+            for kind in [DependencyKind::Normal, DependencyKind::Build] {
+                let violation = check_boundaries(&graph(&[(interface, owner, kind)]))
+                    .expect_err("the Fleet interface must reject an upward edge");
+                assert_eq!(
+                    violation.to_string(),
+                    format!("BD1: forbidden {kind:?} dependency {interface} -> {owner}")
+                );
+            }
+        }
     }
 }
 

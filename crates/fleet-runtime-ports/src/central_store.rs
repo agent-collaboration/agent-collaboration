@@ -1,8 +1,8 @@
-//! The statement-only capability shared by modern central adapters.
+//! The organization's central store: one atomic statement batch, with its alarm update.
 use central_storage::{BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure};
 use std::future::Future;
 
-pub trait ObjectHost: Send + Sync + 'static {
+pub trait CentralStore: Send + Sync + 'static {
     /// Runs every statement in one transaction; a failed guard or constraint rolls it all
     /// back. `AlarmUpdate::SetFromQuery` runs last in that transaction and sets the alarm.
     fn run_batch(
@@ -17,5 +17,5 @@ pub trait ObjectHost: Send + Sync + 'static {
     /// Durable Object alarm, Tokio the last successfully published deadline.
     fn published_alarm(
         &self,
-    ) -> impl Future<Output = Result<Option<central_engine_model::EngineTime>, StoreFailure>> + Send;
+    ) -> impl Future<Output = Result<Option<crate::EngineTime>, StoreFailure>> + Send;
 }

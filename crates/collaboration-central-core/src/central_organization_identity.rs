@@ -1,7 +1,8 @@
 //! The provisioned sign-in stamp is central's sole durable organization identity.
-use crate::{ObjectHost, workspace_decode_error::corrupt, workspace_row_codec::string};
+use crate::{workspace_decode_error::corrupt, workspace_row_codec::string};
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::CentralStore;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CentralOrganizationIdentity {
     Unprovisioned,
@@ -9,7 +10,7 @@ pub enum CentralOrganizationIdentity {
 }
 /// Reads the row verified by provisioning; alarms do not verify its signature again.
 pub async fn read_central_organization(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
 ) -> Result<CentralOrganizationIdentity, StoreFailure> {
     let rows = host
         .read(Statement {
@@ -34,7 +35,7 @@ pub async fn read_central_organization(
 }
 /// Prepares a cold alarm without fabricating an identity for an unprovisioned store.
 pub async fn prepare_central_alarm(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
 ) -> Result<CentralOrganizationIdentity, StoreFailure> {
     let identity = read_central_organization(host).await?;
     if identity == CentralOrganizationIdentity::Unprovisioned {

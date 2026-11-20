@@ -1,7 +1,7 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
 use crate::engine::legacy_units::LegacyUnitOutcome;
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceRuntime,
     central_mail_store::{alarm_update, applied, timestamp},
     guarded_statements::{exact, text},
     notification_windows::{parse, parse_time},
@@ -10,8 +10,9 @@ use crate::{
     workspace_row_codec::{WorkspaceRows, column, string},
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// The caller holds central admission through this deadline and the workspace batch.
     pub(crate) async fn preset_workspace_drain_held(
         &self,

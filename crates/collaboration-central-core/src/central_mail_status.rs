@@ -1,19 +1,20 @@
 //! A sender reads the owning row of their direct message.
 use crate::{
-    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceCaller, WorkspaceRuntime,
     central_mail_rows::encode,
     direct_message_rows::{DirectMessageStatus, decode_direct_message},
     guarded_statements::text,
     workspace_decode_error::corrupt,
 };
 use central_storage::{Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::MessageId;
 use workspace_model::{
     RefusalReason,
     central_mail::{MessageCancellation, MessageSender, MessageStatus},
 };
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn direct_message_status(
         &self,
         caller: &WorkspaceCaller,

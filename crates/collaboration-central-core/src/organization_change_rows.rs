@@ -1,12 +1,12 @@
 //! Sign-in change records share the stamp/effect atomic batch.
 use crate::{
-    ObjectHost,
     workspace_decode_error::corrupt as bad_value,
     workspace_row_codec::{column, string},
 };
 use central_storage::{
     GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement, StoreFailure,
 };
+use fleet_runtime_ports::CentralStore;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -130,7 +130,7 @@ fn integer(value: i64) -> Result<SqlValue, StoreFailure> {
 }
 fn private_id(value: &str) -> Result<Uuid, StoreFailure> {
     let id = Uuid::parse_str(value).map_err(|_| bad_value("signin_change_records.id"))?;
-    if !runtime_primitives::uuid_v7(id) || id.to_string() != value {
+    if !fleet_runtime_ports::uuid_v7(id) || id.to_string() != value {
         return Err(bad_value("signin_change_records.id"));
     }
     Ok(id)
@@ -220,7 +220,7 @@ fn decode(rows: &ReadOutcome, row: &[SqlValue]) -> Result<OrganizationChangeReco
     })
 }
 pub(crate) async fn read_page(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     after: Option<Uuid>,
     limit: u16,
 ) -> Result<Vec<OrganizationChangeRecord>, StoreFailure> {
@@ -231,7 +231,7 @@ pub(crate) async fn read_page(
 /// Find the predecessor ended by this approval's activation, without paging
 /// through unrelated audit history. The operation key already stores this link.
 pub(crate) async fn read_machine_supersession(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     originating_request: &str,
 ) -> Result<Option<OrganizationChangeRecord>, StoreFailure> {
     let rows = host.read(Statement {

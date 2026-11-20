@@ -1,6 +1,6 @@
 //! Read a retained decision from the ledger that owned the original write.
 use crate::{
-    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceCaller, WorkspaceRuntime,
     organization_admin_contract::OrganizationAdminResult,
     workspace_decode_error::corrupt,
     workspace_request_log::{RequestLogStore, lookup},
@@ -10,6 +10,7 @@ use central_link_protocol::{
     ReplyPayload, RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::{ReadOutcome, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentityId, WorkspaceReply, WorkspaceResult, central_mail::CentralMailResult,
 };
@@ -48,7 +49,7 @@ fn retained_decision(
     .map(Some)
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// Status never re-applies the original operation or creates an identity.
     pub async fn request_status(
         &self,

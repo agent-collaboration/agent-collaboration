@@ -161,9 +161,9 @@ jobs:
         run: node verification/tooling/check-tui-input-ownership.ts
       - name: Check the shared asynchronous core on native and wasm
         run: |
-          cargo check --locked -p collaboration-central-core
-          cargo check --locked -p collaboration-central-core --target wasm32-unknown-unknown
-          cargo clippy --locked -p collaboration-central-core --target wasm32-unknown-unknown --lib -- -D warnings
+          cargo check --locked -p collaboration-central-core -p fleet-runtime-ports -p fleet-contracts
+          cargo check --locked -p collaboration-central-core -p fleet-runtime-ports -p fleet-contracts --target wasm32-unknown-unknown
+          cargo clippy --locked -p collaboration-central-core -p fleet-runtime-ports -p fleet-contracts --target wasm32-unknown-unknown --lib -- -D warnings
       - name: Measure pinned tool cache footprint
         run: du -sb tmp/rust-tools
       - name: Wait for checks

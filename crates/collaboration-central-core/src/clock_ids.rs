@@ -4,7 +4,7 @@
 //! object keeps a `ContextV7`, so ids minted in the same millisecond (or while a test
 //! holds the clock) still increase in mint order within that object.
 
-use runtime_primitives::{Clock, IdSource, SyncTime};
+use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use std::sync::{Mutex, PoisonError};
 use uuid::{ContextV7, Timestamp, Uuid};
 

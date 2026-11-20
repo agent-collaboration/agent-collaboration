@@ -15,6 +15,8 @@ test-support = ["collaboration-central-core/test-support", "router-clock/test-su
 [dependencies]
 central-storage.workspace = true
 central-link-protocol.workspace = true
+fleet-contracts.workspace = true
+fleet-runtime-ports.workspace = true
 futures-util.workspace = true
 router-clock.workspace = true
 workspace-model.workspace = true

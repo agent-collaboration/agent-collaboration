@@ -1,0 +1,20 @@
+[package]
+name = "fleet-contracts"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Shared vocabulary and interfaces for FleetRuntime features"
+
+[lints]
+workspace = true
+
+[dependencies]
+central-engine-model.workspace = true
+central-storage.workspace = true
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.156" }
+fleet-runtime-ports.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+workspace-model.workspace = true

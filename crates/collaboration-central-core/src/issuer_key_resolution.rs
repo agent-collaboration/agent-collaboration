@@ -1,26 +1,7 @@
 //! Issuer-key refresh policy uses only the configured source, never JWT claims.
-use crate::{
-    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
-    KeyFetchFailure, RawJwks,
-};
-use runtime_primitives::Clock;
-use std::future::Future;
-
-/// A host binds this port to the issuer's key address from pinned configuration.
-pub trait IssuerKeySource: Send + Sync {
-    fn configured_source(&self) -> &str;
-    fn fetch_issuer_keys(&self) -> impl Future<Output = Result<RawJwks, KeyFetchFailure>> + Send;
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum IssuerKeyResolutionRefusal {
-    #[error("the issuer's key source could not be reached")]
-    Fetch { reason: KeyFetchFailure },
-    #[error(transparent)]
-    KeySet(#[from] IssuerKeyRefusal),
-    #[error("the receiver's key-cache clock is unavailable")]
-    InvalidClock,
-}
+use crate::{IssuerKeyCache, IssuerKeyId, IssuerKeySet, IssuerVerificationKey};
+use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal};
+use fleet_runtime_ports::{Clock, IssuerKeySource};
 
 pub async fn resolve_issuer_key<Source: IssuerKeySource>(
     source: &Source,

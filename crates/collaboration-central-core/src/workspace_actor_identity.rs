@@ -1,10 +1,11 @@
+use crate::WorkspaceRuntime;
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::{json, string};
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
 };
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason,
 };
@@ -39,7 +40,7 @@ pub(crate) struct ActorIdentityPlan {
     pub statements: Vec<GuardedStatement>,
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// Find the caller's actor without minting one on a status read.
     pub(crate) async fn existing_caller_actor(
         &self,
@@ -204,7 +205,7 @@ fn decode_actor(
         identity,
     })
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
         Ok(self.read_actor_identity(actor).await?.is_some())
     }

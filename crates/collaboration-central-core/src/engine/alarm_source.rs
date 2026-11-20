@@ -20,7 +20,6 @@ use super::{
     },
     port::{Engine, EngineHost},
 };
-use crate::ObjectHost as _;
 use crate::{
     workspace_decode_error::corrupt,
     workspace_row_codec::{column, string},
@@ -31,30 +30,10 @@ use central_engine_model::{
 use central_storage::{
     AlarmPublication, AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
+use fleet_contracts::{AlarmNotPublished, AlarmResult, EventCompletion};
+use fleet_runtime_ports::CentralStore as _;
 use futures_util::{StreamExt, stream};
 use std::sync::atomic::{AtomicBool, Ordering};
-
-/// What one due batch did, counted per unit kind.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AlarmResult {
-    pub wakes_fired: usize,
-    pub automations_fired: usize,
-    pub windows_fired: usize,
-    pub workspaces_drained: usize,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EventCompletion {
-    pub work: AlarmResult,
-    pub publication: AlarmPublication,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("the event's alarm was not published: {failure}")]
-pub struct AlarmNotPublished {
-    pub failure: StoreFailure,
-}
 
 #[derive(Clone, Copy)]
 enum DueKind {

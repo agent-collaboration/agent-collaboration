@@ -1,15 +1,15 @@
 use super::*;
 use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 use central_storage::{StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{ClockIds, WorkspaceRuntime, WorkspaceStoreCalls};
+use collaboration_central_core::{ClockIds, WorkspaceRuntime};
 use collaboration_central_tokio::ObjectStorage;
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone)]
 struct ArcClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for ArcClock {
     fn now(&self) -> SyncTime {
-        self.0.now()
+        SyncTime::from_unix_millis(runtime_primitives::Clock::now(self.0.as_ref()).unix_millis())
     }
 }
 #[derive(Clone)]
@@ -17,7 +17,7 @@ struct LoseFirstRead {
     store: Arc<ObjectStorage>,
     lose: Arc<AtomicBool>,
 }
-impl WorkspaceStoreCalls for LoseFirstRead {
+impl WorkspaceStores for LoseFirstRead {
     async fn call_workspace(
         &self,
         _workspace: &m::WorkspaceId,
@@ -42,6 +42,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     f.area(890).await;
     f.host.close().await;
     let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let clock = ArcClock(f.shared_for_runtime());
     let central = Arc::new(
         ObjectStorage::new(
             f.root
@@ -51,7 +52,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
         .with_engine_publication(
-            f.shared_for_runtime(),
+            Arc::new(clock.clone()),
             collaboration_central_core::engine_alarm_decider(due_batches.clone()),
         ),
     );
@@ -70,14 +71,14 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             store: store.clone(),
             lose: lose.clone(),
         },
-        f.shared_for_runtime(),
-        Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
+        Arc::new(clock.clone()),
+        Arc::new(ClockIds::new(clock.clone())),
         due_batches,
     )
     .with_sign_in_verification(
         collaboration_central_tokio::NativeSignInTrust::new(settings(&f.keys.url))
             .unwrap()
-            .for_organization(f.caller.organization_id().clone(), f.clock.clone())
+            .for_organization(f.caller.organization_id().clone(), Arc::new(clock))
             .unwrap(),
     );
     let request = m::WorkspaceRequest {

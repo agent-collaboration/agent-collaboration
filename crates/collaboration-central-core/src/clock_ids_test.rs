@@ -1,5 +1,5 @@
 use super::ClockIds;
-use runtime_primitives::{Clock, IdSource, SyncTime};
+use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use std::sync::atomic::{AtomicI64, Ordering};
 
 struct HeldClock(AtomicI64);

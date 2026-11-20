@@ -1,12 +1,11 @@
+pub(crate) mod admin;
 mod alarm_decision;
 mod alarm_source;
-#[cfg(feature = "test-support")]
-pub(crate) mod commit_fault;
-pub use alarm_source::{AlarmNotPublished, AlarmResult, EventCompletion};
-pub(crate) mod admin;
 pub(crate) mod attempt_records;
 pub(crate) mod attempt_statements;
 pub(crate) mod attempt_store;
+#[cfg(feature = "test-support")]
+pub(crate) mod commit_fault;
 pub(crate) mod control_gate;
 mod due_batch_state;
 pub(crate) mod effects;

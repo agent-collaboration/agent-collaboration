@@ -1,15 +1,16 @@
 //! Resolve display identity from current organization rows when delivering mail.
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, guarded_statements::text,
-    workspace_decode_error::corrupt, workspace_row_codec::string,
+    WorkspaceRuntime, guarded_statements::text, workspace_decode_error::corrupt,
+    workspace_row_codec::string,
 };
 use central_storage::{Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
     Identity, ResolvedSender,
     central_mail::{MessageBody, MessageRecord, MessageSender},
 };
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_message_sender(
         &self,
         message: &MessageRecord,

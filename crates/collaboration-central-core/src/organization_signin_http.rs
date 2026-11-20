@@ -5,7 +5,6 @@ use crate::{
         PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization, ReadOrganizationStatementDigest,
     },
     organization_admin_contract::OrganizationAdminAnswer,
-    organization_authority::OrganizationProvisioningFailure,
     organization_signin_port::OrganizationSignInPort,
     person_request::{AdminRoute, PersonRequestInput},
 };
@@ -17,6 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use fleet_contracts::OrganizationProvisioningFailure;
 use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

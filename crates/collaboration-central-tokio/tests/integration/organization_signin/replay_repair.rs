@@ -1,7 +1,7 @@
 use super::support::*;
 use central_storage::StoreFailure;
 use collaboration_central_core::identity_contract::ProvisionOrganization;
-use collaboration_central_core::organization_authority::OrganizationProvisioningFailure;
+use fleet_contracts::OrganizationProvisioningFailure;
 #[expect(
     clippy::panic_in_result_fn,
     reason = "A cancelled real commit followed by a failed alarm reconciliation must preserve retry classification and exact stored effects."
