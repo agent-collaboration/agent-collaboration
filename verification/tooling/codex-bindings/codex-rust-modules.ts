@@ -219,10 +219,14 @@ export function renderRustModules(
   ];
   const pairings = bindings.pairings.map((item) => ({ name: item.name, items: [item] }));
   for (;;) {
-    const firstObservation = partitions.findIndex((partition) => partition.observation);
-    const declarations = partitions.map(({ items }, index) =>
-      index === firstObservation ? { name: "observation_events", items } : declarationModule(items),
-    );
+    let observationNumber = 0;
+    const declarations = partitions.map(({ items, observation }) => {
+      if (!observation) return declarationModule(items);
+      observationNumber += 1;
+      const name =
+        observationNumber === 1 ? "observation_events" : `observation_events_${observationNumber}`;
+      return { name, items };
+    });
     const files = formatModules(
       moduleSources([...declarations, ...pairings], notificationItems.length !== 0),
       repository,

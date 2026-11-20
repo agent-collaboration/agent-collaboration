@@ -16,6 +16,7 @@ import { z } from "zod";
 
 import { codexBundleSchema } from "../schema-audit/codex-pairing-transcription.ts";
 import { checkCodexBindings, writeCodexBindings } from "./codex-generated-files.ts";
+import type { RustBindingItem } from "./codex-rust-binding.ts";
 import { generatedRustHeader, renderRustModules, rustLineCount } from "./codex-rust-modules.ts";
 import { readPinnedCodexInput, renderCodexBindings } from "./generate-codex-bindings.ts";
 
@@ -124,17 +125,24 @@ test("generation replaces owned monolithic and stale outputs with the bounded se
   checkCodexBindings(directory, files, legacy);
 });
 
-test("the formatted line budget splits declarations and rejects an indivisible item", (): void => {
-  const declaration = (name: string, count: number) => ({
+function compactDeclaration(name: string, fieldCount: number): RustBindingItem {
+  const fields = Array.from({ length: fieldCount }, (_, index) => `field_${index}: String,`);
+  return {
     name,
     exports: [name],
     references: [],
     needsSerde: false,
-    source: `pub struct ${name} { ${Array.from({ length: count }, (_, index) => `field_${index}: String,`).join(" ")} }`,
-  });
+    source: `pub struct ${name} { ${fields.join(" ")} }`,
+  };
+}
+
+test("the formatted line budget splits declarations and rejects an indivisible item", (): void => {
   const partitions = renderRustModules(
     {
-      declarations: [declaration("FirstPayload", 600), declaration("SecondPayload", 600)],
+      declarations: [
+        compactDeclaration("FirstPayload", 600),
+        compactDeclaration("SecondPayload", 600),
+      ],
       pairings: [],
     },
     repository,
@@ -143,7 +151,7 @@ test("the formatted line budget splits declarations and rejects an indivisible i
   for (const module of partitions.values()) assert.ok(rustLineCount(module) <= 1000);
   const paired = renderRustModules(
     {
-      declarations: [declaration("Request", 600), declaration("Response", 600)],
+      declarations: [compactDeclaration("Request", 600), compactDeclaration("Response", 600)],
       pairings: [
         {
           name: "pair_fixture",
@@ -160,11 +168,39 @@ test("the formatted line budget splits declarations and rejects an indivisible i
   assert.throws(
     () =>
       renderRustModules(
-        { declarations: [declaration("OversizedPayload", 1001)], pairings: [] },
+        { declarations: [compactDeclaration("OversizedPayload", 1001)], pairings: [] },
         repository,
       ),
     /oversized_payload\.rs: indivisible generated Rust has \d+ lines after rustfmt, limit is 1000/,
   );
+});
+
+test("observation partitions retain the family name after formatted overflow", (): void => {
+  // Each payload is one line before rustfmt. The formatted cap forces the split.
+  const observations = [
+    ["observation_events.rs", "FirstObservation"],
+    ["observation_events_2.rs", "SecondObservation"],
+    ["observation_events_3.rs", "ThirdObservation"],
+  ] as const;
+  const modules = renderRustModules(
+    {
+      declarations: [compactDeclaration("SharedPayload", 1)],
+      pairings: [],
+      notifications: observations.map(([, name]) => compactDeclaration(name, 600)),
+    },
+    repository,
+  );
+
+  assert.deepEqual(
+    [...modules.keys()],
+    ["shared_payload.rs", ...observations.map(([filename]) => filename), "mod.rs"],
+  );
+  for (const [filename, source] of modules) {
+    assert.ok(rustLineCount(source) <= 1000, filename);
+  }
+  for (const [filename, name] of observations) {
+    assert.ok(modules.get(filename)?.includes(`pub struct ${name} {`), filename);
+  }
 });
 
 test("changed schema and a pairing pointed at another existing type fail the pins", (): void => {
