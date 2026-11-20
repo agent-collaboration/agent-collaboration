@@ -30,14 +30,19 @@ if (scenario === "eof") {
   const input = lines[Symbol.asyncIterator]();
   try {
     assert.ok(!(await input.next()).done, "expected initialize before EOF");
-    const observedPath = process.argv[4];
-    assert.ok(observedPath);
-    const observed = createConnection(observedPath);
-    await once(observed, "connect");
-    observed.end();
+    const socketOrLimit = process.argv[4];
+    assert.ok(socketOrLimit);
+    // The packed exchange supplies the frame size and a flush witness path.
+    // Host tests supply an initialize-observed socket before the frame size.
+    const packedOversized = scenario === "oversized" && /^\d+$/.test(socketOrLimit);
+    if (!packedOversized) {
+      const observed = createConnection(socketOrLimit);
+      await once(observed, "connect");
+      observed.end();
+    }
     if (scenario !== "held") {
       assert.equal(scenario, "oversized");
-      const limit = Number(process.argv[5]);
+      const limit = Number(packedOversized ? socketOrLimit : process.argv[5]);
       assert.ok(Number.isSafeInteger(limit) && limit > 0);
       const frame = Buffer.alloc(limit + 2, 0x78);
       frame[limit + 1] = 0x0a;
@@ -47,6 +52,11 @@ if (scenario === "eof") {
           else resolve();
         });
       });
+      if (packedOversized) {
+        const frameWrittenPath = process.argv[5];
+        assert.ok(frameWrittenPath);
+        writeFileSync(frameWrittenPath, String(process.pid));
+      }
     }
     while (!(await input.next()).done) {
       /* Keep stdin open while the Router owns the failed initialization. */

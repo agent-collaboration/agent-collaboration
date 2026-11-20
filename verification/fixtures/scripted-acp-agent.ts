@@ -55,9 +55,11 @@ async function readMessage(io: AcpStdio, stepNumber: number): Promise<Record<str
 async function readMessageFrame(
   io: AcpStdio,
   stepNumber: number,
+  expectsBatch: boolean,
 ): Promise<z.infer<typeof messageFrameSchema>> {
   const line = await io.nextLine();
-  if (line === undefined) throw mismatch(stepNumber, "JSON-RPC frame", "EOF");
+  if (line === undefined)
+    throw mismatch(stepNumber, expectsBatch ? "JSON-RPC frame" : "JSON-RPC message", "EOF");
   return messageFrameSchema.parse(decode(line));
 }
 
@@ -68,7 +70,7 @@ async function expectUnordered(
 ): Promise<void> {
   const pending = [...messages];
   while (pending.length > 0) {
-    const actual = await readMessageFrame(io, stepNumber);
+    const actual = await readMessageFrame(io, stepNumber, pending.some(Array.isArray));
     const matched = pending.findIndex((expected) => containsExpected(actual, expected));
     if (matched === -1) throw mismatch(stepNumber, pending, actual);
     pending.splice(matched, 1);
@@ -116,7 +118,7 @@ export async function main(): Promise<void> {
           break;
         }
         case "expect_message": {
-          const actual = await readMessageFrame(io, stepNumber);
+          const actual = await readMessageFrame(io, stepNumber, Array.isArray(step.message));
           if (!containsExpected(actual, step.message))
             throw mismatch(stepNumber, step.message, actual);
           break;

@@ -79,10 +79,13 @@ if (scenario === "mcp") {
     agent.endTurn(prompt);
     if (scenario === "successor") {
       const second = await agent.read("session/prompt");
-      await agent.socketSignal(
-        requireArgument(3),
-        (line) => new Error(`unexpected provider input while the successor was held: ${line}`),
-      );
+      // The packed exchange sends both prompts and closes stdin.
+      const controlSocket = process.argv[3];
+      if (controlSocket !== undefined)
+        await agent.socketSignal(
+          controlSocket,
+          (line) => new Error(`unexpected provider input while the successor was held: ${line}`),
+        );
       agent.endTurn(second);
     }
   }
