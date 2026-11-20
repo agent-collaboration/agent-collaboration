@@ -133,6 +133,7 @@ export const controlPlanSchema = z.strictObject({
       restore: z.enum(["load", "resume"]),
       savedMode: z.string().min(1),
       closePrimer: z.literal(false).optional(),
+      observeSilentRestorePrompt: z.literal(true).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -390,6 +391,14 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     throw new Error("only the restart cases declare seed and reopen lifetimes");
   if (control.closePrimer === false && selected[0] !== "unansweredClose")
     throw new Error("only the unanswered-close case declares a metadata-only seed");
+  if (
+    control.observeSilentRestorePrompt &&
+    (selected[0] !== "savedModeRestart" ||
+      control.restart?.phase !== "reopen" ||
+      plan.peer.kind !== "provider" ||
+      plan.endpointId !== "cursor-local")
+  )
+    throw new Error("the silence observation requires the reopened Cursor saved-mode case");
   if (plan.host.kind === "automationDebugHost") {
     if (plan.hostContext === null)
       throw new Error("the automation Host needs its prepared context");
@@ -486,7 +495,8 @@ function checkEffectsAndTime(plan: ControlPlan, now: Date): void {
         total.prompts +
         (name === "unansweredClose" && plan.sessionControl?.closePrimer === false
           ? 1
-          : CASE_EFFECTS[name].prompts),
+          : CASE_EFFECTS[name].prompts) +
+        (name === "savedModeRestart" && plan.sessionControl?.observeSilentRestorePrompt ? 1 : 0),
     }),
     { sessions: 0, prompts: 0 },
   );

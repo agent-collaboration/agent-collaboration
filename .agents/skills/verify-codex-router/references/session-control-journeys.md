@@ -8,6 +8,8 @@ With an allocation for the shared debug proxy, [Route A](../../../../verificatio
 
 For saved mode, use `savedModeSeed` followed by `savedModeReopen`. For Claude's post-restart cancel, use `cancelRestartSeed` followed by `cancelRestartReopen`. Keep the same run directory and port for both phases, and supply the seed's `case/seed.json` to the reopen phase. Reserve four public submissions for the cancel restart, including its expected refused pre-load probe.
 
+For a separately authorized Cursor silence observation, add `observeSilentRestorePrompt: true` to the `savedModeReopen` journey. This records the first post-load prompt's ACP updates and correlated reply within 180 seconds. When the prompt remains pending with no wire activity in that window, the driver cancels the exact operation and submits one successor probe after reading the original outcome. Reserve up to two submissions for this reopen phase and enough time to finish the cancellation and successor reads.
+
 For the foreground Host with a private proxy:
 
 1. Get the exact source, signed normal Router artifacts and hashes, authorized debug identities and budget, and an exclusive owner-private root and short native socket path. Claude uses the private proxy and authorized debug pool. Cursor uses its own approved debug identity. Use the approved advertised Haiku or Grok value. The live path requires a qualified package/executable and the prerequisites in the main skill.

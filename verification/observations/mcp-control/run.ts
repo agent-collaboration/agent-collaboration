@@ -94,6 +94,8 @@ function sessionControlTools(plan: ControlPlan): string[] {
         ? ["conversation_settings_set"]
         : []),
     ];
+  if (plan.sessionControl?.observeSilentRestorePrompt)
+    common.push("events_observe", "conversation_cancel");
   const restore = "conversation_" + plan.sessionControl?.restore;
   return [
     ...common,

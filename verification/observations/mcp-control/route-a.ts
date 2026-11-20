@@ -73,7 +73,11 @@ const routePlanSchema = z.strictObject({
     z.strictObject({ kind: z.literal("preflight") }),
     z.strictObject({ kind: z.enum(["unansweredReopen", "unansweredClose", "unconfirmedCancel"]) }),
     z.strictObject({ kind: z.literal("savedModeSeed") }),
-    z.strictObject({ kind: z.literal("savedModeReopen"), record: pathSchema }),
+    z.strictObject({
+      kind: z.literal("savedModeReopen"),
+      record: pathSchema,
+      observeSilentRestorePrompt: z.literal(true).optional(),
+    }),
     z.strictObject({ kind: z.literal("cancelRestartSeed") }),
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
   ]),
@@ -342,6 +346,9 @@ function makeControlPlan(
       gateDirectory: capture,
       restore: "load",
       savedMode: plan.cursor?.mode ?? "plan",
+      ...(plan.journey.kind === "savedModeReopen" && plan.journey.observeSilentRestorePrompt
+        ? { observeSilentRestorePrompt: true }
+        : {}),
       ...(restart === undefined ? {} : { restart }),
     },
   });

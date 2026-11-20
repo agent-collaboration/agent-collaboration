@@ -202,13 +202,18 @@ export function requireAdmission(
   if (problem !== null) throw new Error(problem);
 }
 
-export async function waitOperation(inputs: CaseInputs, step: string, operationId: string) {
+export async function waitOperation(
+  inputs: CaseInputs,
+  step: string,
+  operationId: string,
+  timeoutSeconds = 65,
+) {
   return callTool(
     inputs.context,
     step,
     "conversation_operation_wait",
-    { operationId, timeoutSeconds: 65 },
-    { timeoutMs: 75_000 },
+    { operationId, timeoutSeconds },
+    { timeoutMs: (timeoutSeconds + 10) * 1000 },
   );
 }
 
@@ -383,6 +388,22 @@ export function promptFrame(target: SessionRef, token: string) {
 export async function completePrompt(inputs: CaseInputs, step: string, target: SessionRef) {
   const prompt = await preparePrompt(inputs, target, step);
   requireAdmission(await startPrompt(inputs, step, target, prompt), prompt.operationId, target);
+  return verifyCompletedPrompt(
+    inputs,
+    step,
+    target,
+    prompt,
+    await waitOperation(inputs, step + "-wait", prompt.operationId),
+  );
+}
+
+export async function verifyCompletedPrompt(
+  inputs: CaseInputs,
+  step: string,
+  target: SessionRef,
+  prompt: Awaited<ReturnType<typeof preparePrompt>>,
+  outcome: McpCallOutcome,
+) {
   const reply = z
     .looseObject({
       operation: z.unknown(),
@@ -395,7 +416,7 @@ export async function completePrompt(inputs: CaseInputs, step: string, target: S
         }),
       }),
     })
-    .parse(answered(await waitOperation(inputs, step + "-wait", prompt.operationId), step));
+    .parse(answered(outcome, step));
   if (
     !sameSession(reply.output.settlement.target, target) ||
     !["end_turn", "endTurn"].includes(reply.output.settlement.stopReason) ||

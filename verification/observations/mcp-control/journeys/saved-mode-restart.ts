@@ -25,6 +25,7 @@ import {
   wireEntries,
 } from "./session-control-steps.ts";
 import type { WireEntry } from "../../providers/acp/session-control-stdio-gate.ts";
+import { observeRestoredCursorPrompt } from "./restored-cursor-prompt.ts";
 
 const restartRecord = z.strictObject({
   sourceHead: z.string(),
@@ -168,7 +169,13 @@ export async function savedModeRestartCase(inputs: CaseInputs): Promise<CaseResu
   )
     throw new Error("the restored mode differs or is unconfirmed with no reason");
   await restoreDeclaredModel(inputs, target, "saved-mode-restored");
-  await completePrompt(inputs, "saved-mode-after-restart", target);
+  if (config.observeSilentRestorePrompt) {
+    const failure = await observeRestoredCursorPrompt(inputs, target);
+    if (failure !== null)
+      return { name: NAME, target, verdict: { kind: "failed", reason: failure } };
+  } else {
+    await completePrompt(inputs, "saved-mode-after-restart", target);
+  }
   if (JSON.stringify(after) !== JSON.stringify(inputs.store.savedSetup(target)))
     throw new Error("the post-restart input changed the saved setup");
   return observed(
