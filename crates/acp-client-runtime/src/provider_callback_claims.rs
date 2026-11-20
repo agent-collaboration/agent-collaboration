@@ -145,3 +145,7 @@ fn id_value(id: &RequestId) -> Value {
         RequestId::Str(text) => Value::String(text.clone()),
     }
 }
+
+#[cfg(test)]
+#[path = "provider_callback_claims_test.rs"]
+mod tests;

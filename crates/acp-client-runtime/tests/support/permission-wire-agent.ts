@@ -43,5 +43,11 @@ if (mode === "duplicate-batch") {
 }
 await agent.read();
 agent.endTurn(prompt);
+if (mode === "two-turns") {
+  const second = await agent.read("session/prompt");
+  agent.send(permission);
+  await agent.read();
+  agent.endTurn(second);
+}
 await agent.drain();
 agent.close();
