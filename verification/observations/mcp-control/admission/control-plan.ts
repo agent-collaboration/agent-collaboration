@@ -4,7 +4,7 @@
 // nothing, so it has zero Host, provider or model effects.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { z } from "zod";
@@ -41,6 +41,12 @@ const actorSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("session"), session: sessionRefSchema }),
 ]);
+const sessionControlCases = z.enum([
+  "savedModeRestart",
+  "unansweredReopen",
+  "unansweredClose",
+  "unconfirmedCancel",
+]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
   "callerLoss",
@@ -51,13 +57,19 @@ export const controlCaseSchema = z.enum([
   // The two-lifetime continuation profile: one lone case per lifetime (continuation-record.ts).
   "continuationRetain",
   "continuationReload",
+  ...sessionControlCases.options,
 ]);
 // Which normal Host artifact serves the run: the automation acceptance Host, or the Router's
 // own foreground Host, each the manifest entry of that name. Never inferred from a path.
-const hostKindSchema = z.enum(["automationDebugHost", "foregroundRouterHost"]);
+const hostKindSchema = z.enum([
+  "automationDebugHost",
+  "foregroundRouterHost",
+  "providerOnlyFixtureHost",
+]);
 const MANIFEST_ENTRY: Readonly<Record<z.infer<typeof hostKindSchema>, string>> = {
   automationDebugHost: "automation-debug-host",
   foregroundRouterHost: "codex-router",
+  providerOnlyFixtureHost: "provider-only-debug-host",
 };
 // The continuation phase this lifetime runs: retain writes the exclusive record inside its own
 // fresh evidence; reload consumes the kept record, bound by its exact digest.
@@ -99,6 +111,7 @@ export const controlPlanSchema = z.strictObject({
       releaseSocket: absolutePath,
     }),
     z.strictObject({ kind: z.literal("provider"), selection: declaredProviderSelectionSchema }),
+    z.strictObject({ kind: z.literal("sessionControlFixture") }),
   ]),
   cases: z.array(controlCaseSchema).min(1),
   // The harmless prompt each case submits. The controlled peer answers any text but "hold",
@@ -113,6 +126,23 @@ export const controlPlanSchema = z.strictObject({
   evidence: absolutePath,
   schemaSource: absolutePath.nullable(),
   continuation: continuationSchema.nullable(),
+  sessionControl: z
+    .strictObject({
+      gateDirectory: absolutePath,
+      restore: z.enum(["load", "resume"]),
+      savedMode: z.string().min(1),
+      restart: z
+        .discriminatedUnion("phase", [
+          z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
+          z.strictObject({
+            phase: z.literal("reopen"),
+            record: absolutePath,
+            sha256: z.string().regex(/^[0-9a-f]{64}$/),
+          }),
+        ])
+        .optional(),
+    })
+    .optional(),
 });
 export type ControlPlan = z.infer<typeof controlPlanSchema>;
 export type ControlCase = z.infer<typeof controlCaseSchema>;
@@ -131,6 +161,10 @@ const CASE_EFFECTS: Readonly<
   continuationRetain: { sessions: 1, prompts: 1 },
   // No new Session: one load of the kept Session and one prompt.
   continuationReload: { sessions: 0, prompts: 1 },
+  savedModeRestart: { sessions: 1, prompts: 1 }, // Each lifetime is admitted separately.
+  unansweredReopen: { sessions: 2, prompts: 2 },
+  unansweredClose: { sessions: 1, prompts: 2 },
+  unconfirmedCancel: { sessions: 1, prompts: 1 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -145,6 +179,7 @@ const sha256File = (path: string): string =>
 
 /** Every declared identity, checked without contacting the Host. Throws on the first mismatch. */
 export function checkControlPlan(plan: ControlPlan, now: Date): CheckedTarget {
+  checkSessionControlDeclaration(plan);
   checkSource(plan);
   checkContinuationDeclaration(plan);
   for (const artifact of [plan.host, plan.router])
@@ -322,6 +357,81 @@ function checkSource(plan: ControlPlan): void {
     throw new Error("the repository is not at the declared source head");
   if (git("status", "--porcelain") !== "")
     throw new Error("the repository has uncommitted changes");
+}
+
+function checkSessionControlDeclaration(plan: ControlPlan): void {
+  const selected = plan.cases.filter((name) => sessionControlCases.safeParse(name).success);
+  const control = plan.sessionControl;
+  const fixture = plan.peer.kind === "sessionControlFixture";
+  if (fixture !== (plan.host.kind === "providerOnlyFixtureHost"))
+    throw new Error("the provider-only Host is reserved for the scripted session-control peer");
+  if (control === undefined) {
+    if (fixture || selected.length > 0) throw new Error("session-control declaration required");
+    return;
+  }
+  if (
+    selected.length !== 1 ||
+    plan.cases.length !== 1 ||
+    plan.continuation !== null ||
+    plan.peer.kind === "controlled" ||
+    (!fixture && plan.host.kind !== "foregroundRouterHost")
+  )
+    throw new Error("declare one session-control case on its own gated Host connection");
+  if ((control.restart !== undefined) !== (selected[0] === "savedModeRestart"))
+    throw new Error("only the saved-mode case declares seed and reopen lifetimes");
+  if (
+    control.restart?.phase === "seed" &&
+    (dirname(control.restart.record) !== plan.evidence || existsSync(control.restart.record))
+  )
+    throw new Error("the fresh saved-mode record belongs in seed evidence");
+  if (
+    control.restart?.phase === "reopen" &&
+    sha256File(control.restart.record) !== control.restart.sha256
+  )
+    throw new Error("the saved-mode record differs from its declared digest");
+  const uid = process.getuid?.();
+  for (const path of [
+    dirname(plan.serviceDirectory),
+    plan.serviceDirectory,
+    control.gateDirectory,
+  ]) {
+    const stat = lstatSync(path);
+    if (
+      realpathSync(path) !== path ||
+      !stat.isDirectory() ||
+      stat.uid !== uid ||
+      (stat.mode & 0o777) !== 0o700
+    )
+      throw new Error(
+        "session control requires canonical owner-private runtime and gate directories",
+      );
+    const sharedDebug = join(homedir(), ".codex-router-debug");
+    if (
+      isProductionRouterPath(path, homedir()) ||
+      path === sharedDebug ||
+      path.startsWith(sharedDebug + sep)
+    )
+      throw new Error("session control requires a private root outside the shared Router homes");
+  }
+  if (fixture) {
+    const binding = z
+      .looseObject({
+        kind: z.literal("providerOnlyHostReady"),
+        hostPid: z.number().int().positive(),
+        serviceDirectory: absolutePath,
+        serviceId: z.uuid(),
+        serviceEpoch: z.uuid(),
+      })
+      .parse(JSON.parse(readFileSync(join(control.gateDirectory, "fixture-binding.json"), "utf8")));
+    if (
+      plan.endpointId !== "claude-local" ||
+      binding.hostPid !== plan.host.pid ||
+      binding.serviceDirectory !== plan.serviceDirectory ||
+      binding.serviceId !== plan.expectedServiceId ||
+      binding.serviceEpoch !== plan.expectedServiceEpoch
+    )
+      throw new Error("scripted mode requires this Host's isolated fixture launch receipt");
+  }
 }
 
 function checkActor(plan: ControlPlan): void {

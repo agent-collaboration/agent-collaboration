@@ -283,8 +283,11 @@ export function checkRootConsumers(root: string, allowedRouter: number | null = 
     for (const value of result.stdout.split(/\s+/).filter(Boolean))
       if (
         Number(value) !== allowedRouter ||
-        !path.startsWith(`${root}/state.sqlite`) ||
-        path.slice(root.length + 1).includes("/")
+        ![
+          "provider-proxy.sqlite",
+          "provider-proxy.sqlite-wal",
+          "provider-proxy.sqlite-shm",
+        ].includes(path.slice(root.length + 1))
       )
         throw new Error("debug root has an unowned consumer");
   }

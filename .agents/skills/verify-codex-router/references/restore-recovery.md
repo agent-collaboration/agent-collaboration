@@ -65,6 +65,8 @@ Use reducer/property coverage and causal race scenarios alongside the real Host/
 
 ## Reachable live Claude and Cursor observations
 
+The four separate 11a [session-control runs](session-control-journeys.md) have their own private-root target and approved selective ACP gate. This section describes the existing restore-recovery matrix.
+
 Launch and readiness use the main skill's declared signed Router/owning Host, readonly normal Codex/profile guard and exact process ownership. Run only on allocated `~/.codex-router-debug`. Obtain a fresh allocation after the declaration; do not copy an account root, change auth/global settings, replace production or borrow old provider identities. Provider health/eligibility is setup evidence. Authentication failure is an environment block, not a recovery verdict.
 
 Budget: at most six no-tools inputs for Claude on **Haiku**, and six for Cursor on the **approved advertised Grok** value. Pass `model: "haiku"` to Claude creation; never allow a Fable default to reach an input. Independently inspect the selected model before every input, including after restore. No model substitution or extra retries. Preserve companion settings. Use actual returned SessionRefs and operation IDs, UUIDv7 for identifiers minted by the caller, and the current published tool schemas.

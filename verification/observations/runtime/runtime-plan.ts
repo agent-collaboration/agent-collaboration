@@ -20,11 +20,18 @@ export const runtimePlanSchema = z.strictObject({
   profile: z.string(),
   codex_config: z.string(),
   native_cwd: z.string(),
-  claude_node: z.string(),
+  claude_node: z.string().optional(),
   claude_adapter: z.string(),
   claude_executable: z.string(),
   cursor_executable: z.string(),
   deadline: z.string(),
+  session_control: z
+    .strictObject({
+      endpoint: z.enum(["claude-local", "cursor-local"]),
+      gate_a: z.string(),
+      gate_b: z.string().optional(),
+    })
+    .optional(),
 });
 export type RuntimePlan = z.infer<typeof runtimePlanSchema>;
 

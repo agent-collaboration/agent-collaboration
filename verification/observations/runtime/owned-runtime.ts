@@ -1,10 +1,13 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import { homedir } from "node:os";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import { spawnSync, type ChildProcess } from "node:child_process";
 import { parseArgs } from "node:util";
+import { pathToFileURL } from "node:url";
+import { z } from "zod";
+import { PROTECTED_PORTS } from "../mcp-control/transport/streaming-mcp-client.ts";
 import { canonicalPath } from "../../filesystem-paths.ts";
 import { evidenceJson } from "../../evidence-json.ts";
 import {
@@ -116,6 +119,7 @@ async function prepareRuntime(
   operations.process.table();
   if (canonicalPath(plan.router_root) === join(homedir(), ".codex-router"))
     throw new Error("production Router root is outside verification scope");
+  checkSessionControlLaunch(plan);
   const binaries = operations.qualifyBinaries(plan.qualification);
   const binary = binaries.get("codex-router");
   if (binary === undefined) throw new Error("qualified Router binary missing");
@@ -123,7 +127,10 @@ async function prepareRuntime(
   const hostEnvironment = operations.hostEnvironment();
   delete hostEnvironment.CLAUDE_CODE_EXECUTABLE;
   delete hostEnvironment.CODEX_ROUTER_HOST_INHERITED_LOCK;
-  const claudeBinding = operations.qualifyClaude(plan.claude_executable, hostEnvironment.PATH);
+  const claudeBinding =
+    plan.session_control?.endpoint === "cursor-local"
+      ? null
+      : operations.qualifyClaude(plan.claude_executable, hostEnvironment.PATH);
   operations.checkConsumers(plan.router_root);
   await operations.assertPortAvailable(plan.port);
   mkdirSync(plan.evidence, { mode: 0o700, recursive: true });
@@ -206,7 +213,68 @@ async function awaitRouterReadiness(
   });
 }
 
-function hostCommand(plan: RuntimePlan, prepared: PreparedRuntime): string[] {
+function checkSessionControlLaunch(plan: RuntimePlan): void {
+  const session = plan.session_control;
+  if (session === undefined) return;
+  if (PROTECTED_PORTS.has(plan.port))
+    throw new Error("session control requires an unused private loopback port");
+  if (session.gate_a === session.gate_b)
+    throw new Error("each Host lifetime needs its own ACP capture");
+  for (const directory of [plan.router_root, session.gate_a, session.gate_b]) {
+    if (directory === undefined) continue;
+    const stat = lstatSync(directory);
+    if (
+      realpathSync(directory) !== directory ||
+      !stat.isDirectory() ||
+      stat.uid !== process.getuid?.() ||
+      (stat.mode & 0o777) !== 0o700
+    )
+      throw new Error("session control requires canonical owner-private directories");
+    for (const root of [join(homedir(), ".codex-router"), join(homedir(), ".codex-router-debug")]) {
+      const canonical = canonicalPath(root);
+      if (directory === canonical || directory.startsWith(canonical + sep))
+        throw new Error("session control cannot use a shared Router root");
+    }
+    if (directory !== plan.router_root && readdirSync(directory).length > 0)
+      throw new Error("use fresh ACP gate directories");
+  }
+  rejectLinkedRuntimeState(plan.router_root);
+  const settings = z
+    .looseObject({
+      providers: z.looseObject({
+        providers: z.looseObject({
+          claude: z.looseObject({
+            enabled: z.boolean(),
+            cacheWarm: z.looseObject({ enabled: z.literal(false) }),
+          }),
+          cursor: z.looseObject({ enabled: z.boolean() }),
+        }),
+      }),
+    })
+    .parse(JSON.parse(readFileSync(join(plan.router_root, "settings.jsonc"), "utf8")));
+  const { claude, cursor } = settings.providers.providers;
+  if (
+    claude.enabled !== (session.endpoint === "claude-local") ||
+    cursor.enabled !== (session.endpoint === "cursor-local")
+  )
+    throw new Error("private settings must enable only the declared ACP provider");
+}
+
+function rejectLinkedRuntimeState(directory: string): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isSymbolicLink() || (entry.isFile() && lstatSync(path).nlink > 1))
+      throw new Error("session control cannot open linked Router state");
+    if (entry.isDirectory()) rejectLinkedRuntimeState(path);
+  }
+}
+
+const SESSION_CONTROL_GATE = join(
+  import.meta.dirname,
+  "../providers/acp/session-control-stdio-gate.ts",
+);
+
+function hostCommand(plan: RuntimePlan, prepared: PreparedRuntime, gate?: string): string[] {
   const command = [
     prepared.binary.path,
     "host",
@@ -217,23 +285,28 @@ function hostCommand(plan: RuntimePlan, prepared: PreparedRuntime): string[] {
     "--mcp-bind",
     "127.0.0.1:0",
     "--require-debug-isolation",
-    "--cursor-acp-executable",
-    plan.cursor_executable,
   ];
-  for (const argument of [
-    "--disable-auto-update",
-    "--disable-project-configs",
-    "--workspace",
-    prepared.workspace,
-    "acp",
-  ])
-    command.push("--cursor-acp-arguments", argument);
-  command.push(
-    "--claude-acp-executable",
-    plan.claude_node,
-    "--claude-acp-arguments",
-    plan.claude_adapter,
-  );
+  if (plan.session_control?.endpoint !== "claude-local") {
+    const throughGate = gate !== undefined && plan.session_control?.endpoint === "cursor-local";
+    command.push(
+      "--cursor-acp-executable",
+      throughGate ? process.execPath : plan.cursor_executable,
+    );
+    const gateArguments = throughGate
+      ? [SESSION_CONTROL_GATE, gate, "--", plan.cursor_executable]
+      : [];
+    for (const argument of [
+      ...gateArguments,
+      "--disable-auto-update",
+      "--disable-project-configs",
+      "--workspace",
+      prepared.workspace,
+      "acp",
+    ])
+      command.push("--cursor-acp-arguments", argument);
+  }
+  if (plan.session_control?.endpoint !== "cursor-local")
+    command.push("--claude-acp-executable", plan.claude_adapter);
   return command;
 }
 
@@ -321,7 +394,10 @@ async function runHostPhase(
   const known = new Map<number, ProcessIdentity>();
   let directive: "stop" | "reopen";
   try {
-    const environment = {
+    const gate = phase === "A" ? plan.session_control?.gate_a : plan.session_control?.gate_b;
+    if (plan.session_control !== undefined && gate === undefined)
+      throw new Error("Host lifetime has no declared ACP gate");
+    const environment: NodeJS.ProcessEnv = {
       ...prepared.hostEnvironment,
       CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET: join(prepared.nativeDirectory, "app-server.sock"),
       NODE_COMPILE_CACHE: join(plan.evidence, "node-cache"),
@@ -329,7 +405,20 @@ async function runHostPhase(
       CURSOR_AGENT_DISABLE_DEBUG_LOG: "1",
       RUST_LOG: "off",
     };
-    const command = hostCommand(plan, prepared);
+    if (gate !== undefined && plan.session_control?.endpoint === "claude-local") {
+      environment["CODEX_ROUTER_SESSION_CONTROL_GATE"] = gate;
+      const packageDirectory = dirname(realpathSync(plan.claude_adapter));
+      environment["CODEX_ROUTER_SESSION_CONTROL_CLAUDE_LIBRARY"] = pathToFileURL(
+        realpathSync(join(packageDirectory, "lib.js")),
+      ).href;
+      environment["NODE_OPTIONS"] = [
+        environment["NODE_OPTIONS"] ?? "",
+        "--import=" + pathToFileURL(SESSION_CONTROL_GATE).href,
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    const command = hostCommand(plan, prepared, gate);
     if (operations.wallNow() >= deadlineEpoch(plan))
       throw new AllocationTimeout("allocation deadline expired at launch");
     input.requireContinuing();
@@ -422,7 +511,7 @@ async function runOwnedLifecycle(
         "--port",
         String(plan.port),
         "--state-db",
-        join(plan.router_root, "state.sqlite"),
+        join(plan.router_root, "provider-proxy.sqlite"),
         "--secret-root",
         join(plan.router_root, "secrets"),
         "--require-debug-isolation",
