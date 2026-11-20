@@ -256,6 +256,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     kind,
                     value,
                     reason,
+                    ..
                 }) => Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                     provider_session_id: provider_session_id.clone(),
                     not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),

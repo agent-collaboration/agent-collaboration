@@ -469,7 +469,7 @@ pub(crate) fn hold_setting_at_create(
         kind,
         match cause {
             provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure => {
-                SessionSettingEvent::Failed { application }
+                SessionSettingEvent::Failed { application, confirmed_current: false }
             }
             provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown => {
                 SessionSettingEvent::OutcomeUnknown { application }

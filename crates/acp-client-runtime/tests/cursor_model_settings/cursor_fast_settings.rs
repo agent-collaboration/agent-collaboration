@@ -249,10 +249,15 @@ async fn accepting_a_refused_fast_stops_keeping_it_off() -> TestResult {
 /// accept refused; a confirmed off releases prompts.
 #[tokio::test]
 async fn lost_fast_off_answer_is_unknown_and_cannot_be_accepted() -> TestResult {
-    let fixture = AcpWireFixture::start_reactive(&["malformed-fast-reply"]).await;
+    let fixture =
+        AcpWireFixture::start_reactive(&["malformed-fast-reply", "refuse-second-fast"]).await;
     let failed = failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
     let held = prompt(&fixture).await;
     let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
+    let refused_repair = set(&fixture, ProviderSettingKind::Fast, "off").await;
+    let held_after_refusal = prompt(&fixture).await;
+    let accepted_after_refusal = fixture.client.accept_session_settings(SESSION.to_owned());
+    let prompts_before_confirmation = prompts_seen(&fixture);
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
@@ -271,6 +276,39 @@ async fn lost_fast_off_answer_is_unknown_and_cannot_be_accepted() -> TestResult 
             Err(ExternalProviderRuntimeError::SettingsOutcomeUncertain)
         ),
         "{accepted:?}"
+    );
+    assert!(
+        matches!(
+            refused_repair,
+            Err(ExternalProviderRuntimeError::SettingFailed {
+                setting: ProviderSettingKind::Fast,
+                ..
+            })
+        ),
+        "{refused_repair:?}"
+    );
+    assert!(
+        matches!(
+            held_after_refusal,
+            Err(ExternalProviderRuntimeError::SettingsUnresolved { .. })
+        ),
+        "a refused repair cleared the earlier unknown hold: {held_after_refusal:?}"
+    );
+    assert!(
+        matches!(
+            accepted_after_refusal,
+            Err(ExternalProviderRuntimeError::SettingsOutcomeUncertain)
+        ),
+        "a refused repair allowed Accept: {accepted_after_refusal:?}"
+    );
+    assert_eq!(prompts_before_confirmation, 0);
+    assert_eq!(prompts_seen(&fixture), 1);
+    assert_eq!(
+        setting_requests(&fixture)
+            .iter()
+            .filter(|(id, _)| id == "fast")
+            .count(),
+        3
     );
     released?;
     Ok(())

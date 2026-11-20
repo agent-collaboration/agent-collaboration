@@ -141,7 +141,11 @@ pub(crate) async fn apply_loaded_setting(
                 disposition: InvalidSettingSessionDisposition::RemainsCreated,
             })
         }
-        Some(SettingSetupFailure::Agent { reason, .. }) => {
+        Some(SettingSetupFailure::Agent {
+            reason,
+            confirmed_current,
+            ..
+        }) => {
             if kind == ProviderSettingKind::Fast {
                 // Preserve the returned catalog and the refusal for reporting
                 // and Accept. The definite refusal does not hold input.
@@ -150,7 +154,10 @@ pub(crate) async fn apply_loaded_setting(
                     handles,
                     &provider_session_id,
                     kind,
-                    SessionSettingEvent::Failed { application },
+                    SessionSettingEvent::Failed {
+                        application,
+                        confirmed_current,
+                    },
                 );
             } else {
                 // A refused mode, model or effort holds nothing, as today.
@@ -264,13 +271,20 @@ async fn keep_fast_off_after_model(
             commit_confirmed_setting(handles, provider_session_id, fast, application, &catalog)?;
             Ok(catalog.effective_settings())
         }
-        Some(SettingSetupFailure::Agent { reason, .. }) => {
+        Some(SettingSetupFailure::Agent {
+            reason,
+            confirmed_current,
+            ..
+        }) => {
             keep_returned_catalog(handles, provider_session_id, &catalog)?;
             record(
                 handles,
                 provider_session_id,
                 fast,
-                SessionSettingEvent::Failed { application },
+                SessionSettingEvent::Failed {
+                    application,
+                    confirmed_current,
+                },
             );
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: fast,
@@ -283,7 +297,10 @@ async fn keep_fast_off_after_model(
                 handles,
                 provider_session_id,
                 fast,
-                SessionSettingEvent::Failed { application },
+                SessionSettingEvent::Failed {
+                    application,
+                    confirmed_current: false,
+                },
             );
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: fast,
