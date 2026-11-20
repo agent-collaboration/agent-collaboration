@@ -139,8 +139,8 @@ async fn busy_without_steering_and_explicit_steer_derive_the_running_answer() {
         "this harness can't take a steer mid-turn; a turn is running; queue the message or cancel the turn"
     );
     assert_eq!(
-        answer,
-        format!("this harness can't take a steer mid-turn; {busy}")
+        answer.strip_prefix("this harness can't take a steer mid-turn; "),
+        Some(busy.as_str())
     );
     host.shutdown().await.expect("shutdown");
 }

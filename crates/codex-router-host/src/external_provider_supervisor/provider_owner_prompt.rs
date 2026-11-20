@@ -17,7 +17,7 @@ use crate::session_owner_delivery_evidence::{
 use acp_client_runtime::acp_transport::TransportRun;
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_protocol::{
-    ConversationOperationQueueState, MessageDelivery, ProviderOperationStage,
+    ConversationOperationQueueState, MessageDelivery, NonEmptyText, ProviderOperationStage,
     ProviderPromptStopReason,
 };
 use provider_session_machines::{
@@ -283,22 +283,28 @@ impl ExternalProviderSupervisor {
                 if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
                     && refusal.kind == ConversationOperationFailureKind::CannotSteer
                 {
-                    failure(
+                    explicit_steer_refusal(
+                        refusal,
                         ConversationOperationFailureKind::UnsupportedCapability,
-                        ConversationOperationFailureStage::Admission,
-                        ProviderOperationEffect::None,
-                        &format!(
-                            "this harness can't take a steer mid-turn; {}",
-                            String::from(refusal.message)
-                        ),
-                        operation,
-                        Some(target),
                     )
                 } else {
                     refusal
                 }
             })
     }
+}
+
+fn explicit_steer_refusal(
+    mut refusal: super::ConversationOperationFailure,
+    kind: ConversationOperationFailureKind,
+) -> super::ConversationOperationFailure {
+    refusal.message = NonEmptyText::try_from(format!(
+        "this harness can't take a steer mid-turn; {}",
+        String::from(refusal.message.clone()),
+    ))
+    .unwrap_or(refusal.message);
+    refusal.kind = kind;
+    refusal
 }
 
 #[cfg(test)]
@@ -823,6 +829,16 @@ impl ExternalProviderSupervisor {
                     return Ok(InputAcceptance::QueuePlanChanged);
                 }
                 let refusal = owner_failure(operation.clone(), target.clone(), error);
+                let refusal = if refusal.kind == ConversationOperationFailureKind::CannotSteer
+                    && matches!(
+                        admission,
+                        DeliveryAdmission::SteerExisting(_)
+                            | DeliveryAdmission::Requested(MessageDelivery::Steer)
+                    ) {
+                    explicit_steer_refusal(refusal, ConversationOperationFailureKind::CannotSteer)
+                } else {
+                    refusal
+                };
                 if refusal.effect == ProviderOperationEffect::None {
                     self.queued_operation_registry()
                         .mark_not_submitted(&operation, String::from(refusal.message.clone()));

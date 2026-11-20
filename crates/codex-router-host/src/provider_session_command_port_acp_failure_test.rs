@@ -5,6 +5,8 @@ use codex_acp_adapter::{
     AcpConnectionContext, AcpOutputSender, AcpRouterChannels, AcpSessionRoute as _, QueuedAcpFrame,
     bounded_acp_output,
 };
+use collaboration_mcp::test_support::ServedCollaborationApi;
+use collaboration_protocol::MessageDelivery;
 use collaboration_runtime::ProviderAcpSessionRoute;
 use router_clock::{ManualClock, RuntimeClock as _};
 use serde_json::{Value, json};
@@ -188,6 +190,48 @@ impl FailureRoute {
         }
     }
 
+    fn serve_mcp(&self) -> ServedCollaborationApi {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(self.root.path(), std::fs::Permissions::from_mode(0o700))
+                .expect("private MCP socket directory");
+        }
+        let target = protocol_session(&self.session).expect("MCP session");
+        let binding = provider_binding(&target);
+        let endpoints = endpoint_directory(&binding)
+            .inventory()
+            .expect("fixture endpoints")
+            .endpoints;
+        let application = collaboration_service::ApplicationFixture::new(
+            &String::from(target.endpoint.service_id),
+            &String::from(binding.generation.service_epoch),
+        )
+        .expect("application identity")
+        .with_provider_conversation_backend(self.supervisor.clone())
+        .with_endpoints(endpoints)
+        .expect("register fixture provider")
+        .build();
+        ServedCollaborationApi::start(self.root.path(), application).expect("serve real MCP route")
+    }
+
+    async fn mcp_prompt(&self, mcp: &ServedCollaborationApi, delivery: MessageDelivery) -> Value {
+        let target = protocol_session(&self.session).expect("MCP session");
+        mcp.call(
+            "conversation_prompt",
+            json!({
+                "target": target,
+                "requestedBy": target,
+                "approver": target,
+                "operationId": OperationId::generate(),
+                "delivery": delivery,
+                "message": {"kind":"humanUser","text":"fixture input"}
+            }),
+        )
+        .await
+        .expect("MCP reply")
+    }
+
     async fn stop(self) {
         self.closed.cancel();
         self.route
@@ -278,15 +322,32 @@ async fn acp_error_carries_explicit_steer_refusal_guidance() {
     route.send_prompt(2, "session/prompt").await;
     assert_eq!(route.wire_request("prompts").await, "saved-session");
 
+    let mcp = route.serve_mcp();
+    let mcp_steer = route.mcp_prompt(&mcp, MessageDelivery::Steer).await;
+    let mcp_auto = route.mcp_prompt(&mcp, MessageDelivery::Auto).await;
     route.send_prompt(3, "_session/steering").await;
     let reply = route.reply(3).await;
+    mcp.stop().await.expect("MCP shutdown");
     route.stop().await;
 
     let error = &reply["error"];
     assert_eq!(error["code"], -32601, "{reply}");
     assert_eq!(
-        error["message"], "a turn is running; queue the message or cancel the turn",
+        mcp_steer["error"]["message"], error["message"],
+        "explicit steer differs between ACP and MCP for the same owner state"
+    );
+    assert_eq!(
+        error["message"],
+        "this harness can't take a steer mid-turn; a turn is running; queue the message or cancel the turn",
         "{reply}"
     );
     assert_eq!(error["data"]["kind"], "cannotSteer", "{reply}");
+    assert_eq!(
+        mcp_steer["error"]["data"]["kind"], "unsupportedCapability",
+        "{mcp_steer}",
+    );
+    assert_eq!(
+        mcp_auto["error"]["message"], "a turn is running; queue the message or cancel the turn",
+        "{mcp_auto}",
+    );
 }
