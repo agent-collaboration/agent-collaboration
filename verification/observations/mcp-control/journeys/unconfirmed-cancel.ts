@@ -314,7 +314,7 @@ export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseRes
   if (!(await negotiated(inputs))[control(inputs).restore])
     return notOffered(NAME, "restore method");
   const target = await createSession(inputs, "cancel-create", control(inputs).savedMode);
-  if (control(inputs).cursorCancelLoad === "afterPrimer")
+  if (control(inputs).cursorCancelLoad === "afterPrimer" || control(inputs).primedCancelGuidance)
     await completePrompt(inputs, "cancel-primer", target);
   const before = await baseline(inputs, "cancel-baseline", target);
   const prompt = await preparePrompt(inputs, target, "cancel-prompt");
@@ -362,13 +362,7 @@ async function holdAndClose(
     if (cancelled.status === "rejected") throw cancelled.reason;
     requireAdmission(submitted.value, prompt.operationId, target);
     const wireCancel = cancelled.value;
-    requireFailure(
-      await waitOperation(inputs, "cancel-terminal-prompt", prompt.operationId),
-      prompt.operationId,
-      target,
-      "outcomeUnknown",
-      "the harness didn't stop the turn",
-    );
+    await observeCancelTimeout(inputs, target, prompt.operationId);
     await requireOperation(
       inputs,
       "cancel-original-prompt",
@@ -425,4 +419,31 @@ async function holdAndClose(
   } finally {
     release();
   }
+}
+
+async function observeCancelTimeout(
+  inputs: CaseInputs,
+  target: SessionRef,
+  operationId: string,
+): Promise<void> {
+  const timedOut = await waitOperation(inputs, "cancel-terminal-prompt", operationId);
+  const guidance = requireFailure(
+    timedOut,
+    operationId,
+    target,
+    "outcomeUnknown",
+    "the harness didn't stop the turn",
+  );
+  if (!control(inputs).primedCancelGuidance) return;
+  const exact =
+    "the harness didn't stop the turn, so its outcome is unknown; close the session, then check it and run operation reconcile for " +
+    operationId;
+  if (
+    timedOut.kind !== "refused" ||
+    !z.object({ message: z.literal(exact) }).safeParse(timedOut.value).success ||
+    guidance.effect !== "unknown"
+  )
+    throw new Error(
+      "the prompt refusal omitted the exact close, check and reconciliation guidance",
+    );
 }

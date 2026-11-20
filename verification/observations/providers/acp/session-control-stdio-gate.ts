@@ -4,10 +4,12 @@ import { spawn } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
+  existsSync,
   lstatSync,
   openSync,
   readFileSync,
   realpathSync,
+  watch,
 } from "node:fs";
 import { join } from "node:path";
 import { pipeline, Transform } from "node:stream";
@@ -37,6 +39,7 @@ export const holdSchema = z.strictObject({
   method: z.enum(["session/load", "session/resume", "session/close", "session/prompt"]),
   sessionId: z.string().min(1),
   promptToken: z.string().min(1).optional(),
+  releaseReply: z.literal(true).optional(),
 });
 export type Hold = z.infer<typeof holdSchema>;
 type Frame = z.infer<typeof frameSchema>;
@@ -60,6 +63,7 @@ const recordedMethods = new Set([
   "session/resume",
   "session/close",
   "session/prompt",
+  "_session/steering",
   "session/cancel",
   "session/set_config_option",
   "session/set_mode",
@@ -97,21 +101,42 @@ export class SessionControlStdioGate {
     string | number,
     { method: string; sessionId: string | null }
   >();
-  private readonly heldReplies = new Set<string | number>();
+  private readonly heldReplies = new Map<string | number, boolean>();
+  private delayedReply: { line: string; entry: WireEntry } | null = null;
   private selected: Hold | null = null;
   private selectedRequest = false;
   private readonly connection: string;
   private readonly readHold: () => Hold | null;
   private readonly record: (entry: WireEntry) => void;
+  private readonly onDelayed: (() => void) | undefined;
 
-  constructor(connection: string, readHold: () => Hold | null, record: (entry: WireEntry) => void) {
+  constructor(
+    connection: string,
+    readHold: () => Hold | null,
+    record: (entry: WireEntry) => void,
+    onDelayed?: () => void,
+  ) {
     this.connection = connection;
     this.readHold = readHold;
     this.record = record;
+    this.onDelayed = onDelayed;
   }
 
   get active(): boolean {
     return this.started;
+  }
+
+  releaseReply(): string | undefined {
+    const delayed = this.delayedReply;
+    if (delayed === null) return undefined;
+    this.delayedReply = null;
+    this.record({
+      ...delayed.entry,
+      sequence: this.sequence++,
+      monotonicMs: performance.now(),
+      disposition: "forwarded",
+    });
+    return delayed.line;
   }
 
   forward(direction: Direction, line: string): boolean {
@@ -149,20 +174,24 @@ export class SessionControlStdioGate {
         (hold.promptToken === undefined ||
           params?.prompt?.some(({ text }) => text?.includes(hold.promptToken ?? "")))
       ) {
-        this.heldReplies.add(requestId);
+        this.heldReplies.set(requestId, hold.releaseReply === true);
         this.selectedRequest = true;
       }
     }
+    const holdReply =
+      reply === undefined || requestId === null ? undefined : this.heldReplies.get(requestId);
+    if (holdReply !== undefined && requestId !== null) this.heldReplies.delete(requestId);
     const withheld =
       direction === "agentToHost" &&
-      ((frame.method === undefined && requestId !== null && this.heldReplies.delete(requestId)) ||
+      (holdReply !== undefined ||
         (this.selectedRequest &&
           hold !== null &&
+          hold.releaseReply !== true &&
           hold.method !== "session/close" &&
           frame.method === "session/update" &&
           sessionId === hold.sessionId));
     if (reply !== undefined && requestId !== null) this.outstanding.delete(requestId);
-    this.record({
+    const entry: WireEntry = {
       connection: this.connection,
       sequence: this.sequence++,
       monotonicMs: performance.now(),
@@ -171,12 +200,36 @@ export class SessionControlStdioGate {
       method,
       sessionId,
       frame: evidenceFrame(frame, method),
-    });
+    };
+    if (holdReply === true) {
+      if (this.delayedReply !== null)
+        throw new Error("the ACP gate already holds a reply to release");
+      this.delayedReply = { line, entry };
+      this.onDelayed?.();
+    }
+    this.record(entry);
     return !withheld;
   }
 }
 
-function privateGate(directory: string): SessionControlStdioGate {
+function forwardReleasedReply(
+  directory: string,
+  gate: SessionControlStdioGate,
+  write: (line: string) => void,
+): void {
+  const watcher = watch(directory, { persistent: false }, () => {
+    if (existsSync(join(directory, "hold.json"))) return;
+    watcher.close();
+    const line = gate.releaseReply();
+    if (line !== undefined) write(line + "\n");
+  });
+  watcher.on("error", (error) => {
+    watcher.close();
+    process.stderr.write("ACP gate could not watch for release: " + error.name + "\n");
+  });
+}
+
+function privateGate(directory: string, write: (line: string) => void): SessionControlStdioGate {
   const status = lstatSync(directory);
   if (
     realpathSync(directory) !== directory ||
@@ -187,7 +240,7 @@ function privateGate(directory: string): SessionControlStdioGate {
     throw new Error("ACP gate requires a canonical owner-private directory");
   const path = join(directory, "wire.jsonl");
   const holdPath = join(directory, "hold.json");
-  return new SessionControlStdioGate(
+  const gate = new SessionControlStdioGate(
     String(process.pid),
     () => {
       try {
@@ -201,7 +254,9 @@ function privateGate(directory: string): SessionControlStdioGate {
       if (entry.sequence === 0) closeSync(openSync(path, "wx", 0o600));
       appendFileSync(path, JSON.stringify(entry) + "\n");
     },
+    () => forwardReleasedReply(directory, gate, write),
   );
+  return gate;
 }
 
 function lineFilter(gate: SessionControlStdioGate, direction: Direction) {
@@ -227,7 +282,9 @@ function lineFilter(gate: SessionControlStdioGate, direction: Direction) {
 }
 
 function relay(directory: string, executable: string, arguments_: string[]): void {
-  const gate = privateGate(directory);
+  const gate = privateGate(directory, (line) => {
+    process.stdout.write(line);
+  });
   const agent = spawn(executable, arguments_, { stdio: ["pipe", "pipe", "inherit"] });
   const filter = (direction: Direction): Transform => {
     const lines = lineFilter(gate, direction);
@@ -271,7 +328,10 @@ function installClaudeGate(directory: string): void {
   // this module too, but it never speaks ACP and never creates a capture.
   delete process.env["CODEX_ROUTER_SESSION_CONTROL_GATE"];
   delete process.env["CODEX_ROUTER_SESSION_CONTROL_CLAUDE_LIBRARY"];
-  const gate = privateGate(directory);
+  const write = process.stdout.write.bind(process.stdout);
+  const gate = privateGate(directory, (line) => {
+    write(line);
+  });
   const input = lineFilter(gate, "hostToAgent");
   const output = lineFilter(gate, "agentToHost");
   const push = process.stdin.push.bind(process.stdin);
@@ -284,7 +344,6 @@ function installClaudeGate(directory: string): void {
     const kept = input.consume(bytes);
     return kept === "" || push(kept, encoding);
   };
-  const write = process.stdout.write.bind(process.stdout);
   // The import qualification probe may emit non-ACP stdout. Let it through intact
   // until stdin actually supplies the initialize frame for this process.
   process.stdout.write = (

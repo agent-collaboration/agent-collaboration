@@ -360,6 +360,7 @@ export function startPrompt(
   step: string,
   target: SessionRef,
   prompt: Awaited<ReturnType<typeof preparePrompt>>,
+  delivery?: "queue" | "steer",
 ) {
   return callTool(
     inputs.context,
@@ -371,6 +372,7 @@ export function startPrompt(
       operationId: prompt.operationId,
       text: prompt.text,
       timeoutSeconds: 1,
+      ...(delivery === undefined ? {} : { delivery }),
     }),
     { timeoutMs: 15_000 },
   );

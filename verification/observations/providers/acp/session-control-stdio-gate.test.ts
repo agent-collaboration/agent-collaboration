@@ -13,6 +13,55 @@ import {
 
 const rpc = (frame: object): string => JSON.stringify({ jsonrpc: "2.0", ...frame });
 
+test("releasing a prompt forwards only its original terminal reply, exactly once", () => {
+  const entries: WireEntry[] = [];
+  const gate = new SessionControlStdioGate(
+    "held",
+    () => ({
+      method: "session/prompt",
+      sessionId: "A",
+      promptToken: "selected",
+      releaseReply: true,
+    }),
+    (entry) => entries.push(entry),
+  );
+  gate.forward("hostToAgent", rpc({ id: 0, method: "initialize", params: { protocolVersion: 1 } }));
+  gate.forward(
+    "hostToAgent",
+    rpc({
+      id: 1,
+      method: "session/prompt",
+      params: {
+        sessionId: "A",
+        prompt: [{ text: "selected" }],
+      },
+    }),
+  );
+  assert.equal(
+    gate.forward(
+      "agentToHost",
+      rpc({
+        method: "session/update",
+        params: {
+          sessionId: "A",
+          update: { sessionUpdate: "user_message_chunk" },
+        },
+      }),
+    ),
+    true,
+  );
+  const terminal = rpc({ id: 1, result: { stopReason: "end_turn" } });
+  assert.equal(gate.forward("agentToHost", terminal), false);
+  assert.equal(gate.releaseReply(), terminal);
+  assert.equal(gate.releaseReply(), undefined);
+  assert.deepEqual(
+    entries
+      .filter((entry) => entry.direction === "agentToHost" && entry.frame?.id === 1)
+      .map((entry) => entry.disposition),
+    ["withheld", "forwarded"],
+  );
+});
+
 test("Node preload holds only the selected real stdout frame and leaves the import probe intact", (context) => {
   const directory = createFixtureDirectory("session-control-gate");
   const hold = join(directory, "hold.json");

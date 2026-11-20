@@ -58,6 +58,7 @@ export function promptArguments(props: {
   readonly operationId: string;
   readonly text: string;
   readonly timeoutSeconds: number;
+  readonly delivery?: "queue" | "steer";
   readonly requester?: DeclaredIdentity;
 }): Arguments {
   const requester = props.requester ?? props.plan.actor;
@@ -71,6 +72,7 @@ export function promptArguments(props: {
         ? { kind: "humanUser", text: props.text }
         : { kind: "agent", sender: requester.session, text: props.text },
     timeoutSeconds: props.timeoutSeconds,
+    ...(props.delivery === undefined ? {} : { delivery: props.delivery }),
   };
 }
 

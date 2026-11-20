@@ -47,6 +47,8 @@ const sessionControlCases = z.enum([
   "unansweredClose",
   "unconfirmedCancel",
   "cancelRestart",
+  "cancelQueued",
+  "refusedSteer",
 ]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
@@ -135,6 +137,7 @@ export const controlPlanSchema = z.strictObject({
       closePrimer: z.literal(false).optional(),
       observeSilentRestorePrompt: z.literal(true).optional(),
       cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
+      primedCancelGuidance: z.literal(true).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -171,6 +174,8 @@ const CASE_EFFECTS: Readonly<
   // Reserve the refusal probe too. A wrong build could dispatch it.
   unconfirmedCancel: { sessions: 1, prompts: 3 },
   cancelRestart: { sessions: 1, prompts: 2 },
+  cancelQueued: { sessions: 1, prompts: 2 },
+  refusedSteer: { sessions: 1, prompts: 2 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -394,6 +399,14 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     throw new Error("only the unanswered-close case declares a metadata-only seed");
   checkCursorCancelDeclaration(plan, selected[0], control.cursorCancelLoad);
   if (
+    control.primedCancelGuidance &&
+    (selected[0] !== "unconfirmedCancel" ||
+      control.cursorCancelLoad !== undefined ||
+      plan.peer.kind !== "provider" ||
+      plan.endpointId !== "claude-local")
+  )
+    throw new Error("the primed guidance observation requires a commissioned Claude cancel");
+  if (
     control.observeSilentRestorePrompt &&
     (selected[0] !== "savedModeRestart" ||
       control.restart?.phase !== "reopen" ||
@@ -509,7 +522,7 @@ function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
   if (name === "unconfirmedCancel") {
     const variant = plan.sessionControl?.cursorCancelLoad;
     if (variant === "firstPrompt") return 2;
-    if (variant === "afterPrimer") return 4;
+    if (variant === "afterPrimer" || plan.sessionControl?.primedCancelGuidance) return 4;
   }
   return CASE_EFFECTS[name].prompts;
 }

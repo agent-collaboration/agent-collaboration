@@ -71,10 +71,13 @@ const routePlanSchema = z.strictObject({
   deadline: z.iso.datetime(),
   journey: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("preflight") }),
-    z.strictObject({ kind: z.enum(["unansweredReopen", "unansweredClose"]) }),
+    z.strictObject({
+      kind: z.enum(["unansweredReopen", "unansweredClose", "cancelQueued", "refusedSteer"]),
+    }),
     z.strictObject({
       kind: z.literal("unconfirmedCancel"),
       cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
+      primedCancelGuidance: z.literal(true).optional(),
     }),
     z.strictObject({ kind: z.literal("savedModeSeed") }),
     z.strictObject({
@@ -170,6 +173,11 @@ function prepare(plan: RoutePlan) {
 }
 
 function prepareProvider(plan: RoutePlan) {
+  if (
+    (plan.journey.kind === "refusedSteer" && plan.cursor === undefined) ||
+    (plan.journey.kind === "cancelQueued" && plan.cursor !== undefined)
+  )
+    throw new Error("the steer and queue controls require Cursor and Claude respectively");
   if (plan.cursor !== undefined) {
     if (plan.journey.kind !== "preflight" && plan.cursor.selection === undefined)
       throw new Error("Cursor input requires a separately qualified Grok catalog choice");
@@ -316,8 +324,10 @@ function makeControlPlan(
   const actor = localActor();
   const cursorCancelLoad =
     plan.journey.kind === "unconfirmedCancel" ? plan.journey.cursorCancelLoad : undefined;
+  const primedCancelGuidance =
+    plan.journey.kind === "unconfirmedCancel" && plan.journey.primedCancelGuidance === true;
   const maxPrompts =
-    cursorCancelLoad === "afterPrimer"
+    cursorCancelLoad === "afterPrimer" || primedCancelGuidance
       ? 4
       : caseName === "unconfirmedCancel" && cursorCancelLoad === undefined
         ? 3
@@ -359,6 +369,7 @@ function makeControlPlan(
       restore: "load",
       savedMode: plan.cursor?.mode ?? "plan",
       ...(cursorCancelLoad === undefined ? {} : { cursorCancelLoad }),
+      ...(primedCancelGuidance ? { primedCancelGuidance: true } : {}),
       ...(plan.journey.kind === "savedModeReopen" && plan.journey.observeSilentRestorePrompt
         ? { observeSilentRestorePrompt: true }
         : {}),
