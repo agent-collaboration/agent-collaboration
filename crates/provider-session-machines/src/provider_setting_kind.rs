@@ -1,6 +1,6 @@
 //! The kinds of provider session setting the setting machine tracks.
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ProviderSettingKind {
     Mode,
     Model,

@@ -1,7 +1,9 @@
 //! Decisions and ordered effects for one provider session across its runs.
 //! The caller executes effects and returns stamped observations as events.
 
+mod owner_ports;
 mod owner_reducer;
+pub use owner_ports::*;
 
 use crate::session_cell_machine::{SessionCell, SessionCellRefusal};
 use crate::session_lifecycle_machine::{CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle};
@@ -18,9 +20,10 @@ pub struct RunAttempt<Attempt> {
     pub attempt: Attempt,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct OwnerInput {
     pub generation: SessionGeneration,
+    pub operation: uuid::Uuid,
     pub input: InputId,
     pub turn: TurnId,
 }
@@ -40,6 +43,9 @@ pub enum PromptAdmission {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionOwnerCommand {
+    Create {
+        operation: uuid::Uuid,
+    },
     Restore {
         attempt: LoadAttempt,
         via: RestoreVia,
@@ -48,6 +54,12 @@ pub enum SessionOwnerCommand {
         generation: SessionGeneration,
         attempt: CloseAttempt,
     },
+    CloseWithCapability(CloseRequest),
+    DependOnRestore {
+        operation: uuid::Uuid,
+        run: RunAttempt<LoadAttempt>,
+    },
+    WarmPrompt(OwnerInput),
     Prompt {
         input: OwnerInput,
         admission: PromptAdmission,
@@ -64,7 +76,12 @@ pub enum SessionOwnerCommand {
         generation: SessionGeneration,
         input: InputId,
     },
+    CancelSetting {
+        input: InputId,
+        setting: OwnerSetting,
+    },
     Set {
+        input: InputId,
         setting: OwnerSetting,
         value: SettingValueId,
     },
@@ -84,7 +101,10 @@ pub enum WireOutcome<Reply> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RestoredMode {
     Observed,
-    Reapply(SettingValueId),
+    Reapply {
+        application: SettingApplication,
+        value: SettingValueId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -99,27 +119,22 @@ pub enum SessionWireResult {
     Restore {
         run: RunAttempt<LoadAttempt>,
         outcome: WireOutcome<RestoredMode>,
+        fast_on: Option<SettingApplication>,
+    },
+    RestoreFailed {
+        run: RunAttempt<LoadAttempt>,
+        failure: RestoreFailure,
     },
     RestoreMode {
         run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
         outcome: WireOutcome<()>,
     },
     Close {
         run: RunAttempt<CloseAttempt>,
         outcome: WireOutcome<()>,
     },
-    Turn {
-        input: OwnerInput,
-        outcome: WireOutcome<()>,
-    },
-    Steer {
-        input: OwnerInput,
-        outcome: WireOutcome<()>,
-    },
-    Setting {
-        setting: OwnerSetting,
-        observation: SettingObservation,
-    },
+    CloseNotSent(RunAttempt<CloseAttempt>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131,6 +146,10 @@ pub enum EffectOutcome {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionStoreResult {
+    Terminal {
+        write: TerminalWriteId,
+        outcome: EffectOutcome,
+    },
     RestoreSetup {
         run: RunAttempt<LoadAttempt>,
         outcome: EffectOutcome,
@@ -158,7 +177,7 @@ pub enum SessionStoreResult {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum RoutedSessionToolEvent {
+pub(in crate::session_owner) enum RoutedSessionToolEvent {
     Observed {
         generation: SessionGeneration,
         tool_id: String,
@@ -177,23 +196,26 @@ pub enum RoutedSessionToolEvent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RestoreWait {
+pub(in crate::session_owner) enum RestoreWait {
     Setup,
     Wire,
     Mode,
-    Publication,
+    FastOff,
+    Preparation,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InputWait {
+pub(in crate::session_owner) enum InputWait {
     Admission,
     DispatchStore,
     UndoStore,
+    Enqueue,
     Wire,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SettingWait {
+pub(in crate::session_owner) enum SettingWait {
+    Enqueue,
     Wire,
     Store,
 }
@@ -201,7 +223,7 @@ pub enum SettingWait {
 /// The executor delivers a firing for the exact wait it armed on the
 /// injected clock. The reducer never reads time or invents deadline values.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SessionDeadline {
+pub(in crate::session_owner) enum SessionDeadline {
     Restore {
         run: RunAttempt<LoadAttempt>,
         wait: RestoreWait,
@@ -222,43 +244,36 @@ pub enum SessionDeadline {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SessionOwnerEvent {
-    Command(SessionOwnerCommand),
-    Wire(SessionWireResult),
-    Store(SessionStoreResult),
-    Publication {
-        run: RunAttempt<LoadAttempt>,
-        outcome: EffectOutcome,
-    },
-    DeadlineElapsed(SessionDeadline),
-    RoutedTool(RoutedSessionToolEvent),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionWireRequest {
+    Create {
+        operation: uuid::Uuid,
+    },
     Restore {
         run: RunAttempt<LoadAttempt>,
         via: RestoreVia,
     },
     RestoreMode {
         run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
         value: SettingValueId,
     },
+    RestoreFastOff {
+        run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
+    },
     Close(RunAttempt<CloseAttempt>),
-    Prompt(OwnerInput),
-    Steer(OwnerInput),
     Cancel {
         generation: SessionGeneration,
         turn: TurnId,
-    },
-    Set {
-        setting: OwnerSetting,
-        value: SettingValueId,
     },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionStoreRequest {
+    RecordTerminal {
+        write: TerminalWriteId,
+        reply: Box<SessionOwnerReply>,
+    },
     ReadRestoreSetup(RunAttempt<LoadAttempt>),
     MarkDispatch(OwnerInput),
     UndoDispatch(OwnerInput),
@@ -272,6 +287,7 @@ pub enum SessionStoreRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionPublication {
+    Created(SessionGeneration),
     /// The Hub applies history and Idle in the order of owner commits.
     Activated {
         run: RunAttempt<LoadAttempt>,
@@ -304,42 +320,62 @@ pub enum RemoteEffect {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CloseOutcome {
     Confirmed,
-    Refused,
+    RouterOnly,
+    DrainExpired,
+    RefusedLive,
+    RefusedLoading,
     OutcomeUnknown,
 }
 
 impl CloseOutcome {
     #[must_use]
+    pub const fn remote_effect(self) -> RemoteEffect {
+        match self {
+            Self::Confirmed => RemoteEffect::Applied,
+            Self::RouterOnly | Self::DrainExpired | Self::RefusedLive | Self::RefusedLoading => {
+                RemoteEffect::None
+            }
+            Self::OutcomeUnknown => RemoteEffect::Unknown,
+        }
+    }
+
+    #[must_use]
+    pub const fn locally_retired(self) -> bool {
+        !matches!(self, Self::RefusedLive)
+    }
+
+    #[must_use]
     pub const fn human_phrase(self) -> &'static str {
         match self {
-            Self::Confirmed => "the provider confirmed the close",
-            Self::Refused => "the provider refused the close",
+            Self::Confirmed => "closed",
+            Self::RouterOnly => {
+                "closed by the Router; this harness has no close, so it wasn't told"
+            }
+            Self::DrainExpired => {
+                "the close wasn't sent because the running turn didn't stop in time; the Router released the session locally, and the harness may still be running that turn"
+            }
+            Self::RefusedLive => "the close was refused; the session is still open",
+            Self::RefusedLoading => {
+                "the close was refused while the session was loading; the Router released it locally, and you can restore it"
+            }
             Self::OutcomeUnknown => {
-                "the Router released the session locally with an unknown provider close outcome, so you can restore it again"
+                "the close may or may not have reached the harness; the Router released the session locally, and you can restore it"
             }
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RestoreFailureStage {
+pub(in crate::session_owner) enum RestoreFailureStage {
     Setup,
     Wire,
-    Publication,
+    Preparation,
     Closed,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionOwnerReply {
-    Restored {
-        run: RunAttempt<LoadAttempt>,
-        mode_confirmed: bool,
-    },
-    RestoreFailed {
-        run: RunAttempt<LoadAttempt>,
-        stage: RestoreFailureStage,
-        remote: RemoteEffect,
-    },
+    RestoreFinished(RestoreResult),
     CloseFinished {
         run: RunAttempt<CloseAttempt>,
         outcome: CloseOutcome,
@@ -353,20 +389,21 @@ pub enum SessionOwnerReply {
         remote: RemoteEffect,
         saved: bool,
     },
+    InputUnsent {
+        input: OwnerInput,
+        reason: RevokeReason,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SessionOwnerEffect {
+pub(in crate::session_owner) enum SessionOwnerEffect {
     ArmDeadline(SessionDeadline),
     Wire(SessionWireRequest),
     Store(SessionStoreRequest),
     Publish(SessionPublication),
     Reply(SessionOwnerReply),
     RetireRoute(SessionGeneration),
-    StageReplayTool {
-        generation: SessionGeneration,
-        tool_id: String,
-    },
+    PrepareHost(RunAttempt<LoadAttempt>),
     ForwardTool {
         generation: SessionGeneration,
         tool_id: String,
@@ -386,10 +423,22 @@ pub enum SessionOwnerRefusal {
     EffectInProgress,
 }
 
+impl SessionOwnerRefusal {
+    #[must_use]
+    pub const fn retry_advice(&self) -> Option<&'static str> {
+        match self {
+            Self::GenerationChanged => {
+                Some("the session was restored again; send again if still needed")
+            }
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct SessionOwnerCommit {
     pub next: SessionOwnerState,
-    pub effects: Vec<SessionOwnerEffect>,
+    pub effects: OwnerOutbox,
 }
 
 #[derive(Debug)]
@@ -402,7 +451,7 @@ pub enum SessionOwnerRejection {
 pub type SessionOwnerDecision = Result<SessionOwnerCommit, SessionOwnerRejection>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PendingRestore {
+pub(in crate::session_owner) enum PendingRestore {
     Setup {
         run: RunAttempt<LoadAttempt>,
         via: RestoreVia,
@@ -415,31 +464,38 @@ enum PendingRestore {
         run: RunAttempt<LoadAttempt>,
         via: RestoreVia,
     },
-    Publication {
+    FastOff {
         run: RunAttempt<LoadAttempt>,
+        via: RestoreVia,
+        mode_confirmed: bool,
+    },
+    Preparing {
+        run: RunAttempt<LoadAttempt>,
+        via: RestoreVia,
         mode_confirmed: bool,
     },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct PendingPrompt {
+pub(in crate::session_owner) struct PendingPrompt {
     input: OwnerInput,
     wait: InputWait,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionOwnerState {
-    cell: SessionCell,
-    restore: Option<PendingRestore>,
-    prompts: BTreeMap<u64, PendingPrompt>,
-    steer: Option<PendingPrompt>,
-    setting: Option<(OwnerSetting, SettingWait)>,
-    tools: BTreeMap<String, ToolOwnership>,
+    pub(in crate::session_owner) cell: SessionCell,
+    pub(in crate::session_owner) restore: Option<PendingRestore>,
+    pub(in crate::session_owner) prompts: BTreeMap<u64, PendingPrompt>,
+    pub(in crate::session_owner) steer: Option<PendingPrompt>,
+    pub(in crate::session_owner) setting: Option<(OwnerSetting, SettingWait)>,
+    pub(in crate::session_owner) tools: BTreeMap<String, ToolOwnership>,
+    pub(in crate::session_owner) ports: owner_ports::PendingPorts,
 }
 
 impl SessionOwnerState {
     #[must_use]
-    pub fn fresh() -> Self {
+    pub fn new(address: OwnerAddress) -> Self {
         Self {
             cell: SessionCell::fresh(),
             restore: None,
@@ -447,16 +503,17 @@ impl SessionOwnerState {
             steer: None,
             setting: None,
             tools: BTreeMap::new(),
+            ports: owner_ports::PendingPorts::new(address),
         }
     }
 
     #[must_use]
-    pub const fn lifecycle(&self) -> SessionLifecycle {
+    pub(in crate::session_owner) const fn lifecycle(&self) -> SessionLifecycle {
         self.cell.lifecycle
     }
 
     #[must_use]
-    pub const fn turn(&self) -> SessionTurn {
+    pub(in crate::session_owner) const fn turn(&self) -> SessionTurn {
         self.cell.turn
     }
 }

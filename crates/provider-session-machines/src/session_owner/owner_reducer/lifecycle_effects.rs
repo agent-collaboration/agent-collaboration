@@ -1,15 +1,22 @@
 use super::{OwnerRejection, OwnerResult, OwnerTransition};
-use crate::SessionGeneration;
 use crate::session_cell_machine::{SessionCellEffect, SessionCellEvent};
 use crate::session_lifecycle_machine::{
-    CloseAttempt, ClosePhase, LoadAttempt, RestoreVia, SessionLifecycle, SessionLifecycleEffect,
+    CloseAttempt, ClosePhase, LoadAttempt, RestoreVia, SessionLifecycle,
+};
+use crate::session_owner::OwnerSetting;
+use crate::session_owner::{
+    AuthorizationStatus, CloseRequest, ObservationCause, ObservedSetting, OwnerEffect,
+    PreparationStage, PreparedSetup, RestoreDisposition, RestoreFailure, RestorePhase,
+    RestorePreparation, RestoreResult, SettingEvidence, TurnMembership,
 };
 use crate::session_owner::{
     CloseOutcome, EffectOutcome, PendingRestore, RemoteEffect, RestoreFailureStage, RestoreWait,
     RestoredMode, RunAttempt, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal,
     SessionOwnerReply, SessionPublication, SessionStoreRequest, SessionWireRequest, WireOutcome,
 };
+use crate::session_setting_machine::{SettingApplication, SettingValueId};
 use crate::session_turn_machine::{SessionTurn, SessionTurnEffect};
+use crate::{ProviderSettingKind, SessionGeneration};
 
 impl PendingRestore {
     pub(super) const fn run(self) -> RunAttempt<LoadAttempt> {
@@ -17,7 +24,8 @@ impl PendingRestore {
             Self::Setup { run, .. }
             | Self::Wire { run, .. }
             | Self::Mode { run, .. }
-            | Self::Publication { run, .. } => run,
+            | Self::FastOff { run, .. }
+            | Self::Preparing { run, .. } => run,
         }
     }
 
@@ -26,22 +34,34 @@ impl PendingRestore {
             Self::Setup { .. } => RestoreWait::Setup,
             Self::Wire { .. } => RestoreWait::Wire,
             Self::Mode { .. } => RestoreWait::Mode,
-            Self::Publication { .. } => RestoreWait::Publication,
+            Self::FastOff { .. } => RestoreWait::FastOff,
+            Self::Preparing { .. } => RestoreWait::Preparation,
         }
     }
 
-    const fn remote(self) -> RemoteEffect {
+    pub(super) const fn remote(self) -> RemoteEffect {
         match self {
             Self::Setup { .. } => RemoteEffect::None,
             Self::Wire { .. } => RemoteEffect::Unknown,
-            Self::Mode { .. } | Self::Publication { .. } => RemoteEffect::Applied,
+            Self::Mode { .. } | Self::FastOff { .. } | Self::Preparing { .. } => {
+                RemoteEffect::Applied
+            }
         }
     }
 }
 
 impl OwnerTransition {
     pub(super) fn start_restore(&mut self, attempt: LoadAttempt, via: RestoreVia) -> OwnerResult {
+        if !self.next.ports.connection_alive || self.next.ports.create.is_some() {
+            return Err(SessionOwnerRefusal::EffectInProgress.into());
+        }
         self.cell_move(SessionCellEvent::LoadRequested { attempt, via })?;
+        self.next.ports.observed.clear();
+        self.next.ports.admitted_inputs.clear();
+        self.next.ports.replay.clear();
+        self.next.ports.retained_items.clear();
+        self.next.ports.route_ready = false;
+        self.next.ports.fast_reapply = None;
         let Some(generation) = self.next.cell.run_generation() else {
             return Err(OwnerRejection::IgnoredLate);
         };
@@ -83,6 +103,7 @@ impl OwnerTransition {
         &mut self,
         run: RunAttempt<LoadAttempt>,
         outcome: WireOutcome<RestoredMode>,
+        fast_on: Option<SettingApplication>,
     ) -> OwnerResult {
         let Some(PendingRestore::Wire { run: pending, via }) = self.next.restore else {
             return Err(OwnerRejection::IgnoredLate);
@@ -90,17 +111,35 @@ impl OwnerTransition {
         if pending != run {
             return Err(OwnerRejection::IgnoredLate);
         }
+        self.next.ports.fast_reapply = fast_on.map(|application| OwnerSetting {
+            change: RunAttempt {
+                generation: run.generation,
+                attempt: application,
+            },
+            kind: ProviderSettingKind::Fast,
+        });
         match outcome {
-            WireOutcome::Confirmed(RestoredMode::Observed) => self.commit_restore(run, via, true),
-            WireOutcome::Confirmed(RestoredMode::Reapply(value)) => {
-                if self.next.cell.restore_mode_write.is_some() {
-                    return self.commit_restore(run, via, false);
+            WireOutcome::Confirmed(RestoredMode::Observed) => {
+                self.after_restore_mode(run, via, true)
+            }
+            WireOutcome::Confirmed(RestoredMode::Reapply { application, value }) => {
+                if self.setting_fenced(ProviderSettingKind::Mode) {
+                    return self.after_restore_mode(run, via, false);
                 }
-                self.cell_move(SessionCellEvent::RestoreModeWriteClaimed {
-                    attempt: run.attempt,
-                })?;
+                let setting = OwnerSetting {
+                    change: RunAttempt {
+                        generation: run.generation,
+                        attempt: application,
+                    },
+                    kind: ProviderSettingKind::Mode,
+                };
+                self.next
+                    .ports
+                    .restore_setting_fences
+                    .insert(setting.kind, (run, setting));
                 self.release(SessionOwnerEffect::Wire(SessionWireRequest::RestoreMode {
                     run,
+                    setting,
                     value,
                 }));
                 self.wait_for_restore(PendingRestore::Mode { run, via });
@@ -118,18 +157,226 @@ impl OwnerTransition {
     pub(super) fn restore_mode_on_wire(
         &mut self,
         run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
         outcome: WireOutcome<()>,
     ) -> OwnerResult {
-        // A late correlated result can release only its original wire claim.
-        // It cannot confirm the mode or activate another attempt.
-        self.cell_move(SessionCellEvent::RestoreModeWriteSettled {
-            attempt: run.attempt,
-        })?;
+        self.release_restore_fence(run, setting, ProviderSettingKind::Mode)?;
         match self.next.restore {
             Some(PendingRestore::Mode { run: pending, via }) if pending == run => {
-                self.commit_restore(run, via, outcome == WireOutcome::Confirmed(()))
+                let cause = match outcome {
+                    WireOutcome::Confirmed(()) => None,
+                    WireOutcome::Refused => Some(ObservationCause::Refused),
+                    WireOutcome::Unknown => Some(ObservationCause::Unconfirmed),
+                };
+                if let Some(cause) = cause {
+                    self.record_unconfirmed_mode(cause);
+                }
+                self.after_restore_mode(run, via, outcome == WireOutcome::Confirmed(()))
             }
             _ => Ok(()),
+        }
+    }
+
+    fn after_restore_mode(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        via: RestoreVia,
+        mode_confirmed: bool,
+    ) -> OwnerResult {
+        if !mode_confirmed {
+            self.next
+                .ports
+                .observed
+                .entry(crate::ProviderSettingKind::Mode)
+                .or_insert(SettingEvidence {
+                    value: ObservedSetting::Unknown,
+                    cause: Some(ObservationCause::Unconfirmed),
+                });
+        }
+        if self.next.cell.keep_fast_off
+            && let Some(setting) = self.next.ports.fast_reapply.take()
+        {
+            if self.setting_fenced(ProviderSettingKind::Fast) {
+                return self.finish_fast_off(
+                    run,
+                    via,
+                    mode_confirmed,
+                    SettingEvidence {
+                        value: ObservedSetting::Unknown,
+                        cause: Some(ObservationCause::Unconfirmed),
+                    },
+                );
+            }
+            self.next
+                .ports
+                .restore_setting_fences
+                .insert(setting.kind, (run, setting));
+            self.release(SessionOwnerEffect::Wire(
+                SessionWireRequest::RestoreFastOff { run, setting },
+            ));
+            self.wait_for_restore(PendingRestore::FastOff {
+                run,
+                via,
+                mode_confirmed,
+            });
+        } else {
+            self.begin_host_prepare(run, via, mode_confirmed);
+        }
+        Ok(())
+    }
+
+    fn record_unconfirmed_mode(&mut self, cause: ObservationCause) {
+        self.next.ports.observed.insert(
+            ProviderSettingKind::Mode,
+            SettingEvidence {
+                value: ObservedSetting::Unknown,
+                cause: Some(cause),
+            },
+        );
+    }
+
+    fn release_restore_fence(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
+        kind: ProviderSettingKind,
+    ) -> OwnerResult {
+        if self.next.ports.restore_setting_fences.get(&kind) != Some(&(run, setting)) {
+            return Err(OwnerRejection::IgnoredLate);
+        }
+        self.next.ports.restore_setting_fences.remove(&kind);
+        Ok(())
+    }
+
+    fn finish_fast_off(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        via: RestoreVia,
+        mode_confirmed: bool,
+        observation: SettingEvidence,
+    ) -> OwnerResult {
+        self.next
+            .ports
+            .observed
+            .insert(ProviderSettingKind::Fast, observation);
+        self.begin_host_prepare(run, via, mode_confirmed);
+        Ok(())
+    }
+
+    fn begin_host_prepare(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        via: RestoreVia,
+        mode_confirmed: bool,
+    ) {
+        self.effects.push(OwnerEffect::PrepareRoute(run));
+        self.release(SessionOwnerEffect::PrepareHost(run));
+        self.wait_for_restore(PendingRestore::Preparing {
+            run,
+            via,
+            mode_confirmed,
+        });
+    }
+
+    pub(super) fn restore_preparation(&mut self, progress: RestorePreparation) -> OwnerResult {
+        let run = match &progress {
+            RestorePreparation::RouteReady(run)
+            | RestorePreparation::HostReady { run, .. }
+            | RestorePreparation::FastOff { run, .. }
+            | RestorePreparation::Failed { run, .. } => *run,
+        };
+        if let RestorePreparation::FastOff {
+            setting,
+            observation,
+            ..
+        } = progress
+        {
+            self.release_restore_fence(run, setting, ProviderSettingKind::Fast)?;
+            if let Some(PendingRestore::FastOff {
+                run: pending,
+                via,
+                mode_confirmed,
+            }) = self.next.restore
+                && pending == run
+            {
+                return self.finish_fast_off(run, via, mode_confirmed, observation);
+            }
+            return Ok(());
+        }
+        let pending = self
+            .next
+            .restore
+            .filter(|pending| pending.run() == run)
+            .ok_or(OwnerRejection::IgnoredLate)?;
+        match (pending, progress) {
+            (
+                PendingRestore::Preparing {
+                    via,
+                    mode_confirmed,
+                    ..
+                },
+                RestorePreparation::HostReady {
+                    capabilities,
+                    settings,
+                    observed,
+                    ..
+                },
+            ) => {
+                for (kind, evidence) in observed {
+                    self.next.ports.observed.entry(kind).or_insert(evidence);
+                }
+                for (kind, value) in [
+                    (ProviderSettingKind::Mode, settings.mode.as_ref()),
+                    (ProviderSettingKind::Model, settings.model.as_ref()),
+                    (ProviderSettingKind::Effort, settings.effort.as_ref()),
+                ] {
+                    if let Some(value) = value {
+                        self.next
+                            .ports
+                            .observed
+                            .entry(kind)
+                            .or_insert_with(|| SettingEvidence {
+                                value: ObservedSetting::Confirmed(SettingValueId(value.clone())),
+                                cause: None,
+                            });
+                    }
+                }
+                self.next.ports.setup = Some(PreparedSetup {
+                    capabilities,
+                    settings,
+                });
+                if self.next.ports.route_ready {
+                    self.commit_restore(run, via, mode_confirmed)
+                } else {
+                    Ok(())
+                }
+            }
+            (
+                PendingRestore::Preparing {
+                    via,
+                    mode_confirmed,
+                    ..
+                },
+                RestorePreparation::RouteReady(_),
+            ) => {
+                self.next.ports.route_ready = true;
+                if self.next.ports.setup.is_some() {
+                    self.commit_restore(run, via, mode_confirmed)
+                } else {
+                    Ok(())
+                }
+            }
+            (
+                PendingRestore::Preparing { .. }
+                | PendingRestore::Mode { .. }
+                | PendingRestore::FastOff { .. },
+                RestorePreparation::Failed { stage, .. },
+            ) => self.fail_restore(
+                run,
+                RestoreFailure::LocalPrerequisite { stage },
+                RemoteEffect::Applied,
+            ),
+            _ => Err(OwnerRejection::IgnoredLate),
         }
     }
 
@@ -142,13 +389,19 @@ impl OwnerTransition {
         self.cell_move(SessionCellEvent::Loaded {
             attempt: run.attempt,
         })?;
+        self.next.restore = None;
         self.release(SessionOwnerEffect::Publish(SessionPublication::Activated {
             run,
             via,
         }));
-        self.wait_for_restore(PendingRestore::Publication {
-            run,
-            mode_confirmed,
+        let _mode_was_confirmed = mode_confirmed;
+        self.settle_restore(RestoreResult {
+            attempt: run,
+            phase: RestorePhase::Attempted,
+            disposition: RestoreDisposition::Restored {
+                earlier_unanswered: self.next.cell.last_unanswered_restore.is_some(),
+            },
+            observed: self.next.ports.observed.clone(),
         });
         self.drive_prompt_line()
     }
@@ -159,42 +412,6 @@ impl OwnerTransition {
             run: pending.run(),
             wait: pending.wait(),
         }));
-    }
-
-    pub(super) fn activation_published(
-        &mut self,
-        run: RunAttempt<LoadAttempt>,
-        outcome: EffectOutcome,
-    ) -> OwnerResult {
-        let Some(PendingRestore::Publication {
-            run: pending,
-            mode_confirmed,
-        }) = self.next.restore
-        else {
-            return Err(OwnerRejection::IgnoredLate);
-        };
-        if pending != run || !self.is_live(run.generation) {
-            return Err(OwnerRejection::IgnoredLate);
-        }
-        self.next.restore = None;
-        if outcome == EffectOutcome::Applied {
-            self.release(SessionOwnerEffect::Reply(SessionOwnerReply::Restored {
-                run,
-                mode_confirmed,
-            }));
-            return Ok(());
-        }
-        self.abandon_running_turn()?;
-        let effects = self.cell_move(SessionCellEvent::ActorExited {
-            generation: run.generation,
-        })?;
-        self.apply_entry_effects(effects)?;
-        self.retire_generation(run.generation)?;
-        self.release(SessionOwnerEffect::Publish(SessionPublication::Unloaded(
-            run.generation,
-        )));
-        self.reply_restore_failed(run, RestoreFailureStage::Publication, RemoteEffect::Applied);
-        Ok(())
     }
 
     pub(super) fn restore_deadline(
@@ -215,11 +432,62 @@ impl OwnerTransition {
             PendingRestore::Wire { .. } => {
                 self.fail_loading(run, RestoreFailureStage::Wire, RemoteEffect::Unknown)
             }
-            PendingRestore::Mode { via, .. } => self.commit_restore(run, via, false),
-            PendingRestore::Publication { .. } => {
-                self.activation_published(run, EffectOutcome::Unknown)
+            PendingRestore::Mode { via, .. } => {
+                self.record_unconfirmed_mode(ObservationCause::NoAnswer);
+                self.after_restore_mode(run, via, false)
             }
+            PendingRestore::FastOff {
+                via,
+                mode_confirmed,
+                ..
+            } => self.finish_fast_off(
+                run,
+                via,
+                mode_confirmed,
+                SettingEvidence {
+                    value: ObservedSetting::Unknown,
+                    cause: Some(ObservationCause::NoAnswer),
+                },
+            ),
+            PendingRestore::Preparing { .. } => self.fail_restore(
+                run,
+                RestoreFailure::LocalPrerequisite {
+                    stage: PreparationStage::HostSetup,
+                },
+                RemoteEffect::Applied,
+            ),
         }
+    }
+
+    pub(super) fn restore_failed_on_wire(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        failure: RestoreFailure,
+    ) -> OwnerResult {
+        if !matches!(self.next.restore, Some(PendingRestore::Wire { run: pending, .. }) if pending == run)
+        {
+            return Err(OwnerRejection::IgnoredLate);
+        }
+        let remote = if matches!(failure, RestoreFailure::Refused { .. }) {
+            RemoteEffect::None
+        } else {
+            RemoteEffect::Unknown
+        };
+        self.fail_restore(run, failure, remote)
+    }
+
+    pub(super) fn fail_restore(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        failure: RestoreFailure,
+        remote: RemoteEffect,
+    ) -> OwnerResult {
+        let stage = match self.next.restore {
+            Some(PendingRestore::Setup { .. }) => RestoreFailureStage::Setup,
+            Some(PendingRestore::Wire { .. }) => RestoreFailureStage::Wire,
+            _ => RestoreFailureStage::Preparation,
+        };
+        self.retire_loading(run, stage, remote, failure)
     }
 
     fn fail_loading(
@@ -227,6 +495,29 @@ impl OwnerTransition {
         run: RunAttempt<LoadAttempt>,
         stage: RestoreFailureStage,
         remote: RemoteEffect,
+    ) -> OwnerResult {
+        let failure = match stage {
+            RestoreFailureStage::Setup => RestoreFailure::LocalPrerequisite {
+                stage: PreparationStage::SavedSetup,
+            },
+            RestoreFailureStage::Wire if remote == RemoteEffect::Unknown => {
+                RestoreFailure::NoAnswer
+            }
+            RestoreFailureStage::Wire => RestoreFailure::Lost,
+            RestoreFailureStage::Preparation => RestoreFailure::LocalPrerequisite {
+                stage: PreparationStage::HostSetup,
+            },
+            RestoreFailureStage::Closed => RestoreFailure::Closed,
+        };
+        self.retire_loading(run, stage, remote, failure)
+    }
+
+    fn retire_loading(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        stage: RestoreFailureStage,
+        remote: RemoteEffect,
+        failure: RestoreFailure,
     ) -> OwnerResult {
         let event = if remote == RemoteEffect::Unknown {
             SessionCellEvent::LoadUnanswered {
@@ -239,12 +530,9 @@ impl OwnerTransition {
         };
         let effects = self.cell_move(event)?;
         self.next.restore = None;
+        self.reply_restore_failed(run, stage, remote, failure);
         self.apply_entry_effects(effects)?;
         self.retire_generation(run.generation)?;
-        self.release(SessionOwnerEffect::Publish(SessionPublication::Unloaded(
-            run.generation,
-        )));
-        self.reply_restore_failed(run, stage, remote);
         Ok(())
     }
 
@@ -253,13 +541,24 @@ impl OwnerTransition {
         run: RunAttempt<LoadAttempt>,
         stage: RestoreFailureStage,
         remote: RemoteEffect,
+        failure: RestoreFailure,
     ) {
-        self.release(SessionOwnerEffect::Reply(
-            SessionOwnerReply::RestoreFailed { run, stage, remote },
-        ));
+        self.settle_restore(RestoreResult {
+            attempt: run,
+            phase: if stage == RestoreFailureStage::Setup {
+                RestorePhase::Preflight
+            } else {
+                RestorePhase::Attempted
+            },
+            disposition: RestoreDisposition::Retired { failure, remote },
+            observed: self.next.ports.observed.clone(),
+        });
+        self.next.ports.replay.clear();
+        self.next.ports.setup = None;
     }
 
-    pub(super) fn start_close(&mut self, run: RunAttempt<CloseAttempt>) -> OwnerResult {
+    pub(super) fn start_close(&mut self, request: CloseRequest) -> OwnerResult {
+        let run = request.run;
         if self.next.cell.run_generation() != Some(run.generation) {
             return Err(SessionOwnerRefusal::GenerationChanged.into());
         }
@@ -267,26 +566,51 @@ impl OwnerTransition {
             attempt: run.attempt,
         })?;
         if let Some(restore) = self.next.restore.take() {
-            self.reply_restore_failed(restore.run(), RestoreFailureStage::Closed, restore.remote());
+            self.reply_restore_failed(
+                restore.run(),
+                RestoreFailureStage::Closed,
+                restore.remote(),
+                RestoreFailure::Closed,
+            );
         }
-        self.discontinue_setting()?;
-        self.end_pending_steer();
+        self.next.ports.close_support = Some((run, request.provider_supports_close));
+        self.revoke_run(run.generation);
         self.release(SessionOwnerEffect::ArmDeadline(SessionDeadline::Close(run)));
         for effect in &effects {
-            match effect {
-                SessionCellEffect::Turn(SessionTurnEffect::WriteCancel { turn }) => {
-                    self.release(SessionOwnerEffect::Wire(SessionWireRequest::Cancel {
-                        generation: run.generation,
-                        turn: *turn,
-                    }));
-                }
-                SessionCellEffect::Lifecycle(SessionLifecycleEffect::StartFree { .. }) => {
-                    self.release(SessionOwnerEffect::Wire(SessionWireRequest::Close(run)));
-                }
-                _ => {}
+            if let SessionCellEffect::Turn(SessionTurnEffect::WriteCancel { turn }) = effect
+                && !self.waiting_for_prompt_enqueue(*turn)
+            {
+                self.release(SessionOwnerEffect::Wire(SessionWireRequest::Cancel {
+                    generation: run.generation,
+                    turn: *turn,
+                }));
             }
         }
-        self.apply_entry_effects(effects)
+        self.apply_entry_effects(effects)?;
+        self.continue_close()
+    }
+
+    pub(super) fn continue_close(&mut self) -> OwnerResult {
+        if !self.next.ports.connection_alive {
+            return Ok(());
+        }
+        let Some((run, ClosePhase::Freeing)) = self.closing() else {
+            return Ok(());
+        };
+        if self.next.ports.authorizations.iter().any(|(key, pending)| {
+            key.run == run.generation && pending.status != AuthorizationStatus::Taken
+        }) {
+            return Ok(());
+        }
+        let Some((_, supported)) = self.next.ports.close_support.take() else {
+            return Ok(());
+        };
+        if supported {
+            self.release(SessionOwnerEffect::Wire(SessionWireRequest::Close(run)));
+            Ok(())
+        } else {
+            self.complete_close(run, CloseOutcome::RouterOnly)
+        }
     }
 
     pub(super) fn closing(&self) -> Option<(RunAttempt<CloseAttempt>, ClosePhase)> {
@@ -329,7 +653,13 @@ impl OwnerTransition {
                         run.generation,
                     )));
                 }
-                self.reply_close_finished(run, CloseOutcome::Refused);
+                let outcome = if self.is_live(run.generation) {
+                    self.effects.push(OwnerEffect::ReopenRoute(run));
+                    CloseOutcome::RefusedLive
+                } else {
+                    CloseOutcome::RefusedLoading
+                };
+                self.reply_close_finished(run, outcome);
                 Ok(())
             }
         }
@@ -339,15 +669,32 @@ impl OwnerTransition {
         if !self.closing().is_some_and(|(pending, _)| pending == run) {
             return Err(OwnerRejection::IgnoredLate);
         }
+        let unsent = self.closing() == Some((run, ClosePhase::EndingTurn))
+            || self.next.ports.close_support.is_some();
         self.abandon_running_turn()?;
-        self.complete_close(run, CloseOutcome::OutcomeUnknown)
+        let outcome = if unsent {
+            CloseOutcome::DrainExpired
+        } else {
+            CloseOutcome::OutcomeUnknown
+        };
+        self.complete_close(run, outcome)
     }
 
-    fn complete_close(
+    pub(super) fn close_not_sent(&mut self, run: RunAttempt<CloseAttempt>) -> OwnerResult {
+        if self.closing() != Some((run, ClosePhase::Freeing))
+            || self.next.ports.close_support.is_some()
+        {
+            return Err(OwnerRejection::IgnoredLate);
+        }
+        self.complete_close(run, CloseOutcome::DrainExpired)
+    }
+
+    pub(super) fn complete_close(
         &mut self,
         run: RunAttempt<CloseAttempt>,
         outcome: CloseOutcome,
     ) -> OwnerResult {
+        self.next.ports.close_support = None;
         let effects = self.cell_move(SessionCellEvent::CloseDone {
             attempt: run.attempt,
         })?;
@@ -369,7 +716,7 @@ impl OwnerTransition {
         ));
     }
 
-    fn abandon_running_turn(&mut self) -> OwnerResult {
+    pub(super) fn abandon_running_turn(&mut self) -> OwnerResult {
         match self.next.turn() {
             SessionTurn::Idle => Ok(()),
             SessionTurn::Running { turn } | SessionTurn::Cancelling { turn } => {
@@ -378,11 +725,14 @@ impl OwnerTransition {
         }
     }
 
-    fn retire_generation(&mut self, generation: SessionGeneration) -> OwnerResult {
+    pub(super) fn retire_generation(&mut self, generation: SessionGeneration) -> OwnerResult {
         self.finish_retired_store_work(generation)?;
         self.discontinue_setting()?;
-        self.end_pending_steer();
         self.retire_run_tools(generation);
+        self.effects
+            .push(OwnerEffect::CallbackMembership(TurnMembership::Retire(
+                generation,
+            )));
         self.release(SessionOwnerEffect::RetireRoute(generation));
         Ok(())
     }

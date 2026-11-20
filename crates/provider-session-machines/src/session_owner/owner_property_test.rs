@@ -1,137 +1,235 @@
 use super::*;
 use crate::session_lifecycle_machine::CloseOrigin;
 use hegel::generators as gs;
+use std::collections::BTreeSet;
 
 struct Mailbox {
     owner: SessionOwnerState,
-    admitted: BTreeMap<InputId, SessionGeneration>,
-    armed: Vec<SessionDeadline>,
-    arrivals: Vec<SessionOwnerEvent>,
+    arrivals: Vec<OwnerEvent>,
+    armed: Vec<OwnerDeadline>,
 }
 
 impl Mailbox {
     fn new() -> Self {
         Self {
-            owner: SessionOwnerState::fresh(),
-            admitted: BTreeMap::new(),
-            armed: Vec::new(),
+            owner: fresh(),
             arrivals: Vec::new(),
+            armed: Vec::new(),
         }
     }
 
-    fn deliver(&mut self, event: SessionOwnerEvent) {
-        let before = self.owner.lifecycle();
-        let waited_before = pending(&self.owner);
-        let decision = self.owner.decide(event.clone());
-        if let Ok(SessionOwnerCommit { next, effects }) = decision {
-            if let SessionOwnerEvent::Command(
-                SessionOwnerCommand::Prompt { input, .. }
-                | SessionOwnerCommand::Steer { input, .. },
-            ) = &event
-            {
-                self.admitted.insert(input.input.clone(), input.generation);
+    fn deliver(&mut self, event: OwnerEvent) {
+        let before = self.owner.snapshot().lifecycle;
+        let previous_waits = pending(&self.owner);
+        let fences = sent_settings(&self.owner);
+        let restore_fences = self.owner.ports.restore_setting_fences.clone();
+        if let Ok(commit) = decide(&self.owner, event.clone()) {
+            self.owner = commit.next;
+            assert_live_commit(before, self.owner.snapshot().lifecycle, &event);
+            for effect in commit.effects.effects {
+                self.observe(effect);
             }
-            assert_live_commit(before, next.lifecycle(), &event);
-            for effect in effects {
-                self.observe(next.lifecycle(), effect);
-            }
-            self.owner = next;
         }
-
         let remaining = pending(&self.owner);
         assert!(
             remaining.iter().all(|wait| self.armed.contains(wait)),
-            "(c) pending work has no armed deadline: {remaining:?}"
+            "I3 pending work has no armed deadline: {remaining:?}"
         );
-        if let SessionOwnerEvent::DeadlineElapsed(wait) = event {
+        if let OwnerEvent::Deadline(wait) = &event {
             assert!(
-                !waited_before.contains(&wait) || !remaining.contains(&wait),
-                "(c) fired deadline left its pending item: {wait:?}"
+                !previous_waits.contains(wait) || !remaining.contains(wait),
+                "I3 expired work stayed pending: {wait:?}"
             );
         }
+        assert_fences(fences, &self.owner, &event);
+        for (kind, (run, setting)) in restore_fences {
+            if self.owner.ports.restore_setting_fences.get(&kind) != Some(&(run, setting)) {
+                assert!(
+                    matches!(event, OwnerEvent::ConnectionLost)
+                        || matches!(event, OwnerEvent::Wire(SessionWireResult::RestoreMode { run: reply_run, setting: reply_setting, .. })
+                        | OwnerEvent::Prepare(RestorePreparation::FastOff { run: reply_run, setting: reply_setting, .. })
+                        if reply_run == run && reply_setting == setting),
+                    "I8 a restore setting lost its fence before exact correlation or connection loss"
+                );
+            }
+        }
         if !matches!(before, SessionLifecycle::NotLoaded { .. })
-            && let SessionLifecycle::NotLoaded { last } = self.owner.lifecycle()
+            && let SessionLifecycle::NotLoaded { last } = self.owner.snapshot().lifecycle
         {
-            let retry =
-                self.owner
-                    .decide(SessionOwnerEvent::Command(SessionOwnerCommand::Restore {
-                        attempt: LoadAttempt(uuid(999)),
-                        via: RestoreVia::Load,
-                    }));
-            assert!(
-                matches!(retry, Ok(SessionOwnerCommit { next, .. })
-                if matches!(next.lifecycle(), SessionLifecycle::Loading { generation, .. }
-                    if generation.number() > last.number())),
-                "(d) a retired generation barred a deliberate restore"
+            let recovery = decide(
+                &self.owner,
+                OwnerEvent::Command(SessionOwnerCommand::Restore {
+                    attempt: LoadAttempt(uuid(999)),
+                    via: RestoreVia::Load,
+                }),
             );
+            if self.owner.ports.connection_alive {
+                assert!(
+                    matches!(recovery, Ok(SessionOwnerCommit { next, .. }) if matches!(
+                        next.snapshot().lifecycle, SessionLifecycle::Loading { generation, .. } if generation > last
+                    ))
+                );
+            } else {
+                assert!(matches!(recovery, Err(SessionOwnerRejection::Refused(_))));
+            }
         }
     }
 
-    fn observe(&mut self, lifecycle: SessionLifecycle, effect: SessionOwnerEffect) {
+    fn observe(&mut self, effect: OwnerEffect) {
         match effect {
-            SessionOwnerEffect::ArmDeadline(wait) => {
-                self.armed.push(wait.clone());
-                self.arrivals.push(SessionOwnerEvent::DeadlineElapsed(wait));
+            OwnerEffect::Arm { deadline, .. } => {
+                self.armed.push(deadline.clone());
+                self.arrivals.push(OwnerEvent::Deadline(deadline));
             }
-            SessionOwnerEffect::Wire(request) => {
-                if let SessionWireRequest::Prompt(ref input)
-                | SessionWireRequest::Steer(ref input) = request
-                {
-                    assert_eq!(
-                        self.admitted.get(&input.input),
-                        Some(&input.generation),
-                        "(b) wire input used a different generation from admission"
-                    );
-                    assert_eq!(
-                        lifecycle,
-                        SessionLifecycle::Live {
-                            generation: input.generation
+            OwnerEffect::Wire(SessionWireRequest::Restore { run, .. }) => self.arrivals.extend([
+                restore_reply(run),
+                OwnerEvent::Wire(SessionWireResult::Restore {
+                    run,
+                    outcome: WireOutcome::Confirmed(RestoredMode::Reapply {
+                        application: SettingApplication(run.attempt.0),
+                        value: SettingValueId("auto".into()),
+                    }),
+                    fast_on: None,
+                }),
+                OwnerEvent::Wire(SessionWireResult::RestoreFailed {
+                    run,
+                    failure: RestoreFailure::Disconnected,
+                }),
+            ]),
+            OwnerEffect::Wire(SessionWireRequest::RestoreMode { run, setting, .. }) => self
+                .arrivals
+                .push(OwnerEvent::Wire(SessionWireResult::RestoreMode {
+                    run,
+                    setting,
+                    outcome: WireOutcome::Confirmed(()),
+                })),
+            OwnerEffect::Wire(SessionWireRequest::Close(run)) => self.arrivals.extend([
+                close_reply(run, WireOutcome::Confirmed(())),
+                close_reply(run, WireOutcome::Refused),
+                close_reply(run, WireOutcome::Unknown),
+            ]),
+            OwnerEffect::PrepareHost(run) => self.arrivals.extend([
+                host_ready(run),
+                OwnerEvent::Prepare(RestorePreparation::Failed {
+                    run,
+                    stage: PreparationStage::HostSetup,
+                }),
+            ]),
+            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff { run, setting }) => {
+                self.arrivals
+                    .push(OwnerEvent::Prepare(RestorePreparation::FastOff {
+                        run,
+                        setting,
+                        observation: SettingEvidence {
+                            value: ObservedSetting::Confirmed(SettingValueId("off".into())),
+                            cause: None,
                         },
-                        "(b) wire input left a retired generation"
-                    );
+                    }));
+            }
+            OwnerEffect::PrepareRoute(run) => self
+                .arrivals
+                .push(OwnerEvent::Prepare(RestorePreparation::RouteReady(run))),
+            OwnerEffect::Store(request) => self.observe_store(request),
+            OwnerEffect::Authorize {
+                authorization,
+                work,
+            } => {
+                self.arrivals
+                    .push(OwnerEvent::Dispatch(DispatchResult::Taken(
+                        authorization.clone(),
+                    )));
+                match work {
+                    AuthorizedWork::Prompt(_) => {
+                        self.arrivals
+                            .push(OwnerEvent::Dispatch(DispatchResult::PromptFinished {
+                                authorization,
+                                outcome: WireOutcome::Confirmed(()),
+                            }))
+                    }
+                    AuthorizedWork::Steer(_) => {
+                        self.arrivals
+                            .push(OwnerEvent::Dispatch(DispatchResult::SteerFinished {
+                                authorization,
+                                outcome: WireOutcome::Confirmed(()),
+                            }))
+                    }
+                    AuthorizedWork::Setting { value, .. } => {
+                        self.arrivals
+                            .push(OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+                                authorization,
+                                observation: SettingObservation::Applied(value),
+                            }))
+                    }
                 }
-                self.arrivals.extend(wire_replies(request));
             }
-            SessionOwnerEffect::Store(request) => self.arrivals.extend(store_replies(request)),
-            SessionOwnerEffect::Publish(SessionPublication::Activated { run, .. }) => {
-                assert_eq!(
-                    lifecycle,
-                    SessionLifecycle::Live {
-                        generation: run.generation
-                    },
-                    "(e) observed Idle without committed Live"
-                );
-                for outcome in [EffectOutcome::Applied, EffectOutcome::Failed] {
-                    self.arrivals
-                        .push(SessionOwnerEvent::Publication { run, outcome });
+            OwnerEffect::Revoke { authorization, .. } => self
+                .arrivals
+                .push(OwnerEvent::Dispatch(DispatchResult::Revoked(authorization))),
+            OwnerEffect::Publish(
+                PublicationBatch::Commit { id, .. } | PublicationBatch::Rebase { id, .. },
+            ) => {
+                self.arrivals
+                    .push(OwnerEvent::Publication(PublicationResult::Applied(id)));
+            }
+            OwnerEffect::Wire(_)
+            | OwnerEffect::CallbackMembership(_)
+            | OwnerEffect::Reply(_)
+            | OwnerEffect::ReplyUnsaved(_)
+            | OwnerEffect::RestoreSettled { .. }
+            | OwnerEffect::AdoptProviderId { .. }
+            | OwnerEffect::CreateSettled { .. }
+            | OwnerEffect::RetireRoute(_)
+            | OwnerEffect::ReopenRoute(_)
+            | OwnerEffect::ForwardTool { .. }
+            | OwnerEffect::CheckRetainedTool { .. } => {}
+        }
+    }
+
+    fn observe_store(&mut self, request: SessionStoreRequest) {
+        for outcome in [
+            EffectOutcome::Applied,
+            EffectOutcome::Failed,
+            EffectOutcome::Unknown,
+        ] {
+            let event = match &request {
+                SessionStoreRequest::RecordTerminal { write, .. } => SessionStoreResult::Terminal {
+                    write: *write,
+                    outcome,
+                },
+                SessionStoreRequest::ReadRestoreSetup(run) => {
+                    SessionStoreResult::RestoreSetup { run: *run, outcome }
                 }
-            }
-            SessionOwnerEffect::Publish(SessionPublication::TurnEnded {
-                generation,
-                idle: true,
-                ..
-            }) => {
-                assert_eq!(
-                    lifecycle,
-                    SessionLifecycle::Live { generation },
-                    "(e) observed Idle after a run retired"
-                );
-            }
-            SessionOwnerEffect::Publish(_)
-            | SessionOwnerEffect::Reply(_)
-            | SessionOwnerEffect::RetireRoute(_)
-            | SessionOwnerEffect::StageReplayTool { .. }
-            | SessionOwnerEffect::ForwardTool { .. }
-            | SessionOwnerEffect::CheckRetainedTool { .. } => {}
+                SessionStoreRequest::MarkDispatch(input) => SessionStoreResult::Dispatch {
+                    input: input.clone(),
+                    outcome,
+                },
+                SessionStoreRequest::UndoDispatch(input) => SessionStoreResult::UndoDispatch {
+                    input: input.clone(),
+                    outcome,
+                },
+                SessionStoreRequest::MarkSteerDispatch(input) => {
+                    SessionStoreResult::SteerDispatch {
+                        input: input.clone(),
+                        outcome,
+                    }
+                }
+                SessionStoreRequest::ReadDispatch(input) => SessionStoreResult::DispatchReadback {
+                    input: input.clone(),
+                    outcome,
+                },
+                SessionStoreRequest::RecordConfirmedSetting { setting, .. } => {
+                    SessionStoreResult::ConfirmedSetting {
+                        setting: *setting,
+                        outcome,
+                    }
+                }
+            };
+            self.arrivals.push(OwnerEvent::Store(event));
         }
     }
 }
 
-fn assert_live_commit(
-    before: SessionLifecycle,
-    after: SessionLifecycle,
-    event: &SessionOwnerEvent,
-) {
+fn assert_live_commit(before: SessionLifecycle, after: SessionLifecycle, event: &OwnerEvent) {
     let SessionLifecycle::Live { generation } = after else {
         return;
     };
@@ -149,20 +247,9 @@ fn assert_live_commit(
                 attempt,
             };
             loading == generation
-                && match event {
-                    SessionOwnerEvent::Wire(
-                        SessionWireResult::Restore {
-                            run,
-                            outcome: WireOutcome::Confirmed(_),
-                        }
-                        | SessionWireResult::RestoreMode { run, .. },
-                    )
-                    | SessionOwnerEvent::DeadlineElapsed(SessionDeadline::Restore {
-                        run,
-                        wait: RestoreWait::Mode,
-                    }) => *run == expected,
-                    _ => false,
-                }
+                && matches!(event, OwnerEvent::Prepare(
+                RestorePreparation::HostReady { run, .. } | RestorePreparation::RouteReady(run)
+            ) if *run == expected)
         }
         SessionLifecycle::Closing {
             generation: closing,
@@ -171,27 +258,30 @@ fn assert_live_commit(
             ..
         } => {
             closing == generation
-                && matches!(event, SessionOwnerEvent::Wire(SessionWireResult::Close { run, outcome: WireOutcome::Refused })
+                && matches!(event, OwnerEvent::Wire(SessionWireResult::Close { run, outcome: WireOutcome::Refused })
                 if *run == RunAttempt { generation, attempt })
         }
-        _ => false,
+        SessionLifecycle::NotLoaded { last } => {
+            generation > last && matches!(event, OwnerEvent::Create(CreateProgress::Adopted { .. }))
+        }
+        SessionLifecycle::Live { .. } | SessionLifecycle::Closing { .. } => false,
     };
     assert!(
         committed,
-        "(a) Live did not follow a matching owner commit: {before:?}, {event:?}, {after:?}"
+        "I1 Live must follow one matching usable-run commit: {before:?}, {event:?}, {after:?}"
     );
 }
 
-fn pending(state: &SessionOwnerState) -> Vec<SessionDeadline> {
+fn pending(state: &SessionOwnerState) -> Vec<OwnerDeadline> {
     let mut waits = Vec::new();
     if let Some(restore) = state.restore {
-        let (run, wait) = match restore {
-            PendingRestore::Setup { run, .. } => (run, RestoreWait::Setup),
-            PendingRestore::Wire { run, .. } => (run, RestoreWait::Wire),
-            PendingRestore::Mode { run, .. } => (run, RestoreWait::Mode),
-            PendingRestore::Publication { run, .. } => (run, RestoreWait::Publication),
-        };
-        waits.push(SessionDeadline::Restore { run, wait });
+        waits.push(match restore {
+            PendingRestore::Setup { run, .. } => OwnerDeadline::ReadSetup(run),
+            PendingRestore::Wire { run, .. } => OwnerDeadline::RestoreWire(run),
+            PendingRestore::Mode { run, .. } => OwnerDeadline::RestoreMode(run),
+            PendingRestore::FastOff { run, .. } => OwnerDeadline::RestoreFastOff(run),
+            PendingRestore::Preparing { run, .. } => OwnerDeadline::HostPrepare(run),
+        });
     }
     if let SessionLifecycle::Closing {
         generation,
@@ -199,180 +289,167 @@ fn pending(state: &SessionOwnerState) -> Vec<SessionDeadline> {
         ..
     } = state.lifecycle()
     {
-        waits.push(SessionDeadline::Close(RunAttempt {
+        waits.push(OwnerDeadline::Close(RunAttempt {
             generation,
             attempt,
         }));
     }
+    for prompt in state.prompts.values().chain(state.steer.iter()) {
+        match prompt.wait {
+            InputWait::DispatchStore => waits.push(OwnerDeadline::DispatchMark {
+                input: prompt.input.clone(),
+            }),
+            InputWait::UndoStore => waits.push(OwnerDeadline::UndoStore {
+                input: prompt.input.clone(),
+            }),
+            InputWait::Admission | InputWait::Enqueue | InputWait::Wire => {}
+        }
+    }
     waits.extend(
         state
-            .prompts
-            .values()
-            .map(|pending| SessionDeadline::Prompt {
-                input: pending.input.clone(),
-                wait: pending.wait,
+            .ports
+            .unsent_prompts
+            .keys()
+            .map(|input| OwnerDeadline::UndoStore {
+                input: input.clone(),
             }),
     );
-    if let Some(pending) = &state.steer {
-        waits.push(SessionDeadline::Steer {
-            input: pending.input.clone(),
-            wait: pending.wait,
-        });
+    for (key, authorization) in &state.ports.authorizations {
+        match (&authorization.status, &authorization.work) {
+            (AuthorizationStatus::Offered, _) => waits.push(OwnerDeadline::Enqueue(key.clone())),
+            (AuthorizationStatus::Taken, AuthorizedWork::Steer(_)) => {
+                waits.push(OwnerDeadline::SteerResult(key.clone()))
+            }
+            _ => {}
+        }
     }
-    if let Some((setting, wait)) = state.setting {
-        waits.push(SessionDeadline::Setting { setting, wait });
+    match state.setting {
+        Some((setting, SettingWait::Wire)) => waits.push(OwnerDeadline::SettingWire(setting)),
+        Some((setting, SettingWait::Store)) => waits.push(OwnerDeadline::SettingStore(setting)),
+        _ => {}
     }
+    waits.extend(
+        state
+            .ports
+            .awaiting_apply
+            .iter()
+            .copied()
+            .map(OwnerDeadline::Publication),
+    );
+    waits.extend(state.ports.rebase.map(OwnerDeadline::Rebase));
+    waits.extend(state.ports.create.map(OwnerDeadline::Create));
+    waits.extend(
+        state
+            .ports
+            .pending_terminal
+            .keys()
+            .copied()
+            .map(OwnerDeadline::TerminalStore),
+    );
     waits
 }
 
-fn wire_replies(request: SessionWireRequest) -> Vec<SessionOwnerEvent> {
-    let replies = [
-        WireOutcome::Confirmed(()),
-        WireOutcome::Refused,
-        WireOutcome::Unknown,
-    ];
-    match request {
-        SessionWireRequest::Restore { run, .. } => [
-            WireOutcome::Confirmed(RestoredMode::Observed),
-            WireOutcome::Confirmed(RestoredMode::Reapply(SettingValueId("auto".to_owned()))),
-            WireOutcome::Refused,
-            WireOutcome::Unknown,
-        ]
-        .into_iter()
-        .map(|outcome| SessionWireResult::Restore { run, outcome })
-        .map(SessionOwnerEvent::Wire)
-        .collect(),
-        SessionWireRequest::RestoreMode { run, .. } => replies
-            .into_iter()
-            .map(|outcome| SessionWireResult::RestoreMode { run, outcome })
-            .map(SessionOwnerEvent::Wire)
-            .collect(),
-        SessionWireRequest::Close(run) => replies
-            .into_iter()
-            .map(|outcome| SessionWireResult::Close { run, outcome })
-            .map(SessionOwnerEvent::Wire)
-            .collect(),
-        SessionWireRequest::Prompt(input) => replies
-            .into_iter()
-            .map(|outcome| SessionWireResult::Turn {
-                input: input.clone(),
-                outcome,
-            })
-            .map(SessionOwnerEvent::Wire)
-            .collect(),
-        SessionWireRequest::Steer(input) => replies
-            .into_iter()
-            .map(|outcome| SessionWireResult::Steer {
-                input: input.clone(),
-                outcome,
-            })
-            .map(SessionOwnerEvent::Wire)
-            .collect(),
-        SessionWireRequest::Set { setting, value } => [
-            SettingObservation::Applied(value),
-            SettingObservation::Refused { current: None },
-            SettingObservation::Unknown,
-        ]
-        .into_iter()
-        .map(|observation| SessionWireResult::Setting {
-            setting,
-            observation,
+fn sent_settings(state: &SessionOwnerState) -> BTreeSet<DispatchAuthorization> {
+    state
+        .ports
+        .authorizations
+        .iter()
+        .filter_map(|(key, pending)| {
+            (pending.status == AuthorizationStatus::Taken
+                && matches!(pending.work, AuthorizedWork::Setting { .. }))
+            .then_some(key.clone())
         })
-        .map(SessionOwnerEvent::Wire)
-        .collect(),
-        SessionWireRequest::Cancel { .. } => Vec::new(),
+        .collect()
+}
+
+fn assert_fences(
+    before: BTreeSet<DispatchAuthorization>,
+    after: &SessionOwnerState,
+    event: &OwnerEvent,
+) {
+    let retained = sent_settings(after);
+    for key in before.difference(&retained) {
+        assert!(
+            matches!(event, OwnerEvent::ConnectionLost)
+                || matches!(event, OwnerEvent::Dispatch(DispatchResult::SettingFinished { authorization, .. } | DispatchResult::DefinitelyUnsent(authorization)) if authorization == key),
+            "I8 a sent setting lost its fence before exact correlation or connection loss: {key:?}"
+        );
     }
 }
 
-fn store_replies(request: SessionStoreRequest) -> Vec<SessionOwnerEvent> {
-    [
-        EffectOutcome::Applied,
-        EffectOutcome::Failed,
-        EffectOutcome::Unknown,
-    ]
-    .into_iter()
-    .map(|outcome| match &request {
-        SessionStoreRequest::ReadRestoreSetup(run) => {
-            SessionStoreResult::RestoreSetup { run: *run, outcome }
-        }
-        SessionStoreRequest::MarkDispatch(input) => SessionStoreResult::Dispatch {
-            input: input.clone(),
-            outcome,
-        },
-        SessionStoreRequest::UndoDispatch(input) => SessionStoreResult::UndoDispatch {
-            input: input.clone(),
-            outcome,
-        },
-        SessionStoreRequest::MarkSteerDispatch(input) => SessionStoreResult::SteerDispatch {
-            input: input.clone(),
-            outcome,
-        },
-        SessionStoreRequest::ReadDispatch(input) => SessionStoreResult::DispatchReadback {
-            input: input.clone(),
-            outcome,
-        },
-        SessionStoreRequest::RecordConfirmedSetting { setting, .. } => {
-            SessionStoreResult::ConfirmedSetting {
-                setting: *setting,
-                outcome,
-            }
-        }
-    })
-    .map(SessionOwnerEvent::Store)
-    .collect()
-}
-
 #[hegel::test]
-fn generated_mailbox_orders_preserve_the_five_owner_invariants(case: hegel::TestCase) {
+fn generated_orders_check_i1_i3_i7_and_i8(case: hegel::TestCase) {
     let mut mailbox = Mailbox::new();
-    // Reach each oracle even on the smallest shrunk suffix.
     let first = RunAttempt {
         generation: SessionGeneration::from_number(1),
         attempt: LoadAttempt(uuid(1)),
     };
-    mailbox.deliver(SessionOwnerEvent::Command(SessionOwnerCommand::Restore {
+    mailbox.deliver(OwnerEvent::Command(SessionOwnerCommand::Restore {
         attempt: first.attempt,
         via: RestoreVia::Load,
     }));
-    mailbox.deliver(SessionOwnerEvent::Store(SessionStoreResult::RestoreSetup {
+    mailbox.deliver(OwnerEvent::Store(SessionStoreResult::RestoreSetup {
         run: first,
         outcome: EffectOutcome::Applied,
     }));
     mailbox.deliver(restore_reply(first));
-    let first_input = input(first.generation, 2);
-    mailbox.deliver(SessionOwnerEvent::Command(SessionOwnerCommand::Prompt {
-        input: first_input.clone(),
-        admission: PromptAdmission::Direct,
+    mailbox.deliver(host_ready(first));
+    let old_incarnation = OwnerMailboxEvent {
+        owner: OwnerAddress {
+            incarnation: OwnerIncarnation(uuid(777)),
+            ..mailbox.owner.snapshot().owner
+        },
+        event: OwnerEvent::Prepare(RestorePreparation::RouteReady(first)),
+    };
+    assert!(
+        matches!(
+            mailbox.owner.decide(old_incarnation),
+            Err(SessionOwnerRejection::IgnoredLate)
+        ),
+        "I7 old incarnation changed the current attempt"
+    );
+    mailbox.deliver(OwnerEvent::Prepare(RestorePreparation::RouteReady(first)));
+    let setting = OwnerSetting {
+        change: RunAttempt {
+            generation: first.generation,
+            attempt: SettingApplication(uuid(2)),
+        },
+        kind: ProviderSettingKind::Fast,
+    };
+    mailbox.deliver(OwnerEvent::Command(setting_command(setting, 2)));
+    let token = mailbox
+        .arrivals
+        .iter()
+        .rev()
+        .find_map(|event| match event {
+            OwnerEvent::Dispatch(DispatchResult::Taken(token)) => Some(token.clone()),
+            _ => None,
+        })
+        .expect("authorized setting");
+    mailbox.deliver(OwnerEvent::Dispatch(DispatchResult::Taken(token.clone())));
+    mailbox.deliver(OwnerEvent::Deadline(OwnerDeadline::SettingWire(setting)));
+    mailbox.deliver(OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+        authorization: token,
+        observation: SettingObservation::Applied(SettingValueId("off".into())),
     }));
-    mailbox.deliver(mark_prompt(&first_input));
-    let closing = RunAttempt {
+    let close = RunAttempt {
         generation: first.generation,
         attempt: CloseAttempt(uuid(3)),
     };
-    mailbox.deliver(SessionOwnerEvent::Command(SessionOwnerCommand::Close {
-        generation: closing.generation,
-        attempt: closing.attempt,
+    mailbox.deliver(OwnerEvent::Command(SessionOwnerCommand::Close {
+        generation: close.generation,
+        attempt: close.attempt,
     }));
-    mailbox.deliver(SessionOwnerEvent::DeadlineElapsed(SessionDeadline::Close(
-        closing,
-    )));
-    // Old replies remain in the mailbox alongside current commands.
-    let steps = case.draw(gs::integers::<u8>().min_value(1).max_value(70));
-    for number in 10..10 + u64::from(steps) {
-        let choice = case.draw(gs::integers::<u8>().max_value(11));
-        let generation = match mailbox.owner.lifecycle() {
-            SessionLifecycle::NotLoaded { last } => last,
-            SessionLifecycle::Live { generation }
-            | SessionLifecycle::Loading { generation, .. }
-            | SessionLifecycle::Closing { generation, .. } => generation,
-        };
-        let mut next_input = input(generation, number);
-        if let SessionTurn::Running { turn } | SessionTurn::Cancelling { turn } =
-            mailbox.owner.turn()
-            && choice == 5
-        {
-            next_input.turn = turn;
-        }
+    mailbox.deliver(OwnerEvent::Deadline(OwnerDeadline::Close(close)));
+
+    let steps = case.draw(gs::integers::<u8>().min_value(1).max_value(75));
+    for number in 20..20 + u64::from(steps) {
+        let choice = case.draw(gs::integers::<u8>().max_value(9));
+        let generation = mailbox
+            .owner
+            .cell
+            .run_generation()
+            .unwrap_or(SessionGeneration::UNTRACKED);
         let command = match choice {
             0 => SessionOwnerCommand::Restore {
                 attempt: LoadAttempt(uuid(number)),
@@ -382,26 +459,20 @@ fn generated_mailbox_orders_preserve_the_five_owner_invariants(case: hegel::Test
                 generation,
                 attempt: CloseAttempt(uuid(number)),
             },
-            2..=4 => SessionOwnerCommand::Prompt {
-                input: next_input,
-                admission: PromptAdmission::Auto {
-                    steering_supported: true,
-                },
+            2 => SessionOwnerCommand::Prompt {
+                input: input(generation, number),
+                admission: PromptAdmission::Queue,
             },
-            5 => SessionOwnerCommand::Steer {
-                input: next_input,
-                supported: true,
-            },
-            6 => SessionOwnerCommand::Set {
-                setting: OwnerSetting {
+            3 => setting_command(
+                OwnerSetting {
                     change: RunAttempt {
                         generation,
                         attempt: SettingApplication(uuid(number)),
                     },
-                    kind: ProviderSettingKind::Fast,
+                    kind: ProviderSettingKind::Mode,
                 },
-                value: SettingValueId("off".to_owned()),
-            },
+                number,
+            ),
             _ => {
                 let index = case.draw(
                     gs::integers::<usize>().max_value(mailbox.arrivals.len().saturating_sub(1)),
@@ -412,26 +483,23 @@ fn generated_mailbox_orders_preserve_the_five_owner_invariants(case: hegel::Test
                 continue;
             }
         };
-        mailbox.deliver(SessionOwnerEvent::Command(command));
+        mailbox.deliver(OwnerEvent::Command(command));
     }
-    // Once new commands stop, drive every currently armed wait from the
-    // injected clock. Each input can advance through at most four waits.
-    let budget = 4 * (pending(&mailbox.owner).len() + 1);
-    for _ in 0..budget {
-        let Some(wait) = pending(&mailbox.owner).into_iter().next() else {
-            break;
-        };
-        mailbox.deliver(SessionOwnerEvent::DeadlineElapsed(wait));
+
+    // Stable Live/NotLoaded, ordinary running turns and transport-retained
+    // setting fences are not bounded attempts. Publication retries may
+    // continue after degradation; each individual offer has its own budget.
+    let waits = pending(&mailbox.owner);
+    for wait in waits {
+        mailbox.deliver(OwnerEvent::Deadline(wait));
     }
-    assert!(
-        pending(&mailbox.owner).is_empty(),
-        "(c) transient work did not drain within the deadline budget"
-    );
-    assert!(
-        !matches!(
-            mailbox.owner.lifecycle(),
-            SessionLifecycle::Loading { .. } | SessionLifecycle::Closing { .. }
-        ),
-        "(c) the owner remained in a transient lifecycle"
-    );
+    if pending(&mailbox.owner).is_empty() {
+        let before = mailbox.owner.snapshot();
+        mailbox.deliver(OwnerEvent::Deadline(OwnerDeadline::Close(close)));
+        assert_eq!(
+            mailbox.owner.snapshot(),
+            before,
+            "an old timeout cannot retire healthy stable state"
+        );
+    }
 }

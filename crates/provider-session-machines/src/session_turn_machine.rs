@@ -7,7 +7,7 @@ use state_machine_core::{
 };
 
 /// One turn's identity (a UUIDv7 minted at the handover, design note §13.1).
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct TurnId(pub uuid::Uuid);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

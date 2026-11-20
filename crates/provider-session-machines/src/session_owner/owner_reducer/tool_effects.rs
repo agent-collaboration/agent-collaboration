@@ -1,13 +1,79 @@
 use super::{OwnerRejection, OwnerResult, OwnerTransition};
 use crate::SessionGeneration;
 use crate::session_lifecycle_machine::SessionLifecycle;
-use crate::session_owner::{RoutedSessionToolEvent, SessionOwnerEffect};
+use crate::session_owner::{RoutedSessionToolEvent, RoutedTool, SessionOwnerEffect};
 use crate::session_turn_machine::{SessionTurn, TurnId};
 use crate::tool_ownership::{
     ToolOwnershipEffect, ToolOwnershipEvent, ToolSessionPhase, reduce_tool_ownership,
 };
 
 impl OwnerTransition {
+    pub(super) fn routed_tool(&mut self, event: RoutedTool) -> OwnerResult {
+        match event {
+            RoutedTool::Exact { run, turn, tool_id } => {
+                if self.tool_phase(run)
+                    != Some(ToolSessionPhase::LiveRunning {
+                        generation: run,
+                        turn,
+                    })
+                {
+                    return Err(OwnerRejection::IgnoredLate);
+                }
+                self.apply_tool(RoutedSessionToolEvent::RoutedCallback {
+                    generation: run,
+                    tool_id,
+                })
+            }
+            RoutedTool::ExactIdle { run, item_id } => {
+                if self.tool_phase(run) != Some(ToolSessionPhase::LiveIdle { generation: run }) {
+                    return Err(OwnerRejection::IgnoredLate);
+                }
+                self.apply_tool(RoutedSessionToolEvent::RetiredUpdate {
+                    generation: run,
+                    item_exists: self.next.ports.retained_items.contains(&item_id),
+                    tool_id: item_id,
+                })
+            }
+            RoutedTool::Observed {
+                run,
+                turn,
+                tool_id,
+                observation,
+            } => {
+                if let Some(turn) = turn
+                    && self.tool_phase(run)
+                        != Some(ToolSessionPhase::LiveRunning {
+                            generation: run,
+                            turn,
+                        })
+                {
+                    return Err(OwnerRejection::IgnoredLate);
+                }
+                self.apply_tool(RoutedSessionToolEvent::Observed {
+                    generation: run,
+                    tool_id,
+                    observation,
+                })
+            }
+            RoutedTool::Replay { run, item } => {
+                if !self
+                    .next
+                    .restore
+                    .is_some_and(|pending| pending.run() == run)
+                {
+                    return Err(OwnerRejection::IgnoredLate);
+                }
+                self.next.ports.replay.push(item);
+                Ok(())
+            }
+            RoutedTool::ItemRetained { run, item_id } => {
+                self.require_live(run)?;
+                self.next.ports.retained_items.insert(item_id);
+                Ok(())
+            }
+        }
+    }
+
     pub(super) fn apply_tool(&mut self, event: RoutedSessionToolEvent) -> OwnerResult {
         let (expected, tool_id) = match &event {
             RoutedSessionToolEvent::Observed {
@@ -44,13 +110,10 @@ impl OwnerTransition {
         }
         match effect {
             ToolOwnershipEffect::None => {}
-            ToolOwnershipEffect::ForwardFrame { generation }
+            ToolOwnershipEffect::ForwardFrame { .. }
                 if matches!(phase, ToolSessionPhase::Loading { .. }) =>
             {
-                self.release(SessionOwnerEffect::StageReplayTool {
-                    generation,
-                    tool_id,
-                });
+                // Replay publication is staged on the stamped restore attempt.
             }
             ToolOwnershipEffect::CheckRetainedItem => {
                 self.release(SessionOwnerEffect::CheckRetainedTool {
@@ -77,7 +140,7 @@ impl OwnerTransition {
                 Some(ToolSessionPhase::Loading { generation })
             }
             SessionLifecycle::Live { generation } if generation == expected => {
-                Some(match self.next.turn() {
+                Some(match self.next.snapshot().turn {
                     SessionTurn::Idle => ToolSessionPhase::LiveIdle { generation },
                     SessionTurn::Running { turn } | SessionTurn::Cancelling { turn } => {
                         ToolSessionPhase::LiveRunning { generation, turn }
