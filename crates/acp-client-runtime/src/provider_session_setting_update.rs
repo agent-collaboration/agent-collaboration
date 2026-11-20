@@ -302,15 +302,13 @@ async fn keep_fast_off_after_model(
                     confirmed_current: false,
                 },
             );
+            if !catalog.offers_fast() {
+                return Err(ExternalProviderRuntimeError::FastNotOffered);
+            }
             Err(ExternalProviderRuntimeError::SettingFailed {
                 setting: fast,
                 value: FAST_OFF.to_owned(),
-                reason: if catalog.offers_fast() {
-                    "the agent's fast option can't be turned off"
-                } else {
-                    "fast is not offered for the current model"
-                }
-                .to_owned(),
+                reason: "the agent's fast option can't be turned off".to_owned(),
             })
         }
         Some(SettingSetupFailure::Uncertain { .. }) => {

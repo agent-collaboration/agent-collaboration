@@ -468,9 +468,7 @@ async fn model_change_reports_fast_not_offered_without_holding_input() -> TestRe
     fixture.client.shutdown().await;
 
     assert!(
-        matches!(&failure, Err(ExternalProviderRuntimeError::SettingFailed {
-            setting: ProviderSettingKind::Fast, value, reason
-        }) if value == "off" && reason.contains("not offered")),
+        matches!(&failure, Err(ExternalProviderRuntimeError::FastNotOffered)),
         "{failure:?}"
     );
     assert_eq!(

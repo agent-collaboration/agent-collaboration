@@ -366,6 +366,15 @@ fn setting_error(
             value: Some(value),
             advertised,
         },
+        error @ ExternalProviderRuntimeError::FastNotOffered => ProviderSettingsFailure {
+            kind: ProviderSettingsFailureKind::ProviderRejected,
+            stage: None,
+            target: Some(request.target.clone()),
+            message: error.to_string(),
+            setting: Some(ProviderSettingName::Fast),
+            value: Some("off".to_owned()),
+            advertised: Vec::new(),
+        },
         ExternalProviderRuntimeError::SettingFailed { setting, value, .. } => {
             ProviderSettingsFailure {
                 kind: ProviderSettingsFailureKind::ProviderRejected,
