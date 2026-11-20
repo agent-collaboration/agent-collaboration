@@ -123,17 +123,32 @@ function renderDefinition(context: DefaultContext): string {
   const docs = rustDocs(description);
   const derives = "#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]";
   switch (definition.kind) {
-    case "enum":
+    // Derived enum deserialization also accepts object-shaped tags. Decode the schema string first.
+    case "enum": {
+      const expectedTags = definition.variants.map((value) => `"${value}"`).join(", ");
       return [
         ...docs,
-        derives,
+        "#[derive(Clone, Debug, Eq, PartialEq, Serialize)]",
         `pub enum ${name} {`,
         ...definition.variants.flatMap((value) => [
           `#[serde(rename = "${value}")]`,
           `${variantIdentifier(value)},`,
         ]),
         "}",
+        "",
+        `impl<'de> Deserialize<'de> for ${name} {`,
+        "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
+        "let tag = String::deserialize(decoder)?;",
+        "match tag.as_str() {",
+        ...definition.variants.map(
+          (value) => `"${value}" => Ok(Self::${variantIdentifier(value)}),`,
+        ),
+        `_ => Err(serde::de::Error::unknown_variant(&tag, &[${expectedTags}])),`,
+        "}",
+        "}",
+        "}",
       ].join("\n");
+    }
     case "nonEmptyString":
       return [
         ...docs,

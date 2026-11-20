@@ -211,6 +211,80 @@ fn wire_types_reject_invalid_roots_known_fields_and_closed_values() {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Fixed conformance fixtures must round-trip."
+)]
+fn assert_finite_model_field(field: &str, accepted: &[Value], rejected: &[Value]) {
+    let response_with = |value: &Value| {
+        let mut model = required_model_fields();
+        model
+            .as_object_mut()
+            .expect("model fixture is an object")
+            .insert(field.to_owned(), value.clone());
+        json!({"data": [model]})
+    };
+
+    for value in accepted {
+        let wire = response_with(value);
+        let decoded: ModelListReply =
+            serde_json::from_str(&wire.to_string()).expect("valid finite tag");
+
+        assert_eq!(
+            serde_json::to_value(decoded).expect("encoded response"),
+            wire
+        );
+    }
+    for value in rejected {
+        let wire = response_with(value);
+
+        let decoded = serde_json::from_str::<ModelListReply>(&wire.to_string());
+
+        assert!(decoded.is_err(), "{field}={value} decoded as {decoded:?}");
+    }
+}
+
+#[test]
+fn finite_input_modality_tags_accept_only_strings() {
+    assert_finite_model_field(
+        "inputModalities",
+        &[json!(["text", "image", "audio"])],
+        &[
+            json!([{"text": null}]),
+            json!(["video"]),
+            json!([1]),
+            json!([null]),
+        ],
+    );
+}
+
+#[test]
+fn finite_multi_agent_tags_accept_only_strings_and_the_field_is_nullable() {
+    assert_finite_model_field(
+        "multiAgentVersion",
+        &[json!("disabled"), json!("v1"), json!("v2"), Value::Null],
+        &[
+            json!({"v2": null}),
+            json!("v3"),
+            json!(false),
+            json!(["v2"]),
+        ],
+    );
+}
+
+#[test]
+fn finite_cyber_access_tags_accept_only_strings() {
+    assert_finite_model_field(
+        "availableAccessPrograms",
+        &[json!({"cyber": ["standard", "daybreakBlue", "daybreakRed"]})],
+        &[
+            json!({"cyber": [{"daybreakBlue": null}]}),
+            json!({"cyber": ["unknown"]}),
+            json!({"cyber": [true]}),
+        ],
+    );
+}
+
 #[test]
 fn wrong_model_list_types_fail_to_compile() {
     let examples = trybuild::TestCases::new();

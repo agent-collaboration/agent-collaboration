@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum CyberAccessProgram {
     #[serde(rename = "standard")]
     Standard,
@@ -14,8 +14,25 @@ pub enum CyberAccessProgram {
     DaybreakRed,
 }
 
+impl<'de> Deserialize<'de> for CyberAccessProgram {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "standard" => Ok(Self::Standard),
+            "daybreakBlue" => Ok(Self::DaybreakBlue),
+            "daybreakRed" => Ok(Self::DaybreakRed),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["standard", "daybreakBlue", "daybreakRed"],
+            )),
+        }
+    }
+}
+
 /// Canonical user-input modality tags advertised by a model.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum InputModality {
     #[serde(rename = "text")]
     Text,
@@ -23,6 +40,23 @@ pub enum InputModality {
     Image,
     #[serde(rename = "audio")]
     Audio,
+}
+
+impl<'de> Deserialize<'de> for InputModality {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "text" => Ok(Self::Text),
+            "image" => Ok(Self::Image),
+            "audio" => Ok(Self::Audio),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["text", "image", "audio"],
+            )),
+        }
+    }
 }
 
 codex_object! {
@@ -286,7 +320,7 @@ codex_object! {
 }
 
 /// Multi-agent runtime supported by a model.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum MultiAgentVersion {
     #[serde(rename = "disabled")]
     Disabled,
@@ -294,6 +328,23 @@ pub enum MultiAgentVersion {
     V1,
     #[serde(rename = "v2")]
     V2,
+}
+
+impl<'de> Deserialize<'de> for MultiAgentVersion {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "disabled" => Ok(Self::Disabled),
+            "v1" => Ok(Self::V1),
+            "v2" => Ok(Self::V2),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["disabled", "v1", "v2"],
+            )),
+        }
+    }
 }
 
 /// A non-empty reasoning effort value advertised by the model.
