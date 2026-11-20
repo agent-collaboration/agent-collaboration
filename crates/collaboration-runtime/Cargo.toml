@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-test-support = []
+test-support = ["sqlite-storage-maintenance/test-support"]
 
 [lints]
 workspace = true

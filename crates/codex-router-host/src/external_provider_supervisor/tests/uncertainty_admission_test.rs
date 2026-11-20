@@ -82,6 +82,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
     // Act: exercise the owning admission boundary with the actual live identity.
     let admitted = backend
         .prepare_operation(
+            backend.admission_deadline(),
             requested_id.clone(),
             ProviderOperationKind::ConversationPrompt,
             live_binding,

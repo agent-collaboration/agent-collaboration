@@ -73,6 +73,7 @@ impl ExternalProviderSupervisor {
     ) -> ProviderConversationFuture<'static, super::ConversationOperationSubmission> {
         let operation = request.operation_id.clone();
         let failure_target = Some(request.target.clone());
+        let deadline = self.admission_deadline();
         let backend = self.clone();
         retain_operation(operation, failure_target, async move {
             let target = request.target.clone();
@@ -83,6 +84,7 @@ impl ExternalProviderSupervisor {
             )?;
             let prepared = backend
                 .admit_operation(
+                    deadline,
                     request.operation_id.clone(),
                     ProviderOperationKind::ConversationPrompt,
                     binding.clone(),
@@ -554,6 +556,7 @@ impl ExternalProviderSupervisor {
         use crate::session_owner_calls::InputAcceptance;
         use provider_session_machines::session_owner::SessionOwnerCommand;
 
+        let deadline = self.admission_deadline();
         let target = request.target.clone();
         let operation = request.operation_id.clone();
         let (binding, runtime) =
@@ -618,9 +621,14 @@ impl ExternalProviderSupervisor {
             )
         })?;
         let provider_id = String::from(target.session_id.clone());
-        let content = runtime
-            .prepare_owner_prompt(&provider_id, request.input)
-            .await
+        let content = self
+            .within_admission(
+                deadline,
+                &operation,
+                Some(&target),
+                runtime.prepare_owner_prompt(&provider_id, request.input),
+            )
+            .await?
             .map_err(|error| runtime_failure(operation.clone(), Some(target.clone()), error))?;
         let can_queue = matches!(
             admission,
@@ -629,7 +637,7 @@ impl ExternalProviderSupervisor {
         );
         let live = if can_queue {
             let Some(live) = self
-                .reserve_queued_delivery(&operation, &target, &binding)
+                .reserve_queued_delivery(deadline, &operation, &target, &binding)
                 .await?
             else {
                 return Ok(InputAcceptance::Unknown);
@@ -638,6 +646,7 @@ impl ExternalProviderSupervisor {
         } else {
             let PreparedOperation::Admitted { live, .. } = self
                 .admit_operation(
+                    deadline,
                     operation.clone(),
                     ProviderOperationKind::ConversationPrompt,
                     binding.clone(),

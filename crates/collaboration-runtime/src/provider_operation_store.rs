@@ -294,7 +294,37 @@ impl ProviderOperationStore {
         if admission.operation_kind != ProviderOperationKind::ConversationPrompt {
             return Err(ProviderOperationStoreError::InvalidRecord);
         }
-        let dispatched_at_ms = dispatched_at_ms.max(admission.admitted_at_ms);
+        match self
+            .admit_with_target(admission, Some(target), Some(dispatched_at_ms), || true)
+            .await?
+        {
+            Some(ProviderOperationAdmissionResult::Admitted(record)) => Ok(record),
+            _ => Err(ProviderOperationStoreError::TransitionConflict),
+        }
+    }
+
+    /// Records Host admission, its target and its optional dispatch mark as one
+    /// transaction. `None` means the admission guard revoked it before COMMIT.
+    pub async fn admit_with_target(
+        &mut self,
+        admission: ProviderOperationAdmission,
+        target: Option<&SessionRef>,
+        dispatched_at_ms: Option<i64>,
+        may_commit: impl FnOnce() -> bool + Send,
+    ) -> Result<Option<ProviderOperationAdmissionResult>, ProviderOperationStoreError> {
+        let dispatched_at_ms = dispatched_at_ms.map(|stamp| stamp.max(admission.admitted_at_ms));
+        let (stage, effect) = if dispatched_at_ms.is_some() {
+            (
+                ProviderOperationStage::MayHaveDispatched,
+                ProviderOperationEffect::Unknown,
+            )
+        } else {
+            (
+                ProviderOperationStage::Admitted,
+                ProviderOperationEffect::None,
+            )
+        };
+        let mut transaction = self.transaction(TransactionStart::Immediate).await?;
         let result = sqlx::query!(
             "INSERT OR IGNORE INTO provider_operations (
                 operation_id,operation_kind,binding_json,
@@ -304,28 +334,40 @@ impl ProviderOperationStore {
             admission.operation_id.as_str(),
             encode_enum(admission.operation_kind)?,
             encode_closed(&admission.binding)?,
-            String::from(target.endpoint.service_id.clone()),
-            String::from(target.endpoint.endpoint_id.clone()),
-            String::from(target.session_id.clone()),
-            encode_enum(ProviderOperationStage::MayHaveDispatched)?,
-            encode_enum(ProviderOperationEffect::Unknown)?,
+            target.map(|target| String::from(target.endpoint.service_id.clone())),
+            target.map(|target| String::from(target.endpoint.endpoint_id.clone())),
+            target.map(|target| String::from(target.session_id.clone())),
+            encode_enum(stage)?,
+            encode_enum(effect)?,
             encode_enum(ProviderReconciliationState::Unresolved)?,
             admission.admitted_at_ms,
             dispatched_at_ms,
-            dispatched_at_ms,
+            dispatched_at_ms.unwrap_or(admission.admitted_at_ms),
         )
-        .execute_as_transaction(self)
+        .execute(&mut *transaction)
         .await?;
-        if result.rows_affected() == 0 {
-            return Err(ProviderOperationStoreError::TransitionConflict);
-        }
-        self.inspect(&admission.operation_id)
+        let record = Self::read_operation(&mut transaction, &admission.operation_id)
             .await?
-            .ok_or(ProviderOperationStoreError::InvalidRecord)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        if !transaction.commit_if(may_commit).await? {
+            return Ok(None);
+        }
+        Ok(Some(if result.rows_affected() == 1 {
+            ProviderOperationAdmissionResult::Admitted(record)
+        } else {
+            ProviderOperationAdmissionResult::Existing(record)
+        }))
     }
 
     pub async fn inspect(
         &mut self,
+        operation_id: &OperationId,
+    ) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
+        Self::read_operation(&mut self.connection, operation_id).await
+    }
+
+    async fn read_operation(
+        connection: &mut SqliteConnection,
         operation_id: &OperationId,
     ) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
         sqlx::query_as!(
@@ -337,10 +379,18 @@ impl ProviderOperationStore {
              FROM provider_operations WHERE operation_id=?",
             operation_id.as_str(),
         )
-        .fetch_optional(&mut self.connection)
+        .fetch_optional(connection)
         .await?
         .map(decode_record)
         .transpose()
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn pause_next_admission_after_commit_for_test(
+        &self,
+    ) -> sqlite_storage_maintenance::CommitPause {
+        self.commits
+            .pause_next_commit_at(sqlite_storage_maintenance::CommitPoint::AfterCommitReturned)
     }
 
     /// Unacknowledged unknown operations for this binding, excluding completed

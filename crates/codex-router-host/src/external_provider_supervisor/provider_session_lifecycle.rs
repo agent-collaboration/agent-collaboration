@@ -15,6 +15,7 @@ pub(super) fn resume(
 ) -> ProviderConversationFuture<'_, ConversationOperationSubmission> {
     let operation_id = request.operation_id.clone();
     let failure_target = Some(request.target.clone());
+    let deadline = supervisor.admission_deadline();
     let backend = supervisor.clone();
     retain_operation(operation_id, failure_target, async move {
         let target = request.target.clone();
@@ -24,9 +25,14 @@ pub(super) fn resume(
             Some(target.clone()),
         )?;
         let provider_session_id = String::from(target.session_id.clone());
-        if !runtime
-            .capability_report(&provider_session_id)
-            .await
+        if !backend
+            .within_admission(
+                deadline,
+                &request.operation_id,
+                Some(&target),
+                runtime.capability_report(&provider_session_id),
+            )
+            .await?
             .supports_resume
         {
             return Err(failure(
@@ -40,6 +46,7 @@ pub(super) fn resume(
         }
         let prepared = backend
             .prepare_operation(
+                deadline,
                 request.operation_id.clone(),
                 ProviderOperationKind::ConversationResume,
                 binding,
@@ -81,6 +88,7 @@ pub(super) fn close(
 ) -> ProviderConversationFuture<'_, ConversationOperationSubmission> {
     let operation_id = request.operation_id.clone();
     let failure_target = Some(request.target.clone());
+    let deadline = supervisor.admission_deadline();
     let backend = supervisor.clone();
     retain_operation(operation_id, failure_target, async move {
         let target = request.target.clone();
@@ -93,27 +101,32 @@ pub(super) fn close(
         // An agent with no session/close is closed by the Router itself: the
         // same interrupt, then a release here (owner: "close should just
         // interrupt the agent and close", every agent).
-        let agent_closes = runtime
-            .capability_report(&provider_session_id)
-            .await
+        let agent_closes = backend
+            .within_admission(
+                deadline,
+                &request.operation_id,
+                Some(&target),
+                runtime.capability_report(&provider_session_id),
+            )
+            .await?
             .supports_close;
         // Close interrupts a running turn (D1 R14): the live turn's row
         // doesn't refuse it; an earlier outcome that is unknown and no longer
         // live still does.
         let prepared = backend
             .admit_operation(
+                deadline,
                 request.operation_id.clone(),
                 ProviderOperationKind::ConversationClose,
                 binding,
                 Some(&target),
-                DispatchMark::Deferred,
+                DispatchMark::AtAdmission,
             )
             .await?;
         match prepared {
             PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
-            PreparedOperation::Admitted { live, .. } => {
+            PreparedOperation::Admitted { snapshot, live } => {
                 let operation_id = request.operation_id.clone();
-                let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
                 let completion_backend = backend.clone();
                 backend.spawn_operation(operation_id.clone(), live, async move {
                     super::provider_owner_operations::close(

@@ -1,25 +1,51 @@
 //! One admission per operation ID (D1 Change 4 and Change 5; state machines,
 //! design note §14.1–§15.3): a reused ID must match its request, an earlier
 //! send's unknown outcome blocks the session, and a new row is persisted
-//! before anything reaches the agent. Decisions read the binding's cells;
-//! the store lock covers single statements only.
+//! before anything reaches the agent. Decisions read the binding's cells.
 
 use super::{
     Arc, ConversationBindingIdentity, ConversationOperationFailure,
     ConversationOperationFailureKind, ConversationOperationFailureStage,
-    ConversationOperationSnapshot, ExternalProviderSupervisor, LiveOperation, OperationId,
-    PreparedOperation, ProviderBindingIdentity, ProviderOperationAdmission,
-    ProviderOperationAdmissionResult, ProviderOperationEffect, ProviderOperationKind,
-    ProviderOperationRecord, SessionRef, admission_failure, failure, snapshot_failure,
+    ExternalProviderSupervisor, LiveOperation, OperationId, PreparedOperation,
+    ProviderBindingIdentity, ProviderOperationAdmission, ProviderOperationAdmissionResult,
+    ProviderOperationEffect, ProviderOperationKind, ProviderOperationRecord,
+    ProviderReconciliationState, SessionRef, admission_failure, failure, snapshot_failure,
     snapshot_from_record, unavailable_failure,
 };
+use router_clock::ClockInstant;
+use std::{future::Future, time::Duration};
+use tokio::sync::oneshot;
+
+const HOST_ADMISSION_BUDGET: Duration = Duration::from_secs(10);
+
+struct AdmissionWrite {
+    operation: ProviderOperationAdmission,
+    target: Option<SessionRef>,
+    mark: DispatchMark,
+    deadline: ClockInstant,
+    live: Arc<LiveOperation>,
+}
+
+fn admission_expired(
+    operation: &OperationId,
+    target: Option<&SessionRef>,
+) -> ConversationOperationFailure {
+    failure(
+        ConversationOperationFailureKind::Busy,
+        ConversationOperationFailureStage::Admission,
+        ProviderOperationEffect::None,
+        "the Router was busy and nothing was sent, so send again as a new operation",
+        operation.clone(),
+        target.cloned(),
+    )
+}
+
 /// When an admitted operation is marked as possibly dispatched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum DispatchMark {
     /// At admission: the caller dispatches right away.
     AtAdmission,
-    /// Later, by `begin_dispatch`, once the API prompt path knows it will
-    /// prompt or steer; a queued API prompt stays Admitted with no effect.
+    /// Later, when the owner authorizes a prompt or steer to dispatch.
     Deferred,
 }
 
@@ -94,6 +120,33 @@ pub(super) fn reused_id_failure(
 }
 
 impl ExternalProviderSupervisor {
+    pub(super) fn admission_deadline(&self) -> ClockInstant {
+        self.inner
+            .clock
+            .monotonic_now()
+            .after(HOST_ADMISSION_BUDGET)
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "Retains the typed admission refusal."
+    )]
+    pub(super) async fn within_admission<T>(
+        &self,
+        deadline: ClockInstant,
+        operation: &OperationId,
+        target: Option<&SessionRef>,
+        step: impl Future<Output = T>,
+    ) -> Result<T, ConversationOperationFailure> {
+        let clock = self.inner.clock.as_ref();
+        if clock.monotonic_now() >= deadline {
+            return Err(admission_expired(operation, target));
+        }
+        router_clock::timeout_at(clock, deadline, step)
+            .await
+            .map_err(|_| admission_expired(operation, target))
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "The typed failure retains the full published operation payload."
@@ -139,7 +192,9 @@ impl ExternalProviderSupervisor {
             let foreground = input.operation.to_string();
             unknown.retain(|operation| operation.as_str() != foreground);
         }
-        let in_flight = if mark == DispatchMark::AtAdmission {
+        let in_flight = if mark == DispatchMark::AtAdmission
+            && operation_kind != ProviderOperationKind::ConversationClose
+        {
             self.inner
                 .live_operations
                 .lock()
@@ -157,32 +212,44 @@ impl ExternalProviderSupervisor {
     )]
     pub(super) async fn reserve_queued_delivery(
         &self,
+        deadline: ClockInstant,
         operation_id: &OperationId,
         target: &SessionRef,
         binding: &ProviderBindingIdentity,
     ) -> Result<Option<Arc<LiveOperation>>, ConversationOperationFailure> {
         let kind = ProviderOperationKind::ConversationPrompt;
-        self.wait_for_reservation(operation_id).await;
-        if let Some(record) = self
-            .stored_operation(operation_id, &Some(target.clone()))
-            .await?
-        {
-            Self::existing_operation(operation_id.clone(), record, kind, Some(target))?;
+        let existing = self
+            .within_admission(deadline, operation_id, Some(target), async {
+                self.wait_for_reservation(operation_id).await;
+                if let Some(record) = self
+                    .stored_operation(operation_id, &Some(target.clone()))
+                    .await?
+                {
+                    Self::existing_operation(operation_id.clone(), record, kind, Some(target))?;
+                    return Ok(true);
+                }
+                self.check_operation_blockers(
+                    operation_id,
+                    kind,
+                    binding,
+                    Some(target),
+                    DispatchMark::Deferred,
+                )
+                .await?;
+                Ok(false)
+            })
+            .await??;
+        if existing {
             return Ok(None);
         }
-        self.check_operation_blockers(
-            operation_id,
-            kind,
-            binding,
-            Some(target),
-            DispatchMark::Deferred,
-        )
-        .await?;
         let mut operations = self
             .inner
             .live_operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.inner.clock.monotonic_now() >= deadline {
+            return Err(admission_expired(operation_id, Some(target)));
+        }
         match operations.operations.entry(operation_id.clone()) {
             std::collections::hash_map::Entry::Occupied(entry)
                 if entry.get().is_prompt_for(target) =>
@@ -233,17 +300,15 @@ impl ExternalProviderSupervisor {
         Ok(())
     }
 
-    /// Admits one operation (design note §15.3). A known ID answers from its
-    /// row; otherwise the binding's cells decide whether an earlier outcome
-    /// blocks it, the operation is reserved in the live index before its
-    /// durable insert, and each durable step is one statement. No store lock
-    /// is held across a decision.
+    /// Owns a new reservation up to durable admission. Only the transaction
+    /// finishing under the store lock can outlive the caller's deadline.
     #[expect(
         clippy::result_large_err,
-        reason = "The typed failure retains the full published operation payload."
+        reason = "Retains the typed admission refusal."
     )]
     pub(super) async fn admit_operation(
         &self,
+        deadline: ClockInstant,
         operation_id: OperationId,
         operation_kind: ProviderOperationKind,
         binding: ProviderBindingIdentity,
@@ -252,44 +317,61 @@ impl ExternalProviderSupervisor {
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
         let admitted_at_ms = self.inner.now_ms();
         let failure_target = known_target.cloned();
-        // 1. A reserved ID: wait for its durable insert, then answer from it.
-        self.wait_for_reservation(&operation_id).await;
+        let lookup = async {
+            self.wait_for_reservation(&operation_id).await;
+            self.stored_operation(&operation_id, &failure_target).await
+        };
         if let Some(record) = self
-            .stored_operation(&operation_id, &failure_target)
-            .await?
+            .within_admission(deadline, &operation_id, known_target, lookup)
+            .await??
         {
             return Self::existing_operation(operation_id, record, operation_kind, known_target);
         }
-        // 2. Whether an earlier outcome blocks it, from the binding's cells.
-        self.check_operation_blockers(&operation_id, operation_kind, &binding, known_target, mark)
-            .await?;
-        // 3. Reserve it in the live index before its durable insert.
+        self.within_admission(
+            deadline,
+            &operation_id,
+            known_target,
+            self.check_operation_blockers(
+                &operation_id,
+                operation_kind,
+                &binding,
+                known_target,
+                mark,
+            ),
+        )
+        .await??;
+
         let live = Arc::new(LiveOperation::reserving(
             binding.endpoint.clone(),
             known_target.cloned(),
             operation_kind,
         ));
-        let reserved_first = {
+        let reserved = {
+            use std::collections::hash_map::Entry;
             let mut operations = self
                 .inner
                 .live_operations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if operations.operations.contains_key(&operation_id) {
-                true
-            } else {
-                operations
-                    .operations
-                    .insert(operation_id.clone(), Arc::clone(&live));
-                false
+            if self.inner.clock.monotonic_now() >= deadline {
+                return Err(admission_expired(&operation_id, known_target));
+            }
+            match operations.operations.entry(operation_id.clone()) {
+                Entry::Occupied(_) => false,
+                Entry::Vacant(entry) => {
+                    entry.insert(Arc::clone(&live));
+                    true
+                }
             }
         };
-        if reserved_first {
-            // Another request reserved this ID first: answer from it.
-            self.wait_for_reservation(&operation_id).await;
+        if !reserved {
+            let lookup = async {
+                self.wait_for_reservation(&operation_id).await;
+                self.stored_operation(&operation_id, &failure_target).await
+            };
             return match self
-                .stored_operation(&operation_id, &failure_target)
-                .await?
+                .within_admission(deadline, &operation_id, known_target, lookup)
+                .await??
             {
                 Some(record) => {
                     Self::existing_operation(operation_id, record, operation_kind, known_target)
@@ -297,140 +379,131 @@ impl ExternalProviderSupervisor {
                 None => Err(unavailable_failure(operation_id, failure_target)),
             };
         }
-        // A test holds the reservation here, before its durable insert.
-        #[cfg(test)]
-        let admission_test_pause = {
-            self.inner
-                .admission_test_pause
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .take()
-        };
-        #[cfg(test)]
-        if let Some(pause) = admission_test_pause {
-            let _result = pause.entered.send(());
-            let _result = pause.release.await;
-        }
-        // 4. The durable steps, one statement each.
-        match self
-            .persist_admission(
-                &operation_id,
-                operation_kind,
-                binding,
-                known_target,
-                mark,
-                admitted_at_ms,
-                &live,
-            )
-            .await
-        {
-            Ok(Some(snapshot)) => {
-                live.admitted();
-                Ok(PreparedOperation::Admitted { snapshot, live })
-            }
-            Ok(None) => {
-                // A durable row already existed: this reservation ends.
-                self.drop_reservation(&operation_id, &live, true);
-                match self
-                    .stored_operation(&operation_id, &failure_target)
-                    .await?
-                {
-                    Some(record) => {
-                        Self::existing_operation(operation_id, record, operation_kind, known_target)
-                    }
-                    None => Err(unavailable_failure(operation_id, failure_target)),
-                }
-            }
-            Err(admission_failure) => {
-                self.drop_reservation(&operation_id, &live, false);
-                Err(admission_failure)
-            }
-        }
-    }
 
-    /// The insert, its target and, at admission, its dispatch marker; `None`
-    /// when a durable row for the ID already existed.
-    #[expect(
-        clippy::result_large_err,
-        reason = "The typed failure retains the full published operation payload."
-    )]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "One admission's durable inputs, passed through from its caller."
-    )]
-    async fn persist_admission(
-        &self,
-        operation_id: &OperationId,
-        operation_kind: ProviderOperationKind,
-        binding: ProviderBindingIdentity,
-        known_target: Option<&SessionRef>,
-        mark: DispatchMark,
-        admitted_at_ms: i64,
-        live: &LiveOperation,
-    ) -> Result<Option<ConversationOperationSnapshot>, ConversationOperationFailure> {
-        let failure_target = known_target.cloned();
-        let admission = self
-            .inner
-            .store
-            .lock()
-            .await
-            .admit(ProviderOperationAdmission {
+        let write = AdmissionWrite {
+            operation: ProviderOperationAdmission {
                 operation_id: operation_id.clone(),
                 operation_kind,
                 binding: ConversationBindingIdentity::ExternalProvider { binding },
                 admitted_at_ms,
-            })
-            .await
-            .map_err(|_| {
-                admission_failure(
-                    operation_id.clone(),
-                    "provider operation admission could not be persisted",
-                    failure_target.clone(),
-                )
-            })?;
-        let record = match admission {
-            ProviderOperationAdmissionResult::Existing(_) => return Ok(None),
-            ProviderOperationAdmissionResult::Admitted(record) => record,
+            },
+            target: failure_target,
+            mark,
+            deadline,
+            live,
         };
-        let record = match known_target {
-            Some(target) => self
-                .inner
-                .store
-                .lock()
-                .await
-                .record_target(operation_id, target, self.inner.now_ms())
-                .await
-                .map_err(|_| {
-                    admission_failure(
-                        operation_id.clone(),
-                        "provider operation target could not be persisted",
-                        failure_target.clone(),
-                    )
-                })?,
-            None => record,
-        };
-        let record = match mark {
-            DispatchMark::AtAdmission => {
-                live.dispatch_marked();
-                self.inner
-                    .store
+        let supervisor = self.clone();
+        let (reply, completion) = oneshot::channel();
+        tokio::spawn(async move {
+            supervisor.complete_admission(write, reply).await;
+        });
+        self.within_admission(deadline, &operation_id, known_target, completion)
+            .await?
+            .map_err(|_| unavailable_failure(operation_id, known_target.cloned()))?
+    }
+
+    async fn complete_admission(
+        &self,
+        write: AdmissionWrite,
+        reply: oneshot::Sender<Result<PreparedOperation, ConversationOperationFailure>>,
+    ) {
+        let AdmissionWrite {
+            operation,
+            target,
+            mark,
+            deadline,
+            live,
+        } = write;
+        let operation_id = operation.operation_id.clone();
+        let kind = operation.operation_kind;
+        let target = target.as_ref();
+        let clock = self.inner.clock.as_ref();
+        let acquire_store = async {
+            // Tests can hold the reservation before any admission SQL runs.
+            #[cfg(test)]
+            {
+                let pause = self
+                    .inner
+                    .admission_test_pause
                     .lock()
-                    .await
-                    .mark_may_have_dispatched(operation_id, self.inner.now_ms())
-                    .await
-                    .map_err(|_| {
-                        admission_failure(
-                            operation_id.clone(),
-                            "provider dispatch marker could not be persisted",
-                            failure_target,
-                        )
-                    })?
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                if let Some(pause) = pause {
+                    let _result = pause.entered.send(());
+                    let _result = pause.release.await;
+                }
             }
-            DispatchMark::Deferred => record,
+            self.inner.store.lock().await
         };
-        snapshot_from_record(record)
-            .map(Some)
-            .map_err(|message| snapshot_failure(operation_id.clone(), message))
+        let Ok(mut store) = self
+            .within_admission(deadline, &operation_id, target, acquire_store)
+            .await
+        else {
+            self.drop_reservation(&operation_id, &live, false);
+            let _result = reply.send(Err(admission_expired(&operation_id, target)));
+            return;
+        };
+        let dispatch_time = (mark == DispatchMark::AtAdmission).then(|| self.inner.now_ms());
+        let eligible = || clock.monotonic_now() < deadline && !reply.is_closed();
+        match store
+            .admit_with_target(operation, target, dispatch_time, eligible)
+            .await
+        {
+            Ok(Some(ProviderOperationAdmissionResult::Admitted(record))) => {
+                // Keep the same store guard until a late admission is terminal.
+                // Nobody can hand it to an owner after the caller gets known unsent.
+                if eligible() {
+                    let result = snapshot_from_record(record)
+                        .map(|snapshot| PreparedOperation::Admitted {
+                            snapshot,
+                            live: Arc::clone(&live),
+                        })
+                        .map_err(|message| snapshot_failure(operation_id.clone(), message));
+                    if result.is_ok() {
+                        live.admitted();
+                        if mark == DispatchMark::AtAdmission {
+                            live.dispatch_marked();
+                        }
+                        if reply.send(result).is_ok() {
+                            return;
+                        }
+                    } else {
+                        let _result = reply.send(result);
+                    }
+                }
+                if let Err(error) = store
+                    .record_terminal(
+                        &operation_id,
+                        ProviderOperationEffect::None,
+                        ProviderReconciliationState::Confirmed,
+                        None,
+                        self.inner.now_ms(),
+                    )
+                    .await
+                {
+                    tracing::error!(operation = operation_id.as_str(), %error, "could not settle unsent provider admission");
+                }
+                self.drop_reservation(&operation_id, &live, false);
+            }
+            Ok(Some(ProviderOperationAdmissionResult::Existing(record))) => {
+                self.drop_reservation(&operation_id, &live, true);
+                let _result =
+                    reply.send(Self::existing_operation(operation_id, record, kind, target));
+            }
+            Ok(None) => {
+                self.drop_reservation(&operation_id, &live, false);
+                let _result = reply.send(Err(admission_expired(&operation_id, target)));
+            }
+            Err(error) => {
+                self.drop_reservation(&operation_id, &live, false);
+                tracing::warn!(operation = operation_id.as_str(), %error, "could not persist provider admission");
+                let _result = reply.send(Err(admission_failure(
+                    operation_id,
+                    "provider operation admission could not be persisted",
+                    target.cloned(),
+                )));
+            }
+        }
     }
 
     /// The operation's durable row, read in one statement.
@@ -484,8 +557,7 @@ impl ExternalProviderSupervisor {
         }
     }
 
-    /// Ends a reservation that got no row of its own: a durable row already
-    /// existed (`conflict`), or the insert failed.
+    /// Ends a reservation that cannot be handed to a dispatch caller.
     pub(super) fn drop_reservation(
         &self,
         operation_id: &OperationId,
@@ -506,53 +578,6 @@ impl ExternalProviderSupervisor {
         }
         drop(operations);
         live.dropped(conflict);
-    }
-
-    /// Marks a Deferred admission as possibly dispatched, right before its
-    /// prompt or steer is sent.
-    #[expect(
-        clippy::result_large_err,
-        reason = "The typed failure retains the full published operation payload."
-    )]
-    pub(super) async fn begin_dispatch(
-        &self,
-        operation_id: &OperationId,
-        target: &SessionRef,
-    ) -> Result<ConversationOperationSnapshot, ConversationOperationFailure> {
-        self.with_live(operation_id, LiveOperation::dispatch_marked);
-        let record = self
-            .inner
-            .store
-            .lock()
-            .await
-            .mark_may_have_dispatched(operation_id, self.inner.now_ms())
-            .await
-            .map_err(|_| {
-                admission_failure(
-                    operation_id.clone(),
-                    "provider dispatch marker could not be persisted",
-                    Some(target.clone()),
-                )
-            })?;
-        snapshot_from_record(record)
-            .map_err(|message| snapshot_failure(operation_id.clone(), message))
-    }
-}
-
-impl ExternalProviderSupervisor {
-    /// Applies `step` to the operation's live owner, when it has one.
-    fn with_live(&self, operation_id: &OperationId, step: impl FnOnce(&LiveOperation)) {
-        let live = self
-            .inner
-            .live_operations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .operations
-            .get(operation_id)
-            .cloned();
-        if let Some(live) = live {
-            step(&live);
-        }
     }
 }
 

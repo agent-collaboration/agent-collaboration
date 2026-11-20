@@ -461,12 +461,14 @@ impl ExternalProviderSupervisor {
     )]
     async fn prepare_operation(
         &self,
+        deadline: router_clock::ClockInstant,
         operation_id: OperationId,
         operation_kind: ProviderOperationKind,
         binding: ProviderBindingIdentity,
         known_target: Option<&SessionRef>,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
         self.admit_operation(
+            deadline,
             operation_id,
             operation_kind,
             binding,

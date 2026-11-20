@@ -83,6 +83,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         request: ConversationCreateRequest,
     ) -> ProviderConversationFuture<'_, ConversationOperationSubmission> {
         let operation_id = request.operation_id.clone();
+        let deadline = self.admission_deadline();
         let backend = self.clone();
         retain_operation(operation_id, None, async move {
             let (binding, runtime) =
@@ -144,6 +145,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
             }
             let prepared = backend
                 .prepare_operation(
+                    deadline,
                     request.operation_id.clone(),
                     ProviderOperationKind::ConversationCreate,
                     binding.clone(),
@@ -364,6 +366,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
     ) -> ProviderConversationFuture<'_, ConversationOperationSubmission> {
         let operation_id = request.operation_id.clone();
         let failure_target = Some(request.target.clone());
+        let deadline = self.admission_deadline();
         let backend = self.clone();
         retain_operation(operation_id, failure_target, async move {
             let target = request.target.clone();
@@ -384,6 +387,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
             }
             let prepared = backend
                 .prepare_operation(
+                    deadline,
                     request.operation_id.clone(),
                     ProviderOperationKind::ConversationLoad,
                     binding,
@@ -437,6 +441,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
     ) -> ProviderConversationFuture<'_, ConversationOperationSubmission> {
         let operation_id = request.operation_id.clone();
         let failure_target = Some(request.target.clone());
+        let deadline = self.admission_deadline();
         let backend = self.clone();
         retain_operation(operation_id, failure_target, async move {
             let target = request.target.clone();
@@ -445,17 +450,21 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 &request.operation_id,
                 Some(target.clone()),
             )?;
-            if let Some(record) = backend
-                .inner
-                .store
-                .lock()
-                .await
-                .inspect(&request.operation_id)
-                .await
+            let existing = backend
+                .within_admission(deadline, &request.operation_id, Some(&target), async {
+                    backend
+                        .inner
+                        .store
+                        .lock()
+                        .await
+                        .inspect(&request.operation_id)
+                        .await
+                })
+                .await?
                 .map_err(|_| {
                     unavailable_failure(request.operation_id.clone(), Some(target.clone()))
-                })?
-            {
+                })?;
+            if let Some(record) = existing {
                 // A reused ID must name the same kind and session (D1 R15).
                 if !super::provider_operation_admission::same_request(
                     &record,
@@ -467,11 +476,18 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         Some(target),
                     ));
                 }
-                return Ok(existing_submission(snapshot_from_record(record).map_err(
-                    |message| snapshot_failure(request.operation_id, message),
-                )?));
+                let snapshot = snapshot_from_record(record)
+                    .map_err(|message| snapshot_failure(request.operation_id, message))?;
+                return Ok(existing_submission(snapshot));
             }
-            let target_operation = backend.inspect_record(&request.target_operation_id).await?;
+            let target_operation = backend
+                .within_admission(
+                    deadline,
+                    &request.operation_id,
+                    Some(&target),
+                    backend.inspect_record(&request.target_operation_id),
+                )
+                .await??;
             let active_started_steer = backend
                 .owner_session_snapshot(&target)
                 .and_then(|snapshot| snapshot.provider_started_turn)
@@ -499,6 +515,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
             }
             let prepared = backend
                 .prepare_operation(
+                    deadline,
                     request.operation_id.clone(),
                     ProviderOperationKind::ConversationCancel,
                     binding,

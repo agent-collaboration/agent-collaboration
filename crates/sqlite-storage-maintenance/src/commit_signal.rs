@@ -122,17 +122,27 @@ impl<'connection, TDatabase: Database> SignaledTransaction<'connection, TDatabas
     }
 
     /// Commits, then bumps the commit signal if this transaction changed rows.
-    pub async fn commit(mut self) -> Result<(), sqlx::Error> {
+    pub async fn commit(self) -> Result<(), sqlx::Error> {
+        self.commit_if(|| true).await.map(|_| ())
+    }
+
+    /// Checks the caller's admission guard immediately before invoking COMMIT.
+    pub async fn commit_if(mut self, eligible: impl FnOnce() -> bool) -> Result<bool, sqlx::Error> {
         let changed_rows =
             (self.count_changes)(&mut self.transaction).await? != self.changes_at_begin;
         let pending = self.commits.begin_commit(changed_rows);
         pending.checkpoint(CommitPoint::BeforeCommitInvoked).await;
+        if !eligible() {
+            pending.settle(false);
+            self.transaction.rollback().await?;
+            return Ok(false);
+        }
         let committed = self.transaction.commit().await;
         if committed.is_ok() {
             pending.checkpoint(CommitPoint::AfterCommitReturned).await;
         }
         pending.settle(committed.is_ok());
-        committed
+        committed.map(|()| true)
     }
 
     /// A known rollback; it never signals.
