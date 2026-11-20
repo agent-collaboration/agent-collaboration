@@ -4,8 +4,8 @@ use crate::engine::machines::{
     lifecycle_finish::FinishEvent,
 };
 use crate::{WorkspaceRuntime, organization_admin_contract::EngineKindName};
-use central_storage::{GuardedStatement, StoreFailure};
-use fleet_engine::{AttemptRefusal, DiscardOutcome, Engine, KindRegistry};
+use central_storage::StoreFailure;
+use fleet_engine::{AttemptRefusal, DiscardOutcome, KindRegistry, RegisteredDiscard};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
 /// Every kind health lists, zeros included. `engine_source` rows are the due-list
@@ -33,37 +33,26 @@ pub(crate) const KIND_REGISTRY: KindRegistry<'static, EngineKindName> = KindRegi
     hidden: HIDDEN_KINDS,
 };
 
-impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
-    pub(crate) async fn engine_discard(
-        &self,
-        attempt_id: uuid::Uuid,
-        statements: Vec<GuardedStatement>,
-    ) -> Result<DiscardOutcome, StoreFailure> {
-        let prepared = match Engine::new(self)
-            .prepare_discard(&KIND_REGISTRY, attempt_id)
-            .await?
-        {
-            Ok(prepared) => prepared,
-            Err(refusal) => return Ok(DiscardOutcome::Refused(refusal)),
-        };
-        match prepared.kind() {
-            EngineKindName::WakeTimer => {
-                prepared
-                    .finish(wake_finish_store(), FinishEvent::Discard, statements)
-                    .await
-            }
-            EngineKindName::AutomationTimer => {
-                prepared
-                    .finish(automation_finish_store(), FinishEvent::Discard, statements)
-                    .await
-            }
-            EngineKindName::DirectMessage
-            | EngineKindName::SystemMessageExpiry
-            | EngineKindName::LegacyNoticeWindows
-            | EngineKindName::LegacyWorkspaceDrains
-            | EngineKindName::EngineSource => {
-                Ok(DiscardOutcome::Refused(AttemptRefusal::DiscardUnsupported))
-            }
+pub(crate) async fn finish_registered_discard<H: CentralStore, S: WorkspaceStores>(
+    registered: RegisteredDiscard<'_, WorkspaceRuntime<H, S>>,
+) -> Result<DiscardOutcome, StoreFailure> {
+    match registered.kind() {
+        EngineKindName::WakeTimer => {
+            registered
+                .finish(wake_finish_store(), FinishEvent::Discard)
+                .await
+        }
+        EngineKindName::AutomationTimer => {
+            registered
+                .finish(automation_finish_store(), FinishEvent::Discard)
+                .await
+        }
+        EngineKindName::DirectMessage
+        | EngineKindName::SystemMessageExpiry
+        | EngineKindName::LegacyNoticeWindows
+        | EngineKindName::LegacyWorkspaceDrains
+        | EngineKindName::EngineSource => {
+            Ok(DiscardOutcome::Refused(AttemptRefusal::DiscardUnsupported))
         }
     }
 }

@@ -5,7 +5,7 @@ mod engine;
 
 pub use engine::admin::{
     AttemptRefusal, DiscardOutcome, DiscardStore, EngineHealthFacts, KindHealth, KindRegistry,
-    RetiredDiscard, RetiredItem,
+    RegisteredDiscard, RetiredItem,
 };
 pub use engine::admin_failure_class::EngineFailureClass;
 pub use engine::alarm_source::{

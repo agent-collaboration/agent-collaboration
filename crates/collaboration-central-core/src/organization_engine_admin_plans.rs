@@ -276,7 +276,10 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         let mut committed = admission.clone();
         committed.extend(statements.clone());
         committed.extend(retain(&OrganizationAdminResult::EngineDiscarded {})?);
-        match self.engine_discard(request.attempt_id, committed).await? {
+        match Engine::new(self)
+            .discard(request.attempt_id, committed)
+            .await?
+        {
             DiscardOutcome::Committed => {
                 admission.clear();
                 // The re-arm is this event's last step; a failed publication is

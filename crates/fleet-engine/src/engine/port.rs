@@ -1,6 +1,7 @@
 //! The engine's only view of the runtime that hosts it (P3, module direction):
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
+use super::admin::{DiscardOutcome, KindRegistry, RegisteredDiscard};
 use super::alarm_source::{TimedRows, WholeUnit, WholeUnitOutcome};
 use central_engine_model::EngineTime;
 use central_storage::StoreFailure;
@@ -17,6 +18,7 @@ pub trait EngineHost: Send + Sync + Sized {
     type Timed: TimedRows<Self>;
     type WholeKind: Copy + Send + Sync + 'static;
     type Host: CentralStore;
+    type AdminKind: Copy + Eq + Send + Sync + 'static;
     fn host(&self) -> &Self::Host;
     /// The one injected clock.
     fn now(&self) -> Result<EngineTime, StoreFailure>;
@@ -30,6 +32,12 @@ pub trait EngineHost: Send + Sync + Sized {
     ) -> impl Future<Output = Result<bool, StoreFailure>> + Send;
     fn timed_rows(&self) -> &Self::Timed;
     fn alarm_inputs(&self) -> &'static str;
+    fn admin_kinds(&self) -> &'static KindRegistry<'static, Self::AdminKind>;
+    /// Selects the finisher and event for an attempt the engine resolved on this host.
+    fn finish_registered_discard(
+        &self,
+        discard: RegisteredDiscard<'_, Self>,
+    ) -> impl Future<Output = Result<DiscardOutcome, StoreFailure>> + Send;
     fn ordered_whole_units(&self) -> &'static [Self::WholeKind];
     fn whole_unit(&self, kind: Self::WholeKind) -> WholeUnit;
     fn run_whole_unit(

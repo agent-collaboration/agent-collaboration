@@ -1,13 +1,17 @@
 //! Composes the retained engine with the runtime's execution capabilities.
-use crate::WorkspaceRuntime;
+use crate::workspace_runtime::engine_admin_dispatch::{KIND_REGISTRY, finish_registered_discard};
 use crate::workspace_runtime::engine_dispatch::{CoreTimedRows, WholeKind};
+use crate::{WorkspaceRuntime, organization_admin_contract::EngineKindName};
 use central_engine_model::EngineTime;
 use central_storage::StoreFailure;
 use fleet_contracts::{
     AlarmNotPublished, CentralObservation, EngineSubject, EventCompletion, LegacyUnitOutcome,
     MailDeliveryReady, ObservedControl,
 };
-use fleet_engine::{Engine, EngineHost, WholeUnit, WholeUnitOutcome};
+use fleet_engine::{
+    DiscardOutcome, Engine, EngineHost, KindRegistry, RegisteredDiscard, WholeUnit,
+    WholeUnitOutcome,
+};
 use fleet_runtime::DueBatchState;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
@@ -15,6 +19,7 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
     type Host = H;
     type Timed = CoreTimedRows;
     type WholeKind = WholeKind;
+    type AdminKind = EngineKindName;
     fn host(&self) -> &H {
         self.execution.statement_host()
     }
@@ -41,6 +46,15 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
     }
     fn alarm_inputs(&self) -> &'static str {
         crate::engine::query_registry::ALARM_INPUTS
+    }
+    fn admin_kinds(&self) -> &'static KindRegistry<'static, Self::AdminKind> {
+        &KIND_REGISTRY
+    }
+    async fn finish_registered_discard(
+        &self,
+        discard: RegisteredDiscard<'_, Self>,
+    ) -> Result<DiscardOutcome, StoreFailure> {
+        finish_registered_discard(discard).await
     }
     fn ordered_whole_units(&self) -> &'static [WholeKind] {
         &[WholeKind::Windows, WholeKind::Drains]

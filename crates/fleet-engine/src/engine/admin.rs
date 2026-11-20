@@ -21,12 +21,14 @@ pub struct KindRegistry<'a, Kind> {
     pub hidden: &'a [&'static str],
 }
 
-pub struct RetiredDiscard<'runtime, R: EngineHost, Kind> {
+/// A retired attempt passed only to the preparing runtime's discard registration.
+pub struct RegisteredDiscard<'runtime, R: EngineHost> {
     runtime: &'runtime R,
     attempt_id: uuid::Uuid,
-    kind: Kind,
+    kind: R::AdminKind,
     stored_kind: String,
     key: InstanceKey,
+    admission_and_receipt: Vec<GuardedStatement>,
 }
 
 type DecodeFinishingRow<State> = fn(&ReadOutcome) -> Result<Option<Versioned<State>>, LoadFailure>;
@@ -361,21 +363,46 @@ impl<'runtime, R: EngineHost> Engine<'runtime, R> {
             .map(|_| delete_retired(attempt_id)))
     }
 
-    pub async fn prepare_discard<Kind: Copy + Eq + Send + Sync>(
+    /// Resolves a retired attempt and runs its preparing runtime's registered finisher.
+    ///
+    /// A same-kind descriptor cannot be substituted at the admin entry.
+    ///
+    /// ```compile_fail,E0061
+    /// use central_engine_model::Machine;
+    /// use fleet_engine::{DiscardStore, Engine, EngineHost};
+    ///
+    /// async fn replace_finisher<R: EngineHost, M: Machine>(
+    ///     engine: &Engine<'_, R>,
+    ///     attempt_id: uuid::Uuid,
+    ///     mut same_kind: DiscardStore<M>,
+    ///     event: M::Event,
+    /// ) {
+    ///     same_kind.read_sql = "SELECT 1";
+    ///     let _ = engine.discard(attempt_id, vec![], same_kind, event).await;
+    /// }
+    /// ```
+    pub async fn discard(
         &self,
-        registry: &KindRegistry<'_, Kind>,
         attempt_id: uuid::Uuid,
-    ) -> Result<Result<RetiredDiscard<'runtime, R, Kind>, AttemptRefusal>, StoreFailure> {
-        Ok(self
-            .retired_attempt(registry, attempt_id)
+        admission_and_receipt: Vec<GuardedStatement>,
+    ) -> Result<DiscardOutcome, StoreFailure> {
+        let (kind, stored_kind, key) = match self
+            .retired_attempt(self.0.admin_kinds(), attempt_id)
             .await?
-            .map(|(kind, stored_kind, key)| RetiredDiscard {
+        {
+            Ok(attempt) => attempt,
+            Err(refusal) => return Ok(DiscardOutcome::Refused(refusal)),
+        };
+        self.0
+            .finish_registered_discard(RegisteredDiscard {
                 runtime: self.0,
                 attempt_id,
                 kind,
                 stored_kind,
                 key,
-            }))
+                admission_and_receipt,
+            })
+            .await
     }
 
     /// Discard reads only the finishing view: a corrupt payload does not stop it;
@@ -414,16 +441,16 @@ impl<'runtime, R: EngineHost> Engine<'runtime, R> {
     }
 }
 
-impl<R: EngineHost, Kind: Copy + Send + Sync> RetiredDiscard<'_, R, Kind> {
-    pub fn kind(&self) -> Kind {
+impl<R: EngineHost> RegisteredDiscard<'_, R> {
+    pub fn kind(&self) -> R::AdminKind {
         self.kind
     }
 
+    /// Runs the typed finisher selected inside the host registration callback.
     pub async fn finish<M>(
-        self,
+        mut self,
         store: DiscardStore<M>,
         event: M::Event,
-        mut admission_and_receipt: Vec<GuardedStatement>,
     ) -> Result<DiscardOutcome, StoreFailure>
     where
         M: Machine,
@@ -435,7 +462,8 @@ impl<R: EngineHost, Kind: Copy + Send + Sync> RetiredDiscard<'_, R, Kind> {
         if self.stored_kind != M::KIND.0 {
             return Ok(DiscardOutcome::Refused(AttemptRefusal::DiscardUnsupported));
         }
-        admission_and_receipt.insert(0, delete_retired(self.attempt_id));
+        self.admission_and_receipt
+            .insert(0, delete_retired(self.attempt_id));
         Engine::new(self.runtime)
             .discard_subject::<M, _>(
                 &BoundDiscardStore {
@@ -444,7 +472,7 @@ impl<R: EngineHost, Kind: Copy + Send + Sync> RetiredDiscard<'_, R, Kind> {
                 },
                 self.key,
                 event,
-                &DiscardSource(admission_and_receipt),
+                &DiscardSource(self.admission_and_receipt),
             )
             .await
     }
