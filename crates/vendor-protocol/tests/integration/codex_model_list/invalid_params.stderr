@@ -4,8 +4,14 @@ error[E0277]: the trait bound `ModelListResponse: CodexRequest` is not satisfied
 4 |     let _method = <ModelListResponse as CodexRequest>::METHOD;
   |                    ^^^^^^^^^^^^^^^^^ the trait `CodexRequest` is not implemented for `ModelListResponse`
   |
-help: the trait `CodexRequest` is implemented for `ModelListParams`
+help: the following other types implement trait `CodexRequest`
  --> src/codex/generated.rs
   |
   | impl super::CodexRequest for ModelListParams {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ModelListParams`
+...
+  | impl super::CodexRequest for ThreadReadParams {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ThreadReadParams`
+...
+  | impl super::CodexRequest for ThreadResumeParams {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ThreadResumeParams`

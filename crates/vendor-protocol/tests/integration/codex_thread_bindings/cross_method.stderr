@@ -1,0 +1,49 @@
+error[E0271]: type mismatch resolving `<ThreadResumeParams as CodexRequest>::Response == ThreadReadResponse`
+ --> tests/integration/codex_thread_bindings/cross_method.rs:9:10
+  |
+9 |     read(None::<ThreadResumeParams>);
+  |     ---- ^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `ThreadReadResponse`, found `ThreadResumeResponse`
+  |     |
+  |     required by a bound introduced by this call
+  |
+note: required by a bound in `read`
+ --> tests/integration/codex_thread_bindings/cross_method.rs:5:31
+  |
+5 | fn read<Request: CodexRequest<Response = ThreadReadResponse>>(_: Option<Request>) {}
+  |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `read`
+
+error[E0271]: type mismatch resolving `<ThreadReadParams as CodexRequest>::Response == ThreadResumeResponse`
+  --> tests/integration/codex_thread_bindings/cross_method.rs:10:12
+   |
+10 |     resume(None::<ThreadReadParams>);
+   |     ------ ^^^^^^^^^^^^^^^^^^^^^^^^ expected `ThreadResumeResponse`, found `ThreadReadResponse`
+   |     |
+   |     required by a bound introduced by this call
+   |
+note: required by a bound in `resume`
+  --> tests/integration/codex_thread_bindings/cross_method.rs:6:33
+   |
+ 6 | fn resume<Request: CodexRequest<Response = ThreadResumeResponse>>(_: Option<Request>) {}
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `resume`
+
+error[E0308]: mismatched types
+  --> tests/integration/codex_thread_bindings/cross_method.rs:11:69
+   |
+11 |     let _: Option<<ThreadResumeParams as CodexRequest>::Response> = None::<ThreadReadResponse>;
+   |            ------------------------------------------------------   ^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<ThreadResumeResponse>`, found `Option<ThreadReadResponse>`
+   |            |
+   |            expected due to this
+   |
+   = note: expected enum `Option<ThreadResumeResponse>`
+              found enum `Option<ThreadReadResponse>`
+
+error[E0308]: mismatched types
+  --> tests/integration/codex_thread_bindings/cross_method.rs:12:67
+   |
+12 |     let _: Option<<ThreadReadParams as CodexRequest>::Response> = None::<ThreadResumeResponse>;
+   |            ----------------------------------------------------   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<ThreadReadResponse>`, found `Option<ThreadResumeResponse>`
+   |            |
+   |            expected due to this
+   |
+   = note: expected enum `Option<ThreadReadResponse>`
+              found enum `Option<ThreadResumeResponse>`

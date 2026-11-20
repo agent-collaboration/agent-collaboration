@@ -17,7 +17,7 @@ const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const schemaDirectory = join(repository, "verification/schemas");
 const committedBindings = join(repository, "crates/vendor-protocol/src/codex/generated.rs");
 const generatorCommand = "pnpm --dir verification run codex:generate";
-const selectedMethod = "model/list";
+const selectedMethods = ["model/list", "thread/read", "thread/resume"];
 
 const pinSchema = z.object({
   protocol: z.string(),
@@ -40,9 +40,11 @@ export function readPinnedCodexInput(
   return bytes.toString("utf8");
 }
 
-export function renderCodexModelList(schemaText: string, pairingText: string): string {
-  const bundle = codexBundleSchema.parse(JSON.parse(schemaText));
-  const pairing = codexPairingSchema.parse(JSON.parse(pairingText));
+function resolveBinding(
+  bundle: z.infer<typeof codexBundleSchema>,
+  pairing: z.infer<typeof codexPairingSchema>,
+  selectedMethod: string,
+): { method: string; params: string; response: string } {
   const selected = pairing.clientRequests.filter((entry) => entry.method === selectedMethod);
   const [request] = selected;
   if (selected.length !== 1 || request?.bundle.kind !== "exported") {
@@ -67,14 +69,22 @@ export function renderCodexModelList(schemaText: string, pairingText: string): s
     throw new Error(`${selectedMethod}: pairing params disagree with the exported request`);
   }
 
-  const definitions = reachableDefinitions(bundle.definitions.v2, [params, response]);
-  for (const root of [params, response]) {
+  return { method: request.method, params, response };
+}
+
+export function renderCodexBindings(schemaText: string, pairingText: string): string {
+  const bundle = codexBundleSchema.parse(JSON.parse(schemaText));
+  const pairing = codexPairingSchema.parse(JSON.parse(pairingText));
+  const bindings = selectedMethods.map((method) => resolveBinding(bundle, pairing, method));
+  const roots = bindings.flatMap(({ params, response }) => [params, response]);
+  const definitions = reachableDefinitions(bundle.definitions.v2, roots);
+  for (const root of roots) {
     if (definitions.get(root)?.definition.kind !== "object") {
       throw new Error(`${root}: expected an object payload`);
     }
   }
 
-  const source = renderRustBindings({ method: request.method, params, response }, definitions);
+  const source = renderRustBindings(bindings, definitions);
   return execFileSync(
     "rustfmt",
     ["--edition", "2024", "--config-path", join(repository, "rustfmt.toml")],
@@ -99,14 +109,16 @@ function main(args: readonly string[]): void {
   }
   const schema = readPinnedCodexInput(schemaDirectory, "codexAppServer");
   const pairing = readPinnedCodexInput(schemaDirectory, "codexAppServerPairing");
-  const generated = renderCodexModelList(schema, pairing);
+  const generated = renderCodexBindings(schema, pairing);
   if (mode === "--write") {
     mkdirSync(dirname(committedBindings), { recursive: true });
     writeFileSync(committedBindings, generated);
   } else {
     checkCodexBindings(committedBindings, generated);
   }
-  console.log(`Codex ${selectedMethod} binding ${mode === "--write" ? "generated" : "matches"}`);
+  console.log(
+    `Codex bindings ${mode === "--write" ? "generated" : "match"}: ${selectedMethods.join(", ")}`,
+  );
 }
 
 if (import.meta.main) main(process.argv.slice(2));

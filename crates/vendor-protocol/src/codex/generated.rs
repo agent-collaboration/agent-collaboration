@@ -3,6 +3,884 @@
 
 use serde::{Deserialize, Serialize};
 
+// #/definitions/v2/AbsolutePathBuf
+/// A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).
+///
+/// IMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.
+pub type AbsolutePathBuf = String;
+
+// #/definitions/v2/ActivePermissionProfile
+codex_object! {
+    ActivePermissionProfile {
+        /// Parent profile identifier from the selected permissions profile's `extends` setting, when present.
+        #[serde(
+            rename = "extends",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        extends: Option<Option<String>>,
+        /// Identifier from `default_permissions` or the implicit built-in default, such as `:workspace` or a user-defined `[permissions.<id>]` profile.
+        #[serde(rename = "id")]
+        id: String,
+    }
+}
+
+impl ActivePermissionProfile {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn extends(&self) -> Option<&str> {
+        self.extends.as_ref().and_then(Option::as_deref)
+    }
+}
+
+// #/definitions/v2/AgentMessageDelivery
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum AgentMessageDelivery {
+    #[serde(rename = "async")]
+    Async,
+}
+
+impl<'de> Deserialize<'de> for AgentMessageDelivery {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "async" => Ok(Self::Async),
+            _ => Err(serde::de::Error::unknown_variant(&tag, &["async"])),
+        }
+    }
+}
+
+// #/definitions/v2/AgentMessageInputContent
+codex_object! {
+    InputTextAgentMessageInputContent {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_object! {
+    EncryptedContentAgentMessageInputContent {
+        #[serde(rename = "encrypted_content")]
+        encrypted_content: String,
+    }
+}
+
+codex_tagged_object! {
+    AgentMessageInputContent {
+        "input_text" => InputText(InputTextAgentMessageInputContent),
+        "encrypted_content" => EncryptedContent(EncryptedContentAgentMessageInputContent),
+    }
+}
+
+// #/definitions/v2/AgentPath
+pub type AgentPath = String;
+
+// #/definitions/v2/ApprovalsReviewer
+/// Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ApprovalsReviewer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "auto_review")]
+    AutoReview,
+    #[serde(rename = "guardian_subagent")]
+    GuardianSubagent,
+}
+
+impl<'de> Deserialize<'de> for ApprovalsReviewer {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "user" => Ok(Self::User),
+            "auto_review" => Ok(Self::AutoReview),
+            "guardian_subagent" => Ok(Self::GuardianSubagent),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["user", "auto_review", "guardian_subagent"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/AskForApproval
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum AskForApprovalTag {
+    #[serde(rename = "untrusted")]
+    Untrusted,
+    #[serde(rename = "on-request")]
+    OnRequest,
+    #[serde(rename = "never")]
+    Never,
+}
+
+impl<'de> Deserialize<'de> for AskForApprovalTag {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "untrusted" => Ok(Self::Untrusted),
+            "on-request" => Ok(Self::OnRequest),
+            "never" => Ok(Self::Never),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["untrusted", "on-request", "never"],
+            )),
+        }
+    }
+}
+
+codex_object! {
+    GranularAskForApprovalPayload {
+        #[serde(rename = "mcp_elicitations")]
+        mcp_elicitations: bool,
+        #[serde(
+            rename = "request_permissions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        request_permissions: Option<bool>,
+        #[serde(rename = "rules")]
+        rules: bool,
+        #[serde(rename = "sandbox_approval")]
+        sandbox_approval: bool,
+        #[serde(
+            rename = "skill_approval",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        skill_approval: Option<bool>,
+    }
+}
+
+impl GranularAskForApprovalPayload {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn request_permissions(&self) -> bool {
+        self.request_permissions.unwrap_or(false)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn skill_approval(&self) -> bool {
+        self.skill_approval.unwrap_or(false)
+    }
+}
+
+codex_object! {
+    closed
+    GranularAskForApproval {
+        #[serde(rename = "granular")]
+        granular: GranularAskForApprovalPayload,
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AskForApproval {
+    Known(AskForApprovalTag),
+    Granular(GranularAskForApproval),
+}
+
+// #/definitions/v2/AsyncUserInputQuestion
+codex_object! {
+    closed
+    AsyncUserInputQuestion {
+        #[serde(
+            rename = "options",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        options: Option<Option<Vec<String>>>,
+        #[serde(rename = "title")]
+        title: String,
+    }
+}
+
+// #/definitions/v2/ByteRange
+codex_object! {
+    ByteRange {
+        #[serde(rename = "end")]
+        end: usize,
+        #[serde(rename = "start")]
+        start: usize,
+    }
+}
+
+// #/definitions/v2/CodexErrorInfo
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum CodexErrorInfoTag {
+    #[serde(rename = "contextWindowExceeded")]
+    ContextWindowExceeded,
+    #[serde(rename = "sessionBudgetExceeded")]
+    SessionBudgetExceeded,
+    #[serde(rename = "usageLimitExceeded")]
+    UsageLimitExceeded,
+    #[serde(rename = "rateLimitExceeded")]
+    RateLimitExceeded,
+    #[serde(rename = "flexUnavailable")]
+    FlexUnavailable,
+    #[serde(rename = "serverOverloaded")]
+    ServerOverloaded,
+    #[serde(rename = "modelNotFound")]
+    ModelNotFound,
+    #[serde(rename = "policyCapacityUnavailable")]
+    PolicyCapacityUnavailable,
+    #[serde(rename = "cyberPolicy")]
+    CyberPolicy,
+    #[serde(rename = "misalignmentPolicyViolation")]
+    MisalignmentPolicyViolation,
+    #[serde(rename = "tooManyDenials")]
+    TooManyDenials,
+    #[serde(rename = "internalServerError")]
+    InternalServerError,
+    #[serde(rename = "unauthorized")]
+    Unauthorized,
+    #[serde(rename = "badRequest")]
+    BadRequest,
+    #[serde(rename = "threadRollbackFailed")]
+    ThreadRollbackFailed,
+    #[serde(rename = "sandboxError")]
+    SandboxError,
+    #[serde(rename = "other")]
+    Other,
+}
+
+impl<'de> Deserialize<'de> for CodexErrorInfoTag {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "contextWindowExceeded" => Ok(Self::ContextWindowExceeded),
+            "sessionBudgetExceeded" => Ok(Self::SessionBudgetExceeded),
+            "usageLimitExceeded" => Ok(Self::UsageLimitExceeded),
+            "rateLimitExceeded" => Ok(Self::RateLimitExceeded),
+            "flexUnavailable" => Ok(Self::FlexUnavailable),
+            "serverOverloaded" => Ok(Self::ServerOverloaded),
+            "modelNotFound" => Ok(Self::ModelNotFound),
+            "policyCapacityUnavailable" => Ok(Self::PolicyCapacityUnavailable),
+            "cyberPolicy" => Ok(Self::CyberPolicy),
+            "misalignmentPolicyViolation" => Ok(Self::MisalignmentPolicyViolation),
+            "tooManyDenials" => Ok(Self::TooManyDenials),
+            "internalServerError" => Ok(Self::InternalServerError),
+            "unauthorized" => Ok(Self::Unauthorized),
+            "badRequest" => Ok(Self::BadRequest),
+            "threadRollbackFailed" => Ok(Self::ThreadRollbackFailed),
+            "sandboxError" => Ok(Self::SandboxError),
+            "other" => Ok(Self::Other),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &[
+                    "contextWindowExceeded",
+                    "sessionBudgetExceeded",
+                    "usageLimitExceeded",
+                    "rateLimitExceeded",
+                    "flexUnavailable",
+                    "serverOverloaded",
+                    "modelNotFound",
+                    "policyCapacityUnavailable",
+                    "cyberPolicy",
+                    "misalignmentPolicyViolation",
+                    "tooManyDenials",
+                    "internalServerError",
+                    "unauthorized",
+                    "badRequest",
+                    "threadRollbackFailed",
+                    "sandboxError",
+                    "other",
+                ],
+            )),
+        }
+    }
+}
+
+codex_object! {
+    HttpConnectionFailedCodexErrorInfoPayload {
+        #[serde(
+            rename = "httpStatusCode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        http_status_code: Option<Option<u16>>,
+    }
+}
+
+codex_object! {
+    closed
+    HttpConnectionFailedCodexErrorInfo {
+        #[serde(rename = "httpConnectionFailed")]
+        http_connection_failed: HttpConnectionFailedCodexErrorInfoPayload,
+    }
+}
+
+codex_object! {
+    ResponseStreamConnectionFailedCodexErrorInfoPayload {
+        #[serde(
+            rename = "httpStatusCode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        http_status_code: Option<Option<u16>>,
+    }
+}
+
+codex_object! {
+    closed
+    /// Failed to connect to the response SSE stream.
+    ResponseStreamConnectionFailedCodexErrorInfo {
+        #[serde(rename = "responseStreamConnectionFailed")]
+        response_stream_connection_failed: ResponseStreamConnectionFailedCodexErrorInfoPayload,
+    }
+}
+
+codex_object! {
+    ResponseStreamDisconnectedCodexErrorInfoPayload {
+        #[serde(
+            rename = "httpStatusCode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        http_status_code: Option<Option<u16>>,
+    }
+}
+
+codex_object! {
+    closed
+    /// The response SSE stream disconnected in the middle of a turn before completion.
+    ResponseStreamDisconnectedCodexErrorInfo {
+        #[serde(rename = "responseStreamDisconnected")]
+        response_stream_disconnected: ResponseStreamDisconnectedCodexErrorInfoPayload,
+    }
+}
+
+codex_object! {
+    ResponseTooManyFailedAttemptsCodexErrorInfoPayload {
+        #[serde(
+            rename = "httpStatusCode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        http_status_code: Option<Option<u16>>,
+    }
+}
+
+codex_object! {
+    closed
+    /// Reached the retry limit for responses.
+    ResponseTooManyFailedAttemptsCodexErrorInfo {
+        #[serde(rename = "responseTooManyFailedAttempts")]
+        response_too_many_failed_attempts: ResponseTooManyFailedAttemptsCodexErrorInfoPayload,
+    }
+}
+
+codex_object! {
+    ActiveTurnNotSteerableCodexErrorInfoPayload {
+        #[serde(rename = "turnKind")]
+        turn_kind: NonSteerableTurnKind,
+    }
+}
+
+codex_object! {
+    closed
+    /// Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.
+    ActiveTurnNotSteerableCodexErrorInfo {
+        #[serde(rename = "activeTurnNotSteerable")]
+        active_turn_not_steerable: ActiveTurnNotSteerableCodexErrorInfoPayload,
+    }
+}
+
+/// This translation layer make sure that we expose codex error code in camel case.
+///
+/// When an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum CodexErrorInfo {
+    Known(CodexErrorInfoTag),
+    HttpConnectionFailed(HttpConnectionFailedCodexErrorInfo),
+    ResponseStreamConnectionFailed(ResponseStreamConnectionFailedCodexErrorInfo),
+    ResponseStreamDisconnected(ResponseStreamDisconnectedCodexErrorInfo),
+    ResponseTooManyFailedAttempts(ResponseTooManyFailedAttemptsCodexErrorInfo),
+    ActiveTurnNotSteerable(ActiveTurnNotSteerableCodexErrorInfo),
+    UnknownString(String),
+    UnknownObject(serde_json::Map<String, serde_json::Value>),
+    MalformedKnownObject(serde_json::Map<String, serde_json::Value>),
+}
+
+impl<'de> Deserialize<'de> for CodexErrorInfo {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        match serde_json::Value::deserialize(decoder)? {
+            serde_json::Value::String(tag) => Ok(match tag.as_str() {
+                "contextWindowExceeded" => Self::Known(CodexErrorInfoTag::ContextWindowExceeded),
+                "sessionBudgetExceeded" => Self::Known(CodexErrorInfoTag::SessionBudgetExceeded),
+                "usageLimitExceeded" => Self::Known(CodexErrorInfoTag::UsageLimitExceeded),
+                "rateLimitExceeded" => Self::Known(CodexErrorInfoTag::RateLimitExceeded),
+                "flexUnavailable" => Self::Known(CodexErrorInfoTag::FlexUnavailable),
+                "serverOverloaded" => Self::Known(CodexErrorInfoTag::ServerOverloaded),
+                "modelNotFound" => Self::Known(CodexErrorInfoTag::ModelNotFound),
+                "policyCapacityUnavailable" => {
+                    Self::Known(CodexErrorInfoTag::PolicyCapacityUnavailable)
+                }
+                "cyberPolicy" => Self::Known(CodexErrorInfoTag::CyberPolicy),
+                "misalignmentPolicyViolation" => {
+                    Self::Known(CodexErrorInfoTag::MisalignmentPolicyViolation)
+                }
+                "tooManyDenials" => Self::Known(CodexErrorInfoTag::TooManyDenials),
+                "internalServerError" => Self::Known(CodexErrorInfoTag::InternalServerError),
+                "unauthorized" => Self::Known(CodexErrorInfoTag::Unauthorized),
+                "badRequest" => Self::Known(CodexErrorInfoTag::BadRequest),
+                "threadRollbackFailed" => Self::Known(CodexErrorInfoTag::ThreadRollbackFailed),
+                "sandboxError" => Self::Known(CodexErrorInfoTag::SandboxError),
+                "other" => Self::Known(CodexErrorInfoTag::Other),
+                _ => Self::UnknownString(tag),
+            }),
+            serde_json::Value::Object(fields) => {
+                if fields.contains_key("httpConnectionFailed") {
+                    let value = serde_json::Value::Object(fields.clone());
+                    return Ok(
+                        match serde_json::from_value::<HttpConnectionFailedCodexErrorInfo>(value) {
+                            Ok(payload) => Self::HttpConnectionFailed(payload),
+                            Err(_) => Self::MalformedKnownObject(fields),
+                        },
+                    );
+                }
+                if fields.contains_key("responseStreamConnectionFailed") {
+                    let value = serde_json::Value::Object(fields.clone());
+                    return Ok(
+                        match serde_json::from_value::<ResponseStreamConnectionFailedCodexErrorInfo>(
+                            value,
+                        ) {
+                            Ok(payload) => Self::ResponseStreamConnectionFailed(payload),
+                            Err(_) => Self::MalformedKnownObject(fields),
+                        },
+                    );
+                }
+                if fields.contains_key("responseStreamDisconnected") {
+                    let value = serde_json::Value::Object(fields.clone());
+                    return Ok(
+                        match serde_json::from_value::<ResponseStreamDisconnectedCodexErrorInfo>(
+                            value,
+                        ) {
+                            Ok(payload) => Self::ResponseStreamDisconnected(payload),
+                            Err(_) => Self::MalformedKnownObject(fields),
+                        },
+                    );
+                }
+                if fields.contains_key("responseTooManyFailedAttempts") {
+                    let value = serde_json::Value::Object(fields.clone());
+                    return Ok(
+                        match serde_json::from_value::<ResponseTooManyFailedAttemptsCodexErrorInfo>(
+                            value,
+                        ) {
+                            Ok(payload) => Self::ResponseTooManyFailedAttempts(payload),
+                            Err(_) => Self::MalformedKnownObject(fields),
+                        },
+                    );
+                }
+                if fields.contains_key("activeTurnNotSteerable") {
+                    let value = serde_json::Value::Object(fields.clone());
+                    return Ok(
+                        match serde_json::from_value::<ActiveTurnNotSteerableCodexErrorInfo>(value)
+                        {
+                            Ok(payload) => Self::ActiveTurnNotSteerable(payload),
+                            Err(_) => Self::MalformedKnownObject(fields),
+                        },
+                    );
+                }
+                Ok(Self::UnknownObject(fields))
+            }
+            _ => Err(serde::de::Error::custom("expected a string or object")),
+        }
+    }
+}
+
+// #/definitions/v2/CollabAgentState
+codex_object! {
+    CollabAgentState {
+        #[serde(
+            rename = "message",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        message: Option<Option<String>>,
+        #[serde(rename = "status")]
+        status: CollabAgentStatus,
+    }
+}
+
+// #/definitions/v2/CollabAgentStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum CollabAgentStatus {
+    #[serde(rename = "pendingInit")]
+    PendingInit,
+    #[serde(rename = "running")]
+    Running,
+    #[serde(rename = "interrupted")]
+    Interrupted,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "errored")]
+    Errored,
+    #[serde(rename = "shutdown")]
+    Shutdown,
+    #[serde(rename = "notFound")]
+    NotFound,
+}
+
+impl<'de> Deserialize<'de> for CollabAgentStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "pendingInit" => Ok(Self::PendingInit),
+            "running" => Ok(Self::Running),
+            "interrupted" => Ok(Self::Interrupted),
+            "completed" => Ok(Self::Completed),
+            "errored" => Ok(Self::Errored),
+            "shutdown" => Ok(Self::Shutdown),
+            "notFound" => Ok(Self::NotFound),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &[
+                    "pendingInit",
+                    "running",
+                    "interrupted",
+                    "completed",
+                    "errored",
+                    "shutdown",
+                    "notFound",
+                ],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/CollabAgentTool
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum CollabAgentTool {
+    #[serde(rename = "spawnAgent")]
+    SpawnAgent,
+    #[serde(rename = "sendInput")]
+    SendInput,
+    #[serde(rename = "resumeAgent")]
+    ResumeAgent,
+    #[serde(rename = "wait")]
+    Wait,
+    #[serde(rename = "closeAgent")]
+    CloseAgent,
+    #[serde(rename = "sendMessage")]
+    SendMessage,
+    #[serde(rename = "followupTask")]
+    FollowupTask,
+    #[serde(rename = "interruptAgent")]
+    InterruptAgent,
+    #[serde(rename = "listAgents")]
+    ListAgents,
+}
+
+impl<'de> Deserialize<'de> for CollabAgentTool {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "spawnAgent" => Ok(Self::SpawnAgent),
+            "sendInput" => Ok(Self::SendInput),
+            "resumeAgent" => Ok(Self::ResumeAgent),
+            "wait" => Ok(Self::Wait),
+            "closeAgent" => Ok(Self::CloseAgent),
+            "sendMessage" => Ok(Self::SendMessage),
+            "followupTask" => Ok(Self::FollowupTask),
+            "interruptAgent" => Ok(Self::InterruptAgent),
+            "listAgents" => Ok(Self::ListAgents),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &[
+                    "spawnAgent",
+                    "sendInput",
+                    "resumeAgent",
+                    "wait",
+                    "closeAgent",
+                    "sendMessage",
+                    "followupTask",
+                    "interruptAgent",
+                    "listAgents",
+                ],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/CollabAgentToolCallStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum CollabAgentToolCallStatus {
+    #[serde(rename = "inProgress")]
+    InProgress,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "interrupted")]
+    Interrupted,
+}
+
+impl<'de> Deserialize<'de> for CollabAgentToolCallStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "inProgress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "interrupted" => Ok(Self::Interrupted),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["inProgress", "completed", "failed", "interrupted"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/CollaborationMode
+codex_object! {
+    /// Collaboration mode for a Codex session.
+    CollaborationMode {
+        #[serde(rename = "mode")]
+        mode: ModeKind,
+        #[serde(rename = "settings")]
+        settings: Settings,
+    }
+}
+
+// #/definitions/v2/CommandAction
+codex_object! {
+    ReadCommandAction {
+        #[serde(rename = "command")]
+        command: String,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(rename = "path")]
+        path: LegacyAppPathString,
+    }
+}
+
+codex_object! {
+    ListFilesCommandAction {
+        #[serde(rename = "command")]
+        command: String,
+        #[serde(
+            rename = "path",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        path: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    SearchCommandAction {
+        #[serde(rename = "command")]
+        command: String,
+        #[serde(
+            rename = "path",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        path: Option<Option<String>>,
+        #[serde(
+            rename = "query",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        query: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    UnknownCommandAction {
+        #[serde(rename = "command")]
+        command: String,
+    }
+}
+
+codex_tagged_object! {
+    CommandAction {
+        "read" => Read(ReadCommandAction),
+        "listFiles" => ListFiles(ListFilesCommandAction),
+        "search" => Search(SearchCommandAction),
+        "unknown" => Unknown(UnknownCommandAction),
+    }
+}
+
+// #/definitions/v2/CommandExecutionSource
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum CommandExecutionSource {
+    #[serde(rename = "agent")]
+    Agent,
+    #[serde(rename = "userShell")]
+    UserShell,
+    #[serde(rename = "unifiedExecStartup")]
+    UnifiedExecStartup,
+    #[serde(rename = "unifiedExecInteraction")]
+    UnifiedExecInteraction,
+}
+
+impl<'de> Deserialize<'de> for CommandExecutionSource {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "agent" => Ok(Self::Agent),
+            "userShell" => Ok(Self::UserShell),
+            "unifiedExecStartup" => Ok(Self::UnifiedExecStartup),
+            "unifiedExecInteraction" => Ok(Self::UnifiedExecInteraction),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &[
+                    "agent",
+                    "userShell",
+                    "unifiedExecStartup",
+                    "unifiedExecInteraction",
+                ],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/CommandExecutionStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum CommandExecutionStatus {
+    #[serde(rename = "inProgress")]
+    InProgress,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "declined")]
+    Declined,
+}
+
+impl<'de> Deserialize<'de> for CommandExecutionStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "inProgress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "declined" => Ok(Self::Declined),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["inProgress", "completed", "failed", "declined"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/ConfigurationReasoning
+codex_object! {
+    /// Reasoning settings interpreted by the backend for the routed model.
+    ConfigurationReasoning {
+        #[serde(rename = "effort")]
+        effort: ReasoningEffort,
+    }
+}
+
+// #/definitions/v2/ContentItem
+codex_object! {
+    InputTextContentItem {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_object! {
+    choice [image_url, file_id]
+    InputImageContentItem {
+        #[serde(
+            rename = "detail",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        detail: Option<Option<ImageDetail>>,
+        #[serde(
+            rename = "file_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        file_id: Option<super::StringAlternative>,
+        #[serde(
+            rename = "image_url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        image_url: Option<super::StringAlternative>,
+    }
+}
+
+codex_object! {
+    InputAudioContentItem {
+        #[serde(rename = "audio_url")]
+        audio_url: String,
+    }
+}
+
+codex_object! {
+    OutputTextContentItem {
+        #[serde(
+            rename = "annotations",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        annotations: Option<Option<Vec<serde_json::Value>>>,
+        #[serde(
+            rename = "logprobs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        logprobs: Option<Option<Vec<serde_json::Value>>>,
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_tagged_object! {
+    ContentItem {
+        "input_text" => InputText(InputTextContentItem),
+        "input_image" => InputImage(InputImageContentItem),
+        "input_audio" => InputAudio(InputAudioContentItem),
+        "output_text" => OutputText(OutputTextContentItem),
+    }
+}
+
+// #/definitions/v2/CyberAccessProgram
 /// Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum CyberAccessProgram {
@@ -31,6 +909,245 @@ impl<'de> Deserialize<'de> for CyberAccessProgram {
     }
 }
 
+// #/definitions/v2/DynamicToolCallOutputContentItem
+codex_object! {
+    InputTextDynamicToolCallOutputContentItem {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_object! {
+    InputImageDynamicToolCallOutputContentItem {
+        #[serde(rename = "imageUrl")]
+        image_url: String,
+    }
+}
+
+codex_object! {
+    InputAudioDynamicToolCallOutputContentItem {
+        #[serde(rename = "audioUrl")]
+        audio_url: String,
+    }
+}
+
+codex_tagged_object! {
+    DynamicToolCallOutputContentItem {
+        "inputText" => Text(InputTextDynamicToolCallOutputContentItem),
+        "inputImage" => Image(InputImageDynamicToolCallOutputContentItem),
+        "inputAudio" => Audio(InputAudioDynamicToolCallOutputContentItem),
+    }
+}
+
+// #/definitions/v2/DynamicToolCallStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum DynamicToolCallStatus {
+    #[serde(rename = "inProgress")]
+    InProgress,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "failed")]
+    Failed,
+}
+
+impl<'de> Deserialize<'de> for DynamicToolCallStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "inProgress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["inProgress", "completed", "failed"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/FileUpdateChange
+codex_object! {
+    FileUpdateChange {
+        #[serde(rename = "diff")]
+        diff: String,
+        #[serde(rename = "kind")]
+        kind: PatchChangeKind,
+        #[serde(rename = "path")]
+        path: String,
+    }
+}
+
+// #/definitions/v2/FunctionCallOutputBody
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum FunctionCallOutputBody {
+    Text(String),
+    Items(Vec<FunctionCallOutputContentItem>),
+}
+
+// #/definitions/v2/FunctionCallOutputContentItem
+codex_object! {
+    InputTextFunctionCallOutputContentItem {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_object! {
+    choice [image_url, file_id]
+    InputImageFunctionCallOutputContentItem {
+        #[serde(
+            rename = "detail",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        detail: Option<Option<ImageDetail>>,
+        #[serde(
+            rename = "file_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        file_id: Option<super::StringAlternative>,
+        #[serde(
+            rename = "image_url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        image_url: Option<super::StringAlternative>,
+    }
+}
+
+codex_object! {
+    InputAudioFunctionCallOutputContentItem {
+        #[serde(rename = "audio_url")]
+        audio_url: String,
+    }
+}
+
+codex_object! {
+    EncryptedContentFunctionCallOutputContentItem {
+        #[serde(rename = "encrypted_content")]
+        encrypted_content: String,
+    }
+}
+
+codex_tagged_object! {
+    /// Responses API compatible content items that can be returned by a tool call. This is a subset of ContentItem with the types we support as function call outputs.
+    FunctionCallOutputContentItem {
+        "input_text" => InputText(InputTextFunctionCallOutputContentItem),
+        "input_image" => InputImage(InputImageFunctionCallOutputContentItem),
+        "input_audio" => InputAudio(InputAudioFunctionCallOutputContentItem),
+        "encrypted_content" => EncryptedContent(EncryptedContentFunctionCallOutputContentItem),
+    }
+}
+
+// #/definitions/v2/GitInfo
+codex_object! {
+    GitInfo {
+        #[serde(
+            rename = "branch",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        branch: Option<Option<String>>,
+        #[serde(
+            rename = "originUrl",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        origin_url: Option<Option<String>>,
+        #[serde(
+            rename = "sha",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        sha: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/HookPromptFragment
+codex_object! {
+    HookPromptFragment {
+        #[serde(rename = "hookRunId")]
+        hook_run_id: String,
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+// #/definitions/v2/ImageDetail
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ImageDetail {
+    #[serde(rename = "auto")]
+    Auto,
+    #[serde(rename = "low")]
+    Low,
+    #[serde(rename = "high")]
+    High,
+    #[serde(rename = "original")]
+    Original,
+}
+
+impl<'de> Deserialize<'de> for ImageDetail {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "auto" => Ok(Self::Auto),
+            "low" => Ok(Self::Low),
+            "high" => Ok(Self::High),
+            "original" => Ok(Self::Original),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["auto", "low", "high", "original"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/ImageGenerationFailure
+codex_object! {
+    UsageLimitExceededImageGenerationFailure {
+        #[serde(rename = "limitId")]
+        limit_id: String,
+        #[serde(
+            rename = "resetsAt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        resets_at: Option<Option<i64>>,
+    }
+}
+
+codex_tagged_object! {
+    ImageGenerationFailure {
+        "usageLimitExceeded" => UsageLimitExceeded(UsageLimitExceededImageGenerationFailure),
+    }
+}
+
+// #/definitions/v2/ImageGenerationInputImage
+codex_object! {
+    /// A local image file successfully read for this exact image-generation request.
+    ImageGenerationInputImage {
+        #[serde(rename = "path")]
+        path: AbsolutePathBuf,
+        /// Lowercase SHA-256 of the file bytes read before image normalization.
+        #[serde(rename = "sha256")]
+        sha256: String,
+    }
+}
+
+// #/definitions/v2/InputModality
 /// Canonical user-input modality tags advertised by a model.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum InputModality {
@@ -59,6 +1176,353 @@ impl<'de> Deserialize<'de> for InputModality {
     }
 }
 
+// #/definitions/v2/InternalChatMessageMetadataPassthrough
+codex_object! {
+    /// Internal Responses API passthrough metadata copied into underlying chat messages.
+    ///
+    /// Responses API strongly types this payload. Do not modify it without first getting API approval and making the corresponding Responses API change.
+    InternalChatMessageMetadataPassthrough {
+        #[serde(
+            rename = "turn_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        turn_id: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/LegacyAppPathString
+pub type LegacyAppPathString = String;
+
+// #/definitions/v2/LocalShellAction
+codex_object! {
+    ExecLocalShellAction {
+        #[serde(rename = "command")]
+        command: Vec<String>,
+        #[serde(
+            rename = "env",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        env: Option<Option<std::collections::BTreeMap<String, String>>>,
+        #[serde(
+            rename = "timeout_ms",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        timeout_ms: Option<Option<u64>>,
+        #[serde(
+            rename = "user",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        user: Option<Option<String>>,
+        #[serde(
+            rename = "working_directory",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        working_directory: Option<Option<String>>,
+    }
+}
+
+codex_tagged_object! {
+    LocalShellAction {
+        "exec" => Exec(ExecLocalShellAction),
+    }
+}
+
+// #/definitions/v2/LocalShellStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum LocalShellStatus {
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "in_progress")]
+    InProgress,
+    #[serde(rename = "incomplete")]
+    Incomplete,
+}
+
+impl<'de> Deserialize<'de> for LocalShellStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "completed" => Ok(Self::Completed),
+            "in_progress" => Ok(Self::InProgress),
+            "incomplete" => Ok(Self::Incomplete),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["completed", "in_progress", "incomplete"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/McpAppDisplayMode
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum McpAppDisplayMode {
+    #[serde(rename = "inline")]
+    Inline,
+    #[serde(rename = "fullscreen")]
+    Fullscreen,
+}
+
+impl<'de> Deserialize<'de> for McpAppDisplayMode {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "inline" => Ok(Self::Inline),
+            "fullscreen" => Ok(Self::Fullscreen),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["inline", "fullscreen"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/McpAppUi
+codex_object! {
+    /// UI resource and display preference for model invocations, captured from the tool descriptor.
+    McpAppUi {
+        #[serde(rename = "preferredModelDisplayMode")]
+        preferred_model_display_mode: McpAppDisplayMode,
+        #[serde(rename = "resourceUri")]
+        resource_uri: String,
+    }
+}
+
+// #/definitions/v2/McpToolCallAppContext
+codex_object! {
+    McpToolCallAppContext {
+        #[serde(
+            rename = "actionName",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        action_name: Option<Option<String>>,
+        #[serde(
+            rename = "appName",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        app_name: Option<Option<String>>,
+        #[serde(rename = "connectorId")]
+        connector_id: String,
+        #[serde(
+            rename = "linkId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        link_id: Option<Option<String>>,
+        #[serde(
+            rename = "resourceUri",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        resource_uri: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/McpToolCallError
+codex_object! {
+    McpToolCallError {
+        #[serde(rename = "message")]
+        message: String,
+    }
+}
+
+// #/definitions/v2/McpToolCallResult
+codex_object! {
+    McpToolCallResult {
+        #[serde(
+            rename = "_meta",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        _meta: Option<serde_json::Value>,
+        #[serde(rename = "content")]
+        content: Vec<serde_json::Value>,
+        #[serde(
+            rename = "structuredContent",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        structured_content: Option<serde_json::Value>,
+    }
+}
+
+// #/definitions/v2/McpToolCallStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum McpToolCallStatus {
+    #[serde(rename = "inProgress")]
+    InProgress,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "failed")]
+    Failed,
+}
+
+impl<'de> Deserialize<'de> for McpToolCallStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "inProgress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["inProgress", "completed", "failed"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/MemoryCitation
+codex_object! {
+    MemoryCitation {
+        #[serde(rename = "entries")]
+        entries: Vec<MemoryCitationEntry>,
+        #[serde(rename = "threadIds")]
+        thread_ids: Vec<String>,
+    }
+}
+
+// #/definitions/v2/MemoryCitationEntry
+codex_object! {
+    MemoryCitationEntry {
+        #[serde(rename = "lineEnd")]
+        line_end: u32,
+        #[serde(rename = "lineStart")]
+        line_start: u32,
+        #[serde(rename = "note")]
+        note: String,
+        #[serde(rename = "path")]
+        path: String,
+    }
+}
+
+// #/definitions/v2/MessagePhase
+/// Classifies assistant text as commentary, a partial answer, or a terminal answer.
+///
+/// Providers do not emit this consistently, so callers must treat `None` as "phase unknown" and keep compatibility behavior for legacy models.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum MessagePhase {
+    #[serde(rename = "commentary")]
+    Commentary,
+    #[serde(rename = "partial_answer")]
+    PartialAnswer,
+    #[serde(rename = "final_answer")]
+    FinalAnswer,
+}
+
+impl<'de> Deserialize<'de> for MessagePhase {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "commentary" => Ok(Self::Commentary),
+            "partial_answer" => Ok(Self::PartialAnswer),
+            "final_answer" => Ok(Self::FinalAnswer),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["commentary", "partial_answer", "final_answer"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/MisalignmentErrorDetails
+codex_object! {
+    MisalignmentErrorDetails {
+        /// A substantive localized explanation is required before offering continuation.
+        #[serde(
+            rename = "detailedExplanation",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        detailed_explanation: Option<Option<String>>,
+        /// Open-ended classification; clients must accept categories added by Responses.
+        #[serde(
+            rename = "errorType",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        error_type: Option<Option<String>>,
+        /// Opaque server-issued block target. Presence alone does not enable target-based continuation.
+        #[serde(
+            rename = "reviewTarget",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        review_target: Option<Option<String>>,
+        /// Instruction to submit as the next turn's user input if continuation is confirmed.
+        #[serde(
+            rename = "steer",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        steer: Option<Option<MisalignmentSteer>>,
+    }
+}
+
+// #/definitions/v2/MisalignmentSteer
+codex_object! {
+    MisalignmentSteer {
+        #[serde(rename = "message")]
+        message: String,
+    }
+}
+
+// #/definitions/v2/ModeKind
+/// Initial collaboration mode to use when the TUI starts.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ModeKind {
+    #[serde(rename = "plan")]
+    Plan,
+    #[serde(rename = "default")]
+    Default,
+}
+
+impl<'de> Deserialize<'de> for ModeKind {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "plan" => Ok(Self::Plan),
+            "default" => Ok(Self::Default),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["plan", "default"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/Model
 codex_object! {
     Model {
         /// Deprecated: use `serviceTiers` instead.
@@ -212,6 +1676,7 @@ impl Model {
     }
 }
 
+// #/definitions/v2/ModelAccessPrograms
 codex_object! {
     /// Caller-specific explicit access programs advertised by model discovery.
     ModelAccessPrograms {
@@ -221,6 +1686,7 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/ModelAvailabilityNux
 codex_object! {
     ModelAvailabilityNux {
         #[serde(rename = "message")]
@@ -228,6 +1694,7 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/ModelListParams
 codex_object! {
     ModelListParams {
         /// Opaque pagination cursor returned by a previous call.
@@ -257,6 +1724,7 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/ModelListResponse
 codex_object! {
     ModelListResponse {
         #[serde(rename = "data")]
@@ -272,6 +1740,7 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/ModelServiceTier
 codex_object! {
     ModelServiceTier {
         #[serde(rename = "description")]
@@ -283,6 +1752,7 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/ModelUpgradeInfo
 codex_object! {
     ModelUpgradeInfo {
         #[serde(
@@ -319,6 +1789,48 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/MultiAgentMode
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum MultiAgentModeTag {
+    #[serde(rename = "explicitRequestOnly")]
+    ExplicitRequestOnly,
+    #[serde(rename = "proactive")]
+    Proactive,
+}
+
+impl<'de> Deserialize<'de> for MultiAgentModeTag {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "explicitRequestOnly" => Ok(Self::ExplicitRequestOnly),
+            "proactive" => Ok(Self::Proactive),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["explicitRequestOnly", "proactive"],
+            )),
+        }
+    }
+}
+
+codex_object! {
+    closed
+    CustomMultiAgentMode {
+        #[serde(rename = "custom")]
+        custom: String,
+    }
+}
+
+/// Controls the effective multi-agent delegation instructions for a turn. `custom` means the configured mode hint defines the policy instead of a built-in policy.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum MultiAgentMode {
+    Known(MultiAgentModeTag),
+    Custom(CustomMultiAgentMode),
+}
+
+// #/definitions/v2/MultiAgentVersion
 /// Multi-agent runtime supported by a model.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum MultiAgentVersion {
@@ -347,6 +1859,148 @@ impl<'de> Deserialize<'de> for MultiAgentVersion {
     }
 }
 
+// #/definitions/v2/NetworkAccess
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum NetworkAccess {
+    #[serde(rename = "restricted")]
+    Restricted,
+    #[serde(rename = "enabled")]
+    Enabled,
+}
+
+impl<'de> Deserialize<'de> for NetworkAccess {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "enabled" => Ok(Self::Enabled),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["restricted", "enabled"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/NonSteerableTurnKind
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum NonSteerableTurnKind {
+    #[serde(rename = "review")]
+    Review,
+    #[serde(rename = "compact")]
+    Compact,
+}
+
+impl<'de> Deserialize<'de> for NonSteerableTurnKind {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "review" => Ok(Self::Review),
+            "compact" => Ok(Self::Compact),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["review", "compact"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/PatchApplyStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum PatchApplyStatus {
+    #[serde(rename = "inProgress")]
+    InProgress,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "declined")]
+    Declined,
+}
+
+impl<'de> Deserialize<'de> for PatchApplyStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "inProgress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "declined" => Ok(Self::Declined),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["inProgress", "completed", "failed", "declined"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/PatchChangeKind
+codex_object! {
+    AddPatchChangeKind {
+    }
+}
+
+codex_object! {
+    DeletePatchChangeKind {
+    }
+}
+
+codex_object! {
+    UpdatePatchChangeKind {
+        #[serde(
+            rename = "move_path",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        move_path: Option<Option<String>>,
+    }
+}
+
+codex_tagged_object! {
+    PatchChangeKind {
+        "add" => Add(AddPatchChangeKind),
+        "delete" => Delete(DeletePatchChangeKind),
+        "update" => Update(UpdatePatchChangeKind),
+    }
+}
+
+// #/definitions/v2/Personality
+/// Deprecated: `friendly` and `pragmatic` no longer select a style.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum Personality {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "friendly")]
+    Friendly,
+    #[serde(rename = "pragmatic")]
+    Pragmatic,
+}
+
+impl<'de> Deserialize<'de> for Personality {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "none" => Ok(Self::None),
+            "friendly" => Ok(Self::Friendly),
+            "pragmatic" => Ok(Self::Pragmatic),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["none", "friendly", "pragmatic"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/ReasoningEffort
 /// A non-empty reasoning effort value advertised by the model.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(try_from = "String")]
@@ -370,6 +2024,7 @@ impl TryFrom<String> for ReasoningEffort {
     }
 }
 
+// #/definitions/v2/ReasoningEffortOption
 codex_object! {
     ReasoningEffortOption {
         #[serde(rename = "description")]
@@ -379,9 +2034,3493 @@ codex_object! {
     }
 }
 
+// #/definitions/v2/ReasoningItemContent
+codex_object! {
+    ReasoningTextReasoningItemContent {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_object! {
+    TextReasoningItemContent {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_tagged_object! {
+    ReasoningItemContent {
+        "reasoning_text" => ReasoningText(ReasoningTextReasoningItemContent),
+        "text" => Text(TextReasoningItemContent),
+    }
+}
+
+// #/definitions/v2/ReasoningItemReasoningSummary
+codex_object! {
+    SummaryTextReasoningItemReasoningSummary {
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+codex_tagged_object! {
+    ReasoningItemReasoningSummary {
+        "summary_text" => SummaryText(SummaryTextReasoningItemReasoningSummary),
+    }
+}
+
+// #/definitions/v2/ResponseItem
+codex_object! {
+    AdditionalToolsResponseItem {
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(rename = "role")]
+        role: String,
+        #[serde(rename = "tools")]
+        tools: Vec<serde_json::Value>,
+    }
+}
+
+codex_object! {
+    MessageResponseItem {
+        #[serde(rename = "content")]
+        content: Vec<ContentItem>,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(
+            rename = "phase",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        phase: Option<Option<MessagePhase>>,
+        #[serde(rename = "role")]
+        role: String,
+        #[serde(
+            rename = "status",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        status: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    AgentMessageResponseItem {
+        #[serde(rename = "author")]
+        author: String,
+        #[serde(rename = "content")]
+        content: Vec<AgentMessageInputContent>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "recipient")]
+        recipient: String,
+    }
+}
+
+codex_object! {
+    ReasoningResponseItem {
+        #[serde(
+            rename = "content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        content: Option<Option<Vec<ReasoningItemContent>>>,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "summary")]
+        summary: Vec<ReasoningItemReasoningSummary>,
+    }
+}
+
+impl ReasoningResponseItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn content(&self) -> Option<&Vec<ReasoningItemContent>> {
+        self.content.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    LocalShellCallResponseItem {
+        #[serde(rename = "action")]
+        action: LocalShellAction,
+        /// Set when using the Responses API.
+        #[serde(
+            rename = "call_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        call_id: Option<Option<String>>,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        /// Legacy id field retained for compatibility with older payloads.
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "status")]
+        status: LocalShellStatus,
+    }
+}
+
+codex_object! {
+    FunctionCallResponseItem {
+        #[serde(rename = "arguments")]
+        arguments: String,
+        #[serde(rename = "call_id")]
+        call_id: String,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "encrypted_function_args",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_function_args: Option<Option<Vec<String>>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(
+            rename = "namespace",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        namespace: Option<Option<String>>,
+        #[serde(
+            rename = "status",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        status: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    ToolSearchCallResponseItem {
+        #[serde(rename = "arguments")]
+        arguments: serde_json::Value,
+        #[serde(
+            rename = "call_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        call_id: Option<Option<String>>,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(rename = "execution")]
+        execution: String,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(
+            rename = "status",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        status: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    FunctionCallOutputResponseItem {
+        #[serde(
+            rename = "call_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        call_id: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(
+            rename = "name",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        name: Option<Option<String>>,
+        #[serde(
+            rename = "namespace",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        namespace: Option<Option<String>>,
+        #[serde(rename = "output")]
+        output: FunctionCallOutputBody,
+    }
+}
+
+codex_object! {
+    CustomToolCallResponseItem {
+        #[serde(rename = "call_id")]
+        call_id: String,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(rename = "input")]
+        input: String,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(
+            rename = "namespace",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        namespace: Option<Option<String>>,
+        #[serde(
+            rename = "status",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        status: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    CustomToolCallOutputResponseItem {
+        #[serde(rename = "call_id")]
+        call_id: String,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(
+            rename = "name",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        name: Option<Option<String>>,
+        #[serde(rename = "output")]
+        output: FunctionCallOutputBody,
+    }
+}
+
+codex_object! {
+    ToolSearchOutputResponseItem {
+        #[serde(
+            rename = "call_id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        call_id: Option<Option<String>>,
+        #[serde(rename = "execution")]
+        execution: String,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "status")]
+        status: String,
+        #[serde(rename = "tools")]
+        tools: Vec<serde_json::Value>,
+    }
+}
+
+codex_object! {
+    WebSearchCallResponseItem {
+        #[serde(
+            rename = "action",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        action: Option<Option<ResponsesApiWebSearchAction>>,
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(
+            rename = "status",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        status: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    ImageGenerationCallResponseItem {
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+        #[serde(rename = "result")]
+        result: String,
+        #[serde(
+            rename = "revised_prompt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        revised_prompt: Option<Option<String>>,
+        #[serde(rename = "status")]
+        status: String,
+    }
+}
+
+codex_object! {
+    CompactionResponseItem {
+        #[serde(rename = "encrypted_content")]
+        encrypted_content: String,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+    }
+}
+
+codex_object! {
+    /// A durable input control interpreted by the backend at its position in history.
+    ConfigurationUpdateResponseItem {
+        #[serde(rename = "reasoning")]
+        reasoning: ConfigurationReasoning,
+    }
+}
+
+codex_object! {
+    CompactionTriggerResponseItem {
+    }
+}
+
+codex_object! {
+    ContextCompactionResponseItem {
+        #[serde(
+            rename = "encrypted_content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        encrypted_content: Option<Option<String>>,
+        #[serde(
+            rename = "id",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        id: Option<Option<String>>,
+        #[serde(
+            rename = "internal_chat_message_metadata_passthrough",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        internal_chat_message_metadata_passthrough: Option<Option<InternalChatMessageMetadataPassthrough>>,
+    }
+}
+
+codex_object! {
+    OtherResponseItem {
+    }
+}
+
+codex_tagged_object! {
+    ResponseItem {
+        "additional_tools" => AdditionalTools(AdditionalToolsResponseItem),
+        "message" => Message(MessageResponseItem),
+        "agent_message" => AgentMessage(AgentMessageResponseItem),
+        "reasoning" => Reasoning(ReasoningResponseItem),
+        "local_shell_call" => LocalShellCall(LocalShellCallResponseItem),
+        "function_call" => FunctionCall(FunctionCallResponseItem),
+        "tool_search_call" => ToolSearchCall(ToolSearchCallResponseItem),
+        "function_call_output" => FunctionCallOutput(FunctionCallOutputResponseItem),
+        "custom_tool_call" => CustomToolCall(CustomToolCallResponseItem),
+        "custom_tool_call_output" => CustomToolCallOutput(CustomToolCallOutputResponseItem),
+        "tool_search_output" => ToolSearchOutput(ToolSearchOutputResponseItem),
+        "web_search_call" => WebSearchCall(WebSearchCallResponseItem),
+        "image_generation_call" => ImageGenerationCall(ImageGenerationCallResponseItem),
+        "compaction" => Compaction(CompactionResponseItem),
+        "configuration_update" => ConfigurationUpdate(ConfigurationUpdateResponseItem),
+        "compaction_trigger" => CompactionTrigger(CompactionTriggerResponseItem),
+        "context_compaction" => ContextCompaction(ContextCompactionResponseItem),
+        "other" => Other(OtherResponseItem),
+    }
+}
+
+// #/definitions/v2/ResponsesApiWebSearchAction
+codex_object! {
+    SearchResponsesApiWebSearchAction {
+        #[serde(
+            rename = "queries",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        queries: Option<Option<Vec<String>>>,
+        #[serde(
+            rename = "query",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        query: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    OpenPageResponsesApiWebSearchAction {
+        #[serde(
+            rename = "url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        url: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    FindInPageResponsesApiWebSearchAction {
+        #[serde(
+            rename = "pattern",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        pattern: Option<Option<String>>,
+        #[serde(
+            rename = "url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        url: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    OtherResponsesApiWebSearchAction {
+    }
+}
+
+codex_tagged_object! {
+    ResponsesApiWebSearchAction {
+        "search" => Search(SearchResponsesApiWebSearchAction),
+        "open_page" => OpenPage(OpenPageResponsesApiWebSearchAction),
+        "find_in_page" => FindInPage(FindInPageResponsesApiWebSearchAction),
+        "other" => Other(OtherResponsesApiWebSearchAction),
+    }
+}
+
+// #/definitions/v2/SandboxMode
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum SandboxMode {
+    #[serde(rename = "read-only")]
+    ReadOnly,
+    #[serde(rename = "workspace-write")]
+    WorkspaceWrite,
+    #[serde(rename = "danger-full-access")]
+    DangerFullAccess,
+}
+
+impl<'de> Deserialize<'de> for SandboxMode {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "read-only" => Ok(Self::ReadOnly),
+            "workspace-write" => Ok(Self::WorkspaceWrite),
+            "danger-full-access" => Ok(Self::DangerFullAccess),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["read-only", "workspace-write", "danger-full-access"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/SandboxPolicy
+codex_object! {
+    DangerFullAccessSandboxPolicy {
+    }
+}
+
+codex_object! {
+    ReadOnlySandboxPolicy {
+        #[serde(
+            rename = "networkAccess",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        network_access: Option<bool>,
+    }
+}
+
+impl ReadOnlySandboxPolicy {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn network_access(&self) -> bool {
+        self.network_access.unwrap_or(false)
+    }
+}
+
+codex_object! {
+    ExternalSandboxSandboxPolicy {
+        #[serde(
+            rename = "networkAccess",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        network_access: Option<NetworkAccess>,
+    }
+}
+
+impl ExternalSandboxSandboxPolicy {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn network_access(&self) -> NetworkAccess {
+        self.network_access
+            .clone()
+            .unwrap_or(NetworkAccess::Restricted)
+    }
+}
+
+codex_object! {
+    WorkspaceWriteSandboxPolicy {
+        #[serde(
+            rename = "excludeSlashTmp",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        exclude_slash_tmp: Option<bool>,
+        #[serde(
+            rename = "excludeTmpdirEnvVar",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        exclude_tmpdir_env_var: Option<bool>,
+        #[serde(
+            rename = "networkAccess",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        network_access: Option<bool>,
+        #[serde(
+            rename = "writableRoots",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        writable_roots: Option<Vec<AbsolutePathBuf>>,
+    }
+}
+
+impl WorkspaceWriteSandboxPolicy {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn exclude_slash_tmp(&self) -> bool {
+        self.exclude_slash_tmp.unwrap_or(false)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn exclude_tmpdir_env_var(&self) -> bool {
+        self.exclude_tmpdir_env_var.unwrap_or(false)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn network_access(&self) -> bool {
+        self.network_access.unwrap_or(false)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn writable_roots(&self) -> &[AbsolutePathBuf] {
+        self.writable_roots.as_deref().unwrap_or(&[])
+    }
+}
+
+codex_tagged_object! {
+    SandboxPolicy {
+        "dangerFullAccess" => DangerFullAccess(DangerFullAccessSandboxPolicy),
+        "readOnly" => ReadOnly(ReadOnlySandboxPolicy),
+        "externalSandbox" => ExternalSandbox(ExternalSandboxSandboxPolicy),
+        "workspaceWrite" => WorkspaceWrite(WorkspaceWriteSandboxPolicy),
+    }
+}
+
+// #/definitions/v2/SessionSource
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum SessionSourceTag {
+    #[serde(rename = "cli")]
+    Cli,
+    #[serde(rename = "vscode")]
+    Vscode,
+    #[serde(rename = "exec")]
+    Exec,
+    #[serde(rename = "appServer")]
+    AppServer,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+impl<'de> Deserialize<'de> for SessionSourceTag {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "cli" => Ok(Self::Cli),
+            "vscode" => Ok(Self::Vscode),
+            "exec" => Ok(Self::Exec),
+            "appServer" => Ok(Self::AppServer),
+            "unknown" => Ok(Self::Unknown),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["cli", "vscode", "exec", "appServer", "unknown"],
+            )),
+        }
+    }
+}
+
+codex_object! {
+    closed
+    CustomSessionSource {
+        #[serde(rename = "custom")]
+        custom: String,
+    }
+}
+
+codex_object! {
+    closed
+    SubAgentSessionSource {
+        #[serde(rename = "subAgent")]
+        sub_agent: SubAgentSource,
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum SessionSource {
+    Known(SessionSourceTag),
+    Custom(CustomSessionSource),
+    SubAgent(SubAgentSessionSource),
+}
+
+// #/definitions/v2/Settings
+codex_object! {
+    /// Settings for a collaboration mode.
+    Settings {
+        #[serde(
+            rename = "developer_instructions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        developer_instructions: Option<Option<String>>,
+        #[serde(rename = "model")]
+        model: String,
+        #[serde(
+            rename = "reasoning_effort",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        reasoning_effort: Option<Option<ReasoningEffort>>,
+    }
+}
+
+// #/definitions/v2/SortDirection
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum SortDirection {
+    #[serde(rename = "asc")]
+    Asc,
+    #[serde(rename = "desc")]
+    Desc,
+}
+
+impl<'de> Deserialize<'de> for SortDirection {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "asc" => Ok(Self::Asc),
+            "desc" => Ok(Self::Desc),
+            _ => Err(serde::de::Error::unknown_variant(&tag, &["asc", "desc"])),
+        }
+    }
+}
+
+// #/definitions/v2/SubAgentActivityKind
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum SubAgentActivityKind {
+    #[serde(rename = "started")]
+    Started,
+    #[serde(rename = "interacted")]
+    Interacted,
+    #[serde(rename = "interrupted")]
+    Interrupted,
+    #[serde(rename = "completed")]
+    Completed,
+}
+
+impl<'de> Deserialize<'de> for SubAgentActivityKind {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "started" => Ok(Self::Started),
+            "interacted" => Ok(Self::Interacted),
+            "interrupted" => Ok(Self::Interrupted),
+            "completed" => Ok(Self::Completed),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["started", "interacted", "interrupted", "completed"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/SubAgentSource
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum SubAgentSourceTag {
+    #[serde(rename = "review")]
+    Review,
+    #[serde(rename = "compact")]
+    Compact,
+    #[serde(rename = "memory_consolidation")]
+    MemoryConsolidation,
+}
+
+impl<'de> Deserialize<'de> for SubAgentSourceTag {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "review" => Ok(Self::Review),
+            "compact" => Ok(Self::Compact),
+            "memory_consolidation" => Ok(Self::MemoryConsolidation),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["review", "compact", "memory_consolidation"],
+            )),
+        }
+    }
+}
+
+codex_object! {
+    ThreadSpawnSubAgentSourcePayload {
+        #[serde(
+            rename = "agent_nickname",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        agent_nickname: Option<Option<String>>,
+        #[serde(
+            rename = "agent_path",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        agent_path: Option<Option<AgentPath>>,
+        #[serde(
+            rename = "agent_role",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        agent_role: Option<Option<String>>,
+        #[serde(rename = "depth")]
+        depth: i32,
+        #[serde(rename = "parent_thread_id")]
+        parent_thread_id: ThreadId,
+    }
+}
+
+impl ThreadSpawnSubAgentSourcePayload {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn agent_nickname(&self) -> Option<&str> {
+        self.agent_nickname.as_ref().and_then(Option::as_deref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn agent_path(&self) -> Option<&AgentPath> {
+        self.agent_path.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn agent_role(&self) -> Option<&str> {
+        self.agent_role.as_ref().and_then(Option::as_deref)
+    }
+}
+
+codex_object! {
+    closed
+    ThreadSpawnSubAgentSource {
+        #[serde(rename = "thread_spawn")]
+        thread_spawn: ThreadSpawnSubAgentSourcePayload,
+    }
+}
+
+codex_object! {
+    closed
+    OtherSubAgentSource {
+        #[serde(rename = "other")]
+        other: String,
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum SubAgentSource {
+    Known(SubAgentSourceTag),
+    ThreadSpawn(ThreadSpawnSubAgentSource),
+    Other(OtherSubAgentSource),
+}
+
+// #/definitions/v2/TextElement
+codex_object! {
+    TextElement {
+        /// Byte range in the parent `text` buffer that this element occupies.
+        #[serde(rename = "byteRange")]
+        byte_range: ByteRange,
+        /// Optional human-readable placeholder for the element, displayed in the UI.
+        #[serde(
+            rename = "placeholder",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        placeholder: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/Thread
+codex_object! {
+    Thread {
+        /// Optional random unique nickname assigned to an AgentControl-spawned sub-agent.
+        #[serde(
+            rename = "agentNickname",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        agent_nickname: Option<Option<String>>,
+        /// Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.
+        #[serde(
+            rename = "agentRole",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        agent_role: Option<Option<String>>,
+        /// Whether the app server accepts direct turn input for this loaded thread. `None` means the capability is unavailable, such as for an unloaded stored thread.
+        #[serde(
+            rename = "canAcceptDirectInput",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        can_accept_direct_input: Option<Option<bool>>,
+        /// Version of the CLI that created the thread.
+        #[serde(rename = "cliVersion")]
+        cli_version: String,
+        /// Unix timestamp (in seconds) when the thread was created.
+        #[serde(rename = "createdAt")]
+        created_at: i64,
+        /// Working directory captured for the thread.
+        #[serde(rename = "cwd")]
+        cwd: AbsolutePathBuf,
+        /// Saved Daybreak choice, independent of turn execution. Null if unset.
+        #[serde(
+            rename = "daybreakEnabled",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        daybreak_enabled: Option<Option<bool>>,
+        /// Current environments for a loaded thread, in priority order, primary first. `null` means the thread is not loaded or the server does not expose its selection. An empty list means no environments are selected. This does not report connection status.
+        #[serde(
+            rename = "environments",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        environments: Option<Option<Vec<ThreadEnvironment>>>,
+        /// Whether the thread is ephemeral and should not be materialized on disk.
+        #[serde(rename = "ephemeral")]
+        ephemeral: bool,
+        /// Optional implementation-specific thread data.
+        #[serde(
+            rename = "extra",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        extra: Option<Option<ThreadExtra>>,
+        /// Source thread id when this thread was created by forking another thread.
+        #[serde(
+            rename = "forkedFromId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        forked_from_id: Option<Option<String>>,
+        /// Optional Git metadata captured when the thread was created.
+        #[serde(
+            rename = "gitInfo",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        git_info: Option<Option<GitInfo>>,
+        /// Persisted thread history contract selected when this thread was created.
+        #[serde(
+            rename = "historyMode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        history_mode: Option<ThreadHistoryMode>,
+        /// Identifier for this thread. Codex-generated thread IDs are UUIDv7.
+        #[serde(rename = "id")]
+        id: String,
+        /// Current configured model when loaded, otherwise the latest persisted model. Null when unavailable. This is not per-turn execution telemetry.
+        #[serde(
+            rename = "model",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        model: Option<Option<String>>,
+        /// Model provider used for this thread (for example, 'openai').
+        #[serde(rename = "modelProvider")]
+        model_provider: String,
+        /// Optional user-facing thread title.
+        #[serde(
+            rename = "name",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        name: Option<Option<String>>,
+        /// Originator recorded when the thread was created, independent of its current client or executor. Null when the recorded originator is unavailable.
+        #[serde(
+            rename = "originator",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        originator: Option<Option<String>>,
+        /// The ID of the parent thread. This will only be set if this thread is a subagent.
+        #[serde(
+            rename = "parentThreadId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        parent_thread_id: Option<Option<String>>,
+        /// [UNSTABLE] Path to the thread on disk.
+        #[serde(
+            rename = "path",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        path: Option<Option<String>>,
+        /// Usually the first user message in the thread, if available.
+        #[serde(rename = "preview")]
+        preview: String,
+        /// Canonical project assignment owned by app-server, if any.
+        #[serde(rename = "projectId", deserialize_with = "super::deserialize_required_nullable")]
+        project_id: Option<String>,
+        /// Current configured reasoning effort when loaded, otherwise the latest persisted effort. Null when unset or unavailable. This is not per-turn execution telemetry.
+        #[serde(
+            rename = "reasoningEffort",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        reasoning_effort: Option<Option<ReasoningEffort>>,
+        /// Unix timestamp (in seconds) used for thread recency ordering.
+        #[serde(
+            rename = "recencyAt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        recency_at: Option<Option<i64>>,
+        /// The independently persisted section selected for this thread, if any.
+        #[serde(
+            rename = "section",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        section: Option<Option<ThreadSection>>,
+        /// Unix timestamp in seconds when the thread entered its current section.
+        #[serde(
+            rename = "sectionEnteredAt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        section_entered_at: Option<Option<i64>>,
+        /// Session id shared by threads that belong to the same session tree.
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        /// Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.).
+        #[serde(rename = "source")]
+        source: SessionSource,
+        /// Current runtime status for the thread.
+        #[serde(rename = "status")]
+        status: ThreadStatus,
+        /// Optional analytics source classification for this thread.
+        #[serde(
+            rename = "threadSource",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        thread_source: Option<Option<ThreadSource>>,
+        /// Only populated on `thread/resume`, `thread/fork`, and `thread/read` (when `includeTurns` is true) responses. For all other responses and notifications returning a Thread, the turns field will be an empty list.
+        #[serde(rename = "turns")]
+        turns: Vec<Turn>,
+        /// Unix timestamp (in seconds) when the thread was last updated.
+        #[serde(rename = "updatedAt")]
+        updated_at: i64,
+    }
+}
+
+impl Thread {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn environments(&self) -> Option<&Vec<ThreadEnvironment>> {
+        self.environments.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn history_mode(&self) -> ThreadHistoryMode {
+        self.history_mode
+            .clone()
+            .unwrap_or(ThreadHistoryMode::Legacy)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn section(&self) -> Option<&ThreadSection> {
+        self.section.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn section_entered_at(&self) -> Option<&i64> {
+        self.section_entered_at.as_ref().and_then(Option::as_ref)
+    }
+}
+
+// #/definitions/v2/ThreadActiveFlag
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ThreadActiveFlag {
+    #[serde(rename = "waitingOnApproval")]
+    WaitingOnApproval,
+    #[serde(rename = "waitingOnUserInput")]
+    WaitingOnUserInput,
+}
+
+impl<'de> Deserialize<'de> for ThreadActiveFlag {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "waitingOnApproval" => Ok(Self::WaitingOnApproval),
+            "waitingOnUserInput" => Ok(Self::WaitingOnUserInput),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["waitingOnApproval", "waitingOnUserInput"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/ThreadEnvironment
+codex_object! {
+    /// An environment selected by a loaded thread, independent of connection status.
+    ThreadEnvironment {
+        #[serde(rename = "cwd")]
+        cwd: LegacyAppPathString,
+        #[serde(rename = "environmentId")]
+        environment_id: String,
+        #[serde(rename = "runtimeWorkspaceRoots")]
+        runtime_workspace_roots: Vec<LegacyAppPathString>,
+    }
+}
+
+// #/definitions/v2/ThreadExtra
+/// Extra app-server data for a thread.
+pub type ThreadExtra = std::collections::BTreeMap<String, serde_json::Value>;
+
+// #/definitions/v2/ThreadHistoryMode
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ThreadHistoryMode {
+    #[serde(rename = "legacy")]
+    Legacy,
+    #[serde(rename = "paginated")]
+    Paginated,
+}
+
+impl<'de> Deserialize<'de> for ThreadHistoryMode {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "legacy" => Ok(Self::Legacy),
+            "paginated" => Ok(Self::Paginated),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["legacy", "paginated"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/ThreadId
+pub type ThreadId = String;
+
+// #/definitions/v2/ThreadItem
+codex_object! {
+    UserMessageThreadItem {
+        #[serde(
+            rename = "clientId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        client_id: Option<Option<String>>,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "content")]
+        content: Vec<UserInput>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl UserMessageThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    HookPromptThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "fragments")]
+        fragments: Vec<HookPromptFragment>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl HookPromptThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    AgentMessageThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(
+            rename = "delivery",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        delivery: Option<Option<AgentMessageDelivery>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(
+            rename = "memoryCitation",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        memory_citation: Option<Option<MemoryCitation>>,
+        #[serde(
+            rename = "phase",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        phase: Option<Option<MessagePhase>>,
+        #[serde(
+            rename = "questions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        questions: Option<Option<Vec<AsyncUserInputQuestion>>>,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+impl AgentMessageThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn delivery(&self) -> Option<&AgentMessageDelivery> {
+        self.delivery.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn memory_citation(&self) -> Option<&MemoryCitation> {
+        self.memory_citation.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn phase(&self) -> Option<&MessagePhase> {
+        self.phase.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn questions(&self) -> Option<&Vec<AsyncUserInputQuestion>> {
+        self.questions.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    FunctionCallOutputThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(
+            rename = "namespace",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        namespace: Option<Option<String>>,
+        #[serde(rename = "output")]
+        output: FunctionCallOutputBody,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl FunctionCallOutputThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    /// EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.
+    PlanThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "text")]
+        text: String,
+    }
+}
+
+impl PlanThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    ReasoningThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(
+            rename = "content",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        content: Option<Vec<String>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(
+            rename = "summary",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        summary: Option<Vec<String>>,
+    }
+}
+
+impl ReasoningThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn content(&self) -> &[String] {
+        self.content.as_deref().unwrap_or(&[])
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn summary(&self) -> &[String] {
+        self.summary.as_deref().unwrap_or(&[])
+    }
+}
+
+codex_object! {
+    CommandExecutionThreadItem {
+        /// The command's output, aggregated from stdout and stderr.
+        #[serde(
+            rename = "aggregatedOutput",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        aggregated_output: Option<Option<String>>,
+        /// The command to be executed.
+        #[serde(rename = "command")]
+        command: String,
+        /// A best-effort parsing of the command to understand the action(s) it will perform. This returns a list of CommandAction objects because a single shell command may be composed of many commands piped together.
+        #[serde(rename = "commandActions")]
+        command_actions: Vec<CommandAction>,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        /// The command's working directory.
+        #[serde(rename = "cwd")]
+        cwd: LegacyAppPathString,
+        /// The duration of the command execution in milliseconds.
+        #[serde(
+            rename = "durationMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        duration_ms: Option<Option<i64>>,
+        /// The command's exit code.
+        #[serde(
+            rename = "exitCode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        exit_code: Option<Option<i32>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Trusted first-party plugin id when this command resolves to one plugin script.
+        #[serde(
+            rename = "pluginId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        plugin_id: Option<Option<String>>,
+        /// Identifier for the underlying PTY process (when available).
+        #[serde(
+            rename = "processId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        process_id: Option<Option<String>>,
+        /// Safe plugin-relative path when this command resolves to one plugin script.
+        #[serde(
+            rename = "scriptPath",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        script_path: Option<Option<String>>,
+        #[serde(
+            rename = "source",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        source: Option<CommandExecutionSource>,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "status")]
+        status: CommandExecutionStatus,
+    }
+}
+
+impl CommandExecutionThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn plugin_id(&self) -> Option<&str> {
+        self.plugin_id.as_ref().and_then(Option::as_deref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn script_path(&self) -> Option<&str> {
+        self.script_path.as_ref().and_then(Option::as_deref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn source(&self) -> CommandExecutionSource {
+        self.source.clone().unwrap_or(CommandExecutionSource::Agent)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    FileChangeThreadItem {
+        #[serde(rename = "changes")]
+        changes: Vec<FileUpdateChange>,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "status")]
+        status: PatchApplyStatus,
+    }
+}
+
+impl FileChangeThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    McpToolCallThreadItem {
+        #[serde(
+            rename = "appContext",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        app_context: Option<Option<McpToolCallAppContext>>,
+        #[serde(rename = "arguments")]
+        arguments: serde_json::Value,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        /// The duration of the MCP tool call in milliseconds.
+        #[serde(
+            rename = "durationMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        duration_ms: Option<Option<i64>>,
+        #[serde(
+            rename = "error",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        error: Option<Option<McpToolCallError>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Legacy compatibility field; prefer `mcpAppUi.resourceUri` when available.
+        #[serde(
+            rename = "mcpAppResourceUri",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        mcp_app_resource_uri: Option<Option<String>>,
+        /// Presentation captured from the invoked descriptor; absent in older history.
+        #[serde(
+            rename = "mcpAppUi",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        mcp_app_ui: Option<Option<McpAppUi>>,
+        #[serde(
+            rename = "pluginId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        plugin_id: Option<Option<String>>,
+        #[serde(
+            rename = "readOnlyHint",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        read_only_hint: Option<Option<bool>>,
+        #[serde(
+            rename = "result",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        result: Option<Option<McpToolCallResult>>,
+        #[serde(rename = "server")]
+        server: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "status")]
+        status: McpToolCallStatus,
+        #[serde(rename = "tool")]
+        tool: String,
+    }
+}
+
+impl McpToolCallThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    DynamicToolCallThreadItem {
+        #[serde(rename = "arguments")]
+        arguments: serde_json::Value,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(
+            rename = "contentItems",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        content_items: Option<Option<Vec<DynamicToolCallOutputContentItem>>>,
+        /// The duration of the dynamic tool call in milliseconds.
+        #[serde(
+            rename = "durationMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        duration_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(
+            rename = "namespace",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        namespace: Option<Option<String>>,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "status")]
+        status: DynamicToolCallStatus,
+        #[serde(
+            rename = "success",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        success: Option<Option<bool>>,
+        #[serde(rename = "tool")]
+        tool: String,
+    }
+}
+
+impl DynamicToolCallThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    CollabAgentToolCallThreadItem {
+        /// Last known status of the target agents, when available.
+        #[serde(rename = "agentsStates")]
+        agents_states: std::collections::BTreeMap<String, CollabAgentState>,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        /// Unique identifier for this collab tool call.
+        #[serde(rename = "id")]
+        id: String,
+        /// Model requested for the spawned agent, when applicable.
+        #[serde(
+            rename = "model",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        model: Option<Option<String>>,
+        /// Prompt text sent as part of the collab tool call, when available.
+        #[serde(
+            rename = "prompt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        prompt: Option<Option<String>>,
+        /// Reasoning effort requested for the spawned agent, when applicable.
+        #[serde(
+            rename = "reasoningEffort",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        reasoning_effort: Option<Option<ReasoningEffort>>,
+        /// Thread ID of the receiving agent, when applicable. In case of spawn operation, this corresponds to the newly spawned agent.
+        #[serde(rename = "receiverThreadIds")]
+        receiver_thread_ids: Vec<String>,
+        /// Thread ID of the agent issuing the collab request.
+        #[serde(rename = "senderThreadId")]
+        sender_thread_id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        /// Current status of the collab tool call.
+        #[serde(rename = "status")]
+        status: CollabAgentToolCallStatus,
+        /// Name of the collab tool that was invoked.
+        #[serde(rename = "tool")]
+        tool: CollabAgentTool,
+    }
+}
+
+impl CollabAgentToolCallThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    SubAgentActivityThreadItem {
+        #[serde(rename = "agentPath")]
+        agent_path: String,
+        #[serde(rename = "agentThreadId")]
+        agent_thread_id: String,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "kind")]
+        kind: SubAgentActivityKind,
+        /// Resolved model at sub-agent creation; absent from older records and other activities.
+        #[serde(
+            rename = "model",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        model: Option<Option<String>>,
+        /// Resolved reasoning effort at sub-agent creation, when known.
+        #[serde(
+            rename = "reasoningEffort",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        reasoning_effort: Option<Option<ReasoningEffort>>,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl SubAgentActivityThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    WebSearchThreadItem {
+        #[serde(
+            rename = "action",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        action: Option<Option<WebSearchAction>>,
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "query")]
+        query: String,
+        /// Structured search results returned out-of-band by standalone web search.
+        ///
+        /// These stay as opaque JSON at the extension/app-server boundary so new result fields and result types can pass through without a Codex release.
+        #[serde(
+            rename = "results",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        results: Option<Option<Vec<serde_json::Value>>>,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl WebSearchThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn results(&self) -> Option<&Vec<serde_json::Value>> {
+        self.results.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    ImageViewThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "path")]
+        path: LegacyAppPathString,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl ImageViewThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    /// Display item emitted by the interruptible `clock.sleep` tool.
+    SleepThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "durationMs")]
+        duration_ms: u64,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl SleepThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    choice [file_id, result]
+    /// Either inline generated-image data or its durable attachment-store identity.
+    ///
+    /// `File` must remain first so rollouts written during the migration, which contain both an empty `result` and a `fileId`, retain the file reference when deserialized.
+    ImageGenerationThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(
+            rename = "failure",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        failure: Option<Option<ImageGenerationFailure>>,
+        #[serde(
+            rename = "fileId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        file_id: Option<super::StringAlternative>,
+        /// Image generation identifier for the generated image, when provided by the image backend.
+        #[serde(
+            rename = "generationId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        generation_id: Option<Option<String>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Observed local inputs for a completed generation, absent on older items.
+        #[serde(
+            rename = "inputImages",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        input_images: Option<Vec<ImageGenerationInputImage>>,
+        #[serde(
+            rename = "result",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        result: Option<super::StringAlternative>,
+        #[serde(
+            rename = "revisedPrompt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        revised_prompt: Option<Option<String>>,
+        #[serde(
+            rename = "savedPath",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        saved_path: Option<Option<AbsolutePathBuf>>,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+        #[serde(rename = "status")]
+        status: String,
+        #[serde(
+            rename = "transparentBackground",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        transparent_background: Option<Option<bool>>,
+    }
+}
+
+impl ImageGenerationThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn failure(&self) -> Option<&ImageGenerationFailure> {
+        self.failure.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn generation_id(&self) -> Option<&str> {
+        self.generation_id.as_ref().and_then(Option::as_deref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn transparent_background(&self) -> Option<&bool> {
+        self.transparent_background
+            .as_ref()
+            .and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    EnteredReviewModeThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "review")]
+        review: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl EnteredReviewModeThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    ExitedReviewModeThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "review")]
+        review: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl ExitedReviewModeThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    ContextCompactionThreadItem {
+        /// Unix timestamp in milliseconds when the item completed, if recorded.
+        #[serde(
+            rename = "completedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at_ms: Option<Option<i64>>,
+        #[serde(rename = "id")]
+        id: String,
+        /// Unix timestamp in milliseconds when the item started, if recorded.
+        #[serde(
+            rename = "startedAtMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at_ms: Option<Option<i64>>,
+    }
+}
+
+impl ContextCompactionThreadItem {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn completed_at_ms(&self) -> Option<&i64> {
+        self.completed_at_ms.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn started_at_ms(&self) -> Option<&i64> {
+        self.started_at_ms.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_tagged_object! {
+    /// A thread item and its recorded lifecycle times. The payload stays flat on the wire.
+    ThreadItem {
+        "userMessage" => UserMessage(UserMessageThreadItem),
+        "hookPrompt" => HookPrompt(HookPromptThreadItem),
+        "agentMessage" => AgentMessage(AgentMessageThreadItem),
+        "functionCallOutput" => FunctionCallOutput(FunctionCallOutputThreadItem),
+        "plan" => Plan(PlanThreadItem),
+        "reasoning" => Reasoning(ReasoningThreadItem),
+        "commandExecution" => CommandExecution(CommandExecutionThreadItem),
+        "fileChange" => FileChange(FileChangeThreadItem),
+        "mcpToolCall" => McpToolCall(McpToolCallThreadItem),
+        "dynamicToolCall" => DynamicToolCall(DynamicToolCallThreadItem),
+        "collabAgentToolCall" => CollabAgentToolCall(CollabAgentToolCallThreadItem),
+        "subAgentActivity" => SubAgentActivity(SubAgentActivityThreadItem),
+        "webSearch" => WebSearch(WebSearchThreadItem),
+        "imageView" => ImageView(ImageViewThreadItem),
+        "sleep" => Sleep(SleepThreadItem),
+        "imageGeneration" => ImageGeneration(ImageGenerationThreadItem),
+        "enteredReviewMode" => EnteredReviewMode(EnteredReviewModeThreadItem),
+        "exitedReviewMode" => ExitedReviewMode(ExitedReviewModeThreadItem),
+        "contextCompaction" => ContextCompaction(ContextCompactionThreadItem),
+    }
+}
+
+// #/definitions/v2/ThreadReadParams
+codex_object! {
+    ThreadReadParams {
+        /// When true, include turns and their items from rollout history. Full-history hydration is deprecated for paginated threads; prefer a metadata-only read and page with `thread/turns/list` and `thread/items/list`.
+        #[serde(
+            rename = "includeTurns",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        include_turns: Option<bool>,
+        #[serde(rename = "threadId")]
+        thread_id: String,
+    }
+}
+
+// #/definitions/v2/ThreadReadResponse
+codex_object! {
+    ThreadReadResponse {
+        /// Local receipt. Null means this thread's durable read state is unavailable.
+        #[serde(
+            rename = "readState",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        read_state: Option<Option<ThreadReadState>>,
+        #[serde(rename = "thread")]
+        thread: Thread,
+    }
+}
+
+// #/definitions/v2/ThreadReadState
+codex_object! {
+    /// The first unread position in a durable local thread. A null position means read. The opaque revision guards edits against activity or marks the caller has not seen.
+    ThreadReadState {
+        #[serde(
+            rename = "firstUnread",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        first_unread: Option<Option<ThreadUnreadPosition>>,
+        #[serde(rename = "revision")]
+        revision: String,
+    }
+}
+
+// #/definitions/v2/ThreadResumeInitialTurnsPageParams
+codex_object! {
+    ThreadResumeInitialTurnsPageParams {
+        /// How much item detail to include for each returned turn; defaults to summary.
+        #[serde(
+            rename = "itemsView",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        items_view: Option<Option<TurnItemsView>>,
+        /// Optional turn page size.
+        #[serde(
+            rename = "limit",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        limit: Option<Option<u32>>,
+        /// Optional turn pagination direction; defaults to descending.
+        #[serde(
+            rename = "sortDirection",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        sort_direction: Option<Option<SortDirection>>,
+    }
+}
+
+// #/definitions/v2/ThreadResumeParams
+codex_object! {
+    /// There are three ways to resume a thread: 1. By thread_id: load the thread from disk by thread_id and resume it. 2. By history: instantiate the thread from memory and resume it. 3. By path: load the thread from disk by path and resume it.
+    ///
+    /// For non-running threads, the precedence is: history > non-empty path > thread_id. If using history or a non-empty path for a non-running thread, the thread_id param will be ignored.
+    ///
+    /// If thread_id identifies a running thread, app-server rejoins that thread and treats a non-empty path as a consistency check against the active rollout path. Empty string path values are treated as absent.
+    ///
+    /// Prefer using thread_id whenever possible.
+    ThreadResumeParams {
+        #[serde(
+            rename = "approvalPolicy",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        approval_policy: Option<Option<AskForApproval>>,
+        /// Override where approval requests are routed for review on this thread and subsequent turns.
+        #[serde(
+            rename = "approvalsReviewer",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        approvals_reviewer: Option<Option<ApprovalsReviewer>>,
+        #[serde(
+            rename = "baseInstructions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        base_instructions: Option<Option<String>>,
+        #[serde(
+            rename = "config",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        config: Option<Option<std::collections::BTreeMap<String, serde_json::Value>>>,
+        #[serde(
+            rename = "cwd",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        cwd: Option<Option<String>>,
+        #[serde(
+            rename = "developerInstructions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        developer_instructions: Option<Option<String>>,
+        /// When true, return only thread metadata and live-resume state without populating `thread.turns`. This is useful when the client plans to call `thread/turns/list` immediately after resuming. Full-history hydration is deprecated for paginated threads; use this with `thread/turns/list` and `thread/items/list` instead.
+        #[serde(
+            rename = "excludeTurns",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        exclude_turns: Option<bool>,
+        /// [UNSTABLE] FOR CODEX CLOUD - DO NOT USE. If specified, the thread will be resumed with the provided history instead of loaded from disk.
+        #[serde(
+            rename = "history",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        history: Option<Option<Vec<ResponseItem>>>,
+        /// When present, include a `thread/turns/list` page in the resume response so clients can bootstrap recent turns without a second request.
+        #[serde(
+            rename = "initialTurnsPage",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        initial_turns_page: Option<Option<ThreadResumeInitialTurnsPageParams>>,
+        /// Configuration overrides for the resumed thread, if any.
+        #[serde(
+            rename = "model",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        model: Option<Option<String>>,
+        #[serde(
+            rename = "modelProvider",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        model_provider: Option<Option<String>>,
+        /// [UNSTABLE] Specify the rollout path to resume from. If specified for a non-running thread, the thread_id param will be ignored. If thread_id identifies a running thread, the path must match the active rollout path.
+        #[serde(
+            rename = "path",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        path: Option<Option<String>>,
+        /// Named profile id for the resumed thread. Cannot be combined with `sandbox`.
+        #[serde(
+            rename = "permissions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        permissions: Option<Option<String>>,
+        /// @deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions.
+        #[serde(
+            rename = "personality",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        personality: Option<Option<Personality>>,
+        /// Replace the thread's runtime workspace roots. Paths must be absolute.
+        #[serde(
+            rename = "runtimeWorkspaceRoots",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        runtime_workspace_roots: Option<Option<Vec<AbsolutePathBuf>>>,
+        #[serde(
+            rename = "sandbox",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        sandbox: Option<Option<SandboxMode>>,
+        #[serde(
+            rename = "serviceTier",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        service_tier: Option<Option<String>>,
+        #[serde(rename = "threadId")]
+        thread_id: String,
+    }
+}
+
+impl ThreadResumeParams {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn path(&self) -> Option<&str> {
+        self.path.as_ref().and_then(Option::as_deref)
+    }
+}
+
+// #/definitions/v2/ThreadResumeResponse
+codex_object! {
+    ThreadResumeResponse {
+        /// Named or implicit built-in profile that produced the active permissions, when known.
+        #[serde(
+            rename = "activePermissionProfile",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        active_permission_profile: Option<Option<ActivePermissionProfile>>,
+        #[serde(rename = "approvalPolicy")]
+        approval_policy: AskForApproval,
+        /// Reviewer currently used for approval requests on this thread.
+        #[serde(rename = "approvalsReviewer")]
+        approvals_reviewer: ApprovalsReviewer,
+        /// Effective collaboration mode. Absent when resuming from an older server.
+        #[serde(
+            rename = "collaborationMode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        collaboration_mode: Option<Option<CollaborationMode>>,
+        #[serde(rename = "cwd")]
+        cwd: AbsolutePathBuf,
+        /// Saved list of disabled plugin IDs. Does not yet filter plugin capabilities.
+        #[serde(
+            rename = "disabledPluginIds",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        disabled_plugin_ids: Option<Vec<String>>,
+        /// `thread/turns/list` page returned when requested by `initialTurnsPage`.
+        #[serde(
+            rename = "initialTurnsPage",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        initial_turns_page: Option<Option<TurnsPage>>,
+        /// Environment-native paths to instruction source files currently loaded for this thread.
+        #[serde(
+            rename = "instructionSources",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        instruction_sources: Option<Vec<LegacyAppPathString>>,
+        /// Opaque cursor for hydrating paginated items backwards.
+        ///
+        /// Pass this as `cursor` to `thread/items/list` with `sortDirection: "desc"`. The first page includes the item identified by the cursor.
+        #[serde(
+            rename = "itemsBackwardsCursor",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        items_backwards_cursor: Option<Option<String>>,
+        #[serde(rename = "model")]
+        model: String,
+        #[serde(rename = "modelProvider")]
+        model_provider: String,
+        /// @deprecated Always `explicitRequestOnly`. Use `reasoningEffort` for Ultra behavior.
+        #[serde(
+            rename = "multiAgentMode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        multi_agent_mode: Option<MultiAgentMode>,
+        #[serde(
+            rename = "reasoningEffort",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        reasoning_effort: Option<Option<ReasoningEffort>>,
+        /// Thread-scoped runtime workspace roots used to materialize `:workspace_roots`.
+        #[serde(
+            rename = "runtimeWorkspaceRoots",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        runtime_workspace_roots: Option<Vec<AbsolutePathBuf>>,
+        /// Legacy sandbox policy retained for compatibility. Experimental clients should prefer `activePermissionProfile` for profile provenance.
+        #[serde(rename = "sandbox")]
+        sandbox: SandboxPolicy,
+        #[serde(
+            rename = "serviceTier",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        service_tier: Option<Option<String>>,
+        #[serde(rename = "thread")]
+        thread: Thread,
+        /// Opaque cursor for hydrating paginated turns backwards.
+        ///
+        /// Pass this as `cursor` to `thread/turns/list` with `sortDirection: "desc"`. The first page includes the turn identified by the cursor.
+        #[serde(
+            rename = "turnsBackwardsCursor",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        turns_backwards_cursor: Option<Option<String>>,
+    }
+}
+
+impl ThreadResumeResponse {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn active_permission_profile(&self) -> Option<&ActivePermissionProfile> {
+        self.active_permission_profile
+            .as_ref()
+            .and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn disabled_plugin_ids(&self) -> &[String] {
+        self.disabled_plugin_ids.as_deref().unwrap_or(&[])
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn initial_turns_page(&self) -> Option<&TurnsPage> {
+        self.initial_turns_page.as_ref().and_then(Option::as_ref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn instruction_sources(&self) -> &[LegacyAppPathString] {
+        self.instruction_sources.as_deref().unwrap_or(&[])
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn items_backwards_cursor(&self) -> Option<&str> {
+        self.items_backwards_cursor
+            .as_ref()
+            .and_then(Option::as_deref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn multi_agent_mode(&self) -> MultiAgentMode {
+        self.multi_agent_mode
+            .clone()
+            .unwrap_or(MultiAgentMode::Known(
+                MultiAgentModeTag::ExplicitRequestOnly,
+            ))
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn runtime_workspace_roots(&self) -> &[AbsolutePathBuf] {
+        self.runtime_workspace_roots.as_deref().unwrap_or(&[])
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn turns_backwards_cursor(&self) -> Option<&str> {
+        self.turns_backwards_cursor
+            .as_ref()
+            .and_then(Option::as_deref)
+    }
+}
+
+// #/definitions/v2/ThreadSection
+codex_object! {
+    /// An independently persisted, user-visible thread section.
+    ThreadSection {
+        /// Optional appearance synchronized across clients.
+        #[serde(
+            rename = "appearance",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        appearance: Option<Option<ThreadSectionAppearance>>,
+        /// Opaque UUIDv7 identity that remains stable when the section is renamed.
+        #[serde(rename = "id")]
+        id: String,
+        /// The current user-visible section name.
+        #[serde(rename = "name")]
+        name: String,
+    }
+}
+
+impl ThreadSection {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn appearance(&self) -> Option<&ThreadSectionAppearance> {
+        self.appearance.as_ref().and_then(Option::as_ref)
+    }
+}
+
+// #/definitions/v2/ThreadSectionAppearance
+codex_object! {
+    /// Extensible visual presentation for a custom thread section.
+    ThreadSectionAppearance {
+        #[serde(
+            rename = "color",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        color: Option<Option<String>>,
+        #[serde(
+            rename = "icon",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        icon: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/ThreadSource
+pub type ThreadSource = String;
+
+// #/definitions/v2/ThreadStatus
+codex_object! {
+    NotLoadedThreadStatus {
+    }
+}
+
+codex_object! {
+    IdleThreadStatus {
+    }
+}
+
+codex_object! {
+    SystemErrorThreadStatus {
+    }
+}
+
+codex_object! {
+    ActiveThreadStatus {
+        #[serde(rename = "activeFlags")]
+        active_flags: Vec<ThreadActiveFlag>,
+    }
+}
+
+codex_tagged_object! {
+    ThreadStatus {
+        "notLoaded" => NotLoaded(NotLoadedThreadStatus),
+        "idle" => Idle(IdleThreadStatus),
+        "systemError" => SystemError(SystemErrorThreadStatus),
+        "active" => Active(ActiveThreadStatus),
+    }
+}
+
+// #/definitions/v2/ThreadUnreadPosition
+codex_object! {
+    /// Explicitly marked unread, including when the thread has no turns.
+    ThreadStartThreadUnreadPosition {
+    }
+}
+
+codex_object! {
+    /// The earliest completed result needing attention.
+    TurnThreadUnreadPosition {
+        #[serde(rename = "turnId")]
+        turn_id: String,
+    }
+}
+
+codex_tagged_object! {
+    ThreadUnreadPosition {
+        "threadStart" => ThreadStart(ThreadStartThreadUnreadPosition),
+        "turn" => Turn(TurnThreadUnreadPosition),
+    }
+}
+
+// #/definitions/v2/Turn
+codex_object! {
+    Turn {
+        /// Unix timestamp (in seconds) when the turn completed.
+        #[serde(
+            rename = "completedAt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        completed_at: Option<Option<i64>>,
+        /// Duration between turn start and completion in milliseconds, if known.
+        #[serde(
+            rename = "durationMs",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        duration_ms: Option<Option<i64>>,
+        /// Error associated with a failed or interrupted turn.
+        #[serde(
+            rename = "error",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        error: Option<Option<TurnError>>,
+        /// Identifier for this turn. Codex-generated turn IDs are UUIDv7.
+        #[serde(rename = "id")]
+        id: String,
+        /// Thread items currently included in this turn payload.
+        #[serde(rename = "items")]
+        items: Vec<ThreadItem>,
+        /// Describes how much of `items` has been loaded for this turn.
+        #[serde(
+            rename = "itemsView",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        items_view: Option<TurnItemsView>,
+        /// ID of the first turn in the chain of work that led to this turn. Pass this as `rootTurnId` when starting work on behalf of this turn. May be null in older history or a `review/start` response.
+        #[serde(
+            rename = "rootTurnId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        root_turn_id: Option<Option<String>>,
+        /// Unix timestamp (in seconds) when the turn started.
+        #[serde(
+            rename = "startedAt",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        started_at: Option<Option<i64>>,
+        #[serde(rename = "status")]
+        status: TurnStatus,
+    }
+}
+
+impl Turn {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn items_view(&self) -> TurnItemsView {
+        self.items_view.clone().unwrap_or(TurnItemsView::Full)
+    }
+}
+
+// #/definitions/v2/TurnError
+codex_object! {
+    TurnError {
+        #[serde(
+            rename = "additionalDetails",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        additional_details: Option<Option<String>>,
+        #[serde(
+            rename = "codexErrorInfo",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        codex_error_info: Option<Option<CodexErrorInfo>>,
+        #[serde(rename = "message")]
+        message: String,
+        /// Optional public explanation and continuation instruction for a misalignment block.
+        #[serde(
+            rename = "misalignment",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        misalignment: Option<Option<MisalignmentErrorDetails>>,
+    }
+}
+
+impl TurnError {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn additional_details(&self) -> Option<&str> {
+        self.additional_details.as_ref().and_then(Option::as_deref)
+    }
+
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn misalignment(&self) -> Option<&MisalignmentErrorDetails> {
+        self.misalignment.as_ref().and_then(Option::as_ref)
+    }
+}
+
+// #/definitions/v2/TurnItemsView
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum TurnItemsView {
+    #[serde(rename = "notLoaded")]
+    NotLoaded,
+    #[serde(rename = "summary")]
+    Summary,
+    #[serde(rename = "full")]
+    Full,
+}
+
+impl<'de> Deserialize<'de> for TurnItemsView {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "notLoaded" => Ok(Self::NotLoaded),
+            "summary" => Ok(Self::Summary),
+            "full" => Ok(Self::Full),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["notLoaded", "summary", "full"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/TurnStatus
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum TurnStatus {
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "interrupted")]
+    Interrupted,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "inProgress")]
+    InProgress,
+}
+
+impl<'de> Deserialize<'de> for TurnStatus {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "completed" => Ok(Self::Completed),
+            "interrupted" => Ok(Self::Interrupted),
+            "failed" => Ok(Self::Failed),
+            "inProgress" => Ok(Self::InProgress),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["completed", "interrupted", "failed", "inProgress"],
+            )),
+        }
+    }
+}
+
+// #/definitions/v2/TurnsPage
+codex_object! {
+    TurnsPage {
+        #[serde(
+            rename = "backwardsCursor",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        backwards_cursor: Option<Option<String>>,
+        #[serde(rename = "data")]
+        data: Vec<Turn>,
+        #[serde(
+            rename = "nextCursor",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        next_cursor: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/UserInput
+codex_object! {
+    TextUserInput {
+        #[serde(rename = "text")]
+        text: String,
+        /// UI-defined spans within `text` used to render or persist special elements.
+        #[serde(
+            rename = "text_elements",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        text_elements: Option<Vec<TextElement>>,
+    }
+}
+
+impl TextUserInput {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn text_elements(&self) -> &[TextElement] {
+        self.text_elements.as_deref().unwrap_or(&[])
+    }
+}
+
+codex_object! {
+    choice [url, file_id]
+    ImageUserInput {
+        #[serde(
+            rename = "detail",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        detail: Option<Option<ImageDetail>>,
+        #[serde(
+            rename = "fileId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        file_id: Option<super::StringAlternative>,
+        #[serde(
+            rename = "url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        url: Option<super::StringAlternative>,
+    }
+}
+
+impl ImageUserInput {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn detail(&self) -> Option<&ImageDetail> {
+        self.detail.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    LocalImageUserInput {
+        #[serde(
+            rename = "detail",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        detail: Option<Option<ImageDetail>>,
+        #[serde(rename = "path")]
+        path: String,
+    }
+}
+
+impl LocalImageUserInput {
+    /// Effective value using the schema default when the field is absent.
+    #[must_use]
+    pub fn detail(&self) -> Option<&ImageDetail> {
+        self.detail.as_ref().and_then(Option::as_ref)
+    }
+}
+
+codex_object! {
+    AudioUserInput {
+        #[serde(rename = "url")]
+        url: String,
+    }
+}
+
+codex_object! {
+    LocalAudioUserInput {
+        #[serde(rename = "path")]
+        path: String,
+    }
+}
+
+codex_object! {
+    SkillUserInput {
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(rename = "path")]
+        path: String,
+    }
+}
+
+codex_object! {
+    MentionUserInput {
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(rename = "path")]
+        path: String,
+    }
+}
+
+codex_tagged_object! {
+    UserInput {
+        "text" => Text(TextUserInput),
+        "image" => Image(ImageUserInput),
+        "localImage" => LocalImage(LocalImageUserInput),
+        "audio" => Audio(AudioUserInput),
+        "localAudio" => LocalAudio(LocalAudioUserInput),
+        "skill" => Skill(SkillUserInput),
+        "mention" => Mention(MentionUserInput),
+    }
+}
+
+// #/definitions/v2/WebSearchAction
+codex_object! {
+    SearchWebSearchAction {
+        #[serde(
+            rename = "queries",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        queries: Option<Option<Vec<String>>>,
+        #[serde(
+            rename = "query",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        query: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    OpenPageWebSearchAction {
+        #[serde(
+            rename = "url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        url: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    FindInPageWebSearchAction {
+        #[serde(
+            rename = "pattern",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        pattern: Option<Option<String>>,
+        #[serde(
+            rename = "url",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        url: Option<Option<String>>,
+    }
+}
+
+codex_object! {
+    OtherWebSearchAction {
+    }
+}
+
+codex_tagged_object! {
+    WebSearchAction {
+        "search" => Search(SearchWebSearchAction),
+        "openPage" => OpenPage(OpenPageWebSearchAction),
+        "findInPage" => FindInPage(FindInPageWebSearchAction),
+        "other" => Other(OtherWebSearchAction),
+    }
+}
+
 impl super::sealed::Sealed for ModelListParams {}
 
 impl super::CodexRequest for ModelListParams {
     const METHOD: &'static str = "model/list";
     type Response = ModelListResponse;
+}
+
+impl super::sealed::Sealed for ThreadReadParams {}
+
+impl super::CodexRequest for ThreadReadParams {
+    const METHOD: &'static str = "thread/read";
+    type Response = ThreadReadResponse;
+}
+
+impl super::sealed::Sealed for ThreadResumeParams {}
+
+impl super::CodexRequest for ThreadResumeParams {
+    const METHOD: &'static str = "thread/resume";
+    type Response = ThreadResumeResponse;
 }
