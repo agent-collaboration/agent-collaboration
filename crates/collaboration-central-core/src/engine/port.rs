@@ -41,6 +41,8 @@ pub(crate) trait EngineHost: Send + Sync {
     #[cfg(feature = "test-support")]
     fn pauses(&self) -> &fleet_runtime::PausePoints;
     #[cfg(feature = "test-support")]
+    fn record_engine_completion_entry(&self);
+    #[cfg(feature = "test-support")]
     fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations));
 }
 

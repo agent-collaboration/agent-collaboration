@@ -183,7 +183,10 @@ impl Drop for WorkerdHost {
 }
 impl WorkerdHost {
     pub async fn open(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
-        c2_controls::open_fixture(clock, None).await
+        c2_controls::open_fixture(clock, None, false).await
+    }
+    pub async fn open_capturing_logs(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
+        c2_controls::open_fixture(clock, None, true).await
     }
     pub async fn open_with_persistence(
         clock: Arc<dyn Clock>,
@@ -192,7 +195,7 @@ impl WorkerdHost {
         let directory = directory
             .canonicalize()
             .map_err(|_| StoreFailure::Unavailable)?;
-        c2_controls::open_fixture(clock, Some(directory)).await
+        c2_controls::open_fixture(clock, Some(directory), false).await
     }
     pub fn now_seconds(&self) -> i64 {
         self.clock.now().unix_millis().div_euclid(1000)

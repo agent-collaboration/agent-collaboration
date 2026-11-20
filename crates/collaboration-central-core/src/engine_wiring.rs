@@ -52,6 +52,10 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
         self.execution.pause_points()
     }
     #[cfg(feature = "test-support")]
+    fn record_engine_completion_entry(&self) {
+        self.execution.record_engine_completion_entry();
+    }
+    #[cfg(feature = "test-support")]
     fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations)) {
         self.execution.count_legacy_invocation(count);
     }

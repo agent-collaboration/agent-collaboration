@@ -14,6 +14,7 @@ mod fixture_admission;
 #[derive(Default)]
 pub(crate) struct Controls {
     pub(super) faults: std::sync::Arc<fleet_runtime::TestFaults>,
+    pub(super) zero_next_write_alarm: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
@@ -30,6 +31,8 @@ pub(crate) struct Controls {
 enum Point {
     AfterReads,
     AfterStoreApplied,
+    AfterWorkspaceExecute,
+    EngineCompletionEntered,
     BeforeDrainCommit,
     AfterDrainCommit,
     BeforeTimerCommit,
@@ -48,6 +51,8 @@ impl From<Point> for PausePoint {
         match point {
             Point::AfterReads => Self::AfterReads,
             Point::AfterStoreApplied => Self::AfterStoreApplied,
+            Point::AfterWorkspaceExecute => Self::AfterWorkspaceExecute,
+            Point::EngineCompletionEntered => Self::EngineCompletionEntered,
             Point::BeforeDrainCommit => Self::BeforeDrainCommit,
             Point::AfterDrainCommit => Self::AfterDrainCommit,
             Point::BeforeTimerCommit => Self::BeforeTimerCommit,
@@ -144,6 +149,26 @@ pub(super) async fn control(
         "/test/completion-attempts" => {
             Response::from_json(&runtime.runtime().completion_attempts())
         }
+        "/test/engine-completion-entries" => {
+            Response::from_json(&runtime.runtime().engine_completion_entries())
+        }
+        "/test/try-completion-turns" => {
+            let workspace = request.json::<workspace_ids::WorkspaceId>().await?;
+            let central_free = runtime.runtime().try_central_turn().is_some();
+            let workspace_free = runtime
+                .runtime()
+                .workspace_turns()
+                .try_take(&workspace)
+                .is_some();
+            Response::from_json(&[central_free, workspace_free])
+        }
+        "/test/zero-next-write-alarm" => {
+            object
+                .controls
+                .zero_next_write_alarm
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            Response::from_json(&true)
+        }
         "/test/legacy-unit-invocations" => {
             Response::from_json(&runtime.runtime().legacy_unit_invocations())
         }
@@ -231,6 +256,8 @@ pub(super) async fn control(
                     | Point::AfterEngineLoad
                     | Point::BeforeSignInSample
                     | Point::AfterSignInSample
+                    | Point::AfterWorkspaceExecute
+                    | Point::EngineCompletionEntered
             ) {
                 return Err(error("not a timer point"));
             }

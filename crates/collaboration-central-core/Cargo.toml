@@ -41,8 +41,6 @@ sha2.workspace = true
 base64 = "0.22.1"
 url.workspace = true
 uuid = { workspace = true, features = ["serde"] }
-# Executor-independent sync primitives only, so the Worker build stays portable.
-tokio = { version = "1.53.3", default-features = false, features = ["sync"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { version = "=1.26.0", features = ["v7", "js"] }

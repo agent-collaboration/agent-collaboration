@@ -227,8 +227,21 @@ pub(super) struct Fixture {
 }
 impl Fixture {
     pub async fn new() -> Self {
+        Self::open(false).await
+    }
+
+    pub async fn new_capturing_logs() -> Self {
+        Self::open(true).await
+    }
+
+    async fn open(capture_logs: bool) -> Self {
         let clock = Arc::new(HeldClock(AtomicI64::new(1_861_920_000_000)));
-        let host = WorkerdHost::open(clock.clone()).await.unwrap();
+        let host = if capture_logs {
+            WorkerdHost::open_capturing_logs(clock.clone()).await
+        } else {
+            WorkerdHost::open(clock.clone()).await
+        }
+        .unwrap();
         let caller = caller();
         seed(&host, &caller).await;
         let workspace = create_workspace(&host, &caller).await;

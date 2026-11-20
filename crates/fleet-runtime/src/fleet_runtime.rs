@@ -31,6 +31,8 @@ pub struct FleetRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     completed_alarms: tokio::sync::watch::Sender<u64>,
     #[cfg(feature = "test-support")]
     completion_attempts: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "test-support")]
+    engine_completion_entries: std::sync::atomic::AtomicU64,
     /// Test-support record of every alarm drive that failed, in order.
     #[cfg(feature = "test-support")]
     failed_alarms: tokio::sync::watch::Sender<Vec<String>>,
@@ -70,6 +72,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
             completed_alarms: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             completion_attempts: Default::default(),
+            #[cfg(feature = "test-support")]
+            engine_completion_entries: Default::default(),
             #[cfg(feature = "test-support")]
             failed_alarms: tokio::sync::watch::channel(Vec::new()).0,
             #[cfg(feature = "test-support")]
@@ -124,6 +128,19 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
     pub fn completion_attempts(&self) -> u64 {
         self.completion_attempts
             .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Counts entries to the underlying engine, including a direct call that bypasses the hook.
+    #[cfg(feature = "test-support")]
+    pub fn engine_completion_entries(&self) -> u64 {
+        self.engine_completion_entries
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn record_engine_completion_entry(&self) {
+        self.engine_completion_entries
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn alarm_schedule<Deadline: Copy>(&self) -> AlarmSchedule<Deadline> {

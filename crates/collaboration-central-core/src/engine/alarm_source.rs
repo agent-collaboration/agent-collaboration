@@ -123,6 +123,13 @@ impl<R: EngineHost> Engine<'_, R> {
     /// Every event reaches this after its own work. The claim occurs before the
     /// first await; only individual units perform async work, at most eight wide.
     pub(crate) async fn after_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
+        #[cfg(feature = "test-support")]
+        {
+            self.0.record_engine_completion_entry();
+            self.pauses()
+                .reached_central(fleet_runtime::PausePoint::EngineCompletionEntered)
+                .await;
+        }
         let result = self.complete_event().await;
         if let Err(error) = &result {
             self.observe_alarm_not_published(error.failure.clone());

@@ -192,6 +192,7 @@ impl WorkerdHost {
 pub(super) async fn open_fixture(
     clock: Arc<dyn Clock>,
     persistence: Option<std::path::PathBuf>,
+    capture_logs: bool,
 ) -> Result<WorkerdHost, StoreFailure> {
     let keys = signed::SignInKeys::start()
         .await
@@ -208,7 +209,7 @@ pub(super) async fn open_fixture(
     // The default fixture reads no Worker logs: the bridge inherits stderr, so
     // the lifecycle tests' stderr-EOF barrier still means the bridge exited.
     let mut host =
-        WorkerdHost::open_configured(clock, Some(plan), false, false, persistence).await?;
+        WorkerdHost::open_configured(clock, Some(plan), false, capture_logs, persistence).await?;
     host._fixture_keys = Some(keys);
     host._fixture_plan = Some(root);
     Ok(host)

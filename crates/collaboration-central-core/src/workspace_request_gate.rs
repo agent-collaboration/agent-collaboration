@@ -329,6 +329,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         // Admission answers for the organization as on main; the due batch that
         // follows checks the stamp once for this event before any unit (P3).
         let result = execute(self, caller, request).await;
+        #[cfg(feature = "test-support")]
+        self.execution
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::AfterWorkspaceExecute)
+            .await;
         let _ = self.after_event().await;
         match result {
             Err(StoreFailure::Unavailable) => Ok(reply(m::WorkspaceResult::CentralUnavailable)),

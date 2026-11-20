@@ -25,6 +25,8 @@ struct CentralStatements {
     #[cfg(feature = "test-support")]
     faults: Arc<fleet_runtime::TestFaults>,
     #[cfg(feature = "test-support")]
+    zero_next_write_alarm: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(feature = "test-support")]
     witness_env: SendWrapper<Env>,
     connection: SendWrapper<DoConnection>,
     state: Arc<SendWrapper<State>>,
@@ -48,14 +50,31 @@ impl CentralStore for CentralStatements {
             if let Some(failure) = self.faults.take_alarm_batch_failure(&batch) {
                 return Err(failure);
             }
+            let decide_alarm = self.decide_alarm.clone();
+            #[cfg(feature = "test-support")]
+            let decide_alarm = if !batch.statements.is_empty()
+                && matches!(
+                    batch.alarm,
+                    central_storage::AlarmUpdate::SetEngineFromQuery { .. }
+                )
+                && self
+                    .zero_next_write_alarm
+                    .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                // The store calls this after the guarded SQL. Workerd rejects epoch zero at setAlarm.
+                let zero_alarm: central_storage::EngineAlarmDecider =
+                    Arc::new(move |times, now, write| {
+                        decide_alarm(times, now, write)?;
+                        Ok(Some(0))
+                    });
+                zero_alarm
+            } else {
+                decide_alarm
+            };
             let result = statement_store::run_batch(
                 &self.connection,
                 batch.into(),
-                AlarmPolicy::Engine(
-                    self.state.storage(),
-                    self.clock.clone(),
-                    self.decide_alarm.clone(),
-                ),
+                AlarmPolicy::Engine(self.state.storage(), self.clock.clone(), decide_alarm),
             )
             .await;
             #[cfg(feature = "test-support")]
@@ -189,6 +208,8 @@ impl CentralObject {
         Arc::new(CentralStatements {
             #[cfg(feature = "test-support")]
             faults: self.controls.faults.clone(),
+            #[cfg(feature = "test-support")]
+            zero_next_write_alarm: self.controls.zero_next_write_alarm.clone(),
             #[cfg(feature = "test-support")]
             witness_env: SendWrapper::new(self.env.clone()),
             connection: SendWrapper::new(DoConnection::new(self.state.storage())),
