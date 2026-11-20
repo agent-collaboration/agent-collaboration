@@ -22,9 +22,7 @@ mod proof_context {
 }
 
 use collaboration_client::protocol::{
-    ConversationCreateOutcome, DestinationPreparation, ExecutionDestination,
-    InstructionCreateParams, OperationId, RouterAccess, ScheduleCreateRequest, ScheduleDefinition,
-    ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest,
+    ConversationCreateOutcome, OperationId, RouterAccess, SessionRef,
 };
 use collaboration_client::{ConversationActor, ConversationClient, ConversationCreateInput};
 #[path = "../delivery_matrix/approval.rs"]
@@ -67,7 +65,7 @@ use subscription::{
     board_subscription_push, board_subscription_push_targets, verify_subscription_notice,
 };
 
-const ACP_TARGET_EXPECTED_PROMPTS: usize = 8;
+const ACP_TARGET_EXPECTED_PROMPTS: usize = 6;
 pub(super) const SUBSCRIPTION_NOTICE_LABEL: &str = "🧵 Router: new thread activity";
 
 #[tokio::test]
@@ -207,45 +205,6 @@ async fn exercise_delivery_matrix(config_guard: &ConfigHashGuard) -> ProofResult
         records.push(json!({"producer":producer.name(),"target":"claudeCodePeer","status":"pass","evidence":"fixture peer socket user frame"}));
         config_guard.verify()?;
     }
-
-    let codex = create_empty_conversation(&proof, &sender).await?;
-    let marker = matrix_marker("wakeSend", "codex");
-    wake_send(
-        &proof,
-        &sender,
-        &codex,
-        &format!("{marker}. Reply exactly RECEIVED_{marker}. Do not call tools."),
-    )
-    .await?;
-    wait_for_input_marker(&mut proof, &codex, &marker, Duration::from_secs(120)).await?;
-    records.push(json!({"producer":"wakeSend","target":"codex","status":"pass","evidence":"first fire plus thread/read user input"}));
-    config_guard.verify()?;
-
-    let marker = matrix_marker("wakeSend", "claude");
-    wake_send(&proof, &sender, &peer.target, &marker).await?;
-    peer.expect_marker(&marker).await?;
-    records.push(json!({"producer":"wakeSend","target":"claudeCodePeer","status":"pass","evidence":"first fire plus fixture peer socket user frame"}));
-    config_guard.verify()?;
-
-    let codex = create_empty_conversation(&proof, &sender).await?;
-    let marker = matrix_marker("scheduledRun", "codex");
-    schedule_send(
-        &mut proof,
-        &codex,
-        &format!("{marker}. Reply exactly RECEIVED_{marker}. Do not call tools."),
-    )
-    .await?;
-    wait_for_input_marker(&mut proof, &codex, &marker, Duration::from_secs(120)).await?;
-    records.push(json!({"producer":"scheduledRun","target":"codex","status":"pass","evidence":"scheduled user input in thread/read"}));
-    config_guard.verify()?;
-
-    records.push(json!({"producer":"scheduledRun","target":"materializedCodex","status":"pending","evidence":"isolated Codex home has no model auth to finish a first turn; default-run fake native integration test covers the route; live recipient proof follows a production restart"}));
-
-    let marker = matrix_marker("scheduledRun", "claude");
-    schedule_send(&mut proof, &peer.target, &marker).await?;
-    peer.expect_marker(&marker).await?;
-    records.push(json!({"producer":"scheduledRun","target":"claudeCodePeer","status":"pass","evidence":"scheduled input in fixture peer socket frame"}));
-    config_guard.verify()?;
 
     let codex = proof.start_thread("Board subscription recipient").await?;
     let codex_marker = matrix_marker("boardSubscription", "codex");
@@ -578,102 +537,4 @@ async fn cli_send_receipt(
         .into());
     }
     Ok(receipt["result"]["record"].clone())
-}
-
-#[expect(
-    clippy::indexing_slicing,
-    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
-)]
-async fn wake_send(
-    proof: &ProofContext,
-    sender: &SessionRef,
-    target: &SessionRef,
-    text: &str,
-) -> ProofResult<()> {
-    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "wake",
-            "send",
-            "--from",
-            &serde_json::to_string(sender)?,
-            "--to",
-            &serde_json::to_string(target)?,
-            "--text",
-            text,
-            "--after",
-            "1s",
-            "--wait-until-first-fire",
-            "--operation-id",
-            &uuid::Uuid::now_v7().to_string(),
-            "--service-directory",
-        ])
-        .arg(&proof.service_directory)
-        .arg("--json")
-        .output()
-        .await?;
-    let result: Value = serde_json::from_slice(&output.stdout)?;
-    if !output.status.success() || result["kind"] != "result" {
-        return Err(format!(
-            "wake send failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-    if result.pointer("/result/record/firstFire/kind") != Some(&json!("wakeFired")) {
-        return Err("wake send did not report a first firing".into());
-    }
-    Ok(())
-}
-
-async fn schedule_send(
-    proof: &mut ProofContext,
-    target: &SessionRef,
-    text: &str,
-) -> ProofResult<()> {
-    let instruction = proof
-        .client
-        .create_instruction(InstructionCreateParams {
-            operation_id: OperationId::generate(),
-            text: text.to_owned().try_into()?,
-        })
-        .await?;
-    let schedule = proof
-        .client
-        .create_schedule(ScheduleCreateRequest {
-            operation_id: OperationId::generate(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRequest::After {
-                    seconds: 5.try_into()?,
-                },
-                enabled: false,
-                destination: ExecutionDestination::Unprepared,
-                execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-luna".to_owned()),
-                effort: Some("low".to_owned()),
-            },
-        })
-        .await?;
-    proof
-        .client
-        .prepare_schedule(SchedulePrepareRequest {
-            operation_id: OperationId::generate(),
-            schedule_id: schedule.schedule_id.clone(),
-            destination: DestinationPreparation::Existing {
-                target: target.clone(),
-                cwd: proof.workspace.to_string_lossy().into_owned(),
-            },
-        })
-        .await?;
-    let enabled = proof
-        .client
-        .enable_schedule(ScheduleEnableRequest {
-            operation_id: OperationId::generate(),
-            schedule_id: schedule.schedule_id,
-        })
-        .await?;
-    if enabled.next_due_at.is_none() {
-        return Err("Scheduled delivery has no next due time".into());
-    }
-    Ok(())
 }

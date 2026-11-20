@@ -501,44 +501,5 @@ export const section: LedgerSection = {
           "cfg(test) fake managed Codex socket reply written by test apparatus; no kept complete capture records this fixture connection (it keeps only the parsed incoming requests)",
       },
     },
-    {
-      file: "crates/collaboration-service/src/native_wake_acceptance_fixture.rs",
-      line: 18,
-      edge: "managed-codex",
-      sends: "synthetic initialize result {id, result:{}}",
-      owner: { crate: "collaboration-service" },
-      origin: "apparatus",
-      coverage: {
-        kind: "uncovered",
-        reason:
-          "cfg(test) fake managed Codex socket reply written by test apparatus; no kept complete capture records this fixture connection (it keeps only the parsed incoming requests)",
-      },
-    },
-    {
-      file: "crates/collaboration-service/src/native_wake_acceptance_fixture.rs",
-      line: 34,
-      edge: "managed-codex",
-      sends: "synthetic thread/read result {thread:{id, status:{type:idle}}}",
-      owner: { crate: "collaboration-service" },
-      origin: "apparatus",
-      coverage: {
-        kind: "uncovered",
-        reason:
-          "cfg(test) fake managed Codex socket reply written by test apparatus; no kept complete capture records this fixture connection (it keeps only the parsed incoming requests)",
-      },
-    },
-    {
-      file: "crates/collaboration-service/src/native_wake_acceptance_fixture.rs",
-      line: 56,
-      edge: "managed-codex",
-      sends: "synthetic turn/start result {turn:{id}}",
-      owner: { crate: "collaboration-service" },
-      origin: "apparatus",
-      coverage: {
-        kind: "uncovered",
-        reason:
-          "cfg(test) fake managed Codex socket reply written by test apparatus; no kept complete capture records this fixture connection (it keeps only the parsed incoming requests)",
-      },
-    },
   ],
 };

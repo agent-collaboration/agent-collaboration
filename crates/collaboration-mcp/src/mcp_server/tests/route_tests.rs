@@ -120,11 +120,6 @@ async fn message_server(
     collaboration_service::SubscriptionDeliveryService,
     crate::native_mail_owner::NativeMailOwner,
 ) {
-    let store = std::sync::Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .expect("push store"),
-    ));
     let delivery: std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery> =
         std::sync::Arc::new(PeerWrittenDelivery);
     let presence: std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe> =
@@ -134,9 +129,7 @@ async fn message_server(
             .await
             .expect("native carrier owner"),
     );
-    let identity = crate::api_test_harness::test_identity()
-        .with_automation_store(store)
-        .with_session_delivery(delivery.clone());
+    let identity = crate::api_test_harness::test_identity();
     let clock = identity.runtime_clock();
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {

@@ -11,6 +11,14 @@ export type CaseOutcome =
   | { readonly kind: "observed" }
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "open"; readonly reason: string };
+/** VD rows whose behaviour this build no longer carries, each with where it is proven again. */
+const retiredRows: ReadonlyMap<string, string> = new Map([
+  ["OB4:14", "local wakes removed in M2; proven again by central wakes (C5)"],
+]);
+/** Why `row` is retired, when it is. */
+export function retiredReason(row: string): string | undefined {
+  return retiredRows.get(row);
+}
 const jointRows = new Set(["OB4:5", "OB4:6", "OB4:7", "OB4:12", "OB4:13", "OB4:16"]);
 const jointEvidence: readonly CaseRegistration["evidence"][] = [
   "journey",
@@ -96,6 +104,8 @@ export function collectOutcomes(input: {
       throw new Error(`unregistered case result: ${id}`);
   return new Map(
     [...plan].map(([row, ids]): [string, RowOutcome] => {
+      const retired = retiredRows.get(row);
+      if (retired !== undefined) return [row, { kind: "retired", reason: retired }];
       if (ids.length === 0) return [row, { kind: "open", reason: "no case registered" }];
       for (const id of ids) {
         const result = input.results.get(id);

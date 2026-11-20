@@ -5,6 +5,7 @@ import {
   collectOutcomes,
   exitCode,
   readRows,
+  retiredReason,
   resolveCoverage,
   type CaseRegistration,
 } from "./coverage.ts";
@@ -36,7 +37,7 @@ async function main(): Promise<void> {
     results: new Map(),
   });
   const missing = [...mapping]
-    .filter(([, cases]): boolean => cases.length === 0)
+    .filter(([row, cases]): boolean => cases.length === 0 && retiredReason(row) === undefined)
     .map(([row]): string => row);
   await receipt.save("coverage-plan.json", {
     mode: "planOnly",

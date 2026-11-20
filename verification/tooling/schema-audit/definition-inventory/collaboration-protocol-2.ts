@@ -11,11 +11,11 @@ const P = "crates/collaboration-protocol/src/";
 export const rows: InventoryRow[] = [
   {
     file: `${P}delivery_inspection_contract.rs`,
-    line: 11,
+    line: 9,
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "NativeEffectEvidence {permissionDifferences, target: SessionRef, generation: CodexGeneration, clientUserMessageId, nativeTurnId, nativeSubmissionId, allocation, resume, submission, cessation} with its own PreparationEffect L31, SubmissionEffect L40 (no routerQueued) and CessationEvidence L49: a separately written copy of agent-automation native_effects.rs:43 (and :17, :26, :36). collaboration-runtime codex_app_server_scheduled_runs.rs:43-51 JSON round-trips this public copy into the automation one",
+      "NativeEffectEvidence {permissionDifferences, target: SessionRef, generation: CodexGeneration, clientUserMessageId, nativeTurnId, nativeSubmissionId, allocation, resume, submission, cessation} with its own PreparationEffect L29, SubmissionEffect L38 (no routerQueued) and CessationEvidence L47: a separately written copy of agent-automation native_effects.rs:43 (and :17, :26, :36)",
     usedBy: [
       { part: "N11" },
       { crate: "collaboration-runtime" },
@@ -24,105 +24,6 @@ export const rows: InventoryRow[] = [
     duplicateGroup: "native-effect-evidence",
     disposition: "duplicate",
     fixedBy: "D2",
-  },
-  {
-    file: `${P}delivery_inspection_contract.rs`,
-    line: 61,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP delivery_show / delivery_list / delivery_reconcile result: DeliveryEvidence L61, DeliverySource L95, DeliveryDisposition L103, DeliveryInspection L112, DeliveryShowRequest L125, and WakeMutationResult L130",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-client" },
-      { crate: "collaboration-service" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}schedule_contract.rs`,
-    line: 23,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP ScheduleDefinition {instructionId, timing: TimingRequest, enabled, destination, executionTimeoutSeconds: PositiveSeconds, model, effort} (with the freshEachRun schema rule L19), carried by ScheduleCreateRequest L70, ScheduleUpdateRequest L76 and ScheduleSnapshot L53 (ImportedContinuity L42, ScheduleShowRequest L84, ScheduleEnableRequest L89). The canonical MCP definition; agent-automation schedule_definition.rs:38 is a separately written copy that collaboration-service schedule_operations.rs:48-50,100-102 converts into by serde_json",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "agent-collaboration" },
-    ],
-    duplicateGroup: "schedule-definition-copies",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}schedule_contract.rs`,
-    line: 11,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP ExecutionDestination (tag kind: unprepared, freshEachRunUnprepared, ownedThread {target: SessionRef, cwd}, freshEachRun {endpoint: EndpointRef, cwd}) nested in ScheduleDefinition; agent-automation schedule_definition.rs:7 is a separately written generic copy",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }],
-    duplicateGroup: "schedule-definition-copies",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}automation_timing_contract.rs`,
-    line: 42,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP TimingRequest (tag kind: at {at: ObservationTimestamp}, after / interval {seconds: PositiveSeconds}, cron {expression, timezone}) and ExpiryRequest L59, nested in ScheduleDefinition and the wake requests; agent-automation timing_calculation.rs:20 TimingRule and collaboration-mail-protocol remote_wake.rs:104 RemoteWakeTiming are separately written copies",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "agent-collaboration" }],
-    duplicateGroup: "wake-record-copies",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}schedule_package_contract.rs`,
-    line: 8,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP schedule_import ScheduleImportRequest {operationId, packageUtf8, overwrite} and schedule_export ScheduleExportResult {packageUtf8} L16: the string carries the portable JSONL export (agent-automation portable_schedule_encoding.rs:12)",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "agent-collaboration" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}schedule_preparation_contract.rs`,
-    line: 12,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP schedule_prepare SchedulePrepareRequest L29 {operationId, scheduleId, destination} with DestinationPreparation fresh {endpoint, cwd} / fork {source, throughTurnId, cwd} / existing {target, cwd}",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}schedule_failure.rs`,
-    line: 42,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP schedule tool failure data: ScheduleFailure L42 with ScheduleFailureKind L8, ScheduleFailureStage L23, ScheduleNextAction L32, ScheduleFailureDetails L68 and ScheduleEffects L101",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
   },
   {
     file: `${P}session_message_send.rs`,
@@ -207,141 +108,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${P}run_execution_contract.rs`,
-    line: 156,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP run_show / run_list RunSnapshot L156 with RunState L81, ContinuityInput L17, FrozenExecutionConfiguration L37, CapturedRunInputs L48, WorkerOutcome L57, ExecutionTiming L130, RunExecutionEvidence L137, RetainedSummary L147, RunShowRequest L167, RunRecoveryRequest L172. Public run state projected by collaboration-service run_projection.rs from the stored agent-automation RunRecord (a different, stored contract with millisecond times)",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "agent-collaboration" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}run_execution_reference.rs`,
-    line: 24,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "RunExecution (tag kind: codexAppServer(NativeExecution L8 {target, nativeTurnId, startedAt, deadlineAt, effectiveTimeoutSeconds}), providerAcp, claudeCodePeer) nested in RunState",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "codex-router-host" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}run_failure_contract.rs`,
-    line: 34,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP run tool failure data RunFailure L34 with RunFailureKind L7, RunFailureStage L18, RunNextAction L26",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}attempt_history_contract.rs`,
-    line: 68,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP delivery_attempts / run_summaries AttemptHistoryPage<TRecord> L68 with AttemptInspection L11, SummaryInspectionState L22, SummaryInspection L33, EarlierAttempts L55, AttemptHistoryCoverage L60, DeliveryAttemptsRequest L76, RunSummariesRequest L84",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}automation_configuration_contract.rs`,
-    line: 7,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP automation_configure / automation_status: AutomationConfiguration L7, AutomationConfigureRequest L21, AutomationStatus L36, ConfigurationFileState L45, ConfigurationFailure L52, ConfigurationFailureKind L61, ConfigurationNextAction L69",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "codex-router-host" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}automation_event_contract.rs`,
-    line: 61,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP automation_events AutomationEventsPage L79 of AutomationEvent L61 {subject: AutomationEventSubject L21 (AutomationEventSubjectKind L11), details: AutomationEventDetails L32}, AutomationEventsRequest L72",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}automation_inspection_contract.rs`,
-    line: 11,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP run_list / delivery_list / revision_list requests RunListRequest L11, DeliveryListRequest L36, RevisionListRequest L45, RevisionRecord L53, and failure data AutomationInspectionFailure L88 (kind L63, stage L73, nextAction L80)",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "agent-collaboration" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}instruction_contract.rs`,
-    line: 8,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP instruction_create / update / show: InstructionCreateParams L8, InstructionUpdateParams L14, InstructionShowParams L22, InstructionSnapshot L27, and failure data InstructionFailure L76 (kind L37, stage L48, nextAction L56, LocalMutationState L64, LocalMutationEvidence L71)",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "agent-collaboration" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}operation_inspection_contract.rs`,
-    line: 69,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP operation_show OperationSnapshot L69 with OperationLocalMutation L11, OperationEffects L22, OperationFailure L36, OperationState L49, OperationShowRequest L90",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: `${P}provider_settings_contract.rs`,
     line: 9,
     owner: "router-vocabulary",
@@ -411,17 +177,6 @@ export const rows: InventoryRow[] = [
       { crate: "collaboration-client" },
       { crate: "agent-collaboration" },
     ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}wake_authority.rs`,
-    line: 9,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "WakeCreator (tag kind: session(SessionRef), owner, router, unrecorded) nested in wake requests and WakeDefinition (wakeup_contract.rs:44, :75), and WakeRefusal L18 nested in WakeFailure (wakeup_failure.rs:22)",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "agent-collaboration" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
   },

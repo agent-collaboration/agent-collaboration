@@ -19,7 +19,6 @@ use std::time::Duration;
 pub(super) struct UnloadedMatrixTargets {
     pub(super) held_dm: SessionRef,
     pub(super) held_subscription: SessionRef,
-    pub(super) wake: SessionRef,
 }
 
 pub(super) async fn prepare_unloaded_targets(
@@ -28,17 +27,16 @@ pub(super) async fn prepare_unloaded_targets(
     let targets = UnloadedMatrixTargets {
         held_dm: prepare_materialized_target(proof, "S3 held DM recipient").await?,
         held_subscription: prepare_materialized_target(proof, "S5 held batch recipient").await?,
-        wake: prepare_materialized_target(proof, "S6 unloaded wake recipient").await?,
     };
     super::debug_backend_restart::restart(proof).await?;
-    for target in [&targets.held_dm, &targets.held_subscription, &targets.wake] {
+    for target in [&targets.held_dm, &targets.held_subscription] {
         require_unloaded_target(proof, target).await?;
     }
     proof.record(
         "matrixUnloadedTargetsPrepared",
         json!({
             "heldDm":targets.held_dm,"heldSubscription":targets.held_subscription,
-            "wake":targets.wake,"generation":proof.generation,
+            "generation":proof.generation,
         }),
     )?;
     Ok(targets)

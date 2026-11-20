@@ -7,23 +7,17 @@
 //!
 //! Each family owns only the capabilities its constructor receives.
 //! [`CollaborationApplication`] shares the constructed families and lends callers their APIs: board (`board_operations`); messages (`message_operations`);
-//! conversations (`conversation_operations`); wakes (`wake_operations`); schedules, runs,
-//! instructions and automation inspection (`automation_operations`, `schedule_operations`,
-//! `automation_inspection_operations`, `automation_history_operations`); approvals and
+//! conversations (`conversation_operations`); approvals and
 //! questions (`interaction_operations`); sessions, the journal and the address book
 //! (`session_operations`, `journal_operations`); provider observation
 //! (`provider_observation_operations`). Heavier paging logic stays in the crate's domain modules
-//! (`codex_session_inventory`, `provider_session_inventory`, `schedule_preparation`).
-mod automation_history_operations;
-mod automation_inspection_operations;
-mod automation_operations;
+//! (`codex_session_inventory`, `provider_session_inventory`).
 mod board_operations;
 mod conversation_operations;
 mod interaction_operations;
 mod journal_operations;
 mod message_operations;
 mod provider_observation_operations;
-mod schedule_operations;
 mod session_context_reader;
 mod session_native_control;
 mod session_operations;
@@ -34,9 +28,7 @@ pub use crate::inventory_failures::{
 pub use crate::response_budget::{API_RESULT_BUDGET, RESULT_LIMIT_BYTES, ResultByteBudget};
 pub use session_context_reader::SessionContextReader;
 pub use session_native_control::NativeSessionControl;
-pub(crate) mod wake_operations;
 
-pub use automation_operations::AutomationOperations;
 pub use board_operations::{BoardOperations, ThreadWaitBudgetError, thread_wait_root_notice_limit};
 pub use conversation_operations::{ConversationFailure, ConversationOperations};
 pub use interaction_operations::{InteractionFailure, InteractionOperations, QuestionRejection};
@@ -49,7 +41,6 @@ pub use message_operations::{
 pub use provider_observation_operations::{
     ObservationFailure, ObservationOperations, ObservedEventSink,
 };
-pub use schedule_operations::ScheduleOperationFailure;
 pub use session_operations::{
     EndpointDirectoryUnavailable, InstallationIdentityUnavailable, SessionOperations,
 };
@@ -57,7 +48,6 @@ pub use session_operations::{
 pub(crate) use session_operations::{
     classify_native_call_failure, rename_method_unsupported, valid_session_rename_name,
 };
-pub use wake_operations::{WakeOperations, WakeWaitFailure};
 
 #[cfg(test)]
 #[path = "thread_wait_budget_tests.rs"]
@@ -73,16 +63,10 @@ pub struct CollaborationApplication {
     messages: std::sync::Arc<MessageOperations>,
     observation: std::sync::Arc<ObservationOperations>,
     sessions: std::sync::Arc<SessionOperations>,
-    automation: std::sync::Arc<AutomationOperations>,
-    wakes: std::sync::Arc<WakeOperations>,
     interactions: std::sync::Arc<InteractionOperations>,
 }
 impl CollaborationApplication {
     #[must_use]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Constructor injection keeps each independently owned capability explicit instead of recreating a service locator."
-    )]
     pub fn new(
         identity: RouterIdentity,
         board: BoardOperations,
@@ -90,8 +74,6 @@ impl CollaborationApplication {
         messages: MessageOperations,
         observation: ObservationOperations,
         sessions: SessionOperations,
-        automation: AutomationOperations,
-        wakes: WakeOperations,
         interactions: InteractionOperations,
     ) -> Self {
         Self {
@@ -101,8 +83,6 @@ impl CollaborationApplication {
             messages: std::sync::Arc::new(messages),
             observation: std::sync::Arc::new(observation),
             sessions: std::sync::Arc::new(sessions),
-            automation: std::sync::Arc::new(automation),
-            wakes: std::sync::Arc::new(wakes),
             interactions: std::sync::Arc::new(interactions),
         }
     }
@@ -143,14 +123,6 @@ impl CollaborationApplication {
         &self.sessions
     }
     #[must_use]
-    pub fn automation(&self) -> &AutomationOperations {
-        &self.automation
-    }
-    #[must_use]
-    pub fn wakes(&self) -> &WakeOperations {
-        &self.wakes
-    }
-    #[must_use]
     pub fn interactions(&self) -> &InteractionOperations {
         &self.interactions
     }
@@ -158,33 +130,4 @@ impl CollaborationApplication {
 
 // Rejection tests compose existing failure builders without exposing application internals.
 #[cfg(test)]
-pub(crate) use automation_operations::run_failure_context;
-#[cfg(test)]
-pub(crate) use schedule_operations::{ScheduleFailureContext, schedule_failure};
-#[cfg(test)]
 pub(crate) use session_native_control::INVALID_NATIVE_PARAMETERS;
-
-#[cfg(test)]
-pub(crate) fn instruction_rejection_fixture(
-    kind: collaboration_protocol::InstructionFailureKind,
-) -> collaboration_protocol::InstructionFailure {
-    use automation_operations::{
-        InstructionContext, InstructionFailureReason, instruction_failure,
-    };
-    use collaboration_protocol::{InstructionStage, LocalMutationState};
-
-    instruction_failure(
-        InstructionContext {
-            operation_id: None,
-            instruction_id: None,
-            mutation: true,
-            current_revision_id: None,
-        },
-        InstructionFailureReason {
-            kind,
-            stage: InstructionStage::Storage,
-            message: "failure",
-            mutation: LocalMutationState::None,
-        },
-    )
-}

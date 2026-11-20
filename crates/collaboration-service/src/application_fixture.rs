@@ -18,23 +18,13 @@ pub struct ApplicationFixture {
     pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
     pub(crate) fleet_link: board_fleet_sync::FleetLinkObservation,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
-    pub(crate) configuration: collaboration_runtime::AutomationConfigurationHandle,
-    pub(crate) configuration_backend:
-        Option<std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>>,
     pub(crate) service_epoch: UuidIdentity,
     pub(crate) display_names: collaboration_runtime::SessionDisplayNameCache,
     pub(crate) directory: EndpointDirectory,
-    pub(crate) wake_wait_permits: std::sync::Arc<tokio::sync::Semaphore>,
     pub(crate) journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     pub(crate) native_backend: Option<collaboration_runtime::NativeControlBackend>,
-    pub(crate) session_delivery:
-        Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>>,
-    pub(crate) scheduled_run_execution:
-        Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>>,
     pub(crate) approval_broker:
         Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
-    pub(crate) automation:
-        Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
     pub(crate) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(crate) provider_operations:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
@@ -60,13 +50,6 @@ impl ApplicationFixture {
         runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
     ) -> Result<Self, String> {
         runtime.validate_owner(&self.router_identity(), self.interaction_store.as_ref())?;
-        if let Some(store) = &self.automation {
-            runtime.attach_wake_owner(
-                self.service_id.clone(),
-                store.clone(),
-                self.wake_wait_permits.clone(),
-            )?;
-        }
         runtime.attach_reader_readiness()?;
         runtime.attach_project_replication(self.project_replication.clone())?;
         self.mail_delivery = Some(runtime);
@@ -170,95 +153,12 @@ impl ApplicationFixture {
         }
     }
 
-    pub fn automation_retention_worker(
-        &self,
-    ) -> Option<collaboration_runtime::AutomationRetentionWorker> {
-        self.automation.as_ref().map(|store| {
-            let worker = collaboration_runtime::AutomationRetentionWorker::new(
-                std::sync::Arc::clone(store),
-                self.runtime_clock.clone(),
-            );
-            let worker = match self.interaction_store.as_ref() {
-                Some(store) => worker.with_native_push_store(std::sync::Arc::clone(store)),
-                None => worker,
-            };
-            match self.approval_broker.as_ref() {
-                Some(broker) => worker.with_interaction_broker(std::sync::Arc::clone(broker)),
-                None => worker,
-            }
-        })
-    }
-    pub fn with_automation_configuration(
-        mut self,
-        handle: collaboration_runtime::AutomationConfigurationHandle,
-        backend: std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>,
-    ) -> Self {
-        self.configuration = handle;
-        self.configuration_backend = Some(backend);
-        self
-    }
-
-    pub fn schedule_timing_worker(&self) -> Option<collaboration_runtime::ScheduleTimingWorker> {
-        self.automation
-            .as_ref()
-            .zip(self.scheduled_run_execution.as_ref())
-            .zip(self.interaction_store.as_ref())
-            .map(|((store, execution), interactions)| {
-                collaboration_runtime::ScheduleTimingWorker::new(
-                    std::sync::Arc::clone(store),
-                    std::sync::Arc::clone(interactions),
-                    std::sync::Arc::clone(execution),
-                    self.native_backend.clone(),
-                    self.configuration.clone(),
-                    self.machine_identity.clone(),
-                    self.runtime_clock.clone(),
-                )
-            })
-    }
-
-    pub fn wake_timing_worker(&self) -> Option<collaboration_runtime::WakeTimingWorker> {
-        self.automation
-            .as_ref()
-            .zip(self.session_delivery.as_ref())
-            .zip(self.interaction_store.as_ref())
-            .map(|((store, delivery), interactions)| {
-                collaboration_runtime::WakeTimingWorker::new(
-                    std::sync::Arc::clone(store),
-                    std::sync::Arc::clone(delivery),
-                    self.configuration.clone(),
-                    self.machine_identity.clone(),
-                    std::sync::Arc::clone(interactions),
-                    self.runtime_clock.clone(),
-                )
-            })
-    }
-
-    pub fn with_automation_store(
-        mut self,
-        store: std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
-    ) -> Self {
-        self.automation = Some(store);
-        self
-    }
-
     pub fn with_interaction_store(
         mut self,
         store: std::sync::Arc<interaction_storage::InteractionStore>,
     ) -> Self {
         self.interaction_store = Some(store);
         self
-    }
-
-    pub fn push_handoff_worker(&self) -> Option<collaboration_runtime::PushHandoffWorker> {
-        self.automation
-            .as_ref()
-            .zip(self.interaction_store.as_ref())
-            .map(|(automation, interactions)| {
-                collaboration_runtime::PushHandoffWorker::new(
-                    std::sync::Arc::clone(automation),
-                    std::sync::Arc::clone(interactions),
-                )
-            })
     }
 
     pub fn with_provider_operation_store(
@@ -324,32 +224,8 @@ impl ApplicationFixture {
     }
 
     #[must_use]
-    pub fn with_session_delivery(
-        mut self,
-        delivery: std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>,
-    ) -> Self {
-        self.session_delivery = Some(delivery);
-        self
-    }
-
-    #[must_use]
-    pub fn session_message_delivery(
-        &self,
-    ) -> Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>> {
-        self.session_delivery.clone()
-    }
-
-    #[must_use]
     pub fn session_display_name_cache(&self) -> collaboration_runtime::SessionDisplayNameCache {
         self.display_names.clone()
-    }
-    #[must_use]
-    pub fn with_scheduled_run_execution(
-        mut self,
-        execution: std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>,
-    ) -> Self {
-        self.scheduled_run_execution = Some(execution);
-        self
     }
     #[must_use]
     pub fn with_approval_broker(
@@ -396,8 +272,6 @@ impl ApplicationFixture {
                 collaboration_contracts::UnacknowledgedProjectReplication,
             ),
             project_claim: None,
-            configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
-            configuration_backend: None,
             service_id: service_id.clone(),
             installation_peer: None,
             fleet_link: board_fleet_sync::FleetLinkObservation::Unconfigured,
@@ -408,11 +282,7 @@ impl ApplicationFixture {
             display_names: collaboration_runtime::SessionDisplayNameCache::default(),
             journal: None,
             native_backend: None,
-            session_delivery: None,
-            scheduled_run_execution: None,
             approval_broker: None,
-            wake_wait_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(16)),
-            automation: None,
             interaction_store: None,
             provider_operations: None,
             provider_session_hub: None,
@@ -533,27 +403,9 @@ impl ApplicationFixture {
             self.provider_session_hub.clone(),
             self.directory.clone(),
         );
-        let automation = crate::collaboration_application::AutomationOperations::new(
-            self.runtime_clock.clone(),
-            self.router_identity(),
-            self.automation.clone(),
-            self.configuration.clone(),
-            self.configuration_backend.clone(),
-            self.session_delivery.clone(),
-            self.interaction_store.clone(),
-            self.scheduled_run_execution.clone(),
-            self.native_backend.clone(),
-        );
         let interactions = crate::collaboration_application::InteractionOperations::new(
             self.approval_broker.clone(),
         );
-        let wakes = crate::collaboration_application::WakeOperations::new(
-            self.runtime_clock.clone(),
-            &self.service_id.clone(),
-            self.automation.clone().as_ref(),
-        )
-        .with_wait_capacity(&self.wake_wait_permits.clone())
-        .with_remote(self.mail_delivery.as_ref());
         crate::CollaborationApplication::new(
             self.router_identity(),
             board,
@@ -561,8 +413,6 @@ impl ApplicationFixture {
             messages,
             observation,
             sessions,
-            automation,
-            wakes,
             interactions,
         )
     }

@@ -133,21 +133,14 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         endpoint: target.endpoint.clone(),
         gate,
     };
-    let automation_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&root.join("automation.sqlite"))
-            .await
-            .unwrap_or_else(|error| panic!("automation store: {error}")),
-    ));
     let identity = ApplicationFixture::new(service_id, epoch)
         .unwrap_or_else(|error| panic!("identity: {error}"))
-        .with_automation_store(Arc::clone(&automation_store))
         .with_endpoints(vec![description.clone()])
         .unwrap_or_else(|error| panic!("endpoints: {error}"))
         .with_native_backend(native_backend.clone())
         .unwrap_or_else(|error| panic!("binding: {error}"));
     let clock = identity.runtime_clock();
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
-        identity.runtime_clock(),
         service_id
             .to_owned()
             .try_into()
@@ -185,7 +178,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .unwrap_or_else(|error| panic!("broker delivery: {error}"));
     let interactions = broker.interaction_store();
     let identity = identity
-        .with_session_delivery(delivery)
         .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone())
         .with_approval_broker(broker);
     let (identity, native_mail) = native_mail_owner::start(
@@ -629,14 +621,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .await
         .unwrap_or_else(|error| panic!("second serve: {error}"));
     native_mail.close().await.unwrap();
-    Arc::try_unwrap(automation_store)
-        .unwrap_or_else(|_| panic!("service retained automation store"))
-        .into_inner()
-        .close()
-        .await
-        .unwrap_or_else(|error| panic!("automation store close: {error}"));
-    std::fs::remove_file(root.join("automation.sqlite"))
-        .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
     std::fs::remove_file(backend_path).unwrap_or_else(|error| panic!("socket cleanup: {error}"));
     interaction_database_cleanup::remove_closed_interaction_database(
         &root.join("interaction.sqlite"),

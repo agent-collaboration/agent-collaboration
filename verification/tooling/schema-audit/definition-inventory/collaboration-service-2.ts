@@ -2,21 +2,6 @@ import type { InventoryRow } from "../schema-audit-types.ts";
 
 export const rows: InventoryRow[] = [
   {
-    file: "crates/collaboration-service/src/collaboration_application/wake_operations/remote.rs",
-    line: 100,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "convert back from collaboration_mail_protocol results: WakeSnapshot l100 l140 l383, mutation result l222, wait answer l269, WakeFailureReason l400 l406, LocalMutationState l407",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: "crates/collaboration-service/src/collaboration_rejection.rs",
     line: 51,
     owner: "mcp",
@@ -33,22 +18,6 @@ export const rows: InventoryRow[] = [
     ],
     duplicateGroup: null,
     disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/delivery_projection.rs",
-    line: 15,
-    owner: "router-vocabulary",
-    kind: "method-table",
-    defines:
-      "stored delivery mode string auto/steer/queue to MessageDelivery (a string copy of MessageDelivery's serde names)",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: "delivery-mode-strings",
-    disposition: "duplicate",
-    fixedBy: "D2",
   },
   {
     file: "crates/collaboration-service/src/inventory_failures.rs",
@@ -265,113 +234,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 24,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "convert<T>: generic serde_json to_value then from_value between any two types, mapping every failure to (); the conversion used for every remote-wake identity, request, result and failure mapping in this file (69-497)",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 94,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "send_wake_mail flattens the target SessionRef's collaboration_protocol ServiceId to a String and rebuilds a message_board ServiceId with try_into; LocalWakeOwner::apply compares the board recipient ServiceId with String::from(protocol UuidIdentity) (344-345)",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: "service-identity-conversion",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 132,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "send_wake_mail converts the stored request target (collaboration_protocol SessionRef, automation_storage RemoteWakeMail) to the message_board SessionRef recipient address by convert",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: "session-ref-conversion",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 371,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "LocalWakeOwner::apply compares the wake snapshot's collaboration_protocol message target with the board recipient address by convert::<message_board::SessionRef> (a failed conversion reads as a mismatch); the Send arm compares message.target with the recipient directly (390)",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 394,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "mail-protocol RemoteWakeRequest fields converted into the canonical MCP wake request types: WakeSendRequest {operationId, requestedBy, message (board SessionRef target), timing, expiry} (394-399), WakeShowRequest wakeupId (363, 410), WakeMutationRequest {operationId, wakeupId} (429-430), WakeWaitRequest wakeupId (450). The copied mail types are indexed separately in collaboration-mail-protocol (Lead 01a1e2cd).",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 402,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "MCP wake results to mail-protocol RemoteWakeResult by convert: WakeSnapshot to RemoteWakeSnapshot (402, 407, and the stored replay snapshot 69), wake mutation result to RemoteWakeMutation (438), wait answer to RemoteWakeWaitResult (465)",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
-    line: 493,
-    owner: "router-vocabulary",
-    kind: "method-table",
-    defines:
-      "remote_failure maps WakeFailureReason to RemoteWakeRefusal and LocalMutationState to RemoteWakeMutationState by JSON round trip, silently coercing an unmatched reason to InvalidRecord and state to Unknown (497); WakeWaitFailure::InvalidField to RemoteWakeRefusal::InvalidField by hand (467-475)",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: "crates/collaboration-service/src/mail_push_outcome.rs",
     line: 40,
     owner: "router-vocabulary",
@@ -423,22 +285,6 @@ export const rows: InventoryRow[] = [
     kind: "method-table",
     defines:
       "cfg(test) fake Codex: reply table for initialize, thread/read l166, thread/resume l169, turn/start l181, thread/turns/list l200, turn/steer l203, thread/queue/add l204; reply envelope {id,result} l216; also hand-built Router run JSON decoded by from_value: CapturedRunInputs l110, CodexAppServer recorded receipt l111",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: "codex-stand-in-schemas",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
-    file: "crates/collaboration-service/src/native_wake_acceptance_fixture.rs",
-    line: 30,
-    owner: "codex",
-    kind: "hand-json",
-    defines:
-      "cfg(test) fake Codex: initialize result l19, thread/read method check l30 and result {thread:{id,status:{type:idle}}} l35, turn/start method check l47, reads params.clientUserMessageId l51, turn/start result {turn:{id}} l57",
     usedBy: [
       {
         crate: "collaboration-service",
@@ -503,37 +349,6 @@ export const rows: InventoryRow[] = [
     usedBy: [
       {
         crate: "collaboration-service",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/operation_receipt_projection.rs",
-    line: 13,
-    owner: "router-vocabulary",
-    kind: "method-table",
-    defines:
-      "stored method string decoded to AutomationOperationMethod through Value::String (13); success re-serializes method.as_str() and decodes it into each OperationSuccess family's own method enum (93; 97, 121, 135, 144, 152, 161), so the family method enums are JSON-coupled copies of AutomationOperationMethod",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: "operation-method-copies",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/collaboration-service/src/operation_receipt_projection.rs",
-    line: 50,
-    owner: "router-vocabulary",
-    kind: "hand-json",
-    defines:
-      'project_failure builds the MCP OperationFailure {kind, stage, message, field, constraint, nextAction, effects} from ScheduleFailure (58-71) and ConfigurationFailure (74-83), flattening typed kind/stage/nextAction to strings with token (169) and a literal stage "configuration" (77); OperationState::Uncertain reads failure.message from stored JSON by hand (19)',
-    usedBy: [
-      {
-        part: "N11",
       },
     ],
     duplicateGroup: null,
@@ -751,99 +566,6 @@ export const rows: InventoryRow[] = [
       },
     ],
     duplicateGroup: "push-line-construction",
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/run_projection.rs",
-    line: 21,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "agent_automation CapturedRunInputs<SessionRef, EndpointRef> to collaboration_protocol CapturedRunInputs (L21-22) and agent_automation WorkerOutcome to collaboration_protocol WorkerOutcome (L30-31) by serde_json to_value then from_value, for the MCP RunSnapshot",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/run_projection.rs",
-    line: 82,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "ClaudeCodePeer route evidence session_id string compared with String::from(target.session_id) of the captured OwnedThread destination to recover the target SessionRef (L77-87)",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/run_projection.rs",
-    line: 116,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "RunPhase to protocol RunState hand mapping (Waiting, Preparing, Executing, Stopping, SummaryRequired, SummaryRunning, SummaryBlocked, Finished, PreparationFailed, Uncertain) with literal explanation strings for SummaryBlocked (L123), PreparationFailed (L125) and Uncertain (L126)",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/schedule_activation.rs",
-    line: 31,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "agent_automation ExecutionDestination to collaboration_contracts ScheduleDestination: FreshEachRun to Fresh{endpoint}, OwnedThread to Existing{target}; FreshEachRunUnprepared and Unprepared refused with literal reasons (L31-74)",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/schedule_activation.rs",
-    line: 57,
-    owner: "router-vocabulary",
-    kind: "session-ref-conversion",
-    defines:
-      "OwnedThread target SessionRef flattened to BindingAddress {service_id, endpoint_id, thread_id} strings by String::from (L57-62)",
-    usedBy: [
-      {
-        crate: "collaboration-service",
-      },
-      {
-        crate: "automation-storage",
-      },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-service/src/schedule_preparation.rs",
-    line: 42,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP schedule_prepare DestinationPreparation Existing/Fresh/Fork to collaboration_contracts ScheduleDestination Existing/Fresh/Fork with cwd dropped (L42-57)",
-    usedBy: [
-      {
-        part: "N11",
-      },
-    ],
-    duplicateGroup: null,
     disposition: "boundary-encoding",
   },
 ];

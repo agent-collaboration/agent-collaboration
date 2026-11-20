@@ -124,14 +124,10 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     };
     let runtime_clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
-        runtime_clock.clone(),
         service_id.clone(),
         directory,
         backend_config.clone(),
         Arc::clone(&holder),
-    ));
-    let automation_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
     let delivery_router = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
@@ -153,12 +149,10 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     let identity =
         ApplicationFixture::new(&String::from(service_id.clone()), &String::from(service_id))?
             .with_runtime_clock(runtime_clock.clone())
-            .with_automation_store(Arc::clone(&automation_store))
             .with_endpoints(vec![description])?
             .with_native_backend(backend_config)?
             .with_provider_operation_store(Arc::clone(&store))
             .with_codex_conversation_recorder(Arc::clone(&recorder))
-            .with_session_delivery(delivery)
             .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
     let (identity, native_mail) = native_mail_owner::start(
         identity,
@@ -323,18 +317,11 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
     native_mail.close().await?;
-    let automation_store = Arc::try_unwrap(automation_store)
-        .map_err(|_| io::Error::other("service retained automation store"))?
-        .into_inner();
-    automation_store.close().await?;
     drop(store);
     for name in [
         "operations.sqlite",
         "operations.sqlite-wal",
         "operations.sqlite-shm",
-        "automation.sqlite",
-        "automation.sqlite-wal",
-        "automation.sqlite-shm",
         "interaction.sqlite",
         "interaction.sqlite-wal",
         "interaction.sqlite-shm",

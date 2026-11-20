@@ -53,22 +53,6 @@ export const rows: InventoryRow[] = [
     fixedBy: "D2",
   },
   {
-    file: `${C}scheduled_run_contract.rs`,
-    line: 103,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "scheduled-run port vocabulary between Router parts: Serde RunAcceptance L105, RunSubmission L112, SettlementEvidence L129, ScheduleCapability L137, ScheduleSupport L147, NativeTurnRef L154, RunSummarySource L161, RunSettlement L167, StopRequestOutcome L184 and RunReconciliation L192, returned through the ScheduledRunExecution trait L214 by the Host provider route (provider_acp_scheduled_runs.rs:119) and the runtime Codex route (codex_app_server_scheduled_runs.rs), consumed by collaboration-service schedule_activation.rs:93-103 and the runtime scheduled-run worker; the canonical definitions, no second copy found",
-    usedBy: [
-      { part: "N9" },
-      { part: "N10" },
-      { crate: "collaboration-runtime" },
-      { crate: "collaboration-service" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: `${C}session_delivery_contract.rs`,
     line: 88,
     owner: "router-vocabulary",

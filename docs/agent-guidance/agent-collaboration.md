@@ -194,101 +194,13 @@ cancellation uses 130.
 
 ## Timed messages and scheduled work
 
-A wake-up is a timed ordinary message. It uses the same sender, recipient,
-content and `--delivery auto|steer|queue` options:
+Local wakes and schedules are not available in this build. The `wake`,
+`schedule`, `instruction`, `run`, `delivery`, `operation`, `revision` and
+`automation` commands answer "not available in this build" and exit 2, and
+their MCP tools are not advertised. They return with central wakes and
+schedules. Provider conversation operations stay under `conversation operation`.
 
-```sh
-agent-collaboration wake send \
-  --from "$AGENT_SELF_ADDRESS" --to "$AGENT_TARGET_ADDRESS" \
-  --text-file reminder-message.txt --after 10m --json
-agent-collaboration wake send \
-  --from "$AGENT_SELF_ADDRESS" --to "$AGENT_TARGET_ADDRESS" \
-  --text-file reminder-message.txt --every 10m --for 2h --json
-```
-
-Wait intervals (`--after`, `--every`) are either under the 29-minute prompt-cache
-ceiling or a real calendar schedule (`--every 1d`, `--cron` with `--timezone`).
-Mid-range waits such as 45 minutes pay a cold resume without being a schedule;
-do not use them unless the recipient is Mini. `--for` / `--until` is assignment
-lifetime, not the wait interval.
-
-Creation means the reminder is durably arranged. To wait for its first firing,
-add `--wait-until-first-fire` and pass a saved UUIDv7 `--operation-id` so an
-interrupted wait can inspect the created wake. That wait does not include native acceptance or a
-reply. With `--json`, the command emits one result whose `result.record.firstFire`
-contains the firing receipt. A wait failure emits one error that retains the
-created wake under `created`. Pause/cancel before the first firing returns an error. Pausing discards
-undispatched reminders; resume preserves the original timing and expiry.
-
-Save the returned `operationId`. If creation's outcome is uncertain, inspect
-that operation and reuse the same ID and request for any deliberate retry.
-A new ID is a new request. Do not resend uncertain native input.
-
-```sh
-agent-collaboration wake list --json
-agent-collaboration wake show --wakeup-id WAKE_UUID --json
-agent-collaboration delivery list --wakeup-id WAKE_UUID --json
-agent-collaboration delivery reconcile --delivery-id DELIVERY_UUID --json
-agent-collaboration operation show --operation-id OPERATION_UUID --json
-```
-
-Reusable scheduled work separates instruction text, schedule timing and each
-execution Run. Create instructions, then a disabled schedule definition, prepare
-its destination, and enable future triggers:
-
-```sh
-agent-collaboration instruction create --text-file task-instructions.txt --json
-agent-collaboration schedule create --definition-file schedule-definition.json --json
-agent-collaboration schedule prepare --schedule-id SCHEDULE_UUID --fresh --cwd "$PWD" --json
-agent-collaboration schedule enable --schedule-id SCHEDULE_UUID --json
-agent-collaboration run list --schedule-id SCHEDULE_UUID --json
-```
-
-A minimal `schedule-definition.json` uses the instruction UUID from creation:
-
-```json
-{
-  "instructionId": "INSTRUCTION_UUID",
-  "timing": {"kind": "interval", "seconds": 600},
-  "enabled": false,
-  "destination": {"kind": "unprepared"},
-  "executionTimeoutSeconds": null
-}
-```
-
-Interval seconds use the same two regimes as wakes: under 1740 (29 minutes) or a
-real calendar cadence. Do not pick mid-range values such as 2700 (45 minutes)
-unless the worker is Mini.
-
-Disabling a schedule stops future triggers and preserves created Runs. One Run
-occupies its schedule through any required summarization; uncertain cessation
-keeps that occupancy. The execution default is one hour and the separate Luna
-summary default is fifteen minutes. Use `automation status/configure` to inspect
-or change future defaults. Ordinary messages remain allowed during scheduled work.
-
-Use `run show/reconcile/summaries`, `delivery show/attempts/reconcile`,
-`revision list` and `automation events` to inspect current state and retained
-history. Reconciliation reads native evidence without starting, interrupting or
-repeating native work. An old queued item may already have been consumed, so
-absence does not establish non-submission.
-
-`schedule export --schedule-id ...` emits JSONL. Import with
-`schedule import --package-file ...`; an existing UUID requires `--overwrite`.
-Import preserves the schedule identity, creates a new local edit token, and
-leaves it disabled until its destination is prepared. The package does not move
-native session files. Event history expires after two calendar months; current
-Runs, summaries and latest effect evidence remain.
-
-Execution mode is fixed at creation and survives export/import. An imported
-reuse-mode schedule has `{"kind":"unprepared"}` and uses `schedule prepare`.
-An imported fresh-per-run schedule has `{"kind":"freshEachRunUnprepared"}`.
-For that mode, use `schedule update --schedule-id ... --expected-change-id ...
---definition-file ...` to supply a `freshEachRun` destination containing the
-local `endpoint` and absolute `cwd`, then enable it. This configures local
-bindings without allocating a thread or changing mode. Same-ID overwrite
-preserves mode; choosing another mode requires a new schedule.
-
-Completion wake-ups and remote federation are later work. Project boards use `agent-collaboration board`; see [message board guidance](../../agent-skills/agent-collaboration/references/message-board.md), including its [assigned-role guidance](../../agent-skills/agent-collaboration/references/message-board.md#participate-in-the-assigned-role). Board seats are discussion-local participation; they do not grant session ancestry, filesystem rights, design authority or native-child direct input.
+Project boards use `agent-collaboration board`; see [message board guidance](../../agent-skills/agent-collaboration/references/message-board.md), including its [assigned-role guidance](../../agent-skills/agent-collaboration/references/message-board.md#participate-in-the-assigned-role). Board seats are discussion-local participation; they do not grant session ancestry, filesystem rights, design authority or native-child direct input.
 B still sends its own reply explicitly.
 
 ## Human input, interruption and other protocols

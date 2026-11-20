@@ -223,7 +223,6 @@ async fn approval_broker_fixture(
     .await?;
     let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
         Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             service_id.clone(),
             endpoints,
             native_backend,
@@ -232,9 +231,7 @@ async fn approval_broker_fixture(
     broker.install_session_delivery(Arc::new(
         collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
     ))?;
-    let push_fixture =
-        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
-            .await?;
+    let push_fixture = approval_push_fixture::ApprovalPushFixture::compose(service_id, &broker)?;
     let captured_approver = approver.clone();
     let captured_broker = Arc::clone(&broker);
     let approver_task = tokio::spawn(async move {

@@ -133,8 +133,7 @@ impl Surfaces {
             interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
                 .await?,
         );
-        let mut identity =
-            ApplicationFixture::new(SERVICE, SERVICE)?.with_session_delivery(carrier.clone());
+        let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?;
         if let Some(admission) = admission {
             identity = identity.with_project_admission(admission);
         }

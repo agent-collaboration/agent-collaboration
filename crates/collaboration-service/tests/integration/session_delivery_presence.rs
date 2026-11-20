@@ -98,7 +98,6 @@ fn codex_route_fixture(
         gate.activate(generation, socket_path, Some(schemas))?;
     }
     let route = CodexAppServerDeliveryRoute::new(
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         service_id,
         directory,
         NativeControlBackend {

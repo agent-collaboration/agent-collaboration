@@ -117,19 +117,6 @@ fn message_help_uses_the_harness_identity_and_removes_sender_overrides() {
 }
 
 #[test]
-fn wake_help_uses_the_harness_identity_and_removes_sender_overrides() {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args(["wake", "send", "--help"])
-        .output()
-        .unwrap_or_else(|error| panic!("wake help: {error}"));
-
-    assert!(output.status.success());
-    let help =
-        String::from_utf8(output.stdout).unwrap_or_else(|error| panic!("wake help text: {error}"));
-    assert!(!help.contains("--from"));
-}
-
-#[test]
 fn reply_help_requires_a_push_reference_and_removes_latest_sender_options() {
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args(["message", "reply", "--help"])

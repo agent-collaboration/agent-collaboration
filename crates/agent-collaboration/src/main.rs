@@ -69,29 +69,8 @@ fn main() {
     {
         std::process::exit(agent_collaboration::run_board_command(arguments));
     }
-    if arguments.first().is_some_and(|arg| arg == "automation") {
-        std::process::exit(agent_collaboration::run_automation_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "delivery") {
-        std::process::exit(agent_collaboration::run_delivery_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "revision") {
-        std::process::exit(agent_collaboration::run_revision_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "operation") {
-        std::process::exit(agent_collaboration::run_operation_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "run") {
-        std::process::exit(agent_collaboration::run_workflow_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "schedule") {
-        std::process::exit(agent_collaboration::run_schedule_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "wake") {
-        std::process::exit(agent_collaboration::run_wakeup_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "instruction") {
-        std::process::exit(agent_collaboration::run_instruction_command(arguments));
+    if let Some(exit) = agent_collaboration::refuse_retired_command_group(&arguments) {
+        std::process::exit(exit);
     }
     if arguments.first().is_some_and(|arg| arg == "conversation") {
         std::process::exit(agent_collaboration::run_conversation_command(arguments));

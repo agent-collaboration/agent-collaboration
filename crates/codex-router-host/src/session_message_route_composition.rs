@@ -16,7 +16,6 @@ pub(crate) struct SessionMessageRouteComposition {
 }
 
 pub(crate) struct SessionMessageRouteInputs {
-    pub(crate) clock: Arc<dyn router_clock::RuntimeClock>,
     pub(crate) provider_endpoints: HashSet<EndpointRef>,
     pub(crate) directory: EndpointDirectory,
     pub(crate) native_backend: NativeControlBackend,
@@ -31,7 +30,6 @@ pub(crate) fn compose_session_message_routes(
     inputs: SessionMessageRouteInputs,
 ) -> io::Result<SessionMessageRouteComposition> {
     let SessionMessageRouteInputs {
-        clock,
         provider_endpoints,
         directory,
         native_backend,
@@ -44,7 +42,6 @@ pub(crate) fn compose_session_message_routes(
     let service_id = native_backend.endpoint.service_id.clone();
     let codex_route: Arc<dyn SessionDeliveryRoute> = Arc::new(
         collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            clock,
             service_id.clone(),
             directory.clone(),
             native_backend,

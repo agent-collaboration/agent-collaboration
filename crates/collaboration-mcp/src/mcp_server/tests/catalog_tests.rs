@@ -30,18 +30,112 @@ fn retired_cancel_tools_and_cli_commands_are_absent() {
     assert!(tools.iter().any(|tool| tool.name == "conversation_cancel"));
 }
 
+/// The local wake and schedule tools this build no longer carries.
+const RETIRED_WAKE_AND_SCHEDULE_TOOLS: [&str; 36] = [
+    "instruction_create",
+    "instruction_update",
+    "instruction_show",
+    "delivery_show",
+    "schedule_import",
+    "schedule_export",
+    "schedule_create",
+    "schedule_update",
+    "schedule_show",
+    "schedule_enable",
+    "schedule_disable",
+    "schedule_prepare",
+    "run_show",
+    "run_summary_retry",
+    "run_summary_skip",
+    "automation_configure",
+    "run_reconcile",
+    "delivery_reconcile",
+    "operation_show",
+    "operation_reconcile",
+    "automation_events",
+    "delivery_attempts",
+    "run_summaries",
+    "instruction_list",
+    "schedule_list",
+    "run_list",
+    "delivery_list",
+    "revision_list",
+    "automation_status",
+    "wake_send",
+    "wake_show",
+    "wake_pause",
+    "wake_resume",
+    "wake_cancel",
+    "wake_list",
+    "wake_wait_until_first_fire",
+];
+
+#[test]
+fn retired_wake_and_schedule_tools_are_absent_from_the_catalog() {
+    let tools = CollaborationMcpServer::catalog_only().resolved_tools();
+    for retired in RETIRED_WAKE_AND_SCHEDULE_TOOLS {
+        assert!(
+            tools.iter().all(|tool| tool.name != retired),
+            "retired tool {retired} must not be advertised"
+        );
+    }
+    assert!(
+        tools
+            .iter()
+            .any(|tool| tool.name == "conversation_operation_show"),
+        "the provider conversation operation tools stay"
+    );
+}
+
+#[tokio::test]
+async fn a_retired_wake_or_schedule_tool_gets_the_ordinary_unknown_tool_answer() {
+    // Arrange
+    let directory = tempfile::tempdir().expect("service directory");
+    let api = crate::api_test_harness::ServedApi::tcp(&crate::api_test_harness::api_config(
+        crate::api_test_harness::test_identity().build(),
+        directory.path(),
+    ))
+    .await;
+
+    for (index, retired) in RETIRED_WAKE_AND_SCHEDULE_TOOLS.into_iter().enumerate() {
+        // Act
+        let (_, answer) = api
+            .post(&serde_json::json!({
+                "jsonrpc":"2.0","id":index,"method":"tools/call",
+                "params":{"name":retired,"arguments":{}}
+            }))
+            .await;
+
+        // Assert: the same answer as any name this Router never had.
+        assert_eq!(answer["error"]["code"], -32602, "{retired}: {answer}");
+        assert_eq!(
+            answer["error"]["message"], "tool not found",
+            "{retired}: {answer}"
+        );
+        assert!(answer["error"].get("data").is_none(), "{retired}: {answer}");
+    }
+    let (_, never_known) = api
+        .post(&serde_json::json!({
+            "jsonrpc":"2.0","id":99,"method":"tools/call",
+            "params":{"name":"no_such_tool","arguments":{}}
+        }))
+        .await;
+    assert_eq!(never_known["error"]["code"], -32602, "{never_known}");
+    api.stop().await;
+}
+
 #[test]
 fn catalog_has_complete_unique_tools_with_resolvable_schemas() {
     let server = CollaborationMcpServer::catalog_only();
     let tools = server.resolved_tools();
-    assert_eq!(tools.len(), 165);
+    assert_eq!(tools.len(), 129);
     let mut names = tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 165);
+    assert_eq!(names.len(), 129);
     assert!(names.contains(&"conversation_resume"));
     assert!(names.contains(&"installation_show"));
     assert!(names.contains(&"conversation_close"));
@@ -240,32 +334,6 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
             "provider create-and-prompt schema must reject {field}"
         );
     }
-
-    let schedule_schema = schema_for("schedule_create");
-    let schedule_definition = &schedule_schema["$defs"]["ScheduleDefinition"];
-    assert!(
-        schedule_definition["required"]
-            .as_array()
-            .is_some_and(|fields| fields.contains(&serde_json::json!("effort"))),
-        "{schedule_schema}"
-    );
-    assert!(schedule_definition["allOf"].is_array());
-    let mut fresh_schedule = serde_json::json!({
-        "operationId":"019f0000-0000-7000-8000-000000000202",
-        "definition":{
-            "instructionId":"019f0000-0000-7000-8000-000000000203",
-            "timing":{"kind":"after","seconds":60},"enabled":false,
-            "destination":{"kind":"freshEachRun","endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"cwd":"/tmp/project"},
-            "effort":"medium"
-        }
-    });
-    let schedule_validator = jsonschema::validator_for(&schedule_schema).expect("schedule schema");
-    assert!(!schedule_validator.is_valid(&fresh_schedule));
-    fresh_schedule["definition"]["model"] = serde_json::json!("gpt-5.6-sol");
-    assert!(schedule_validator.is_valid(&fresh_schedule));
-
-    let run_schema = schema_for("run_list");
-    assert!(!required_for(&run_schema).contains(&serde_json::json!("cursor")));
 
     let wait = schema_for("thread_wait");
     let wait_required = required_for(&wait);
@@ -626,28 +694,6 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
             &["advertised client", "completed turn", "peer reply"][..],
         ),
         (
-            "wake_send",
-            &[
-                "required operation identity",
-                "local scheduling",
-                "native input acceptance",
-                "agent reply",
-            ][..],
-        ),
-        (
-            "schedule_prepare",
-            &[
-                "Preparation",
-                "reuseThread",
-                "allocate a native conversation",
-                "ReadThread",
-                "without loading or resuming",
-                "native input acceptance",
-            ][..],
-        ),
-        ("instruction_create", &["required operation identity"][..]),
-        ("wake_pause", &["required operation identity"][..]),
-        (
             "inbox_fetch",
             &[
                 "Unread mode initializes reader tracking",
@@ -682,7 +728,6 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
                 "does not acknowledge",
             ][..],
         ),
-        ("operation_reconcile", &["never replays"][..]),
     ] {
         let description = descriptions
             .get(name)

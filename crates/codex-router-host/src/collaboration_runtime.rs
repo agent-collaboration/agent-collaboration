@@ -116,8 +116,6 @@ pub struct CollaborationRuntime {
     fleet_link: board_fleet_sync::FleetLinkObservation,
     interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
-    startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
-    #[cfg(test)]
     startup_test_broker: std::sync::Weak<collaboration_runtime::ServiceInteractionBroker>,
     #[cfg(test)]
     startup_test_display_names: collaboration_runtime::SessionDisplayNameCache,
@@ -132,8 +130,6 @@ pub struct CollaborationRuntime {
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
-    automation_store:
-        Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
     provider_delivery_route: Option<std::sync::Arc<crate::ProviderAcpDeliveryRoute>>,
     provider_retention: Option<tokio::task::JoinHandle<()>>,
@@ -154,9 +150,8 @@ pub struct CollaborationRuntime {
     provider_retirement_tasks: JoinSet<io::Result<()>>,
     journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     maintenance: Option<tokio::task::JoinHandle<Result<(), lifecycle_observation::JournalError>>>,
-    automation_task: Option<tokio::task::JoinHandle<()>>,
-    schedule_task: Option<tokio::task::JoinHandle<()>>,
-    automation_maintenance: Option<tokio::task::JoinHandle<()>>,
+    /// Trims settled interaction records and history; runs for the Host's whole life.
+    interaction_retention: Option<tokio::task::JoinHandle<()>>,
     fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
@@ -164,9 +159,6 @@ pub struct CollaborationRuntime {
     observation_rechecks: observation_recheck::ObservationRechecks,
     /// Re-checks on the observation backoff when the journal failed to open.
     journal_unavailable_rechecks: Option<tokio::task::JoinHandle<()>>,
-    /// What the scheduler loop reports, for composition tests.
-    #[cfg(test)]
-    schedule_observation: Option<collaboration_runtime::WorkerObservation>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
