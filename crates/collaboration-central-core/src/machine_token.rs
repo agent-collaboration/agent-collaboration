@@ -1,9 +1,10 @@
 //! Verify the issuer's machine access-token profile before live admission.
 use crate::{
     IssuerSignatureVerifier,
-    identity_contract::{ClientId, MachinePrincipal, MachineTokenClaims},
+    identity_contract::{MachinePrincipal, MachineTokenClaims},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::ClientId;
 use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use fleet_runtime_ports::Clock;
 use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, SignatureValidity};

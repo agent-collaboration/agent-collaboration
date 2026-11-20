@@ -2,7 +2,6 @@
 use crate::{
     WorkspaceRuntime,
     notification_windows::{NotificationWindow, window_statements},
-    workspace_row_codec::WorkspaceRows,
 };
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
@@ -10,6 +9,7 @@ use fleet_runtime_ports::{
     guarded_statements::{any, text},
     workspace_decode_error::corrupt,
 };
+use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
 use std::collections::BTreeSet;
 use workspace_model as m;
 
@@ -120,7 +120,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
 }
 fn targeted_recipients(
-    change: &crate::workspace_change_records::StoredChange,
+    change: &fleet_workspace_access::workspace_change_records::StoredChange,
     rows: &WorkspaceRows,
 ) -> Result<BTreeSet<m::ActorIdentityId>, StoreFailure> {
     let mut recipients = BTreeSet::new();

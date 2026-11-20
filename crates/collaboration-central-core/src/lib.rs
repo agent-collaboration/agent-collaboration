@@ -20,6 +20,7 @@ pub mod signin_test_observation;
 pub mod storage_conformance;
 
 mod machine_connection;
+pub use machine_connection::ValidatedMachineConnection;
 mod machine_connection_admission;
 mod machine_login_plans;
 mod machine_login_reads;
@@ -28,24 +29,20 @@ mod machine_login_rows;
 #[cfg(feature = "test-support")]
 mod machine_login_test_control;
 mod machine_login_writes;
-pub use machine_connection::{MachineConnectionAttachment, ValidatedMachineConnection};
 pub use machine_connection_admission::{MachineLinkRequestAuthority, MachineTokenRenewalRefusal};
+mod workspace_caller;
+pub use workspace_caller::WorkspaceCaller;
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
-pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime};
+pub use workspace_runtime::WorkspaceRuntime;
 mod organization_workspace_plans;
-mod workspace_actor_identity;
-mod workspace_admission;
-mod workspace_change_records;
 mod workspace_directory_requests;
 mod workspace_directory_rows;
 mod workspace_item_reads;
-mod workspace_json_records;
 mod workspace_read_queries;
 mod workspace_request_gate;
 mod workspace_request_status;
-mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
 

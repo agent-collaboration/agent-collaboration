@@ -2,9 +2,10 @@
 #[cfg(test)]
 use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
-    AdmissionId, AdmissionRef, ClientId, CommandId, DeviceLoginRequestId, EnrollmentAuthorization,
+    AdmissionId, AdmissionRef, CommandId, DeviceLoginRequestId, EnrollmentAuthorization,
     EnrollmentRevocationReason, MachineEnrollment, PersonId,
 };
+use fleet_contracts::ClientId;
 use serde_json::json;
 
 #[test]

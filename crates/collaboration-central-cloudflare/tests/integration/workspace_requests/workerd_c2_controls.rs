@@ -1,7 +1,8 @@
 //! External-only witness and eviction controls for the real compiled Worker.
 use super::*;
 use central_storage::SafeInteger;
-use collaboration_central_core::identity_contract::ClientId;
+use fleet_contracts::ClientId;
+
 use fleet_identity_protocol::{EnrollmentId, UnixSeconds};
 use workspace_ids::MachineId;
 

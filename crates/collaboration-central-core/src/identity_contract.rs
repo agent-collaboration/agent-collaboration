@@ -44,10 +44,4 @@ macro_rules! central_identity {
         impl $name { #[must_use] pub fn as_str(&self) -> &str { self.0.as_str() } }
     )+};
 }
-central_identity!(
-    PersonId,
-    ClientId,
-    DeviceLoginRequestId,
-    AdmissionId,
-    CommandId
-);
+central_identity!(PersonId, DeviceLoginRequestId, AdmissionId, CommandId);

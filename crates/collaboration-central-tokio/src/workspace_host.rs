@@ -3,14 +3,14 @@ use crate::{
     machine_push_registry::MachinePushRegistry, object_storage::ObjectStorage,
     sign_in_trust::NativeSignInTrust,
 };
+use collaboration_central_core::WorkspaceCaller;
 #[path = "workspace_alarm_owner.rs"]
 mod workspace_alarm_owner;
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{
-    OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings, WorkspaceCaller,
-    WorkspaceRuntime,
+    OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings, WorkspaceRuntime,
     identity_contract::{
         AuthorizationRevision, AuthorizationRevisionAcknowledgement,
         OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,

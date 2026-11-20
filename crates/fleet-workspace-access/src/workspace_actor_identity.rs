@@ -1,4 +1,4 @@
-use crate::WorkspaceRuntime;
+use crate::WorkspaceAccess;
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch, StoreFailure,
@@ -7,7 +7,8 @@ use fleet_runtime_ports::stored_values::{json, string};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
-    ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason,
+    ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason, Timestamp,
+    central_mail::NoticeCadence,
 };
 
 fn text(value: impl ToString) -> SqlValue {
@@ -35,14 +36,14 @@ fn identity_insert(actor: &ActorIdentityId, kind: &str, encoded: &str, now: &str
 }
 
 /// A new caller identity joins the same atomic batch as its retained outcome.
-pub(crate) struct ActorIdentityPlan {
+pub struct ActorIdentityPlan {
     pub actor: ActorIdentityId,
     pub statements: Vec<GuardedStatement>,
 }
 
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stores> {
     /// Find the caller's actor without minting one on a status read.
-    pub(crate) async fn existing_caller_actor(
+    pub async fn existing_caller_actor(
         &self,
         caller: &workspace_model::Caller,
     ) -> Result<Option<ActorIdentityId>, StoreFailure> {
@@ -71,7 +72,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
 
     /// Caller holds the org turn and supplies its sole applying time sample.
-    pub(crate) async fn prepare_identity(
+    pub async fn prepare_identity(
         &self,
         identity: &Identity,
         now: workspace_model::Timestamp,
@@ -105,7 +106,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         })
     }
 
-    pub(crate) async fn resolve_identity(
+    pub async fn resolve_identity(
         &self,
         identity: &Identity,
     ) -> Result<ActorIdentityId, StoreFailure> {
@@ -143,7 +144,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             .parse()
             .map_err(|_| corrupt("actor_identity_id"))
     }
-    pub(crate) async fn resolve_actor_ref(
+    pub async fn resolve_actor_ref(
         &self,
         reference: &ActorRef,
         caller: &ActorIdentityId,
@@ -167,7 +168,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }
         }
     }
-    pub(crate) async fn actor_views(
+    pub async fn actor_views(
         &self,
         ids: &[ActorIdentityId],
     ) -> Result<Vec<ActorView>, StoreFailure> {
@@ -213,12 +214,12 @@ fn decode_actor(
         identity,
     })
 }
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stores> {
+    pub async fn named_actor(&self, actor: &ActorIdentityId) -> Result<bool, StoreFailure> {
         Ok(self.read_actor_identity(actor).await?.is_some())
     }
 
-    pub(crate) async fn read_actor_identity(
+    pub async fn read_actor_identity(
         &self,
         actor: &ActorIdentityId,
     ) -> Result<Option<Identity>, StoreFailure> {
@@ -229,4 +230,20 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             _ => Err(corrupt("access_actor_identities.actor_identity_id")),
         }
     }
+}
+
+/// Plans the guarded write of an admitted session's notice cadence.
+pub fn plan_notice_cadence(
+    actor: &ActorIdentityId,
+    cadence: NoticeCadence,
+    updated_at: Timestamp,
+) -> Result<GuardedStatement, StoreFailure> {
+    use fleet_runtime_ports::guarded_statements::{exact, text};
+    let encoded = serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
+    let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
+    let updated_at = updated_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    Ok(exact(
+        "UPDATE access_actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
+        vec![text(cadence_text), text(updated_at), text(actor)],
+    ))
 }

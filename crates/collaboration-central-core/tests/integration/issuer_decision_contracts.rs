@@ -5,10 +5,10 @@ use collaboration_central_core::identity_contract::{
     AdmitMachineConnection, AdmittedMachine, AllowedWorkspaces, DecideDeviceLogin,
     DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal, DisableMachineClient,
     DisabledMachineClient, EndedMachineClient, EnrollPermission, MachineConnectionAdmission,
-    MachineConnectionRefusal, MachinePrincipal, MachineTokenClaims, MachineTokenDecision,
-    MachineTokenRefusal, OrganizationStanding, PersonAdmissionRequest, PresentedMachine,
-    StandingRole,
+    MachinePrincipal, MachineTokenClaims, MachineTokenDecision, MachineTokenRefusal,
+    OrganizationStanding, PersonAdmissionRequest, PresentedMachine, StandingRole,
 };
+use fleet_contracts::MachineConnectionRefusal;
 use serde_json::json;
 
 #[test]

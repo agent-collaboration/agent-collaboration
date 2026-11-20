@@ -1,0 +1,23 @@
+[package]
+name = "fleet-workspace-access"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Live workspace admission, actor identities, and stored workspace reads"
+
+[lints]
+workspace = true
+
+[dependencies]
+central-storage.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
+fleet-contracts.workspace = true
+fleet-runtime.workspace = true
+fleet-runtime-ports.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
+workspace-ids.workspace = true
+workspace-model.workspace = true

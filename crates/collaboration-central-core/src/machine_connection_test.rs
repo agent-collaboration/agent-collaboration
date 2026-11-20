@@ -1,8 +1,9 @@
 use super::*;
-use crate::{
-    WorkspaceCaller,
-    organization_authority::machine_login::{EnrollmentGeneration, MachineRow, StoredEnrollment},
+use crate::WorkspaceCaller;
+use crate::organization_authority::machine_login::{
+    EnrollmentGeneration, MachineRow, StoredEnrollment,
 };
+use fleet_identity_protocol::UnixSeconds;
 use workspace_model::Caller;
 
 const NOW_MS: i64 = 1_800_000_000_123;
@@ -10,19 +11,19 @@ fn id(suffix: u64) -> String {
     format!("018f1111-2222-7000-8000-{suffix:012x}")
 }
 fn attachment() -> MachineConnectionAttachment {
-    MachineConnectionAttachment {
-        organization_id: id(1).try_into().unwrap(),
-        machine_id: id(3).try_into().unwrap(),
-        enrollment_id: id(4).try_into().unwrap(),
-        client_id: id(4).try_into().unwrap(),
-        effective_expires_at: UnixSeconds(NOW_MS / 1000 + 600),
-    }
+    MachineConnectionAttachment::from_token_claims(
+        id(1).try_into().unwrap(),
+        id(3).try_into().unwrap(),
+        id(4).try_into().unwrap(),
+        id(4).try_into().unwrap(),
+        UnixSeconds(NOW_MS / 1000 + 600),
+    )
 }
 fn facts() -> EnrollmentFacts {
     let attachment = attachment();
     let enrollment = StoredEnrollment {
-        id: attachment.enrollment_id.clone(),
-        machine_id: attachment.machine_id.clone(),
+        id: attachment.enrollment_id().clone(),
+        machine_id: attachment.machine_id().clone(),
         request_id: id(6).try_into().unwrap(),
         approved_by: id(7).try_into().unwrap(),
         label: "test machine".to_owned().try_into().unwrap(),
@@ -31,18 +32,18 @@ fn facts() -> EnrollmentFacts {
         approved_at_ms: NOW_MS - 1000,
         code_expires_at: UnixSeconds(NOW_MS / 1000 + 100),
         state: StoredEnrollmentState::Enrolled {
-            client_id: attachment.client_id.clone(),
+            client_id: attachment.client_id().clone(),
             last_grant_at: UnixSeconds(NOW_MS / 1000),
         },
         ended_at_ms: None,
     };
     EnrollmentFacts {
-        organization_id: attachment.organization_id.clone(),
+        organization_id: attachment.organization_id().clone(),
         organization_has_enrollment: true,
         prior_approval: None,
         enrollment: Some(enrollment.clone()),
         machine: Some(MachineRow {
-            machine_id: attachment.machine_id,
+            machine_id: attachment.machine_id().clone(),
             label: "test machine".to_owned().try_into().unwrap(),
             allowed_workspaces: vec![],
             generation: EnrollmentGeneration::try_from(1).unwrap(),
@@ -54,7 +55,7 @@ fn facts() -> EnrollmentFacts {
     }
 }
 fn admit(attachment: &MachineConnectionAttachment, facts: &EnrollmentFacts) -> Admission {
-    validate_live(attachment, &attachment.organization_id, facts, NOW_MS)
+    validate_live(attachment, attachment.organization_id(), facts, NOW_MS)
 }
 
 #[test]
@@ -97,14 +98,24 @@ fn live_admission_requires_matching_active_machine_enrollment_and_client() {
         admit(&provenance, &superseded).unwrap(),
         Err(MachineConnectionRefusal::Superseded {})
     ));
-    let mut wrong_client = provenance.clone();
-    wrong_client.client_id = id(9).try_into().unwrap();
+    let wrong_client = MachineConnectionAttachment::from_token_claims(
+        provenance.organization_id().clone(),
+        provenance.machine_id().clone(),
+        provenance.enrollment_id().clone(),
+        id(9).try_into().unwrap(),
+        provenance.effective_expires_at(),
+    );
     assert!(matches!(
         admit(&wrong_client, &baseline).unwrap(),
         Err(MachineConnectionRefusal::WrongClient {})
     ));
-    let mut wrong_row = provenance.clone();
-    wrong_row.machine_id = id(9).parse().unwrap();
+    let wrong_row = MachineConnectionAttachment::from_token_claims(
+        provenance.organization_id().clone(),
+        id(9).parse().unwrap(),
+        provenance.enrollment_id().clone(),
+        provenance.client_id().clone(),
+        provenance.effective_expires_at(),
+    );
     assert!(matches!(
         admit(&wrong_row, &baseline).unwrap(),
         Err(MachineConnectionRefusal::EnrollmentNotActive {})
@@ -121,11 +132,11 @@ fn live_admission_requires_matching_active_machine_enrollment_and_client() {
 fn original_deadline_has_no_leeway_and_never_renews_during_admission() {
     let provenance = attachment();
     let facts = facts();
-    let deadline_ms = provenance.effective_expires_at.0 * 1000;
+    let deadline_ms = provenance.effective_expires_at().0 * 1000;
     assert!(
         validate_live(
             &provenance,
-            &provenance.organization_id,
+            provenance.organization_id(),
             &facts,
             deadline_ms - 1
         )
@@ -134,14 +145,14 @@ fn original_deadline_has_no_leeway_and_never_renews_during_admission() {
     );
     for now_ms in [deadline_ms, deadline_ms + 1] {
         assert!(matches!(
-            validate_live(&provenance, &provenance.organization_id, &facts, now_ms).unwrap(),
+            validate_live(&provenance, provenance.organization_id(), &facts, now_ms).unwrap(),
             Err(MachineConnectionRefusal::EnrollmentNotActive {})
         ));
     }
     let connection = admit(&provenance, &facts).unwrap().unwrap();
     assert_eq!(
         connection.effective_expires_at(),
-        provenance.effective_expires_at
+        provenance.effective_expires_at()
     );
     assert_eq!(connection.attachment(), provenance);
 }
@@ -161,8 +172,13 @@ fn attachment_is_closed_and_restoration_rejects_invalid_identity_and_time() {
     non_v7["machineId"] = serde_json::json!("018f1111-2222-4000-8000-000000000003");
     assert!(serde_json::from_value::<MachineConnectionAttachment>(non_v7).is_err());
     for expiry in [-1, i64::MAX] {
-        let mut invalid = provenance.clone();
-        invalid.effective_expires_at = UnixSeconds(expiry);
+        let invalid = MachineConnectionAttachment::from_token_claims(
+            provenance.organization_id().clone(),
+            provenance.machine_id().clone(),
+            provenance.enrollment_id().clone(),
+            provenance.client_id().clone(),
+            UnixSeconds(expiry),
+        );
         assert!(matches!(
             admit(&invalid, &facts()),
             Err(StoreFailure::Corrupt { .. })

@@ -12,7 +12,7 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 34] = [
+const LAYER_POLICY: [(&str, &[&str]); 35] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -49,6 +49,7 @@ const LAYER_POLICY: [(&str, &[&str]); 34] = [
             "fleet-identity-protocol",
             "fleet-runtime-ports",
             "fleet-runtime",
+            "fleet-workspace-access",
             "message-board",
             "workspace-ids",
             "workspace-model",
@@ -97,6 +98,17 @@ const LAYER_POLICY: [(&str, &[&str]); 34] = [
             "central-storage",
             "fleet-contracts",
             "fleet-identity-protocol",
+            "fleet-runtime-ports",
+            "workspace-ids",
+            "workspace-model",
+        ],
+    ),
+    (
+        "fleet-workspace-access",
+        &[
+            "central-storage",
+            "fleet-contracts",
+            "fleet-runtime",
             "fleet-runtime-ports",
             "workspace-ids",
             "workspace-model",
@@ -429,6 +441,7 @@ fn fixture_graph(
         ("fleet-ports", "fleet-runtime-ports"),
         ("fleet-contracts", "fleet-contracts"),
         ("fleet-runtime", "fleet-runtime"),
+        ("fleet-access", "fleet-workspace-access"),
         ("fleet-storage-schema", "fleet-storage-schema"),
         ("fleet-store-sqlx", "fleet-store-sqlx"),
         ("central-native", "collaboration-central-tokio"),
@@ -490,6 +503,7 @@ fn fleet_layer_registration_rejects_incoming_router_clock_edges() {
     for (destination, expected) in [
         ("fleet-ports", "fleet-runtime-ports"),
         ("fleet-contracts", "fleet-contracts"),
+        ("fleet-access", "fleet-workspace-access"),
     ] {
         for kind in [None, Some(DependencyKind::Build)] {
             let graph = fixture_graph("router-clock", destination, vec![kind]);
@@ -543,6 +557,7 @@ fn only_the_native_central_host_can_reach_the_executor_directly() {
         for (source, package) in [
             ("central-worker", "collaboration-central-cloudflare"),
             ("fleet-runtime", "fleet-runtime"),
+            ("fleet-access", "fleet-workspace-access"),
             ("fleet-storage-schema", "fleet-storage-schema"),
         ] {
             let graph = fixture_graph(source, "fleet-store-sqlx", vec![kind]);

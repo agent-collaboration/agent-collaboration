@@ -64,7 +64,16 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
                 "signin_organization_identity.id",
             ));
         }
-        if let Err(reason) = self.admit_workspace(caller, None).await? {
+        if let Err(reason) = self
+            .access()
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                None,
+            )
+            .await?
+        {
             return Ok(EngineRequestOutcome::NotPermitted { reason });
         }
         let identity = match caller.caller() {
@@ -77,7 +86,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
                 }
             }
         };
-        let actor = self.resolve_identity(&identity).await?;
+        let actor = self.access().resolve_identity(&identity).await?;
         crate::engine::port::Engine::new(self)
             .request_engine::<OwedReply, _>(
                 &crate::engine::owed_reply_store::OwedReplyStore(self),

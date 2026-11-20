@@ -1,7 +1,6 @@
 //! Read a retained decision from the ledger that owned the original write.
-use crate::{
-    WorkspaceCaller, WorkspaceRuntime, organization_admin_contract::OrganizationAdminResult,
-};
+use crate::WorkspaceCaller;
+use crate::{WorkspaceRuntime, organization_admin_contract::OrganizationAdminResult};
 use central_link_protocol::{
     ReplyPayload, RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
@@ -63,13 +62,19 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             RequestScope::Workspace(workspace) => Some(workspace),
         };
         if self
-            .admit_workspace(caller, scope_workspace)
+            .access()
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                scope_workspace,
+            )
             .await?
             .is_err()
         {
             return Ok(RequestStatusAnswer::NotFound);
         }
-        let Some(actor) = self.existing_caller_actor(caller.caller()).await? else {
+        let Some(actor) = self.access().existing_caller_actor(caller.caller()).await? else {
             return Ok(RequestStatusAnswer::NotFound);
         };
         let cutoff = (self.execution.now()? - chrono::Duration::hours(24)).to_rfc3339();
@@ -108,6 +113,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 result @ (WorkspaceResult::Done(_) | WorkspaceResult::NotFound { .. }),
             )) => {
                 let actors = self
+                    .access()
                     .actor_views(&crate::workspace_item_reads::actor_ids(&result))
                     .await?;
                 RequestStatusAnswer::Answered(ReplyPayload::Workspace(WorkspaceReply {

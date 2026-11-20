@@ -1,6 +1,7 @@
 //! One injected clock drives UUIDs, signed admission and native alarm execution.
 use super::{engine_v2_support::*, support::*};
-use collaboration_central_core::identity_contract::MachineConnectionRefusal;
+use fleet_contracts::MachineConnectionRefusal;
+
 use router_clock::{ClockInstant, DriveGuard, GatedClock, RuntimeClock};
 use runtime_primitives::{Clock, SyncTime};
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};

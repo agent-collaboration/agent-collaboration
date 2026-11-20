@@ -1,9 +1,11 @@
 //! Replay precedes mutable rule decisions; the durable answer shares the effect batch.
-use crate::workspace_row_codec::WorkspaceRows;
-use crate::{WorkspaceCaller, WorkspaceRuntime};
+
+use crate::WorkspaceCaller;
+use crate::WorkspaceRuntime;
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
 use workspace_model as m;
 
 fn invalid(field: &str) -> m::WorkspaceReply {
@@ -75,7 +77,13 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     {
         let _central = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
-            .admit_workspace(caller, request.workspace_id.as_ref())
+            .access()
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                request.workspace_id.as_ref(),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -92,12 +100,18 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     let actor = {
         let _turn = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
-            .admit_workspace(caller, request.workspace_id.as_ref())
+            .access()
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                request.workspace_id.as_ref(),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
         }
-        runtime.resolve_identity(&identity).await?
+        runtime.access().resolve_identity(&identity).await?
     };
     let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
     let workspace = request
@@ -110,7 +124,16 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         None
     };
     let admission_turn = runtime.execution.take_central_turn().await;
-    if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+    if let Err(refusal) = runtime
+        .access()
+        .admit_workspace(
+            runtime,
+            caller.caller(),
+            caller.connection().attachment_ref(),
+            Some(workspace),
+        )
+        .await?
+    {
         return Ok(reply(m::WorkspaceResult::Refused(refusal)));
     }
     let now = runtime.execution.now()?;
@@ -234,7 +257,16 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         // The workspace turn precedes central, matching the drain's lock order.
         // Revocation and the admitted batch cannot pass each other inside this turn.
         let _central = runtime.execution.take_central_turn().await;
-        if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+        if let Err(refusal) = runtime
+            .access()
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                Some(workspace),
+            )
+            .await?
+        {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
         }
         if matches!(
@@ -284,6 +316,7 @@ async fn enrich<Host: CentralStore, Stores: WorkspaceStores>(
     durable_answer: bool,
 ) -> Result<m::WorkspaceReply, StoreFailure> {
     let actors = match runtime
+        .access()
         .actor_views(&crate::workspace_item_reads::actor_ids(&result))
         .await
     {

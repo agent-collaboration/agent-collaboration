@@ -18,7 +18,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let central_authored = !matches!(message.body, MessageBody::Direct { .. });
         let identity = match &message.sender {
             MessageSender::Central => None,
-            MessageSender::Actor(actor) => self.read_actor_identity(actor).await?,
+            MessageSender::Actor(actor) => self.access().read_actor_identity(actor).await?,
         };
         let sender = match identity {
             Some(Identity::AgentSession { session }) => {

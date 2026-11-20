@@ -10,6 +10,7 @@ members = [
     "crates/central-engine-model",
     "crates/fleet-runtime-ports",
     "crates/fleet-runtime",
+    "crates/fleet-workspace-access",
     "crates/fleet-storage-schema",
     "crates/fleet-store-sqlx",
     "crates/fleet-contracts",
@@ -80,6 +81,7 @@ central-engine-model = { path = "crates/central-engine-model", version = "0.1.15
 fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156" }
 fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }
 fleet-runtime = { path = "crates/fleet-runtime", version = "0.1.156" }
+fleet-workspace-access = { path = "crates/fleet-workspace-access", version = "0.1.156" }
 fleet-storage-schema = { path = "crates/fleet-storage-schema", version = "0.1.156" }
 fleet-store-sqlx = { path = "crates/fleet-store-sqlx", version = "0.1.156" }
 router-clock = { path = "crates/router-clock", version = "0.1.136" }

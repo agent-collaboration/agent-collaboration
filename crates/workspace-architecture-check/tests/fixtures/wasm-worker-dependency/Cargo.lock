@@ -24,5 +24,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-workspace-access"
+version = "0.0.0"
+dependencies = [
+ "clock-data",
+]
+
+[[package]]
 name = "worker"
 version = "0.0.0"

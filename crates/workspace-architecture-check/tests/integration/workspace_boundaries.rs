@@ -16,10 +16,13 @@ pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
             "central-storage",
             "fleet-identity-protocol",
             "fleet-runtime-ports",
+            "message-board",
+            "workspace-ids",
             "workspace-model",
         ],
     ),
 ];
+const FLEET_ACCESS: &str = "fleet-workspace-access";
 const FLEET_WASM_TARGET: &str = "wasm32-unknown-unknown";
 // Chrono's wasm support reaches these runtime-independent helpers via js-sys.
 const FLEET_WASM_SUPPORT_PACKAGES: &[&str] = &["futures-core", "futures-task", "futures-util"];
@@ -184,7 +187,12 @@ fn check_workspace_driver_edges(
 /// Workspace metadata merges features from unrelated roots (notably uuid's wasm
 /// support). A package-scoped tree checks the actual pure-rule dependency closure.
 pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    for (package, _) in PURE_CRATES.into_iter().chain(FLEET_PURE_CRATES) {
+    for package in PURE_CRATES
+        .into_iter()
+        .chain(FLEET_PURE_CRATES)
+        .map(|(package, _)| package)
+        .chain([FLEET_ACCESS])
+    {
         check_package_targets(root, package)?;
     }
     Ok(())
@@ -192,7 +200,7 @@ pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std:
 
 fn check_package_targets(root: &Path, package: &str) -> Result<(), Box<dyn std::error::Error>> {
     check_package_tree(root, package, None)?;
-    if FLEET_PURE_CRATES.iter().any(|(name, _)| *name == package) {
+    if package == FLEET_ACCESS || FLEET_PURE_CRATES.iter().any(|(name, _)| *name == package) {
         check_package_tree(root, package, Some(FLEET_WASM_TARGET)).map_err(|error| {
             format!("{package} dependency tree for {FLEET_WASM_TARGET}: {error}")
         })?;
@@ -217,7 +225,7 @@ fn check_package_tree(
         "--prefix",
         "none",
         "--format",
-        "{p}",
+        "{p}\t{f}",
     ]);
     if let Some(triple) = target {
         cargo.args(["--target", triple]);
@@ -235,40 +243,77 @@ fn check_package_tree(
     } else {
         &[]
     };
-    check_tree_output(&String::from_utf8(output.stdout)?, allowed_support)
+    check_tree_output(&String::from_utf8(output.stdout)?, allowed_support, package)
 }
 fn check_tree_output(
     tree: &str,
     allowed_support: &[&str],
+    package: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    for name in tree
-        .lines()
-        .filter_map(|line| line.split_whitespace().next())
-    {
-        if is_effectful(name) && !allowed_support.contains(&name) {
-            return Err(format!("BD2: pure rules transitively reach {name}").into());
+    for line in tree.lines() {
+        let (identity, features) = line.split_once('\t').unwrap_or((line, ""));
+        let Some(name) = identity.split_whitespace().next() else {
+            continue;
+        };
+        if !is_effectful(name) || allowed_support.contains(&name) {
+            continue;
         }
+        if package == FLEET_ACCESS && name == "tokio" {
+            let features = features.strip_suffix(" (*)").unwrap_or(features).trim();
+            if matches!(features, "" | "sync") {
+                continue;
+            }
+            return Err(format!(
+                "BD2: {package} reaches Tokio features {features}; only sync is allowed"
+            )
+            .into());
+        }
+        return Err(format!("BD2: pure rules transitively reach {name}").into());
     }
     Ok(())
 }
 
 #[test]
 fn pure_package_tree_rejects_effectful_transitive_dependencies() {
-    assert!(check_tree_output("workspace-rules v1\nserde v1\ntokio v1", &[]).is_err());
-    assert!(check_tree_output("workspace-rules v1\nsqlx-sqlite v1", &[]).is_err());
+    assert!(
+        check_tree_output(
+            "workspace-rules v1\nserde v1\ntokio v1",
+            &[],
+            "workspace-rules"
+        )
+        .is_err()
+    );
+    assert!(
+        check_tree_output("workspace-rules v1\nsqlx-sqlite v1", &[], "workspace-rules").is_err()
+    );
     assert!(
         check_tree_output(
             "workspace-rules v1\nworkspace-model v1\nuuid v1\nserde v1",
-            &[]
+            &[],
+            "workspace-rules",
         )
         .is_ok()
     );
 }
 
 #[test]
+fn access_dependency_tree_allows_tokio_sync_but_rejects_the_executor() {
+    let valid = "fleet-workspace-access v1\t\ntokio v1\tsync";
+    assert!(check_tree_output(valid, &[], FLEET_ACCESS).is_ok());
+
+    let invalid = "fleet-workspace-access v1\t\ntokio v1\trt,sync";
+    let violation = check_tree_output(invalid, &[], FLEET_ACCESS)
+        .expect_err("workspace access cannot enable the Tokio executor");
+    assert_eq!(
+        violation.to_string(),
+        "BD2: fleet-workspace-access reaches Tokio features rt,sync; only sync is allowed"
+    );
+}
+
+#[test]
 fn fleet_package_tree_rejects_an_indirect_wasm_worker_dependency() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wasm-worker-dependency");
-    for package in ["fleet-contracts", "fleet-runtime-ports"] {
+    for package in ["fleet-contracts", "fleet-runtime-ports", FLEET_ACCESS] {
         check_package_tree(&root, package, None).expect("the native dependency tree is pure");
 
         let violation = check_package_targets(&root, package)
