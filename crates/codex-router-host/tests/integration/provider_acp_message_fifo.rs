@@ -238,6 +238,8 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     );
 
     let first_operation_id = collaboration_protocol::OperationId::generate();
+    let (terminal_waiting, release_terminal) =
+        supervisor.pause_terminal_write_of(&target, &first_operation_id);
     let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
@@ -307,30 +309,30 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     assert_eq!(listed[0].input_id, queued_input_id);
     assert_eq!(listed[0].preview, expected_push_preview);
 
-    let blocker_id = collaboration_protocol::OperationId::generate();
-    {
-        let mut provider_store = store.lock().await;
-        provider_store
-            .admit(collaboration_runtime::ProviderOperationAdmission {
-                operation_id: blocker_id.clone(),
-                operation_kind: ProviderOperationKind::ConversationPrompt,
-                binding: collaboration_protocol::ConversationBindingIdentity::ExternalProvider {
-                    binding: binding.clone(),
-                },
-                admitted_at_ms: 2,
-            })
-            .await
-            .expect("admit transient busy blocker");
-        provider_store
-            .mark_may_have_dispatched(&blocker_id, 3)
-            .await
-            .expect("mark transient busy blocker");
-    }
-
     first_event
         .write_all(b"x")
         .await
         .expect("release first prompt");
+    terminal_waiting
+        .await
+        .expect("Control prompt reached its terminal write");
+    supervisor
+        .wait_for_dispatch_mark_fixture(&target, &queued_operation_id)
+        .await
+        .expect("queued delivery offered its mark behind the held terminal write");
+    assert!(
+        store
+            .lock()
+            .await
+            .inspect(&queued_operation_id)
+            .await
+            .expect("inspect queued operation during the hold")
+            .is_none(),
+        "the queued delivery's first write must wait behind the Control settlement"
+    );
+    release_terminal
+        .send(())
+        .expect("release the Control settlement");
     let first_settlement = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
@@ -345,19 +347,6 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         first_settlement.output,
         collaboration_protocol::ConversationOperationWaitOutput::Available { .. }
     ));
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    store
-        .lock()
-        .await
-        .record_terminal(
-            &blocker_id,
-            collaboration_protocol::ProviderOperationEffect::None,
-            collaboration_protocol::ProviderReconciliationState::Confirmed,
-            None,
-            4,
-        )
-        .await
-        .expect("release transient busy blocker");
     let (mut second_event, _) = tokio::time::timeout(Duration::from_secs(2), listener.accept())
         .await
         .expect("queued prompt must drain after Control prompt settles")

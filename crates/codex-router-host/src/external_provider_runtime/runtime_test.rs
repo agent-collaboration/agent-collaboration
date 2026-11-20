@@ -190,10 +190,13 @@ fn cancellation_fixture() -> ExternalProviderLaunch {
 }
 
 #[cfg(unix)]
-fn successor_prompt_fixture() -> ExternalProviderLaunch {
+fn successor_prompt_fixture(release_socket: &std::path::Path) -> ExternalProviderLaunch {
     acp_scripted_fixture::launch_fixture_agent(
         "host-basic-session-agent.ts",
-        vec!["successor".to_owned()],
+        vec![
+            "successor".to_owned(),
+            release_socket.to_string_lossy().into_owned(),
+        ],
     )
 }
 

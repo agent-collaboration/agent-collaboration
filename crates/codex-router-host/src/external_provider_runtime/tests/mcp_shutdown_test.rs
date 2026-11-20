@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(unix)]
+use tokio::io::AsyncWriteExt as _;
 
 #[cfg(unix)]
 async fn observe_mcp_fixture(
@@ -389,8 +391,11 @@ async fn wait_for_admission_witness(receipt: &std::path::Path) {
 #[cfg(unix)]
 #[tokio::test]
 async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
+    let fixture = tempfile::tempdir().expect("successor fixture root");
+    let release_path = fixture.path().join("successor.sock");
+    let witness = tokio::net::UnixListener::bind(&release_path).expect("successor witness");
     let runtime = ExternalProviderRuntime::initialize(
-        successor_prompt_fixture(),
+        successor_prompt_fixture(&release_path),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
@@ -414,10 +419,10 @@ async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
         "second".to_owned(),
         approval_context(second_id),
     ));
-    tokio::select! {
+    let (mut release, _) = tokio::select! {
         result = &mut second => panic!("successor settled too early: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
-    }
+        observed = witness.accept() => observed.expect("the peer is holding the successor"),
+    };
     let stale_cancel = runtime
         .cancel_prompt_operation(
             "fixture-session".to_owned(),
@@ -426,6 +431,10 @@ async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
         .await
         .expect_err("stale cancel must not reach successor prompt");
     assert!(stale_cancel.to_string().contains("no longer active"));
+    release
+        .write_all(b"release")
+        .await
+        .expect("release the successor");
     assert_eq!(
         second.await.expect("successor settles").stop_reason,
         ProviderPromptStopReason::EndTurn
@@ -586,15 +595,18 @@ async fn live_external_provider_explicit_cancel() {
         .expect("provider conversation created");
 
     {
-        let prompt = runtime.prompt(
+        let (dispatch, taken) = tokio::sync::oneshot::channel();
+        let prompt = runtime.prompt_for_operation(
             provider_session_id.clone(),
+            None,
             "Without using tools, write the integers from 1 through 100000, one per line."
                 .to_owned(),
+            Some(dispatch),
         );
         tokio::pin!(prompt);
         tokio::select! {
             result = &mut prompt => panic!("provider prompt settled before explicit cancel: {result:?}"),
-            () = tokio::time::sleep(Duration::from_millis(500)) => {}
+            observed = taken => assert_eq!(observed.expect("prompt dispatch observation"), ProviderPromptDispatchObservation::Submitted),
         }
         runtime
             .cancel_active_prompt(provider_session_id.clone())
