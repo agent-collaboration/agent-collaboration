@@ -11,10 +11,10 @@ use super::{
     Ordering, PathBuf, ProviderCapabilityReport, ProviderCommand, ProviderPromptContent,
     ProviderSessionActivity, ProviderSteeringOutcome,
 };
+use crate::RestoreFailure;
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
-use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
 use agent_client_protocol::schema::v1::ContentBlock;
-use provider_session_machines::{SessionGeneration, session_cell_machine::SessionCellEvent};
+use provider_session_machines::session_lifecycle_machine::RestoreVia;
 
 /// A close the session's cell admitted. Until its Close command enters the
 /// connection queue, dropping the caller settles it as failed, so the cell
@@ -31,23 +31,11 @@ impl PendingCloseAdmissionGuard {
     fn admit(
         cells: &Arc<crate::session_cell_table::SessionCellTable>,
         provider_session_id: &str,
-        generation: Option<SessionGeneration>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let attempt = provider_session_machines::session_lifecycle_machine::CloseAttempt(
             uuid::Uuid::now_v7(),
         );
-        if let Some(generation) = generation {
-            cells
-                .transition_in_run(
-                    provider_session_id,
-                    generation,
-                    SessionCellEvent::CloseRequested { attempt },
-                    crate::session_cell_table::EntryEffectRoute::Sink,
-                )
-                .map_err(|_| ExternalProviderRuntimeError::SessionReleased)?;
-        } else {
-            crate::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
-        }
+        crate::session_cell_bookkeeping::admit_close(cells, provider_session_id, attempt)?;
         Ok(Self {
             cells: Arc::clone(cells),
             provider_session_id: provider_session_id.to_owned(),
@@ -375,13 +363,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 },
             ));
         }
-        self.restore_session(
-            provider_session_id,
-            cwd,
-            super::provider_session_restore::RestoreHistoryMode::Replay,
-            setup,
-        )
-        .await
+        self.restore_session(provider_session_id, cwd, RestoreVia::Load, setup)
+            .await
     }
 
     pub async fn resume_session(
@@ -420,43 +403,24 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 },
             ));
         }
-        self.restore_session(
-            provider_session_id,
-            cwd,
-            super::provider_session_restore::RestoreHistoryMode::WithoutReplay,
-            setup,
-        )
-        .await
+        self.restore_session(provider_session_id, cwd, RestoreVia::Resume, setup)
+            .await
     }
 
     async fn restore_session(
         &self,
         provider_session_id: String,
         cwd: PathBuf,
-        mode: super::provider_session_restore::RestoreHistoryMode,
+        via: RestoreVia,
         setup: crate::SessionRestoreSetup,
     ) -> Result<super::RestoredSessionAdmission, RestoreFailure> {
-        let (reply, result) = tokio::sync::oneshot::channel();
-        let dispatch = RestoreDispatch::default();
-        self.commands
-            .send(ProviderCommand::Restore {
-                provider_session_id,
-                cwd,
-                mode,
-                setup,
-                admitted: None,
-                dispatch: dispatch.clone(),
-                reply,
-            })
+        self.begin_restore_session(provider_session_id, cwd, setup, via)
+            .await?
+            .finished()
+            .await?
+            .activate()
             .await
-            .map_err(|_| RestoreFailure::preflight(self.retired_operation_error()))?;
-        super::provider_session_restore::complete_restore(
-            result,
-            &dispatch,
-            &self.local_shutdown,
-            &self.sink_closed,
-        )
-        .await
+            .map_err(RestoreFailure::attempted)
     }
 
     /// Test support: ends the session's actor the way an actor ends on its
@@ -501,7 +465,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             });
         }
         let mut admission_guard =
-            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id, None)?;
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
         self.close_session_after_mark(provider_session_id, false, &mut admission_guard)
             .await
     }
@@ -549,26 +513,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
     ) -> Result<(), ExternalProviderRuntimeError> {
         let mut admission_guard =
-            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id, None)?;
-        self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
-            .await
-    }
-
-    /// Releases a failed restore's local run. The close claim is made under
-    /// the cell's lock, so an ended run cannot close a newer run of the ID.
-    pub async fn retire_restored_session(
-        &self,
-        provider_session_id: String,
-        generation: SessionGeneration,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        let Ok(mut admission_guard) = PendingCloseAdmissionGuard::admit(
-            &self.session_cells,
-            &provider_session_id,
-            Some(generation),
-        ) else {
-            // Another close owns retirement, or this generation already ended.
-            return Ok(());
-        };
+            PendingCloseAdmissionGuard::admit(&self.session_cells, &provider_session_id)?;
         self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
             .await
     }

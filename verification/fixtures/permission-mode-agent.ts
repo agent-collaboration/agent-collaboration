@@ -13,6 +13,7 @@
 //     0.81.0 does for a model without auto support.
 //   reject-mode: every mode change is answered with an error.
 //   plain-prompts: record and end prompts without asking for permission.
+//   silent-prompts: record prompts but send no response, even after cancel.
 //   refuse-prompt: record the prompt and reject its ACP request.
 //   silent-first-restore: leave the first load or resume unanswered.
 //   disconnect-during-restore: exit after reading the load or resume.
@@ -20,6 +21,7 @@
 //     configOptions, which a client cannot read; the mode stays and later
 //     changes are answered normally.
 //   advertise-close: the agent advertises session/close.
+//   hold-close-refusal: refuse a close after <receipt>.release-close appears.
 //   offer-fast: sessions also offer a select option "fast" (false, true),
 //     starting at "true".
 //   refuse-fast-once: the first fast change is answered with an error.
@@ -33,6 +35,7 @@
 import { field } from "../exact-json.ts";
 import { requireArgument } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
+import { fileAppears, startReleaseBarrier } from "./release-barrier.ts";
 import { selectOption } from "./provider-settings-options.ts";
 
 const receipt = requireArgument(2);
@@ -43,11 +46,13 @@ const known = [
   "clamp-auto",
   "reject-mode",
   "plain-prompts",
+  "silent-prompts",
   "refuse-prompt",
   "silent-first-restore",
   "disconnect-during-restore",
   "malformed-mode-reply",
   "advertise-close",
+  "hold-close-refusal",
   "offer-fast",
   "refuse-fast-once",
   "advertise-restore",
@@ -58,6 +63,7 @@ const known = [
 for (const behaviour of behaviours)
   if (!known.includes(behaviour)) throw new Error(`unknown fixture behaviour ${behaviour}`);
 const clampAuto = behaviours.has("clamp-auto");
+if (behaviours.has("hold-close-refusal")) startReleaseBarrier(receipt);
 
 const profiles: Record<string, { readonly start: string; readonly modes: readonly string[] }> = {
   claude: { start: "default", modes: ["default", "acceptEdits", "plan", "auto"] },
@@ -187,6 +193,10 @@ requests: for (;;) {
       // The prompt text is the tool call to ask permission for, as ACP JSON.
       const sessionId = String(field(request, "params", "sessionId"));
       observed.prompts.push(sessionId);
+      if (behaviours.has("silent-prompts")) {
+        agent.receipt(receipt, observed);
+        break;
+      }
       if (behaviours.has("refuse-prompt")) {
         agent.receipt(receipt, observed);
         agent.send({
@@ -249,7 +259,15 @@ requests: for (;;) {
     case "session/close":
       observed.closes.push(String(field(request, "params", "sessionId")));
       agent.receipt(receipt, observed);
-      agent.respond(request, {});
+      if (behaviours.has("hold-close-refusal")) {
+        void fileAppears(`${receipt}.release-close`).then((): void => {
+          agent.send({
+            jsonrpc: "2.0",
+            id: request.id,
+            error: { code: -32601, message: "close was refused" },
+          });
+        });
+      } else agent.respond(request, {});
       break;
     case "authenticate":
       agent.respond(request, {});

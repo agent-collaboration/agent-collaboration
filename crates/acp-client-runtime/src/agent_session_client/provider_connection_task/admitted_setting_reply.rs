@@ -63,6 +63,45 @@ impl AdmittedSettingReply {
     }
 }
 
+/// Restore's keep-off policy runs before the newly activated actor can take
+/// any user input.
+pub(super) fn queue_restore_fast_off<P: crate::InteractionPort>(
+    handles: &crate::provider_session_runtime_handles::ProviderSessionRuntimeHandles,
+    session_id: &str,
+    generation: SessionGeneration,
+    actor: &tokio::sync::mpsc::UnboundedSender<
+        crate::provider_session_actor::ProviderSessionCommand<P, AdmittedSettingReply>,
+    >,
+) {
+    if !crate::session_cell_bookkeeping::keep_fast_off(&handles.session_cells, session_id)
+        || !handles
+            .session_settings
+            .read_in(session_id, generation)
+            .is_some_and(|catalog| catalog.fast_observed() == crate::FastObserved::On)
+    {
+        return;
+    }
+    let (reply, _answer) = tokio::sync::oneshot::channel();
+    let reply = AdmittedSettingReply::for_run(
+        reply,
+        &handles.session_cells,
+        session_id,
+        generation,
+        ProviderSettingKind::Fast,
+    );
+    let _queued = actor.send(
+        crate::provider_session_actor::ProviderSessionCommand::SetSetting {
+            request: crate::ProviderSettingRequest {
+                kind: ProviderSettingKind::Fast,
+                value: crate::provider_setting_application::FAST_OFF.to_owned(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+            reply,
+        },
+    );
+}
+
 impl crate::provider_session_actor::SettingReply for AdmittedSettingReply {
     fn send(
         mut self,

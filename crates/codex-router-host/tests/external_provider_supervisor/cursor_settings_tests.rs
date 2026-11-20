@@ -360,3 +360,88 @@ async fn fast_failure_after_model_change_is_labelled_fast_off() -> TestResult {
     ensure_eq!(refused.value.as_deref(), Some("off"));
     Ok(())
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn model_change_reports_fast_not_offered_to_the_settings_caller() -> TestResult {
+    let cursor = ReactiveCursor::start(&["fast-not-offered-on-fixture-b"]).await?;
+    let (target, _) = cursor.create(None).await?;
+    let prior_settings = cursor.setting_requests()?;
+    let refusal = cursor
+        .set(&target, ProviderSettingName::Model, "fixture-b")
+        .await
+        .expect_err("the new model has no fast off to apply");
+    let catalog = cursor
+        .backend
+        .inspect_session(ProviderSessionInspectRequest {
+            target: target.clone(),
+        })
+        .await
+        .map_err(|error| error.message)?
+        .settings_catalog
+        .ok_or("catalog missing")?;
+    let id = OperationId::generate();
+    operation(
+        cursor
+            .backend
+            .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
+                input_id: None,
+                operation_id: id.clone(),
+                target,
+                generation: Some(generation()?),
+                requested_by: cursor.creator.clone().into(),
+                approver: cursor.creator.clone().into(),
+                prompt: MessageContent::HumanUser {
+                    text: MessageText::try_from("next prompt".to_owned())?,
+                },
+            })
+            .await,
+    )?;
+    let settled = operation(wait(&cursor.backend, id).await)?;
+    cursor.backend.shutdown().await.map_err(str::to_owned)?;
+    let wire: Vec<Value> = serde_json::from_slice(&std::fs::read(&cursor.receipt)?)?;
+    let settings: Vec<_> = wire
+        .iter()
+        .filter(|request| request["method"] == "session/set_config_option")
+        .skip(prior_settings)
+        .map(|request| &request["params"])
+        .collect();
+
+    ensure_eq!(
+        refusal.message.as_str(),
+        "fast is not offered for the current model"
+    );
+    ensure_eq!(refusal.setting, Some(ProviderSettingName::Fast));
+    ensure_eq!(refusal.value.as_deref(), Some("off"));
+    ensure!(
+        catalog
+            .config_options
+            .iter()
+            .any(|option| option.id == "model"
+                && option.current_value
+                    == collaboration_protocol::ProviderConfigValueView::Select {
+                        value: "fixture-b".to_owned()
+                    })
+    );
+    ensure_eq!(settings.len(), 1);
+    ensure_eq!(
+        settings
+            .first()
+            .map(|params| (&params["configId"], &params["value"])),
+        Some((&json!("model"), &json!("fixture-b")))
+    );
+    ensure!(matches!(
+        settled.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. }
+        }
+    ));
+    ensure_eq!(
+        wire.iter()
+            .filter(|request| request["method"] == "session/prompt")
+            .count(),
+        1
+    );
+    Ok(())
+}

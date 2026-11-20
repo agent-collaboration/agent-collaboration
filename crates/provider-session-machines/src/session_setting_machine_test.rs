@@ -17,6 +17,13 @@ fn every_state() -> Vec<SessionSetting> {
             to: value("b"),
             application: application(1),
             observed: value("a"),
+            prior_outcome_unknown: false,
+        },
+        SessionSetting::Changing {
+            to: value("b"),
+            application: application(1),
+            observed: value("a"),
+            prior_outcome_unknown: true,
         },
         SessionSetting::Unresolved {
             cause: UnresolvedCause::DefiniteFailure,
@@ -45,6 +52,11 @@ fn every_event() -> Vec<SessionSettingEvent> {
         },
         SessionSettingEvent::Failed {
             application: application(1),
+            confirmed_current: false,
+        },
+        SessionSettingEvent::Failed {
+            application: application(1),
+            confirmed_current: true,
         },
         SessionSettingEvent::OutcomeUnknown {
             application: application(1),
@@ -85,6 +97,7 @@ fn observations_never_clear_a_change_or_a_hold() {
         to: value("b"),
         application: application(1),
         observed: value("a"),
+        prior_outcome_unknown: false,
     };
 
     // Act
@@ -158,7 +171,10 @@ fn any_event_order_keeps_changes_and_holds(case: hegel::TestCase) {
                 application: app,
                 value: name,
             },
-            2 => SessionSettingEvent::Failed { application: app },
+            2 => SessionSettingEvent::Failed {
+                application: app,
+                confirmed_current: case.draw(gs::booleans()),
+            },
             3 => SessionSettingEvent::OutcomeUnknown { application: app },
             4 => SessionSettingEvent::Observed { value: name },
             5 => SessionSettingEvent::Refused { application: app },
@@ -176,18 +192,52 @@ fn any_event_order_keeps_changes_and_holds(case: hegel::TestCase) {
                 matches!(
                     &event,
                     SessionSettingEvent::Applied { application: from, .. }
-                        | SessionSettingEvent::Failed { application: from }
+                        | SessionSettingEvent::Failed { application: from, .. }
                         | SessionSettingEvent::Refused { application: from }
                         | SessionSettingEvent::OutcomeUnknown { application: from }
                         if from == application
                 ) || matches!(&event, SessionSettingEvent::Lost)
             );
         }
-        if matches!(event, SessionSettingEvent::Refused { .. }) {
-            assert!(
-                matches!(next, SessionSetting::Current { .. }),
-                "a refusal of a kind that doesn't hold left a hold: {next:?}"
+        if let SessionSetting::Changing {
+            prior_outcome_unknown,
+            ..
+        } = &before
+        {
+            let retains_unknown = matches!(
+                next,
+                SessionSetting::Unresolved {
+                    cause: UnresolvedCause::OutcomeUnknown,
+                    ..
+                }
             );
+            if matches!(
+                event,
+                SessionSettingEvent::Failed {
+                    confirmed_current: false,
+                    ..
+                } | SessionSettingEvent::Refused { .. }
+            ) {
+                assert_eq!(retains_unknown, *prior_outcome_unknown);
+            }
+            if matches!(
+                event,
+                SessionSettingEvent::Failed {
+                    confirmed_current: true,
+                    ..
+                }
+            ) {
+                assert!(matches!(
+                    next,
+                    SessionSetting::Unresolved {
+                        cause: UnresolvedCause::DefiniteFailure,
+                        ..
+                    }
+                ));
+            }
+            if matches!(event, SessionSettingEvent::Refused { .. }) && !prior_outcome_unknown {
+                assert!(matches!(next, SessionSetting::Current { .. }));
+            }
         }
         if matches!(event, SessionSettingEvent::Lost) {
             assert!(matches!(
@@ -229,6 +279,7 @@ fn a_refused_change_of_a_kind_that_does_not_hold_returns_to_its_value() {
         to: value("b"),
         application: application(1),
         observed: value("a"),
+        prior_outcome_unknown: false,
     };
 
     // Act

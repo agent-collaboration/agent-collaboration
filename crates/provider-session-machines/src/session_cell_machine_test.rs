@@ -720,6 +720,7 @@ fn only_unknown_setting_outcomes_hold_prompts() {
         crate::ProviderSettingKind::Fast,
         SessionSettingEvent::Failed {
             application: change(2),
+            confirmed_current: false,
         },
     );
 
@@ -743,6 +744,7 @@ fn only_unknown_setting_outcomes_hold_prompts() {
         crate::ProviderSettingKind::Mode,
         SessionSettingEvent::Failed {
             application: change(3),
+            confirmed_current: false,
         },
     );
 
@@ -789,6 +791,7 @@ fn accept_leaves_an_in_flight_change_and_refuses_an_unknown_outcome() {
         crate::ProviderSettingKind::Fast,
         SessionSettingEvent::Failed {
             application: change(1),
+            confirmed_current: false,
         },
     );
     let held_and_changing = setting(

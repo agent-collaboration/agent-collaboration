@@ -4,6 +4,10 @@ pub(super) mod admitted_setting_reply;
 #[cfg(any(test, feature = "test-observation"))]
 use super::{AtomicU64, ExternalProviderApprovalRefusalWarning};
 
+use super::provider_restore_activation::{
+    ProvisionalRestoreActor, RestorePublication, RestorePublicationReceiver,
+    take_provisional_restore,
+};
 use super::{
     AcpProtocolVersion, ActiveApprovalContext, AgentSessionClient, Arc, CancellationToken, Client,
     CreateAdmissionInputs, CursorPlanItems, Duration, ExternalProviderAdmission,
@@ -190,6 +194,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let test_tool_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         #[cfg(any(test, feature = "test-observation"))]
         let session_test_tool_calls = Arc::clone(&test_tool_calls);
+        let client_clock = Arc::clone(&clock);
         let task = tokio::spawn(async move {
             use futures_util::StreamExt as _;
             use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
@@ -401,6 +406,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             String,
                             tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P, admitted_setting_reply::AdmittedSettingReply>>,
                         >::new();
+                        let mut provisional_restores = HashMap::<String, ProvisionalRestoreActor>::new();
                         let mut session_tasks = tokio::task::JoinSet::new();
                         let mut admission_tasks = tokio::task::JoinSet::new();
                         let (admission_tx, mut admission_rx) = tokio::sync::mpsc::channel(32);
@@ -411,8 +417,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 () = task_shutdown.cancelled() => break,
                                 completion = admission_rx.recv() => {
                                     let Some(completion) = completion else { continue; };
-                                    // An actor that exited on its own left its sender
-                                    // behind; its session is no longer loaded here.
                                     sessions.retain(|_, sender| !sender.is_closed());
                                     match completion {
                                         PendingSessionAdmission::Create { result, activation, reply } => {
@@ -506,119 +510,138 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             }
                                             let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
                                         }
-                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, dispatch, in_folder, reply } => {
-                                            // A close since this restore was admitted made its attempt
-                                            // stale: the late completion registers nothing, and a fresh
-                                            // restore stays possible. Request routing belongs to whatever
-                                            // displaced it (the close, or a newer load that tracked the
-                                            // ID), so the stale branch leaves it alone (review F2).
+                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, dispatch, publication, in_folder, reply } => {
                                             if !crate::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
-                                                let _result = reply.send(Err(dispatch.failure(ExternalProviderRuntimeError::SessionReleased)));
+                                                let _sent = reply.send(Err(dispatch.failure(ExternalProviderRuntimeError::SessionReleased)));
                                                 continue;
                                             }
-                                            if matches!(result.as_ref(), Err(failure) if matches!(failure.error(), ExternalProviderRuntimeError::SinkClosed)) {
+                                            let restored = match *result {
+                                                Ok(restored) => restored,
+                                                Err(failure) => {
+                                                    match failure.error() {
+                                                        ExternalProviderRuntimeError::RestoreNoAnswer => {
+                                                            let _retired = session_cells.transition(&provider_session_id, SessionCellEvent::LoadUnanswered { attempt }, crate::session_cell_table::EntryEffectRoute::Sink);
+                                                            if task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
+                                                                sink_closed.cancel();
+                                                                task_shutdown.cancel();
+                                                            }
+                                                        }
+                                                        ExternalProviderRuntimeError::SinkClosed => {
+                                                            crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false);
+                                                            sink_closed.cancel();
+                                                            task_shutdown.cancel();
+                                                        }
+                                                        _ => { crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false); }
+                                                    }
+                                                    task_tool_registry.retire_run(&provider_session_id, generation);
+                                                    known_sessions.forget(&provider_session_id).await;
+                                                    let _sent = reply.send(Err(failure));
+                                                    continue;
+                                                }
+                                            };
+                                            let report = base_capabilities.with_session_response(&restored.session.response())
+                                                .with_auth_status(task_auth_status.read().await.clone());
+                                            let _written = task_session_capabilities.write(&provider_session_id, generation, report);
+                                            let settings = restored.settings_catalog;
+                                            if task_event_sink.publish_in(&provider_session_id, generation, session_event_model::SessionEvent::SettingsChanged {
+                                                settings: settings.to_session_settings(),
+                                            }).is_err() {
+                                                crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false);
                                                 sink_closed.cancel();
                                                 task_shutdown.cancel();
+                                                let _sent = reply.send(Err(RestoreFailure::attempted(ExternalProviderRuntimeError::SinkClosed)));
+                                                continue;
                                             }
-                                            let report = result.as_ref().as_ref().ok().map(|restored| {
-                                                base_capabilities.with_session_response(&restored.session.response())
+                                            let _written = task_session_settings.write(&provider_session_id, generation, settings);
+                                            let mode_difference = restored.restored_mode.difference;
+                                            let permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, restored.restored_mode);
+                                            let earlier_restore_unanswered = session_cells.read(&provider_session_id, |cell| cell.last_unanswered_restore.is_some());
+                                            provisional_restores.insert(provider_session_id.clone(), ProvisionalRestoreActor {
+                                                generation, attempt, session: restored.session, item_projection: restored.item_projection,
                                             });
-                                            let catalog = result.as_ref().as_ref().ok().map(|restored| {
-                                                (restored.settings_catalog.clone(), restored.restored_mode.clone())
+                                            let pending_admission_tx = admission_tx.clone();
+                                            let pending_shutdown = task_shutdown.clone();
+                                            admission_tasks.spawn(async move {
+                                                let RestorePublicationReceiver { decision, settled } = publication;
+                                                let decision = tokio::select! {
+                                                    () = pending_shutdown.cancelled() => return,
+                                                    decision = decision => decision.unwrap_or(RestorePublication::Failed),
+                                                };
+                                                publish_pending_session_admission(&pending_admission_tx, &pending_shutdown,
+                                                    PendingSessionAdmission::RestorePublication { provider_session_id, generation, decision, settled }).await;
                                             });
-                                            let (activation, ready) = tokio::sync::oneshot::channel();
-                                            let mut result = (*result).and_then(|restored| {
-                                                register_static_provider_session(
-                                                    StaticSessionActivation {
-                                                        session: restored.session,
-                                                        item_projection: restored.item_projection,
-                                                        activation: ready,
-                                                    },
-                                                    &mut sessions,
-                                                    &mut session_tasks,
-                                                    task_shutdown.clone(),
-                                                    Arc::clone(&task_frame_observation),
+                                            let _sent = reply.send(Ok(super::RestoredSessionAdmission { generation, permission_mode, mode_difference, earlier_restore_unanswered }));
+                                        }
+                                        PendingSessionAdmission::RestorePublication { provider_session_id, generation, decision, settled } => {
+                                            let Some(provisional) = take_provisional_restore(&mut provisional_restores, &provider_session_id, generation) else {
+                                                let _sent = settled.send(if decision == RestorePublication::Failed { Ok(()) } else { Err(ExternalProviderRuntimeError::SessionReleased) });
+                                                continue;
+                                            };
+                                            if decision == RestorePublication::Published
+                                                && crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, provisional.attempt, true)
+                                            {
+                                                let (activation, ready) = tokio::sync::oneshot::channel();
+                                                let result = register_static_provider_session(
+                                                    StaticSessionActivation { session: provisional.session, item_projection: provisional.item_projection, activation: ready },
+                                                    &mut sessions, &mut session_tasks, task_shutdown.clone(), Arc::clone(&task_frame_observation),
                                                     task_runtime_handles.for_session_generation(generation),
                                                     #[cfg(any(test, feature = "test-observation"))] Arc::clone(&session_test_tool_calls),
-                                                ).map_err(RestoreFailure::attempted)
-                                            }).map(|_| generation);
-                                            let mut permission_mode = crate::PermissionModeReport::default();
-                                            let mut mode_difference = None;
-                                            // The cell moves Loading to Live on a registered restore,
-                                            // and back to NotLoaded on a failed one.
-                                            let earlier_restore_unanswered = session_cells.read(&provider_session_id, |cell| cell.last_unanswered_restore.is_some());
-                                            if matches!(&result, Err(failure) if matches!(failure.error(), ExternalProviderRuntimeError::RestoreNoAnswer)) {
-                                                let _retired = session_cells.transition(&provider_session_id, SessionCellEvent::LoadUnanswered { attempt }, crate::session_cell_table::EntryEffectRoute::Sink);
-                                                if task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
+                                                );
+                                                if result.is_ok() {
+                                                    if let Some(session) = sessions.get(&provider_session_id) {
+                                                        admitted_setting_reply::queue_restore_fast_off(&task_runtime_handles, &provider_session_id, generation, session);
+                                                    }
+                                                    let _sent = activation.send(());
+                                                    let _sent = settled.send(Ok(()));
+                                                    continue;
+                                                }
+                                                crate::session_cell_bookkeeping::report_actor_exit(&session_cells, task_event_sink.as_ref(), &provider_session_id, generation);
+                                                let _sent = settled.send(result.map(|_| ()));
+                                            } else {
+                                                let attempt = provisional.attempt;
+                                                drop(provisional);
+                                                if crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false)
+                                                    && task_event_sink.publish_unloaded(&provider_session_id, generation).is_err()
+                                                {
                                                     sink_closed.cancel();
                                                     task_shutdown.cancel();
                                                 }
-                                            } else {
-                                                crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, result.is_ok());
+                                                let _sent = settled.send(match decision {
+                                                    RestorePublication::Published => Err(ExternalProviderRuntimeError::SessionReleased),
+                                                    RestorePublication::Failed => Ok(()),
+                                                });
                                             }
-                                            if result.is_err() {
-                                                task_tool_registry.retire_run(&provider_session_id, generation);
-                                                known_sessions.forget(&provider_session_id).await;
-                                            } else if let Some(report) = report {
-                                                let report = report.with_auth_status(task_auth_status.read().await.clone());
-                                                let _written = task_session_capabilities.write(&provider_session_id, generation, report);
-                                                if let Some((catalog, restored_mode)) = catalog {
-                                                    if task_event_sink.publish_in(
-                                                        &provider_session_id,
-                                                        generation,
-                                                        session_event_model::SessionEvent::SettingsChanged {
-                                                            settings: catalog.to_session_settings(),
-                                                        },
-                                                    ).is_err() {
-                                                        sink_closed.cancel();
-                                                        task_shutdown.cancel();
-                                                        result = Err(RestoreFailure::attempted(ExternalProviderRuntimeError::SinkClosed));
-                                                    }
-                                                    let _written = task_session_settings.write(&provider_session_id, generation, catalog.clone());
-                                                    mode_difference = restored_mode.difference;
-                                                    permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, restored_mode);
-                                                    // The session's fast hold outlives its runs (note §12.3): a
-                                                    // restored run whose agent reads fast on has it turned off
-                                                    // again, ahead of anything else in its mailbox.
-                                                    if crate::session_cell_bookkeeping::keep_fast_off(&session_cells, &provider_session_id)
-                                                        && catalog.fast_observed() == crate::FastObserved::On
-                                                        && let Some(session) = sessions.get(&provider_session_id)
-                                                    {
-                                                        let (reply, _answer) = tokio::sync::oneshot::channel();
-                                                        let reply = admitted_setting_reply::AdmittedSettingReply::for_run(reply, &session_cells, &provider_session_id, generation, provider_session_machines::ProviderSettingKind::Fast);
-                                                        let _queued = session.send(ProviderSessionCommand::SetSetting {
-                                                            request: crate::ProviderSettingRequest {
-                                                                kind: provider_session_machines::ProviderSettingKind::Fast,
-                                                                value: crate::provider_setting_application::FAST_OFF.to_owned(),
-                                                                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
-                                                                expected_model: None,
-                                                            },
-                                                            reply,
-                                                        });
-                                                    }
-                                                }
-                                                let _result = activation.send(());
-                                            }
-                                            let _result = reply.send(result.map(|generation| super::RestoredSessionAdmission { generation, permission_mode, mode_difference, earlier_restore_unanswered }));
+                                            known_sessions.forget(&provider_session_id).await;
+                                            crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
+                                            task_tool_registry.retire_run(&provider_session_id, generation);
+                                            task_todo_state.forget_session(&provider_session_id);
                                         }
                                         PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
                                             // A done close ends NotLoaded and can be loaded again (ACP
                                             // close); a failed one returns the cell to where it started.
+                                            let closing_load = crate::session_cell_bookkeeping::closing_load_generation(&session_cells, &provider_session_id, attempt);
+                                            if let Some(generation) = closing_load {
+                                                drop(take_provisional_restore(&mut provisional_restores, &provider_session_id, generation));
+                                            }
                                             let closed_generation = crate::session_cell_bookkeeping::settle_close(&session_cells, &provider_session_id, attempt, result.is_ok());
-                                            if result.is_ok() {
+                                            if let Some(generation) = closed_generation {
                                                 // Closed ends the run's generation here, in the loop
                                                 // that admits restores, so no newer run can open
                                                 // between the close and its Closed (D1 R14).
-                                                if task_event_sink.publish_closed(&provider_session_id, closed_generation).is_err() {
+                                                if task_event_sink.publish_closed(&provider_session_id, Some(generation)).is_err() {
                                                     sink_closed.cancel();
                                                     task_shutdown.cancel();
                                                 }
                                                 sessions.remove(&provider_session_id);
-                                                known_sessions.forget(&provider_session_id).await;
-                                                if let Some(generation) = closed_generation {
-                                                    crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
-                                                    task_tool_registry.retire_run(&provider_session_id, generation);
+                                            }
+                                            if let Some(generation) = closed_generation.or(closing_load) {
+                                                if result.is_err() && task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
+                                                    sink_closed.cancel();
+                                                    task_shutdown.cancel();
                                                 }
+                                                known_sessions.forget(&provider_session_id).await;
+                                                crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
+                                                task_tool_registry.retire_run(&provider_session_id, generation);
                                                 task_todo_state.forget_session(&provider_session_id);
                                             }
                                             let _result = reply.send(result);
@@ -689,7 +712,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 .await;
                                             });
                                         }
-                                        ProviderCommand::Restore { provider_session_id, cwd, mode, setup, admitted, dispatch, reply } => {
+                                        ProviderCommand::Restore { provider_session_id, cwd, mode, setup, admitted, dispatch, publication, reply } => {
                                             // Only an admitted restore opens a new run; a refused
                                             // one leaves the live run alone (D1 R14).
                                             let attempt = provider_session_machines::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
@@ -728,6 +751,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 session_cells: Arc::clone(&session_cells),
                                                 clock: Arc::clone(&clock),
                                                 dispatch,
+                                                publication,
                                                 reply,
                                             };
                                             admission_tasks.spawn(async move {
@@ -945,6 +969,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             auth_status,
             session_settings,
             session_cells,
+            clock: client_clock,
             shutdown,
             local_shutdown: CancellationToken::new(),
             sink_closed: client_sink_closed,

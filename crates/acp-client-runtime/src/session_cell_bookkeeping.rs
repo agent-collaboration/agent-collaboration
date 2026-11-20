@@ -123,18 +123,37 @@ pub(crate) fn settle_load(
     session_id: &str,
     attempt: LoadAttempt,
     registered: bool,
-) {
+) -> bool {
     let event = if registered {
         SessionCellEvent::Loaded { attempt }
     } else {
         SessionCellEvent::LoadFailed { attempt }
     };
     // Stale only when a close already replaced this load; the caller checked.
-    let _ignored = cells.transition(
-        session_id,
-        event,
-        crate::session_cell_table::EntryEffectRoute::Sink,
-    );
+    cells
+        .transition(
+            session_id,
+            event,
+            crate::session_cell_table::EntryEffectRoute::Sink,
+        )
+        .is_ok()
+}
+
+/// A close took ownership of a still-provisional restore.
+pub(crate) fn closing_load_generation(
+    cells: &SessionCellTable,
+    session_id: &str,
+    close_attempt: CloseAttempt,
+) -> Option<SessionGeneration> {
+    cells.read(session_id, |cell| match cell.lifecycle {
+        SessionLifecycle::Closing {
+            generation,
+            from: provider_session_machines::session_lifecycle_machine::CloseOrigin::Loading,
+            attempt,
+            ..
+        } if attempt == close_attempt => Some(generation),
+        _ => None,
+    })
 }
 
 /// Admits a close: Live or Loading to Closing. Closing refuses it as busy;
@@ -469,7 +488,7 @@ pub(crate) fn hold_setting_at_create(
         kind,
         match cause {
             provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure => {
-                SessionSettingEvent::Failed { application }
+                SessionSettingEvent::Failed { application, confirmed_current: false }
             }
             provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown => {
                 SessionSettingEvent::OutcomeUnknown { application }

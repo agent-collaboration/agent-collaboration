@@ -110,26 +110,14 @@ impl SessionCell {
 
     /// Some setting's last change has an unknown outcome.
     pub fn any_setting_outcome_unknown(&self) -> bool {
-        self.settings.values().any(|setting| {
-            matches!(
-                setting,
-                SessionSetting::Unresolved {
-                    cause: UnresolvedCause::OutcomeUnknown,
-                    ..
-                }
-            )
-        })
+        self.settings.values().any(SessionSetting::outcome_unknown)
     }
 
     /// The kind's last change has an unknown outcome.
     pub fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
-        matches!(
-            self.settings.get(&kind),
-            Some(SessionSetting::Unresolved {
-                cause: UnresolvedCause::OutcomeUnknown,
-                ..
-            })
-        )
+        self.settings
+            .get(&kind)
+            .is_some_and(SessionSetting::outcome_unknown)
     }
 
     fn line_open_for(&self, generation: SessionGeneration) -> bool {

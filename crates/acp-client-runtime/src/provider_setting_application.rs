@@ -24,6 +24,7 @@ pub(crate) enum SettingSetupFailure {
         kind: ProviderSettingKind,
         value: String,
         reason: String,
+        confirmed_current: bool,
     },
     Uncertain {
         kind: ProviderSettingKind,
@@ -40,7 +41,10 @@ pub(crate) enum RestoreModeObservation {
 }
 
 enum SettingResponseFailure {
-    Rejected(String),
+    Rejected {
+        reason: String,
+        confirmed_current: bool,
+    },
     Unknown,
     RestoreReadback(RestoreModeObservation),
 }
@@ -270,10 +274,14 @@ async fn apply_fast_off(
         Err(_) => Err(SettingResponseFailure::Unknown),
     };
     result.map_err(|failure| match failure {
-        SettingResponseFailure::Rejected(reason) => SettingSetupFailure::Agent {
+        SettingResponseFailure::Rejected {
+            reason,
+            confirmed_current,
+        } => SettingSetupFailure::Agent {
             kind: ProviderSettingKind::Fast,
             value: FAST_OFF.to_owned(),
             reason,
+            confirmed_current,
         },
         SettingResponseFailure::Unknown | SettingResponseFailure::RestoreReadback(_) => {
             SettingSetupFailure::Uncertain {
@@ -300,12 +308,14 @@ fn apply_fast_response(
     *catalog = updated;
     match observed {
         crate::FastObserved::Off => Ok(()),
-        crate::FastObserved::On => Err(SettingResponseFailure::Rejected(
-            "the agent's fast option still reads on".to_owned(),
-        )),
-        crate::FastObserved::NoOption => Err(SettingResponseFailure::Rejected(
-            "the agent's answer no longer lists a fast option".to_owned(),
-        )),
+        crate::FastObserved::On => Err(SettingResponseFailure::Rejected {
+            reason: "the agent's fast option still reads on".to_owned(),
+            confirmed_current: true,
+        }),
+        crate::FastObserved::NoOption => Err(SettingResponseFailure::Rejected {
+            reason: "the agent's answer no longer lists a fast option".to_owned(),
+            confirmed_current: true,
+        }),
     }
 }
 
@@ -602,10 +612,14 @@ async fn apply_one_setting(
         });
     };
     result.map_err(|failure| match failure {
-        SettingResponseFailure::Rejected(reason) => SettingSetupFailure::Agent {
+        SettingResponseFailure::Rejected {
+            reason,
+            confirmed_current,
+        } => SettingSetupFailure::Agent {
             kind,
             value: value.clone(),
             reason,
+            confirmed_current,
         },
         SettingResponseFailure::Unknown => SettingSetupFailure::Uncertain {
             kind,
@@ -722,9 +736,10 @@ async fn send_setting_request(
         Err(error) if agent_client_protocol::is_incoming_transport_closed(&error) => {
             Err(unconfirmed_response(restore))
         }
-        Err(error) => Err(SettingResponseFailure::Rejected(
-            acp_operation_error(error).to_string(),
-        )),
+        Err(error) => Err(SettingResponseFailure::Rejected {
+            reason: acp_operation_error(error).to_string(),
+            confirmed_current: false,
+        }),
     }
 }
 

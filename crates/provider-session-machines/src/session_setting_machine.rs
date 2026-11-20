@@ -31,11 +31,28 @@ pub enum SessionSetting {
         to: SettingValueId,
         application: SettingApplication,
         observed: SettingValueId,
+        prior_outcome_unknown: bool,
     },
     Unresolved {
         cause: UnresolvedCause,
         observed: SettingValueId,
     },
+}
+
+impl SessionSetting {
+    #[must_use]
+    pub fn outcome_unknown(&self) -> bool {
+        matches!(
+            self,
+            Self::Unresolved {
+                cause: UnresolvedCause::OutcomeUnknown,
+                ..
+            } | Self::Changing {
+                prior_outcome_unknown: true,
+                ..
+            }
+        )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -52,6 +69,7 @@ pub enum SessionSettingEvent {
     /// setting a create couldn't apply).
     Failed {
         application: SettingApplication,
+        confirmed_current: bool,
     },
     /// The agent refused the change, and the kind holds nothing (mode, model
     /// or effort changed live, as today): it keeps the value it had.
@@ -178,7 +196,9 @@ const TRANSITIONS: &[Transition] = &[
     edge("unresolved_unknown", "set_requested", "changing"),
     edge("changing", "applied", "current"),
     edge("changing", "failed", "unresolved_refused"),
+    edge("changing", "failed", "unresolved_unknown"),
     edge("changing", "refused", "current"),
+    edge("changing", "refused", "unresolved_unknown"),
     edge("current", "lost", "unresolved_unknown"),
     edge("changing", "lost", "unresolved_unknown"),
     edge("unresolved_refused", "lost", "unresolved_unknown"),
@@ -219,6 +239,7 @@ impl StateMachine for SessionSettingMachine {
                         to: to.clone(),
                         application,
                         observed: observed_now(state),
+                        prior_outcome_unknown: state.outcome_unknown(),
                     },
                     vec![E::SendChange { to, application }],
                 ))
@@ -235,9 +256,28 @@ impl StateMachine for SessionSettingMachine {
                 S::Changing {
                     application: current,
                     observed,
+                    prior_outcome_unknown: true,
                     ..
                 },
-                V::Failed { application },
+                V::Failed {
+                    application,
+                    confirmed_current: false,
+                }
+                | V::Refused { application },
+            ) if *current == application => Ok((
+                S::Unresolved {
+                    cause: UnresolvedCause::OutcomeUnknown,
+                    observed: observed.clone(),
+                },
+                Vec::new(),
+            )),
+            (
+                S::Changing {
+                    application: current,
+                    observed,
+                    ..
+                },
+                V::Failed { application, .. },
             ) if *current == application => Ok((
                 S::Unresolved {
                     cause: UnresolvedCause::DefiniteFailure,
@@ -288,7 +328,10 @@ impl StateMachine for SessionSettingMachine {
             }
             (
                 S::Changing {
-                    to, application, ..
+                    to,
+                    application,
+                    prior_outcome_unknown,
+                    ..
                 },
                 V::Observed { value },
             ) => Ok((
@@ -296,6 +339,7 @@ impl StateMachine for SessionSettingMachine {
                     to: to.clone(),
                     application: *application,
                     observed: value,
+                    prior_outcome_unknown: *prior_outcome_unknown,
                 },
                 vec![E::PublishSettings],
             )),

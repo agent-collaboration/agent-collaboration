@@ -200,6 +200,7 @@ fn hold_steps_are_the_moves_the_reducer_allows(case: hegel::TestCase) {
             to: value(&case),
             application: application(&case),
             observed: value(&case),
+            prior_outcome_unknown: case.draw(gs::booleans()),
         },
         2 => SessionSetting::Unresolved {
             cause: UnresolvedCause::DefiniteFailure,

@@ -15,6 +15,55 @@ use std::{future::Future, time::Duration};
 
 const RESTORE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 
+impl<P: InteractionPort> super::AgentSessionClient<P> {
+    #[must_use]
+    pub fn loading_generation(
+        &self,
+        session_id: &str,
+    ) -> Option<provider_session_machines::SessionGeneration> {
+        use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
+        self.session_cells
+            .read(session_id, |cell| match cell.lifecycle {
+                SessionLifecycle::Loading { generation, .. } => Some(generation),
+                _ => None,
+            })
+    }
+
+    /// Wait for the exact restore seen when the input arrived. A replacement
+    /// generation never inherits input from a failed restore.
+    pub async fn wait_for_restore_activation(
+        &self,
+        session_id: &str,
+        generation: provider_session_machines::SessionGeneration,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
+        let wait = self.session_cells.wait_while(session_id, |cell| {
+            matches!(cell.lifecycle, SessionLifecycle::Loading { generation: loading, .. } if loading == generation)
+        });
+        let settled = tokio::select! {
+            () = self.shutdown.cancelled() => return Err(ExternalProviderRuntimeError::SessionStateRefused {
+                answer: "the restore ended before activation; reconnect and retry this session".to_owned(),
+            }),
+            settled = router_clock::timeout(self.clock.as_ref(), RESTORE_RESPONSE_TIMEOUT, wait) => settled,
+        };
+        if settled.is_err() {
+            return Err(ExternalProviderRuntimeError::SessionStateRefused {
+                answer: "the session is still restoring; retry this session when it finishes"
+                    .to_owned(),
+            });
+        }
+        if self.session_cells.read(session_id, |cell| {
+            matches!(cell.lifecycle, SessionLifecycle::Live { generation: live } if live == generation)
+        }) {
+            Ok(())
+        } else {
+            Err(ExternalProviderRuntimeError::SessionStateRefused {
+                answer: "the restore did not activate; load or resume this session and retry the input".to_owned(),
+            })
+        }
+    }
+}
+
 /// Both restore entry points may lose their reply when the connection stops.
 /// An orderly local shutdown retains the ordinary transport failure result.
 pub(super) async fn complete_restore(
@@ -100,6 +149,7 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) session_cells: Arc<crate::session_cell_table::SessionCellTable>,
     pub(super) clock: Arc<dyn router_clock::RuntimeClock>,
     pub(super) dispatch: RestoreDispatch,
+    pub(super) publication: super::provider_restore_activation::RestorePublicationReceiver,
     pub(super) reply:
         tokio::sync::oneshot::Sender<Result<super::RestoredSessionAdmission, RestoreFailure>>,
 }
@@ -123,6 +173,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         session_cells,
         clock,
         dispatch,
+        publication,
         reply,
     } = inputs;
     let replay_started = if mode == RestoreHistoryMode::Replay {
@@ -235,6 +286,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
             provider_session_id,
             result: Box::new(result),
             dispatch,
+            publication,
             in_folder: folders.in_folder,
             reply,
         },

@@ -123,6 +123,7 @@ async function serveSharedSettings(peer: {
 //   on-off-fast: use the on/off select identifiers advertised by Claude.
 //   fast-not-offered-on-fixture-b: omit the fast option on fixture-b.
 //   refuse-fast-once: the first fast change is answered with an error.
+//   refuse-second-fast: the second fast change is answered with an error.
 //   refuse-fast-after-model: fast changes are accepted until a model change is
 //     accepted after the first fast change; the next fast change is refused,
 //     later ones accepted.
@@ -161,6 +162,7 @@ const reactiveBehaviourNames = [
   "on-off-fast",
   "fast-not-offered-on-fixture-b",
   "refuse-fast-once",
+  "refuse-second-fast",
   "refuse-fast-after-model",
   "malformed-fast-reply",
   "malformed-fast-after-model",
@@ -268,6 +270,7 @@ class ReactiveFastReplies {
       this.afterModelFastFailed = true;
       return "malformed";
     }
+    if (this.fastChanges === 2 && this.behaviours.has("refuse-second-fast")) return "refuse";
     if (this.fastChanges !== 1) return "apply";
     if (this.behaviours.has("refuse-fast-once")) return "refuse";
     if (this.behaviours.has("malformed-fast-reply")) return "malformed";

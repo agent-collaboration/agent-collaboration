@@ -289,62 +289,81 @@ impl SessionQueueDoor<'_> {
     }
 }
 
-/// A load the session's cell admitted (Loading): messages may join its line
-/// now; `finished` answers when the agent has loaded it.
-pub struct SessionLoadStarted {
+/// An admitted restore. Messages may join the loading run's line, and
+/// `finished` returns the provisional route after the provider answers.
+pub struct SessionRestoreStarted {
     pub generation: SessionGeneration,
     completion: tokio::sync::oneshot::Receiver<
         Result<super::RestoredSessionAdmission, crate::RestoreFailure>,
     >,
     dispatch: crate::provider_restore_failure::RestoreDispatch,
+    publication: super::provider_restore_activation::RestorePublicationSender,
     local_shutdown: tokio_util::sync::CancellationToken,
     sink_closed: tokio_util::sync::CancellationToken,
 }
 
-impl SessionLoadStarted {
-    /// The load's result: the run is Live, or it failed and the messages
-    /// that waited for it ended not sent.
-    pub async fn finished(self) -> Result<super::RestoredSessionAdmission, crate::RestoreFailure> {
-        super::provider_session_restore::complete_restore(
+impl SessionRestoreStarted {
+    /// The provider's restore result. Its local actor remains provisional.
+    pub async fn finished(self) -> Result<super::PreparedProviderRestore, crate::RestoreFailure> {
+        let admission = super::provider_session_restore::complete_restore(
             self.completion,
             &self.dispatch,
             &self.local_shutdown,
             &self.sink_closed,
         )
-        .await
+        .await?;
+        Ok(super::PreparedProviderRestore {
+            admission,
+            publication: self.publication,
+        })
     }
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {
-    /// Starts loading the session (session/load with replay), rebuilding the
-    /// setup its create had (D1 R18), and returns as soon as its cell admits
-    /// the load, so a door can put messages in the loading run's line in
-    /// order.
-    pub async fn begin_load_session(
+    /// Starts restoring the session with its recorded setup (D1 R18).
+    /// Returns once the session cell admits the restore, so a queue door can
+    /// put messages in its loading line in order.
+    pub async fn begin_restore_session(
         &self,
         provider_session_id: String,
         cwd: std::path::PathBuf,
         setup: crate::SessionRestoreSetup,
-    ) -> Result<SessionLoadStarted, crate::RestoreFailure> {
+        via: provider_session_machines::session_lifecycle_machine::RestoreVia,
+    ) -> Result<SessionRestoreStarted, crate::RestoreFailure> {
+        use super::provider_session_restore::RestoreHistoryMode;
         use crate::{RestoreFailure, provider_restore_failure::RestoreDispatch};
-        if !self.base_capabilities.supports_load {
+        use provider_session_machines::session_lifecycle_machine::RestoreVia;
+        let (supported, capability, mode) = match via {
+            RestoreVia::Load => (
+                self.base_capabilities.supports_load,
+                "session/load",
+                RestoreHistoryMode::Replay,
+            ),
+            RestoreVia::Resume => (
+                self.base_capabilities.supports_resume,
+                "session/resume",
+                RestoreHistoryMode::WithoutReplay,
+            ),
+        };
+        if !supported {
             return Err(RestoreFailure::preflight(
-                super::ExternalProviderRuntimeError::UnsupportedCapability {
-                    capability: "session/load",
-                },
+                super::ExternalProviderRuntimeError::UnsupportedCapability { capability },
             ));
         }
         let (admitted, generation) = tokio::sync::oneshot::channel();
         let (reply, completion) = tokio::sync::oneshot::channel();
         let dispatch = RestoreDispatch::default();
+        let (publication, publication_receiver) =
+            super::provider_restore_activation::RestorePublicationSender::channel();
         self.commands
             .send(super::ProviderCommand::Restore {
                 provider_session_id,
                 cwd,
-                mode: super::provider_session_restore::RestoreHistoryMode::Replay,
+                mode,
                 setup,
                 admitted: Some(admitted),
                 dispatch: dispatch.clone(),
+                publication: publication_receiver,
                 reply,
             })
             .await
@@ -352,10 +371,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 RestoreFailure::preflight(super::ExternalProviderRuntimeError::TransportFailure)
             })?;
         match generation.await {
-            Ok(generation) => Ok(SessionLoadStarted {
+            Ok(generation) => Ok(SessionRestoreStarted {
                 generation,
                 completion,
                 dispatch,
+                publication,
                 local_shutdown: self.local_shutdown.clone(),
                 sink_closed: self.sink_closed.clone(),
             }),

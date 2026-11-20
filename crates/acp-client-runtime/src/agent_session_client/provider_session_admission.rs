@@ -256,6 +256,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     kind,
                     value,
                     reason,
+                    ..
                 }) => Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                     provider_session_id: provider_session_id.clone(),
                     not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
@@ -380,6 +381,9 @@ pub(super) fn fail_pending_session_admission<P: InteractionPort>(
                 dispatch.failure(ExternalProviderRuntimeError::RestoreDisconnected)
             });
             let _result = reply.send(Err(failure));
+        }
+        PendingSessionAdmission::RestorePublication { settled, .. } => {
+            let _result = settled.send(Err(ExternalProviderRuntimeError::TransportFailure));
         }
         PendingSessionAdmission::Close { reply, .. } => {
             let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));

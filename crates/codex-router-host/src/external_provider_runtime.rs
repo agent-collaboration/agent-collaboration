@@ -100,6 +100,8 @@ pub struct ExternalProviderRuntime {
             tokio::sync::oneshot::Receiver<()>,
         )>,
     >,
+    #[cfg(test)]
+    restore_input_waiting: tokio::sync::Notify,
 }
 
 impl std::fmt::Debug for ExternalProviderRuntime {
@@ -131,6 +133,8 @@ impl ExternalProviderRuntime {
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
@@ -160,6 +164,8 @@ impl ExternalProviderRuntime {
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
@@ -208,6 +214,8 @@ impl ExternalProviderRuntime {
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
@@ -233,6 +241,8 @@ impl ExternalProviderRuntime {
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
             #[cfg(test)]
             activation_pause: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
@@ -423,7 +433,9 @@ impl ExternalProviderRuntime {
         // The generation the connection admitted this load under (D1 R14).
         let restored = self
             .client
-            .load_session_with_setup(provider_session_id.clone(), cwd, setup)
+            .begin_restore_session(provider_session_id.clone(), cwd, setup, RestoreVia::Load)
+            .await?
+            .finished()
             .await?;
         self.finish_restore(&provider_session_id, restored, RestoreVia::Load)
             .await
@@ -453,7 +465,9 @@ impl ExternalProviderRuntime {
     ) -> Result<(), acp_client_runtime::RestoreFailure> {
         let restored = self
             .client
-            .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
+            .begin_restore_session(provider_session_id.clone(), cwd, setup, RestoreVia::Resume)
+            .await?
+            .finished()
             .await?;
         self.finish_restore(&provider_session_id, restored, RestoreVia::Resume)
             .await
@@ -462,29 +476,48 @@ impl ExternalProviderRuntime {
     async fn finish_restore(
         &self,
         provider_session_id: &str,
-        restored: acp_client_runtime::RestoredSessionAdmission,
+        restored: acp_client_runtime::PreparedProviderRestore,
         via: RestoreVia,
     ) -> Result<(), acp_client_runtime::RestoreFailure> {
         #[cfg(test)]
         self.pause_before_activation().await;
-        let generation = restored.generation;
+        let generation = restored.admission.generation;
         if let Err(error) = self
             .activate_restore(provider_session_id, generation, via)
             .await
         {
-            if let Err(retirement_error) = self
-                .client
-                .retire_restored_session(provider_session_id.to_owned(), generation)
-                .await
-            {
+            if let Err(retirement_error) = restored.retire().await {
                 tracing::warn!(provider_session_id, %retirement_error, "failed to retire an unsuccessful restore");
             }
             return Err(acp_client_runtime::RestoreFailure::attempted(error));
         }
+        let restored = restored
+            .activate()
+            .await
+            .map_err(acp_client_runtime::RestoreFailure::attempted)?;
         // Kept only once the run's activation was accepted (review F3).
         self.session_setup
             .record_restored_mode(provider_session_id, &restored.permission_mode);
         Ok(())
+    }
+
+    pub(crate) async fn wait_for_restore_input(
+        &self,
+        provider_session_id: &str,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        let Some(generation) = self.client.loading_generation(provider_session_id) else {
+            return Ok(());
+        };
+        #[cfg(test)]
+        self.restore_input_waiting.notify_one();
+        self.client
+            .wait_for_restore_activation(provider_session_id, generation)
+            .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn wait_for_pending_restore_input_for_test(&self) {
+        self.restore_input_waiting.notified().await;
     }
 
     async fn activate_restore(

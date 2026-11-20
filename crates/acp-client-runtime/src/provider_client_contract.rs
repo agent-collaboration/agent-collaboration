@@ -193,6 +193,8 @@ pub enum ExternalProviderRuntimeError {
         "settings-uncertain: run conversation settings set to resolve the unknown provider setting outcome"
     )]
     SettingsOutcomeUncertain,
+    #[error("fast is not offered for the current model")]
+    FastNotOffered,
     #[error("provider setting could not be applied")]
     SettingFailed {
         setting: provider_session_machines::ProviderSettingKind,
