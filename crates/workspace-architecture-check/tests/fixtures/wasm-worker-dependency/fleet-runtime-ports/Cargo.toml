@@ -1,0 +1,9 @@
+[package]
+name = "fleet-runtime-ports"
+version = "0.0.0"
+edition = "2024"
+autotests = false
+publish = false
+
+[dependencies]
+clock-data = { path = "../clock-data" }

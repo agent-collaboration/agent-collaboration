@@ -1,7 +1,8 @@
 //! Issuer key decoding and five-minute retention, separate from legacy Access.
-use crate::RawJwks;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
+use fleet_contracts::IssuerKeyRefusal;
+use fleet_runtime_ports::RawJwks;
 use message_board::IdentityValidationError;
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Mutex};
@@ -132,16 +133,6 @@ impl IssuerKeySet {
             .find(|key| &key.key_id == key_id)
             .ok_or(IssuerKeyRefusal::UnknownKey)
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum IssuerKeyRefusal {
-    #[error("the issuer's public key set is malformed")]
-    MalformedKeySet,
-    #[error("the issuer's signing key is unknown")]
-    UnknownKey,
-    #[error("the issuer key cache is unavailable")]
-    CacheUnavailable,
 }
 
 #[derive(Default)]

@@ -2,7 +2,7 @@
 //! reads answer from storage; retry and discard retain their answer under the
 //! operation ID, so a replay returns it as CreateWorkspace's does.
 use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminResult, WorkspaceRuntime, WorkspaceStoreCalls,
+    AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
     engine::admin::{AttemptRefusal, DiscardOutcome},
     organization_admin_contract::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
@@ -12,6 +12,7 @@ use crate::{
     workspace_row_codec::{json, string},
 };
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{ActorIdentityId, Identity, PersonId, RequestId, Timestamp};
 
 /// What the admin batch carries for one engine operation.
@@ -75,7 +76,7 @@ fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, Stor
     }
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub(crate) async fn engine_health_result(&self) -> Result<EngineAdminPlan, StoreFailure> {
         let health = crate::engine::port::Engine::new(self)
             .engine_health()

@@ -4,7 +4,7 @@ use crate::organization_change_rows::{
 };
 use central_storage::StoreFailure;
 use fleet_identity_protocol::UnixSeconds;
-use runtime_primitives::IdSource;
+use fleet_runtime_ports::IdSource;
 use uuid::Uuid;
 
 pub(crate) const IDLE_EXPIRY_SECONDS: i64 = 30 * 24 * 60 * 60;
@@ -23,7 +23,7 @@ pub(super) struct DecisionIds<'a>(pub &'a dyn IdSource);
 impl DecisionIds<'_> {
     pub(super) fn next(&self) -> Result<Uuid, StoreFailure> {
         let id = self.0.new_id();
-        if !runtime_primitives::uuid_v7(id) {
+        if !fleet_runtime_ports::uuid_v7(id) {
             return Err(StoreFailure::Unavailable);
         }
         Uuid::parse_str(&id.to_string()).map_err(|_| StoreFailure::Unavailable)

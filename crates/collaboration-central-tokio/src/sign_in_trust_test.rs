@@ -1,8 +1,7 @@
 use super::NativeSignInTrust;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use collaboration_central_core::{
-    SignInTrustSettings, organization_authority::FleetOrganizationStatementRefusal,
-};
+use collaboration_central_core::SignInTrustSettings;
+use fleet_contracts::FleetOrganizationStatementRefusal;
 use fleet_identity_protocol::OrganizationId;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use router_clock::ManualClock;
@@ -21,6 +20,15 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000b2a1";
 const OTHER_ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000b2b1";
 const NOW_SECONDS: i64 = 1_900_000_000;
+
+struct SignInTestClock(Arc<ManualClock>);
+
+impl fleet_runtime_ports::Clock for SignInTestClock {
+    fn now(&self) -> fleet_runtime_ports::SyncTime {
+        let sample = runtime_primitives::Clock::now(self.0.as_ref());
+        fleet_runtime_ports::SyncTime::from_unix_millis(sample.unix_millis())
+    }
+}
 
 fn settings(jwks_url: String) -> SignInTrustSettings {
     SignInTrustSettings {
@@ -136,7 +144,7 @@ async fn native_factory_preserves_org_binding_refresh_bound_and_current_clock() 
     let trust = NativeSignInTrust::new(settings(keys.url.clone()))?;
     let organization = OrganizationId::try_from(ORGANIZATION.to_owned())?;
     let verifier = trust
-        .for_organization(organization, clock.clone())
+        .for_organization(organization, Arc::new(SignInTestClock(clock.clone())))
         .map_err(|_| "fixture trust")?;
     let stamp = statement(ORGANIZATION)?;
     let other_stamp = statement(OTHER_ORGANIZATION)?;
@@ -147,7 +155,7 @@ async fn native_factory_preserves_org_binding_refresh_bound_and_current_clock() 
     let other = trust
         .for_organization(
             OrganizationId::try_from(OTHER_ORGANIZATION.to_owned())?,
-            clock.clone(),
+            Arc::new(SignInTestClock(clock.clone())),
         )
         .map_err(|_| "fixture other trust")?;
     assert!(other.verify_statement(&other_stamp).await.is_ok());
@@ -196,8 +204,10 @@ async fn native_factory_refuses_invalid_trust_configuration() -> TestResult {
     let clock = Arc::new(ManualClock::starting_at(SyncTime::from_unix_millis(
         NOW_SECONDS * 1000,
     ))?);
-    let verifier =
-        trust.for_organization(OrganizationId::try_from(ORGANIZATION.to_owned())?, clock);
+    let verifier = trust.for_organization(
+        OrganizationId::try_from(ORGANIZATION.to_owned())?,
+        Arc::new(SignInTestClock(clock)),
+    );
     assert!(matches!(
         verifier,
         Err(FleetOrganizationStatementRefusal::InvalidConfiguration)

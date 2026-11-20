@@ -1,7 +1,6 @@
 //! Apply a verified revocation and its fresh-proof reservation in one org turn.
 use crate::{
-    MachineEnrollmentRevocationResult as ResultKind, ObjectHost, OrganizationAdminAnswer,
-    WorkspaceRuntime, WorkspaceStoreCalls,
+    MachineEnrollmentRevocationResult as ResultKind, OrganizationAdminAnswer, WorkspaceRuntime,
     identity_contract::PersonId,
     organization_authority::machine_login::{
         self, DecisionTime, EnrollmentQuery, StoredEnrollmentState,
@@ -11,8 +10,9 @@ use crate::{
 };
 use central_storage::{AlarmUpdate, BatchOutcome, GuardedStatement, StatementBatch, StoreFailure};
 use fleet_identity_protocol::EnrollmentId;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// The caller holds the central turn through admission, commit and notification.
     pub(crate) async fn revoke_machine_enrollment_from_admin(
         &self,

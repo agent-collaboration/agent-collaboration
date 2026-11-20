@@ -1,7 +1,8 @@
 use super::*;
-use crate::{IssuerKeyCache, KeyFetchFailure, RawJwks, VerifyFailure};
+use crate::IssuerKeyCache;
+use fleet_runtime_ports::SyncTime;
+use fleet_runtime_ports::{KeyFetchFailure, RawJwks, VerifyFailure};
 use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
-use runtime_primitives::SyncTime;
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicUsize, Ordering};
 

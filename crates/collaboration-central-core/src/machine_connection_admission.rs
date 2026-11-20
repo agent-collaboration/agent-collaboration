@@ -1,6 +1,6 @@
 //! The organization turn owns read-only connection admission and restoration.
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceRuntime,
     identity_contract::MachineConnectionRefusal,
     machine_connection::{
         Admission, MachineConnectionAttachment, ValidatedMachineConnection, validate_live,
@@ -10,6 +10,7 @@ use crate::{
 };
 use central_storage::StoreFailure;
 use fleet_identity_protocol::EnrollmentId;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::MachineId;
 
 /// Live authority for one ordinary link request or one member of a write batch.
@@ -19,7 +20,7 @@ pub enum MachineLinkRequestAuthority {
     TemporarilyUnavailable,
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub async fn restore_machine_link_request(
         &self,
         attachment: &MachineConnectionAttachment,

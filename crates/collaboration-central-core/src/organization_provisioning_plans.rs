@@ -3,14 +3,12 @@ use crate::identity_contract::{
     AuthorizationRevision, AuthorizationRevisionAcknowledgement, OrganizationStatementDigestReply,
     ProvisionOrganization, ProvisionOrganizationResult, ReadOrganizationStatementDigest,
 };
-use crate::organization_authority::OrganizationProvisioningFailure;
 use crate::organization_authority::{
-    CurrentStamp, FleetOrganizationStatementRefusal, OrganizationStatementReplacement,
-    OrganizationStatementReplacementRefusal, StoredStampRead,
-    decide_organization_statement_replacement,
+    CurrentStamp, OrganizationStatementReplacement, OrganizationStatementReplacementRefusal,
+    StoredStampRead, decide_organization_statement_replacement,
 };
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceRuntime,
     organization_authority_cache::StampStanding,
     organization_change_rows::{
         self, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
@@ -18,8 +16,11 @@ use crate::{
     organization_stamp_rows,
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
-use runtime_primitives::SyncTime;
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+use fleet_contracts::FleetOrganizationStatementRefusal;
+use fleet_contracts::OrganizationProvisioningFailure;
+use fleet_runtime_ports::SyncTime;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub(crate) async fn prepare_signin_authority(&self) -> Result<(), StoreFailure> {
         let authority = &self.signin_authority;
         if authority.needs_check() {
@@ -64,10 +65,12 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .verify_statement(request.organization_statement.as_str())
             .await
             .map_err(|reason| {
-                (self.signin_observer)(crate::CentralObservation::OrganizationStatementRefused {
-                    organization: self.organization.clone(),
-                    refusal: reason,
-                });
+                (self.signin_observer)(
+                    fleet_contracts::CentralObservation::OrganizationStatementRefused {
+                        organization: self.organization.clone(),
+                        refusal: reason,
+                    },
+                );
                 match reason {
                     FleetOrganizationStatementRefusal::OrganizationMismatch => {
                         Failure::OrganizationMismatch
@@ -87,10 +90,12 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         self.prepare_signin_authority().await?;
         let now = self.clock.now();
         verified.require_valid_at(now).map_err(|refusal| {
-            (self.signin_observer)(crate::CentralObservation::OrganizationStatementRefused {
-                organization: self.organization.clone(),
-                refusal,
-            });
+            (self.signin_observer)(
+                fleet_contracts::CentralObservation::OrganizationStatementRefused {
+                    organization: self.organization.clone(),
+                    refusal,
+                },
+            );
             Failure::InvalidStatement
         })?;
         let stored_trusted = self.signin_authority.standing(now) != StampStanding::Refused;
@@ -257,7 +262,7 @@ fn stored_unexpired(stored: &StoredStampRead, now: SyncTime) -> bool {
     };
     crate::organization_authority::stored_statement_unexpired(stamp.statement(), now)
 }
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     async fn apply_revision_plan(
         &self,
         plan: crate::authorization_revision_plans::AuthorizationRevisionPlan,

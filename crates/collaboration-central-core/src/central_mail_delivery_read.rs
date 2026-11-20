@@ -1,6 +1,6 @@
 //! Select a page of still-deliverable messages for one live machine link.
 use crate::{
-    MachineConnectionAttachment, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    MachineConnectionAttachment, WorkspaceRuntime,
     central_mail_records::decode_messages,
     central_mail_rows::{encode, timestamp},
     direct_message_rows::failure_text,
@@ -14,6 +14,7 @@ use crate::{
 };
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::MessageId;
 use workspace_model::{
     ResolvedSender, Timestamp,
@@ -63,7 +64,7 @@ pub enum WindowedDeliveryDecision {
     AuthorityLapsed,
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// Read the next page of direct and system messages with an open window.
     pub async fn windowed_welcome_page(
         &self,

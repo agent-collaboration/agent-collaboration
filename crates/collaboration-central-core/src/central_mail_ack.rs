@@ -1,6 +1,6 @@
 //! Settle one recipient acknowledgement against the owning message row.
 use crate::{
-    MachineConnectionAttachment, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    MachineConnectionAttachment, WorkspaceRuntime,
     central_mail_rows::timestamp,
     direct_message_rows::refusal_text,
     engine::{
@@ -20,6 +20,7 @@ use central_engine_model::{InstanceKey, Machine, TransitionError};
 use central_storage::{
     AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::{MachineId, MessageId};
 use workspace_model::central_mail::DeliveryAnswer;
 
@@ -46,7 +47,7 @@ impl<M: Machine> EventSource<M> for AckSource {
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub async fn acknowledge_delivery(
         &self,
         connection: &MachineConnectionAttachment,

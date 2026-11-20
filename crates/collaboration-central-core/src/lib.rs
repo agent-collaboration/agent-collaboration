@@ -17,7 +17,6 @@ mod engine_wiring;
 pub use engine::DueUnitStart;
 #[cfg(feature = "test-support")]
 pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineReadFault};
-pub use engine::{AlarmNotPublished, EventCompletion};
 pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
 pub mod machine_token;
@@ -33,8 +32,6 @@ mod pause_points;
 #[cfg(feature = "test-support")]
 pub use pause_points::{HeldPause, PausePoint, PausePoints};
 
-mod object_host;
-pub use object_host::ObjectHost;
 mod machine_connection;
 mod machine_connection_admission;
 mod machine_login_plans;
@@ -51,7 +48,7 @@ mod workspace_runtime;
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
 #[cfg(feature = "test-support")]
 pub use workspace_runtime::LegacyUnitInvocations;
-pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime};
 mod organization_workspace_plans;
 mod workspace_actor_identity;
 mod workspace_admission;
@@ -69,9 +66,6 @@ mod workspace_request_status;
 mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
-
-mod access_observation;
-pub use access_observation::CentralObservation;
 
 mod central_mail_ack;
 pub use central_mail_ack::{MailAckIgnored, MailAckSettlement};
@@ -92,7 +86,6 @@ mod central_timer_rows;
 mod central_timers;
 mod direct_message_rows;
 mod guarded_statements;
-pub use engine::AlarmResult;
 mod notification_windows;
 mod workspace_drain;
 mod workspace_notice_plans;
@@ -111,15 +104,9 @@ mod issuer_key_resolution;
 mod issuer_signature_verifier;
 pub mod organization_authority;
 pub mod person_request;
-mod signature_verification;
-pub use issuer_key_cache::{
-    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
-};
-pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
-pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
-pub use signature_verification::{Ed25519Verification, SignatureValidity, VerifyFailure};
-mod key_source_capabilities;
-pub use key_source_capabilities::{KeyFetchFailure, RawJwks};
+pub use issuer_key_cache::{IssuerKeyCache, IssuerKeyId, IssuerKeySet, IssuerVerificationKey};
+pub use issuer_key_resolution::resolve_issuer_key;
+pub use issuer_signature_verifier::IssuerSignatureVerifier;
 mod sign_in_trust_settings;
 pub use sign_in_trust_settings::SignInTrustSettings;
 mod authorization_floor_rows;

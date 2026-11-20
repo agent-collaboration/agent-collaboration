@@ -8,9 +8,10 @@ use central_storage::{
     AlarmPublicationFailure, AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure,
 };
 use collaboration_central_core::{
-    AlarmNotPublished, MAX_ALARM_UNIX_MILLIS, PausePoint,
+    MAX_ALARM_UNIX_MILLIS, PausePoint,
     engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
 };
+use fleet_contracts::AlarmNotPublished;
 use router_clock::RuntimeClock;
 
 /// A time with no later five-minute mark inside the portable range, yet far

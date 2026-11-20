@@ -1,10 +1,12 @@
-use super::{IssuerSignatureRefusal, IssuerSignatureVerifier};
-use crate::{
-    Ed25519Verification, IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerKeySource,
-    KeyFetchFailure, RawJwks, SignatureValidity, VerifyFailure,
-};
+use super::IssuerSignatureVerifier;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use runtime_primitives::{Clock, SyncTime};
+use fleet_contracts::IssuerSignatureRefusal;
+use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal};
+use fleet_runtime_ports::{Clock, SyncTime};
+use fleet_runtime_ports::{
+    Ed25519Verification, IssuerKeySource, KeyFetchFailure, RawJwks, SignatureValidity,
+    VerifyFailure,
+};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},

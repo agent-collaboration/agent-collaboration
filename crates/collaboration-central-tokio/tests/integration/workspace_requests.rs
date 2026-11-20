@@ -477,6 +477,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     host.close().await;
 }
 
+mod clock_boundaries;
 mod corruption_and_restart;
 mod initiatives_and_members;
 mod migrations;

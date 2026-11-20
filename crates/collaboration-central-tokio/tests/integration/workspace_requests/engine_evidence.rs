@@ -6,7 +6,7 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-use collaboration_central_core::ObjectHost;
+use fleet_runtime_ports::CentralStore;
 use std::io::Write;
 
 pub(crate) const EVIDENCE_DIR_VARIABLE: &str = "CENTRAL_ENGINE_EVIDENCE_DIR";
@@ -26,11 +26,11 @@ pub(crate) fn append_receipt(name: &str, body: &str) {
     writeln!(file, "{body}").unwrap();
 }
 
-async fn read(host: &impl ObjectHost, sql: &'static str) -> ReadOutcome {
+async fn read(host: &impl CentralStore, sql: &'static str) -> ReadOutcome {
     host.read(Statement { sql, args: vec![] }).await.unwrap()
 }
 
-async fn run(host: &impl ObjectHost, sql: &'static str) {
+async fn run(host: &impl CentralStore, sql: &'static str) {
     assert!(matches!(
         host.run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -47,7 +47,7 @@ async fn run(host: &impl ObjectHost, sql: &'static str) {
 
 /// Writes every column of every `central_work_attempts` row after one step
 /// (acceptance R4), as one JSON line naming the step.
-pub(crate) async fn dump_attempts(host: &impl ObjectHost, receipt: &str, step: &str) {
+pub(crate) async fn dump_attempts(host: &impl CentralStore, receipt: &str, step: &str) {
     let table = read(
         host,
         "SELECT * FROM engine_work_attempts ORDER BY machine_kind,subject_key",
@@ -63,7 +63,7 @@ pub(crate) async fn dump_attempts(host: &impl ObjectHost, receipt: &str, step: &
 /// each one as UUIDv7 (V11.2), including IDs a later success deletes. The
 /// witness is a disposable test-store fixture: its counter key keeps write
 /// order and it never reaches a production schema, so it carries no UUIDv7 key.
-pub(crate) async fn install_attempt_id_witness(host: &impl ObjectHost) {
+pub(crate) async fn install_attempt_id_witness(host: &impl CentralStore) {
     run(
         host,
         "CREATE TABLE IF NOT EXISTS test_attempt_id_witness (witness_order INTEGER PRIMARY KEY, attempt_id TEXT, write_kind TEXT NOT NULL)",
@@ -85,7 +85,7 @@ pub(crate) async fn install_attempt_id_witness(host: &impl ObjectHost) {
 /// itself planted, and writes them to the V11.2 receipt. Fails loudly when the
 /// witness was never installed. Returns how many IDs were checked.
 pub(crate) async fn assert_every_written_attempt_id_is_uuid_v7(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     test: &str,
     planted: &[&str],
 ) -> usize {

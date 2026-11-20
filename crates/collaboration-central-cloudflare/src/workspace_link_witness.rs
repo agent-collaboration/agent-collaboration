@@ -1,6 +1,7 @@
 //! Verification-only events; no hook or binding exists in a production bundle.
-use super::{CentralObject, ObjectHost};
+use super::CentralObject;
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore;
 use serde::Serialize;
 use worker::{Env, Method, RequestInit, Result};
 

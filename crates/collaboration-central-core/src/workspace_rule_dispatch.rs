@@ -1,7 +1,8 @@
 //! Translate admitted semantic inputs into the existing pure rule's declared rows.
+use crate::WorkspaceRuntime;
 use crate::workspace_decode_error::corrupt;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_storage::StoreFailure;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 
 pub(crate) struct ResolvedOperation {
@@ -24,7 +25,7 @@ fn optional_description(
 ) -> Result<Option<m::RequiredDescription>, m::RefusalReason> {
     description.map(required_description).transpose()
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_command(
         &self,
         op: &m::WorkspaceOperation,

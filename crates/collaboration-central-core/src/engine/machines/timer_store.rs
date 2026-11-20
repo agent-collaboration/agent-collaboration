@@ -1,5 +1,4 @@
 use super::{automation_timer as automation, wake_timer as wake};
-use crate::ObjectHost as _;
 use crate::{
     central_mail_rows::{insert_message, timestamp},
     central_timer_rows::{decode_automations, decode_wakes},
@@ -16,6 +15,7 @@ use crate::{
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore as _;
 use workspace_model::central_mail as mail;
 
 pub(crate) struct WakeStore<'a, R: EngineHost>(pub &'a R);

@@ -1,0 +1,21 @@
+[package]
+name = "fleet-runtime-ports"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The capabilities a host supplies to FleetRuntime: traits and the leaf values they carry"
+
+[lints]
+workspace = true
+
+[dependencies]
+central-storage.workspace = true
+central-engine-model.workspace = true
+workspace-ids.workspace = true
+serde.workspace = true
+uuid.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }

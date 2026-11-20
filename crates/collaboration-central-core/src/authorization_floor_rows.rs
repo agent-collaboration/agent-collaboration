@@ -1,6 +1,5 @@
 //! Strict authorization-floor decoding and snapshot guards for modern central.
 use crate::{
-    ObjectHost,
     person_request::{
         FloorRevision, OrganizationFloor, OrganizationFloorState, PersonFloor, PersonFloorState,
     },
@@ -10,6 +9,7 @@ use crate::{
 use central_storage::{
     GuardedStatement, ReadOutcome, SafeInteger, SqlValue, Statement, StoreFailure,
 };
+use fleet_runtime_ports::CentralStore;
 
 pub(crate) fn integer(value: i64, field: &str) -> Result<SqlValue, StoreFailure> {
     SafeInteger::new(value)
@@ -26,7 +26,7 @@ fn read_integer(rows: &ReadOutcome, row: &[SqlValue], field: &str) -> Result<i64
 
 fn private_id(value: &str, field: &str) -> Result<(), StoreFailure> {
     let parsed = uuid::Uuid::parse_str(value).map_err(|_| corrupt(field))?;
-    if !runtime_primitives::uuid_v7(parsed) || parsed.to_string() != value {
+    if !fleet_runtime_ports::uuid_v7(parsed) || parsed.to_string() != value {
         return Err(corrupt(field));
     }
     Ok(())
@@ -91,7 +91,7 @@ pub(crate) fn decode_person_floor(
 }
 
 pub(crate) async fn read_organization_floor(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     organization: &str,
 ) -> Result<Option<OrganizationFloor>, StoreFailure> {
     let rows = host.read(Statement {
@@ -102,7 +102,7 @@ pub(crate) async fn read_organization_floor(
 }
 
 pub(crate) async fn read_person_floor(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     organization: &str,
     person: &str,
 ) -> Result<Option<PersonFloor>, StoreFailure> {

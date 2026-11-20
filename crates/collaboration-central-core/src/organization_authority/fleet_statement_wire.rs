@@ -1,6 +1,6 @@
 //! Decode the stamp profile without granting identity to unverified claims.
-use super::fleet_statement_refusal::FleetOrganizationStatementRefusal;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::FleetOrganizationStatementRefusal;
 use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Deserializer};
 
@@ -118,7 +118,10 @@ fn decode(value: &str) -> Result<Vec<u8>, FleetOrganizationStatementRefusal> {
 }
 
 /// A stored statement's expiry guard only; this does not establish signature trust.
-pub(crate) fn stored_statement_unexpired(compact: &str, now: runtime_primitives::SyncTime) -> bool {
+pub(crate) fn stored_statement_unexpired(
+    compact: &str,
+    now: fleet_runtime_ports::SyncTime,
+) -> bool {
     ParsedFleetStatement::parse(compact)
         .is_ok_and(|parsed| now.unix_millis().div_euclid(1000) < parsed.claims.exp.0)
 }

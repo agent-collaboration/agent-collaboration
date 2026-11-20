@@ -3,7 +3,7 @@ use central_storage::{BatchOutcome, ReadOutcome, SqlValue, StatementBatch};
 use std::sync::Mutex;
 
 struct ReadSequence(Mutex<Vec<(&'static str, ReadOutcome)>>);
-impl ObjectHost for ReadSequence {
+impl CentralStore for ReadSequence {
     async fn published_alarm(
         &self,
     ) -> Result<Option<central_engine_model::EngineTime>, central_storage::StoreFailure> {

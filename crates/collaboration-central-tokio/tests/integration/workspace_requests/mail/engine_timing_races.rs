@@ -7,12 +7,12 @@ use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublication, CorruptReason, StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
-    AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, WorkspaceStoreCalls,
-    engine_probe::ProbeEvent,
+    ClockIds, PausePoint, WorkspaceRuntime, engine_probe::ProbeEvent,
 };
 use collaboration_central_tokio::ObjectStorage;
+use fleet_contracts::AlarmNotPublished;
+use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use router_clock::RuntimeClock;
-use runtime_primitives::{Clock, SyncTime};
 use std::sync::{Arc, Mutex, PoisonError};
 
 fn set(time: Time) -> AlarmPublication {
@@ -152,7 +152,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
 /// Pass-through workspace calls for a hand-built runtime.
 #[derive(Clone)]
 struct WorkspaceStore(Arc<ObjectStorage>);
-impl WorkspaceStoreCalls for WorkspaceStore {
+impl WorkspaceStores for WorkspaceStore {
     async fn call_workspace(
         &self,
         _workspace: &workspace_model::WorkspaceId,
@@ -168,7 +168,7 @@ impl WorkspaceStoreCalls for WorkspaceStore {
 struct SharedClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for SharedClock {
     fn now(&self) -> SyncTime {
-        self.0.now()
+        SyncTime::from_unix_millis(runtime_primitives::Clock::now(self.0.as_ref()).unix_millis())
     }
 }
 /// One publication stops between its decision and its alarm write.
@@ -188,6 +188,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
     }
     fixture.host.close().await;
     let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let clock = SharedClock(fixture.shared_for_runtime());
     let gate: Arc<Mutex<Option<DecisionGate>>> = Arc::default();
     let decide = collaboration_central_core::engine_alarm_decider(due_batches.clone());
     let gated: central_storage::EngineAlarmDecider = Arc::new({
@@ -211,7 +212,7 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
             )),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
-        .with_engine_publication(fixture.shared_for_runtime(), gated),
+        .with_engine_publication(Arc::new(clock.clone()), gated),
     );
     let workspace = Arc::new(ObjectStorage::new(
         fixture
@@ -225,8 +226,8 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         fixture.caller.organization_id().clone(),
         central.clone(),
         WorkspaceStore(workspace.clone()),
-        fixture.shared_for_runtime(),
-        Arc::new(ClockIds::new(SharedClock(fixture.shared_for_runtime()))),
+        Arc::new(clock.clone()),
+        Arc::new(ClockIds::new(clock)),
         due_batches.clone(),
     ));
     fixture.set_utc(at(start, 4, 0, 0)).await;

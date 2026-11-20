@@ -3,8 +3,9 @@
 //! `workspaces` table, not a workspace store.
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_request_gate::{reply, store_result};
-use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 use workspace_rules::DirectoryChange;
 
@@ -79,7 +80,7 @@ pub(crate) fn classify<'a>(
     }))
 }
 
-pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     caller: &WorkspaceCaller,
     request: &m::WorkspaceRequest,
@@ -134,7 +135,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     }
 }
 
-async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+async fn write<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     caller: &WorkspaceCaller,
     request: &m::WorkspaceRequest,

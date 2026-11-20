@@ -1,12 +1,13 @@
 //! Position-ordered activity joins one central recipient window across workspaces.
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceRuntime,
     guarded_statements::{any, text},
     notification_windows::{NotificationWindow, window_statements},
     workspace_decode_error::corrupt,
     workspace_row_codec::WorkspaceRows,
 };
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use std::collections::BTreeSet;
 use workspace_model as m;
 
@@ -18,7 +19,7 @@ pub struct DrainResult {
     pub window_items_added: usize,
     pub skipped_recipients: usize,
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn plan_workspace_notices(
         &self,
         workspace: &m::WorkspaceId,

@@ -9,7 +9,7 @@ use crate::identity_contract::{EndedMachineClient, EnrollmentRevocationReason, P
 use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use crate::person_request::AdminOperationId;
 use central_storage::StoreFailure;
-use runtime_primitives::IdSource;
+use fleet_runtime_ports::IdSource;
 
 /// None means the machine_id has no currently enrolled login.
 pub(crate) fn revoke_machine_enrollment(

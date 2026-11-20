@@ -167,6 +167,12 @@ pub(super) struct Fixture {
 }
 impl Fixture {
     pub async fn new() -> Self {
+        Self::with_host_clock(|clock| clock).await
+    }
+
+    pub async fn with_host_clock(
+        adapt: impl FnOnce(Arc<router_clock::GatedClock>) -> Arc<dyn router_clock::RuntimeClock>,
+    ) -> Self {
         let root = tempfile::tempdir().unwrap();
         let clock = Arc::new(
             router_clock::GatedClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
@@ -175,10 +181,13 @@ impl Fixture {
             .unwrap(),
         );
         let keys = signed::SignInKeys::start().await.unwrap();
-        let host =
-            TokioWorkspaceHost::open_with_signin(root.path(), clock.clone(), settings(&keys.url))
-                .await
-                .unwrap();
+        let host = TokioWorkspaceHost::open_with_signin(
+            root.path(),
+            adapt(clock.clone()),
+            settings(&keys.url),
+        )
+        .await
+        .unwrap();
         use runtime_primitives::Clock;
         let now = clock.now().unix_millis().div_euclid(1000);
         let runtime = host.central(&organization()).await.unwrap();

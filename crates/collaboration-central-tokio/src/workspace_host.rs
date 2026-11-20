@@ -9,19 +9,20 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{
-    ClockIds, ObjectHost, OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings,
-    WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
+    ClockIds, OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings,
+    WorkspaceCaller, WorkspaceRuntime,
     identity_contract::{
         AuthorizationRevision, AuthorizationRevisionAcknowledgement,
         OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,
         ReadOrganizationStatementDigest,
     },
-    organization_authority::OrganizationProvisioningFailure,
     person_request::PersonRequestInput,
 };
+use fleet_contracts::OrganizationProvisioningFailure;
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use router_clock::RuntimeClock;
-use runtime_primitives::{Clock, IdSource, SyncTime};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -32,7 +33,7 @@ use workspace_alarm_owner::WorkspaceAlarmOwner;
 use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
 use workspace_model::{WorkspaceId, WorkspaceReply, WorkspaceRequest};
 
-impl ObjectHost for ObjectStorage {
+impl CentralStore for ObjectStorage {
     async fn run_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         ObjectStorage::run_batch(self, batch).await
     }
@@ -47,7 +48,7 @@ impl ObjectHost for ObjectStorage {
 struct ClockHandle(Arc<dyn RuntimeClock>);
 impl Clock for ClockHandle {
     fn now(&self) -> SyncTime {
-        self.0.now()
+        SyncTime::from_unix_millis(runtime_primitives::Clock::now(self.0.as_ref()).unix_millis())
     }
 }
 #[derive(Clone)]
@@ -72,7 +73,7 @@ impl TokioWorkspaceStores {
         Ok(store)
     }
 }
-impl WorkspaceStoreCalls for TokioWorkspaceStores {
+impl WorkspaceStores for TokioWorkspaceStores {
     async fn call_workspace(
         &self,
         workspace: &WorkspaceId,
@@ -196,7 +197,9 @@ impl TokioWorkspaceHost {
                 Ok(check) => runtime.with_sign_in_verification(check),
                 // The default checker explicitly refuses every offered statement with
                 // InvalidConfiguration, at the core observation boundary.
-                Err(collaboration_central_core::organization_authority::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
+                Err(fleet_contracts::FleetOrganizationStatementRefusal::InvalidConfiguration) => {
+                    runtime
+                }
                 Err(_) => return Err(StoreFailure::Unavailable),
             },
             None => runtime,
@@ -223,7 +226,7 @@ impl TokioWorkspaceHost {
         orgs.insert(organization.clone(), runtime.clone());
         Ok(runtime)
     }
-    pub fn current_time(&self) -> SyncTime {
+    pub fn current_time(&self) -> runtime_primitives::SyncTime {
         self.clock.now()
     }
 

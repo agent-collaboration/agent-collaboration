@@ -1,11 +1,12 @@
 //! Live request admission. Callers hold the central turn through the admitted effect.
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::{column, json, string};
-use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{RefusalReason, WorkspaceId};
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn admit_workspace(
         &self,
         caller: &WorkspaceCaller,

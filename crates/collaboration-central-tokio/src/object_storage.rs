@@ -6,7 +6,8 @@ use central_storage::{
     AlarmPublication, AlarmPublicationFailure, BatchOutcome, EngineAlarmDecider, EngineAlarmTimes,
     ReadOutcome, Statement, StatementBatch, StoreFailure,
 };
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::Clock;
+use runtime_primitives::SyncTime;
 use sqlx::migrate::Migrator;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -141,7 +142,7 @@ impl ObjectStorage {
                     ..
                 })
                 | Err(_) => Some(LastAlarmPublication::Failed {
-                    at: engine.clock.now(),
+                    at: SyncTime::from_unix_millis(engine.clock.now().unix_millis()),
                 }),
                 Ok(
                     BatchOutcome::Applied {

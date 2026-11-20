@@ -90,10 +90,7 @@ async fn stamp_failures_and_unprovisioned_alarm_leave_business_rows_unchanged() 
         ));
         let result = runtime.cold_alarm().await;
         match case {
-            0 => assert_eq!(
-                result.unwrap(),
-                collaboration_central_core::AlarmResult::default()
-            ),
+            0 => assert_eq!(result.unwrap(), fleet_contracts::AlarmResult::default()),
             1 => assert_eq!(
                 result.unwrap_err(),
                 central_storage::StoreFailure::Unavailable

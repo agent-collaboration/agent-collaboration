@@ -1,6 +1,5 @@
 //! Prepare fresh-proof reservation; the caller appends its effect to the same batch.
 use crate::{
-    ObjectHost,
     authorization_floor_rows::{
         integer, organization_guard, person_guard, read_organization_floor, read_person_floor,
     },
@@ -13,6 +12,7 @@ use crate::{
     workspace_row_codec::string,
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore;
 use workspace_model::Timestamp;
 
 pub(crate) struct PersonAdmissionPlan {
@@ -24,7 +24,7 @@ pub(crate) struct PersonAdmissionPlan {
 /// `now` is the caller's sole applying sample, taken while it holds the org turn.
 /// No request marker is written until the caller commits this plan with its effect.
 pub(crate) async fn prepare_person_admission(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     request: &VerifiedPersonRequest,
     now: Timestamp,
 ) -> Result<Result<PersonAdmissionPlan, AdmissionRefusal>, StoreFailure> {

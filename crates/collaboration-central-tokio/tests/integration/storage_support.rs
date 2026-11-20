@@ -6,7 +6,7 @@ use central_storage::{
 };
 use collaboration_central_core::ClockIds;
 use collaboration_central_tokio::ObjectStorage;
-use runtime_primitives::{Clock, IdSource, SyncTime};
+use fleet_runtime_ports::{Clock, IdSource, SyncTime};
 use sqlx::migrate::Migrator;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

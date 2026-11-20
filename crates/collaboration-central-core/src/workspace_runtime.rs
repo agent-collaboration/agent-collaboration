@@ -1,20 +1,14 @@
 //! One org's request owner. Stores execute statements; only this core makes decisions.
-use crate::{MailDeliveryReady, ObjectHost, WorkspaceTurns};
+use crate::{MailDeliveryReady, WorkspaceTurns};
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
+use fleet_contracts::CentralObservation;
 use fleet_identity_protocol::OrganizationId;
-use runtime_primitives::{Clock, IdSource};
-use std::{future::Future, sync::Arc};
+use fleet_runtime_ports::{CentralStore, Clock, IdSource, WorkspaceStores};
+use std::sync::Arc;
 use workspace_model::{Caller, WorkspaceId};
 
-pub trait WorkspaceStoreCalls: Clone + Send + Sync + 'static {
-    fn call_workspace(
-        &self,
-        workspace: &WorkspaceId,
-        call: StoreCall,
-    ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
-}
 /// A semantic caller bound to core-validated machine_id provenance.
 #[derive(Clone)]
 pub struct WorkspaceCaller {
@@ -63,7 +57,7 @@ pub use crate::engine::port::LegacyUnitInvocations;
 
 /// One organization's request runtime. Machine grant lifetime is fixed by central
 /// policy and has no public configuration API.
-pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
+pub struct WorkspaceRuntime<Host: CentralStore, Stores: WorkspaceStores> {
     pub(crate) organization: OrganizationId,
     pub(crate) host: Arc<Host>,
     pub(crate) stores: Stores,
@@ -71,7 +65,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) ids: Arc<dyn IdSource>,
     pub(crate) due_batches: Arc<crate::DueBatchState>,
     pub(crate) turns: WorkspaceTurns,
-    pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+    pub(crate) signin_observer: Arc<dyn Fn(CentralObservation) + Send + Sync>,
     pub(crate) mail_delivery_ready: Arc<dyn Fn(MailDeliveryReady) + Send + Sync>,
     pub(crate) machine_revoked: Arc<dyn Fn(workspace_ids::MachineId) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
@@ -98,7 +92,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     #[cfg(feature = "test-support")]
     pub(crate) machine_restore_failure: std::sync::Mutex<Option<(usize, StoreFailure)>>,
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub fn new(
         organization: OrganizationId,
         host: Arc<Host>,
@@ -152,7 +146,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     }
     pub fn with_sign_in_observer(
         mut self,
-        observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+        observer: Arc<dyn Fn(CentralObservation) + Send + Sync>,
     ) -> Self {
         self.signin_observer = observer;
         self

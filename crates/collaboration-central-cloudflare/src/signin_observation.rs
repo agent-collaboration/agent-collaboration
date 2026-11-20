@@ -1,6 +1,6 @@
 //! The Worker's log sink for the org runtime's closed observations.
 
-use collaboration_central_core::CentralObservation;
+use fleet_contracts::CentralObservation;
 
 /// Modern org runtime sink; only the core closed classification crosses here.
 pub(crate) fn observe_signin(observation: CentralObservation) {

@@ -1,8 +1,9 @@
 //! Replay precedes mutable rule decisions; the durable answer shares the effect batch.
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::WorkspaceRows;
-use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 
 fn invalid(field: &str) -> m::WorkspaceReply {
@@ -36,7 +37,7 @@ pub(crate) fn store_result(
         }
     }
 }
-pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     caller: &WorkspaceCaller,
     request: m::WorkspaceRequest,
@@ -269,7 +270,7 @@ fn drain_failure(error: StoreFailure) -> Result<m::WorkspaceReply, StoreFailure>
         }
     }
 }
-async fn enrich<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+async fn enrich<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     result: m::WorkspaceResult,
     durable_answer: bool,
@@ -311,7 +312,7 @@ fn unchanged_item(operation: &m::WorkspaceOperation) -> Result<m::ItemRef, Store
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub async fn request(
         &self,
         caller: &WorkspaceCaller,

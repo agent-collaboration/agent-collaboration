@@ -50,7 +50,7 @@ impl<State, Error> From<FailureOutcome> for HandleOutcome<State, Error> {
         }
     }
 }
-struct ReducerIds<'a>(&'a dyn runtime_primitives::IdSource);
+struct ReducerIds<'a>(&'a dyn fleet_runtime_ports::IdSource);
 impl central_engine_model::IdSource for ReducerIds<'_> {
     fn next_id(&mut self) -> uuid::Uuid {
         self.0.new_id()
