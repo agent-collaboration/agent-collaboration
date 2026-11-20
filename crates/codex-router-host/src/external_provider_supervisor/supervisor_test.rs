@@ -579,14 +579,10 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         .expect("provider runtime")
         .shutdown()
         .await;
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        backend
-            .queued_operation_registry()
-            .wait_for_not_submitted(&queued_id),
-    )
-    .await
-    .expect("the queued input settles after provider retirement");
+    backend
+        .queued_operation_registry()
+        .wait_for_not_submitted(&queued_id)
+        .await;
     let snapshot = backend
         .queued_operation_registry()
         .snapshot(&queued_id)

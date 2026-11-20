@@ -390,61 +390,6 @@ impl ProviderSessionEventHub {
         history.replay_epoch = replay_epoch;
         Ok(replay_epoch)
     }
-
-    /// A resumed Session has no replayable history. Invalidate retained events
-    /// and subscribers while keeping the newly connected Session idle.
-    pub async fn begin_history_unavailable(
-        &self,
-        session: SessionRef,
-    ) -> Result<u64, SessionEventHubError> {
-        let history = self
-            .histories
-            .lock()
-            .await
-            .entry(session)
-            .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
-            .clone();
-        let mut history = history.lock().await;
-        let replay_epoch = history
-            .replay_epoch
-            .checked_add(1)
-            .ok_or(SessionEventHubError::Unavailable)?;
-        let _ = history.sender.send(HubEvent {
-            sequence: history.next_sequence,
-            event: SessionEvent::ResyncRequired { replay_epoch },
-        });
-        // Resume has no transcript replay, but the client publishes its fresh
-        // current settings before this Host invalidation. Carry that state
-        // event into the new epoch ahead of capabilities and Idle.
-        let current_settings = history
-            .events
-            .values()
-            .rev()
-            .find_map(|item| match &item.event {
-                SessionEvent::SettingsChanged { settings } => Some(settings.clone()),
-                _ => None,
-            });
-        let (sender, _) = broadcast::channel(self.subscriber_capacity);
-        history.sender = sender;
-        history.events.clear();
-        history.items.clear();
-        history.pending.clear();
-        history.turn_running = false;
-        history.state = SessionState::Idle;
-        history.next_sequence = 1;
-        if let Some(settings) = current_settings {
-            history.events.insert(
-                1,
-                HubEvent {
-                    sequence: 1,
-                    event: SessionEvent::SettingsChanged { settings },
-                },
-            );
-            history.next_sequence = 2;
-        }
-        history.replay_epoch = replay_epoch;
-        Ok(replay_epoch)
-    }
 }
 
 impl SessionEventHub for ProviderSessionEventHub {

@@ -75,13 +75,6 @@ fn target() -> SessionRef {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-fn non_creator_agent(target: &SessionRef) -> SessionRef {
-    let mut sender = target.clone();
-    sender.session_id = SessionId::try_from("other-session".to_owned()).expect("sender ID");
-    sender
-}
-
-#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
@@ -465,21 +458,6 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
             [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
             if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::Accepted));
     }
-    let typed_steer = route
-        .steer_contents(
-            target.clone(),
-            non_creator_agent(&target).into(),
-            session_event_model::InputId::generate(),
-            session_event_model::ProviderSubmission::plain(vec![
-                session_event_model::PromptContent::text("follow-up".into()).expect("typed text"),
-            ]),
-        )
-        .await
-        .expect("non-creator typed steer");
-    assert!(matches!(
-        typed_steer,
-        codex_router_host::ProviderSteeringOutcome::Injected { .. }
-    ));
     active_event.write_all(b"x").await.expect("release prompt");
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("shutdown");

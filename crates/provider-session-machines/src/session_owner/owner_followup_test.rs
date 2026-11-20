@@ -544,7 +544,6 @@ fn t2_explicit_steer_on_idle_uses_the_prompt_path_and_preserves_the_input() {
             supported: true,
         },
     );
-    assert!(effects.contains(&OwnerEffect::IdleSteerUsesPrompt(request.clone())));
     assert!(
         effects.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
             request.clone()

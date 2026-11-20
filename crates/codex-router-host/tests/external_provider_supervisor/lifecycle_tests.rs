@@ -231,20 +231,7 @@ async fn supervisor_shutdown_drains_saturated_load_completions_and_preserves_unk
         )?;
         operation_ids.push(operation_id);
     }
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if std::fs::read_to_string(&admission_log)
-                .unwrap_or_default()
-                .lines()
-                .count()
-                == 40
-            {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await?;
+    wait_for_fixture_loads(&admission_log, 40).await;
     backend
         .shutdown()
         .await
@@ -255,7 +242,7 @@ async fn supervisor_shutdown_drains_saturated_load_completions_and_preserves_unk
             .expect_err("shutdown-held load cannot succeed");
         ensure_eq!(failure.effect, ProviderOperationEffect::Unknown);
     }
-    assert_process_reaped(&process_id_path).await?;
+    assert_process_reaped(&process_id_path)?;
     Ok(())
 }
 

@@ -298,7 +298,7 @@ export const section: LedgerSection = {
     {
       file: "crates/codex-router-host/src/provider_acp_delivery_route/provider_content_commands.rs",
       disposition: { kind: "converts", owners: ["acp", "router-vocabulary"] },
-      note: "prompt_contents (45), compact (62), submit_input (78), steer_contents (167), queue_contents (235); RouteClaim/ProviderSessionLoadOutcome to ProviderQueueAdmissionError (97-135); unsupported_content_type (318-337) repeats the ACP content capability check of acp-client-runtime provider_prompt_content.rs:82",
+      note: "prompt_contents (45), compact (62), submit_input (78), place_steer (194), queue_contents (235); RouteClaim/ProviderSessionLoadOutcome to ProviderQueueAdmissionError (97-135); unsupported_content_type (318-337) repeats the ACP content capability check of acp-client-runtime provider_prompt_content.rs:82",
     },
     {
       file: "crates/codex-router-host/src/provider_acp_delivery_route/provider_delivery_request.rs",

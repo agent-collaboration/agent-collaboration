@@ -5,7 +5,7 @@ use super::{
     ProviderIdentity, ProviderPromptContentsRequest, ProviderSessionLoadOutcome, RouteClaim,
     SessionRef, ensure_provider_session_loaded, session_queue_plan,
 };
-use crate::{ProviderSteeringOutcome, session_owner_calls::InputAcceptance};
+use crate::session_owner_calls::InputAcceptance;
 use acp_client_runtime::RestorePhase;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -189,34 +189,6 @@ impl ProviderAcpDeliveryRoute {
             })
             .await
             .map_err(|failure| ProviderPromptContentsError::Operation(Box::new(failure)))
-    }
-
-    pub async fn steer_contents(
-        &self,
-        target: SessionRef,
-        actor: ProviderIdentity,
-        input_id: session_event_model::InputId,
-        contents: session_event_model::ProviderSubmission,
-    ) -> Result<ProviderSteeringOutcome, ProviderSteerContentsError> {
-        Ok(
-            match self
-                .place_steer(target, actor, input_id, None, contents)
-                .await?
-            {
-                InputAcceptance::Started | InputAcceptance::ProviderStarted => {
-                    ProviderSteeringOutcome::StartedNewTurn
-                }
-                InputAcceptance::Steered { joined_operation } => {
-                    ProviderSteeringOutcome::Injected {
-                        running_operation_id: joined_operation
-                            .and_then(|id| OperationId::try_from(id.to_string()).ok()),
-                        joined_turn: None,
-                    }
-                }
-                InputAcceptance::Unsent { .. } => ProviderSteeringOutcome::Failed,
-                _ => return Err(ProviderQueueAdmissionError::Unavailable.into()),
-            },
-        )
     }
 
     pub(crate) async fn place_steer(

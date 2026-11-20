@@ -700,10 +700,6 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                     .reopen_route(Self::transport_run(owner, run.generation), run.attempt);
                 Ok(None)
             }
-            OwnerEffect::IdleSteerUsesPrompt(input) => {
-                self.calls.record_idle_steer(input.operation);
-                Ok(None)
-            }
             OwnerEffect::InputQueued(input) => {
                 self.calls
                     .accepted(input.operation, InputAcceptance::Queued);

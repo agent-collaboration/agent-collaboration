@@ -15,7 +15,7 @@ use provider_session_machines::{
 };
 use session_event_model::InputId;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{Mutex, MutexGuard},
 };
 use tokio::sync::{Notify, oneshot};
@@ -35,7 +35,6 @@ pub struct SessionOwnerCalls {
     reply_changed: Notify,
     cancels: Mutex<BTreeMap<CancelTarget, oneshot::Sender<CancelReceipt>>>,
     dependent_restores: Mutex<BTreeMap<Uuid, oneshot::Sender<RestoreResult>>>,
-    idle_steers: Mutex<BTreeSet<Uuid>>,
 }
 
 pub(crate) type CancelReceipt = Result<CancelDrainReport, RevokeReason>;
@@ -54,7 +53,6 @@ struct SteerTarget {
 pub struct OwnedSettlement {
     pub reply: SessionOwnerReply,
     pub saved: bool,
-    pub idle_steer_summary: Option<&'static str>,
     pub(crate) turn_approver: Option<ProviderIdentity>,
 }
 
@@ -119,9 +117,6 @@ impl SessionOwnerCalls {
         }
     }
 
-    pub(crate) fn record_idle_steer(&self, operation: Uuid) {
-        lock(&self.idle_steers).insert(operation);
-    }
     pub fn insert_content(&self, input: &OwnerInput, content: ProviderPromptContent) {
         lock(&self.outstanding).insert(input.input.clone(), input.clone());
         lock(&self.content).insert(input.input.clone(), content);
@@ -141,7 +136,6 @@ impl SessionOwnerCalls {
         lock(&self.replies).remove(&operation);
         self.reply_changed.notify_waiters();
         lock(&self.dependent_restores).remove(&operation);
-        lock(&self.idle_steers).remove(&operation);
         lock(&self.acceptance).remove(&operation);
         lock(&self.delivery_evidence).remove(&operation);
         lock(&self.steer_targets).remove(&operation);
@@ -155,7 +149,6 @@ impl SessionOwnerCalls {
         lock(&self.content).clear();
         lock(&self.outstanding).clear();
         lock(&self.approvals).clear();
-        lock(&self.idle_steers).clear();
         lock(&self.acceptance).clear();
         lock(&self.delivery_evidence).clear();
         lock(&self.active_turns).clear();
@@ -294,9 +287,6 @@ impl SessionOwnerCalls {
             | SessionOwnerReply::SettingNotSent { setting, .. }
             | SessionOwnerReply::ModelFastFinished { setting, .. } => setting.change.attempt.0,
         };
-        let idle_steer_summary = lock(&self.idle_steers)
-            .remove(&operation)
-            .then_some("no turn was running; sent as a new prompt");
         lock(&self.delivery_evidence).remove(&operation);
         let joined = lock(&self.steer_targets).remove(&operation);
         let joined_operation = joined.as_ref().and_then(|target| target.operation);
@@ -333,7 +323,6 @@ impl SessionOwnerCalls {
             let _caller_gone = caller.send(OwnedSettlement {
                 reply,
                 saved,
-                idle_steer_summary,
                 turn_approver: joined.and_then(|target| target.different_approver),
             });
             self.reply_changed.notify_waiters();

@@ -748,7 +748,6 @@ pub enum OwnerEffect {
         operation: Uuid,
         reason: RevokeReason,
     },
-    IdleSteerUsesPrompt(OwnerInput),
     InputQueued(OwnerInput),
     SettingQueued {
         input: InputId,

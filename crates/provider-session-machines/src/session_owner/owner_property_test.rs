@@ -234,7 +234,6 @@ impl Mailbox {
             | OwnerEffect::RetireRoute(_)
             | OwnerEffect::CancelNotSent { .. }
             | OwnerEffect::CancelSent { .. }
-            | OwnerEffect::IdleSteerUsesPrompt(_)
             | OwnerEffect::InputQueued(_)
             | OwnerEffect::PromptTaken(_)
             | OwnerEffect::SteerSubmitted(_)

@@ -791,8 +791,6 @@ impl OwnerTransition {
     pub(super) fn admit_steer(&mut self, input: OwnerInput, supported: bool) -> OwnerResult {
         if self.next.turn() == SessionTurn::Idle {
             self.require_live(input.generation)?;
-            self.effects
-                .push(OwnerEffect::IdleSteerUsesPrompt(input.clone()));
             return self.admit_prompt(input, PromptAdmission::Direct);
         }
         self.admit_existing_steer(input, supported)
