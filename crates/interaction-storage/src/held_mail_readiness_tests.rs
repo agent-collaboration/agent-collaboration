@@ -1,7 +1,7 @@
-//! The real readiness SQL covers ordered identities without fetching body columns.
+//! The real readiness SQL uses the target index for ordered, eligible identities.
 use super::*;
-use crate::{MailPushUpdate, StorageError};
-use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt};
+use crate::{MailPushUpdate, PendingPollMail, StorageError};
+use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, RouterOriginRef};
 use sqlx::{Connection, Row};
 
 fn held_receipt() -> DeliveryReceipt {
@@ -16,7 +16,7 @@ fn held_receipt() -> DeliveryReceipt {
 }
 
 #[tokio::test]
-async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
+async fn readiness_ids_search_the_target_index_and_match_eligible_record_order() {
     // Native projection rows stand in for custody; this storage case makes no SDK admission claim.
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("interaction.sqlite");
@@ -49,6 +49,41 @@ async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
     let scheduled_id = scheduled.push_id.clone();
     let scheduled_for_transaction = scheduled_id.clone();
     drafts.push((scheduled, true));
+    let (poll_item, mut polled) = native_item_and_push();
+    polled.body = Some(body.clone());
+    let poll_marker = PendingPollMail {
+        item: poll_item.id(),
+        recipient: polled.target.clone(),
+        membership: message_board::RecordId::generate(),
+        received_at: polled.created_at,
+    };
+    let polled_id = polled.push_id.clone();
+    drafts.push((polled, true));
+    let (_, mut notification) = native_item_and_push();
+    let project = message_board::ProjectId::generate();
+    let intent = message_board::NotifyIntentId::generate();
+    notification.kind = PushKind::BoardNotification;
+    notification.origin = PushOrigin::Router(PushKind::BoardNotification);
+    notification.origin_router_ref = Some(
+        RouterOriginRef::BoardIntent {
+            project: project.clone(),
+            intent: intent.clone(),
+        }
+        .canonical_string()
+        .unwrap(),
+    );
+    notification.mode = None;
+    notification.body = None;
+    notification.header_facts = PushHeaderFacts::BoardNotification {
+        project,
+        intent,
+        cause: message_board::RoleAssignmentId::generate().into(),
+        summary: "Legacy board notification".to_owned().try_into().unwrap(),
+    };
+    let notification_id = notification.push_id.clone();
+    drafts.push((notification, true));
+    let excluded = [scheduled_id, polled_id, notification_id];
+    let excluded_for_claim = excluded.clone();
     let copied_id = prototype.push_id.clone();
     owner.insert_push_record(prototype).await.unwrap();
     owner
@@ -85,6 +120,19 @@ async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
                 )
                 .await
                 .map_err(StoreError::backend)?;
+                // Pair a valid marker with the same ID as a held DM projection to
+                // exercise the anti-join independently of the notification kind filter.
+                crate::insert_pending_poll_in_scope(scope, &poll_marker)
+                    .await
+                    .map_err(StoreError::backend)?;
+                for id in &excluded_for_claim {
+                    assert!(
+                        !crate::mark_released_mail_pending_in_scope(scope, id)
+                            .await
+                            .map_err(StoreError::backend)?,
+                        "readiness claim accepted excluded push {id:?}"
+                    );
+                }
                 Ok(())
             })
         })
@@ -108,7 +156,7 @@ async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
     assert_eq!(
         records
             .iter()
-            .filter(|record| record.push_id != scheduled_id)
+            .filter(|record| !excluded.contains(&record.push_id))
             .map(|record| record.push_id.clone())
             .collect::<Vec<_>>(),
         expected
@@ -116,16 +164,19 @@ async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
     assert!(
         records
             .iter()
+            .filter(|record| record.kind == PushKind::DirectMessage)
             .all(|record| record.body.as_deref() == Some(body.as_str()))
     );
-    assert!(
-        records.iter().any(|record| record.push_id == scheduled_id),
-        "scheduled retry must remain in the full held-record API"
-    );
-    assert!(
-        !ids.contains(&scheduled_id),
-        "readiness released a scheduled retry"
-    );
+    for id in &excluded {
+        assert!(
+            records.iter().any(|record| &record.push_id == id),
+            "excluded push {id:?} must remain in the full held-record API"
+        );
+        assert!(
+            !ids.contains(id),
+            "readiness discovered excluded push {id:?}"
+        );
+    }
     let mut connection = owner.writer.lock().await;
     // This is the same file consumed by the production checked query_file! macro.
     const PLAN: &str = concat!("EXPLAIN QUERY PLAN ", include_str!("held_mail_ids.sql"));
@@ -140,21 +191,28 @@ async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
         .map(|row| row.try_get::<String, _>("detail").unwrap())
         .collect::<Vec<_>>();
     assert!(
-        plan.iter().any(|detail| detail
-            .to_ascii_lowercase()
-            .contains("covering index router_pushes_held_mail_readiness")),
-        "readiness fetched non-index columns: {plan:?}"
+        plan.iter().any(|detail| {
+            let detail = detail.to_ascii_lowercase();
+            detail.starts_with("search p ")
+                && detail.contains("index router_pushes_held_mail_readiness ")
+        }),
+        "readiness did not search the target index: {plan:?}"
     );
-    assert!(
-        plan.iter().any(|detail| detail
-            .to_ascii_lowercase()
-            .contains("covering index local_delivery_retries_readiness")),
-        "scheduled eligibility fetched non-index columns: {plan:?}"
-    );
+    for alias in ["r", "poll"] {
+        assert!(
+            plan.iter().any(|detail| {
+                let detail = detail.to_ascii_lowercase();
+                detail.starts_with(&format!("search {alias} "))
+                    && detail.contains("index ")
+                    && detail.contains("(item_id=?)")
+            }),
+            "readiness did not search {alias} by item ID: {plan:?}"
+        );
+    }
     assert!(
         plan.iter()
             .all(|detail| !detail.to_ascii_lowercase().contains("temp b-tree")),
-        "readiness sorted outside its covering index: {plan:?}"
+        "readiness sorted outside its target index: {plan:?}"
     );
     eprintln!(
         "250 x 64 KiB projections: ID read {identity_read:?}; full-record read {record_read:?}; plan {plan:?}"
@@ -174,12 +232,11 @@ async fn readiness_ids_use_a_covering_plan_and_match_full_record_order() {
 }
 
 #[tokio::test]
-async fn readiness_covering_index_shape_and_ledger_are_checked_on_reopen() {
+async fn readiness_index_shape_and_ledger_are_checked_on_reopen() {
     for statement in [
         "DROP INDEX router_pushes_held_mail_readiness",
         "DROP INDEX router_pushes_held_mail_readiness; CREATE INDEX router_pushes_held_mail_readiness ON router_pushes(push_id)",
         "DELETE FROM _sqlx_migrations WHERE version=202610210002",
-        "DELETE FROM _sqlx_migrations WHERE version=202611200001",
         "DROP INDEX local_delivery_retries_readiness",
         "DROP INDEX local_delivery_retries_readiness; CREATE INDEX local_delivery_retries_readiness ON local_delivery_retries(item_id)",
         "DELETE FROM _sqlx_migrations WHERE version=202610210003",
