@@ -1,6 +1,8 @@
 //! ACP route for Router-owned provider Sessions on the shared connection shell.
 use crate::provider_acp_content_translation::parse_prompt_content;
-use crate::provider_acp_event_projection::{ProviderSessionObservers, stream_prompt};
+use crate::provider_acp_event_projection::{
+    ObservedEventPosition, ProviderSessionObservers, stream_prompt,
+};
 use codex_acp_adapter::{
     AcpConnectionContext, AcpRouteFuture, AcpRouterChannels, AcpSchemaCatalog, AcpSessionRoute,
 };
@@ -88,13 +90,14 @@ pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
 /// A `session/prompt` to place in a session that is, or just became, busy.
 struct PlacedPrompt {
     commands: Arc<dyn SessionCommandPort>,
+    events: Arc<dyn SessionEventHub>,
     output: codex_acp_adapter::AcpOutputSender,
     id: Value,
     session: SessionRef,
     content: Vec<session_event_model::PromptContent>,
     actor: Identity,
     attachment: collaboration_contracts::SessionEventAttachment,
-    observed_turn: tokio::sync::watch::Receiver<Option<String>>,
+    observed: tokio::sync::watch::Receiver<Option<ObservedEventPosition>>,
 }
 
 /// Steers or queues the prompt, then answers when the turn that took it ends.
@@ -102,17 +105,18 @@ async fn answer_by_placement(prompt: PlacedPrompt) {
     use crate::provider_acp_busy_prompt::{BusyPrompt, BusyPromptPlacement, place_busy_prompt};
     let PlacedPrompt {
         commands,
+        events,
         output,
         id,
         session,
         content,
         actor,
         attachment,
-        observed_turn,
+        observed,
     } = prompt;
     let placement = place_busy_prompt(BusyPrompt {
         commands: commands.as_ref(),
-        session,
+        session: session.clone(),
         content,
         actor,
         attachment: &attachment,
@@ -120,7 +124,16 @@ async fn answer_by_placement(prompt: PlacedPrompt) {
     .await;
     let frame = match placement {
         BusyPromptPlacement::InTurn { turn_id } => {
-            stream_prompt(output, id, turn_id, attachment, observed_turn).await;
+            stream_prompt(
+                output,
+                id,
+                turn_id,
+                events.as_ref(),
+                session,
+                attachment,
+                observed,
+            )
+            .await;
             return;
         }
         BusyPromptPlacement::Refused(error) => command_failure(id, error),
@@ -430,9 +443,9 @@ async fn serve_provider_sessions(
                             Ok(SessionState::Running | SessionState::RequiresAction { .. })
                         ) {
                             // A busy session steers or queues; it is never refused (D1 R12).
-                            let (Ok(attachment), Some(observed_turn)) = (
+                            let (Ok(attachment), Some(observed)) = (
                                 route.events.attach(session.clone()).await,
-                                observers.observed_turns.get(&session).cloned(),
+                                observers.observed_events.get(&session).cloned(),
                             ) else {
                                 router
                                     .output
@@ -442,13 +455,14 @@ async fn serve_provider_sessions(
                             };
                             prompts.spawn(answer_by_placement(PlacedPrompt {
                                 commands: Arc::clone(&route.commands),
+                                events: Arc::clone(&route.events),
                                 output: router.output.clone(),
                                 id,
                                 session,
                                 content,
                                 actor,
                                 attachment,
-                                observed_turn,
+                                observed,
                             }));
                             continue;
                         }
@@ -456,8 +470,8 @@ async fn serve_provider_sessions(
                         match attachment {
                             Err(_) => failure(id, -32002, "Session not found"),
                             Ok(attachment) => {
-                                let Some(observed_turn) =
-                                    observers.observed_turns.get(&session).cloned()
+                                let Some(observed) =
+                                    observers.observed_events.get(&session).cloned()
                                 else {
                                     router
                                         .output
@@ -488,26 +502,30 @@ async fn serve_provider_sessions(
                                         };
                                         prompts.spawn(answer_by_placement(PlacedPrompt {
                                             commands: Arc::clone(&route.commands),
+                                            events: Arc::clone(&route.events),
                                             output: router.output.clone(),
                                             id,
                                             session,
                                             content,
                                             actor,
                                             attachment,
-                                            observed_turn,
+                                            observed,
                                         }));
                                         continue;
                                     }
                                     Err(error) => command_failure(id, error),
                                     Ok(turn) => {
                                         let output = router.output.clone();
+                                        let events = Arc::clone(&route.events);
                                         prompts.spawn(async move {
                                             stream_prompt(
                                                 output,
                                                 id,
                                                 turn.turn_id,
+                                                events.as_ref(),
+                                                session,
                                                 attachment,
-                                                observed_turn,
+                                                observed,
                                             )
                                             .await;
                                         });

@@ -1,7 +1,7 @@
 //! Projects shared provider Session events onto one ACP client connection.
 use crate::provider_acp_session_route::failure;
 use crate::provider_acp_session_route::response;
-use collaboration_contracts::SessionEventHub;
+use collaboration_contracts::{HubEvent, SessionEventAttachment, SessionEventHub};
 use message_board::SessionRef;
 use serde_json::{Value, json};
 use session_event_model::session_profile_codec::{ProfileState, ProfileTurn, StateNotification};
@@ -15,6 +15,14 @@ use std::{
 };
 use tokio::{sync::watch, task::JoinSet};
 use tokio_util::sync::CancellationToken;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ObservedEventPosition {
+    epoch: u64,
+    sequence: u64,
+}
+
+const TURN_OUTCOME_UNREADABLE: &str = "the turn's outcome couldn't be read from the event stream; check the session before sending again";
 
 fn capabilities_from_snapshot(
     snapshot: &[collaboration_contracts::HubEvent],
@@ -194,7 +202,7 @@ pub(crate) struct ProviderSessionObservers {
     supports_state: bool,
     pub(crate) tasks: JoinSet<()>,
     attached: BTreeSet<SessionRef>,
-    pub(crate) observed_turns: HashMap<SessionRef, watch::Receiver<Option<String>>>,
+    pub(crate) observed_events: HashMap<SessionRef, watch::Receiver<Option<ObservedEventPosition>>>,
     cancellations: HashMap<SessionRef, CancellationToken>,
 }
 
@@ -210,7 +218,7 @@ impl ProviderSessionObservers {
             supports_state,
             tasks: JoinSet::new(),
             attached: BTreeSet::new(),
-            observed_turns: HashMap::new(),
+            observed_events: HashMap::new(),
             cancellations: HashMap::new(),
         }
     }
@@ -226,13 +234,13 @@ impl ProviderSessionObservers {
                 previous.cancel();
             }
             self.attached.remove(&session);
-            self.observed_turns.remove(&session);
+            self.observed_events.remove(&session);
         }
         let attachment = self.events.attach(session.clone()).await.map_err(|_| ())?;
         let report = capabilities_from_snapshot(&attachment.snapshot).ok_or(())?;
         if self.attached.insert(session.clone()) {
-            let (turn_sender, turn_receiver) = watch::channel(None);
-            self.observed_turns.insert(session.clone(), turn_receiver);
+            let (progress, observed) = watch::channel(None);
+            self.observed_events.insert(session.clone(), observed);
             let cancellation = CancellationToken::new();
             self.cancellations
                 .insert(session.clone(), cancellation.clone());
@@ -250,6 +258,13 @@ impl ProviderSessionObservers {
                         self.output.send(notification).await.map_err(|_| ())?;
                     }
                 }
+            }
+            let mut epoch = attachment.epoch;
+            if let Some(last) = attachment.snapshot.last() {
+                progress.send_replace(Some(ObservedEventPosition {
+                    epoch,
+                    sequence: last.sequence,
+                }));
             }
             let mut receiver = attachment.receiver;
             let output = self.output.clone();
@@ -292,6 +307,13 @@ impl ProviderSessionObservers {
                                 return;
                             }
                         }
+                        epoch = replacement.epoch;
+                        if let Some(last) = replacement.snapshot.last() {
+                            progress.send_replace(Some(ObservedEventPosition {
+                                epoch,
+                                sequence: last.sequence,
+                            }));
+                        }
                         receiver = replacement.receiver;
                         continue;
                     };
@@ -305,9 +327,10 @@ impl ProviderSessionObservers {
                     {
                         break;
                     }
-                    if let SessionEvent::TurnEnded { turn_id, .. } = event.event {
-                        let _sent = turn_sender.send(Some(turn_id));
-                    }
+                    progress.send_replace(Some(ObservedEventPosition {
+                        epoch,
+                        sequence: event.sequence,
+                    }));
                 }
             });
         }
@@ -319,59 +342,90 @@ pub(crate) async fn stream_prompt(
     output: codex_acp_adapter::AcpOutputSender,
     id: Value,
     turn_id: String,
-    mut attachment: collaboration_contracts::SessionEventAttachment,
-    mut observed_turn: watch::Receiver<Option<String>>,
+    events: &dyn SessionEventHub,
+    session: SessionRef,
+    mut attachment: SessionEventAttachment,
+    mut observed: watch::Receiver<Option<ObservedEventPosition>>,
 ) {
-    let mut replay = attachment.snapshot.into_iter();
+    use tokio::sync::broadcast::error::RecvError;
+
+    let mut replay = std::mem::take(&mut attachment.snapshot).into_iter();
     loop {
-        let event = match replay.next() {
-            Some(event) => event,
-            None => match attachment.receiver.recv().await {
-                Ok(event) => event,
-                Err(_) => {
+        let received = match replay.next() {
+            Some(event) => Ok(event),
+            None => attachment.receiver.recv().await,
+        };
+        let event = match received {
+            Ok(HubEvent {
+                event: SessionEvent::ResyncRequired { .. },
+                ..
+            })
+            | Err(RecvError::Lagged(_)) => {
+                let resync = received.is_ok();
+                let replacement = events.attach(session.clone()).await;
+                let Ok(replacement) = replacement else {
                     let _sent = output
-                        .send(failure(id, -32000, "Session event stream unavailable"))
+                        .send(failure(id, -32000, TURN_OUTCOME_UNREADABLE))
                         .await;
                     return;
-                }
-            },
-        };
-        match event.event {
-            SessionEvent::TurnEnded {
-                turn_id: ended,
-                outcome,
-            } if ended == turn_id => {
-                while observed_turn.borrow().as_deref() != Some(ended.as_str()) {
-                    if observed_turn.changed().await.is_err() {
-                        let _sent = output
-                            .send(failure(id, -32000, "Session observer unavailable"))
-                            .await;
-                        return;
-                    }
-                }
-                let stop_reason = match outcome {
-                    TurnOutcome::Ended { stop_reason, .. } => match stop_reason {
-                        StopReason::EndTurn => "end_turn",
-                        StopReason::MaxTokens => "max_tokens",
-                        StopReason::MaxTurnRequests => "max_turn_requests",
-                        StopReason::Refusal => "refusal",
-                        StopReason::Cancelled => "cancelled",
-                        StopReason::Unknown(_) => "end_turn",
-                    },
-                    TurnOutcome::Lost { .. } => {
-                        let _sent = output.send(failure(id, -32000, "Session turn lost")).await;
-                        return;
-                    }
                 };
+                if (resync || replacement.epoch != attachment.epoch)
+                    && !replacement.snapshot.iter().any(|event| matches!(
+                        &event.event, SessionEvent::TurnEnded { turn_id: ended, .. } if ended == &turn_id
+                    ))
+                {
+                    let _sent = output.send(failure(id, -32000, TURN_OUTCOME_UNREADABLE)).await;
+                    return;
+                }
+                attachment = replacement;
+                replay = std::mem::take(&mut attachment.snapshot).into_iter();
+                continue;
+            }
+            Ok(event) => event,
+            Err(RecvError::Closed) => {
                 let _sent = output
-                    .send(response(id, json!({"stopReason":stop_reason})))
+                    .send(failure(id, -32000, "Session event stream unavailable"))
                     .await;
                 return;
             }
-            _ => {}
+        };
+        if let SessionEvent::TurnEnded {
+            turn_id: ended,
+            outcome,
+        } = event.event
+            && ended == turn_id
+        {
+            let position = ObservedEventPosition {
+                epoch: attachment.epoch,
+                sequence: event.sequence,
+            };
+            let frame = if observed
+                .wait_for(|observed| observed.is_some_and(|observed| observed >= position))
+                .await
+                .is_err()
+            {
+                failure(id, -32000, "Session observer unavailable")
+            } else {
+                match outcome {
+                    TurnOutcome::Ended {
+                        stop_reason: StopReason::Unknown(_),
+                        ..
+                    } => failure(id, -32000, TURN_OUTCOME_UNREADABLE),
+                    TurnOutcome::Ended { stop_reason, .. } => {
+                        response(id, json!({"stopReason":stop_reason_label(&stop_reason)}))
+                    }
+                    TurnOutcome::Lost { .. } => failure(id, -32000, "Session turn lost"),
+                }
+            };
+            let _sent = output.send(frame).await;
+            return;
         }
     }
 }
+
+#[cfg(test)]
+#[path = "provider_acp_prompt_waiter_test.rs"]
+mod prompt_waiter_tests;
 
 #[cfg(test)]
 mod state_tests {

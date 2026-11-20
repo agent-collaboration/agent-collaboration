@@ -417,6 +417,8 @@ impl CollaborationRuntime {
                 );
             }
         }
+        #[cfg(feature = "runtime-test-support")]
+        let provider_test_hub = provider_session_hub.as_ref().map(std::sync::Arc::downgrade);
         drop(provider_session_hub);
         let publication = publication.with_acp_listener()?;
         let manifest = collaboration_runtime::ManifestPublication::publish(
@@ -490,6 +492,8 @@ impl CollaborationRuntime {
             installation_peer,
             owner_human_id,
             provider_store,
+            #[cfg(feature = "runtime-test-support")]
+            provider_test_hub,
             external_provider_supervisor,
             provider_cache_warm,
             provider_delivery_route,

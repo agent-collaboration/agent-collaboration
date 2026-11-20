@@ -14,7 +14,8 @@ use codex_router_host::{
     ExternalProviderStartup,
 };
 use collaboration_client::CollaborationClient;
-use collaboration_protocol::{BoundedObservationRequest, SessionRef};
+use collaboration_contracts::SessionEventAttachment;
+use collaboration_protocol::SessionRef;
 use serde_json::{Value, json};
 use session_event_model::{SessionEvent, StopReason, TurnOutcome};
 use std::os::unix::fs::PermissionsExt as _;
@@ -195,21 +196,42 @@ impl AcpBusyHost {
         let binding = agent.binding(root.path(), &receipt);
         let owner = message_board::HumanId::try_from(OWNER.to_owned())
             .unwrap_or_else(|error| panic!("owner: {error}"));
-        let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
-            CollaborationRuntimeInputs {
-                owner_human_id: Some(owner),
-                directory: root.path().to_owned(),
-                codex_home: root.path().to_owned(),
-                backend_socket: root.path().join("backend.sock"),
-                mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-                native_schema: None,
-                peer_registry_directory: None,
-                remote_control_server_name: None,
-            },
-            vec![ExternalProviderStartup::Launch(binding)],
-        ))
+        let runtime = Box::pin(
+            CollaborationRuntime::runtime_test_start_with_provider_clock(
+                CollaborationRuntimeInputs {
+                    owner_human_id: Some(owner),
+                    directory: root.path().to_owned(),
+                    codex_home: root.path().to_owned(),
+                    backend_socket: root.path().join("backend.sock"),
+                    mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+                    native_schema: None,
+                    peer_registry_directory: None,
+                    remote_control_server_name: None,
+                },
+                vec![ExternalProviderStartup::Launch(binding)],
+                std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
+            ),
+        )
         .await
         .unwrap_or_else(|error| panic!("Host starts the provider face: {error}"));
+        let client = CollaborationClient::connect(root.path(), "acp-busy-prompt", "1")
+            .await
+            .unwrap_or_else(|error| panic!("collaboration API client: {error}"));
+        let inventory = client
+            .list_endpoints()
+            .await
+            .unwrap_or_else(|error| panic!("endpoint inventory: {error}"));
+        assert!(
+            inventory.endpoints.iter().any(|endpoint| {
+                String::from(endpoint.endpoint.endpoint_id.clone()) == agent.endpoint_id()
+                    && matches!(
+                        endpoint.availability,
+                        collaboration_protocol::EndpointAvailability::Available { .. }
+                    )
+            }),
+            "provider endpoint unavailable: {inventory:?}"
+        );
+        drop(client);
         let mut acp = AcpConnection::connect(&root.path().join("codex-acp.sock")).await;
         let initialized = acp
             .request(
@@ -312,24 +334,23 @@ impl AcpBusyHost {
             .unwrap_or_else(|error| panic!("release {name}: {error}"));
     }
 
-    /// The session's event history on the Host's hub, through the
-    /// collaboration API's provider observation.
+    pub(super) async fn attach_events(&self) -> SessionEventAttachment {
+        let target = serde_json::from_value(json!(&self.session))
+            .unwrap_or_else(|error| panic!("hub session: {error}"));
+        self.runtime
+            .attach_provider_events_for_test(target)
+            .await
+            .unwrap_or_else(|error| panic!("attach to provider events: {error}"))
+    }
+
+    /// Snapshot after the ACP reply has witnessed terminal publication.
     pub(super) async fn hub_events(&self) -> Vec<Value> {
-        let client = CollaborationClient::connect(self.root.path(), "acp-busy-prompt", "1")
+        self.attach_events()
             .await
-            .unwrap_or_else(|error| panic!("collaboration API client: {error}"));
-        client
-            .observe_provider_session(BoundedObservationRequest {
-                target: self.session.clone(),
-                timeout_seconds: 1,
-                max_events: 4096,
-                max_bytes: 1_048_576,
-                after_sequence: None,
-                epoch: None,
-            })
-            .await
-            .unwrap_or_else(|error| panic!("provider observation: {error}"))
-            .events
+            .snapshot
+            .into_iter()
+            .map(|record| json!({"sequence":record.sequence, "event":record.event}))
+            .collect()
     }
 
     /// Asks the Host to close the session through the collaboration API.

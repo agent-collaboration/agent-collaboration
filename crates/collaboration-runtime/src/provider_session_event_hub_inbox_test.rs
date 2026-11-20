@@ -94,6 +94,78 @@ async fn applied(inbox: &HubSessionInbox, batch: HubPublication) -> HubPublicati
         .expect("applied")
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn offer_during_apply_preserves_batch_order_and_history() {
+    let (_root, hub) = hub().await;
+    let session = session();
+    let incarnation = Uuid::now_v7();
+    let (inbox, stop, worker) = start(&hub, &session, NonZeroUsize::MIN, incarnation);
+    applied(&inbox, rebase(incarnation, 1, SessionState::Idle)).await;
+    let initial = hub
+        .attach(session.clone())
+        .await
+        .expect("initial attachment");
+
+    let (entered, applying) = oneshot::channel();
+    let (release, hold) = std::sync::mpsc::channel();
+    *inbox.inner.apply_gate.lock().expect("apply probe") = Some((entered, hold));
+    let first = inbox
+        .try_offer(commit(incarnation, 2, &[SessionState::Running]))
+        .expect("first offer");
+    applying.await.expect("worker holds the apply lock");
+    let (entered, contended) = oneshot::channel();
+    *inbox.inner.contended_offer.lock().expect("offer probe") = Some(entered);
+    let contender = inbox.clone();
+    let second = tokio::task::spawn_blocking(move || {
+        contender.try_offer(commit(incarnation, 3, &[SessionState::Idle]))
+    });
+    let witnessed = contended.await;
+    release.send(()).expect("release the held apply");
+    witnessed.expect("second offer reached the held lock");
+
+    assert_eq!(
+        first.await.expect("first receipt"),
+        Ok(stamp(incarnation, 2))
+    );
+    assert_eq!(
+        second
+            .await
+            .expect("offer task")
+            .expect("contention must not refuse the offer")
+            .await
+            .expect("second receipt"),
+        Ok(stamp(incarnation, 3))
+    );
+    let history = hub
+        .attach(session)
+        .await
+        .expect("history after both commits");
+    assert_eq!(
+        history.epoch, initial.epoch,
+        "ordinary contention cannot force a rebase"
+    );
+    assert_eq!(
+        history
+            .snapshot
+            .iter()
+            .map(|event| &event.event)
+            .collect::<Vec<_>>(),
+        vec![
+            &SessionEvent::StateChanged {
+                state: SessionState::Idle
+            },
+            &SessionEvent::StateChanged {
+                state: SessionState::Running
+            },
+            &SessionEvent::StateChanged {
+                state: SessionState::Idle
+            },
+        ]
+    );
+    stop.cancel();
+    worker.await.expect("worker stopped");
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn a_previous_turn_terminal_is_retained_without_ending_the_active_turn() {
     let (_root, hub) = hub().await;

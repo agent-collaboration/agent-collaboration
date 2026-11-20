@@ -73,8 +73,6 @@ impl HubPublication {
 pub enum HubPublicationRefusal {
     #[error("the session's hub inbox is full")]
     Full,
-    #[error("the session's hub inbox is applying a batch")]
-    Applying,
     #[error("the session's hub inbox is closed")]
     Closed,
     #[error("a different session owner incarnation has the inbox")]
@@ -98,6 +96,10 @@ struct InboxInner {
     ready: Notify,
     capacity: usize,
     capacity_returned: watch::Sender<()>,
+    #[cfg(test)]
+    apply_gate: Mutex<Option<(oneshot::Sender<()>, std::sync::mpsc::Receiver<()>)>>,
+    #[cfg(test)]
+    contended_offer: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 #[derive(Default)]
@@ -143,6 +145,10 @@ impl ProviderSessionEventHub {
                         ready: Notify::new(),
                         capacity: capacity.get(),
                         capacity_returned: watch::channel(()).0,
+                        #[cfg(test)]
+                        apply_gate: Mutex::default(),
+                        #[cfg(test)]
+                        contended_offer: Mutex::default(),
                     }),
                 };
                 entry.insert(inbox.clone());
@@ -201,7 +207,21 @@ impl HubSessionInbox {
     ) -> Result<HubPublicationReceipt, HubPublicationRefusal> {
         let mut state = match self.inner.state.try_lock() {
             Ok(state) => state,
-            Err(TryLockError::WouldBlock) => return Err(HubPublicationRefusal::Applying),
+            Err(TryLockError::WouldBlock) => {
+                #[cfg(test)]
+                if let Some(entered) = self
+                    .inner
+                    .contended_offer
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take()
+                {
+                    let _receiver_gone = entered.send(());
+                }
+                // The worker applies under this lock without awaiting. Its short
+                // critical section keeps the apply and incarnation fence ordered.
+                self.state()
+            }
             Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
         };
         if state.closed {
@@ -258,6 +278,18 @@ impl HubInboxTask {
         let Some(entry) = state.pending.pop_front() else {
             return;
         };
+        #[cfg(test)]
+        if let Some((entered, release)) = self
+            .inbox
+            .inner
+            .apply_gate
+            .lock()
+            .expect("apply probe")
+            .take()
+        {
+            let _receiver_gone = entered.send(());
+            let _test_stopped = release.recv();
+        }
         let result = apply_publication(history, &mut state, entry.publication);
         let _reader_gone = entry.reply.send(result);
         self.inbox.inner.capacity_returned.send_replace(());

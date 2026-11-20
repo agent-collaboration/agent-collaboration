@@ -133,6 +133,8 @@ pub struct CollaborationRuntime {
     owner_human_id: Option<message_board::HumanId>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
+    #[cfg(feature = "runtime-test-support")]
+    provider_test_hub: Option<std::sync::Weak<collaboration_runtime::ProviderSessionEventHub>>,
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
     /// Keeps Claude's prompt cache warm; stopped before the supervisor so nothing submits after.
     provider_cache_warm: Option<std::sync::Arc<crate::provider_cache_warm::ProviderCacheWarm>>,
@@ -164,6 +166,24 @@ pub struct CollaborationRuntime {
 }
 
 impl CollaborationRuntime {
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn attach_provider_events_for_test(
+        &self,
+        session: message_board::SessionRef,
+    ) -> Result<
+        collaboration_contracts::SessionEventAttachment,
+        collaboration_contracts::SessionEventHubError,
+    > {
+        use collaboration_contracts::{SessionEventHub as _, SessionEventHubError};
+
+        let hub = self
+            .provider_test_hub
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or(SessionEventHubError::Unavailable)?;
+        hub.attach(session).await
+    }
+
     /// Delivery routes share the provider and native resources of this Host run.
     pub fn session_delivery(&self) -> Option<&collaboration_runtime::SessionDeliveryRouter> {
         self.session_delivery_router.as_deref()

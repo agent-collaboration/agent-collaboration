@@ -3,7 +3,7 @@
 //! the agent says the turn ended, re-decided once, prompted or queued.
 
 use super::acp_busy_host::{AcpBusyHost, BusyAgent, HubTurns, agent_frames, until_agent_read};
-use session_event_model::StopReason;
+use session_event_model::{SessionEvent, StopReason};
 
 /// The message whose turn is running.
 const FIRST: &str = "first";
@@ -20,12 +20,34 @@ const SECOND: &str = "second";
 async fn steered_busy_prompt_answers_when_the_running_turn_ends() {
     // Arrange: a steering agent whose first turn is held, ending max_tokens.
     let mut host = AcpBusyHost::start(&BusyAgent::SendRace(&["first-turn-ends-max-tokens"])).await;
+    let mut events = host.attach_events().await.receiver;
     host.send_prompt(3, FIRST).await;
     until_agent_read(&host.receipt, "session/prompt", 1).await;
+    let foreground_turn = loop {
+        let event = events.recv().await.expect("foreground session events");
+        match event.event {
+            SessionEvent::TurnStarted { turn_id, .. } => break turn_id,
+            SessionEvent::ResyncRequired { .. } => panic!("hub resynced before foreground start"),
+            _ => {}
+        }
+    };
 
     // Act: the busy prompt; once its steer reached the agent, look again, then end the turn.
     host.send_prompt(4, SECOND).await;
     until_agent_read(&host.receipt, "_session/steering", 1).await;
+    loop {
+        let event = events.recv().await.expect("acceptance session events");
+        match event.event {
+            SessionEvent::InputAccepted { turn_id, .. } if turn_id == foreground_turn => break,
+            SessionEvent::TurnEnded { .. } | SessionEvent::ResyncRequired { .. } => {
+                panic!(
+                    "the held turn must accept the steer before ending: {:?}",
+                    event.event
+                )
+            }
+            _ => {}
+        }
+    }
     let line_after_steer = host.queue_list().await;
     let answered_while_running = host.has_answered(4);
     host.release("release");
