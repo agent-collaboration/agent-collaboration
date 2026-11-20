@@ -76,7 +76,7 @@ pub(crate) fn failure(id: Value, code: i32, message: &str) -> Value {
 }
 
 pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
-    let code = match error {
+    let code = match error.classification().as_ref() {
         CommandFailure::SessionNotFound => -32002,
         CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. } => -32601,
         CommandFailure::UnauthorizedActor
@@ -84,6 +84,11 @@ pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
         | CommandFailure::UnsupportedContent(_) => -32602,
         _ => -32000,
     };
+    if let Some(operation) = error.operation_failure() {
+        return json!({"jsonrpc":"2.0","id":id,"error":{
+            "code":code,"message":operation.message,"data":{"kind":operation.kind}
+        }});
+    }
     failure(id, code, &error.to_string())
 }
 
@@ -490,7 +495,12 @@ async fn serve_provider_sessions(
                                 match route.commands.prompt(command).await {
                                     // A turn started after the idle read: place it as a
                                     // busy prompt, never refuse it as busy (D1 R12).
-                                    Err(CommandFailure::Busy) => {
+                                    Err(error)
+                                        if matches!(
+                                            error.classification().as_ref(),
+                                            CommandFailure::Busy
+                                        ) =>
+                                    {
                                         let Ok(attachment) =
                                             route.events.attach(session.clone()).await
                                         else {

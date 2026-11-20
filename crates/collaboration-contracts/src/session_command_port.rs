@@ -2,8 +2,9 @@
 //!
 //! The Host supplies the implementation. This crate owns the interface so no
 //! front door needs to know the provider runtime or ACP SDK.
+use collaboration_protocol::{ConversationOperationFailure, ConversationOperationFailureKind};
 use message_board::{Identity, SessionEndpointRef, SessionRef};
-use std::{future::Future, path::PathBuf, pin::Pin};
+use std::{borrow::Cow, future::Future, path::PathBuf, pin::Pin};
 
 pub type CommandFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, CommandFailure>> + Send + 'a>>;
@@ -135,6 +136,59 @@ pub enum CommandFailure {
     ProviderFailure,
     #[error("{reason}")]
     RestoreFailed { reason: String },
+    #[error("{}", String::from(.0.message.clone()))]
+    ProviderOperation(Box<ConversationOperationFailure>),
+    #[error("{}", String::from(.0.message.clone()))]
+    ProviderSteerOperation(Box<ConversationOperationFailure>),
+}
+
+impl CommandFailure {
+    /// The provider's operation answer, when this error came from one.
+    pub fn operation_failure(&self) -> Option<&ConversationOperationFailure> {
+        match self {
+            Self::ProviderOperation(failure) | Self::ProviderSteerOperation(failure) => {
+                Some(failure)
+            }
+            _ => None,
+        }
+    }
+
+    /// Classify an operation failure for command control flow and protocol error codes.
+    pub fn classification(&self) -> Cow<'_, Self> {
+        let Some(failure) = self.operation_failure() else {
+            return Cow::Borrowed(self);
+        };
+        use ConversationOperationFailureKind as Kind;
+        Cow::Owned(match failure.kind {
+            Kind::CannotSteer if matches!(self, Self::ProviderSteerOperation(_)) => {
+                Self::UnsupportedOperation { operation: "steer" }
+            }
+            Kind::StaleGeneration if matches!(self, Self::ProviderSteerOperation(_)) => Self::Busy,
+            Kind::InvalidRequest => Self::InvalidSelection,
+            Kind::NotFound | Kind::ProviderSessionNotFound => Self::SessionNotFound,
+            Kind::Busy => Self::Busy,
+            Kind::UnsupportedCapability => Self::Unsupported,
+            Kind::SettingsUnresolved => Self::SettingsUnresolved,
+            Kind::InvalidSetting => match &failure.invalid_setting {
+                Some(detail) => Self::InvalidCreateSetting {
+                    target: failure.target.clone(),
+                    detail: Box::new(detail.clone()),
+                },
+                None => Self::InvalidSetting {
+                    advertised: Vec::new(),
+                },
+            },
+            Kind::Overloaded
+            | Kind::AuthenticationRequired
+            | Kind::PermissionRejected
+            | Kind::Unavailable
+            | Kind::ProviderRejected
+            | Kind::ProtocolViolation
+            | Kind::OutcomeUnknown
+            | Kind::CannotSteer
+            | Kind::StaleGeneration => Self::ProviderFailure,
+        })
+    }
 }
 
 /// Commands have distinct results and all carry the identity of the caller.

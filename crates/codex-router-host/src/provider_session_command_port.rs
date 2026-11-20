@@ -23,8 +23,7 @@ use collaboration_contracts::SetSessionSettingCommand;
 use collaboration_contracts::SteerSessionCommand;
 use collaboration_protocol::{
     ConversationCloseRequest, ConversationCreateRequest, ConversationLoadRequest,
-    ConversationOperationFailure, ConversationOperationFailureKind,
-    ConversationOperationSettlement, ConversationOperationWaitOutput,
+    ConversationOperationFailure, ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationResumeRequest, EndpointId, EndpointRef,
     OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
     ProviderRequestedSettings, ProviderSettingName, ProviderSettingsSetRequest,
@@ -577,13 +576,9 @@ fn map_steer_failure(error: ProviderSteerContentsError) -> CommandFailure {
     match error {
         ProviderSteerContentsError::Admission(error) => map_admission_failure(error),
         ProviderSteerContentsError::Runtime(error) => map_runtime_failure(error),
-        ProviderSteerContentsError::Operation(error) => match error.kind {
-            ConversationOperationFailureKind::CannotSteer => {
-                CommandFailure::UnsupportedOperation { operation: "steer" }
-            }
-            ConversationOperationFailureKind::StaleGeneration => CommandFailure::Busy,
-            _ => map_operation_failure(*error),
-        },
+        ProviderSteerContentsError::Operation(error) => {
+            CommandFailure::ProviderSteerOperation(error)
+        }
     }
 }
 
@@ -622,26 +617,7 @@ fn map_runtime_failure(error: ExternalProviderRuntimeError) -> CommandFailure {
 }
 
 fn map_operation_failure(error: ConversationOperationFailure) -> CommandFailure {
-    match error.kind {
-        ConversationOperationFailureKind::InvalidRequest => CommandFailure::InvalidSelection,
-        ConversationOperationFailureKind::NotFound
-        | ConversationOperationFailureKind::ProviderSessionNotFound => {
-            CommandFailure::SessionNotFound
-        }
-        ConversationOperationFailureKind::Busy => CommandFailure::Busy,
-        ConversationOperationFailureKind::UnsupportedCapability => CommandFailure::Unsupported,
-        ConversationOperationFailureKind::SettingsUnresolved => CommandFailure::SettingsUnresolved,
-        ConversationOperationFailureKind::InvalidSetting => match error.invalid_setting {
-            Some(detail) => CommandFailure::InvalidCreateSetting {
-                target: error.target,
-                detail: Box::new(detail),
-            },
-            None => CommandFailure::InvalidSetting {
-                advertised: Vec::new(),
-            },
-        },
-        _ => CommandFailure::ProviderFailure,
-    }
+    CommandFailure::ProviderOperation(Box::new(error))
 }
 
 async fn wait_for_settlement(
