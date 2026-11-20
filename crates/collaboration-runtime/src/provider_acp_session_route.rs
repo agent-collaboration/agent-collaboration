@@ -21,8 +21,20 @@ use serde_json::{Value, json};
 use session_event_model::session_profile_codec::ProfileElement;
 use session_event_model::{CapabilityReport, SessionEvent, SessionState};
 
-use std::{io, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    io,
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::task::JoinSet;
+
+#[path = "provider_acp_session_restore.rs"]
+mod restore;
+use restore::{
+    AcpRestoreMethod, AwaitingRestore, RESTORE_IN_PROGRESS, RestoreCompletion, RestoreRequest,
+    WaitingSessionFrame,
+};
 
 pub struct ProviderAcpSessionRoute {
     endpoint: SessionEndpointRef,
@@ -219,6 +231,47 @@ async fn validate_load_request(
     Ok(())
 }
 
+async fn restore_reply(
+    request: RestoreRequest,
+    outcome: Result<(), CommandFailure>,
+    observers: &mut ProviderSessionObservers,
+    events: &dyn SessionEventHub,
+) -> Value {
+    let RestoreRequest {
+        id,
+        session,
+        method,
+    } = request;
+    if let Err(error) = outcome {
+        return command_failure(id, error);
+    }
+    let include_history = method == AcpRestoreMethod::Load;
+    let Ok(report) = observers
+        .attach(session.clone(), include_history, true)
+        .await
+    else {
+        return failure(id, -32000, "Session event hub unavailable");
+    };
+    match session_result(events, &session, report, !include_history).await {
+        Ok(result) => response(id, result),
+        Err(()) => failure(id, -32000, "Session inventory unavailable"),
+    }
+}
+
+fn targets_session(method: &str) -> bool {
+    matches!(
+        method,
+        "session/load"
+            | "session/resume"
+            | "session/prompt"
+            | "session/cancel"
+            | "_session/steering"
+            | "_session/queue/add"
+            | "_session/queue/list"
+            | "_session/queue/cancel"
+    )
+}
+
 async fn list_sessions_result(
     id: Value,
     params: &Value,
@@ -251,38 +304,124 @@ async fn list_sessions_result(
 
 async fn serve_provider_sessions(
     route: ProviderAcpSessionRoute,
-    mut router: AcpRouterChannels,
+    router: AcpRouterChannels,
     actor: Option<Identity>,
     supports_state: bool,
 ) -> io::Result<()> {
-    let mut schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
-    let mut prompts = JoinSet::<()>::new();
-    let mut observers = ProviderSessionObservers::new(
-        Arc::clone(&route.events),
-        router.output.clone(),
-        supports_state,
+    let mut tasks = ProviderConnectionTasks {
+        prompts: JoinSet::new(),
+        restores: JoinSet::new(),
+        observers: ProviderSessionObservers::new(
+            Arc::clone(&route.events),
+            router.output.clone(),
+            supports_state,
+        ),
+    };
+    let closed = router.closed.clone();
+    let result = tokio::select! {
+        biased;
+        () = closed.cancelled() => Ok(()),
+        result = serve_provider_requests(route, router, actor, &mut tasks) => result,
+    };
+    tokio::join!(
+        tasks.restores.shutdown(),
+        tasks.prompts.shutdown(),
+        tasks.observers.tasks.shutdown()
     );
+    result
+}
+
+struct ProviderConnectionTasks {
+    prompts: JoinSet<()>,
+    restores: JoinSet<RestoreCompletion>,
+    observers: ProviderSessionObservers,
+}
+
+async fn serve_provider_requests(
+    route: ProviderAcpSessionRoute,
+    mut router: AcpRouterChannels,
+    actor: Option<Identity>,
+    tasks: &mut ProviderConnectionTasks,
+) -> io::Result<()> {
+    let mut schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
+    let ProviderConnectionTasks {
+        prompts,
+        restores,
+        observers,
+    } = tasks;
+    let mut awaiting_restore = HashMap::<SessionRef, AwaitingRestore>::new();
+    let mut ready_frames = VecDeque::new();
     loop {
-        let frame = tokio::select! {
-            _ = router.closed.cancelled() => break,
-            completed = prompts.join_next(), if !prompts.is_empty() => {
-                if completed.is_some_and(|result| result.is_err()) {
-                    return Err(io::Error::other("provider ACP prompt task failed"));
+        let frame = match ready_frames.pop_front() {
+            Some(WaitingSessionFrame::Command(frame)) => frame,
+            Some(WaitingSessionFrame::RestoreRefusal {
+                frame,
+                code,
+                message,
+            }) => {
+                if let Some(id) = frame.get("id").cloned() {
+                    router.output.send(failure(id, code, message)).await?;
                 }
                 continue;
+            }
+            None => tokio::select! {
+                completed = restores.join_next(), if !restores.is_empty() => {
+                    let Some(Ok(RestoreCompletion { request, outcome })) = completed else {
+                        return Err(io::Error::other("provider ACP restore task failed"));
+                    };
+                    let session = request.session.clone();
+                    let reply = restore_reply(request, outcome, observers, route.events.as_ref()).await;
+                    router.output.send(reply).await?;
+                    if let Some(waiting) = awaiting_restore.remove(&session) {
+                        ready_frames = waiting.frames;
+                    }
+                    continue;
+                },
+                completed = prompts.join_next(), if !prompts.is_empty() => {
+                    if completed.is_some_and(|result| result.is_err()) {
+                        return Err(io::Error::other("provider ACP prompt task failed"));
+                    }
+                    continue;
+                },
+                completed = observers.tasks.join_next(), if !observers.tasks.is_empty() => {
+                    if completed.is_some_and(|result| result.is_err()) {
+                        return Err(io::Error::other("provider ACP observer task failed"));
+                    }
+                    continue;
+                },
+                frame = router.input.recv() => match frame { Some(frame) => frame, None => break },
             },
-            completed = observers.tasks.join_next(), if !observers.tasks.is_empty() => {
-                if completed.is_some_and(|result| result.is_err()) {
-                    return Err(io::Error::other("provider ACP observer task failed"));
-                }
-                continue;
-            },
-            frame = router.input.recv() => match frame { Some(frame) => frame, None => break },
         };
         let method = frame.get("method").and_then(Value::as_str).unwrap_or("");
         let params = frame.get("params").cloned().unwrap_or_else(|| json!({}));
         let id = frame.get("id").cloned();
         if frame.get("method").is_none() {
+            continue;
+        }
+        if !awaiting_restore.is_empty()
+            && targets_session(method)
+            && let Ok(session) = named_session(&params, &route.endpoint)
+            && let Some(waiting) = awaiting_restore.get_mut(&session)
+        {
+            let queued = match (id, AcpRestoreMethod::from_rpc(method)) {
+                (Some(_), Some(restore_method)) => {
+                    let (code, message) = if restore_method == AcpRestoreMethod::Load {
+                        validate_load_request(&mut schema, route.events.as_ref(), &session, &params)
+                            .await
+                            .err()
+                            .unwrap_or(RESTORE_IN_PROGRESS)
+                    } else {
+                        RESTORE_IN_PROGRESS
+                    };
+                    WaitingSessionFrame::RestoreRefusal {
+                        frame,
+                        code,
+                        message,
+                    }
+                }
+                _ => WaitingSessionFrame::Command(frame),
+            };
+            waiting.frames.push_back(queued);
             continue;
         }
         if method == "session/cancel" && id.is_none() {
@@ -375,68 +514,39 @@ async fn serve_provider_sessions(
                     }
                 }
             }
-            "session/load" | "session/resume" => match named_session(&params, &route.endpoint) {
-                Err(()) => failure(id, -32602, "Invalid SessionRef"),
-                Ok(session) => {
-                    if method == "session/load"
-                        && let Err((code, message)) = validate_load_request(
-                            &mut schema,
-                            route.events.as_ref(),
-                            &session,
-                            &params,
-                        )
-                        .await
-                    {
-                        router.output.send(failure(id, code, message)).await?;
+            method if let Some(restore_method) = AcpRestoreMethod::from_rpc(method) => {
+                let Ok(session) = named_session(&params, &route.endpoint) else {
+                    router
+                        .output
+                        .send(failure(id, -32602, "Invalid SessionRef"))
+                        .await?;
+                    continue;
+                };
+                if restore_method == AcpRestoreMethod::Load
+                    && let Err((code, message)) =
+                        validate_load_request(&mut schema, route.events.as_ref(), &session, &params)
+                            .await
+                {
+                    router.output.send(failure(id, code, message)).await?;
+                    continue;
+                }
+                let request = RestoreRequest {
+                    method: restore_method,
+                    session: session.clone(),
+                    id,
+                };
+                match route.events.state(session.clone()).await {
+                    Err(_) => failure(request.id, -32002, "Session not found"),
+                    Ok(SessionState::Unloaded) => {
+                        awaiting_restore.insert(session, AwaitingRestore::default());
+                        let commands = Arc::clone(&route.commands);
+                        restores
+                            .spawn(async move { request.activate(commands.as_ref(), actor).await });
                         continue;
                     }
-                    let state = route.events.state(session.clone()).await;
-                    match state {
-                        Err(_) => failure(id, -32002, "Session not found"),
-                        Ok(state) => {
-                            let activation = if state == SessionState::Unloaded {
-                                let command = SessionTargetCommand {
-                                    target: session.clone(),
-                                    actor,
-                                };
-                                if method == "session/load" {
-                                    route.commands.load_session(command).await
-                                } else {
-                                    route.commands.resume_session(command).await
-                                }
-                            } else {
-                                Ok(())
-                            };
-                            match activation {
-                                Err(error) => command_failure(id, error),
-                                Ok(()) => {
-                                    match observers
-                                        .attach(session.clone(), method == "session/load", true)
-                                        .await
-                                    {
-                                        Ok(report) => match session_result(
-                                            route.events.as_ref(),
-                                            &session,
-                                            report,
-                                            method == "session/resume",
-                                        )
-                                        .await
-                                        {
-                                            Ok(result) => response(id, result),
-                                            Err(()) => {
-                                                failure(id, -32000, "Session inventory unavailable")
-                                            }
-                                        },
-                                        Err(()) => {
-                                            failure(id, -32000, "Session event hub unavailable")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Ok(_) => restore_reply(request, Ok(()), observers, route.events.as_ref()).await,
                 }
-            },
+            }
             "session/prompt" => {
                 match (
                     named_session(&params, &route.endpoint),
@@ -655,10 +765,6 @@ async fn serve_provider_sessions(
         };
         router.output.send(result).await?;
     }
-    prompts.abort_all();
-    while prompts.join_next().await.is_some() {}
-    observers.tasks.abort_all();
-    while observers.tasks.join_next().await.is_some() {}
     Ok(())
 }
 
