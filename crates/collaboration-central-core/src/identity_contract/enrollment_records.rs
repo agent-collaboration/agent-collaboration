@@ -1,5 +1,6 @@
 //! Observable enrollment states always retain the machine client they authorized.
-use super::{AdmissionId, ClientId, DeviceLoginRequestId, PersonId};
+use super::{AdmissionId, DeviceLoginRequestId, PersonId};
+use fleet_contracts::ClientId;
 use fleet_identity_protocol::{EnrollmentId, UnixSeconds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

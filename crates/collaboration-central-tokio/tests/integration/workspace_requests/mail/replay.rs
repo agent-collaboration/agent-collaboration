@@ -43,6 +43,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
         args: vec![],
     };
     let before = runtime
+        .runtime()
         .statement_host()
         .read(snapshot())
         .await
@@ -63,6 +64,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .read(snapshot())
             .await
@@ -84,6 +86,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .read(snapshot())
             .await
@@ -112,7 +115,7 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
             text: "interrupted".to_owned().try_into().unwrap(),
         },
     };
-    let mut held = runtime.statement_host().hold_alarm_publication();
+    let mut held = runtime.runtime().statement_host().hold_alarm_publication();
     let task_runtime = runtime.clone();
     let caller = fixture.caller.clone();
     let pending_request = request.clone();
@@ -124,12 +127,14 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
         args: vec![],
     };
     let before = runtime
+        .runtime()
         .statement_host()
         .read(snapshot())
         .await
         .unwrap()
         .rows;
     let logged = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT answer FROM runtime_request_log WHERE request_id=?",
@@ -142,7 +147,7 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
     };
     let cached: Result = serde_json::from_str(encoded).unwrap();
     assert!(matches!(&cached, Result::Done(Answer::WakeSet { due_at, .. }) if *due_at == due));
-    assert_eq!(runtime.statement_host().alarm(), None);
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
     pending.abort();
     assert!(pending.await.unwrap_err().is_cancelled());
     drop(held);
@@ -157,6 +162,7 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .read(snapshot())
             .await
@@ -165,7 +171,11 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
         before
     );
     assert_eq!(
-        runtime.statement_host().alarm().map(|at| at.unix_millis()),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         Some(due.timestamp_millis())
     );
     fixture.host.close().await;

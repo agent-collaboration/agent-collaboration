@@ -50,7 +50,7 @@ impl<State, Error> From<FailureOutcome> for HandleOutcome<State, Error> {
         }
     }
 }
-struct ReducerIds<'a>(&'a dyn runtime_primitives::IdSource);
+struct ReducerIds<'a>(&'a dyn fleet_runtime_ports::IdSource);
 impl central_engine_model::IdSource for ReducerIds<'_> {
     fn next_id(&mut self) -> uuid::Uuid {
         self.0.new_id()
@@ -94,7 +94,7 @@ impl<R: EngineHost> Engine<'_, R> {
             #[cfg(feature = "test-support")]
             if source.policy() == SourcePolicy::Due {
                 self.pauses()
-                    .reached_engine(crate::PausePoint::AfterEngineAttemptGate, &key.0)
+                    .reached_engine(fleet_runtime::PausePoint::AfterEngineAttemptGate, &key.0)
                     .await;
             }
             let prior = match adapter.load(&key).await {
@@ -141,7 +141,7 @@ impl<R: EngineHost> Engine<'_, R> {
             }
             #[cfg(feature = "test-support")]
             self.pauses()
-                .reached_engine(crate::PausePoint::AfterEngineLoad, &key.0)
+                .reached_engine(fleet_runtime::PausePoint::AfterEngineLoad, &key.0)
                 .await;
             let now = match self.now() {
                 Ok(now) => now,
@@ -207,7 +207,7 @@ impl<R: EngineHost> Engine<'_, R> {
                     }
                     #[cfg(feature = "test-support")]
                     self.pauses()
-                        .reached_engine(crate::PausePoint::AfterEngineCommit, &key.0)
+                        .reached_engine(fleet_runtime::PausePoint::AfterEngineCommit, &key.0)
                         .await;
                     return HandleOutcome::Done(next);
                 }
@@ -307,7 +307,7 @@ fn receipt_failure<State, Error>(failure: ApplyFailure) -> HandleOutcome<State, 
         ApplyFailure::Uncertain => HandleOutcome::Uncertain,
         ApplyFailure::StoreDown(failure) => HandleOutcome::StoreDown(failure),
         ApplyFailure::Rejected(_) => HandleOutcome::StoreDown(
-            crate::workspace_decode_error::corrupt("runtime_request_log.claim"),
+            fleet_runtime_ports::workspace_decode_error::corrupt("runtime_request_log.claim"),
         ),
     }
 }

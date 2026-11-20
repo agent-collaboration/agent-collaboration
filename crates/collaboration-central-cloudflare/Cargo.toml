@@ -15,11 +15,15 @@ crate-type = ["cdylib"]
 [features]
 link = []
 # The storage boundary's workerd cases (Verification O1); never in a production bundle.
-test-support = ["collaboration-central-core/test-support", "dep:sqlx"]
+test-support = ["fleet-runtime/test-support", "fleet-storage-schema/test-support", "collaboration-central-core/test-support", "dep:sqlx"]
 
 [dependencies]
 central-storage.workspace = true
 central-link-protocol.workspace = true
+fleet-contracts.workspace = true
+fleet-runtime-ports.workspace = true
+fleet-runtime.workspace = true
+fleet-storage-schema.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
 fleet-identity-protocol = {path="../fleet-identity-protocol",version="0.1.149"}
@@ -27,7 +31,6 @@ axum = { version = "0.8.9", default-features = false, features = ["json"] }
 http = "1.4.1"
 tower-service = "0.3.3"
 message-board = { version = "0.1.96", path = "../message-board" }
-runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false, features = ["durable-object"] }
 sqlx-durable-object = { version = "0.3.0", path = "../sqlx-durable-object" }
 sqlx-durable-object-core = { version = "0.2.0", path = "../sqlx-durable-object-core" }
 sqlx-core = { workspace = true, features = ["migrate"] }
@@ -50,6 +53,7 @@ web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "Su
 js-sys = "=0.3.106"
 
 [dev-dependencies]
+runtime-primitives.workspace = true
 base64 = "0.22.1"
 central-link-client = { path = "../central-link-client", version = "0.1.152" }
 reqwest-websocket = "=0.5.1"

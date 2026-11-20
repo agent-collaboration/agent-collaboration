@@ -1,6 +1,6 @@
 //! Settle one recipient acknowledgement against the owning message row.
 use crate::{
-    MachineConnectionAttachment, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
+    WorkspaceRuntime,
     central_mail_rows::timestamp,
     direct_message_rows::refusal_text,
     engine::{
@@ -12,13 +12,17 @@ use crate::{
         port::Engine,
         source::{EventSource, SourcePolicy},
     },
-    guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use central_engine_model::{InstanceKey, Machine, TransitionError};
 use central_storage::{
     AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
+};
+use fleet_contracts::MachineConnectionAttachment;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    guarded_statements::{exact, text},
+    stored_values::string,
+    workspace_decode_error::corrupt,
 };
 use workspace_ids::{MachineId, MessageId};
 use workspace_model::central_mail::DeliveryAnswer;
@@ -46,7 +50,7 @@ impl<M: Machine> EventSource<M> for AckSource {
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub async fn acknowledge_delivery(
         &self,
         connection: &MachineConnectionAttachment,
@@ -71,10 +75,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         message_id: &MessageId,
         answer: DeliveryAnswer,
     ) -> Result<MailAckSettlement, StoreFailure> {
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         use MailAckIgnored as Ignored;
         let ignored = |reason| Ok(MailAckSettlement::Ignored(reason));
-        if connection.organization_id() != &self.organization
+        if connection.organization_id() != self.execution.organization()
             || self
                 .restore_machine_connection_held(connection)
                 .await?
@@ -83,7 +87,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             return ignored(Ignored::MachineAuthorityLapsed);
         }
 
-        let rows = self.host.read(Statement {
+        let rows = self.execution.statement_host().read(Statement {
             sql: "SELECT target_machine_id,message_kind,state FROM mail_messages WHERE message_id=?",
             args: vec![text(message_id)],
         }).await?;
@@ -161,7 +165,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 vec![
                     text(state),
                     reason,
-                    text(timestamp(self.now()?)),
+                    text(timestamp(self.execution.now()?)),
                     text(message_id),
                     text(target),
                     text(kind),
@@ -169,7 +173,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             )],
             alarm: AlarmUpdate::Unchanged,
         };
-        match self.host.run_batch(batch).await? {
+        match self.execution.statement_host().run_batch(batch).await? {
             BatchOutcome::Applied { .. } => Ok(MailAckSettlement::Applied),
             BatchOutcome::GuardFailed { .. } => Err(StoreFailure::AnswerLost),
             BatchOutcome::ConstraintViolated { .. } | BatchOutcome::StatementRejected { .. } => {

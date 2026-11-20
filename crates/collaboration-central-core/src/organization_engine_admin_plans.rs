@@ -2,16 +2,19 @@
 //! reads answer from storage; retry and discard retain their answer under the
 //! operation ID, so a replay returns it as CreateWorkspace's does.
 use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminResult, WorkspaceRuntime, WorkspaceStoreCalls,
+    AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
     engine::admin::{AttemptRefusal, DiscardOutcome},
     organization_admin_contract::{
         EngineKindHealth, EngineRetiredItem, RetainedOrganizationAdminAnswer,
     },
     person_request::{AdminOperationId, EngineAttemptRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{json, string},
 };
 use central_storage::{AlarmUpdate, GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    stored_values::{json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_model::{ActorIdentityId, Identity, PersonId, RequestId, Timestamp};
 
 /// What the admin batch carries for one engine operation.
@@ -75,7 +78,7 @@ fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, Stor
     }
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub(crate) async fn engine_health_result(&self) -> Result<EngineAdminPlan, StoreFailure> {
         let health = crate::engine::port::Engine::new(self)
             .engine_health()
@@ -141,12 +144,13 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             person_id: PersonId::try_from(person.person_id.clone())
                 .map_err(|_| corrupt("person_id"))?,
         };
-        let actor = self.prepare_identity(&identity, now).await?;
+        let actor = self.access().prepare_identity(&identity, now).await?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
-            .host
-            .read(crate::workspace_request_log::lookup(
-                crate::workspace_request_log::RequestLogStore::Organization,
+            .execution
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                fleet_runtime::workspace_request_log::RequestLogStore::Organization,
                 &operation,
                 &cutoff,
             ))
@@ -212,8 +216,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             }
             Err(reason) => refusal(reason),
         };
-        statements.extend(crate::workspace_request_log::retain(
-            crate::workspace_request_log::RequestLogStore::Organization,
+        statements.extend(fleet_runtime::workspace_request_log::retain(
+            fleet_runtime::workspace_request_log::RequestLogStore::Organization,
             &operation,
             &actor,
             &person.intent_digest,
@@ -260,8 +264,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             } => (operation, actor, statements, cutoff),
         };
         let retain = |result: &OrganizationAdminResult| {
-            crate::workspace_request_log::retain(
-                crate::workspace_request_log::RequestLogStore::Organization,
+            fleet_runtime::workspace_request_log::retain(
+                fleet_runtime::workspace_request_log::RequestLogStore::Organization,
                 &operation,
                 &actor,
                 &person.intent_digest,

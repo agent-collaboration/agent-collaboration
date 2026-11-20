@@ -55,6 +55,7 @@ async fn ordinary_client_uses_installation_and_receives_correlated_workspace_and
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(central_storage::Statement {
             sql: "SELECT machine_id FROM login_machines WHERE machine_id=?",
@@ -178,6 +179,7 @@ async fn semantic_requests_recheck_caller_and_original_grant_expiry() -> Result<
         .await?;
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .read(central_storage::Statement {
                 sql: "SELECT workspace_id FROM directory_workspaces",
@@ -309,7 +311,7 @@ async fn private_route_boundary(fixture: &Fixture) -> Result<()> {
         sql: "SELECT (SELECT COUNT(*) FROM directory_workspaces) AS workspaces, (SELECT COUNT(*) FROM runtime_request_log) AS requests, (SELECT COUNT(*) FROM admin_used_requests) AS proofs, (SELECT COUNT(*) FROM access_actor_identities) AS actors",
         args: vec![],
     };
-    let before = runtime.statement_host().read(rows()).await?;
+    let before = runtime.runtime().statement_host().read(rows()).await?;
     let operation = "019f0000-0000-7000-8000-00000000d7e1";
     for path in [
         "/internal/organization-provisioning",
@@ -346,7 +348,7 @@ async fn private_route_boundary(fixture: &Fixture) -> Result<()> {
             }
         }
     }
-    if runtime.statement_host().read(rows()).await? != before {
+    if runtime.runtime().statement_host().read(rows()).await? != before {
         return Err("private route refusals changed owning rows".into());
     }
     Ok(())

@@ -1,15 +1,14 @@
 //! Fixture wire projections are built only from the owning machine row codecs.
 use crate::{
-    identity_contract::{
-        AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollmentRevocationReason,
-    },
+    identity_contract::{AllowedWorkspaces, DeviceLoginRequestId, EnrollmentRevocationReason},
     machine_login_row_values::{seconds_timestamp, timestamp},
     machine_login_rows,
     organization_authority::machine_login::{MachineState, StoredEnrollmentState},
-    workspace_decode_error::corrupt,
 };
 use central_storage::{ReadOutcome, SafeInteger, SqlValue, StoreFailure};
+use fleet_contracts::ClientId;
 use fleet_identity_protocol::EnrollmentId;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use message_board::WorkspaceId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

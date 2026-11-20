@@ -1,12 +1,15 @@
 //! Position-ordered activity joins one central recipient window across workspaces.
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    guarded_statements::{any, text},
+    WorkspaceRuntime,
     notification_windows::{NotificationWindow, window_statements},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::WorkspaceRows,
 };
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    guarded_statements::{any, text},
+    workspace_decode_error::corrupt,
+};
+use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
 use std::collections::BTreeSet;
 use workspace_model as m;
 
@@ -18,7 +21,7 @@ pub struct DrainResult {
     pub window_items_added: usize,
     pub skipped_recipients: usize,
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn plan_workspace_notices(
         &self,
         workspace: &m::WorkspaceId,
@@ -27,7 +30,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     ) -> Result<(Vec<GuardedStatement>, DrainResult), StoreFailure> {
         crate::central_mail_records::decode_messages(
             &self
-                .host
+                .execution
+                .statement_host()
                 .read(crate::central_mail_records::notice_messages())
                 .await?,
         )?;
@@ -92,7 +96,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         .created_at
                         .ok_or_else(|| corrupt("workspace_changes.created_at"))?;
                     let window = NotificationWindow {
-                        id: self.mint()?,
+                        id: self.execution.mint()?,
                         recipient: recipient.clone(),
                         first,
                         due: self.notice_due(&recipient, now).await?,
@@ -105,7 +109,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     workspace,
                     change.thread_id.as_ref(),
                     &change.change_id,
-                    self.mint()?,
+                    self.execution.mint()?,
                     now,
                 ));
                 result.window_items_added += 1;
@@ -116,7 +120,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     }
 }
 fn targeted_recipients(
-    change: &crate::workspace_change_records::StoredChange,
+    change: &fleet_workspace_access::workspace_change_records::StoredChange,
     rows: &WorkspaceRows,
 ) -> Result<BTreeSet<m::ActorIdentityId>, StoreFailure> {
     let mut recipients = BTreeSet::new();

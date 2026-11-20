@@ -6,11 +6,11 @@ use super::{
     effects::{ApplyFailure, classify_batch},
     store_adapter::SubjectVersion,
 };
-use crate::ObjectHost as _;
 use central_engine_model::{
     FailureRecord, FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
 };
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_runtime_ports::CentralStore as _;
 use workspace_model::WorkspaceId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -23,7 +23,7 @@ pub(crate) enum FailureOutcome {
 
 impl<R: EngineHost> Engine<'_, R> {
     pub(crate) fn observe_engine_store_down(&self, subject: &EngineSubject, failure: StoreFailure) {
-        self.observe(crate::CentralObservation::EngineStoreDown {
+        self.observe(fleet_contracts::CentralObservation::EngineStoreDown {
             kind: subject.kind,
             key: subject.key.clone(),
             failure,
@@ -31,7 +31,7 @@ impl<R: EngineHost> Engine<'_, R> {
     }
 
     pub(crate) fn observe_alarm_not_published(&self, failure: StoreFailure) {
-        self.observe(crate::CentralObservation::EngineAlarmNotPublished { failure });
+        self.observe(fleet_contracts::CentralObservation::EngineAlarmNotPublished { failure });
     }
     pub(crate) async fn record_failure(
         &self,
@@ -102,7 +102,10 @@ impl<R: EngineHost> Engine<'_, R> {
     ) -> FailureOutcome {
         #[cfg(feature = "test-support")]
         self.pauses()
-            .reached_engine(crate::PausePoint::BeforeEngineFailureWrite, &subject.key.0)
+            .reached_engine(
+                fleet_runtime::PausePoint::BeforeEngineFailureWrite,
+                &subject.key.0,
+            )
             .await;
         let (record, class) = match prior.map(|stored| &stored.record) {
             Some(Ok(record)) => (Some(record), class),
@@ -120,9 +123,11 @@ impl<R: EngineHost> Engine<'_, R> {
             Ok(FailureTransition::Record(record)) => record,
             Ok(FailureTransition::Unchanged) => return FailureOutcome::Superseded,
             Err(_) => {
-                return FailureOutcome::StoreDown(crate::workspace_decode_error::corrupt(
-                    "engine_work_attempts.failure_update",
-                ));
+                return FailureOutcome::StoreDown(
+                    fleet_runtime_ports::workspace_decode_error::corrupt(
+                        "engine_work_attempts.failure_update",
+                    ),
+                );
             }
         };
         let statement = match write_attempt(
@@ -144,7 +149,7 @@ impl<R: EngineHost> Engine<'_, R> {
                 .await,
         ) {
             Ok(()) => {
-                self.observe(crate::CentralObservation::EngineItemFailed {
+                self.observe(fleet_contracts::CentralObservation::EngineItemFailed {
                     kind: subject.kind,
                     key: subject.key.clone(),
                     failure: record.last_failure.clone(),
@@ -162,7 +167,7 @@ impl<R: EngineHost> Engine<'_, R> {
             Err(ApplyFailure::StoreDown(failure)) => FailureOutcome::StoreDown(failure),
             // A rejected attempt write cannot charge another attempt or recurse.
             Err(ApplyFailure::Rejected(_)) => FailureOutcome::StoreDown(
-                crate::workspace_decode_error::corrupt("engine_work_attempts.write"),
+                fleet_runtime_ports::workspace_decode_error::corrupt("engine_work_attempts.write"),
             ),
         }
     }

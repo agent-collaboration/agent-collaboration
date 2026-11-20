@@ -54,9 +54,9 @@ pub(super) async fn due_batch_at(fixture: &Fixture, runtime: &Runtime, time: Tim
 pub(super) async fn driver_fires_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
     assert_eq!(alarm_ms(runtime), ms(time), "the published alarm");
     driver_settled(fixture, runtime).await;
-    let completed = runtime.alarm_completion_count();
+    let completed = runtime.runtime().alarm_completion_count();
     fixture.advance_to(sync(time)).await;
-    runtime.until_alarm_completed(completed + 1).await;
+    runtime.runtime().until_alarm_completed(completed + 1).await;
 }
 
 pub(super) async fn set_wake(fixture: &Fixture, number: u32, due: Time) -> workspace_ids::WakeId {
@@ -83,6 +83,7 @@ pub(super) async fn set_wake(fixture: &Fixture, number: u32, due: Time) -> works
 
 pub(super) async fn count(runtime: &Runtime, sql: &'static str, args: Vec<SqlValue>) -> i64 {
     match runtime
+        .runtime()
         .statement_host()
         .read(Statement { sql, args })
         .await
@@ -103,6 +104,7 @@ pub(super) async fn notices(runtime: &Runtime) -> i64 {
 }
 pub(super) async fn wake_state(runtime: &Runtime, wake: &workspace_ids::WakeId) -> SqlValue {
     runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
@@ -158,6 +160,7 @@ pub(super) async fn open_notice_window(fixture: &Fixture, first_request: u32) {
 }
 pub(super) async fn window_due(runtime: &Runtime) -> Vec<Vec<SqlValue>> {
     runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT DISTINCT due_at FROM mail_notification_windows",

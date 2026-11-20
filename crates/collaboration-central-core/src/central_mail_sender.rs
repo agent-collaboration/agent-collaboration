@@ -1,15 +1,16 @@
 //! Resolve display identity from current organization rows when delivering mail.
-use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, guarded_statements::text,
-    workspace_decode_error::corrupt, workspace_row_codec::string,
-};
+use crate::WorkspaceRuntime;
 use central_storage::{Statement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    guarded_statements::text, stored_values::string, workspace_decode_error::corrupt,
+};
 use workspace_model::{
     Identity, ResolvedSender,
     central_mail::{MessageBody, MessageRecord, MessageSender},
 };
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_message_sender(
         &self,
         message: &MessageRecord,
@@ -17,12 +18,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let central_authored = !matches!(message.body, MessageBody::Direct { .. });
         let identity = match &message.sender {
             MessageSender::Central => None,
-            MessageSender::Actor(actor) => self.read_actor_identity(actor).await?,
+            MessageSender::Actor(actor) => self.access().read_actor_identity(actor).await?,
         };
         let sender = match identity {
             Some(Identity::AgentSession { session }) => {
                 let rows = self
-                    .host
+                    .execution
+                    .statement_host()
                     .read(Statement {
                         sql: "SELECT label FROM login_machines WHERE machine_id=?",
                         args: vec![text(&session.machine_id)],

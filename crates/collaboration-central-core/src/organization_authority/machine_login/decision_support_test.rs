@@ -5,7 +5,7 @@ use super::super::{
     },
 };
 use crate::identity_contract::MachineTokenDecision;
-use runtime_primitives::IdSource;
+use fleet_runtime_ports::IdSource;
 
 #[test]
 fn generation_exhaustion_and_invalid_id_sources_fail_without_a_plan() {

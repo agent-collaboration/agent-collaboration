@@ -1,15 +1,17 @@
 //! Central-owned statement construction and validated mail rows.
+use crate::WorkspaceRuntime;
 pub(crate) use crate::central_mail_rows::{applied, encode, insert_message, timestamp};
-use crate::guarded_statements::text;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, workspace_decode_error::corrupt};
 use central_storage::{AlarmUpdate, Statement, StoreFailure};
+use fleet_runtime_ports::guarded_statements::text;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::SessionRef;
 use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, Timestamp};
 pub(crate) fn alarm_update() -> AlarmUpdate {
     crate::engine::query_registry::alarm_update()
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) fn prepare_message_record(
         &self,
         sender: mail::MessageSender,
@@ -19,7 +21,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         now: Timestamp,
     ) -> Result<mail::MessageRecord, StoreFailure> {
         Ok(mail::MessageRecord {
-            message_id: self.mint()?,
+            message_id: self.execution.mint()?,
             sender,
             target,
             body,
@@ -35,14 +37,17 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 session: target.clone(),
             })
             .map_err(|_| corrupt("session identity"))?;
-        let rows=self.host.read(Statement{sql:"SELECT a.actor_identity_id FROM access_actor_identities a JOIN login_machines m ON m.machine_id=? WHERE a.identity_kind='agentSession' AND a.identity=? AND m.state='enrolled'",args:vec![text(&target.machine_id),text(identity)]}).await?;
+        let rows=self.execution.statement_host().read(Statement{sql:"SELECT a.actor_identity_id FROM access_actor_identities a JOIN login_machines m ON m.machine_id=? WHERE a.identity_kind='agentSession' AND a.identity=? AND m.state='enrolled'",args:vec![text(&target.machine_id),text(identity)]}).await?;
         Ok(!rows.rows.is_empty())
     }
     pub(crate) async fn route_notice_actor(
         &self,
         actor: &ActorIdentityId,
     ) -> Result<Option<SessionRef>, StoreFailure> {
-        let actors = self.actor_views(std::slice::from_ref(actor)).await?;
+        let actors = self
+            .access()
+            .actor_views(std::slice::from_ref(actor))
+            .await?;
         match actors.first().map(|actor| &actor.identity) {
             Some(workspace_model::Identity::AgentSession { session }) => Ok(Some(session.clone())),
             Some(

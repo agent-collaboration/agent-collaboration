@@ -1,11 +1,13 @@
 //! Verify the issuer's machine access-token profile before live admission.
 use crate::{
-    Ed25519Verification, IssuerKeySource, IssuerSignatureVerifier, SignatureValidity,
-    identity_contract::{ClientId, MachinePrincipal, MachineTokenClaims},
+    IssuerSignatureVerifier,
+    identity_contract::{MachinePrincipal, MachineTokenClaims},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::ClientId;
 use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
-use runtime_primitives::Clock;
+use fleet_runtime_ports::Clock;
+use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, SignatureValidity};
 use serde::Deserialize;
 use std::sync::Arc;
 use workspace_ids::MachineId;
@@ -101,8 +103,8 @@ impl<Ed: Ed25519Verification, Keys: IssuerKeySource> MachineTokenVerifier<Ed, Ke
         {
             Ok(SignatureValidity::Valid) => {}
             Ok(SignatureValidity::Invalid) => return Err(MachineTokenRefusal::Rejected),
-            Err(crate::IssuerSignatureRefusal::Keys(
-                crate::IssuerKeyResolutionRefusal::KeySet(_),
+            Err(fleet_contracts::IssuerSignatureRefusal::Keys(
+                fleet_contracts::IssuerKeyResolutionRefusal::KeySet(_),
             )) => return Err(MachineTokenRefusal::Rejected),
             Err(_) => return Err(MachineTokenRefusal::Unavailable),
         }
@@ -188,7 +190,7 @@ impl Claims {
             self.azp.as_str(),
         ] {
             let uuid = uuid::Uuid::parse_str(id).map_err(|_| rejected)?;
-            if !runtime_primitives::uuid_v7(uuid) || uuid.to_string() != id {
+            if !fleet_runtime_ports::uuid_v7(uuid) || uuid.to_string() != id {
                 return Err(rejected);
             }
         }

@@ -111,6 +111,7 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
     }
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let identities = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT actor_identity_id,identity FROM access_actor_identities",
@@ -132,7 +133,7 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
     };
     let old = find("first-advisor");
     let new = find("second-advisor");
-    let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT holder,ended_at FROM workspace_project_roles WHERE project_id=? AND role='advisor' ORDER BY created_at,project_role_id",args:vec![text(&project)]}).await.unwrap();
+    let rows=runtime.runtime().inspect_workspace(&f.workspace,Statement{sql:"SELECT holder,ended_at FROM workspace_project_roles WHERE project_id=? AND role='advisor' ORDER BY created_at,project_role_id",args:vec![text(&project)]}).await.unwrap();
     assert_eq!(rows.rows.len(), 2);
     assert!(
         rows.rows

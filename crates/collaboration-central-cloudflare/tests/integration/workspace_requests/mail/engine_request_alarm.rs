@@ -7,10 +7,8 @@ use super::super::engine_evidence::{
 };
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{
-    PausePoint,
-    engine_probe::{EngineRequestOutcome, ProbeEvent},
-};
+use collaboration_central_core::engine_probe::{EngineRequestOutcome, ProbeEvent};
+use fleet_runtime::PausePoint;
 
 #[tokio::test]
 async fn a_request_that_stops_the_earliest_timed_subject_moves_the_alarm_with_its_commit() {

@@ -25,7 +25,10 @@ fn bulk_wake_id(number: usize) -> String {
 /// recompute), with the last batch start far enough back that its 30 s floor
 /// is already past; the claim snapshot proves no batch started.
 async fn publish_without_a_batch_at(fixture: &Fixture, runtime: &Runtime, time: Time) {
-    let before = runtime.due_batch_snapshot().last_start_unix_millis;
+    let before = runtime
+        .runtime()
+        .due_batch_snapshot()
+        .last_start_unix_millis;
     assert!(
         before.is_some_and(|start| time.timestamp_millis() - start >= 30_000),
         "the last batch floor must already be past: {before:?}"
@@ -34,7 +37,10 @@ async fn publish_without_a_batch_at(fixture: &Fixture, runtime: &Runtime, time: 
     fixture.set_utc(time).await;
     runtime.recompute_alarm().await.unwrap();
     assert_eq!(
-        runtime.due_batch_snapshot().last_start_unix_millis,
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
         before,
         "no due batch started"
     );
@@ -85,6 +91,7 @@ async fn six_hundred_due_wakes_drain_earliest_first_in_capped_batches_thirty_sec
         .collect();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
@@ -147,7 +154,10 @@ async fn an_only_unreadable_wake_publishes_the_next_mark_before_any_batch_fails_
     // The request's own due batch starts at 10:01:30.
     let wake = set_wake(&fixture, 14100, at(start, 15, 0), "unreadable").await;
     assert_eq!(
-        runtime.due_batch_snapshot().last_start_unix_millis,
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
         ms(at(start, 1, 30))
     );
     assert_eq!(alarm_ms(&runtime), ms(at(start, 15, 0)));

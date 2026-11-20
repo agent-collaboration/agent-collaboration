@@ -19,13 +19,11 @@ use super::engine_admin_support::*;
 use super::engine_stateful_attempts::{AttemptOutcome, ExpectedRecord};
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind,
-    engine_probe::{
-        EngineReceipt, EngineRequestOutcome, InstanceKey, ProbeEvent, ProbeRefusal, ProbeRequest,
-        ProbeState, SeedProbe,
-    },
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, InstanceKey, ProbeEvent, ProbeRefusal, ProbeRequest,
+    ProbeState, SeedProbe,
 };
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 use hegel::{TestCase, generators as gs};
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{CentralMailAnswer, CentralMailOperation, CentralMailResult};
@@ -133,6 +131,7 @@ impl EngineModel {
             self.engine()
                 .runtime()
                 .await
+                .runtime()
                 .statement_host()
                 .engine_commit_fault_pending()
         })
@@ -162,14 +161,17 @@ impl EngineModel {
     }
     fn observe(&mut self) {
         let runtime = self.block(self.engine().runtime());
-        let batches = runtime.due_batch_starts();
+        let batches = runtime.runtime().due_batch_starts();
         self.batch_starts
             .extend_from_slice(&batches[self.seen_batches.min(batches.len())..]);
         self.seen_batches = batches.len();
-        let units = runtime.due_unit_starts();
+        let units = runtime.runtime().due_unit_starts();
         let new_units = units[self.seen_units.min(units.len())..].to_vec();
         self.seen_units = units.len();
-        let pending_now = runtime.statement_host().engine_commit_fault_pending();
+        let pending_now = runtime
+            .runtime()
+            .statement_host()
+            .engine_commit_fault_pending();
         // The armed fault was used up during this step by one of its attempts.
         let mut consumed = self
             .armed_fault
@@ -276,35 +278,35 @@ async fn within_progress_budget<T>(what: &str, mut check: impl FnMut() -> Option
 async fn settle(engine: &EngineOrg) {
     let runtime = engine.runtime().await;
     assert!(
-        runtime.alarm_failures().is_empty(),
+        runtime.runtime().alarm_failures().is_empty(),
         "the alarm driver failed: {:?}",
-        runtime.alarm_failures()
+        runtime.runtime().alarm_failures()
     );
     for _ in 0..16 {
-        let completed = runtime.alarm_completion_count();
-        let failures = runtime.alarm_failures().len();
+        let completed = runtime.runtime().alarm_completion_count();
+        let failures = runtime.runtime().alarm_failures().len();
         let failed = || {
             panic!(
                 "the alarm driver failed: {:?}; due batch {:?}",
-                runtime.alarm_failures(),
-                runtime.due_batch_snapshot()
+                runtime.runtime().alarm_failures(),
+                runtime.runtime().due_batch_snapshot()
             )
         };
         let now = engine.now().timestamp_millis();
-        match runtime.statement_host().alarm() {
+        match runtime.runtime().statement_host().alarm() {
             Some(alarm) if alarm.unix_millis() <= now => {
                 within_progress_budget("completing the due alarm", || {
-                    if runtime.alarm_failures().len() > failures {
+                    if runtime.runtime().alarm_failures().len() > failures {
                         failed();
                     }
-                    (runtime.alarm_completion_count() > completed).then_some(())
+                    (runtime.runtime().alarm_completion_count() > completed).then_some(())
                 })
                 .await;
             }
             Some(alarm) => {
                 let deadline = engine.f.clock.wall_deadline(alarm);
                 within_progress_budget("re-checking the future alarm", || {
-                    if runtime.alarm_failures().len() > failures {
+                    if runtime.runtime().alarm_failures().len() > failures {
                         failed();
                     }
                     engine.f.clock.has_not_due_check_now(deadline).then_some(())
@@ -435,6 +437,7 @@ impl EngineModel {
             let runtime = self.engine().runtime().await;
             if let Some((kind, _)) = kind {
                 runtime
+                    .runtime()
                     .statement_host()
                     .inject_engine_commit_fault(EngineCommitFault {
                         key: InstanceKey(key.clone()),
@@ -502,6 +505,7 @@ impl EngineModel {
             self.engine()
                 .runtime()
                 .await
+                .runtime()
                 .statement_host()
                 .inject_engine_commit_fault(EngineCommitFault {
                     key: InstanceKey(key),
@@ -691,7 +695,10 @@ impl EngineModel {
                 pair[1] - pair[0]
             );
         }
-        let snapshot = self.block(self.engine().runtime()).due_batch_snapshot();
+        let snapshot = self
+            .block(self.engine().runtime())
+            .runtime()
+            .due_batch_snapshot();
         if let (Some(alarm), Some(start)) = (
             self.block(self.engine().alarm_ms()),
             snapshot.last_start_unix_millis,
@@ -770,7 +777,7 @@ async fn probe_stop_uses_fresh_authority_after_the_fixture_clock_advances() {
     engine.f.close().await.unwrap();
 }
 
-#[hegel::test(test_cases = 50)]
+#[hegel::test(test_cases = 50, suppress_health_check = [hegel::HealthCheck::TooSlow])]
 fn the_engine_keeps_its_invariants_under_random_requests_faults_and_restarts(tc: TestCase) {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()

@@ -1,15 +1,16 @@
 //! Read a retained decision from the ledger that owned the original write.
-use crate::{
-    ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
-    organization_admin_contract::OrganizationAdminResult,
-    workspace_decode_error::corrupt,
-    workspace_request_log::{RequestLogStore, lookup},
-    workspace_row_codec::{json, string},
-};
+use crate::WorkspaceCaller;
+use crate::{WorkspaceRuntime, organization_admin_contract::OrganizationAdminResult};
 use central_link_protocol::{
     ReplyPayload, RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::{ReadOutcome, StoreFailure};
+use fleet_runtime::workspace_request_log::{RequestLogStore, lookup};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    stored_values::{json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_model::{
     ActorIdentityId, WorkspaceReply, WorkspaceResult, central_mail::CentralMailResult,
 };
@@ -48,37 +49,45 @@ fn retained_decision(
     .map(Some)
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// Status never re-applies the original operation or creates an identity.
     pub async fn request_status(
         &self,
         caller: &WorkspaceCaller,
         query: &RequestStatusQuery,
     ) -> Result<RequestStatusAnswer, StoreFailure> {
-        let _turn = self.take_central_turn().await;
+        let _turn = self.execution.take_central_turn().await;
         let scope_workspace = match &query.scope {
             RequestScope::Organization => None,
             RequestScope::Workspace(workspace) => Some(workspace),
         };
         if self
-            .admit_workspace(caller, scope_workspace)
+            .access()
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                scope_workspace,
+            )
             .await?
             .is_err()
         {
             return Ok(RequestStatusAnswer::NotFound);
         }
-        let Some(actor) = self.existing_caller_actor(caller.caller()).await? else {
+        let Some(actor) = self.access().existing_caller_actor(caller.caller()).await? else {
             return Ok(RequestStatusAnswer::NotFound);
         };
-        let cutoff = (self.now()? - chrono::Duration::hours(24)).to_rfc3339();
+        let cutoff = (self.execution.now()? - chrono::Duration::hours(24)).to_rfc3339();
         let rows = if let Some(workspace) = scope_workspace {
-            self.read_workspace(
-                workspace,
-                lookup(RequestLogStore::Workspace, &query.request_id, &cutoff),
-            )
-            .await?
+            self.execution
+                .read_workspace(
+                    workspace,
+                    lookup(RequestLogStore::Workspace, &query.request_id, &cutoff),
+                )
+                .await?
         } else {
-            self.host
+            self.execution
+                .statement_host()
                 .read(lookup(
                     RequestLogStore::Organization,
                     &query.request_id,
@@ -104,6 +113,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 result @ (WorkspaceResult::Done(_) | WorkspaceResult::NotFound { .. }),
             )) => {
                 let actors = self
+                    .access()
                     .actor_views(&crate::workspace_item_reads::actor_ids(&result))
                     .await?;
                 RequestStatusAnswer::Answered(ReplyPayload::Workspace(WorkspaceReply {

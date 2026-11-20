@@ -1,10 +1,10 @@
 //! A direct message row as its delivery reducer sees it, decoded without any
 //! runtime so the engine and the request paths share it with no module cycle.
-use crate::{
-    workspace_decode_error::corrupt,
-    workspace_row_codec::{column, json, string},
-};
 use central_storage::{ReadOutcome, SqlValue, StoreFailure};
+use fleet_runtime_ports::{
+    stored_values::{column, json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_ids::SessionRef;
 use workspace_ids::{MessageId, RequestId};
 use workspace_model::central_mail as mail;

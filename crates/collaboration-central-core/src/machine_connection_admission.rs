@@ -1,15 +1,16 @@
 //! The organization turn owns read-only connection admission and restoration.
+use crate::ValidatedMachineConnection;
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    identity_contract::MachineConnectionRefusal,
-    machine_connection::{
-        Admission, MachineConnectionAttachment, ValidatedMachineConnection, validate_live,
-        validate_shape,
-    },
+    WorkspaceRuntime,
+    machine_connection::{Admission, validate_live, validate_shape},
     organization_authority::machine_login::{EnrollmentFacts, EnrollmentQuery},
 };
 use central_storage::StoreFailure;
+use fleet_contracts::{
+    LiveMachineConnection, MachineConnectionAttachment, MachineConnectionRefusal,
+};
 use fleet_identity_protocol::EnrollmentId;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::MachineId;
 
 /// Live authority for one ordinary link request or one member of a write batch.
@@ -19,7 +20,7 @@ pub enum MachineLinkRequestAuthority {
     TemporarilyUnavailable,
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub async fn restore_machine_link_request(
         &self,
         attachment: &MachineConnectionAttachment,
@@ -50,8 +51,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 return Err(StoreFailure::Unavailable);
             }
         };
-        let _turn = self.take_central_turn_for_admission().await;
-        if verified.organization_id() != &self.organization {
+        let _turn = self.execution.take_central_turn_for_admission().await;
+        if verified.organization_id() != self.execution.organization() {
             return Ok(Err(
                 MachineConnectionRefusal::MachineInAnotherOrganization {},
             ));
@@ -60,8 +61,13 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let facts = self
             .connection_facts(verified.machine_id(), verified.enrollment_id())
             .await?;
-        let attachment = MachineConnectionAttachment::from_verified(&verified);
-        validate_live(&attachment, &self.organization, &facts, time.now_ms)
+        let attachment = attachment_from_verified(&verified);
+        validate_live(
+            &attachment,
+            self.execution.organization(),
+            &facts,
+            time.now_ms,
+        )
     }
 
     /// Renews an open connection's machine token (fleet-access R40/V32, B3):
@@ -106,7 +112,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 return Err(StoreFailure::Unavailable);
             }
         };
-        let _turn = self.take_central_turn_for_admission().await;
+        let _turn = self.execution.take_central_turn_for_admission().await;
         if verified.organization_id() != current.organization_id()
             || verified.machine_id() != current.machine_id()
         {
@@ -127,9 +133,9 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         if facts.machine.is_none() {
             return Ok(Err(Refusal::EnrollmentNotActive));
         }
-        let renewed = MachineConnectionAttachment::from_verified(&verified);
+        let renewed = attachment_from_verified(&verified);
         Ok(
-            match validate_live(&renewed, &self.organization, &facts, time.now_ms)? {
+            match validate_live(&renewed, self.execution.organization(), &facts, time.now_ms)? {
                 Ok(connection) => Ok(connection),
                 Err(MachineConnectionRefusal::WrongClient {}) => Err(Refusal::DifferentEnrollment),
                 Err(
@@ -146,7 +152,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         &self,
         attachment: &MachineConnectionAttachment,
     ) -> Admission {
-        let _turn = self.take_central_turn_for_admission().await;
+        let _turn = self.execution.take_central_turn_for_admission().await;
         #[cfg(feature = "test-support")]
         if let Some(failure) = self.take_machine_restore_failure() {
             return Err(failure);
@@ -186,7 +192,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         attachment: &MachineConnectionAttachment,
         register: impl FnOnce() -> Value,
     ) -> Result<Result<Value, MachineConnectionRefusal>, StoreFailure> {
-        let _turn = self.take_central_turn_for_admission().await;
+        let _turn = self.execution.take_central_turn_for_admission().await;
         Ok(self
             .restore_machine_connection_held(attachment)
             .await?
@@ -198,7 +204,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         &self,
         attachment: &MachineConnectionAttachment,
     ) -> Admission {
-        if attachment.organization_id() != &self.organization {
+        if attachment.organization_id() != self.execution.organization() {
             return Ok(Err(
                 MachineConnectionRefusal::MachineInAnotherOrganization {},
             ));
@@ -210,7 +216,12 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let facts = self
             .connection_facts(attachment.machine_id(), attachment.enrollment_id())
             .await?;
-        validate_live(attachment, &self.organization, &facts, time.now_ms)
+        validate_live(
+            attachment,
+            self.execution.organization(),
+            &facts,
+            time.now_ms,
+        )
     }
 
     async fn connection_facts(
@@ -219,8 +230,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         enrollment: &EnrollmentId,
     ) -> Result<EnrollmentFacts, StoreFailure> {
         crate::machine_login_reads::facts(
-            self.host.as_ref(),
-            self.organization.clone(),
+            self.execution.statement_host(),
+            self.execution.organization().clone(),
             &EnrollmentQuery {
                 machine_id: Some(machine_id.clone()),
                 enrollment: Some(enrollment.clone()),
@@ -245,3 +256,28 @@ pub enum MachineTokenRenewalRefusal {
 }
 
 type Renewal = Result<Result<ValidatedMachineConnection, MachineTokenRenewalRefusal>, StoreFailure>;
+
+impl<Host: CentralStore, Stores: WorkspaceStores> LiveMachineConnection
+    for WorkspaceRuntime<Host, Stores>
+{
+    async fn restore_held(
+        &self,
+        attachment: &MachineConnectionAttachment,
+    ) -> Result<Result<(), MachineConnectionRefusal>, StoreFailure> {
+        self.restore_machine_connection_held(attachment)
+            .await
+            .map(|admission| admission.map(|_| ()))
+    }
+}
+
+fn attachment_from_verified(
+    verified: &crate::machine_token::VerifiedMachineToken,
+) -> MachineConnectionAttachment {
+    MachineConnectionAttachment::from_token_claims(
+        verified.organization_id().clone(),
+        verified.machine_id().clone(),
+        verified.enrollment_id().clone(),
+        verified.client_id().clone(),
+        verified.effective_expires_at(),
+    )
+}

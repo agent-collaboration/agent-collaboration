@@ -24,6 +24,7 @@ fn number(value: i64) -> TestResult<SqlValue> {
 async fn rows(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) -> TestResult<ReadOutcome> {
     let runtime = f.host.central(f.caller.organization_id()).await?;
     Ok(runtime
+        .runtime()
         .statement_host()
         .read(Statement { sql, args })
         .await?)
@@ -36,6 +37,7 @@ async fn batch(
     let runtime = f.host.central(f.caller.organization_id()).await?;
     if !matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch { statements, alarm })
             .await?,
@@ -70,7 +72,11 @@ async fn clear_alarm(f: &Fixture) -> TestResult<()> {
 }
 async fn alarm(f: &Fixture) -> TestResult<Option<i64>> {
     let runtime = f.host.central(f.caller.organization_id()).await?;
-    Ok(runtime.statement_host().alarm().map(|at| at.unix_millis()))
+    Ok(runtime
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|at| at.unix_millis()))
 }
 async fn request(f: &Fixture, serial: u32, operation: Op) -> TestResult<MailResult> {
     Ok(f.host

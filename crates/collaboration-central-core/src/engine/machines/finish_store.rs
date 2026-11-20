@@ -2,18 +2,20 @@
 //! the row's raw stored values as its compare-and-set version, decodes only the
 //! lifecycle `state`, and saves `disabled` guarded on every raw column with IS.
 use super::lifecycle_finish::{AutomationKind, Lifecycle, LifecycleFinish, NoEffect, WakeKind};
-use crate::ObjectHost as _;
 use crate::{
     central_mail_rows::timestamp,
     engine::{
         port::EngineHost,
         store_adapter::{LoadFailure, StoreAdapter, Versioned, load_store_failure, raw_version},
     },
-    guarded_statements::{exact, text},
-    workspace_row_codec::string,
 };
 use central_engine_model::{InstanceKey, ItemFailureClass};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::{
+    guarded_statements::{exact, text},
+    stored_values::string,
+};
 
 pub(crate) struct WakeFinishStore<'a, R: EngineHost>(pub &'a R);
 pub(crate) struct AutomationFinishStore<'a, R: EngineHost>(pub &'a R);

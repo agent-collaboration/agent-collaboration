@@ -80,7 +80,7 @@ async fn digest(f: &Fixture) -> TestResult<(u16, Value)> {
 }
 async fn timer_rows(f: &Fixture) -> TestResult<Vec<Vec<SqlValue>>> {
     let runtime = f.runtime(A).await?;
-    Ok(runtime.statement_host().read(Statement {
+    Ok(runtime.runtime().statement_host().read(Statement {
         sql:"SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM automation_wakes ORDER BY wake_id",
         args:vec![],
     }).await?.rows)
@@ -88,6 +88,7 @@ async fn timer_rows(f: &Fixture) -> TestResult<Vec<Vec<SqlValue>>> {
 async fn drop_alarm(f: &Fixture) -> TestResult<()> {
     let runtime = f.runtime(A).await?;
     let outcome = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![],
@@ -104,11 +105,16 @@ async fn drop_alarm(f: &Fixture) -> TestResult<()> {
 }
 async fn alarm(f: &Fixture) -> TestResult<Option<i64>> {
     let runtime = f.runtime(A).await?;
-    Ok(runtime.statement_host().alarm().map(|at| at.unix_millis()))
+    Ok(runtime
+        .runtime()
+        .statement_host()
+        .alarm()
+        .map(|at| at.unix_millis()))
 }
 async fn fail_rearm(f: &Fixture) -> TestResult<()> {
     let runtime = f.runtime(A).await?;
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
     Ok(())

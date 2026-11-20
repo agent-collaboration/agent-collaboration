@@ -1,6 +1,6 @@
 //! The Worker's one clock: the platform's time, read in one place.
 
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
 
 #[derive(Clone, Copy)]
 pub(crate) struct CloudflareClock;

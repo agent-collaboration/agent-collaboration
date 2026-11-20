@@ -12,7 +12,12 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
         sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         args: vec![text(&f.workspace)],
     };
-    let before = runtime.statement_host().read(cursor_query()).await.unwrap();
+    let before = runtime
+        .runtime()
+        .statement_host()
+        .read(cursor_query())
+        .await
+        .unwrap();
     let SqlValue::Integer(position) = before.rows[0][0] else {
         panic!("drain position")
     };
@@ -30,7 +35,7 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
         answer_position.get(),
         u64::try_from(position.get() + 1).unwrap()
     );
-    let changes = runtime.inspect_workspace(&f.workspace, Statement {
+    let changes = runtime.runtime().inspect_workspace(&f.workspace, Statement {
         sql: "SELECT position,change_kind,item_kind FROM workspace_changes WHERE position>? ORDER BY position",
         args: vec![SqlValue::Integer(position)],
     }).await.unwrap();
@@ -49,7 +54,12 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
             ],
         ]
     );
-    let after = runtime.statement_host().read(cursor_query()).await.unwrap();
+    let after = runtime
+        .runtime()
+        .statement_host()
+        .read(cursor_query())
+        .await
+        .unwrap();
     assert_eq!(
         after.rows,
         vec![vec![
@@ -59,10 +69,15 @@ async fn backlog_close_drains_both_change_positions_and_replay_keeps_cursor() {
     );
     assert_eq!(f.call(2204, operation).await, reply);
     assert_eq!(
-        runtime.statement_host().read(cursor_query()).await.unwrap(),
+        runtime
+            .runtime()
+            .statement_host()
+            .read(cursor_query())
+            .await
+            .unwrap(),
         after
     );
-    assert_eq!(runtime.inspect_workspace(&f.workspace,Statement {
+    assert_eq!(runtime.runtime().inspect_workspace(&f.workspace,Statement {
         sql:"SELECT position,change_kind,item_kind FROM workspace_changes WHERE position>? ORDER BY position",args:vec![SqlValue::Integer(position)],
     }).await.unwrap(),changes);
     f.host.close().await;

@@ -1,12 +1,10 @@
 //! Fleet identity verification owns no storage, policy lifetime or host routing.
-use super::fleet_statement_refusal::FleetOrganizationStatementRefusal;
 use super::fleet_statement_wire::{OrganizationStatementDigest, ParsedFleetStatement};
-use crate::{
-    Ed25519Verification, IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier,
-    SignatureValidity,
-};
+use crate::{IssuerKeyCache, IssuerSignatureVerifier};
+use fleet_contracts::FleetOrganizationStatementRefusal;
 use fleet_identity_protocol::{OrganizationId, UnixSeconds};
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime_ports::{Clock, SyncTime};
+use fleet_runtime_ports::{Ed25519Verification, IssuerKeySource, SignatureValidity};
 use std::sync::Arc;
 
 /// Owner choice 3f: a statement lives 120 days and is renewed with 60 days left.

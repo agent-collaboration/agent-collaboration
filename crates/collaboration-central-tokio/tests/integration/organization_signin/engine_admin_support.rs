@@ -5,6 +5,7 @@
 use super::support::*;
 use central_storage::SqlValue;
 use collaboration_central_core::WorkspaceCaller;
+
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use workspace_model as m;
@@ -112,12 +113,13 @@ impl EngineOrg {
     pub async fn alarm_ms(&self) -> Option<i64> {
         self.runtime()
             .await
+            .runtime()
             .statement_host()
             .alarm()
             .map(|time| time.unix_millis())
     }
-    pub async fn invocations(&self) -> collaboration_central_core::LegacyUnitInvocations {
-        self.runtime().await.legacy_unit_invocations()
+    pub async fn invocations(&self) -> fleet_runtime::LegacyUnitInvocations {
+        self.runtime().await.runtime().legacy_unit_invocations()
     }
     pub async fn request(
         &self,

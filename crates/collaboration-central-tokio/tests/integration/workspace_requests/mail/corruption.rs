@@ -15,6 +15,7 @@ async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<central_storage
         .await
         .unwrap();
     let outcome = runtime
+        .runtime()
         .statement_host()
         .run_batch(StatementBatch {
             statements: vec![GuardedStatement {
@@ -78,6 +79,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
             Result::Done(_)
         ));
         let prior_alarm = runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|value| value.unix_millis());
@@ -92,7 +94,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
         } else {
             "automation_timer"
         };
-        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind=?", args: vec![text(kind)] }).await.unwrap();
+        let record = runtime.runtime().statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM engine_work_attempts WHERE machine_kind=?", args: vec![text(kind)] }).await.unwrap();
         assert_eq!(record.rows.len(), 1);
         assert_eq!(
             &record.rows[0][..3],
@@ -106,7 +108,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
             matches!(&record.rows[0][3], central_storage::SqlValue::Text(detail) if detail.contains(expected_column))
         );
 
-        let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='active'),(SELECT COUNT(*) FROM automation_schedules WHERE state='active'),(SELECT COUNT(*) FROM mail_messages)", args: vec![] }).await.unwrap();
+        let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automation_wakes WHERE state='active'),(SELECT COUNT(*) FROM automation_schedules WHERE state='active'),(SELECT COUNT(*) FROM mail_messages)", args: vec![] }).await.unwrap();
         let (wakes, automations) = if number == 1300 { (1, 0) } else { (0, 1) };
         assert_eq!(
             rows.rows,
@@ -118,6 +120,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
         );
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .alarm()
                 .map(|value| value.unix_millis()),
@@ -156,6 +159,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         panic!("wake refused")
     };
     let prior_alarm = runtime
+        .runtime()
         .statement_host()
         .alarm()
         .map(|value| value.unix_millis());
@@ -164,7 +168,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     fixture.set_utc(due).await;
     // Isolation: only the failing timer's batch rolls back; the event succeeds.
     runtime.after_event().await.unwrap();
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id)] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -174,6 +178,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|value| value.unix_millis()),
@@ -184,7 +189,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     fixture.set_utc(due + chrono::Duration::minutes(5)).await;
     runtime.after_event().await.unwrap();
     assert_eq!(runtime.after_event().await.unwrap().work.wakes_fired, 0);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(wake_id)] }).await.unwrap();
+    let rows = runtime.runtime().statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake') FROM automation_wakes WHERE wake_id=?", args: vec![text(wake_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -194,6 +199,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     );
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|value| value.unix_millis()),

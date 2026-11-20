@@ -16,7 +16,12 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
             args: vec![text(&workspace_id)],
         };
-        let initial = runtime.statement_host().read(read_cursor()).await.unwrap();
+        let initial = runtime
+            .runtime()
+            .statement_host()
+            .read(read_cursor())
+            .await
+            .unwrap();
         let SqlValue::Integer(initial_position) = &initial.rows[0][0] else {
             panic!("initial cursor")
         };
@@ -24,6 +29,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         assert_eq!(initial.rows[0][1], SqlValue::Null);
         for request_id in 7212..=7214 {
             let mut applied = runtime
+                .runtime()
                 .pause_points()
                 .hold(&f.workspace, PausePoint::AfterStoreApplied);
             let pending = tokio::spawn({
@@ -54,7 +60,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             let _ = pending.await;
             drop(applied);
         }
-        let changes = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,position FROM workspace_changes WHERE position>? ORDER BY position", args: vec![SqlValue::Integer(initial_position)] }).await.unwrap();
+        let changes = runtime.runtime().inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,position FROM workspace_changes WHERE position>? ORDER BY position", args: vec![SqlValue::Integer(initial_position)] }).await.unwrap();
         assert_eq!(changes.rows.len(), 3);
         for (offset, row) in changes.rows.iter().enumerate() {
             assert_eq!(
@@ -67,6 +73,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             );
         }
         let ledger = runtime
+            .runtime()
             .inspect_workspace(
                 &f.workspace,
                 Statement {
@@ -84,11 +91,16 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             ledger.rows,
             vec![vec![SqlValue::Integer(3.try_into().unwrap())]]
         );
-        let before = runtime.statement_host().read(read_cursor()).await.unwrap();
+        let before = runtime
+            .runtime()
+            .statement_host()
+            .read(read_cursor())
+            .await
+            .unwrap();
         assert_eq!(before.rows[0][0], SqlValue::Integer(initial_position));
         assert!(matches!(&before.rows[0][1], SqlValue::Text(_)));
         let final_position = SqlValue::Integer((initial_position.get() + 3).try_into().unwrap());
-        let mut held = runtime.pause_points().hold(&f.workspace, point);
+        let mut held = runtime.runtime().pause_points().hold(&f.workspace, point);
         let pending = tokio::spawn({
             let runtime = runtime.clone();
             let workspace = f.workspace.clone();
@@ -99,8 +111,14 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             sql: "SELECT i.change_id,w.recipient_actor FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?",
             args: vec![text(&actor), text(&thread)],
         };
-        let cut_cursor = runtime.statement_host().read(read_cursor()).await.unwrap();
+        let cut_cursor = runtime
+            .runtime()
+            .statement_host()
+            .read(read_cursor())
+            .await
+            .unwrap();
         let cut_messages = runtime
+            .runtime()
             .statement_host()
             .read(read_messages())
             .await
@@ -137,6 +155,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         let reopened = f.host.central(f.caller.organization_id()).await.unwrap();
         assert_eq!(
             reopened
+                .runtime()
                 .statement_host()
                 .read(read_cursor())
                 .await
@@ -147,6 +166,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         if before_commit {
             assert!(
                 reopened
+                    .runtime()
                     .statement_host()
                     .read(read_messages())
                     .await
@@ -155,6 +175,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
                     .is_empty()
             );
             let mut drained = reopened
+                .runtime()
                 .pause_points()
                 .hold(&f.workspace, PausePoint::AfterDrainCommit);
             f.clock
@@ -164,6 +185,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             drained.until_held().await;
             assert_eq!(
                 reopened
+                    .runtime()
                     .statement_host()
                     .read(read_cursor())
                     .await
@@ -175,6 +197,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         } else {
             assert_eq!(
                 reopened
+                    .runtime()
                     .statement_host()
                     .read(read_messages())
                     .await
@@ -186,6 +209,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             assert_eq!(replay.notices_queued, 0);
         }
         let rows = reopened
+            .runtime()
             .statement_host()
             .read(read_messages())
             .await
@@ -193,6 +217,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         assert_eq!(rows.rows.len(), 3);
         // The recovered window is still pending; release it only at the original cadence mark.
         let due = reopened
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT due_at FROM mail_notification_windows WHERE recipient_actor=?",
@@ -241,6 +266,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         assert_eq!(delivered, expected);
         assert_eq!(
             reopened
+                .runtime()
                 .statement_host()
                 .read(read_cursor())
                 .await
@@ -278,6 +304,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
@@ -303,6 +330,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         BatchOutcome::Applied { .. }
     ));
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
     let pending = tokio::spawn({
@@ -331,9 +359,15 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         sql: "SELECT drain_due_at FROM mail_workspace_drains WHERE workspace_id=?",
         args: vec![text(&f.workspace)],
     };
-    let original = runtime.statement_host().read(read_due()).await.unwrap();
+    let original = runtime
+        .runtime()
+        .statement_host()
+        .read(read_due())
+        .await
+        .unwrap();
     assert!(matches!(&original.rows[0][0], SqlValue::Text(_)));
     let original_alarm = runtime
+        .runtime()
         .statement_host()
         .alarm()
         .expect("pending drain alarm");
@@ -354,14 +388,14 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         (f.clock.utc_now().timestamp_millis() + 5_000)
             .max(f.clock.utc_now().timestamp_millis() + 30_000)
     );
-    let completed = runtime.alarm_completion_count();
+    let completed = runtime.runtime().alarm_completion_count();
     for second in 1..=60 {
         f.advance(Duration::from_secs(1)).await;
         // The backstop alarm is raised to the 30 s floor (allowance above). P5
         // change 6: the driver's due batch skips W1, whose turn the held write
         // holds, and completes instead of queueing behind it.
         if second == 30 {
-            runtime.until_alarm_completed(completed + 1).await;
+            runtime.runtime().until_alarm_completed(completed + 1).await;
         }
         let caller = f.fresh_caller(&f.caller).await;
         let other = call(
@@ -381,6 +415,7 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         ));
         assert_eq!(
             runtime
+                .runtime()
                 .statement_host()
                 .read(read_due())
                 .await
@@ -391,16 +426,22 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
         // Kept, oracle per Lead ruling: W2's writes never move W1's deadline
         // beyond what the floor rule gives after the latest due batch.
         let floor = runtime
+            .runtime()
             .due_batch_snapshot()
             .last_start_unix_millis
             .map_or(i64::MIN, |start| start + 30_000);
         assert_eq!(
-            runtime.statement_host().alarm().map(|at| at.unix_millis()),
+            runtime
+                .runtime()
+                .statement_host()
+                .alarm()
+                .map(|at| at.unix_millis()),
             Some(original_alarm.unix_millis().max(floor)),
             "W2 moved W1's retained alarm at second {second}"
         );
     }
     let mut drained = runtime
+        .runtime()
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterDrainCommit);
     pending.abort();
@@ -409,28 +450,32 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
     // P5 change 6: no due batch waited behind the held turn, and the aborted write
     // never ran its own drain, so the next due batch (the published alarm) drains W1.
     let next = runtime
+        .runtime()
         .statement_host()
         .alarm()
         .expect("W1 drain keeps an alarm");
     // Let the real native driver settle on the published deadline, then advance
     // the one clock: the driver itself runs the due batch that drains W1.
     f.clock.not_due_check_now(f.clock.wall_deadline(next)).await;
-    let before_driver = runtime.alarm_completion_count();
+    let before_driver = runtime.runtime().alarm_completion_count();
     f.advance_to(next).await;
     let driver_drained = tokio::select! {
         () = drained.until_held() => true,
-        () = runtime.until_alarm_completed(before_driver + 1) => false,
+        () = runtime.runtime().until_alarm_completed(before_driver + 1) => false,
     };
     assert!(
         driver_drained,
         "the native driver completed without reaching the due drain"
     );
-    let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
+    let after = runtime.runtime().statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM mail_workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
     assert_eq!(after.rows.len(), 1);
     assert!(matches!(&after.rows[0][0], SqlValue::Integer(position) if position.get() > 0));
     assert_eq!(after.rows[0][1], SqlValue::Null);
     drained.release();
-    runtime.until_alarm_completed(before_driver + 1).await;
+    runtime
+        .runtime()
+        .until_alarm_completed(before_driver + 1)
+        .await;
     f.host.close().await;
 }
 
@@ -460,12 +505,13 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         panic!("first post")
     };
     let (_, first_item_id) = first_item.kind_and_id();
-    let first_change = runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,created_at FROM workspace_changes WHERE item_id=? AND change_kind='posted'", args: vec![text(first_item_id)] }).await.unwrap();
+    let first_change = runtime.runtime().inspect_workspace(&f.workspace, Statement { sql: "SELECT change_id,created_at FROM workspace_changes WHERE item_id=? AND change_kind='posted'", args: vec![text(first_item_id)] }).await.unwrap();
     let SqlValue::Text(first_id) = &first_change.rows[0][0] else {
         panic!("first change id")
     };
     let first_id = first_id.clone();
     let prior = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
@@ -480,7 +526,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
         runtime
-            .statement_host()
+            .runtime().statement_host()
             .read(Statement {
                 sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
                 args: vec![text(&f.workspace)]
@@ -510,7 +556,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
     };
     let (_, second_item_id) = second_item.kind_and_id();
     let stored = runtime
-        .inspect_workspace(
+        .runtime().inspect_workspace(
             &f.workspace,
             Statement {
                 sql: "SELECT position,created_at,change_id FROM workspace_changes WHERE item_id=? AND change_kind='posted'",
@@ -544,6 +590,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
             < previous_time.timestamp_millis()
     );
     let cursor = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT drained_through_position FROM mail_workspace_drains WHERE workspace_id=?",
@@ -552,7 +599,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         .await
         .unwrap();
     assert_eq!(cursor.rows[0][0], stored.rows[0][0]);
-    let notice = runtime.statement_host().read(Statement { sql: "SELECT i.change_id FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=? ORDER BY i.change_id", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let notice = runtime.runtime().statement_host().read(Statement { sql: "SELECT i.change_id FROM mail_notification_window_items i JOIN mail_notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=? ORDER BY i.change_id", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         notice.rows,
         vec![vec![text(later_id)], vec![text(first_id)]]

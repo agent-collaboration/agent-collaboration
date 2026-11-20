@@ -6,9 +6,8 @@ use super::super::engine_evidence::{
 };
 use super::super::engine_v2_support::{next_mark, raw, rows, runtime, stamp, whole_record};
 use super::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, engine_probe::InstanceKey,
-};
+use collaboration_central_core::engine_probe::InstanceKey;
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
 
 const DRAINS: &str = "legacy_workspace_drains";
 
@@ -65,9 +64,11 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     // The native alarm driver would also find this work due; park it before its
     // drive guard so only this case's direct engine calls take the pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeControlClear, DRAINS);
     f.set_utc(at).await;
@@ -80,6 +81,7 @@ async fn an_older_drain_success_never_clears_a_newer_request_drain_failure() {
     // A write in the late workspace commits; its own immediate drain fails and
     // records the shared unit's failure.
     runtime
+        .runtime()
         .statement_host()
         .inject_engine_commit_fault(EngineCommitFault {
             key: InstanceKey(late.to_string()),

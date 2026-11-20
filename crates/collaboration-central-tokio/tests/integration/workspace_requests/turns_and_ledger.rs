@@ -1,5 +1,5 @@
 use super::*;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 #[tokio::test]
 async fn project_close_keeps_its_turn_until_apply_and_new_child_reads_the_closed_parent() {
     let f = Fixture::new().await;
@@ -28,7 +28,10 @@ async fn project_close_keeps_its_turn_until_apply_and_new_child_reads_the_closed
     .await;
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let seam = f.workspace.clone();
-    let mut held = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
+    let mut held = runtime
+        .runtime()
+        .pause_points()
+        .hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
         request_id: Some(id(305)),
         workspace_id: Some(f.workspace.clone()),
@@ -56,7 +59,11 @@ async fn project_close_keeps_its_turn_until_apply_and_new_child_reads_the_closed
         let caller = f.caller.clone();
         async move { runtime.request(&caller, request).await.unwrap() }
     });
-    runtime.workspace_turns().until_waiting(&seam, 1).await;
+    runtime
+        .runtime()
+        .workspace_turns()
+        .until_waiting(&seam, 1)
+        .await;
     assert!(
         !second.is_finished(),
         "the second request cannot inspect a stale parent"
@@ -80,6 +87,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let seam = f.workspace.clone();
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold(&seam, PausePoint::AfterStoreApplied);
     let request = m::WorkspaceRequest {
@@ -111,7 +119,11 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
         let caller = f.caller.clone();
         async move { runtime.request(&caller, request).await.unwrap() }
     });
-    runtime.workspace_turns().until_waiting(&seam, 1).await;
+    runtime
+        .runtime()
+        .workspace_turns()
+        .until_waiting(&seam, 1)
+        .await;
     held.release();
     first.await.unwrap();
     let refusal = second.await.unwrap();
@@ -155,7 +167,10 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
     };
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let seam = f.workspace.clone();
-    let mut held = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
+    let mut held = runtime
+        .runtime()
+        .pause_points()
+        .hold(&seam, PausePoint::AfterReads);
     let operation = m::WorkspaceOperation::RemoveLink {
         link_id: link.clone(),
     };
@@ -178,6 +193,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
     held.release();
     assert_eq!(pending.await.unwrap().result, m::WorkspaceResult::Conflict);
     let logged = runtime
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -260,6 +276,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     );
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let directory = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT * FROM directory_workspaces ORDER BY workspace_id",
@@ -271,7 +288,12 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         sql: "SELECT answer,created_at FROM runtime_request_log WHERE request_id=?",
         args: vec![text(id::<m::RequestId>(361))],
     };
-    let first_ledger = runtime.statement_host().read(ledger_query()).await.unwrap();
+    let first_ledger = runtime
+        .runtime()
+        .statement_host()
+        .read(ledger_query())
+        .await
+        .unwrap();
     f.advance(std::time::Duration::from_millis(86_400_001))
         .await;
     f.caller = f.fresh_caller(&f.caller).await;
@@ -292,6 +314,7 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
     assert_ne!(original_central, next_central);
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT * FROM directory_workspaces ORDER BY workspace_id",
@@ -302,7 +325,12 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         directory,
         "fresh name refusal must not create a second directory row"
     );
-    let decided = runtime.statement_host().read(ledger_query()).await.unwrap();
+    let decided = runtime
+        .runtime()
+        .statement_host()
+        .read(ledger_query())
+        .await
+        .unwrap();
     assert_eq!(decided.rows.len(), 1);
     assert_eq!(
         decided.rows[0][0],
@@ -319,7 +347,12 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         "the newly retained refusal replays exactly"
     );
     assert_eq!(
-        runtime.statement_host().read(ledger_query()).await.unwrap(),
+        runtime
+            .runtime()
+            .statement_host()
+            .read(ledger_query())
+            .await
+            .unwrap(),
         decided,
         "refusal replay must not rewrite its decision timestamp"
     );

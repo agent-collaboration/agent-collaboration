@@ -37,7 +37,7 @@ pub(super) async fn exercise_continued_activity(
         recipients.push(address);
     }
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let rows = r.statement_host().read(Statement {sql:"SELECT identity,actor_identity_id FROM access_actor_identities WHERE identity LIKE '%sustained-cadence-%'",args:vec![]}).await.unwrap();
+    let rows = r.runtime().statement_host().read(Statement {sql:"SELECT identity,actor_identity_id FROM access_actor_identities WHERE identity LIKE '%sustained-cadence-%'",args:vec![]}).await.unwrap();
     let addressees: Vec<_> = recipients
         .iter()
         .map(|address| {
@@ -104,7 +104,11 @@ pub(super) async fn exercise_continued_activity(
     for minute in 0..=110_i64 {
         let at = start + chrono::Duration::minutes(minute);
         let r = f.host.central(f.caller.organization_id()).await.unwrap();
-        let alarm = r.statement_host().alarm().map(|due| due.unix_millis());
+        let alarm = r
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|due| due.unix_millis());
         drop(r);
         if alarm.is_some_and(|alarm| alarm <= at.timestamp_millis()) {
             dispatch_to(f, at).await;

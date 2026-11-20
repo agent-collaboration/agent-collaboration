@@ -4,10 +4,10 @@ use super::super::engine_evidence::{
 };
 use super::super::support::*;
 use super::engine_probe_support::*;
-use collaboration_central_core::{
-    EngineCommitFault, EngineCommitFaultKind, PausePoint,
-    engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState,
 };
+use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind, PausePoint};
 use router_clock::RuntimeClock;
 
 fn minutes(count: i64) -> chrono::Duration {
@@ -25,9 +25,11 @@ async fn a_held_due_loses_its_compare_and_set_to_a_stop_request_and_ends_superse
     // The native alarm driver would also find this work due; park it before its
     // drive guard so only this case's direct engine calls take the pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &item.to_string());
     fixture.set_utc(due).await;
@@ -87,7 +89,7 @@ async fn race_one_request_id(
         second_item
     };
     let request_key = id::<workspace_model::RequestId>(9010).to_string();
-    let points = runtime.pause_points();
+    let points = runtime.runtime().pause_points();
     let mut first_hold = points.hold_engine(PausePoint::AfterEngineAbsentLookup, &request_key);
     let mut second_hold = points.hold_engine(PausePoint::AfterEngineAbsentLookup, &request_key);
     let send = |target| {
@@ -116,7 +118,7 @@ async fn race_one_request_id(
         first_hold.release();
         (first.await.unwrap(), second)
     };
-    let rows = runtime.statement_host().read(super::super::Statement {
+    let rows = runtime.runtime().statement_host().read(super::super::Statement {
         sql: "SELECT (SELECT effect_count FROM engine_probe_groups WHERE group_id=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?),(SELECT COUNT(*) FROM engine_probe_items WHERE group_id=? AND state='fired')",
         args: vec![text(group), text(id::<workspace_model::RequestId>(9010)), text(group)],
     }).await.unwrap().rows;
@@ -167,6 +169,7 @@ async fn a_second_request_after_the_winner_committed_replays_or_is_refused() {
     seed_probe(&runtime, item, group, None, "winner").await;
     seed_probe(&runtime, other, group, None, "other").await;
     let mut committed = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineCommit, &item.to_string());
     let winner = tokio::spawn({
@@ -231,9 +234,11 @@ async fn rejected_due_with_optional_stop(
     // The native alarm driver would also find this work due; park it before its
     // drive guard so only this case's direct engine calls take the pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut before_write = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeEngineFailureWrite, &item.to_string());
     fixture.set_utc(due).await;
@@ -358,6 +363,7 @@ async fn a_lost_commit_answer_is_uncertain_unrecorded_and_never_doubled() {
         let (item, group) = (probe_id(number), probe_id(number + 1));
         seed_probe(&runtime, item, group, Some(due), "uncertain").await;
         runtime
+            .runtime()
             .statement_host()
             .inject_engine_commit_fault(EngineCommitFault {
                 key: key(item),
@@ -400,6 +406,7 @@ async fn operational_database_codes_are_never_charged_to_the_item() {
         let (item, group) = (probe_id(number), probe_id(number + 1));
         seed_probe(&runtime, item, group, Some(due), "operational").await;
         runtime
+            .runtime()
             .statement_host()
             .inject_engine_commit_fault(EngineCommitFault {
                 key: key(item),
@@ -467,14 +474,16 @@ async fn no_unit_starts_after_central_store_down_and_started_units_settle() {
     // The native alarm driver would also find this work due; park it before its
     // drive guard so only this case's direct engine calls take the pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
-    let points = runtime.pause_points();
+    let points = runtime.runtime().pause_points();
     let mut holds: Vec<_> = in_flight
         .iter()
         .map(|item| points.hold_engine(PausePoint::AfterEngineLoad, &item.to_string()))
         .collect();
     runtime
+        .runtime()
         .statement_host()
         .inject_engine_commit_fault(EngineCommitFault {
             key: key(faulted),
@@ -488,7 +497,11 @@ async fn no_unit_starts_after_central_store_down_and_started_units_settle() {
     for hold in &mut holds {
         hold.until_held().await;
     }
-    while runtime.statement_host().engine_commit_fault_pending() {
+    while runtime
+        .runtime()
+        .statement_host()
+        .engine_commit_fault_pending()
+    {
         tokio::task::yield_now().await;
     }
     for hold in holds {
@@ -545,9 +558,11 @@ async fn one_held_unit_never_delays_the_other_nineteen_or_a_probe_request() {
     // The native alarm driver would also find this work due; park it before its
     // drive guard so only this case's direct engine calls take the pauses.
     let _native_driver = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::BeforeDriveGuard, "driver");
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineLoad, &items[0].to_string());
     fixture.set_utc(due).await;

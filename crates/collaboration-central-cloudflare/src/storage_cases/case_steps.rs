@@ -4,8 +4,8 @@
 use central_storage::{
     AlarmUpdate, RowExpectation, SafeInteger, SqlValue, Statement, StatementBatch,
 };
-use collaboration_central_core::PausePoint;
 use collaboration_central_core::storage_conformance as conformance;
+use fleet_runtime::PausePoint;
 use serde::{Deserialize, Serialize};
 use sqlx_core::migrate::Migrator;
 
@@ -121,6 +121,8 @@ pub(crate) enum CaseStoreCall {
 pub(crate) enum CasePausePoint {
     AfterReads,
     AfterStoreApplied,
+    AfterWorkspaceExecute,
+    EngineCompletionEntered,
     AfterNoticesCommitted,
     BeforeDrainCommit,
     AfterDrainCommit,
@@ -142,6 +144,8 @@ impl From<CasePausePoint> for PausePoint {
         match point {
             CasePausePoint::AfterReads => Self::AfterReads,
             CasePausePoint::AfterStoreApplied => Self::AfterStoreApplied,
+            CasePausePoint::AfterWorkspaceExecute => Self::AfterWorkspaceExecute,
+            CasePausePoint::EngineCompletionEntered => Self::EngineCompletionEntered,
             CasePausePoint::AfterNoticesCommitted => Self::AfterNoticesCommitted,
             CasePausePoint::BeforeDrainCommit => Self::BeforeDrainCommit,
             CasePausePoint::AfterDrainCommit => Self::AfterDrainCommit,
@@ -164,6 +168,8 @@ impl From<PausePoint> for CasePausePoint {
         match point {
             PausePoint::AfterReads => Self::AfterReads,
             PausePoint::AfterStoreApplied => Self::AfterStoreApplied,
+            PausePoint::AfterWorkspaceExecute => Self::AfterWorkspaceExecute,
+            PausePoint::EngineCompletionEntered => Self::EngineCompletionEntered,
             PausePoint::AfterNoticesCommitted => Self::AfterNoticesCommitted,
             PausePoint::BeforeDrainCommit => Self::BeforeDrainCommit,
             PausePoint::AfterDrainCommit => Self::AfterDrainCommit,

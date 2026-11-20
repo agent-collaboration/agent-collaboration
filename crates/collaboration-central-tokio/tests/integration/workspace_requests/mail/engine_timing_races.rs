@@ -6,13 +6,12 @@ use super::super::support::*;
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublication, CorruptReason, StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{
-    AlarmNotPublished, ClockIds, PausePoint, WorkspaceRuntime, WorkspaceStoreCalls,
-    engine_probe::ProbeEvent,
-};
+use collaboration_central_core::{WorkspaceRuntime, engine_probe::ProbeEvent};
 use collaboration_central_tokio::ObjectStorage;
+use fleet_contracts::AlarmNotPublished;
+use fleet_runtime::{ClockIds, FleetRuntime, PausePoint};
+use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use router_clock::RuntimeClock;
-use runtime_primitives::{Clock, SyncTime};
 use std::sync::{Arc, Mutex, PoisonError};
 
 fn set(time: Time) -> AlarmPublication {
@@ -43,7 +42,7 @@ async fn a_publication_held_before_a_newer_claim_publishes_the_newer_floor() {
     fixture.set_utc(at(start, 4, 20, 0)).await;
     // Event A, inside the spacing, holds its only batch after commit and
     // before its alarm decision, with the 10:04:00 start still current.
-    let mut held = runtime.statement_host().hold_alarm_publication();
+    let mut held = runtime.runtime().statement_host().hold_alarm_publication();
     let event_a = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.after_event().await }
@@ -55,9 +54,16 @@ async fn a_publication_held_before_a_newer_claim_publishes_the_newer_floor() {
         async move { runtime.after_event().await }
     });
     // B claimed before its first await and now queues behind A's batch.
-    runtime.statement_host().until_batch_waiting().await;
+    runtime
+        .runtime()
+        .statement_host()
+        .until_batch_waiting()
+        .await;
     assert_eq!(
-        runtime.due_batch_snapshot().last_start_unix_millis,
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
         ms(at(start, 4, 58, 0))
     );
     fixture.set_utc(at(start, 4, 59, 0)).await;
@@ -105,6 +111,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
     let (traffic, traffic_group) = (probe_id(32101), probe_id(32102));
     seed_probe(&runtime, traffic, traffic_group, None, "traffic").await;
     let mut held = runtime
+        .runtime()
         .pause_points()
         .hold_engine(PausePoint::AfterEngineCommit, &traffic.to_string());
     driver_settled(&fixture, &runtime).await;
@@ -124,7 +131,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
     let completion_b = runtime.after_event().await.unwrap();
 
     assert_eq!(completion_b.publication, set(at(start, 5, 28, 0)));
-    assert!(runtime.due_batch_snapshot().leftovers_pending);
+    assert!(runtime.runtime().due_batch_snapshot().leftovers_pending);
     assert_eq!(
         count(
             &runtime,
@@ -152,7 +159,7 @@ async fn a_request_held_across_a_capped_batch_publishes_the_continuation() {
 /// Pass-through workspace calls for a hand-built runtime.
 #[derive(Clone)]
 struct WorkspaceStore(Arc<ObjectStorage>);
-impl WorkspaceStoreCalls for WorkspaceStore {
+impl WorkspaceStores for WorkspaceStore {
     async fn call_workspace(
         &self,
         _workspace: &workspace_model::WorkspaceId,
@@ -168,7 +175,7 @@ impl WorkspaceStoreCalls for WorkspaceStore {
 struct SharedClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for SharedClock {
     fn now(&self) -> SyncTime {
-        self.0.now()
+        SyncTime::from_unix_millis(runtime_primitives::Clock::now(self.0.as_ref()).unix_millis())
     }
 }
 /// One publication stops between its decision and its alarm write.
@@ -187,9 +194,10 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
         window_due_at(&runtime, at(start, 5, 0, 0)).await;
     }
     fixture.host.close().await;
-    let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let due_batches = Arc::new(fleet_runtime::DueBatchState::default());
+    let clock = SharedClock(fixture.shared_for_runtime());
     let gate: Arc<Mutex<Option<DecisionGate>>> = Arc::default();
-    let decide = collaboration_central_core::engine_alarm_decider(due_batches.clone());
+    let decide = fleet_runtime::engine_alarm_decider(due_batches.clone());
     let gated: central_storage::EngineAlarmDecider = Arc::new({
         let gate = gate.clone();
         move |times, now, write| {
@@ -209,9 +217,9 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
                 "{}.sqlite",
                 fixture.caller.organization_id().as_str()
             )),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrations::central_migrator()),
         )
-        .with_engine_publication(fixture.shared_for_runtime(), gated),
+        .with_engine_publication(Arc::new(clock.clone()), gated),
     );
     let workspace = Arc::new(ObjectStorage::new(
         fixture
@@ -219,16 +227,17 @@ async fn a_claim_waits_for_a_publication_between_its_decision_and_its_write() {
             .path()
             .join("workspace-stores")
             .join(format!("{}.sqlite", fixture.workspace)),
-        Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
     ));
-    let runtime = Arc::new(WorkspaceRuntime::new(
+    let runtime = Arc::new(WorkspaceRuntime::new(FleetRuntime::open(
         fixture.caller.organization_id().clone(),
         central.clone(),
         WorkspaceStore(workspace.clone()),
-        fixture.shared_for_runtime(),
-        Arc::new(ClockIds::new(SharedClock(fixture.shared_for_runtime()))),
+        Arc::new(clock.clone()),
+        Arc::new(ClockIds::new(clock)),
         due_batches.clone(),
-    ));
+        Arc::new(|_| {}),
+    )));
     fixture.set_utc(at(start, 4, 0, 0)).await;
     assert_eq!(
         runtime.after_event().await.unwrap().publication,
@@ -296,7 +305,7 @@ async fn two_events_released_together_run_exactly_one_due_batch() {
     let runtime = runtime(&fixture).await;
     let start = fixture.clock.utc_now();
     due_batch_at(&fixture, &runtime, at(start, 4, 0, 0)).await;
-    let before = runtime.legacy_unit_invocations();
+    let before = runtime.runtime().legacy_unit_invocations();
     fixture.set_utc(at(start, 4, 31, 0)).await;
     let barrier = Arc::new(tokio::sync::Barrier::new(2));
     let events: Vec<_> = (0..2)
@@ -314,14 +323,17 @@ async fn two_events_released_together_run_exactly_one_due_batch() {
         event.await.unwrap().unwrap();
     }
 
-    let after = runtime.legacy_unit_invocations();
+    let after = runtime.runtime().legacy_unit_invocations();
     assert_eq!(
         (after.windows - before.windows, after.drains - before.drains),
         (1, 1),
         "exactly one due batch ran its notice units"
     );
     assert_eq!(
-        runtime.due_batch_snapshot().last_start_unix_millis,
+        runtime
+            .runtime()
+            .due_batch_snapshot()
+            .last_start_unix_millis,
         ms(at(start, 4, 31, 0))
     );
     fixture.host.close().await;

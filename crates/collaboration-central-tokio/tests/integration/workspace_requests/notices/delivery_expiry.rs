@@ -35,6 +35,7 @@ async fn expiry_and_replayed_drain(after_deadline: i64) {
         args: vec![text(&actor)],
     };
     let first_window = runtime
+        .runtime()
         .statement_host()
         .read(pending_window())
         .await
@@ -47,7 +48,13 @@ async fn expiry_and_replayed_drain(after_deadline: i64) {
         sql: "SELECT message_id,delivery_window_ends_at,state,failure_reason FROM mail_messages WHERE message_kind='notice' AND recipient_actor=? AND source_thread_id=?",
         args: vec![text(&actor), text(&thread)],
     };
-    let original = runtime.statement_host().read(notices()).await.unwrap().rows;
+    let original = runtime
+        .runtime()
+        .statement_host()
+        .read(notices())
+        .await
+        .unwrap()
+        .rows;
     let [notice] = original.as_slice() else {
         panic!("expected one original notice: {original:?}")
     };
@@ -89,7 +96,13 @@ async fn expiry_and_replayed_drain(after_deadline: i64) {
             .all(|row| row.message.message_id != message_id)
     );
     runtime.after_event().await.unwrap();
-    let expired = runtime.statement_host().read(notices()).await.unwrap().rows;
+    let expired = runtime
+        .runtime()
+        .statement_host()
+        .read(notices())
+        .await
+        .unwrap()
+        .rows;
     assert_eq!(
         expired,
         vec![vec![
@@ -101,7 +114,7 @@ async fn expiry_and_replayed_drain(after_deadline: i64) {
     );
 
     // Rewind only the last drain's cursor and run the real drain/window writers again.
-    let rewind = runtime.statement_host().run_batch(StatementBatch {
+    let rewind = runtime.runtime().statement_host().run_batch(StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
                 sql: "UPDATE mail_workspace_drains SET drained_through_position=? WHERE workspace_id=?",
@@ -121,6 +134,7 @@ async fn expiry_and_replayed_drain(after_deadline: i64) {
         1
     );
     let replay_window = runtime
+        .runtime()
         .statement_host()
         .read(pending_window())
         .await
@@ -129,11 +143,18 @@ async fn expiry_and_replayed_drain(after_deadline: i64) {
     fixture.set_utc(replay_due).await;
     runtime.after_event().await.unwrap();
     assert_eq!(
-        runtime.statement_host().read(notices()).await.unwrap().rows,
+        runtime
+            .runtime()
+            .statement_host()
+            .read(notices())
+            .await
+            .unwrap()
+            .rows,
         expired
     );
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT message_id FROM mail_messages WHERE message_kind='deliveryOutcome'",

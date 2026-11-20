@@ -1,7 +1,5 @@
 //! Read only the machine-login facts named by an organization-serialized query.
 use crate::{
-    ObjectHost,
-    guarded_statements::text,
     identity_contract::{EndedMachineClient, EnrollmentRevocationReason},
     machine_login_row_values::{identifier, nonnegative_integer},
     machine_login_rows::{enrollment, machine, only_row},
@@ -9,18 +7,20 @@ use crate::{
         EnrollmentFacts, EnrollmentQuery, StoredEnrollment, StoredEnrollmentState,
     },
     organization_change_rows::{OrganizationChangeOrigin, read_machine_supersession},
-    workspace_decode_error::corrupt,
-    workspace_row_codec::string,
 };
 use central_storage::{Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::CentralStore;
+use fleet_runtime_ports::{
+    guarded_statements::text, stored_values::string, workspace_decode_error::corrupt,
+};
 
 const BY_REQUEST: &str = "SELECT a.approval_id,a.request_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.machine_id FROM login_machine_approvals a LEFT JOIN login_machines m ON m.machine_id=a.machine_id WHERE a.request_id=?";
 const BY_ENROLLMENT: &str = "SELECT a.approval_id,a.request_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.machine_id FROM login_machine_approvals a LEFT JOIN login_machines m ON m.machine_id=a.machine_id WHERE a.approval_id=?";
 const ACTIVE: &str = "SELECT a.approval_id,a.request_id,a.label,a.allowed_workspaces,a.state,a.end_reason,a.approved_by_person_id,a.permission_checked,a.base_generation,a.code_expires_at,a.machine_client_id,a.last_grant_at,a.ended_at,a.created_at,a.updated_at,m.machine_id FROM login_machine_approvals a LEFT JOIN login_machines m ON m.machine_id=a.machine_id WHERE a.machine_id=? AND a.state='enrolled'";
 
 pub(crate) async fn facts(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     organization_id: OrganizationId,
     query: &EnrollmentQuery,
 ) -> Result<EnrollmentFacts, StoreFailure> {
@@ -142,7 +142,7 @@ pub(crate) async fn facts(
 }
 
 async fn superseded_client(
-    host: &impl ObjectHost,
+    host: &impl CentralStore,
     current: &StoredEnrollment,
 ) -> Result<Option<EndedMachineClient>, StoreFailure> {
     let Some(record) = read_machine_supersession(host, current.request_id.as_str()).await? else {

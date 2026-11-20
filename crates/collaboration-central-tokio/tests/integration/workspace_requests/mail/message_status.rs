@@ -140,6 +140,7 @@ async fn unresolved_direct_sender_is_terminal_without_a_push_or_outcome() {
         panic!("send did not queue: {response:?}");
     };
     let actors = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT identity FROM access_actor_identities WHERE identity_kind='agentSession'",
@@ -159,7 +160,7 @@ async fn unresolved_direct_sender_is_terminal_without_a_push_or_outcome() {
     };
     let component_json = serde_json::to_string(&component_identity).unwrap();
     let row_identity = |prior_kind: &str, prior: &str, next_kind: &str, next: &str| {
-        runtime.statement_host().run_batch(StatementBatch {
+        runtime.runtime().statement_host().run_batch(StatementBatch {
             statements: vec![GuardedStatement {
                 statement: Statement {
                     sql: "UPDATE access_actor_identities SET identity_kind=?,identity=? WHERE identity_kind=? AND identity=?",
@@ -189,7 +190,14 @@ async fn unresolved_direct_sender_is_terminal_without_a_push_or_outcome() {
             .unwrap(),
         WindowedDeliveryDecision::SenderUnresolved
     ));
-    assert_eq!(runtime.statement_host().published_alarm().unwrap(), None);
+    assert_eq!(
+        runtime
+            .runtime()
+            .statement_host()
+            .published_alarm()
+            .unwrap(),
+        None
+    );
     assert!(matches!(
         runtime
             .prepare_windowed_delivery(&attachment, &message_id)
@@ -240,6 +248,7 @@ async fn unresolved_direct_sender_is_terminal_without_a_push_or_outcome() {
     );
     assert!(
         runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT message_id FROM mail_messages WHERE message_kind='deliveryOutcome'",

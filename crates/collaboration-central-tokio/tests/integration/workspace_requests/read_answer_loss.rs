@@ -1,15 +1,16 @@
 use super::*;
 use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 use central_storage::{StoreCall, StoreFailure, StoreReply};
-use collaboration_central_core::{ClockIds, WorkspaceRuntime, WorkspaceStoreCalls};
+use collaboration_central_core::WorkspaceRuntime;
 use collaboration_central_tokio::ObjectStorage;
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime::{ClockIds, FleetRuntime};
+use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone)]
 struct ArcClock(Arc<dyn router_clock::RuntimeClock>);
 impl Clock for ArcClock {
     fn now(&self) -> SyncTime {
-        self.0.now()
+        SyncTime::from_unix_millis(runtime_primitives::Clock::now(self.0.as_ref()).unix_millis())
     }
 }
 #[derive(Clone)]
@@ -17,7 +18,7 @@ struct LoseFirstRead {
     store: Arc<ObjectStorage>,
     lose: Arc<AtomicBool>,
 }
-impl WorkspaceStoreCalls for LoseFirstRead {
+impl WorkspaceStores for LoseFirstRead {
     async fn call_workspace(
         &self,
         _workspace: &m::WorkspaceId,
@@ -41,18 +42,19 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     let f = Fixture::new().await;
     f.area(890).await;
     f.host.close().await;
-    let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let due_batches = Arc::new(fleet_runtime::DueBatchState::default());
+    let clock = ArcClock(f.shared_for_runtime());
     let central = Arc::new(
         ObjectStorage::new(
             f.root
                 .path()
                 .join("central")
                 .join(format!("{}.sqlite", f.caller.organization_id().as_str())),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            Arc::new(fleet_storage_schema::workspace_migrations::central_migrator()),
         )
         .with_engine_publication(
-            f.shared_for_runtime(),
-            collaboration_central_core::engine_alarm_decider(due_batches.clone()),
+            Arc::new(clock.clone()),
+            fleet_runtime::engine_alarm_decider(due_batches.clone()),
         ),
     );
     let store = Arc::new(ObjectStorage::new(
@@ -60,24 +62,25 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
             .path()
             .join("workspace-stores")
             .join(format!("{}.sqlite", f.workspace)),
-        Arc::new(collaboration_central_core::workspace_migrations::workspace_migrator()),
+        Arc::new(fleet_storage_schema::workspace_migrations::workspace_migrator()),
     ));
     let lose = Arc::new(AtomicBool::new(true));
-    let runtime = WorkspaceRuntime::new(
+    let runtime = WorkspaceRuntime::new(FleetRuntime::open(
         f.caller.organization_id().clone(),
         central.clone(),
         LoseFirstRead {
             store: store.clone(),
             lose: lose.clone(),
         },
-        f.shared_for_runtime(),
-        Arc::new(ClockIds::new(ArcClock(f.shared_for_runtime()))),
+        Arc::new(clock.clone()),
+        Arc::new(ClockIds::new(clock.clone())),
         due_batches,
-    )
+        Arc::new(|_| {}),
+    ))
     .with_sign_in_verification(
         collaboration_central_tokio::NativeSignInTrust::new(settings(&f.keys.url))
             .unwrap()
-            .for_organization(f.caller.organization_id().clone(), f.clock.clone())
+            .for_organization(f.caller.organization_id().clone(), Arc::new(clock))
             .unwrap(),
     );
     let request = m::WorkspaceRequest {

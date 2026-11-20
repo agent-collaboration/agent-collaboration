@@ -24,15 +24,15 @@ pub struct OwedReplyRequest {
     pub event: OwedEvent,
 }
 
-impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
+impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::WorkspaceStores>
     crate::WorkspaceRuntime<Host, Stores>
 {
     pub async fn seed_owed_reply(
         &self,
         seed: SeedOwedReply,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::{
-            central_mail_store::timestamp,
+        use crate::central_mail_store::timestamp;
+        use fleet_runtime_ports::{
             guarded_statements::{any, exact, text},
             workspace_decode_error::corrupt,
         };
@@ -42,8 +42,8 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
         if seed.key.get_version_num() != 7 || seed.group.get_version_num() != 7 {
             return Err(corrupt("engine_probe_items.id"));
         }
-        let now = timestamp(self.now()?);
-        self.host.run_batch(central_storage::StatementBatch {
+        let now = timestamp(self.execution.now()?);
+        self.execution.statement_host().run_batch(central_storage::StatementBatch {
             statements: vec![
                 any("INSERT INTO engine_probe_groups(group_id,effect_count,created_at,updated_at) VALUES (?,0,?,?) ON CONFLICT(group_id) DO NOTHING",vec![text(seed.group),text(&now),text(&now)]),
                 exact("INSERT INTO engine_probe_items(item_id,machine_kind,group_id,due_at,claim,state,completed_claim,send_id,connection_id,created_at,updated_at) VALUES (?,'owed_reply',?,NULL,?,'waiting',NULL,NULL,NULL,?,?)",
@@ -60,11 +60,20 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
     ) -> Result<EngineRequestOutcome<OwedState, OwedReplyRefusal>, central_storage::StoreFailure>
     {
         if !self.alarm_organization_is_provisioned().await? {
-            return Err(crate::workspace_decode_error::corrupt(
+            return Err(fleet_runtime_ports::workspace_decode_error::corrupt(
                 "signin_organization_identity.id",
             ));
         }
-        if let Err(reason) = self.admit_workspace(caller, None).await? {
+        if let Err(reason) = self
+            .access()
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                None,
+            )
+            .await?
+        {
             return Ok(EngineRequestOutcome::NotPermitted { reason });
         }
         let identity = match caller.caller() {
@@ -77,7 +86,7 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
                 }
             }
         };
-        let actor = self.resolve_identity(&identity).await?;
+        let actor = self.access().resolve_identity(&identity).await?;
         crate::engine::port::Engine::new(self)
             .request_engine::<OwedReply, _>(
                 &crate::engine::owed_reply_store::OwedReplyStore(self),

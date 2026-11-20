@@ -49,7 +49,8 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
     assert!(matches!(
-        r.statement_host()
+        r.runtime()
+            .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![GuardedStatement {
                     statement: Statement {
@@ -162,7 +163,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         post_ids.push((workspace.clone(), item));
     }
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
-    let windows=r.statement_host().read(Statement{sql:"SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor IN (SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%cadence-%')",args:vec![]}).await.unwrap();
+    let windows=r.runtime().statement_host().read(Statement{sql:"SELECT COUNT(*) FROM mail_notification_windows WHERE recipient_actor IN (SELECT actor_identity_id FROM access_actor_identities WHERE identity LIKE '%cadence-%')",args:vec![]}).await.unwrap();
     assert_eq!(
         windows.rows,
         vec![vec![central_storage::SqlValue::Integer(
@@ -179,6 +180,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         );
     }
     let drains = r
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT COUNT(*) FROM mail_workspace_drains WHERE drain_due_at IS NOT NULL",
@@ -194,27 +196,30 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         "normal writes clear their safety preset"
     );
     let safety_mark = now(f) + chrono::Duration::seconds(5);
-    let callbacks = r.alarm_completion_count();
-    assert!(r.statement_host().alarm().unwrap().unix_millis() > safety_mark.timestamp_millis());
+    let callbacks = r.runtime().alarm_completion_count();
+    assert!(
+        r.runtime().statement_host().alarm().unwrap().unix_millis()
+            > safety_mark.timestamp_millis()
+    );
     // A failed drive parks the driver on its next-mark retry, so it would never
     // check this alarm; fail loudly with its error instead of waiting forever.
-    let failures = r.alarm_failures().len();
+    let failures = r.runtime().alarm_failures().len();
     tokio::select! {
         () = f
             .clock
-            .not_due_check_now(f.clock.wall_deadline(r.statement_host().alarm().unwrap())) => {}
-        () = r.until_alarm_failed(failures + 1) => panic!(
+            .not_due_check_now(f.clock.wall_deadline(r.runtime().statement_host().alarm().unwrap())) => {}
+        () = r.runtime().until_alarm_failed(failures + 1) => panic!(
             "the alarm driver failed instead of checking its alarm: {:?}",
-            r.alarm_failures()
+            r.runtime().alarm_failures()
         ),
     }
     assert!(
-        r.alarm_failures().is_empty(),
+        r.runtime().alarm_failures().is_empty(),
         "earlier failed drives: {:?}",
-        r.alarm_failures()
+        r.runtime().alarm_failures()
     );
     advance_to(f, safety_mark).await;
-    assert_eq!(r.alarm_completion_count(), callbacks);
+    assert_eq!(r.runtime().alarm_completion_count(), callbacks);
     drop(r);
     f.reopen().await;
     for (recipient_index, (_, address, _, _)) in recipients.iter().enumerate() {
@@ -315,14 +320,24 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         text(changed_due.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     ]];
     assert_eq!(
-        r.statement_host().read(read_policy()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(read_policy())
+            .await
+            .unwrap()
+            .rows,
         expected_policy
     );
     drop(r);
     f.reopen().await;
     let r = f.host.central(f.caller.organization_id()).await.unwrap();
     assert_eq!(
-        r.statement_host().read(read_policy()).await.unwrap().rows,
+        r.runtime()
+            .statement_host()
+            .read(read_policy())
+            .await
+            .unwrap()
+            .rows,
         expected_policy
     );
     assert!(

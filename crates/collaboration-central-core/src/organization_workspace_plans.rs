@@ -1,17 +1,20 @@
 //! Verified setup decisions share one org-owned directory, ledger and audit batch.
 use crate::{
-    AdminRefusal, ObjectHost, OrganizationAdminResult, WorkspaceRuntime, WorkspaceStoreCalls,
+    AdminRefusal, OrganizationAdminResult, WorkspaceRuntime,
     organization_admin_contract::{RetainedOrganizationAdminAnswer, WorkspaceView},
     organization_change_rows::{
         self, ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
         OrganizationChangeRecord,
     },
     person_request::{CreateWorkspaceRequest, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
     workspace_directory_rows::{self, DirectoryWorkspace},
-    workspace_row_codec::{json, string},
 };
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_runtime_ports::{
+    stored_values::{json, string},
+    workspace_decode_error::corrupt,
+};
 use workspace_model::{
     ActorIdentityId, Description, Identity, PersonId, RequestId, ResourceName, Timestamp,
     WorkspaceId, WorkspaceState,
@@ -81,7 +84,7 @@ fn retained_result(
     }
 }
 
-impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
+impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     /// Caller has already admitted this fresh person proof at `now` under the org turn.
     pub(crate) async fn prepare_workspace_create(
         &self,
@@ -99,12 +102,13 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             person_id: PersonId::try_from(person.person_id.clone())
                 .map_err(|_| corrupt("person_id"))?,
         };
-        let actor = self.prepare_identity(&identity, now).await?;
+        let actor = self.access().prepare_identity(&identity, now).await?;
         let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
         let logged = self
-            .host
-            .read(crate::workspace_request_log::lookup(
-                crate::workspace_request_log::RequestLogStore::Organization,
+            .execution
+            .statement_host()
+            .read(fleet_runtime::workspace_request_log::lookup(
+                fleet_runtime::workspace_request_log::RequestLogStore::Organization,
                 &operation,
                 &cutoff,
             ))
@@ -150,50 +154,51 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .try_into()
             .map_err(|_| corrupt("workspace.description"))?;
         let mut statements = actor.statements;
-        let result = if workspace_directory_rows::read_by_name(self.host.as_ref(), &name)
-            .await?
-            .is_some()
-        {
-            refused(AdminRefusal::NameInUse)
-        } else {
-            let workspace_id: WorkspaceId = request
-                .operation_id
-                .as_str()
-                .to_owned()
-                .try_into()
-                .map_err(|_| corrupt("workspace_id"))?;
-            statements.push(workspace_directory_rows::insert(
-                &workspace_id,
-                &name,
-                &description,
-                now,
-            )?);
-            statements.push(organization_change_rows::insert(
-                &OrganizationChangeRecord {
-                    id: self.ids.new_id(),
-                    request_id: ChangeRequestId::try_from(
-                        request.operation_id.as_str().to_owned(),
-                    )?,
-                    kind: OrganizationChangeKind::WorkspaceCreated,
-                    origin: OrganizationChangeOrigin::Person {
-                        person_id: person.person_id.clone(),
-                        permission_checked: person.operation.route().permission().to_owned(),
+        let result =
+            if workspace_directory_rows::read_by_name(self.execution.statement_host(), &name)
+                .await?
+                .is_some()
+            {
+                refused(AdminRefusal::NameInUse)
+            } else {
+                let workspace_id: WorkspaceId = request
+                    .operation_id
+                    .as_str()
+                    .to_owned()
+                    .try_into()
+                    .map_err(|_| corrupt("workspace_id"))?;
+                statements.push(workspace_directory_rows::insert(
+                    &workspace_id,
+                    &name,
+                    &description,
+                    now,
+                )?);
+                statements.push(organization_change_rows::insert(
+                    &OrganizationChangeRecord {
+                        id: self.execution.ids().new_id(),
+                        request_id: ChangeRequestId::try_from(
+                            request.operation_id.as_str().to_owned(),
+                        )?,
+                        kind: OrganizationChangeKind::WorkspaceCreated,
+                        origin: OrganizationChangeOrigin::Person {
+                            person_id: person.person_id.clone(),
+                            permission_checked: person.operation.route().permission().to_owned(),
+                        },
+                        target_id: workspace_id.to_string(),
+                        created_at_millis: now.timestamp_millis(),
                     },
-                    target_id: workspace_id.to_string(),
-                    created_at_millis: now.timestamp_millis(),
-                },
-            )?);
-            OrganizationAdminResult::Applied {
-                workspace: workspace_view(DirectoryWorkspace {
-                    workspace_id,
-                    name,
-                    description,
-                    state: WorkspaceState::Active,
-                })?,
-            }
-        };
-        statements.extend(crate::workspace_request_log::retain(
-            crate::workspace_request_log::RequestLogStore::Organization,
+                )?);
+                OrganizationAdminResult::Applied {
+                    workspace: workspace_view(DirectoryWorkspace {
+                        workspace_id,
+                        name,
+                        description,
+                        state: WorkspaceState::Active,
+                    })?,
+                }
+            };
+        statements.extend(fleet_runtime::workspace_request_log::retain(
+            fleet_runtime::workspace_request_log::RequestLogStore::Organization,
             &operation,
             &actor.actor,
             &person.intent_digest,

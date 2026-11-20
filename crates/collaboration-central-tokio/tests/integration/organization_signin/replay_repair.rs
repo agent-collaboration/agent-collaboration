@@ -1,7 +1,7 @@
 use super::support::*;
 use central_storage::StoreFailure;
 use collaboration_central_core::identity_contract::ProvisionOrganization;
-use collaboration_central_core::organization_authority::OrganizationProvisioningFailure;
+use fleet_contracts::OrganizationProvisioningFailure;
 #[expect(
     clippy::panic_in_result_fn,
     reason = "A cancelled real commit followed by a failed alarm reconciliation must preserve retry classification and exact stored effects."
@@ -14,8 +14,8 @@ async fn known_provisioning_commit_reconciles_on_same_host_and_failed_repair_is_
     // Pending durable work predates provisioning; C2 correctly cannot authenticate an unstamped org.
     let (_wake_id, due) = f.seed_pending_wake("provision-repair").await?;
     let runtime = f.runtime(A).await?;
-    assert_eq!(runtime.statement_host().alarm(), None);
-    let mut held = runtime.statement_host().hold_alarm_publication();
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
+    let mut held = runtime.runtime().statement_host().hold_alarm_publication();
     let statement = signed::stamp(A, signed::NOW_SECONDS)?;
     let request = ProvisionOrganization {
         organization_id: org(A)?,
@@ -28,25 +28,30 @@ async fn known_provisioning_commit_reconciles_on_same_host_and_failed_repair_is_
     held.until_held().await;
     let committed = f.snapshot().await?;
     assert_eq!((committed.0.len(), committed.1.len()), (1, 1));
-    assert_eq!(runtime.statement_host().alarm(), None);
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
     pending.abort();
     assert!(pending.await.unwrap_err().is_cancelled());
     drop(held);
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
     assert_eq!(
         runtime.provision_organization(&request).await,
         Err(OrganizationProvisioningFailure::OutcomeUnknown)
     );
-    assert_eq!(runtime.statement_host().alarm(), None);
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
     assert!(
         f.snapshot().await? == committed,
         "uncertain repair must not duplicate the known stamp/record"
     );
     assert_eq!(f.provision(A, &statement).await?.status, 200);
     assert_eq!(
-        runtime.statement_host().alarm().map(|at| at.unix_millis()),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .map(|at| at.unix_millis()),
         Some(due.timestamp_millis())
     );
     assert!(

@@ -1,7 +1,8 @@
 //! External-only witness and eviction controls for the real compiled Worker.
 use super::*;
 use central_storage::SafeInteger;
-use collaboration_central_core::identity_contract::ClientId;
+use fleet_contracts::ClientId;
+
 use fleet_identity_protocol::{EnrollmentId, UnixSeconds};
 use workspace_ids::MachineId;
 
@@ -138,7 +139,7 @@ pub(super) fn is_control_reply(line: &str) -> bool {
 
 impl WorkerdHost {
     pub async fn open_c2(clock: Arc<dyn Clock>, plan: &Path) -> Result<Self, StoreFailure> {
-        Self::open_configured(clock, Some(plan.to_owned()), true, true).await
+        Self::open_configured(clock, Some(plan.to_owned()), true, true, None).await
     }
     async fn c2_control(&self, request: impl Serialize) -> Result<BridgeReply, StoreFailure> {
         let bytes = serde_json::to_vec(&request).map_err(|_| StoreFailure::Unavailable)?;
@@ -189,7 +190,11 @@ impl WorkerdHost {
     }
 }
 
-pub(super) async fn open_fixture(clock: Arc<dyn Clock>) -> Result<WorkerdHost, StoreFailure> {
+pub(super) async fn open_fixture(
+    clock: Arc<dyn Clock>,
+    persistence: Option<std::path::PathBuf>,
+    capture_logs: bool,
+) -> Result<WorkerdHost, StoreFailure> {
     let keys = signed::SignInKeys::start()
         .await
         .map_err(|_| StoreFailure::Unavailable)?;
@@ -204,7 +209,8 @@ pub(super) async fn open_fixture(clock: Arc<dyn Clock>) -> Result<WorkerdHost, S
         },"jwksFixtureUrl":keys.url})).map_err(|_| StoreFailure::Unavailable)?).map_err(|_| StoreFailure::Unavailable)?;
     // The default fixture reads no Worker logs: the bridge inherits stderr, so
     // the lifecycle tests' stderr-EOF barrier still means the bridge exited.
-    let mut host = WorkerdHost::open_configured(clock, Some(plan), false, false).await?;
+    let mut host =
+        WorkerdHost::open_configured(clock, Some(plan), false, capture_logs, persistence).await?;
     host._fixture_keys = Some(keys);
     host._fixture_plan = Some(root);
     Ok(host)

@@ -1,5 +1,5 @@
 //! Native logs retain closed classifications without request data.
-use collaboration_central_core::CentralObservation;
+use fleet_contracts::CentralObservation;
 pub(crate) fn observe(observation: CentralObservation) {
     match observation {
         CentralObservation::EngineAlarmNotPublished { failure } => {

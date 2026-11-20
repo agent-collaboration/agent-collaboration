@@ -69,7 +69,7 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
             receipt: EngineReceipt::RequestIdReused
         }
     );
-    let rows=runtime.statement_host().read(Statement {
+    let rows=runtime.runtime().statement_host().read(Statement {
         sql:"SELECT effect_count,(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
         args:vec![text(id::<workspace_model::RequestId>(8602)),text(group)],
     }).await.unwrap();
@@ -81,7 +81,7 @@ async fn probe_requests_claim_one_receipt_and_replay_the_original_typed_answer()
         ]]
     );
     assert_eq!(
-        runtime.statement_host().alarm(),
+        runtime.runtime().statement_host().alarm(),
         None,
         "traffic-driven work never arms the alarm"
     );
@@ -173,7 +173,7 @@ async fn probe_receipt_claim_replaces_only_an_expired_row_at_the_exact_milliseco
             }
         }
     );
-    let rows=runtime.statement_host().read(Statement {
+    let rows=runtime.runtime().statement_host().read(Statement {
         sql:"SELECT effect_count,(SELECT state FROM engine_probe_items WHERE item_id=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
         args:vec![text(uuid(8612)),text(id::<workspace_model::RequestId>(8614)),text(group)],
     }).await.unwrap();
@@ -202,7 +202,7 @@ fn uuid(number: u32) -> uuid::Uuid {
 
 #[tokio::test]
 async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effect() {
-    use collaboration_central_core::{EngineCommitFault, EngineCommitFaultKind};
+    use fleet_runtime::{EngineCommitFault, EngineCommitFaultKind};
     let fixture = Fixture::new().await;
     witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture
@@ -226,6 +226,7 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
             .await
             .unwrap();
         runtime
+            .runtime()
             .statement_host()
             .inject_engine_commit_fault(EngineCommitFault {
                 key: InstanceKey(item.to_string()),
@@ -245,7 +246,7 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
             EngineRequestOutcome::OutcomeUnknown
         );
 
-        let rows=runtime.statement_host().read(Statement {
+        let rows=runtime.runtime().statement_host().read(Statement {
             sql:"SELECT effect_count,(SELECT COUNT(*) FROM engine_work_attempts WHERE subject_key=?),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_groups WHERE group_id=?",
             args:vec![text(item),text(id::<workspace_model::RequestId>(number+2)),text(group)],
         }).await.unwrap();
@@ -269,6 +270,7 @@ async fn probe_commit_answer_loss_never_charges_a_failure_or_duplicates_an_effec
             }
         );
         let rows = runtime
+            .runtime()
             .statement_host()
             .read(Statement {
                 sql: "SELECT effect_count FROM engine_probe_groups WHERE group_id=?",
@@ -352,7 +354,7 @@ async fn a_constraint_rejected_request_rolls_back_only_its_instance_and_answers_
             receipt: EngineReceipt::Applied { .. }
         }
     ));
-    let rows=runtime.statement_host().read(Statement {
+    let rows=runtime.runtime().statement_host().read(Statement {
         sql:"SELECT state,(SELECT effect_count FROM engine_probe_groups WHERE group_id=?),((SELECT COUNT(*) FROM engine_work_attempts WHERE subject_key=?)),(SELECT COUNT(*) FROM runtime_request_log WHERE request_id=?) FROM engine_probe_items WHERE item_id=?",
         args:vec![text(group),text(uuid(8632)),text(id::<workspace_model::RequestId>(8642)),text(uuid(8632))],
     }).await.unwrap();

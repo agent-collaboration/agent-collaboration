@@ -1,5 +1,6 @@
 //! Sign-in service decisions and machine-token extension claims.
-use super::{AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollPermission, PersonId};
+use super::{AllowedWorkspaces, DeviceLoginRequestId, EnrollPermission, PersonId};
+use fleet_contracts::{ClientId, MachineConnectionRefusal};
 use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use message_board::MachineLabel;
 use schemars::JsonSchema;
@@ -152,20 +153,6 @@ pub struct AdmittedMachine {
 pub enum MachineConnectionAdmission {
     Admitted { machine: AdmittedMachine },
     Refused { reason: MachineConnectionRefusal },
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum MachineConnectionRefusal {
-    UnknownMachine {},
-    EnrollmentNotActive {},
-    Superseded {},
-    MachineInAnotherOrganization {},
-    WrongClient {},
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(

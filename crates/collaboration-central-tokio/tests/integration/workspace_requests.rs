@@ -386,7 +386,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         panic!("thread");
     };
     let runtime = host.central(caller.organization_id()).await.unwrap();
-    runtime.lose_reply_after_apply(id(32));
+    runtime.runtime().lose_reply_after_apply(id(32));
     let operation = m::WorkspaceOperation::ResolveThread {
         thread_id: thread_id.clone(),
         closing_post: None,
@@ -403,7 +403,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         .result,
         m::WorkspaceResult::OutcomeUnknown
     );
-    let applied=runtime.inspect_workspace(&workspace,Statement{sql:"SELECT state,(SELECT json_extract(answer,'$.kind') FROM workspace_request_log WHERE request_id=?) AS stored_answer FROM workspace_threads WHERE thread_id=?",args:vec![text(id::<m::RequestId>(32)),text(&thread_id)]}).await.unwrap();
+    let applied=runtime.runtime().inspect_workspace(&workspace,Statement{sql:"SELECT state,(SELECT json_extract(answer,'$.kind') FROM workspace_request_log WHERE request_id=?) AS stored_answer FROM workspace_threads WHERE thread_id=?",args:vec![text(id::<m::RequestId>(32)),text(&thread_id)]}).await.unwrap();
     assert_eq!(
         applied.rows,
         vec![vec![text("resolved"), text("done")]],
@@ -477,8 +477,11 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     host.close().await;
 }
 
+mod clock_boundaries;
+mod completion_hook;
 mod corruption_and_restart;
 mod initiatives_and_members;
+mod migration_reopen;
 mod migrations;
 mod read_answer_loss;
 mod read_projection_cases;

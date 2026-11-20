@@ -27,7 +27,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     };
     let old_request = make_request(1400, later);
     let new_request = make_request(1401, earlier);
-    let mut publication = runtime.statement_host().hold_alarm_publication();
+    let mut publication = runtime.runtime().statement_host().hold_alarm_publication();
     let old_runtime = runtime.clone();
     let old_caller = fixture.caller.clone();
     let old = tokio::spawn(async move {
@@ -45,7 +45,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
             .await
             .unwrap()
     });
-    runtime.until_central_waiting(1).await;
+    runtime.runtime().until_central_waiting(1).await;
     assert!(!new.is_finished());
     publication.release();
     let Result::Done(Answer::WakeSet {
@@ -62,13 +62,19 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
         panic!("earlier wake refused")
     };
     assert_eq!(
-        runtime.statement_host().alarm().unwrap().unix_millis(),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .unwrap()
+            .unix_millis(),
         earlier.timestamp_millis()
     );
     let mut timer_commit = runtime
+        .runtime()
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
-    let completed = runtime.alarm_completion_count();
+        .hold_central(fleet_runtime::PausePoint::AfterTimerCommit);
+    let completed = runtime.runtime().alarm_completion_count();
     fixture
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
@@ -76,6 +82,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     fixture.advance(Duration::from_secs(300)).await;
     timer_commit.until_held().await;
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT wake_id,state FROM automation_wakes ORDER BY due_at",
@@ -91,6 +98,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
         ]
     );
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'",
@@ -107,9 +115,14 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     // Embedded (Lead ruling): due units commit with the alarm unchanged and the
     // re-arm is the event's final step, so the same oracle is read after it.
     timer_commit.release();
-    runtime.until_alarm_completed(completed + 1).await;
+    runtime.runtime().until_alarm_completed(completed + 1).await;
     assert_eq!(
-        runtime.statement_host().alarm().unwrap().unix_millis(),
+        runtime
+            .runtime()
+            .statement_host()
+            .alarm()
+            .unwrap()
+            .unix_millis(),
         later.timestamp_millis()
     );
     fixture.host.close().await;

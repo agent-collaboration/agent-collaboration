@@ -1,10 +1,11 @@
 //! The org-scoped central's single verified provisioning stamp.
 use crate::organization_authority::{StoredOrganizationStamp, StoredStampRead};
-use crate::{ObjectHost, workspace_decode_error::corrupt, workspace_row_codec::string};
 use central_storage::{GuardedStatement, RowExpectation, SqlValue, Statement, StoreFailure};
 use fleet_identity_protocol::OrganizationId;
+use fleet_runtime_ports::CentralStore;
+use fleet_runtime_ports::{stored_values::string, workspace_decode_error::corrupt};
 
-pub(crate) async fn read(host: &impl ObjectHost) -> Result<StoredStampRead, StoreFailure> {
+pub(crate) async fn read(host: &impl CentralStore) -> Result<StoredStampRead, StoreFailure> {
     let rows = host
         .read(Statement {
             sql: "SELECT id,organization_statement FROM signin_organization_identity ORDER BY id LIMIT 2",

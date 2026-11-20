@@ -152,7 +152,7 @@ async fn r21_close_persists_note_reference_and_change_and_refuses_closed_edits()
         if matches!(&items[..], [m::ItemView::Reference(reference)] if reference.source==m::ReferenceSource::BacklogItem(first.clone()) && reference.target.as_item_ref()==&target))
     );
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
-    let effects = runtime.inspect_workspace(&f.workspace, Statement {
+    let effects = runtime.runtime().inspect_workspace(&f.workspace, Statement {
         sql: "SELECT (SELECT COUNT(*) FROM workspace_changes WHERE item_kind='backlogItem' AND item_id=?1 AND change_kind='stateChanged'),(SELECT COUNT(*) FROM workspace_item_references WHERE source_kind='backlogItem' AND source_id=?2)",
         args: vec![text(&first), text(&second)],
     }).await.unwrap();
@@ -213,6 +213,7 @@ async fn r21_invalid_close_and_late_reference_failure_leave_all_effects_unapplie
         args: vec![text(&item)],
     };
     let before = runtime
+        .runtime()
         .inspect_workspace(&f.workspace, snapshot())
         .await
         .unwrap();
@@ -226,12 +227,14 @@ async fn r21_invalid_close_and_late_reference_failure_leave_all_effects_unapplie
     ));
     assert_eq!(
         runtime
+            .runtime()
             .inspect_workspace(&f.workspace, snapshot())
             .await
             .unwrap(),
         before
     );
     let logged = runtime
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -315,6 +318,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     created(call(&f.host, &other, Some(f.workspace.clone()), 2045, post()).await);
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let creator = runtime
+        .runtime()
         .inspect_workspace(
             &f.workspace,
             Statement {
@@ -327,7 +331,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     let SqlValue::Text(creator_id) = &creator.rows[0][0] else {
         panic!("creator");
     };
-    let members = runtime.inspect_workspace(&f.workspace, Statement {
+    let members = runtime.runtime().inspect_workspace(&f.workspace, Statement {
         sql: "SELECT actor_identity_id FROM workspace_thread_members WHERE thread_id=? AND actor_identity_id<>? AND left_at IS NULL",
         args: vec![text(&thread), text(creator_id)],
     }).await.unwrap();
@@ -387,7 +391,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
         },
     )
     .await;
-    let actors = runtime.statement_host().read(Statement {
+    let actors = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT actor_identity_id FROM access_actor_identities WHERE json_extract(identity,'$.session.sessionId')=?",
         args: vec![text("fresh-self-participant")],
     }).await.unwrap();

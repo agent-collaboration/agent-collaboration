@@ -5,9 +5,10 @@ use central_storage::{AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementB
 use collaboration_central_core::storage_conformance::{
     alarm_from_earliest_widget_due, widgets_migrator,
 };
-use collaboration_central_core::{PausePoint, PausePoints};
 use collaboration_central_tokio::ObjectStorage;
-use runtime_primitives::{Clock, SyncTime};
+use fleet_runtime::{PausePoint, PausePoints};
+use fleet_runtime_ports::Clock;
+use runtime_primitives::SyncTime;
 use std::sync::Arc;
 
 async fn publication_order(older_due: Option<i64>, newer_due: Option<i64>) {
@@ -129,16 +130,13 @@ fn engine_alarm_from_widgets() -> AlarmUpdate {
 async fn a_batch_prepared_before_a_new_claim_publishes_the_latest_floor() {
     let root = tempfile::tempdir().unwrap();
     let clock = HeldClock::at(32_000);
-    let state = Arc::new(collaboration_central_core::DueBatchState::default());
+    let state = Arc::new(fleet_runtime::DueBatchState::default());
     let storage = Arc::new(
         ObjectStorage::new(
             root.path().join("latest-floor.sqlite"),
             Arc::new(widgets_migrator()),
         )
-        .with_engine_publication(
-            clock,
-            collaboration_central_core::engine_alarm_decider(state.clone()),
-        ),
+        .with_engine_publication(clock, fleet_runtime::engine_alarm_decider(state.clone())),
     );
     assert!(state.try_claim(0, chrono::Duration::seconds(30)).unwrap());
     let mut held = storage.hold_alarm_publication();
@@ -204,9 +202,7 @@ async fn publication_uses_the_shared_clock_after_both_committed_publication_hold
         )
         .with_engine_publication(
             clock.clone(),
-            collaboration_central_core::engine_alarm_decider(Arc::new(
-                collaboration_central_core::DueBatchState::default(),
-            )),
+            fleet_runtime::engine_alarm_decider(Arc::new(fleet_runtime::DueBatchState::default())),
         )
         .with_publication_pause(workspace.clone(), pauses.clone()),
     );
@@ -279,9 +275,7 @@ async fn postcommit_upper_edge_failure_preserves_applied_rows_and_the_previous_a
         )
         .with_engine_publication(
             clock.clone(),
-            collaboration_central_core::engine_alarm_decider(Arc::new(
-                collaboration_central_core::DueBatchState::default(),
-            )),
+            fleet_runtime::engine_alarm_decider(Arc::new(fleet_runtime::DueBatchState::default())),
         ),
     );
     assert_eq!(

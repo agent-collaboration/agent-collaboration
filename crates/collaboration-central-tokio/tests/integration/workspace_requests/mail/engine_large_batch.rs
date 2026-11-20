@@ -5,7 +5,7 @@ use super::super::{Statement, support::*};
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::PausePoint;
+use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 
 const INSTANCES: u32 = 1_000;
@@ -18,7 +18,7 @@ fn due_of(start: Time, index: u32) -> Time {
 }
 async fn fired_items(runtime: &Runtime, group: uuid::Uuid) -> Vec<SqlValue> {
     runtime
-        .statement_host()
+        .runtime().statement_host()
         .read(Statement {
             sql: "SELECT item_id FROM engine_probe_items WHERE group_id=? AND state='fired' ORDER BY due_at,item_id",
             args: vec![text(group)],
@@ -123,12 +123,13 @@ async fn eight_held_units_fill_the_fan_out_and_no_ninth_starts() {
         .iter()
         .map(|item| {
             runtime
+                .runtime()
                 .pause_points()
                 .hold_engine(PausePoint::AfterEngineLoad, &item.to_string())
         })
         .collect();
     driver_settled(&fixture, &runtime).await;
-    let before = runtime.legacy_unit_invocations();
+    let before = runtime.runtime().legacy_unit_invocations();
     fixture.set_utc(at(start, 5, 0, 0)).await;
     let batch = tokio::spawn({
         let runtime = runtime.clone();
@@ -145,7 +146,7 @@ async fn eight_held_units_fill_the_fan_out_and_no_ninth_starts() {
             "a ninth unit ran while eight were in flight"
         );
     }
-    let invocations = runtime.legacy_unit_invocations();
+    let invocations = runtime.runtime().legacy_unit_invocations();
     assert_eq!(
         (invocations.windows, invocations.drains),
         (before.windows, before.drains),

@@ -10,10 +10,10 @@ use super::super::{
 use super::engine_event_support::*;
 use super::engine_probe_support::*;
 use central_storage::{AlarmPublicationFailure, StoreFailure};
-use collaboration_central_core::{
-    PausePoint,
-    engine_probe::{EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState},
+use collaboration_central_core::engine_probe::{
+    EngineReceipt, EngineRequestOutcome, ProbeEvent, ProbeState,
 };
+use fleet_runtime::PausePoint;
 
 /// A time with no later five-minute mark inside the portable range, yet far
 /// enough below it that a due batch's look-ahead horizon is still supported.
@@ -311,5 +311,66 @@ async fn a_failed_request_publication_without_an_old_alarm_is_republished_by_the
         .await
         .unwrap();
     assert_eq!(rows.rows, vec![vec![integer(2)]]);
+    fixture.host.close().await;
+}
+
+#[tokio::test]
+async fn a_rejected_physical_alarm_rolls_back_the_guarded_request_and_allows_exact_retry() {
+    use central_storage::SqlValue;
+    use workspace_model as m;
+    use workspace_model::central_mail::{CentralMailAnswer, CentralMailResult};
+
+    let fixture = Fixture::new_capturing_logs().await;
+    let runtime = runtime(&fixture).await;
+    let due = at(now(&fixture), 5, 0, 0);
+    set_wake(&fixture, 30280, due).await;
+    let previous_alarm = alarm_ms(&runtime).await;
+    assert_eq!(previous_alarm, ms(due));
+    assert!(
+        runtime
+            .control::<bool>("zero-next-write-alarm", &())
+            .await
+            .unwrap()
+    );
+
+    let failed = send_message(&fixture, 30281).await;
+
+    assert_eq!(failed, Ok(CentralMailResult::CentralUnavailable));
+    fixture
+        .host
+        .until_log("setAlarm() cannot be called with an alarm time <= 0")
+        .await;
+    assert_eq!(alarm_ms(&runtime).await, previous_alarm);
+    let direct_count = "SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct'";
+    assert_eq!(count(&runtime, direct_count, vec![]).await, 0);
+    assert_eq!(receipts(&runtime, 30281).await, 0);
+
+    let retry = send_message(&fixture, 30281).await.unwrap();
+    assert!(matches!(
+        retry,
+        CentralMailResult::Done(CentralMailAnswer::Queued { .. })
+    ));
+    assert_eq!(count(&runtime, direct_count, vec![]).await, 1);
+    assert_eq!(receipts(&runtime, 30281).await, 1);
+    let rows = runtime
+        .read(Statement {
+            sql: "SELECT answer FROM runtime_request_log WHERE request_id=?",
+            args: vec![text(id::<m::RequestId>(30281))],
+        })
+        .await
+        .unwrap();
+    let [row] = rows.rows.as_slice() else {
+        panic!("expected one retained answer")
+    };
+    let [SqlValue::Text(answer)] = row.as_slice() else {
+        panic!("expected a retained answer as text")
+    };
+    assert_eq!(
+        serde_json::from_str::<CentralMailResult>(answer).unwrap(),
+        retry
+    );
+    assert_eq!(send_message(&fixture, 30281).await.unwrap(), retry);
+    assert_eq!(count(&runtime, direct_count, vec![]).await, 1);
+    assert_eq!(alarm_ms(&runtime).await, previous_alarm);
     fixture.host.close().await;
 }

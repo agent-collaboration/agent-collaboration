@@ -1,9 +1,7 @@
 //! Exact signed bytes are checked against keys from the configured issuer source.
-use crate::{
-    Ed25519Verification, IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeyResolutionRefusal,
-    IssuerKeySource, SignatureValidity, VerifyFailure, resolve_issuer_key,
-};
-use runtime_primitives::Clock;
+use crate::{IssuerKeyCache, IssuerKeyId, resolve_issuer_key};
+use fleet_contracts::{IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerSignatureRefusal};
+use fleet_runtime_ports::{Clock, Ed25519Verification, IssuerKeySource, SignatureValidity};
 use std::sync::Arc;
 
 pub struct IssuerSignatureVerifier<Platform, Source> {
@@ -55,14 +53,6 @@ impl<Platform: Ed25519Verification, Source: IssuerKeySource>
             .await
             .map_err(|reason| IssuerSignatureRefusal::Crypto { reason })
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum IssuerSignatureRefusal {
-    #[error(transparent)]
-    Keys(#[from] IssuerKeyResolutionRefusal),
-    #[error("the issuer-signature capability is unavailable")]
-    Crypto { reason: VerifyFailure },
 }
 
 #[cfg(test)]

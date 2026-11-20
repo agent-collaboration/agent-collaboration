@@ -1,8 +1,11 @@
 //! Replay precedes mutable rule decisions; the durable answer shares the effect batch.
-use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::WorkspaceRows;
-use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+
+use crate::WorkspaceCaller;
+use crate::WorkspaceRuntime;
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
 use workspace_model as m;
 
 fn invalid(field: &str) -> m::WorkspaceReply {
@@ -36,7 +39,7 @@ pub(crate) fn store_result(
         }
     }
 }
-pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     caller: &WorkspaceCaller,
     request: m::WorkspaceRequest,
@@ -72,9 +75,15 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         return Ok(invalid("workspaceId"));
     }
     {
-        let _central = runtime.take_central_turn().await;
+        let _central = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
-            .admit_workspace(caller, request.workspace_id.as_ref())
+            .access()
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                request.workspace_id.as_ref(),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -89,30 +98,45 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         },
     };
     let actor = {
-        let _turn = runtime.take_central_turn().await;
+        let _turn = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
-            .admit_workspace(caller, request.workspace_id.as_ref())
+            .access()
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                request.workspace_id.as_ref(),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
         }
-        runtime.resolve_identity(&identity).await?
+        runtime.access().resolve_identity(&identity).await?
     };
-    let digest = crate::workspace_request_log::digest(&request.operation)?;
+    let digest = fleet_runtime::workspace_request_log::digest(&request.operation)?;
     let workspace = request
         .workspace_id
         .as_ref()
         .ok_or_else(|| corrupt("workspace_id"))?;
     let _turn = if request.operation.is_write() {
-        Some(runtime.turns.take(workspace).await)
+        Some(runtime.execution.workspace_turns().take(workspace).await)
     } else {
         None
     };
-    let admission_turn = runtime.take_central_turn().await;
-    if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+    let admission_turn = runtime.execution.take_central_turn().await;
+    if let Err(refusal) = runtime
+        .access()
+        .admit_workspace(
+            runtime,
+            caller.caller(),
+            caller.connection().attachment_ref(),
+            Some(workspace),
+        )
+        .await?
+    {
         return Ok(reply(m::WorkspaceResult::Refused(refusal)));
     }
-    let now = runtime.now()?;
+    let now = runtime.execution.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     if request.operation.is_write() {
         let request_id = request
@@ -120,16 +144,19 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             .as_ref()
             .ok_or_else(|| corrupt("request_id"))?;
         let logged = runtime
+            .execution
             .read_workspace(
                 workspace,
-                crate::workspace_request_log::lookup(
-                    crate::workspace_request_log::RequestLogStore::Workspace,
+                fleet_runtime::workspace_request_log::lookup(
+                    fleet_runtime::workspace_request_log::RequestLogStore::Workspace,
                     request_id,
                     &cutoff,
                 ),
             )
             .await?;
-        if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+        if let Some(answer) =
+            fleet_runtime::workspace_request_log::replay(&logged, &actor, &digest)?
+        {
             drop(admission_turn);
             if let Err(error) = runtime.drain_after_request(workspace).await {
                 return drain_failure(error);
@@ -140,11 +167,12 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     let context = workspace_rules::WriteContext {
         workspace_id: workspace.clone(),
         actor: actor.clone(),
-        change_id: runtime.mint()?,
+        change_id: runtime.execution.mint()?,
         now,
     };
     let rows = WorkspaceRows::decode(
         runtime
+            .execution
             .read_workspace(
                 workspace,
                 crate::workspace_read_queries::read_statement(
@@ -166,8 +194,9 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     drop(admission_turn);
     #[cfg(feature = "test-support")]
     runtime
-        .pauses
-        .reached(workspace, crate::PausePoint::AfterReads)
+        .execution
+        .pause_points()
+        .reached(workspace, fleet_runtime::PausePoint::AfterReads)
         .await;
     let resolved = runtime.resolve_command(&request.operation, &actor).await?;
     let decision = match &resolved {
@@ -215,8 +244,8 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .ok_or_else(|| corrupt("request_id"))?;
     batch
         .statements
-        .extend(crate::workspace_request_log::retain(
-            crate::workspace_request_log::RequestLogStore::Workspace,
+        .extend(fleet_runtime::workspace_request_log::retain(
+            fleet_runtime::workspace_request_log::RequestLogStore::Workspace,
             request_id,
             &actor,
             &digest,
@@ -227,8 +256,17 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     {
         // The workspace turn precedes central, matching the drain's lock order.
         // Revocation and the admitted batch cannot pass each other inside this turn.
-        let _central = runtime.take_central_turn().await;
-        if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace)).await? {
+        let _central = runtime.execution.take_central_turn().await;
+        if let Err(refusal) = runtime
+            .access()
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                Some(workspace),
+            )
+            .await?
+        {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
         }
         if matches!(
@@ -241,17 +279,20 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         ) {
             runtime.preset_workspace_drain_held(workspace, now).await?;
         }
-        if let Some(result) = store_result(runtime.batch_workspace(workspace, batch).await)? {
+        if let Some(result) =
+            store_result(runtime.execution.batch_workspace(workspace, batch).await)?
+        {
             return Ok(reply(result));
         }
     }
     #[cfg(feature = "test-support")]
     runtime
-        .pauses
-        .reached(workspace, crate::PausePoint::AfterStoreApplied)
+        .execution
+        .pause_points()
+        .reached(workspace, fleet_runtime::PausePoint::AfterStoreApplied)
         .await;
     #[cfg(feature = "test-support")]
-    if runtime.take_lost_reply(request_id) {
+    if runtime.execution.take_lost_reply(request_id) {
         return Ok(reply(m::WorkspaceResult::OutcomeUnknown));
     }
     if let Err(error) = runtime.drain_after_request(workspace).await {
@@ -269,12 +310,13 @@ fn drain_failure(error: StoreFailure) -> Result<m::WorkspaceReply, StoreFailure>
         }
     }
 }
-async fn enrich<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+async fn enrich<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     result: m::WorkspaceResult,
     durable_answer: bool,
 ) -> Result<m::WorkspaceReply, StoreFailure> {
     let actors = match runtime
+        .access()
         .actor_views(&crate::workspace_item_reads::actor_ids(&result))
         .await
     {
@@ -311,7 +353,7 @@ fn unchanged_item(operation: &m::WorkspaceOperation) -> Result<m::ItemRef, Store
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub async fn request(
         &self,
         caller: &WorkspaceCaller,
@@ -320,6 +362,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         // Admission answers for the organization as on main; the due batch that
         // follows checks the stamp once for this event before any unit (P3).
         let result = execute(self, caller, request).await;
+        #[cfg(feature = "test-support")]
+        self.execution
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::AfterWorkspaceExecute)
+            .await;
         let _ = self.after_event().await;
         match result {
             Err(StoreFailure::Unavailable) => Ok(reply(m::WorkspaceResult::CentralUnavailable)),

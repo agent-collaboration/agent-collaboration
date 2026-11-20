@@ -207,6 +207,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
     );
     let runtime = f.host.central(f.caller.organization_id()).await.unwrap();
     let actors = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT actor_identity_id,identity FROM access_actor_identities",

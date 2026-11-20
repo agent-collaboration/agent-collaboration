@@ -59,7 +59,7 @@ async fn revocation_journey(fixture: &Fixture) -> Result<()> {
         .host
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
-    let readback = runtime.statement_host().read(Statement {
+    let readback = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT m.state AS machine_state,m.allowed_workspaces,m.enrollment_generation,a.state,a.end_reason,a.permission_checked,(SELECT COUNT(*) FROM signin_change_records WHERE kind='machineRevoked' AND target_id=a.approval_id AND actor_person_id=? AND permission_checked='machine:revoke') AS audit_records FROM login_machine_approvals a JOIN login_machines m USING(machine_id) WHERE a.approval_id=?",
         args: vec![SqlValue::Text(owner.id), SqlValue::Text(enrollment.to_owned())],
     }).await?;
@@ -125,7 +125,7 @@ async fn mismatched_stored_client(fixture: &Fixture) -> Result<()> {
         .host
         .central(&signed::ORGANIZATION.to_owned().try_into()?)
         .await?;
-    let result = runtime.statement_host().run_batch(StatementBatch {
+    let result = runtime.runtime().statement_host().run_batch(StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
                 sql: "UPDATE login_machine_approvals SET machine_client_id=? WHERE approval_id=?",

@@ -1,7 +1,6 @@
-use crate::workspace_decode_error::corrupt;
-use crate::workspace_row_codec::WorkspaceRows;
 use central_storage::{SqlValue, Statement, StoreFailure};
-use workspace_model::{ActorIdentityId, ChangePosition, ItemRef, WorkspaceOperation};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
+use workspace_model::{ActorIdentityId, ItemRef, WorkspaceOperation};
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
 }
@@ -183,12 +182,4 @@ pub(crate) fn read_statement(
         sql,
         args: vec![text(workspace), first, second, text(actor)],
     })
-}
-impl WorkspaceRows {
-    pub fn created_position(&self, item: &ItemRef) -> Result<ChangePosition, StoreFailure> {
-        self.created_positions
-            .get(item)
-            .copied()
-            .ok_or_else(|| corrupt("created position"))
-    }
 }

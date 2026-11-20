@@ -12,9 +12,9 @@ use central_link_protocol::{
 };
 use central_storage::{SqlValue, Statement};
 use collaboration_central_conformance::{ConformanceResult as Result, signin_fixtures as signed};
+use collaboration_central_core::ValidatedMachineConnection;
 use collaboration_central_core::{
-    MachineLoginControl, ValidatedMachineConnection, identity_contract::MachineTokenDecision,
-    machine_login_control,
+    MachineLoginControl, identity_contract::MachineTokenDecision, machine_login_control,
 };
 use futures_util::StreamExt;
 use reqwest_websocket::{CloseCode, Message, WebSocket};
@@ -117,6 +117,7 @@ async fn renew_machine_token_extends_the_open_connection_and_a_refusal_keeps_its
         WorkspaceResult::Refused(RefusalReason::MachineRevoked)
     );
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT name FROM directory_workspaces ORDER BY name",
@@ -268,6 +269,7 @@ async fn a_renewal_just_before_the_deadline_renews_and_at_or_after_it_is_refused
         "the lapsed link closes: {closed:?}"
     );
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT name FROM directory_workspaces",
@@ -368,6 +370,7 @@ async fn every_refused_renewal_keeps_the_current_deadline() -> Result<()> {
         WorkspaceResult::Refused(RefusalReason::MachineRevoked)
     );
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT name FROM directory_workspaces",

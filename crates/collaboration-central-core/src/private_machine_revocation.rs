@@ -1,18 +1,18 @@
 //! Apply a verified revocation and its fresh-proof reservation in one org turn.
 use crate::{
-    MachineEnrollmentRevocationResult as ResultKind, ObjectHost, OrganizationAdminAnswer,
-    WorkspaceRuntime, WorkspaceStoreCalls,
+    MachineEnrollmentRevocationResult as ResultKind, OrganizationAdminAnswer, WorkspaceRuntime,
     identity_contract::PersonId,
     organization_authority::machine_login::{
         self, DecisionTime, EnrollmentQuery, StoredEnrollmentState,
     },
     person_request::{AdminOperationId, VerifiedPersonRequest},
-    workspace_decode_error::corrupt,
 };
 use central_storage::{AlarmUpdate, BatchOutcome, GuardedStatement, StatementBatch, StoreFailure};
 use fleet_identity_protocol::EnrollmentId;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// The caller holds the central turn through admission, commit and notification.
     pub(crate) async fn revoke_machine_enrollment_from_admin(
         &self,
@@ -22,8 +22,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         now_ms: i64,
     ) -> Result<OrganizationAdminAnswer, StoreFailure> {
         let facts = crate::machine_login_reads::facts(
-            self.host.as_ref(),
-            self.organization.clone(),
+            self.execution.statement_host(),
+            self.execution.organization().clone(),
             &EnrollmentQuery {
                 enrollment: Some(enrollment_id.clone()),
                 ..EnrollmentQuery::default()
@@ -56,7 +56,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         &audit_request,
                         request.operation.route().permission(),
                         DecisionTime { now_ms },
-                        self.ids.as_ref(),
+                        self.execution.ids(),
                     )?;
                     if revocation.answer.is_none() {
                         return Err(corrupt("login_machine_approvals.enrolled"));
@@ -71,11 +71,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             },
         };
         #[cfg(feature = "test-support")]
-        self.pauses
-            .reached_central(crate::PausePoint::AfterSignInSample)
+        self.execution
+            .pause_points()
+            .reached_central(fleet_runtime::PausePoint::AfterSignInSample)
             .await;
         if !matches!(
-            self.host
+            self.execution
+                .statement_host()
                 .run_batch(StatementBatch {
                     statements,
                     alarm: AlarmUpdate::Unchanged,

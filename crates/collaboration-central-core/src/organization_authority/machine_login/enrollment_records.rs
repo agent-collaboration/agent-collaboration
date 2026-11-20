@@ -1,12 +1,13 @@
 //! Facts decoded from one organization's owning store.
 use crate::identity_contract::{
-    AllowedWorkspaces, ClientId, DeviceLoginRequestId, EndedMachineClient,
-    EnrollmentRevocationReason, PersonId,
+    AllowedWorkspaces, DeviceLoginRequestId, EndedMachineClient, EnrollmentRevocationReason,
+    PersonId,
 };
 use crate::organization_authority::OrganizationChangeRecord;
-use crate::workspace_decode_error::corrupt;
 use central_storage::StoreFailure;
+use fleet_contracts::ClientId;
 use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use message_board::{MachineLabel, WorkspaceId};
 use workspace_ids::MachineId;
 

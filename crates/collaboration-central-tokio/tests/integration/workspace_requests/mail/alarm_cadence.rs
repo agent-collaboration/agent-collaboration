@@ -40,6 +40,7 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
         .unwrap();
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(StatementBatch {
                 statements: vec![],
@@ -52,8 +53,9 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
             .unwrap(),
         BatchOutcome::Applied { .. }
     ));
-    assert_eq!(runtime.statement_host().alarm(), None);
+    assert_eq!(runtime.runtime().statement_host().alarm(), None);
     runtime
+        .runtime()
         .statement_host()
         .fail_next_alarm_batch(StoreFailure::Unavailable);
     let request = m::WorkspaceRequest {
@@ -74,12 +76,15 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
         m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { .. })
     ));
     assert_eq!(
-        runtime.statement_host().alarm(),
+        runtime.runtime().statement_host().alarm(),
         None,
         "a failure must not fabricate a physical alarm"
     );
     assert_eq!(
-        runtime.statement_host().failed_alarm_publication_at(),
+        runtime
+            .runtime()
+            .statement_host()
+            .failed_alarm_publication_at(),
         Some(runtime_primitives::SyncTime::from_unix_millis(
             start.timestamp_millis()
         ))
@@ -91,11 +96,12 @@ async fn request_publication_failure_without_an_old_alarm_retries_at_the_next_ma
             runtime_primitives::SyncTime::from_unix_millis(retry.timestamp_millis()),
         ))
         .await;
-    let callbacks = runtime.alarm_completion_count();
+    let callbacks = runtime.runtime().alarm_completion_count();
     fixture.advance(Duration::from_secs(300)).await;
-    runtime.until_alarm_completed(callbacks + 1).await;
+    runtime.runtime().until_alarm_completed(callbacks + 1).await;
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|time| time.unix_millis()),
@@ -139,6 +145,7 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
     // recompute below decides the alarm for a wake that is due exactly now.
     assert!(matches!(
         runtime
+            .runtime()
             .statement_host()
             .run_batch(central_storage::StatementBatch {
                 statements: vec![],
@@ -157,12 +164,14 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
 
     assert_eq!(
         runtime
+            .runtime()
             .statement_host()
             .alarm()
             .map(|time| time.unix_millis()),
         Some((due + chrono::Duration::minutes(5)).timestamp_millis())
     );
     let rows = runtime
+        .runtime()
         .statement_host()
         .read(Statement {
             sql: "SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake'",
@@ -230,7 +239,7 @@ async fn request_event_runs_due_work_inside_the_fifty_second_horizon() {
         .central(fixture.caller.organization_id())
         .await
         .unwrap();
-    let rows = runtime.statement_host().read(Statement {
+    let rows = runtime.runtime().statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM mail_messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM mail_messages WHERE message_kind='direct') FROM automation_wakes WHERE wake_id=?", args: vec![text(&wake_id),text(&wake_id)],
     }).await.unwrap();
     assert_eq!(

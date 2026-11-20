@@ -1,7 +1,8 @@
 //! Translate admitted semantic inputs into the existing pure rule's declared rows.
-use crate::workspace_decode_error::corrupt;
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::WorkspaceRuntime;
 use central_storage::StoreFailure;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 
 pub(crate) struct ResolvedOperation {
@@ -24,7 +25,7 @@ fn optional_description(
 ) -> Result<Option<m::RequiredDescription>, m::RefusalReason> {
     description.map(required_description).transpose()
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn resolve_command(
         &self,
         op: &m::WorkspaceOperation,
@@ -39,7 +40,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateArea {
-                    area_id: self.mint()?,
+                    area_id: self.execution.mint()?,
                     name: name.clone(),
                     description,
                 })
@@ -96,24 +97,26 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 let holder = match lead {
-                    Some(reference) => match self.resolve_actor_ref(reference, actor).await? {
-                        Ok(holder) => holder,
-                        Err(refusal) => return Ok(Err(refusal)),
-                    },
+                    Some(reference) => {
+                        match self.access().resolve_actor_ref(reference, actor).await? {
+                            Ok(holder) => holder,
+                            Err(refusal) => return Ok(Err(refusal)),
+                        }
+                    }
                     None => actor.clone(),
                 };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateProject {
-                    project_id: self.mint()?,
+                    project_id: self.execution.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
                     description,
                     lead: holder,
-                    role_id: self.mint()?,
+                    role_id: self.execution.mint()?,
                 })
             }
             Op::CreateInitiative { name, description } => {
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateInitiative {
-                    initiative_id: self.mint()?,
+                    initiative_id: self.execution.mint()?,
                     name: name.clone(),
                     description: description.clone(),
                 })
@@ -129,7 +132,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }),
             Op::CreateDeliverable { project_id, title } => {
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateDeliverable {
-                    deliverable_id: self.mint()?,
+                    deliverable_id: self.execution.mint()?,
                     project_id: project_id.clone(),
                     title: title.clone(),
                 })
@@ -138,7 +141,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 deliverable_id,
                 title,
             } => m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateIssue {
-                issue_id: self.mint()?,
+                issue_id: self.execution.mint()?,
                 deliverable_id: deliverable_id.clone(),
                 title: title.clone(),
             }),
@@ -147,12 +150,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 role,
                 holder,
             } => {
-                let holder = match self.resolve_actor_ref(holder, actor).await? {
+                let holder = match self.access().resolve_actor_ref(holder, actor).await? {
                     Ok(holder) => holder,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Role(m::RoleCommand::GrantProject {
-                    assignment_id: self.mint()?,
+                    assignment_id: self.execution.mint()?,
                     project_id: project_id.clone(),
                     role: *role,
                     holder,
@@ -169,12 +172,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 role,
                 holder,
             } => {
-                let holder = match self.resolve_actor_ref(holder, actor).await? {
+                let holder = match self.access().resolve_actor_ref(holder, actor).await? {
                     Ok(holder) => holder,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 m::WorkspaceCommand::Role(m::RoleCommand::GrantDeliverable {
-                    assignment_id: self.mint()?,
+                    assignment_id: self.execution.mint()?,
                     deliverable_id: deliverable_id.clone(),
                     role: *role,
                     holder,
@@ -197,13 +200,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     return Ok(Err(refusal));
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::CreateThread {
-                    thread_id: self.mint()?,
-                    member_id: self.mint()?,
+                    thread_id: self.execution.mint()?,
+                    member_id: self.execution.mint()?,
                     area_id: area_id.clone(),
                     title: title.clone(),
                     first_post: m::ThreadPostDraft {
-                        post_id: self.mint()?,
-                        change_id: self.mint()?,
+                        post_id: self.execution.mint()?,
+                        change_id: self.execution.mint()?,
                         body: body.clone(),
                         addressees: addressees.clone(),
                     },
@@ -212,7 +215,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Op::JoinThread { thread_id, role } => {
                 m::WorkspaceCommand::Thread(m::ThreadCommand::JoinThread {
                     thread_id: thread_id.clone(),
-                    member_id: self.mint()?,
+                    member_id: self.execution.mint()?,
                     role: *role,
                 })
             }
@@ -221,14 +224,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 actor: target,
                 role,
             } => {
-                if !self.named_actor(target).await? {
+                if !self.access().named_actor(target).await? {
                     return Ok(Err(m::RefusalReason::UnknownActor {
                         actor_identity_id: target.clone(),
                     }));
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::AddThreadMember {
                     thread_id: thread_id.clone(),
-                    member_id: self.mint()?,
+                    member_id: self.execution.mint()?,
                     actor: target.clone(),
                     role: *role,
                 })
@@ -253,7 +256,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     return Ok(Err(refusal));
                 }
                 m::WorkspaceCommand::Thread(m::ThreadCommand::ThreadPost {
-                    post_id: self.mint()?,
+                    post_id: self.execution.mint()?,
                     thread_id: thread_id.clone(),
                     body: body.clone(),
                     addressees: addressees.clone(),
@@ -265,8 +268,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             } => {
                 let closing_post = match closing_post {
                     Some(body) => Some(m::ThreadPostDraft {
-                        post_id: self.mint()?,
-                        change_id: self.mint()?,
+                        post_id: self.execution.mint()?,
+                        change_id: self.execution.mint()?,
                         body: body.clone(),
                         addressees: vec![],
                     }),
@@ -279,7 +282,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             Op::AddDependency { blocking, blocked } => {
                 m::WorkspaceCommand::Dependency(m::DependencyCommand::Add {
-                    dependency_id: self.mint()?,
+                    dependency_id: self.execution.mint()?,
                     blocking: blocking.clone(),
                     blocked: blocked.clone(),
                 })
@@ -313,7 +316,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 title,
                 description,
             } => m::WorkspaceCommand::Backlog(m::BacklogCommand::Add {
-                item_id: self.mint()?,
+                item_id: self.execution.mint()?,
                 area_id: area_id.clone(),
                 title: title.clone(),
                 description: description.clone(),
@@ -348,9 +351,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                             }
                         };
                         Some(m::BacklogClosingReference {
-                            change_id: self.mint()?,
+                            change_id: self.execution.mint()?,
                             reference: m::Reference {
-                                reference_id: self.mint()?,
+                                reference_id: self.execution.mint()?,
                                 source: m::ReferenceSource::BacklogItem(item_id.clone()),
                                 target,
                                 details: None,
@@ -371,7 +374,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 details,
             } => m::WorkspaceCommand::Reference(m::ReferenceCommand::AddReference {
                 reference: m::Reference {
-                    reference_id: self.mint()?,
+                    reference_id: self.execution.mint()?,
                     source: source.clone(),
                     target: target.clone(),
                     details: details.clone(),
@@ -389,7 +392,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 details,
             } => m::WorkspaceCommand::Reference(m::ReferenceCommand::AddLink {
                 link: m::ExternalLink {
-                    link_id: self.mint()?,
+                    link_id: self.execution.mint()?,
                     source: source.clone(),
                     url: url.clone(),
                     title: title.clone(),
@@ -407,10 +410,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 tags: labels,
             } => {
                 for _ in labels {
-                    tags.push(self.mint()?);
+                    tags.push(self.execution.mint()?);
                 }
                 m::WorkspaceCommand::WorkLog(m::WorkLogCommand::Add {
-                    entry_id: self.mint()?,
+                    entry_id: self.execution.mint()?,
                     project_id: project_id.clone(),
                     body: body.clone(),
                     tags: labels.clone(),
@@ -437,7 +440,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         Ok(Ok(ResolvedOperation {
             command,
             tag_ids: tags,
-            read_mark_id: self.mint()?,
+            read_mark_id: self.execution.mint()?,
         }))
     }
     /// Actor addressees must name known actors; role addressees are checked by the rule.
@@ -447,7 +450,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     ) -> Result<Result<(), m::RefusalReason>, StoreFailure> {
         for addressee in addressees {
             if let m::Addressee::Actor { actor_identity_id } = addressee
-                && !self.named_actor(actor_identity_id).await?
+                && !self.access().named_actor(actor_identity_id).await?
             {
                 return Ok(Err(m::RefusalReason::UnknownActor {
                     actor_identity_id: actor_identity_id.clone(),

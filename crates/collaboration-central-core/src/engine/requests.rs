@@ -6,10 +6,10 @@ use super::{
     source::RequestSource,
     store_adapter::StoreAdapter,
 };
-use crate::ObjectHost as _;
-use crate::workspace_decode_error::corrupt;
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::StoreFailure;
+use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::workspace_decode_error::corrupt;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use workspace_model::{ActorIdentityId, RequestId};
 
@@ -76,7 +76,7 @@ impl<R: EngineHost> Engine<'_, R> {
         let cutoff = now
             .checked_sub_signed(chrono::Duration::hours(24))
             .ok_or_else(|| corrupt("runtime_request_log.cutoff"))?;
-        let digest = crate::workspace_request_log::digest(
+        let digest = fleet_runtime::workspace_request_log::digest(
             &serde_json::json!({"machine":M::KIND.0,"key":&key.0,"event":&event}),
         )?;
         let source = RequestSource(ReceiptClaim {
@@ -93,7 +93,7 @@ impl<R: EngineHost> Engine<'_, R> {
         #[cfg(feature = "test-support")]
         self.pauses()
             .reached_engine(
-                crate::PausePoint::AfterEngineAbsentLookup,
+                fleet_runtime::PausePoint::AfterEngineAbsentLookup,
                 &source.0.request.to_string(),
             )
             .await;

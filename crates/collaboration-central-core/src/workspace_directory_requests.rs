@@ -1,10 +1,12 @@
 //! The organization's workspace directory over the machine request path:
 //! create, rename, archive, show and list. The directory is central's own
 //! `workspaces` table, not a workspace store.
-use crate::workspace_decode_error::corrupt;
+use crate::WorkspaceCaller;
+use crate::WorkspaceRuntime;
 use crate::workspace_request_gate::{reply, store_result};
-use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_runtime_ports::workspace_decode_error::corrupt;
+use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
 use workspace_rules::DirectoryChange;
 
@@ -79,7 +81,7 @@ pub(crate) fn classify<'a>(
     }))
 }
 
-pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     caller: &WorkspaceCaller,
     request: &m::WorkspaceRequest,
@@ -87,14 +89,25 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
 ) -> Result<m::WorkspaceReply, StoreFailure> {
     match directory {
         DirectoryRequest::Show { workspace_id } => {
-            let _central = runtime.take_central_turn().await;
-            if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace_id)).await? {
+            let _central = runtime.execution.take_central_turn().await;
+            if let Err(refusal) = runtime
+                .access()
+                .admit_workspace(
+                    runtime,
+                    caller.caller(),
+                    caller.connection().attachment_ref(),
+                    Some(workspace_id),
+                )
+                .await?
+            {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
-            let workspace =
-                crate::workspace_directory_rows::read_by_id(runtime.host.as_ref(), workspace_id)
-                    .await?
-                    .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
+            let workspace = crate::workspace_directory_rows::read_by_id(
+                runtime.execution.statement_host(),
+                workspace_id,
+            )
+            .await?
+            .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
             Ok(reply(m::WorkspaceResult::Done(m::WorkspaceAnswer::Item {
                 item: m::ItemView::Workspace(workspace.into()),
             })))
@@ -104,17 +117,29 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             cursor,
             limit,
         } => {
-            let _central = runtime.take_central_turn().await;
-            if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+            let _central = runtime.execution.take_central_turn().await;
+            if let Err(refusal) = runtime
+                .access()
+                .admit_workspace(
+                    runtime,
+                    caller.caller(),
+                    caller.connection().attachment_ref(),
+                    None,
+                )
+                .await?
+            {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
             let workspaces: Vec<m::Workspace> =
-                crate::workspace_directory_rows::read_all(runtime.host.as_ref())
+                crate::workspace_directory_rows::read_all(runtime.execution.statement_host())
                     .await?
                     .into_iter()
                     .map(Into::into)
                     .collect();
-            let allowed = runtime.allowed_workspaces(caller).await?;
+            let allowed = runtime
+                .access()
+                .allowed_workspaces(caller.connection().machine_id())
+                .await?;
             Ok(reply(
                 match workspace_rules::workspace_list_answer(
                     query,
@@ -134,7 +159,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     }
 }
 
-async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
+async fn write<Host: CentralStore, Stores: WorkspaceStores>(
     runtime: &WorkspaceRuntime<Host, Stores>,
     caller: &WorkspaceCaller,
     request: &m::WorkspaceRequest,
@@ -155,45 +180,58 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     // Machine admission under the central turn first; a workspace's own state
     // is checked after replay, so a retried archive replays its answer instead
     // of being refused.
-    let _turn = runtime.take_central_turn().await;
-    if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+    let _turn = runtime.execution.take_central_turn().await;
+    if let Err(refusal) = runtime
+        .access()
+        .admit_workspace(
+            runtime,
+            caller.caller(),
+            caller.connection().attachment_ref(),
+            None,
+        )
+        .await?
+    {
         return Ok(reply(m::WorkspaceResult::Refused(refusal)));
     }
-    let now = runtime.now()?;
+    let now = runtime.execution.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     let digest = match &directory {
         DirectoryRequest::Change { workspace_id, .. } => {
             // Directory writes share the organization log across workspace targets.
-            crate::workspace_request_log::digest(&(workspace_id, &request.operation))?
+            fleet_runtime::workspace_request_log::digest(&(workspace_id, &request.operation))?
         }
-        _ => crate::workspace_request_log::digest(&request.operation)?,
+        _ => fleet_runtime::workspace_request_log::digest(&request.operation)?,
     };
-    let actor_plan = runtime.prepare_identity(&identity, now).await?;
+    let actor_plan = runtime.access().prepare_identity(&identity, now).await?;
     let actor = actor_plan.actor;
     let logged = runtime
-        .host
-        .read(crate::workspace_request_log::lookup(
-            crate::workspace_request_log::RequestLogStore::Organization,
+        .execution
+        .statement_host()
+        .read(fleet_runtime::workspace_request_log::lookup(
+            fleet_runtime::workspace_request_log::RequestLogStore::Organization,
             request_id,
             &cutoff,
         ))
         .await?;
-    if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+    if let Some(answer) = fleet_runtime::workspace_request_log::replay(&logged, &actor, &digest)? {
         return Ok(reply(answer));
     }
     let mut statements = actor_plan.statements;
     let answer = match directory {
         DirectoryRequest::Create { name } => {
-            if crate::workspace_directory_rows::read_by_name(runtime.host.as_ref(), name)
-                .await?
-                .is_some()
+            if crate::workspace_directory_rows::read_by_name(
+                runtime.execution.statement_host(),
+                name,
+            )
+            .await?
+            .is_some()
             {
                 m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse {
                     name: name.clone(),
                 })
             } else {
                 let workspace = m::Workspace {
-                    workspace_id: runtime.mint()?,
+                    workspace_id: runtime.execution.mint()?,
                     name: name.clone(),
                     description: m::Description::try_from(String::new())
                         .map_err(|_| corrupt("directory_workspaces.description"))?,
@@ -212,19 +250,33 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             workspace_id,
             change,
         } => {
-            if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace_id)).await? {
+            if let Err(refusal) = runtime
+                .access()
+                .admit_workspace(
+                    runtime,
+                    caller.caller(),
+                    caller.connection().attachment_ref(),
+                    Some(workspace_id),
+                )
+                .await?
+            {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
-            let current: m::Workspace =
-                crate::workspace_directory_rows::read_by_id(runtime.host.as_ref(), workspace_id)
-                    .await?
-                    .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?
-                    .into();
+            let current: m::Workspace = crate::workspace_directory_rows::read_by_id(
+                runtime.execution.statement_host(),
+                workspace_id,
+            )
+            .await?
+            .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?
+            .into();
             let holder = match &change {
                 DirectoryChange::Update { name, .. } => {
-                    crate::workspace_directory_rows::read_by_name(runtime.host.as_ref(), name)
-                        .await?
-                        .map(|row| row.workspace_id)
+                    crate::workspace_directory_rows::read_by_name(
+                        runtime.execution.statement_host(),
+                        name,
+                    )
+                    .await?
+                    .map(|row| row.workspace_id)
                 }
                 DirectoryChange::Archive => None,
             };
@@ -240,8 +292,8 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             return Err(corrupt("directory write"));
         }
     };
-    statements.extend(crate::workspace_request_log::retain(
-        crate::workspace_request_log::RequestLogStore::Organization,
+    statements.extend(fleet_runtime::workspace_request_log::retain(
+        fleet_runtime::workspace_request_log::RequestLogStore::Organization,
         request_id,
         &actor,
         &digest,
@@ -250,7 +302,8 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         &cutoff,
     )?);
     let outcome = runtime
-        .host
+        .execution
+        .statement_host()
         .run_batch(StatementBatch {
             statements,
             alarm: AlarmUpdate::Unchanged,
@@ -260,7 +313,7 @@ async fn write<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         return Ok(reply(result));
     }
     #[cfg(feature = "test-support")]
-    if runtime.take_lost_reply(request_id) {
+    if runtime.execution.take_lost_reply(request_id) {
         return Ok(reply(m::WorkspaceResult::OutcomeUnknown));
     }
     Ok(reply(answer))

@@ -1,18 +1,21 @@
 //! The engine's only view of the runtime that hosts it (P3, module direction):
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
-use super::{DueBatchState, legacy_units::LegacyUnitOutcome};
-use crate::{CentralObservation, MailDeliveryReady, ObjectHost};
+use super::legacy_units::LegacyUnitOutcome;
+use crate::MailDeliveryReady;
 use central_engine_model::EngineTime;
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_contracts::CentralObservation;
+use fleet_runtime::DueBatchState;
+use fleet_runtime_ports::CentralStore;
 use std::future::Future;
 
 pub(crate) trait EngineHost: Send + Sync {
-    type Host: ObjectHost;
+    type Host: CentralStore;
     fn host(&self) -> &Self::Host;
     /// The one injected clock.
     fn now(&self) -> Result<EngineTime, StoreFailure>;
-    fn ids(&self) -> &dyn runtime_primitives::IdSource;
+    fn ids(&self) -> &dyn fleet_runtime_ports::IdSource;
     fn due_batches(&self) -> &DueBatchState;
     fn observe(&self, observation: CentralObservation);
     fn offer_mail(&self, delivery: MailDeliveryReady);
@@ -34,11 +37,13 @@ pub(crate) trait EngineHost: Send + Sync {
     ) -> impl Future<Output = Result<usize, LegacyUnitOutcome>> + Send;
     /// The central turn the notice-window unit commits under, taken without
     /// waiting (P5 change 7): `None` when another event holds it.
-    fn try_central_turn(&self) -> Option<tokio::sync::MutexGuard<'_, ()>>;
+    fn try_central_turn(&self) -> Option<fleet_runtime::TurnGuard<'_>>;
     #[cfg(feature = "test-support")]
-    fn pauses(&self) -> &crate::PausePoints;
+    fn pauses(&self) -> &fleet_runtime::PausePoints;
     #[cfg(feature = "test-support")]
-    fn count_legacy_invocation(&self, count: &dyn Fn(&mut LegacyUnitInvocations));
+    fn record_engine_completion_entry(&self);
+    #[cfg(feature = "test-support")]
+    fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations));
 }
 
 /// The engine bound to one host. Every engine operation is a method here, so
@@ -55,7 +60,7 @@ impl<'a, R: EngineHost> Engine<'a, R> {
     pub(crate) fn now(&self) -> Result<EngineTime, StoreFailure> {
         self.0.now()
     }
-    pub(crate) fn ids(&self) -> &'a dyn runtime_primitives::IdSource {
+    pub(crate) fn ids(&self) -> &'a dyn fleet_runtime_ports::IdSource {
         self.0.ids()
     }
     pub(crate) fn due_batches(&self) -> &'a DueBatchState {
@@ -65,20 +70,7 @@ impl<'a, R: EngineHost> Engine<'a, R> {
         self.0.observe(observation);
     }
     #[cfg(feature = "test-support")]
-    pub(crate) fn pauses(&self) -> &'a crate::PausePoints {
+    pub(crate) fn pauses(&self) -> &'a fleet_runtime::PausePoints {
         self.0.pauses()
     }
-}
-
-/// Test-support counts of whole notice-unit runs (V2 control gate).
-#[cfg(feature = "test-support")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct LegacyUnitInvocations {
-    /// The due batch ran the notice-window unit.
-    pub windows: u64,
-    /// The due batch ran the workspace-drain unit.
-    pub drains: u64,
-    /// A request-triggered drain of one workspace ran (P5 change 5).
-    pub request_drains: u64,
 }

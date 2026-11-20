@@ -223,7 +223,7 @@ async fn descriptions_ascii_collision_index_and_non_ascii_names_keep_their_exact
         "signed noncanonical input must not be rewritten or admitted"
     );
     // Independently prove the SQL index itself rejects padded ASCII collisions.
-    let result=f.runtime(A).await?.statement_host().run_batch(StatementBatch {
+    let result=f.runtime(A).await?.runtime().statement_host().run_batch(StatementBatch {
         statements:vec![GuardedStatement {statement:Statement {
             sql:"INSERT INTO directory_workspaces(workspace_id,name,description,state,created_at,updated_at) VALUES (?,' RESEARCH ','','active',?,?)",
             args:vec![text("019f0000-0000-7000-8000-00000000d7a4"),text("2030-03-17T17:46:40Z"),text("2030-03-17T17:46:40Z")],
@@ -359,8 +359,9 @@ async fn concurrent_same_name_creates_keep_the_first_workspace_and_retain_the_se
     let second_id = "019f0000-0000-7000-8000-00000000d7d2";
     let runtime = f.runtime(A).await?;
     let mut held = runtime
+        .runtime()
         .pause_points()
-        .hold_central(collaboration_central_core::PausePoint::AfterSignInSample);
+        .hold_central(fleet_runtime::PausePoint::AfterSignInSample);
     let first_headers = owner.headers(
         signed::CREATE,
         &intent(first_id, "Concurrent name", "winner"),
@@ -384,7 +385,8 @@ async fn concurrent_same_name_creates_keep_the_first_workspace_and_retain_the_se
         tokio::spawn(
             async move { post(&client, signed::CREATE, second_body, second_headers).await },
         );
-    let queued = tokio::select! {()=runtime.until_central_waiting(1)=>true,_=&mut second=>false};
+    let queued =
+        tokio::select! {()=runtime.runtime().until_central_waiting(1)=>true,_=&mut second=>false};
     assert!(queued, "second create crossed the held org turn");
     held.release();
     let first = first.await??;

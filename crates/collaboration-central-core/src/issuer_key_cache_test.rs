@@ -1,6 +1,8 @@
 //! Issuer cache and parser observations use explicit injected receipt times.
-use crate::{IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, RawJwks};
+use crate::{IssuerKeyCache, IssuerKeyId, IssuerKeySet};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_contracts::IssuerKeyRefusal;
+use fleet_runtime_ports::RawJwks;
 use serde_json::{Value, json};
 
 const SOURCE: &str = "https://issuer.example.invalid/jwks";

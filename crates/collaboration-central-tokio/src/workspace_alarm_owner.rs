@@ -1,19 +1,14 @@
 //! One cancellable driver per central object, using the host's injected clock.
 use super::{ObjectStorage, TokioWorkspaceStores};
-use crate::object_storage::LastAlarmPublication;
 use collaboration_central_core::WorkspaceRuntime;
-use router_clock::{ClockInstant, RuntimeClock};
+use fleet_runtime::AlarmDeadline;
+use fleet_runtime_ports::SyncTime;
+use router_clock::RuntimeClock;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 type Runtime = WorkspaceRuntime<ObjectStorage, TokioWorkspaceStores>;
-
-#[derive(Clone, Copy)]
-enum AlarmWait {
-    Until(ClockInstant),
-    UntilPublication,
-}
 
 pub(super) struct WorkspaceAlarmOwner {
     stop: CancellationToken,
@@ -45,29 +40,28 @@ impl Drop for WorkspaceAlarmOwner {
 }
 
 async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: CancellationToken) {
-    let mut publication = runtime.statement_host().subscribe_publication_status();
-    let mut retry: Option<AlarmWait> = None;
+    let mut publication = runtime
+        .runtime()
+        .statement_host()
+        .subscribe_publication_status();
+    let mut schedule = runtime.runtime().alarm_schedule();
+    let wall_deadline = |at: SyncTime| {
+        clock.wall_deadline(runtime_primitives::SyncTime::from_unix_millis(
+            at.unix_millis(),
+        ))
+    };
     loop {
-        let status = *publication.borrow_and_update();
-        let deadline = retry.unwrap_or_else(|| match status {
-            LastAlarmPublication::Published { deadline } => deadline
-                .map_or(AlarmWait::UntilPublication, |at| {
-                    AlarmWait::Until(clock.wall_deadline(at))
-                }),
-            LastAlarmPublication::Failed { at } => {
-                next_mark_deadline(clock.as_ref(), at.unix_millis())
-            }
-        });
+        let deadline = schedule.deadline(*publication.borrow_and_update(), wall_deadline);
         tokio::select! {
             () = stop.cancelled() => return,
             changed = publication.changed() => {
                 if changed.is_err() { return; }
-                retry = None;
+                schedule.publication_changed();
             },
             () = async {
                 match deadline {
-                    AlarmWait::Until(deadline) => clock.sleep_until(deadline).await,
-                    AlarmWait::UntilPublication => std::future::pending().await,
+                    AlarmDeadline::Until(deadline) => clock.sleep_until(deadline).await,
+                    AlarmDeadline::UntilPublication => std::future::pending().await,
                 }
             } => {
                 // A gated test clock's moves exclude this drive from before it
@@ -77,8 +71,8 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                     () = stop.cancelled() => return,
                     guard = async {
                         runtime
-                            .pause_points()
-                            .reached_engine(collaboration_central_core::PausePoint::BeforeDriveGuard, "driver")
+                            .runtime().pause_points()
+                            .reached_engine(fleet_runtime::PausePoint::BeforeDriveGuard, "driver")
                             .await;
                         clock.drive_guard().await
                     } => guard,
@@ -87,31 +81,23 @@ async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: Cancel
                     () = stop.cancelled() => return,
                     result = runtime.after_event() => result,
                 };
-                match result {
+                match &result {
                     Ok(_) => {
                         #[cfg(feature = "test-support")]
-                        runtime.mark_alarm_completed();
-                        retry = None;
+                        runtime.runtime().mark_alarm_completed();
                     }
                     Err(error) => {
                         tracing::warn!(?error, "central alarm drive failed; retrying");
                         #[cfg(feature = "test-support")]
-                        runtime.mark_alarm_failed(format!("{error:?}"));
-                        retry = Some(next_mark_deadline(clock.as_ref(), clock.utc_now().timestamp_millis()));
+                        runtime.runtime().mark_alarm_failed(format!("{error:?}"));
                     }
                 }
+                schedule.settle_drive(
+                    &result,
+                    || SyncTime::from_unix_millis(clock.utc_now().timestamp_millis()),
+                    wall_deadline,
+                );
             }
         }
     }
-}
-
-fn next_mark_deadline(clock: &dyn RuntimeClock, now: i64) -> AlarmWait {
-    central_storage::alarm_publication_time(Some(now), now)
-        .ok()
-        .flatten()
-        .map_or(AlarmWait::UntilPublication, |millis| {
-            AlarmWait::Until(
-                clock.wall_deadline(runtime_primitives::SyncTime::from_unix_millis(millis)),
-            )
-        })
 }
