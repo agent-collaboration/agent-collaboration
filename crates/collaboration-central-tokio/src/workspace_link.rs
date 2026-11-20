@@ -16,10 +16,10 @@ use central_link_protocol::{
     encode_text,
 };
 use collaboration_central_core::{
-    MachineLinkRequestAuthority, MailAckIgnored, MailAckSettlement, ValidatedMachineConnection,
-    WELCOME_PAGE_SIZE, WelcomeDeliveryPage, WindowedDeliveryDecision, WorkspaceCaller,
-    WorkspaceRuntime,
+    MachineLinkRequestAuthority, MailAckIgnored, MailAckSettlement, WELCOME_PAGE_SIZE,
+    WelcomeDeliveryPage, WindowedDeliveryDecision, WorkspaceRuntime,
 };
+use fleet_contracts::{ValidatedMachineConnection, WorkspaceCaller};
 use fleet_identity_protocol::OrganizationId;
 use futures_util::FutureExt;
 use std::sync::Arc;

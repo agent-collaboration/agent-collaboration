@@ -1,14 +1,16 @@
 //! Live request admission. Callers hold the central turn through the admitted effect.
-use crate::{WorkspaceCaller, WorkspaceRuntime};
+use crate::WorkspaceAccess;
 use central_storage::{SqlValue, Statement, StoreFailure};
+use fleet_contracts::{LiveMachineConnection, WorkspaceCaller};
 use fleet_runtime_ports::stored_values::{column, json, string};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{RefusalReason, WorkspaceId};
 
-impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub(crate) async fn admit_workspace(
+impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stores> {
+    pub async fn admit_workspace(
         &self,
+        live: &impl LiveMachineConnection,
         caller: &WorkspaceCaller,
         workspace: Option<&WorkspaceId>,
     ) -> Result<Result<(), RefusalReason>, StoreFailure> {
@@ -17,8 +19,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         {
             return Ok(Err(RefusalReason::MachineRevoked));
         }
-        if self
-            .restore_machine_connection_held(&caller.connection().attachment())
+        if live
+            .restore_held(&caller.connection().attachment())
             .await?
             .is_err()
         {
@@ -54,7 +56,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         Ok(Ok(()))
     }
     /// The workspaces the admitted caller's machine may use. Call after admission.
-    pub(crate) async fn allowed_workspaces(
+    pub async fn allowed_workspaces(
         &self,
         caller: &WorkspaceCaller,
     ) -> Result<Vec<WorkspaceId>, StoreFailure> {

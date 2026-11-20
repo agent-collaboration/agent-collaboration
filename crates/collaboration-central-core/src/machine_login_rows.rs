@@ -1,12 +1,13 @@
 //! Decode owning machine/login rows into the pure policy's checked facts.
 use crate::{
-    identity_contract::{AllowedWorkspaces, ClientId, EnrollmentRevocationReason},
+    identity_contract::{AllowedWorkspaces, EnrollmentRevocationReason},
     machine_login_row_values as values,
     organization_authority::machine_login::{
         EnrollmentGeneration, MachineRow, MachineState, StoredEnrollment, StoredEnrollmentState,
     },
 };
 use central_storage::{ReadOutcome, SqlValue, StoreFailure};
+use fleet_contracts::ClientId;
 use fleet_runtime_ports::{
     stored_values::{json, string},
     workspace_decode_error::corrupt,

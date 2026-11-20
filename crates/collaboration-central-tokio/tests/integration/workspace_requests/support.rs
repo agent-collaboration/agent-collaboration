@@ -3,7 +3,8 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
+
 use collaboration_central_tokio::TokioWorkspaceHost;
 use std::sync::Arc;
 use workspace_model as m;
@@ -460,8 +461,7 @@ pub async fn admitted_organization<C: runtime_primitives::Clock + ?Sized>(
     host: &TokioWorkspaceHost,
     organization: &fleet_identity_protocol::OrganizationId,
     clock: &C,
-) -> collaboration_central_conformance::ConformanceResult<collaboration_central_core::WorkspaceCaller>
-{
+) -> collaboration_central_conformance::ConformanceResult<fleet_contracts::WorkspaceCaller> {
     let now = clock.now().unix_millis().div_euclid(1000);
     let runtime = host.central(organization).await?;
     runtime
@@ -485,7 +485,7 @@ pub async fn admitted_organization<C: runtime_primitives::Clock + ?Sized>(
         .admit_machine_connection(&token)
         .await?
         .map_err(|_| "fixture machine admission refused")?;
-    let caller = collaboration_central_core::WorkspaceCaller::new(
+    let caller = fleet_contracts::WorkspaceCaller::new(
         connection,
         m::Caller::Session(workspace_ids::SessionRef {
             machine_id: id(2),

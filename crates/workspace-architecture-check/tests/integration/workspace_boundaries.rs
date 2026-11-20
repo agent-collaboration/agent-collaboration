@@ -16,6 +16,8 @@ pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
             "central-storage",
             "fleet-identity-protocol",
             "fleet-runtime-ports",
+            "message-board",
+            "workspace-ids",
             "workspace-model",
         ],
     ),

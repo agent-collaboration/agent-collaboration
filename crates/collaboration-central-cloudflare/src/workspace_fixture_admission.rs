@@ -23,8 +23,7 @@ pub(super) async fn dispatch(
             let result = match runtime.admit_machine_connection(&input.token).await {
                 Err(failure) => Err(failure),
                 Ok(Ok(connection)) => {
-                    match collaboration_central_core::WorkspaceCaller::new(connection, input.caller)
-                    {
+                    match fleet_contracts::WorkspaceCaller::new(connection, input.caller) {
                         Ok(caller) => runtime.request(&caller, input.request).await,
                         Err(reason) => Ok(workspace_model::WorkspaceReply {
                             result: workspace_model::WorkspaceResult::Refused(reason),
@@ -48,8 +47,7 @@ pub(super) async fn dispatch(
             let result = match runtime.admit_machine_connection(&input.token).await {
                 Err(failure) => Err(failure),
                 Ok(Ok(connection)) => {
-                    match collaboration_central_core::WorkspaceCaller::new(connection, input.caller)
-                    {
+                    match fleet_contracts::WorkspaceCaller::new(connection, input.caller) {
                         Ok(caller) => runtime.request_central(&caller, input.request).await,
                         Err(_) => Ok(CentralMailResult::Refused(CentralMailRefusal::Workspace(
                             workspace_model::RefusalReason::MachineRevoked,
@@ -72,11 +70,9 @@ pub(super) async fn admitted_caller(
     runtime: &super::super::OrgRuntime,
     token: &str,
     caller: workspace_model::Caller,
-) -> Result<Option<collaboration_central_core::WorkspaceCaller>> {
+) -> Result<Option<fleet_contracts::WorkspaceCaller>> {
     match runtime.admit_machine_connection(token).await {
-        Ok(Ok(connection)) => {
-            Ok(collaboration_central_core::WorkspaceCaller::new(connection, caller).ok())
-        }
+        Ok(Ok(connection)) => Ok(fleet_contracts::WorkspaceCaller::new(connection, caller).ok()),
         Ok(Err(_)) => Ok(None),
         Err(failure) => Err(worker::Error::RustError(failure.to_string())),
     }

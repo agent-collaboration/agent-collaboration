@@ -9,12 +9,12 @@ async fn anyone_takes_the_lead_and_a_lead_hands_it_over() {
     let creator = lead_identity(&f, &project).await;
     let mut taker_session = session(&f.caller);
     taker_session.session_id = "lead-taker".to_owned().try_into().unwrap();
-    let taker = collaboration_central_core::WorkspaceCaller::new(
+    let taker = fleet_contracts::WorkspaceCaller::new(
         f.caller.connection().clone(),
         m::Caller::Session(taker_session.clone()),
     )
     .unwrap();
-    let person = collaboration_central_core::WorkspaceCaller::new(
+    let person = fleet_contracts::WorkspaceCaller::new(
         f.caller.connection().clone(),
         m::Caller::Person {
             machine_id: f.caller.caller().machine_id().clone(),

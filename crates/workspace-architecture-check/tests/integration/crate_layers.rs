@@ -12,7 +12,7 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 34] = [
+const LAYER_POLICY: [(&str, &[&str]); 35] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -49,6 +49,7 @@ const LAYER_POLICY: [(&str, &[&str]); 34] = [
             "fleet-identity-protocol",
             "fleet-runtime-ports",
             "fleet-runtime",
+            "fleet-workspace-access",
             "message-board",
             "workspace-ids",
             "workspace-model",
@@ -99,6 +100,16 @@ const LAYER_POLICY: [(&str, &[&str]); 34] = [
             "fleet-identity-protocol",
             "fleet-runtime-ports",
             "workspace-ids",
+            "workspace-model",
+        ],
+    ),
+    (
+        "fleet-workspace-access",
+        &[
+            "central-storage",
+            "fleet-contracts",
+            "fleet-runtime",
+            "fleet-runtime-ports",
             "workspace-model",
         ],
     ),

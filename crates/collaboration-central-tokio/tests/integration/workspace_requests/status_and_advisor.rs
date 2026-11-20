@@ -148,7 +148,7 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
         vec![&vec![text(&new), SqlValue::Null]]
     );
     let mut nonlead = f.caller.clone();
-    nonlead = collaboration_central_core::WorkspaceCaller::new(
+    nonlead = fleet_contracts::WorkspaceCaller::new(
         nonlead.connection().clone(),
         m::Caller::Session(second),
     )

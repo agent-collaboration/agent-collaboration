@@ -21,6 +21,7 @@ central-engine-model.workspace = true
 fleet-contracts.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-runtime.workspace = true
+fleet-workspace-access.workspace = true
 agent-automation = {path="../agent-automation",version="0.1.149"}
 workspace-model.workspace = true
 workspace-ids.workspace = true

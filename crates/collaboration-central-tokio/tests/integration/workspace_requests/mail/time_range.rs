@@ -73,7 +73,7 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
     let mut new_caller = fixture.caller.clone();
     let mut new_session = session(&fixture.caller);
     new_session.session_id = "range-new-caller".to_owned().try_into().unwrap();
-    new_caller = collaboration_central_core::WorkspaceCaller::new(
+    new_caller = fleet_contracts::WorkspaceCaller::new(
         new_caller.connection().clone(),
         workspace_model::Caller::Session(new_session),
     )

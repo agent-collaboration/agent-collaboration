@@ -62,6 +62,6 @@ pub(super) async fn machine_rows(f: &Fixture) -> Result<Vec<Vec<Vec<SqlValue>>>>
     }
     Ok(rows)
 }
-pub(super) async fn caller(f: &Fixture) -> Result<collaboration_central_core::WorkspaceCaller> {
+pub(super) async fn caller(f: &Fixture) -> Result<fleet_contracts::WorkspaceCaller> {
     f.machine_caller("setup-machine-session").await
 }

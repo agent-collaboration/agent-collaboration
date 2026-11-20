@@ -4,7 +4,8 @@
 #![cfg(test)]
 use super::support::*;
 use central_storage::SqlValue;
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
+
 use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use workspace_model as m;

@@ -5,13 +5,13 @@ use fleet_runtime_ports::workspace_decode_error::corrupt;
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ListedItem {
+pub struct ListedItem {
     pub item: workspace_model::ItemRef,
     pub position: workspace_model::ChangePosition,
 }
 
 #[derive(Default)]
-pub(crate) struct WorkspaceRows {
+pub struct WorkspaceRows {
     pub areas: Vec<workspace_model::Area>,
     pub projects: Vec<workspace_model::Project>,
     pub initiatives: Vec<workspace_model::Initiative>,
@@ -124,5 +124,17 @@ impl WorkspaceRows {
             }
         }
         Ok(rows)
+    }
+}
+
+impl WorkspaceRows {
+    pub fn created_position(
+        &self,
+        item: &workspace_model::ItemRef,
+    ) -> Result<workspace_model::ChangePosition, StoreFailure> {
+        self.created_positions
+            .get(item)
+            .copied()
+            .ok_or_else(|| corrupt("created position"))
     }
 }

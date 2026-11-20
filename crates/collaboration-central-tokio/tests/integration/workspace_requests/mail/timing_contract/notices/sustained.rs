@@ -19,7 +19,7 @@ pub(super) async fn exercise_continued_activity(
         let mut caller = f.caller.clone();
         let mut address = session(&caller);
         address.session_id = format!("sustained-cadence-{index}").try_into().unwrap();
-        caller = collaboration_central_core::WorkspaceCaller::new(
+        caller = fleet_contracts::WorkspaceCaller::new(
             caller.connection().clone(),
             m::Caller::Session(address.clone()),
         )

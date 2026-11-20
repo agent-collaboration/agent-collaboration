@@ -347,7 +347,7 @@ async fn host_stamped_person_uses_the_same_allowance_and_has_a_distinct_typed_id
     let f = Fixture::new().await;
     let area = f.area(830).await;
     let mut person = f.caller.clone();
-    person = collaboration_central_core::WorkspaceCaller::new(
+    person = fleet_contracts::WorkspaceCaller::new(
         person.connection().clone(),
         m::Caller::Person {
             machine_id: f.caller.caller().machine_id().clone(),

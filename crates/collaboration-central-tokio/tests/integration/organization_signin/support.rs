@@ -233,10 +233,7 @@ impl Fixture {
         self.keys.shutdown().await?;
         Ok(())
     }
-    pub async fn machine_caller(
-        &self,
-        session: &str,
-    ) -> Result<collaboration_central_core::WorkspaceCaller> {
+    pub async fn machine_caller(&self, session: &str) -> Result<fleet_contracts::WorkspaceCaller> {
         let token = signed::machine_token(
             A,
             INSTALLATION,
@@ -250,7 +247,7 @@ impl Fixture {
             .admit_machine_connection(&token)
             .await?
             .map_err(|_| "machine fixture admission refused")?;
-        Ok(collaboration_central_core::WorkspaceCaller::new(
+        Ok(fleet_contracts::WorkspaceCaller::new(
             connection,
             workspace_model::Caller::Session(workspace_ids::SessionRef {
                 machine_id: INSTALLATION.to_owned().try_into()?,

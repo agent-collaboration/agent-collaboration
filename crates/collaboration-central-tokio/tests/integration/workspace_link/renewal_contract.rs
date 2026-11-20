@@ -13,9 +13,9 @@ use central_link_protocol::{
 use central_storage::{SqlValue, Statement};
 use collaboration_central_conformance::{ConformanceResult as Result, signin_fixtures as signed};
 use collaboration_central_core::{
-    MachineLoginControl, ValidatedMachineConnection, identity_contract::MachineTokenDecision,
-    machine_login_control,
+    MachineLoginControl, identity_contract::MachineTokenDecision, machine_login_control,
 };
+use fleet_contracts::ValidatedMachineConnection;
 use futures_util::StreamExt;
 use reqwest_websocket::{CloseCode, Message, WebSocket};
 use serde_json::json;

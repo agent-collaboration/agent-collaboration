@@ -5,7 +5,6 @@ use crate::{
     central_mail_store::{alarm_update, applied, timestamp},
     notification_windows::{parse, parse_time},
     workspace_notice_plans::DrainResult,
-    workspace_row_codec::WorkspaceRows,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
@@ -14,6 +13,7 @@ use fleet_runtime_ports::{
     stored_values::{column, string},
     workspace_decode_error::corrupt,
 };
+use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// The caller holds central admission through this deadline and the workspace batch.

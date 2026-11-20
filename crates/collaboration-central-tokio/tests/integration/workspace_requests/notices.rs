@@ -1,6 +1,7 @@
 //! Native notice decisions and durable drain coordination.
 use super::{SqlValue, Statement, support::*};
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
+
 use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;
 use workspace_model as m;
@@ -12,7 +13,7 @@ async fn joined_observer(
     let mut observer = f.caller.clone();
     let mut address = session(&observer);
     address.session_id = "notice-observer".to_owned().try_into().unwrap();
-    observer = collaboration_central_core::WorkspaceCaller::new(
+    observer = fleet_contracts::WorkspaceCaller::new(
         observer.connection().clone(),
         m::Caller::Session(address),
     )

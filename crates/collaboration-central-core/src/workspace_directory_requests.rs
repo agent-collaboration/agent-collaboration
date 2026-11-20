@@ -1,9 +1,10 @@
 //! The organization's workspace directory over the machine request path:
 //! create, rename, archive, show and list. The directory is central's own
 //! `workspaces` table, not a workspace store.
+use crate::WorkspaceRuntime;
 use crate::workspace_request_gate::{reply, store_result};
-use crate::{WorkspaceCaller, WorkspaceRuntime};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
@@ -89,7 +90,11 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     match directory {
         DirectoryRequest::Show { workspace_id } => {
             let _central = runtime.execution.take_central_turn().await;
-            if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace_id)).await? {
+            if let Err(refusal) = runtime
+                .access()
+                .admit_workspace(runtime, caller, Some(workspace_id))
+                .await?
+            {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
             let workspace = crate::workspace_directory_rows::read_by_id(
@@ -108,7 +113,11 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             limit,
         } => {
             let _central = runtime.execution.take_central_turn().await;
-            if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+            if let Err(refusal) = runtime
+                .access()
+                .admit_workspace(runtime, caller, None)
+                .await?
+            {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
             let workspaces: Vec<m::Workspace> =
@@ -117,7 +126,7 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
                     .into_iter()
                     .map(Into::into)
                     .collect();
-            let allowed = runtime.allowed_workspaces(caller).await?;
+            let allowed = runtime.access().allowed_workspaces(caller).await?;
             Ok(reply(
                 match workspace_rules::workspace_list_answer(
                     query,
@@ -159,7 +168,11 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
     // is checked after replay, so a retried archive replays its answer instead
     // of being refused.
     let _turn = runtime.execution.take_central_turn().await;
-    if let Err(refusal) = runtime.admit_workspace(caller, None).await? {
+    if let Err(refusal) = runtime
+        .access()
+        .admit_workspace(runtime, caller, None)
+        .await?
+    {
         return Ok(reply(m::WorkspaceResult::Refused(refusal)));
     }
     let now = runtime.execution.now()?;
@@ -171,7 +184,7 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
         }
         _ => fleet_runtime::workspace_request_log::digest(&request.operation)?,
     };
-    let actor_plan = runtime.prepare_identity(&identity, now).await?;
+    let actor_plan = runtime.access().prepare_identity(&identity, now).await?;
     let actor = actor_plan.actor;
     let logged = runtime
         .execution
@@ -219,7 +232,11 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
             workspace_id,
             change,
         } => {
-            if let Err(refusal) = runtime.admit_workspace(caller, Some(workspace_id)).await? {
+            if let Err(refusal) = runtime
+                .access()
+                .admit_workspace(runtime, caller, Some(workspace_id))
+                .await?
+            {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
             let current: m::Workspace = crate::workspace_directory_rows::read_by_id(

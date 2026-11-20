@@ -43,7 +43,7 @@ async fn request_status_reads_only_its_scope_and_only_for_its_original_caller() 
     );
 
     // Give the second session a real actor on the same machine and access to the same workspace.
-    let other_caller = collaboration_central_core::WorkspaceCaller::new(
+    let other_caller = fleet_contracts::WorkspaceCaller::new(
         caller.connection().clone(),
         m::Caller::Session(workspace_ids::SessionRef {
             machine_id: caller.caller().machine_id().clone(),

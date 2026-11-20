@@ -62,7 +62,7 @@ async fn creator_window(fixture: &Fixture) -> SqlValue {
     let mut observer = fixture.caller.clone();
     let mut address = session(&observer);
     address.session_id = "row-use-observer".to_owned().try_into().unwrap();
-    observer = collaboration_central_core::WorkspaceCaller::new(
+    observer = fleet_contracts::WorkspaceCaller::new(
         observer.connection().clone(),
         m::Caller::Session(address),
     )

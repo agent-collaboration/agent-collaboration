@@ -1,6 +1,6 @@
 //! Settle one recipient acknowledgement against the owning message row.
 use crate::{
-    MachineConnectionAttachment, WorkspaceRuntime,
+    WorkspaceRuntime,
     central_mail_rows::timestamp,
     direct_message_rows::refusal_text,
     engine::{
@@ -17,6 +17,7 @@ use central_engine_model::{InstanceKey, Machine, TransitionError};
 use central_storage::{
     AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
+use fleet_contracts::MachineConnectionAttachment;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},

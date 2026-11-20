@@ -97,10 +97,12 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     Err(refusal) => return Ok(Err(refusal)),
                 };
                 let holder = match lead {
-                    Some(reference) => match self.resolve_actor_ref(reference, actor).await? {
-                        Ok(holder) => holder,
-                        Err(refusal) => return Ok(Err(refusal)),
-                    },
+                    Some(reference) => {
+                        match self.access().resolve_actor_ref(reference, actor).await? {
+                            Ok(holder) => holder,
+                            Err(refusal) => return Ok(Err(refusal)),
+                        }
+                    }
                     None => actor.clone(),
                 };
                 m::WorkspaceCommand::Organization(m::OrganizationCommand::CreateProject {
@@ -148,7 +150,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 role,
                 holder,
             } => {
-                let holder = match self.resolve_actor_ref(holder, actor).await? {
+                let holder = match self.access().resolve_actor_ref(holder, actor).await? {
                     Ok(holder) => holder,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
@@ -170,7 +172,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 role,
                 holder,
             } => {
-                let holder = match self.resolve_actor_ref(holder, actor).await? {
+                let holder = match self.access().resolve_actor_ref(holder, actor).await? {
                     Ok(holder) => holder,
                     Err(refusal) => return Ok(Err(refusal)),
                 };
@@ -222,7 +224,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 actor: target,
                 role,
             } => {
-                if !self.named_actor(target).await? {
+                if !self.access().named_actor(target).await? {
                     return Ok(Err(m::RefusalReason::UnknownActor {
                         actor_identity_id: target.clone(),
                     }));
@@ -448,7 +450,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     ) -> Result<Result<(), m::RefusalReason>, StoreFailure> {
         for addressee in addressees {
             if let m::Addressee::Actor { actor_identity_id } = addressee
-                && !self.named_actor(actor_identity_id).await?
+                && !self.access().named_actor(actor_identity_id).await?
             {
                 return Ok(Err(m::RefusalReason::UnknownActor {
                     actor_identity_id: actor_identity_id.clone(),

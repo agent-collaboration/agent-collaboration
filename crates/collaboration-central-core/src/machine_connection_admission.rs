@@ -1,14 +1,14 @@
 //! The organization turn owns read-only connection admission and restoration.
 use crate::{
     WorkspaceRuntime,
-    identity_contract::MachineConnectionRefusal,
-    machine_connection::{
-        Admission, MachineConnectionAttachment, ValidatedMachineConnection, validate_live,
-        validate_shape,
-    },
+    machine_connection::{Admission, validate_live, validate_shape},
     organization_authority::machine_login::{EnrollmentFacts, EnrollmentQuery},
 };
 use central_storage::StoreFailure;
+use fleet_contracts::{
+    LiveMachineConnection, MachineConnectionAttachment, MachineConnectionRefusal,
+    ValidatedMachineConnection,
+};
 use fleet_identity_protocol::EnrollmentId;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::MachineId;
@@ -61,7 +61,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         let facts = self
             .connection_facts(verified.machine_id(), verified.enrollment_id())
             .await?;
-        let attachment = MachineConnectionAttachment::from_verified(&verified);
+        let attachment = attachment_from_verified(&verified);
         validate_live(
             &attachment,
             self.execution.organization(),
@@ -133,7 +133,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         if facts.machine.is_none() {
             return Ok(Err(Refusal::EnrollmentNotActive));
         }
-        let renewed = MachineConnectionAttachment::from_verified(&verified);
+        let renewed = attachment_from_verified(&verified);
         Ok(
             match validate_live(&renewed, self.execution.organization(), &facts, time.now_ms)? {
                 Ok(connection) => Ok(connection),
@@ -256,3 +256,28 @@ pub enum MachineTokenRenewalRefusal {
 }
 
 type Renewal = Result<Result<ValidatedMachineConnection, MachineTokenRenewalRefusal>, StoreFailure>;
+
+impl<Host: CentralStore, Stores: WorkspaceStores> LiveMachineConnection
+    for WorkspaceRuntime<Host, Stores>
+{
+    async fn restore_held(
+        &self,
+        attachment: &MachineConnectionAttachment,
+    ) -> Result<Result<(), MachineConnectionRefusal>, StoreFailure> {
+        self.restore_machine_connection_held(attachment)
+            .await
+            .map(|admission| admission.map(|_| ()))
+    }
+}
+
+fn attachment_from_verified(
+    verified: &crate::machine_token::VerifiedMachineToken,
+) -> MachineConnectionAttachment {
+    MachineConnectionAttachment::from_token_claims(
+        verified.organization_id().clone(),
+        verified.machine_id().clone(),
+        verified.enrollment_id().clone(),
+        verified.client_id().clone(),
+        verified.effective_expires_at(),
+    )
+}

@@ -1,6 +1,7 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
-use crate::{WorkspaceCaller, WorkspaceRuntime, central_mail_store};
+use crate::{WorkspaceRuntime, central_mail_store};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     stored_values::{json, string},
@@ -33,7 +34,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     ) -> Result<mail::CentralMailResult, StoreFailure> {
         use mail::{CentralMailRefusal as Refusal, CentralMailResult as Result};
         let _turn = self.execution.take_central_turn().await;
-        if let Err(reason) = self.admit_workspace(caller, None).await? {
+        if let Err(reason) = self.access().admit_workspace(self, caller, None).await? {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
         let identity = match caller.caller() {
@@ -57,7 +58,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             ))
             .await?;
         if let Some(row) = rows.rows.first() {
-            let actor = self.resolve_identity(&identity).await?;
+            let actor = self.access().resolve_identity(&identity).await?;
             if string(&rows, row, "caller")? != actor.as_str()
                 || string(&rows, row, "content_digest")? != digest
             {
@@ -100,7 +101,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         if let Some(reason) = crate::central_mail_time::refusal(&request.operation, now) {
             return Ok(Result::Refused(reason));
         }
-        let actor = self.resolve_identity(&identity).await?;
+        let actor = self.access().resolve_identity(&identity).await?;
         let mut delivery_ready = None;
         let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
             &request.operation
@@ -111,15 +112,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 let encoded =
                     serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
                 let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
-                let mut statements = vec![fleet_runtime_ports::guarded_statements::exact(
-                    "UPDATE access_actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
-                    vec![
-                        fleet_runtime_ports::guarded_statements::text(cadence_text),
-                        fleet_runtime_ports::guarded_statements::text(
-                            central_mail_store::timestamp(now),
-                        ),
-                        fleet_runtime_ports::guarded_statements::text(&actor),
-                    ],
+                let mut statements = vec![fleet_workspace_access::plan_notice_cadence(
+                    &actor,
+                    cadence_text,
+                    central_mail_store::timestamp(now),
                 )];
                 // Recompute the pending deadline from now on the new epoch cadence;
                 // the actual policy and deadline writes share this request's ledger batch.

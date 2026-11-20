@@ -1,5 +1,6 @@
 use super::*;
-use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::WorkspaceCaller;
+
 use fleet_runtime::PausePoint;
 async fn held_pair(
     f: &Fixture,
@@ -99,7 +100,7 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
     let mut second = f.caller.clone();
     let mut next_session = session(&second);
     next_session.session_id = "next-lead".to_owned().try_into().unwrap();
-    second = collaboration_central_core::WorkspaceCaller::new(
+    second = fleet_contracts::WorkspaceCaller::new(
         second.connection().clone(),
         m::Caller::Session(next_session),
     )

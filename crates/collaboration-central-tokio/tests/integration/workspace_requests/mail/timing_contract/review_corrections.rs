@@ -4,7 +4,7 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     let mut recipient = f.caller.clone();
     let mut address = session(&recipient);
     address.session_id = "shorter-cadence".to_owned().try_into().unwrap();
-    recipient = collaboration_central_core::WorkspaceCaller::new(
+    recipient = fleet_contracts::WorkspaceCaller::new(
         recipient.connection().clone(),
         m::Caller::Session(address.clone()),
     )
@@ -216,7 +216,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     let mut caller = f.caller.clone();
     let mut address = session(&caller);
     address.session_id = "late-drain-recipient".to_owned().try_into().unwrap();
-    caller = collaboration_central_core::WorkspaceCaller::new(
+    caller = fleet_contracts::WorkspaceCaller::new(
         caller.connection().clone(),
         m::Caller::Session(address.clone()),
     )
@@ -368,7 +368,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
     let mut caller = f.caller.clone();
     let mut address = session(&caller);
     address.session_id = "rollback-cadence".to_owned().try_into().unwrap();
-    caller = collaboration_central_core::WorkspaceCaller::new(
+    caller = fleet_contracts::WorkspaceCaller::new(
         caller.connection().clone(),
         m::Caller::Session(address.clone()),
     )

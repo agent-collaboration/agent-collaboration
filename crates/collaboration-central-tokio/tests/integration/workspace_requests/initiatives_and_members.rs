@@ -137,7 +137,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
     let mut other = f.caller.clone();
     let mut other_session = session(&other);
     other_session.session_id = "other-participant".to_owned().try_into().unwrap();
-    other = collaboration_central_core::WorkspaceCaller::new(
+    other = fleet_contracts::WorkspaceCaller::new(
         other.connection().clone(),
         m::Caller::Session(other_session),
     )

@@ -1,6 +1,6 @@
 //! Select a page of still-deliverable messages for one live machine link.
 use crate::{
-    MachineConnectionAttachment, WorkspaceRuntime,
+    WorkspaceRuntime,
     central_mail_records::decode_messages,
     central_mail_rows::{encode, timestamp},
     direct_message_rows::failure_text,
@@ -11,6 +11,7 @@ use crate::{
 };
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
+use fleet_contracts::MachineConnectionAttachment;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},

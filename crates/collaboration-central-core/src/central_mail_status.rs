@@ -1,10 +1,11 @@
 //! A sender reads the owning row of their direct message.
 use crate::{
-    WorkspaceCaller, WorkspaceRuntime,
+    WorkspaceRuntime,
     central_mail_rows::encode,
     direct_message_rows::{DirectMessageStatus, decode_direct_message},
 };
 use central_storage::{Statement, StoreFailure};
+use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{guarded_statements::text, workspace_decode_error::corrupt};
 use workspace_ids::MessageId;
@@ -20,10 +21,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         message_id: &MessageId,
     ) -> Result<Result<MessageStatus, RefusalReason>, StoreFailure> {
         let _turn = self.execution.take_central_turn().await;
-        if let Err(refusal) = self.admit_workspace(caller, None).await? {
+        if let Err(refusal) = self.access().admit_workspace(self, caller, None).await? {
             return Ok(Err(refusal));
         }
-        let Some(actor) = self.existing_caller_actor(caller.caller()).await? else {
+        let Some(actor) = self.access().existing_caller_actor(caller.caller()).await? else {
             return Ok(Ok(MessageStatus::NotFound {}));
         };
         let rows = self.execution.statement_host().read(Statement {

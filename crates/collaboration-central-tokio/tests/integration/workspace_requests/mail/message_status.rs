@@ -40,7 +40,7 @@ async fn only_the_original_sender_can_read_direct_message_status() {
         session_id: "status-other-session".to_owned().try_into().unwrap(),
         ..session(&fixture.caller)
     };
-    let other_caller = collaboration_central_core::WorkspaceCaller::new(
+    let other_caller = fleet_contracts::WorkspaceCaller::new(
         fixture.caller.connection().clone(),
         m::Caller::Session(other_session),
     )
