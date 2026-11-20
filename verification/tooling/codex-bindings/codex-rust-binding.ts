@@ -302,6 +302,10 @@ function rawJsonDecoderPath(
     case "enum":
     case "nonEmptyString":
       return undefined;
+    default: {
+      const unhandledShape: never = shape;
+      throw new Error(`${path}: unhandled schema shape ${JSON.stringify(unhandledShape)}`);
+    }
   }
 }
 
