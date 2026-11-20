@@ -6,7 +6,7 @@ use workspace_model::WorkspaceId;
 /// the workspaces it affected; a failure found before any workspace (a central
 /// listing read) names none.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum LegacyUnitOutcome {
+pub enum LegacyUnitOutcome {
     Done,
     RemoteUnavailable {
         workspaces: Vec<WorkspaceId>,
@@ -46,7 +46,7 @@ impl From<StoreFailure> for LegacyUnitOutcome {
     }
 }
 impl LegacyUnitOutcome {
-    pub(crate) fn batch(result: Result<BatchOutcome, StoreFailure>) -> Result<(), Self> {
+    pub fn batch(result: Result<BatchOutcome, StoreFailure>) -> Result<(), Self> {
         match result {
             Ok(BatchOutcome::Applied { .. }) => Ok(()),
             Ok(BatchOutcome::GuardFailed { .. }) => Err(Self::Superseded),
@@ -60,7 +60,7 @@ impl LegacyUnitOutcome {
             Err(failure) => Err(failure.into()),
         }
     }
-    pub(crate) fn failure_class(&self) -> Option<ItemFailureClass> {
+    pub fn failure_class(&self) -> Option<ItemFailureClass> {
         match self {
             Self::RemoteUnavailable { .. } => Some(ItemFailureClass::OtherStoreUnavailable),
             Self::Corrupt { column, .. } => Some(ItemFailureClass::CorruptRow {
@@ -77,7 +77,7 @@ impl LegacyUnitOutcome {
         }
     }
     /// The workspaces a recorded failure affected, for its observation.
-    pub(crate) fn affected_workspaces(&self) -> &[WorkspaceId] {
+    pub fn affected_workspaces(&self) -> &[WorkspaceId] {
         match self {
             Self::RemoteUnavailable { workspaces }
             | Self::Corrupt { workspaces, .. }
@@ -87,7 +87,7 @@ impl LegacyUnitOutcome {
         }
     }
     /// Names the one workspace a per-workspace drain failure came from.
-    pub(crate) fn in_workspace(mut self, workspace: &WorkspaceId) -> Self {
+    pub fn in_workspace(mut self, workspace: &WorkspaceId) -> Self {
         if let Self::RemoteUnavailable { workspaces }
         | Self::Corrupt { workspaces, .. }
         | Self::Rejected { workspaces }
@@ -99,7 +99,7 @@ impl LegacyUnitOutcome {
         self
     }
     /// Preserve the old request entry's result; the engine keeps the richer origin.
-    pub(crate) fn into_request_failure(self) -> StoreFailure {
+    pub fn into_request_failure(self) -> StoreFailure {
         match self {
             Self::Corrupt { column, .. } => {
                 fleet_runtime_ports::workspace_decode_error::corrupt(&column)
@@ -115,7 +115,7 @@ impl LegacyUnitOutcome {
     }
     /// Central outage wins. Then the first recorded failure keeps its class and
     /// gains every other failing workspace; uncharged outcomes are not failures.
-    pub(crate) fn combine(self, next: Self) -> Self {
+    pub fn combine(self, next: Self) -> Self {
         match (self, next) {
             (down @ Self::CentralDown(_), _) | (_, down @ Self::CentralDown(_)) => down,
             (mut first, second) if first.failure_class().is_some() => {

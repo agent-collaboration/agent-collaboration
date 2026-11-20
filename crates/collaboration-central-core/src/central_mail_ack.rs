@@ -3,21 +3,17 @@ use crate::{
     WorkspaceRuntime,
     central_mail_rows::timestamp,
     direct_message_rows::refusal_text,
-    engine::{
-        handle::HandleOutcome,
-        machines::{
-            direct_message::{DirectMessage, DirectMessageRefusal, Event},
-            direct_message_store::DirectMessageStore,
-        },
-        port::Engine,
-        source::{EventSource, SourcePolicy},
+    engine::machines::{
+        direct_message::{DirectMessage, DirectMessageRefusal, Event},
+        direct_message_store::DirectMessageStore,
     },
 };
-use central_engine_model::{InstanceKey, Machine, TransitionError};
+use central_engine_model::{InstanceKey, TransitionError};
 use central_storage::{
     AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
 use fleet_contracts::MachineConnectionAttachment;
+use fleet_engine::{Engine, HandleOutcome};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
@@ -40,14 +36,6 @@ pub enum MailAckIgnored {
     WrongMachine,
     AlreadySettled,
     MachineAuthorityLapsed,
-}
-
-struct AckSource;
-
-impl<M: Machine> EventSource<M> for AckSource {
-    fn policy(&self) -> SourcePolicy {
-        SourcePolicy::Request
-    }
 }
 
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
@@ -125,11 +113,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         answer: DeliveryAnswer,
     ) -> Result<MailAckSettlement, StoreFailure> {
         let settlement = Engine::new(self)
-            .handle::<DirectMessage, _, _>(
+            .handle_ack::<DirectMessage, _>(
                 &DirectMessageStore(self),
                 InstanceKey(message_id.to_string()),
                 Event::Ack(answer),
-                &AckSource,
             )
             .await;
         match settlement {

@@ -1,19 +1,20 @@
 //! Composes the retained engine with the runtime's execution capabilities.
-use crate::engine::{
-    legacy_units::LegacyUnitOutcome,
-    port::{Engine, EngineHost},
-};
-use crate::{MailDeliveryReady, WorkspaceRuntime};
+use crate::WorkspaceRuntime;
+use crate::workspace_runtime::engine_dispatch::{CoreTimedRows, WholeKind};
 use central_engine_model::EngineTime;
-use central_storage::{GuardedStatement, StoreFailure};
+use central_storage::StoreFailure;
 use fleet_contracts::{
-    AlarmNotPublished, CentralObservation, EventCompletion, EventCompletionHook,
+    AlarmNotPublished, CentralObservation, EngineSubject, EventCompletion, LegacyUnitOutcome,
+    MailDeliveryReady, ObservedControl,
 };
-use fleet_runtime::{DueBatchState, TurnGuard};
+use fleet_engine::{Engine, EngineHost, WholeUnit, WholeUnitOutcome};
+use fleet_runtime::DueBatchState;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 
 impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> {
     type Host = H;
+    type Timed = CoreTimedRows;
+    type WholeKind = WholeKind;
     fn host(&self) -> &H {
         self.execution.statement_host()
     }
@@ -35,17 +36,26 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
     async fn organization_is_provisioned(&self) -> Result<bool, StoreFailure> {
         self.alarm_organization_is_provisioned().await
     }
-    async fn plan_due_windows(
+    fn timed_rows(&self) -> &CoreTimedRows {
+        &CoreTimedRows
+    }
+    fn alarm_inputs(&self) -> &'static str {
+        crate::engine::query_registry::ALARM_INPUTS
+    }
+    fn ordered_whole_units(&self) -> &'static [WholeKind] {
+        &[WholeKind::Windows, WholeKind::Drains]
+    }
+    fn whole_unit(&self, kind: WholeKind) -> WholeUnit {
+        kind.description()
+    }
+    async fn run_whole_unit(
         &self,
+        kind: WholeKind,
         now: EngineTime,
-    ) -> Result<(Vec<GuardedStatement>, Vec<MailDeliveryReady>), LegacyUnitOutcome> {
-        WorkspaceRuntime::plan_due_windows(self, now).await
-    }
-    async fn drain_due_workspaces(&self, now: EngineTime) -> Result<usize, LegacyUnitOutcome> {
-        WorkspaceRuntime::drain_due_workspaces(self, now).await
-    }
-    fn try_central_turn(&self) -> Option<TurnGuard<'_>> {
-        self.execution.try_central_turn()
+        subject: &EngineSubject,
+        observed: &ObservedControl,
+    ) -> Result<WholeUnitOutcome, LegacyUnitOutcome> {
+        self.execute_whole_unit(kind, now, subject, observed).await
     }
     #[cfg(feature = "test-support")]
     fn pauses(&self) -> &fleet_runtime::PausePoints {
@@ -54,16 +64,6 @@ impl<H: CentralStore, S: WorkspaceStores> EngineHost for WorkspaceRuntime<H, S> 
     #[cfg(feature = "test-support")]
     fn record_engine_completion_entry(&self) {
         self.execution.record_engine_completion_entry();
-    }
-    #[cfg(feature = "test-support")]
-    fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations)) {
-        self.execution.count_legacy_invocation(count);
-    }
-}
-
-impl<R: EngineHost> EventCompletionHook for Engine<'_, R> {
-    async fn complete_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
-        self.after_event().await
     }
 }
 

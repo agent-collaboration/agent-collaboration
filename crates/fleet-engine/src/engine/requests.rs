@@ -1,6 +1,5 @@
 use super::port::{Engine, EngineHost};
 use super::{
-    attempt_records::EngineSubject,
     handle::HandleOutcome,
     receipts::{EngineReceipt, ReceiptClaim},
     source::RequestSource,
@@ -8,6 +7,7 @@ use super::{
 };
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::StoreFailure;
+use fleet_contracts::EngineSubject;
 use fleet_runtime_ports::CentralStore as _;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -31,7 +31,7 @@ pub enum EngineRequestOutcome<State, Error> {
 }
 
 impl<R: EngineHost> Engine<'_, R> {
-    pub(crate) async fn request_engine<M, Adapter>(
+    pub async fn request_engine<M, Adapter>(
         &self,
         adapter: &Adapter,
         caller: ActorIdentityId,
@@ -70,7 +70,7 @@ impl<R: EngineHost> Engine<'_, R> {
         M::Error: Send + Sync,
         Adapter: StoreAdapter<M>,
     {
-        // The request entry (for example `request_probe`) checked the organization
+        // The request entry checked the organization
         // once for this event, before any read (P3).
         let now = self.now()?;
         let cutoff = now

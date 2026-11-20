@@ -12,13 +12,14 @@ workspace = true
 [features]
 conformance = []
 # Test seams (pause points, the storage conformance schema); never in a production build.
-test-support = ["fleet-runtime/test-support", "dep:sqlx-core", "fleet-storage-schema/test-support"]
+test-support = ["fleet-engine/test-support", "fleet-runtime/test-support", "dep:sqlx-core", "fleet-storage-schema/test-support"]
 
 [dependencies]
 central-storage.workspace = true
 central-link-protocol.workspace = true
 central-engine-model.workspace = true
 fleet-contracts.workspace = true
+fleet-engine.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-runtime.workspace = true
 fleet-workspace-access.workspace = true

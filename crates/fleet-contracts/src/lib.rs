@@ -3,10 +3,13 @@
 
 mod central_observation;
 mod client_id;
+mod engine_attempts;
 mod event_completion;
 mod issuer_refusals;
+mod legacy_units;
 mod machine_connection;
 mod machine_connection_refusal;
+mod mail_delivery_ready;
 mod provisioning_failure;
 mod statement_refusal;
 
@@ -18,3 +21,9 @@ pub use machine_connection::{LiveMachineConnection, MachineConnectionAttachment}
 pub use machine_connection_refusal::MachineConnectionRefusal;
 pub use provisioning_failure::OrganizationProvisioningFailure;
 pub use statement_refusal::FleetOrganizationStatementRefusal;
+
+pub use engine_attempts::{
+    AttemptGuard, ControlGate, EngineSubject, FailureOutcome, ObservedControl, SubjectVersion,
+};
+pub use legacy_units::LegacyUnitOutcome;
+pub use mail_delivery_ready::MailDeliveryReady;

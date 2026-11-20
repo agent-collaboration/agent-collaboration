@@ -89,8 +89,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         vec![at(), text(wake_id)],
                     )]
                 };
-                statements.push(crate::engine::attempt_statements::delete_attempt(
-                    &crate::engine::attempt_records::EngineSubject {
+                statements.push(fleet_engine::delete_attempt(
+                    &fleet_contracts::EngineSubject {
                         kind: central_engine_model::MachineKind("wake_timer"),
                         key: central_engine_model::InstanceKey(wake_id.to_string()),
                     },
@@ -190,8 +190,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         vec![at(), text(automation_id)],
                     )]
                 };
-                statements.push(crate::engine::attempt_statements::delete_attempt(
-                    &crate::engine::attempt_records::EngineSubject {
+                statements.push(fleet_engine::delete_attempt(
+                    &fleet_contracts::EngineSubject {
                         kind: central_engine_model::MachineKind("automation_timer"),
                         key: central_engine_model::InstanceKey(automation_id.to_string()),
                     },

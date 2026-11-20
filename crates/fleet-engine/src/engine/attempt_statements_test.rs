@@ -1,10 +1,10 @@
 use super::{CONTROL_WRITE, write_attempt};
-use crate::engine::attempt_records::{AttemptGuard, EngineSubject};
 use central_engine_model::{
     EngineTime, FailureRecord, InstanceKey, ItemFailureClass, MachineKind, RetirementThreshold,
     after_failure,
 };
 use central_storage::{GuardedStatement, SqlValue};
+use fleet_contracts::{AttemptGuard, EngineSubject};
 use sqlx::{Connection, Row, SqliteConnection};
 
 const WAKE_WRITE: &str = guarded_attempt_sql!(

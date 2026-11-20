@@ -1,35 +1,8 @@
 //! The closed registry owns SQL literals. Time and caps are bound values; no
 //! statement is generated or leaked to acquire a static lifetime.
 
-macro_rules! time_ms {
-    ($column:literal) => {
-        concat!(
-            "CASE WHEN unixepoch(",
-            $column,
-            ") IS NULL OR abs(unixepoch(",
-            $column,
-            ")*1000+CAST(substr(strftime('%f',",
-            $column,
-            "),4,3) AS INTEGER))>9223372036854 THEN 0 ELSE unixepoch(",
-            $column,
-            ")*1000+CAST(substr(strftime('%f',",
-            $column,
-            "),4,3) AS INTEGER) END"
-        )
-    };
-}
-macro_rules! machine_rows {
-    ($table:literal, $key:literal, $due:literal, $kind:literal) => {
-        machine_rows!($table,$key,$due,$kind,"'active'","'done','disabled'","1")
-    };
-    ($table:literal, $key:literal, $due:literal, $kind:literal, $active:literal, $terminal:literal, $predicate:literal) => { concat!(
-        "SELECT s.", $key, " AS subject_key,", time_ms!($due), " AS occurrence_ms,",
-        "CASE WHEN a.attempt_id IS NOT NULL THEN CASE WHEN a.state='failing' AND a.last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN ",
-        time_ms!("a.next_try_at"), " ELSE 0 END WHEN s.state!=",$active," THEN 0 ELSE ", time_ms!($due),
-        " END AS effective_due_ms FROM ", $table, " s LEFT JOIN engine_work_attempts a ON a.machine_kind='", $kind,
-        "' AND a.subject_key=s.", $key, " WHERE s.state NOT IN (",$terminal,") AND (",$predicate,") AND NOT(COALESCE(a.state,'')='retired' AND a.last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable'))"
-    ) };
-}
+use fleet_engine::{controlled_legacy, controlled_machine, machine_rows};
+
 macro_rules! direct_message_rows {
     () => {
         machine_rows!(
@@ -133,36 +106,6 @@ macro_rules! all_grid_inputs {
         grid_inputs!()
     };
 }
-macro_rules! controlled_machine {
-    ($kind:literal, $rows:expr) => { concat!(
-        "CASE WHEN EXISTS(SELECT 1 FROM engine_work_attempts WHERE machine_kind='engine_source' AND subject_key='", $kind,
-        "') THEN (SELECT CASE WHEN state='retired' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN NULL WHEN state='failing' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN ", time_ms!("next_try_at"),
-        " ELSE 0 END FROM engine_work_attempts WHERE machine_kind='engine_source' AND subject_key='", $kind,
-        "') ELSE (SELECT MIN(effective_due_ms) FROM (", $rows, ")) END"
-    ) };
-}
-macro_rules! controlled_legacy {
-    ($kind:literal, $table:literal, $due:literal) => {
-        concat!(
-            "CASE WHEN EXISTS(SELECT 1 FROM engine_work_attempts WHERE machine_kind='",
-            $kind,
-            "' AND subject_key='all') THEN ",
-            "(SELECT CASE WHEN state='retired' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN NULL WHEN state='failing' AND last_failure IN ('corrupt_row','constraint_violated','statement_rejected','refused','other_store_unavailable') THEN ",
-            time_ms!("next_try_at"),
-            " ELSE 0 END FROM engine_work_attempts WHERE machine_kind='",
-            $kind,
-            "' AND subject_key='all') ELSE ",
-            "(SELECT MIN(",
-            time_ms!($due),
-            ") FROM ",
-            $table,
-            " WHERE ",
-            $due,
-            " IS NOT NULL) END"
-        )
-    };
-}
-
 pub(crate) const WAKE_LIST: &str = concat!(
     "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
     machine_rows!("automation_wakes", "wake_id", "s.due_at", "wake_timer"),

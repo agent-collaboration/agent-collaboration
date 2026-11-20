@@ -1,25 +1,10 @@
 use central_engine_model::{
-    AttemptState, EngineTime, FailureRecord, InstanceKey, ItemFailureClass, MachineKind,
-    supported_time,
+    AttemptState, EngineTime, FailureRecord, ItemFailureClass, supported_time,
 };
 use central_storage::{ConstraintKind, ReadOutcome, SqlValue, StoreFailure};
+use fleet_contracts::AttemptGuard;
 use fleet_runtime_ports::{stored_values::column, workspace_decode_error::corrupt};
 use std::num::NonZeroU32;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct EngineSubject {
-    pub kind: MachineKind,
-    pub key: InstanceKey,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct AttemptGuard {
-    pub attempt_id: SqlValue,
-    pub state: SqlValue,
-    pub failure_count: SqlValue,
-    pub last_failure: SqlValue,
-    pub updated_at: SqlValue,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("central attempt holds an invalid value in {column}")]
