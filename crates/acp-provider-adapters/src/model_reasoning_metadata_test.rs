@@ -54,6 +54,197 @@ fn literal_cursor_rows_keep_unknown_models_and_their_own_vendor_defaults() {
 }
 
 #[test]
+fn cursor_discovery_preserves_eligibility_preference_and_duplicate_id_scope() {
+    let mut response =
+        json!({"models": [{"value": "Vendor/Model", "name": "Model", "configOptions": []}]});
+    let mut bare_id = json!({
+        "id": "thought_level", "type": "select", "currentValue": "Vendor/Bare",
+        "options": [{"value": "Vendor/Bare", "name": "Bare"}]
+    });
+    let decode =
+        |response: &serde_json::Value| decode_cursor_models(response).for_model("Vendor/Model");
+    response["models"][0]["configOptions"] = json!([bare_id]);
+    assert_eq!(
+        decode(&response),
+        ModelReasoning::Unknown(ModelReasoningUnknown::Unavailable)
+    );
+
+    bare_id["id"] = json!("model");
+    bare_id["category"] = json!("thought_level");
+    response["models"][0]["configOptions"] = json!([bare_id]);
+    let ModelReasoning::Select(control) = decode(&response) else {
+        panic!("explicit thought_level category qualifies the model ID");
+    };
+    assert_eq!(control.config_id(), "model");
+    assert_eq!(control.default_value(), "Vendor/Bare");
+
+    let explicit = json!({
+        "id": "effort", "type": "select", "currentValue": "Vendor/Preferred",
+        "options": [{"value": "Vendor/Preferred", "name": "Preferred"}]
+    });
+    response["models"][0]["configOptions"] = json!([bare_id, explicit]);
+    let ModelReasoning::Select(control) = decode(&response) else {
+        panic!("explicit effort wins over a categorized select");
+    };
+    assert_eq!(control.config_id(), "effort");
+    assert_eq!(control.default_value(), "Vendor/Preferred");
+    assert_eq!(control.choices()[0].label, "Preferred");
+
+    response["models"][0]["configOptions"] = json!([
+        bare_id, explicit, {"id": "effort", "type": "future_kind", "currentValue": true}
+    ]);
+    assert_eq!(
+        decode(&response),
+        ModelReasoning::Unknown(ModelReasoningUnknown::Ambiguous)
+    );
+}
+
+#[test]
+fn cursor_discovery_excludes_thinking_from_effort_candidates() {
+    let thinking = json!({
+        "id": "thinking", "category": "thought_level", "type": "select",
+        "currentValue": "true", "options": [{"value": "true", "name": "On"}]
+    });
+    let reasoning = json!({
+        "id": "reasoning", "category": "thought_level", "type": "select",
+        "currentValue": "high", "options": [{"value": "high", "name": "High"}]
+    });
+    let response = json!({"models": [
+        {"value": "thinking-only", "name": "Thinking only", "configOptions": [thinking]},
+        {"value": "both-controls", "name": "Both controls", "configOptions": [thinking, reasoning]}
+    ]});
+    let expected_reasoning = ModelReasoningSelect::try_new(
+        "reasoning".into(),
+        vec![ProviderSettingChoice {
+            value: "high".into(),
+            label: "High".into(),
+        }],
+        "high".into(),
+    )
+    .expect("valid reasoning control");
+
+    let metadata = decode_cursor_models(&response);
+
+    assert_eq!(
+        [
+            metadata.for_model("thinking-only"),
+            metadata.for_model("both-controls")
+        ],
+        [
+            ModelReasoning::Unknown(ModelReasoningUnknown::Unavailable),
+            ModelReasoning::Select(expected_reasoning)
+        ],
+        "thinking must neither qualify on its own nor compete with the offered effort"
+    );
+}
+
+#[test]
+fn cursor_discovery_keeps_row_errors_distinct_from_a_malformed_response() {
+    let mut response = json!({"models": [
+        {"value": "valid", "name": "Valid", "configOptions": [
+            {"id": "effort", "type": "select", "currentValue": "low",
+             "options": [{"value": "low", "name": "Low"}]}
+        ]},
+        {"value": "invalid", "name": "Invalid", "configOptions": [
+            {"id": "effort", "type": "select", "currentValue": false}
+        ]}
+    ]});
+
+    let decoded = decode_cursor_models(&response);
+
+    assert!(matches!(
+        decoded.for_model("valid"),
+        ModelReasoning::Select(_)
+    ));
+    assert_eq!(
+        decoded.for_model("invalid"),
+        ModelReasoning::Unknown(ModelReasoningUnknown::Malformed)
+    );
+
+    response["models"][1]["configOptions"][0]["options"] = json!([
+        {"value": "low", "name": "Low"}, {"value": "high"}
+    ]);
+    assert_eq!(
+        decode_cursor_models(&response),
+        ModelReasoningMetadata::Unknown(ModelReasoningUnknown::Malformed)
+    );
+}
+
+#[test]
+fn synthetic_grouped_core_acp_offers_are_malformed_for_cursor_discovery() {
+    let response = json!({"models": [
+        {"value": "valid", "name": "Valid", "configOptions": [
+            {"id": "effort", "type": "select", "currentValue": "low",
+             "options": [{"value": "low", "name": "Low"}]}
+        ]},
+        {"value": "grouped", "name": "Grouped", "configOptions": [
+            {"id": "effort", "name": "Effort", "type": "select", "currentValue": "high",
+             "options": [{"group": "limits", "name": "Limits",
+                          "options": [{"value": "high", "name": "High"}]}]}
+        ]}
+    ]});
+
+    assert_eq!(
+        decode_cursor_models(&response),
+        ModelReasoningMetadata::Unknown(ModelReasoningUnknown::Malformed)
+    );
+}
+
+#[test]
+fn cursor_discovery_keeps_the_two_field_positional_choice_boundary() {
+    let decode = |choice: Value| {
+        decode_cursor_models(&json!({"models": [
+            {"value": "sibling", "name": "Sibling", "configOptions": [
+                {"id": "effort", "type": "select", "currentValue": "low",
+                 "options": [{"value": "low", "name": "Low"}]}
+            ]},
+            {"value": "target", "name": "Target", "configOptions": [
+                {"id": "effort", "type": "select", "currentValue": "high", "options": [choice]}
+            ]}
+        ]}))
+    };
+
+    let accepted = [
+        json!(["high", "High"]),
+        json!({"value": "high", "name": "High", "description": "Optional",
+               "_meta": {"vendor": true}}),
+    ]
+    .map(decode);
+
+    for metadata in accepted {
+        assert!(matches!(
+            metadata.for_model("sibling"),
+            ModelReasoning::Select(_)
+        ));
+        let ModelReasoning::Select(target) = metadata.for_model("target") else {
+            panic!("expected Cursor to retain the advertised effort");
+        };
+        assert_eq!(target.default_value(), "high");
+        assert_eq!(
+            target.choices(),
+            &[ProviderSettingChoice {
+                value: "high".into(),
+                label: "High".into()
+            }]
+        );
+    }
+
+    let rejected = [
+        json!(["high", "High", "Optional"]),
+        json!(["high", "High", "Optional", {"vendor": true}]),
+    ]
+    .map(decode);
+    assert_eq!(
+        rejected,
+        [
+            ModelReasoningMetadata::Unknown(ModelReasoningUnknown::Malformed),
+            ModelReasoningMetadata::Unknown(ModelReasoningUnknown::Malformed)
+        ],
+        "extra positional fields must invalidate the reply, including the valid named sibling"
+    );
+}
+
+#[test]
 fn literal_claude_annotation_requires_offered_default_and_unique_model_identity() {
     let valid = json!({"version":1,"kind":"available","models":[
         {"modelId":"sonnet","kind":"select","configId":"effort","defaultValue":"default",
