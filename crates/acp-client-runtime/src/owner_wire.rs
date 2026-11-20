@@ -97,6 +97,18 @@ pub(crate) struct PromptTerminal {
 }
 
 impl PromptTerminal {
+    fn route(self, reader: Option<mpsc::Sender<Self>>, connection_lost: bool) {
+        if connection_lost {
+            self.completion.send(OwnerEvent::ConnectionLost);
+        } else if let Some(reader) = reader {
+            if let Err(undelivered) = reader.try_send(self) {
+                undelivered.into_inner().finish(String::new(), None);
+            }
+        } else {
+            self.finish(String::new(), None);
+        }
+    }
+
     pub(crate) fn stop_reason(&self) -> Option<session_event_model::StopReason> {
         decode_prompt_result(self.reply.as_ref()?.as_ref().ok()?).ok()
     }
@@ -718,18 +730,13 @@ impl OwnerAcpOutput {
                     let input_ended = input_ended.clone();
                     let connection = connection.clone();
                     replies.spawn(async move {
-                        let response = tokio::select! {
-                            biased;
-                            reply = request => Some(reply),
-                            () = shutdown.cancelled() => None,
-                        };
-                        let connection_lost = response.as_ref().is_none_or(|reply| {
-                            reply.as_ref().is_err_and(|error| {
+                        let (response, connection_lost) = correlation
+                            .read_reply(request, &shutdown, |error| {
                                 connection.is_incoming_closed()
                                     || input_ended.is_cancelled()
                                     || agent_client_protocol::is_incoming_transport_closed(error)
                             })
-                        });
+                            .await;
                         correlation.complete(
                             response,
                             completion,
@@ -749,6 +756,28 @@ impl OwnerAcpOutput {
 }
 
 impl ResponseKind {
+    async fn read_reply(
+        &self,
+        request: impl std::future::Future<Output = Result<serde_json::Value, Error>>,
+        shutdown: &CancellationToken,
+        incoming_lost: impl FnOnce(&Error) -> bool,
+    ) -> (Option<Result<serde_json::Value, Error>>, bool) {
+        let response = tokio::select! {
+            biased;
+            reply = request => Some(reply),
+            () = shutdown.cancelled() => None,
+        };
+        let connection_lost = response.as_ref().is_none_or(|reply| {
+            reply.as_ref().is_err_and(|error| {
+                // The SDK can wake a prompt with an unmarked internal error
+                // after the process exits, before incoming EOF is observed.
+                (matches!(self, Self::Prompt { .. }) && shutdown.is_cancelled())
+                    || incoming_lost(error)
+            })
+        });
+        (response, connection_lost)
+    }
+
     fn complete(
         self,
         reply: Option<Result<serde_json::Value, Error>>,
@@ -764,26 +793,14 @@ impl ResponseKind {
                 turn,
                 compact,
                 reader,
-            } => {
-                if connection_lost {
-                    completion.send(OwnerEvent::ConnectionLost);
-                    return;
-                }
-                let terminal = PromptTerminal {
-                    turn,
-                    compact,
-                    authorization,
-                    reply,
-                    completion,
-                };
-                if let Some(reader) = reader {
-                    if let Err(undelivered) = reader.try_send(terminal) {
-                        undelivered.into_inner().finish(String::new(), None);
-                    }
-                } else {
-                    terminal.finish(String::new(), None);
-                }
+            } => PromptTerminal {
+                turn,
+                compact,
+                authorization,
+                reply,
+                completion,
             }
+            .route(reader, connection_lost),
             Self::Setting(setting) => {
                 let authorization = setting.authorization().cloned();
                 let mode = setting.mode_confirmation();
@@ -864,6 +881,10 @@ impl ResponseKind {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "owner_wire_test.rs"]
+mod tests;
 
 fn set_router_auto(grants: &WireGrants, run: TransportRun, active: bool) {
     if let Some(grant) = grants
