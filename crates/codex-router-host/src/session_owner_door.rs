@@ -70,6 +70,8 @@ pub struct SessionOwnerAddress {
     calls: Arc<SessionOwnerCalls>,
     storage: SessionOwnerStorage,
     wire: Arc<OwnerAcpWire>,
+    #[cfg(test)]
+    preparation_fixture: Arc<crate::session_owner_preparation_fixture::PreparationFixture>,
 }
 
 pub(crate) struct OwnerDeliveryHandle {
@@ -259,6 +261,8 @@ impl SessionOwnerDoor {
             calls,
             storage,
             wire: self.wire.clone(),
+            #[cfg(test)]
+            preparation_fixture: self.preparation_fixture.clone(),
         });
         Ok((session, ports))
     }
@@ -585,15 +589,33 @@ impl SessionOwnerAddress {
         self.calls.insert_content(&input, content);
         let terminal = self.calls.expect_settlement(input.operation);
         let accepted = self.calls.expect_acceptance(input.operation);
-        if let Err(error) = self.admit(command).await {
-            if let Some(attempt) = cold_restore {
-                self.storage.forget_restore(attempt);
+        let admission = self.admit(command).await;
+        #[cfg(test)]
+        let (admission, ack_finished) = match self.preparation_fixture.take_delivery_ack_pause() {
+            Some(pause) => pause.resolve(admission).await,
+            None => (admission, None),
+        };
+        let result = match admission {
+            // The failed-owner recovery still owns these records. Its writer
+            // evidence decides what reached the provider even if the task
+            // stopped before sending the admission acknowledgement.
+            Ok(()) | Err(OwnerDoorError::OwnerStopped) => {
+                Ok(OwnerDeliveryHandle { accepted, terminal })
             }
-            self.calls.release_input(&input.input);
-            self.calls.release_operation(input.operation);
-            return Err(error);
+            Err(error) => {
+                if let Some(attempt) = cold_restore {
+                    self.storage.forget_restore(attempt);
+                }
+                self.calls.release_input(&input.input);
+                self.calls.release_operation(input.operation);
+                Err(error)
+            }
+        };
+        #[cfg(test)]
+        if let Some(finished) = ack_finished {
+            let _test_withdrew_probe = finished.send(());
         }
-        Ok(OwnerDeliveryHandle { accepted, terminal })
+        result
     }
 
     pub(crate) fn defer_queued_admission(
@@ -637,6 +659,19 @@ impl SessionOwnerAddress {
             .await
             .map_err(|_| OwnerDoorError::OwnerStopped)?
             .map_err(OwnerDoorError::Refused)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn hold_completion_capacity(
+        &self,
+    ) -> Vec<acp_client_runtime::session_owner_task::OwnerCompletion> {
+        let port = self.owner.handle.completion_port();
+        std::iter::from_fn(|| port.reserve(self.owner.address).ok()).collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn wait_for_recovery_replies(&self) {
+        self.calls.wait_for_replies().await;
     }
 }
 

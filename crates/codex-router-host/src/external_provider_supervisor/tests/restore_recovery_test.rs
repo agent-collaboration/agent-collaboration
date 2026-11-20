@@ -3,6 +3,9 @@
 #[path = "restore_recovery/admission_budget_test.rs"]
 mod admission_budget_tests;
 
+#[path = "restore_recovery/recovered_admission_test.rs"]
+mod recovered_admission_tests;
+
 #[path = "restore_recovery/cancel_confirmation_test.rs"]
 mod cancel_confirmation_tests;
 

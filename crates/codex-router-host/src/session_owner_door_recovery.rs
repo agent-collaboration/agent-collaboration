@@ -82,6 +82,8 @@ impl SessionOwnerDoor {
             .insert(target.clone(), successor.clone());
 
         let callers = previous.calls.clone();
+        #[cfg(test)]
+        let pause = self.preparation_fixture.clone();
         self.tasks.spawn(async move {
             let mut results = BTreeMap::new();
             for (marked, ticket) in handover.cleanups {
@@ -91,6 +93,10 @@ impl SessionOwnerDoor {
                         | SessionStoreSettlement::MarkNeverWritten)
                 );
                 results.insert(marked.input, saved);
+            }
+            #[cfg(test)]
+            if let Some(release) = pause.hold_recovery() {
+                let _test_withdrew_pause = release.await;
             }
             for input in callers.outstanding_inputs() {
                 let taken = slot_evidence.iter().any(|(authorization, effect)| {

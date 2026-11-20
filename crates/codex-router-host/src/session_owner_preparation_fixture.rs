@@ -10,6 +10,8 @@ use tokio::sync::oneshot;
 pub(crate) struct PreparationFixture {
     restore_pause: Mutex<Option<PreparationPause>>,
     create_pause: Mutex<Option<PreparationPause>>,
+    delivery_ack: Mutex<Option<DeliveryAckPause>>,
+    recovery_pause: Mutex<Option<PreparationPause>>,
     restore_fault: AtomicBool,
 }
 
@@ -18,7 +20,74 @@ struct PreparationPause {
     release: oneshot::Receiver<()>,
 }
 
+pub(crate) struct DeliveryAckPause {
+    reached: PreparationPause,
+    pub(crate) finished: oneshot::Sender<()>,
+    pub(crate) lose_ack: bool,
+}
+
+pub(crate) struct DeliveryAckControl {
+    pub(crate) reached: oneshot::Receiver<()>,
+    pub(crate) release: oneshot::Sender<()>,
+    pub(crate) finished: oneshot::Receiver<()>,
+}
+
+impl DeliveryAckPause {
+    pub(crate) async fn resolve(
+        self,
+        admission: Result<(), crate::session_owner_door::OwnerDoorError>,
+    ) -> (
+        Result<(), crate::session_owner_door::OwnerDoorError>,
+        Option<oneshot::Sender<()>>,
+    ) {
+        let _test_withdrew_pause = self.reached.entered.send(());
+        let _test_withdrew_resume = self.reached.release.await;
+        let admission = if self.lose_ack {
+            Err(crate::session_owner_door::OwnerDoorError::OwnerStopped)
+        } else {
+            admission
+        };
+        (admission, Some(self.finished))
+    }
+}
+
 impl PreparationFixture {
+    pub(crate) fn pause_delivery_ack(&self, lose_ack: bool) -> DeliveryAckControl {
+        let (entered, reached) = oneshot::channel();
+        let (release, released) = oneshot::channel();
+        let (finished, complete) = oneshot::channel();
+        let previous = self
+            .delivery_ack
+            .lock()
+            .expect("fixture lock")
+            .replace(DeliveryAckPause {
+                reached: PreparationPause {
+                    entered,
+                    release: released,
+                },
+                finished,
+                lose_ack,
+            });
+        assert!(previous.is_none(), "prior delivery pause was not reached");
+        DeliveryAckControl {
+            reached,
+            release,
+            finished: complete,
+        }
+    }
+
+    pub(crate) fn take_delivery_ack_pause(&self) -> Option<DeliveryAckPause> {
+        self.delivery_ack.lock().expect("fixture lock").take()
+    }
+
+    pub(crate) fn pause_recovery(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        Self::arm(&self.recovery_pause)
+    }
+
+    pub(crate) fn hold_recovery(&self) -> Option<oneshot::Receiver<()>> {
+        Self::enter(&self.recovery_pause)
+    }
+
     pub(crate) fn pause_restore(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
         Self::arm(&self.restore_pause)
     }
