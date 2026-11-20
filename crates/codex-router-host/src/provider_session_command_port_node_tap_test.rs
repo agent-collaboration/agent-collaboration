@@ -26,6 +26,9 @@ use message_board::SessionRef as BoardSessionRef;
 use session_event_model::{PromptContent, ProviderSubmission, SettingApplicationIntent};
 use std::path::PathBuf;
 
+#[path = "provider_session_command_port_acp_failure_test.rs"]
+mod acp_failures;
+
 const SERVICE_ID: &str = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
 const SCRIPTED_AGENT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),

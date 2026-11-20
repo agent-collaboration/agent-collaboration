@@ -94,16 +94,18 @@ pub(crate) async fn place_busy_prompt(prompt: BusyPrompt<'_>) -> BusyPromptPlace
                 Ok(SessionSteerOutcome::Failed { reason }) => {
                     return BusyPromptPlacement::SteerFailed { reason };
                 }
-                Err(CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. }) => {
-                    Next::Queue
-                }
-                // The expected turn changed: look once more.
-                Err(CommandFailure::Busy) if !last => match running_turn(attachment) {
-                    Some(turn_id) => Next::Steer(turn_id),
-                    None => Next::Prompt,
+                Err(error) => match error.classification().as_ref() {
+                    CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. } => {
+                        Next::Queue
+                    }
+                    // The expected turn changed: look once more.
+                    CommandFailure::Busy if !last => match running_turn(attachment) {
+                        Some(turn_id) => Next::Steer(turn_id),
+                        None => Next::Prompt,
+                    },
+                    CommandFailure::Busy => Next::Queue,
+                    _ => return BusyPromptPlacement::Refused(error),
                 },
-                Err(CommandFailure::Busy) => Next::Queue,
-                Err(error) => return BusyPromptPlacement::Refused(error),
             },
             Next::Prompt => match commands
                 .prompt(PromptSessionCommand {
@@ -119,13 +121,15 @@ pub(crate) async fn place_busy_prompt(prompt: BusyPrompt<'_>) -> BusyPromptPlace
                         turn_id: turn.turn_id,
                     };
                 }
-                // A turn started first: steer or queue it once.
-                Err(CommandFailure::Busy) if !last => match running_turn(attachment) {
-                    Some(turn_id) => Next::Steer(turn_id),
-                    None => Next::Queue,
+                Err(error) => match error.classification().as_ref() {
+                    // A turn started first: steer or queue it once.
+                    CommandFailure::Busy if !last => match running_turn(attachment) {
+                        Some(turn_id) => Next::Steer(turn_id),
+                        None => Next::Queue,
+                    },
+                    CommandFailure::Busy => Next::Queue,
+                    _ => return BusyPromptPlacement::Refused(error),
                 },
-                Err(CommandFailure::Busy) => Next::Queue,
-                Err(error) => return BusyPromptPlacement::Refused(error),
             },
             Next::Queue => break,
         };

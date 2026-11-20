@@ -9,6 +9,10 @@ use session_event_model::{CapabilityReport, InputId, StopReason, TurnOutcome};
 use std::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+#[path = "provider_acp_session_route_restore_test.rs"]
+mod restore_tests;
+use restore_tests::{RestoreFixture, RestoreMethod};
+
 /// What each busy-prompt command answers; each is taken once, and an
 /// unscripted command answers Unsupported.
 #[derive(Default)]
@@ -43,6 +47,7 @@ struct RecordingSessionBackend {
     script: Mutex<BusyScript>,
     calls: Mutex<RecordedCalls>,
     events: tokio::sync::broadcast::Sender<HubEvent>,
+    restore: Option<RestoreFixture>,
 }
 
 impl RecordingSessionBackend {
@@ -68,6 +73,7 @@ impl RecordingSessionBackend {
             script: Mutex::new(script),
             calls: Mutex::new(RecordedCalls::default()),
             events,
+            restore: None,
         }))
     }
 
@@ -95,11 +101,17 @@ impl SessionCommandPort for RecordingSessionBackend {
         let session = self.session.clone();
         Box::pin(async move { Ok(session) })
     }
-    fn load_session(&self, _: SessionTargetCommand) -> CommandFuture<'_, ()> {
-        Box::pin(async { Err(CommandFailure::Unsupported) })
+    fn load_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
+        self.restore.as_ref().map_or_else(
+            || -> CommandFuture<'_, ()> { Box::pin(async { Err(CommandFailure::Unsupported) }) },
+            |fixture| fixture.restore(RestoreMethod::Load, command),
+        )
     }
-    fn resume_session(&self, _: SessionTargetCommand) -> CommandFuture<'_, ()> {
-        Box::pin(async { Err(CommandFailure::Unsupported) })
+    fn resume_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
+        self.restore.as_ref().map_or_else(
+            || -> CommandFuture<'_, ()> { Box::pin(async { Err(CommandFailure::Unsupported) }) },
+            |fixture| fixture.restore(RestoreMethod::Resume, command),
+        )
     }
     fn prompt(&self, _: PromptSessionCommand) -> CommandFuture<'_, SessionTurnHandle> {
         self.calls.lock().expect("test lock").prompts += 1;
@@ -134,7 +146,18 @@ impl SessionCommandPort for RecordingSessionBackend {
         let answer = self.script.lock().expect("test lock").queue_outcome.take();
         Box::pin(async { answer.unwrap_or(Err(CommandFailure::Unsupported)) })
     }
-    fn queue_list(&self, _: SessionTargetCommand) -> CommandFuture<'_, Vec<QueuedSessionInput>> {
+    fn queue_list(
+        &self,
+        command: SessionTargetCommand,
+    ) -> CommandFuture<'_, Vec<QueuedSessionInput>> {
+        if let Some(fixture) = &self.restore {
+            fixture
+                .queue_reads
+                .lock()
+                .expect("queue calls")
+                .push(command.target);
+            return Box::pin(async { Ok(Vec::new()) });
+        }
         Box::pin(async { Err(CommandFailure::Unsupported) })
     }
     fn queue_cancel(&self, _: SessionTargetCommand, _: String) -> CommandFuture<'_, ()> {
@@ -181,8 +204,12 @@ impl SessionEventHub for RecordingSessionBackend {
             })
         })
     }
-    fn state(&self, _: SessionRef) -> HubFuture<'_, SessionState> {
-        let state = if self.running_turn.is_some() {
+    fn state(&self, session: SessionRef) -> HubFuture<'_, SessionState> {
+        let state = if let Some(fixture) = &self.restore
+            && session == self.session
+        {
+            fixture.state.lock().expect("restore state").clone()
+        } else if self.running_turn.is_some() {
             SessionState::Running
         } else {
             SessionState::Idle
@@ -190,7 +217,7 @@ impl SessionEventHub for RecordingSessionBackend {
         Box::pin(async move { Ok(state) })
     }
     fn sessions(&self, _: SessionEndpointRef) -> HubFuture<'_, Vec<HubSessionSummary>> {
-        let summary = HubSessionSummary {
+        let mut summary = HubSessionSummary {
             session: self.session.clone(),
             approver: self.approver.clone(),
             working_directory: PathBuf::from("/"),
@@ -201,7 +228,17 @@ impl SessionEventHub for RecordingSessionBackend {
             mode: None,
             state: SessionState::Idle,
         };
-        Box::pin(async move { Ok(vec![summary]) })
+        let summaries = if let Some(fixture) = &self.restore {
+            let other = HubSessionSummary {
+                session: fixture.other.clone(),
+                ..summary.clone()
+            };
+            summary.state = fixture.state.lock().expect("restore state").clone();
+            vec![summary, other]
+        } else {
+            vec![summary]
+        };
+        Box::pin(async move { Ok(summaries) })
     }
 }
 
