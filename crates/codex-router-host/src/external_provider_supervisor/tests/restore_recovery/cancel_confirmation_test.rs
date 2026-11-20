@@ -71,7 +71,10 @@ async fn expire_confirmation(
     assert_eq!(failure.effect, ProviderOperationEffect::Unknown);
     assert_eq!(
         String::from(failure.message),
-        "the harness didn't stop the turn; close the session to recover"
+        format!(
+            "the harness didn't stop the turn, so its outcome is unknown; close the session, then check it and run operation reconcile for {}",
+            foreground.as_str(),
+        )
     );
     let owner = host
         .session_owner_for(&rig.target)

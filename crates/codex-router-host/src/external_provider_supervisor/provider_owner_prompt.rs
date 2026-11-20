@@ -396,7 +396,10 @@ fn retained_prompt(
             ConversationOperationFailureKind::OutcomeUnknown,
             ConversationOperationFailureStage::Dispatch,
             ProviderOperationEffect::Unknown,
-            "the harness didn't stop the turn; close the session to recover",
+            &format!(
+                "the harness didn't stop the turn, so its outcome is unknown; close the session, then check it and run operation reconcile for {}",
+                operation.as_str(),
+            ),
             operation,
             Some(target.clone()),
         )),
