@@ -18,8 +18,9 @@ use collaboration_contracts::TargetPresence;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, MessageDelivery, PushHeaderFacts, PushId, PushKind,
-    PushOrigin, PushRecordDraft, SessionRef,
+    DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, MessageDelivery, OperationId,
+    PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
+    SessionReachability, SessionRef,
 };
 use interaction_storage::InteractionStore;
 use serde::{Deserialize, Serialize};
@@ -101,11 +102,16 @@ fn session(session_id: &str) -> SessionRef {
     .expect("session reference")
 }
 
+/// A started turn whose receipt carries evidence beyond its outcome tag: a reachability and a
+/// client receipt, so losing either field after restart changes the stored record.
 fn started() -> DeliveryReceipt {
     DeliveryReceipt {
         outcome: DeliveryOutcome::Started,
-        reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-        client: None,
+        reachability: Some(SessionReachability::ProviderAcp),
+        client: Some(DeliveryClientReceipt::ProviderAcp {
+            operation_id: OperationId::try_from("019f0000-0000-7000-8000-0000000000b1".to_owned())
+                .expect("receipt operation id"),
+        }),
     }
 }
 
@@ -303,9 +309,19 @@ async fn deliver_then_kill(
     (root, state, submissions)
 }
 
-/// Restarts delivery over the child's store, asks for the same message again, and returns
-/// its stored outcome and every submission the restarted process made.
-async fn restart_and_ask_again(state: &ChildState) -> (DeliveryOutcome, Vec<PushId>) {
+/// What the restarted process shows for the message.
+struct AfterRestart {
+    /// The record the restarted delivery answered when asked for the message again.
+    answered: PushRecord,
+    /// The record read back from the store after that answer.
+    stored: PushRecord,
+    /// Every submission the restarted process made; any is a resend.
+    resent: Vec<PushId>,
+}
+
+/// Restarts delivery over the child's store, asks for the same message again, and returns what
+/// the restarted process answered, stored and submitted.
+async fn restart_and_ask_again(state: &ChildState) -> AfterRestart {
     let store = Arc::new(
         InteractionStore::open(&state.database)
             .await
@@ -314,7 +330,7 @@ async fn restart_and_ask_again(state: &ChildState) -> (DeliveryOutcome, Vec<Push
     let detector = Arc::new(ResendDetector::default());
     let service = service_over(Arc::clone(&store), detector.clone());
     service.start().await.expect("restarted delivery starts");
-    let record = tokio::time::timeout(
+    let answered = tokio::time::timeout(
         Duration::from_secs(15),
         service.deliver_direct_message(state.target.clone(), state.push_id.clone()),
     )
@@ -322,6 +338,11 @@ async fn restart_and_ask_again(state: &ChildState) -> (DeliveryOutcome, Vec<Push
     .expect("delivery answer deadline")
     .expect("stored direct message");
     service.shutdown().await;
+    let stored = store
+        .get_push_record(&state.push_id)
+        .await
+        .expect("stored record read")
+        .expect("stored record present");
     drop(service);
     Arc::try_unwrap(store)
         .unwrap_or_else(|_| panic!("restarted store retained"))
@@ -333,11 +354,11 @@ async fn restart_and_ask_again(state: &ChildState) -> (DeliveryOutcome, Vec<Push
         .lock()
         .expect("detector submissions")
         .clone();
-    let outcome = record
-        .last_outcome
-        .expect("a settled direct message has an outcome")
-        .outcome;
-    (outcome, resent)
+    AfterRestart {
+        answered,
+        stored,
+        resent,
+    }
 }
 
 #[tokio::test]
@@ -356,8 +377,14 @@ async fn a_direct_message_whose_process_dies_after_native_acceptance_is_unknown_
     );
     // After restart the store cannot know whether the turn ran: the message is Unknown,
     // and asking for it again neither resubmits nor invents an acceptance.
-    let (outcome, resent) = restart_and_ask_again(&state).await;
+    let after = restart_and_ask_again(&state).await;
+    let outcome = after
+        .answered
+        .last_outcome
+        .expect("a settled direct message has an outcome")
+        .outcome;
     assert_eq!(outcome, DeliveryOutcome::Unknown);
+    let resent = after.resent;
     assert!(
         resent.is_empty(),
         "the restarted Host resubmitted {resent:?}"
@@ -367,15 +394,41 @@ async fn a_direct_message_whose_process_dies_after_native_acceptance_is_unknown_
 #[tokio::test]
 async fn a_direct_message_whose_process_dies_after_settlement_keeps_its_receipt_and_is_never_resent()
  {
-    // Arrange and act: the child stores the started receipt, then dies.
-    let (_root, state, submissions) = deliver_then_kill(LossPoint::AfterSettlement).await;
+    // Arrange and act: the child stores the started receipt, records the settled message it
+    // was answered with, then dies.
+    let (root, state, submissions) = deliver_then_kill(LossPoint::AfterSettlement).await;
+    let settled: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root.path().join("settled-record.json")).expect("settled record"),
+    )
+    .expect("settled record json");
+    // The receipt carries evidence beyond its tag, so a lost field would show.
+    assert_eq!(
+        settled["lastOutcome"]["outcome"]["kind"], "started",
+        "{settled}"
+    );
+    assert!(
+        !settled["lastOutcome"]["reachability"].is_null(),
+        "{settled}"
+    );
+    assert!(!settled["lastOutcome"]["client"].is_null(), "{settled}");
+    assert!(!settled["settledAt"].is_null(), "{settled}");
 
-    // Assert: one submission; the stored receipt survives restart unchanged and nothing is
-    // submitted again.
+    // Assert: one submission; after restart both the replayed answer and the stored message equal
+    // the settled message field for field, and nothing is submitted again.
     assert_eq!(submissions.len(), 1, "{submissions:?}");
     assert_eq!(submissions[0].push_id, state.push_id);
-    let (outcome, resent) = restart_and_ask_again(&state).await;
-    assert_eq!(outcome, DeliveryOutcome::Started);
+    let after = restart_and_ask_again(&state).await;
+    assert_eq!(
+        serde_json::to_value(&after.answered).expect("answered json"),
+        settled,
+        "the replayed answer differs from the settled message"
+    );
+    assert_eq!(
+        serde_json::to_value(&after.stored).expect("stored json"),
+        settled,
+        "recovery rewrote the settled message"
+    );
+    let resent = after.resent;
     assert!(
         resent.is_empty(),
         "the restarted Host resubmitted {resent:?}"
@@ -426,7 +479,12 @@ async fn direct_message_process_loss_child_entry() {
     service.start().await.expect("child delivery starts");
     let delivered = service.deliver_direct_message(target, push_id).await;
     if loss_point == LossPoint::AfterSettlement {
-        delivered.as_ref().expect("settled direct message");
+        let settled = delivered.as_ref().expect("settled direct message");
+        std::fs::write(
+            root.join("settled-record.json"),
+            serde_json::to_vec(settled).expect("settled record json"),
+        )
+        .expect("settled record");
         signal_ready(&ready).await;
         std::future::pending::<()>().await;
     }
