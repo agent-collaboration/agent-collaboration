@@ -100,7 +100,10 @@ function declarationModule(items: readonly RustBindingItem[]): RustModule {
   return { name: fieldIdentifier(first.name), items };
 }
 
-function moduleSources(modules: readonly RustModule[]): ReadonlyMap<string, string> {
+function moduleSources(
+  modules: readonly RustModule[],
+  hasNotifications: boolean,
+): ReadonlyMap<string, string> {
   const owners = new Map<string, string>();
   const moduleOrder = new Map<string, number>();
   for (const [index, module] of modules.entries()) {
@@ -117,7 +120,7 @@ function moduleSources(modules: readonly RustModule[]): ReadonlyMap<string, stri
   const index = [
     sourceHeader,
     // Keep the handwritten helpers private while preserving the renderer's super:: paths.
-    "use super::{CodexRequest, OpaqueJson, OpaqueJsonObject, StringAlternative,",
+    `use super::{CodexRequest, ${hasNotifications ? "CodexServerNotification, " : ""}OpaqueJson, OpaqueJsonObject, StringAlternative,`,
     "    deserialize_object, deserialize_present, deserialize_required_nullable, json_object_tag, sealed};",
     "",
   ];
@@ -197,26 +200,50 @@ function formatModules(
 }
 
 export function renderRustModules(
-  bindings: { declarations: readonly RustBindingItem[]; pairings: readonly RustBindingPairing[] },
+  bindings: {
+    declarations: readonly RustBindingItem[];
+    pairings: readonly RustBindingPairing[];
+    notifications?: readonly RustBindingItem[];
+  },
   repository: string,
 ): ReadonlyMap<string, string> {
-  const partitions = packDeclarations(orderDeclarations(bindings.declarations, bindings.pairings));
+  const notificationItems = bindings.notifications ?? [];
+  const partitions = [
+    ...packDeclarations(orderDeclarations(bindings.declarations, bindings.pairings)).map(
+      (items) => ({
+        items,
+        observation: false,
+      }),
+    ),
+    ...packDeclarations(notificationItems).map((items) => ({ items, observation: true })),
+  ];
   const pairings = bindings.pairings.map((item) => ({ name: item.name, items: [item] }));
   for (;;) {
-    const declarations = partitions.map(declarationModule);
-    const files = formatModules(moduleSources([...declarations, ...pairings]), repository);
+    const firstObservation = partitions.findIndex((partition) => partition.observation);
+    const declarations = partitions.map(({ items }, index) =>
+      index === firstObservation ? { name: "observation_events", items } : declarationModule(items),
+    );
+    const files = formatModules(
+      moduleSources([...declarations, ...pairings], notificationItems.length !== 0),
+      repository,
+    );
     const oversized = [...files].find(([, source]) => rustLineCount(source) > maximumLines);
     if (oversized === undefined) return files;
 
     const [filename, source] = oversized;
     const index = declarations.findIndex((module) => `${module.name}.rs` === filename);
     const partition = partitions[index];
-    if (partition === undefined || partition.length < 2) {
+    if (partition === undefined || partition.items.length < 2) {
       throw new Error(
         `${filename}: indivisible generated Rust has ${rustLineCount(source)} lines after rustfmt, limit is ${maximumLines}`,
       );
     }
-    const middle = Math.ceil(partition.length / 2);
-    partitions.splice(index, 1, partition.slice(0, middle), partition.slice(middle));
+    const middle = Math.ceil(partition.items.length / 2);
+    partitions.splice(
+      index,
+      1,
+      { ...partition, items: partition.items.slice(0, middle) },
+      { ...partition, items: partition.items.slice(middle) },
+    );
   }
 }

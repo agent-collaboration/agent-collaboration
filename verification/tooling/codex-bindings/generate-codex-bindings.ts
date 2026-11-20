@@ -11,6 +11,11 @@ import {
 } from "../schema-audit/codex-pairing-transcription.ts";
 import { checkCodexBindings, writeCodexBindings } from "./codex-generated-files.ts";
 import { renderRustBindings } from "./codex-rust-binding.ts";
+import {
+  groupNotificationItems,
+  resolveNotifications,
+  selectedNotifications,
+} from "./codex-notifications.ts";
 import { renderRustModules } from "./codex-rust-modules.ts";
 import { definitionName, definitionRef, reachableDefinitions } from "./codex-schema.ts";
 
@@ -80,7 +85,11 @@ export function renderCodexBindings(
   const bundle = codexBundleSchema.parse(JSON.parse(schemaText));
   const pairing = codexPairingSchema.parse(JSON.parse(pairingText));
   const bindings = selectedMethods.map((method) => resolveBinding(bundle, pairing, method));
-  const roots = bindings.flatMap(({ params, response }) => [params, response]);
+  const notifications = resolveNotifications(bundle.definitions.ServerNotification);
+  const roots = [
+    ...bindings.flatMap(({ params, response }) => [params, response]),
+    ...notifications.map(({ params }) => params),
+  ];
   const definitions = reachableDefinitions(bundle.definitions.v2, roots);
   for (const root of roots) {
     if (definitions.get(root)?.definition.kind !== "object") {
@@ -88,7 +97,9 @@ export function renderCodexBindings(
     }
   }
 
-  return renderRustModules(renderRustBindings(bindings, definitions), repository);
+  const rendered = renderRustBindings(bindings, definitions);
+  const groups = groupNotificationItems(rendered.declarations, notifications);
+  return renderRustModules({ ...groups, pairings: rendered.pairings }, repository);
 }
 
 function main(args: readonly string[]): void {
@@ -104,8 +115,9 @@ function main(args: readonly string[]): void {
   } else {
     checkCodexBindings(committedBindings, generated, legacyBindings);
   }
+  const methods = [...selectedMethods, ...selectedNotifications];
   console.log(
-    `Codex bindings ${mode === "--write" ? "generated" : "match"}: ${selectedMethods.join(", ")}`,
+    `Codex bindings ${mode === "--write" ? "generated" : "match"}: ${methods.join(", ")}`,
   );
 }
 

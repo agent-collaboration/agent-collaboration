@@ -10,6 +10,8 @@ diagnostics for invalid method pairings. The thread cases cover the different
 reply settings, tagged objects, and schema-declared alternatives.
 The turn-start cases cover typed context, request presence, finite reasoning
 summary tags, and preservation of opaque output-schema numbers.
+The observation cases cover the five exact server method associations,
+required payload fields, millisecond timestamps, and nested opaque numbers.
 The response ingress cases exercise the typed decoder on raw JSON-RPC results,
 compare opaque numbers with `Value` ingress, and pin the buffering restriction.
 The pinned inputs and their provenance live in `verification/schemas/pins.json`.

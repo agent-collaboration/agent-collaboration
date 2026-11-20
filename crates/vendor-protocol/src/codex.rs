@@ -38,6 +38,24 @@ pub trait CodexRequest: sealed::Sealed + Serialize + DeserializeOwned {
     }
 }
 
+/// A Codex server notification payload and its exact upstream method.
+pub trait CodexServerNotification: sealed::Sealed + Serialize + DeserializeOwned {
+    /// The JSON-RPC method whose `params` have this payload type.
+    const METHOD: &'static str;
+
+    /// Decodes the complete original JSON `params` of a notification selected by method.
+    ///
+    /// Pass the raw payload bytes to preserve opaque JSON. The caller owns method
+    /// selection, notification correlation, and any effects.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JSON error for an invalid payload or trailing non-whitespace data.
+    fn decode_params(params_json: &[u8]) -> serde_json::Result<Self> {
+        serde_json::from_slice(params_json)
+    }
+}
+
 /// A validated JSON value in a schema-declared opaque field.
 ///
 /// Decode directly from JSON text or bytes and serialize back to JSON to retain the source

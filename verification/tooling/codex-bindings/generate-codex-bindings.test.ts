@@ -32,9 +32,10 @@ test("two offline generations match the committed shared binding closure", (): v
   assert.deepEqual(renderCodexBindings(schema, pairing), generated);
   const source = [...generated.values()].join("\n");
   const definitions = source.match(/^\/\/ #\/definitions\/v2\/\w+$/gm);
-  assert.equal(definitions?.length, 108);
-  assert.equal(new Set(definitions).size, 108);
+  assert.equal(definitions?.length, 113);
+  assert.equal(new Set(definitions).size, 113);
   assert.equal(source.match(/impl super::CodexRequest for /g)?.length, 4);
+  assert.equal(source.match(/impl super::CodexServerNotification for /g)?.length, 5);
   for (const [name, module] of generated) assert.ok(rustLineCount(module) <= 1000, name);
   checkCodexBindings(committed, generated, `${committed}.rs`);
 });
@@ -207,6 +208,95 @@ test("semantic validation refuses unsupported constraints and unresolved payload
 
 const definitionFields = z.looseObject({ properties: z.record(z.string(), z.unknown()) });
 const taggedBranches = z.looseObject({ oneOf: z.array(definitionFields) });
+
+const notificationBranches = z.looseObject({
+  oneOf: z.array(
+    z.looseObject({
+      properties: z.looseObject({
+        method: z.looseObject({ enum: z.tuple([z.string()]) }),
+        params: z.unknown().optional(),
+      }),
+    }),
+  ),
+});
+
+test("server notification generation rejects an absent or repeated method declaration", (): void => {
+  const bundle = codexBundleSchema.parse(JSON.parse(schema));
+  const original = notificationBranches.parse(bundle.definitions.ServerNotification);
+  const matches = original.oneOf.filter(
+    (branch) => branch.properties.method.enum[0] === "turn/started",
+  );
+  assert.equal(matches.length, 1);
+
+  bundle.definitions.ServerNotification = {
+    ...original,
+    oneOf: original.oneOf.filter((branch) => branch.properties.method.enum[0] !== "turn/started"),
+  };
+  assert.throws(
+    () => renderCodexBindings(JSON.stringify(bundle), pairing),
+    /turn\/started: expected exactly one ServerNotification envelope, found 0/,
+  );
+  bundle.definitions.ServerNotification = { ...original, oneOf: [...original.oneOf, ...matches] };
+  assert.throws(
+    () => renderCodexBindings(JSON.stringify(bundle), pairing),
+    /turn\/started: expected exactly one ServerNotification envelope, found 2/,
+  );
+});
+
+test("server notification generation rejects a shared params reference between equal-shaped events", (): void => {
+  const bundle = codexBundleSchema.parse(JSON.parse(schema));
+  const original = notificationBranches.parse(bundle.definitions.ServerNotification);
+  bundle.definitions.ServerNotification = {
+    ...original,
+    oneOf: original.oneOf.map((branch) => {
+      if (branch.properties.method.enum[0] !== "turn/started") return branch;
+      return {
+        ...branch,
+        properties: {
+          ...branch.properties,
+          params: { $ref: "#/definitions/v2/TurnCompletedNotification" },
+        },
+      };
+    }),
+  };
+  assert.throws(
+    () => renderCodexBindings(JSON.stringify(bundle), pairing),
+    /ServerNotification methods turn\/started and turn\/completed share params #\/definitions\/v2\/TurnCompletedNotification/,
+  );
+});
+
+test("server notification generation derives distinct payload references from the export", (): void => {
+  const bundle = codexBundleSchema.parse(JSON.parse(schema));
+  const original = notificationBranches.parse(bundle.definitions.ServerNotification);
+  bundle.definitions.ServerNotification = {
+    ...original,
+    oneOf: original.oneOf.map((branch) => {
+      const method = branch.properties.method.enum[0];
+      if (method !== "turn/started" && method !== "turn/completed") return branch;
+      const payload =
+        method === "turn/started" ? "TurnCompletedNotification" : "TurnStartedNotification";
+      return {
+        ...branch,
+        properties: {
+          ...branch.properties,
+          params: { $ref: `#/definitions/v2/${payload}` },
+        },
+      };
+    }),
+  };
+  const generated = renderCodexBindings(JSON.stringify(bundle), pairing).get(
+    "observation_events.rs",
+  );
+  assert.ok(generated);
+  assert.match(
+    generated,
+    /impl super::CodexServerNotification for TurnCompletedNotification \{\s+const METHOD: &'static str = "turn\/started";/,
+  );
+  assert.match(
+    generated,
+    /impl super::CodexServerNotification for TurnStartedNotification \{\s+const METHOD: &'static str = "turn\/completed";/,
+  );
+});
 
 test("turn generation rejects overlapping enum branches and unsupported output constraints", (): void => {
   const bundle = codexBundleSchema.parse(JSON.parse(schema));
